@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-14.md`
-- **Total Sessions**: 480
-- **Last Active**: 2026-05-17
+- **Total Sessions**: 481
+- **Last Active**: 2026-05-18
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-14.md` | ~193 | Active |
+| `journal-14.md` | ~249 | Active |
 | `journal-13.md` | ~1947 | Archived |
 | `journal-12.md` | ~1971 | Archived |
 | `journal-11.md` | ~1985 | Archived |
@@ -42,6 +42,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 481 | 2026-05-18 | 支持 Markdown 文件预览公式和图表渲染 | `7fdc8e5e` | `feature/v0.5.0-md` |
 | 480 | 2026-05-17 | 收口 harness 治理层设计提案 | `783c5ab8` | `feature/v0.5` |
 | 479 | 2026-05-16 | PR #564 与 chore/bump-version-0.5 语义融合 | `5fa60b2b` | `feature/v0.5` |
 | 478 | 2026-05-16 | 修复 Composer.rewind-confirm.test 在 CI 上的 waitFor 超时 | `1500a69a` | `feature/v0.5` |
