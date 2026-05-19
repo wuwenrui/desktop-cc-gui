@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-14.md`
-- **Total Sessions**: 498
+- **Total Sessions**: 499
 - **Last Active**: 2026-05-20
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-14.md` | ~975 | Active |
+| `journal-14.md` | ~1025 | Active |
 | `journal-13.md` | ~1947 | Archived |
 | `journal-12.md` | ~1971 | Archived |
 | `journal-11.md` | ~1985 | Archived |
@@ -42,6 +42,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 499 | 2026-05-20 | 归档 harness 治理 OpenSpec 变更 | `92cefd0c` | `feature/v0.5.0-md` |
 | 498 | 2026-05-20 | 拆分 Sidebar 会话文件夹测试 | `ce539a2e` | `feature/v0.5.0-md` |
 | 497 | 2026-05-20 | 拆分 Messages 推理与计划交接测试 | `23c58d2b` | `feature/v0.5.0-md` |
 | 496 | 2026-05-20 | 拆分线程消息乐观渲染测试 | `eef1f298` | `feature/v0.5.0-md` |

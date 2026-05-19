@@ -973,3 +973,53 @@ Notes:
 ### Next Steps
 
 - None - task complete
+
+
+## Session 499: 归档 harness 治理 OpenSpec 变更
+
+**Date**: 2026-05-20
+**Task**: 归档 harness 治理 OpenSpec 变更
+**Branch**: `feature/v0.5.0-md`
+
+### Summary
+
+批量归档 9 个 harness governance OpenSpec change，同步 main specs，更新 openspec/project.md 库存，并修正 engine capability matrix fixture 的归档后引用路径。
+
+### Main Changes
+
+- Archived nine harness governance changes under `openspec/changes/archive/2026-05-20-*`.
+- Synced main specs for engine runtime contract, engine capability matrix, context ledger cost budget, checkpoint policy chain, agent domain event schema/runtime, capability-aware policy router, governance telemetry loop, and policy decision audit surface.
+- Updated `openspec/project.md` inventory to active=11, archive=316, specs=269 and recorded the external-CI qualifier for `formalize-engine-runtime-contract`.
+- Added `openspec/docs/harness-governance-closure-report-2026-05-20.md`.
+- Updated `src/features/engine/engineCapabilityMatrix.ts` and `scripts/check-engine-capability-matrix.mjs` to read matrix fixture from `openspec/specs/**` after archive.
+
+Validation run before commit:
+- `openspec validate --all --strict --no-interactive` -> 280 passed, 0 failed.
+- `npm run check:engine-capability-matrix`
+- `npm run check:context-ledger-cost-budget`
+- `npm run check:checkpoint-policy-chain`
+- `npm run check:agent-domain-event-schema`
+- `npm run check:realtime-event-batching`
+- `npm exec vitest run src/features/engine/engineCapabilityMatrix.test.ts`
+
+Notes:
+- Did not touch concurrent files work in `src/features/files/**`.
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `92cefd0c` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
