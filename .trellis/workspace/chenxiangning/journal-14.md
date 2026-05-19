@@ -679,3 +679,45 @@ Notes:
 ### Next Steps
 
 - None - task complete
+
+
+## Session 491: 收口 harness capability 感知查询入口
+
+**Date**: 2026-05-19
+**Task**: 收口 harness capability 感知查询入口
+**Branch**: `feature/v0.5.0-md`
+
+### Summary
+
+第二切片 add-capability-aware-policy-router 已实现并提交：新增 typed useCapability hook、只读 engine-name branch scanner，并收紧 EngineCapabilityKey 编译期约束。
+
+### Main Changes
+
+| Area | Detail |
+|------|--------|
+| OpenSpec | 新增并验证 `add-capability-aware-policy-router` proposal/design/spec/tasks。 |
+| Frontend | 新增 `src/features/engine/capabilities/useCapability.ts`，通过 `getActiveEngine/getEngineStatus` 解析 active/override engine 后委托现有 matrix helper。 |
+| Type Safety | `EngineCapabilityKey` 收紧为 literal union，非法 capability 通过 `@ts-expect-error` 测试锁住编译期失败。 |
+| Tooling | 新增 `scripts/scan-engine-name-branches.mjs` 和 `check:capability-aware-policy-router`，只输出 deterministic JSON 证据，不做 lint/enforcement。 |
+| Cross-platform | Scanner 使用 Node `fs/path`，规范化 POSIX path，覆盖 Windows-style path、CRLF、重叠路径去重和稳定输出。 |
+| Validation Passed | `npm run typecheck`; `npx vitest run src/features/engine/capabilities/useCapability.test.tsx src/features/engine/engineCapabilityMatrix.test.ts`; `node --test scripts/check-heavy-test-noise.test.mjs scripts/test-batched.test.mjs scripts/scan-engine-name-branches.test.mjs`; `npm run check:heavy-test-noise`; `node --test scripts/check-large-files.test.mjs`; `npm run check:large-files:near-threshold`; `openspec validate add-capability-aware-policy-router --strict --no-interactive`. |
+| Known Blocker | `npm run check:large-files:gate` remains blocked by `src/features/threads/hooks/useThreadActions.ts` at 2935 lines (`feature-hotpath`, fail>2800, status=new), unrelated to this slice. |
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `552b8dc8` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
