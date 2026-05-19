@@ -939,3 +939,37 @@ Notes:
 ### Next Steps
 
 - None - task complete
+
+
+## Session 498: 拆分 Sidebar 会话文件夹测试
+
+**Date**: 2026-05-20
+**Task**: 拆分 Sidebar 会话文件夹测试
+**Branch**: `feature/v0.5.0-md`
+
+### Summary
+
+将 Sidebar.test.tsx 尾部 workspace session folder 行为用例拆到 Sidebar.session-folders.test.tsx；主测试文件从 2911 行降到 2334 行，large-file near-threshold watch 从 23 降到 22。验证通过：npm run typecheck；npx vitest run src/features/app/components/Sidebar.test.tsx src/features/app/components/Sidebar.session-folders.test.tsx；npx vitest run src/features/app/components/Sidebar*.test.tsx；npm run check:large-files:near-threshold；npm run check:large-files:gate；git diff --check。阶段性未跑 heavy-test-noise，按治理约定留到最终整体收口。提交时未混入当前工作区已有 OpenSpec 归档/同步变更。
+
+### Main Changes
+
+完成 Sidebar 测试大文件治理切片：只移动测试用例，不改生产逻辑。新增 Sidebar.session-folders.test.tsx 承接 workspace session folder 创建、折叠、移动、删除、分页相关用例，原 Sidebar.test.tsx 删除对应尾段。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ce539a2e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
