@@ -1353,3 +1353,51 @@ Notes:
 ### Next Steps
 
 - None - task complete
+
+
+## Session 508: 拆分用户提问历史归一化
+
+**Date**: 2026-05-20
+**Task**: 拆分用户提问历史归一化
+**Branch**: `feature/v0.5.0-md`
+
+### Summary
+
+将 threadItems.ts 中 AskUserQuestion 历史回答解析与 requestUserInputSubmitted 归一化抽出为 threadItemsAskUserQuestion；threadItems.ts 从 2416 行降到 2161 行，large-file watch 从 14 降到 13。
+
+### Main Changes
+
+完成 harness 大文件治理下一切片：
+- 新增 threadItemsAskUserQuestion.ts，封装 AskUserQuestion answer echo 解析、模板解析、requestUserInputSubmitted 历史卡片生成。
+- threadItems.ts 保留 prepareThreadItems 主流程，并通过新 util 调用 AskUserQuestion 归一化。
+- threadItems.ts 从 2416 行降至 2161，低于 feature-hotpath warn>2400 线。
+
+验证：
+- npm run typecheck
+- npx vitest run src/utils/threadItems.test.ts src/features/threads/loaders/claudeHistoryLoader.test.ts
+- npm run check:large-files:near-threshold
+- npm run check:large-files:gate
+- git diff --check
+
+备注：
+- heavy-test-noise-sentry 继续按阶段策略 deferred 到整体收口阶段。
+- 未纳入未跟踪 OpenSpec 目录 openspec/changes/evolve-harness-governance-closed-loop/。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c0e1c765` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

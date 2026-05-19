@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-14.md`
-- **Total Sessions**: 507
+- **Total Sessions**: 508
 - **Last Active**: 2026-05-20
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-14.md` | ~1355 | Active |
+| `journal-14.md` | ~1403 | Active |
 | `journal-13.md` | ~1947 | Archived |
 | `journal-12.md` | ~1971 | Archived |
 | `journal-11.md` | ~1985 | Archived |
@@ -42,6 +42,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 508 | 2026-05-20 | 拆分用户提问历史归一化 | `c0e1c765` | `feature/v0.5.0-md` |
 | 507 | 2026-05-20 | 拆分事件诊断工具 | `c81c151c` | `feature/v0.5.0-md` |
 | 506 | 2026-05-20 | 拆分消息线程解析职责 | `779c07b8` | `feature/v0.5.0-md` |
 | 505 | 2026-05-20 | 拆分实时历史对齐调度 | `a22cba8d` | `feature/v0.5.0-md` |
