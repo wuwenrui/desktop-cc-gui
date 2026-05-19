@@ -40,6 +40,7 @@ import "./styles/compact-phone.css";
 import "./styles/compact-tablet.css";
 import "./styles/tool-blocks-shell.css";
 import "./styles/tool-blocks.css";
+import "./styles/tool-call-block.css";
 import "./styles/status-panel.css";
 import "./styles/opencode-panel.css";
 import "./styles/kanban.css";

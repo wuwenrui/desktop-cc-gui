@@ -2300,6 +2300,18 @@ const zhPart1 = {
     copyCodeBlockWithFence: "复制带围栏代码块",
     copy: "复制",
     copyWithFence: "围栏复制",
+    toolCallCard: {
+      title: "工具调用",
+      expand: "展开",
+      collapse: "收起",
+      copy: "复制原文",
+      copied: "已复制",
+      streaming: "流式输出中",
+      unknownTool: "未知工具",
+      noParams: "无参数",
+      parameters: "参数",
+      rawPayload: "原始 XML",
+    },
     exitPlanCard: {
       ariaLabel: "计划完成卡片",
       title: "执行计划已就绪",

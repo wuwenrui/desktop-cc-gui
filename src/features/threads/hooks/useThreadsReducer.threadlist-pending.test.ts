@@ -411,7 +411,7 @@ describe("threadReducer", () => {
     expect(next.activeThreadIdByWorkspace["ws-1"]).toBe("claude-pending-a");
   });
 
-  it("does not auto-rename when multiple pending Claude threads exist even if active has activity", () => {
+  it("renames the active anchored Claude pending thread when multiple pending threads exist", () => {
     const base: ThreadState = {
       ...initialState,
       activeThreadIdByWorkspace: { "ws-1": "claude-pending-new" },
@@ -440,10 +440,10 @@ describe("threadReducer", () => {
           lastDurationMs: null,
         },
         "claude-pending-new": {
-          isProcessing: false,
+          isProcessing: true,
           hasUnread: false,
           isReviewing: false,
-          processingStartedAt: null,
+          processingStartedAt: 140,
           lastDurationMs: null,
         },
       },
@@ -466,16 +466,15 @@ describe("threadReducer", () => {
 
     const ids = next.threadsByWorkspace["ws-1"]?.map((thread) => thread.id) ?? [];
     expect(ids).toContain("claude-pending-old");
-    expect(ids).toContain("claude-pending-new");
     expect(ids).toContain("claude:session-2");
-    expect(next.itemsByThread["claude:session-2"] ?? []).toHaveLength(0);
-    expect(next.itemsByThread["claude-pending-new"]?.map((item) => item.id)).toContain(
-      "user-new",
-    );
+    expect(ids).not.toContain("claude-pending-new");
+    expect(next.itemsByThread["claude:session-2"]?.map((item) => item.id)).toContain("user-new");
+    expect(next.itemsByThread["claude-pending-new"]).toBeUndefined();
     expect(next.itemsByThread["claude-pending-old"]?.map((item) => item.id)).toContain(
       "reasoning-old",
     );
-    expect(next.activeThreadIdByWorkspace["ws-1"]).toBe("claude-pending-new");
+    expect(next.activeThreadIdByWorkspace["ws-1"]).toBe("claude:session-2");
+    expect(next.threadStatusById["claude:session-2"]?.isProcessing).toBe(true);
   });
 
   it("does not force-rename a single idle pending thread to unrelated session id", () => {

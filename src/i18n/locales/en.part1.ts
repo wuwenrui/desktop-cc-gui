@@ -2463,6 +2463,18 @@ const enPart1 = {
     copyCodeBlockWithFence: "Copy fenced code block",
     copy: "Copy",
     copyWithFence: "Fence copy",
+    toolCallCard: {
+      title: "Tool call",
+      expand: "Expand",
+      collapse: "Collapse",
+      copy: "Copy raw",
+      copied: "Copied",
+      streaming: "streaming",
+      unknownTool: "unknown",
+      noParams: "No parameters",
+      parameters: "Parameters",
+      rawPayload: "Raw XML",
+    },
     exitPlanCard: {
       ariaLabel: "Plan ready card",
       title: "Execution Plan Ready",

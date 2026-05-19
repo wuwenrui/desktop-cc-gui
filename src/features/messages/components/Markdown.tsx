@@ -1,4 +1,4 @@
-import { lazy, memo, startTransition, Suspense, useCallback, useEffect, useMemo, useRef, useState, isValidElement, type ReactNode, type MouseEvent } from "react";
+import { Fragment, lazy, memo, startTransition, Suspense, useCallback, useEffect, useMemo, useRef, useState, isValidElement, type ReactNode, type MouseEvent } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import { useTranslation } from "react-i18next";
 import remarkBreaks from "remark-breaks";
@@ -19,6 +19,7 @@ import {
   resolveProgressiveRevealValue,
   type LightweightMarkdownLinkRenderer,
 } from "./LiveMarkdown";
+import { ToolCallBlock } from "./ToolCallBlock";
 import {
   areKatexAssetsReady,
   buildLatexRenderEntries,
@@ -42,6 +43,7 @@ import {
 import { normalizeOutsideMarkdownCode } from "../../../utils/markdownCodeRegions";
 import { highlightLine } from "../../../utils/syntax";
 import { detectCodexLeadMarker, type CodexLeadMarkerConfig } from "../constants/codexLeadMarkers";
+import { parseToolCallBlocks, type Block } from "../utils/toolCallBlocks";
 
 type MarkdownProps = {
   value: string;
@@ -111,6 +113,18 @@ const MARKDOWN_ALERT_TONE_SET = new Set([
   "warning",
   "caution",
 ]);
+
+function stableToolCallHash(value: string) {
+  let hash = 5381;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = ((hash << 5) + hash) ^ value.charCodeAt(index);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function buildToolCallBlockKey(block: Extract<Block, { kind: "tool-call" }>) {
+  return `tcb-${block.startOffset}-${block.tagName}-${stableToolCallHash(block.keySignature)}`;
+}
 
 function areMarkdownPropsEqual(prev: MarkdownProps, next: MarkdownProps) {
   return (
@@ -1675,6 +1689,10 @@ export const Markdown = memo(function Markdown({
       );
     return normalizeOutsideMarkdownCode(renderValue, normalizeDisplayText);
   }, [renderValue, codeBlock, liveRenderMode, preserveFormatting]);
+  const toolCallBlocks = useMemo(() => parseToolCallBlocks(content), [content]);
+  const shouldRenderToolCallSegments = !(
+    toolCallBlocks.length === 1 && toolCallBlocks[0]?.kind === "md"
+  );
   const sourceMarkdownRef = useRef(content);
   sourceMarkdownRef.current = content;
 
@@ -1973,20 +1991,57 @@ export const Markdown = memo(function Markdown({
     [handleFileLinkClick, handleFileLinkContextMenu, urlTransform],
   );
 
+  const renderMarkdownContent = useCallback((nextContent: string) => {
+    if (liveRenderMode === "lightweight") {
+      return (
+        <LightweightMarkdown
+          value={nextContent}
+          renderLink={renderLightweightLink}
+        />
+      );
+    }
+    return (
+      <ReactMarkdown
+        remarkPlugins={remarkPluginsMemo}
+        rehypePlugins={rehypePluginsMemo}
+        urlTransform={urlTransform}
+        components={components}
+      >
+        {nextContent}
+      </ReactMarkdown>
+    );
+  }, [
+    components,
+    liveRenderMode,
+    rehypePluginsMemo,
+    remarkPluginsMemo,
+    renderLightweightLink,
+    urlTransform,
+  ]);
+
   return (
     <div className={className}>
-      {liveRenderMode === "lightweight" ? (
-        <LightweightMarkdown value={content} renderLink={renderLightweightLink} />
-      ) : (
-        <ReactMarkdown
-          remarkPlugins={remarkPluginsMemo}
-          rehypePlugins={rehypePluginsMemo}
-          urlTransform={urlTransform}
-          components={components}
-        >
-          {content}
-        </ReactMarkdown>
-      )}
+      {shouldRenderToolCallSegments
+        ? toolCallBlocks.map((block, index) => {
+          if (block.kind === "md") {
+            return (
+              <Fragment key={`md-${index}`}>
+                {renderMarkdownContent(block.content)}
+              </Fragment>
+            );
+          }
+          return (
+            <ToolCallBlock
+              key={buildToolCallBlockKey(block)}
+              raw={block.raw}
+              tool={block.tool}
+              params={block.params}
+              complete={block.complete}
+              isLive={!block.complete}
+            />
+          );
+        })
+        : renderMarkdownContent(content)}
     </div>
   );
 }, areMarkdownPropsEqual);

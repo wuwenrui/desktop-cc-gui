@@ -36,9 +36,7 @@ import {
   shouldDeduplicateCodexAssistantMessages,
 } from "./useThreadsReducerAssistantDedup";
 import { isOptimisticUserMessageId } from "../utils/queuedHandoffBubble";
-import {
-  isClaudeSessionBootstrapThreadId,
-} from "../utils/claudeForkThread";
+import { resolvePendingThreadIdForSession } from "../utils/threadPendingResolution";
 import {
   isProcessingGeneratedImageItem,
 } from "../utils/generatedImagePlaceholder";
@@ -201,78 +199,28 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
 
       // CRITICAL FIX: Handle race condition between renameThreadId and subsequent events.
       // If threadId is engine:{sessionId} but not found, check for pending thread to rename.
-      const pendingPrefix = action.threadId.startsWith("claude:")
-        ? "claude-pending-"
+      const pendingEngine = action.threadId.startsWith("claude:")
+        ? "claude"
         : action.threadId.startsWith("gemini:")
-          ? "gemini-pending-"
+          ? "gemini"
         : action.threadId.startsWith("opencode:")
-          ? "opencode-pending-"
+          ? "opencode"
           : null;
-      if (pendingPrefix) {
-        const pendingIndexes: number[] = [];
-        list.forEach((thread, index) => {
-          if (
-            thread.id.startsWith(pendingPrefix) ||
-            (pendingPrefix === "claude-pending-" &&
-              isClaudeSessionBootstrapThreadId(thread.id))
-          ) {
-            pendingIndexes.push(index);
-          }
+      if (pendingEngine) {
+        const pendingThreadId = resolvePendingThreadIdForSession({
+          workspaceId: action.workspaceId,
+          engine: pendingEngine,
+          threadsByWorkspace: state.threadsByWorkspace,
+          activeThreadIdByWorkspace: state.activeThreadIdByWorkspace,
+          threadStatusById: state.threadStatusById,
+          activeTurnIdByThread: state.activeTurnIdByThread,
+          itemsByThread: state.itemsByThread,
         });
+        const pendingIndex = pendingThreadId === null
+          ? -1
+          : list.findIndex((thread) => thread.id === pendingThreadId);
 
-        const hasPendingThreadAnchor = (threadId: string) => {
-          const hasActiveTurn = (state.activeTurnIdByThread[threadId] ?? null) !== null;
-          if (hasActiveTurn) {
-            return true;
-          }
-          const isProcessing = Boolean(state.threadStatusById[threadId]?.isProcessing);
-          const hasObservedItems = (state.itemsByThread[threadId]?.length ?? 0) > 0;
-          return isProcessing && hasObservedItems;
-        };
-        const activePendingId = state.activeThreadIdByWorkspace[action.workspaceId] ?? null;
-        const resolveActivePendingIndex = (): number | null => {
-          if (!activePendingId) {
-            return null;
-          }
-          const isActivePending =
-            activePendingId.startsWith(pendingPrefix) ||
-            (pendingPrefix === "claude-pending-" &&
-              isClaudeSessionBootstrapThreadId(activePendingId));
-          if (!isActivePending) {
-            return null;
-          }
-          const activeIndex = pendingIndexes.find(
-            (index) => list[index]?.id === activePendingId,
-          );
-          if (activeIndex === undefined) {
-            return null;
-          }
-          const threadId = list[activeIndex]?.id ?? "";
-          if (!threadId || !hasPendingThreadAnchor(threadId)) {
-            return null;
-          }
-          return activeIndex;
-        };
-
-        // Boundary first: when multiple pending threads exist for the same engine,
-        // never auto-rename here. The incoming finalized session event may belong
-        // to any pending stream, and guessing can cross-bind sessions.
-        //
-        // We rely on explicit thread/session mapping (thread/sessionIdUpdated) to
-        // reconcile those cases safely.
-        let pendingIndex: number | null = null;
-        if (pendingIndexes.length === 1) {
-          const singlePendingIndex = pendingIndexes[0];
-          const singlePendingId =
-            singlePendingIndex !== undefined ? (list[singlePendingIndex]?.id ?? "") : "";
-          if (singlePendingId && hasPendingThreadAnchor(singlePendingId)) {
-            pendingIndex = singlePendingIndex ?? null;
-          }
-        } else if (pendingIndexes.length === 0) {
-          pendingIndex = resolveActivePendingIndex();
-        }
-
-        if (pendingIndex !== null) {
+        if (pendingIndex >= 0) {
           // Found a pending thread - perform inline rename to avoid race condition
           const pendingThread = list[pendingIndex];
           if (!pendingThread) {
@@ -373,9 +321,12 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
       }
 
       // No existing thread and no pending thread to rename - create new thread
+      const fallbackName = action.threadId.startsWith("claude:")
+        ? "Claude Session"
+        : `Agent ${list.length + 1}`;
       const thread: ThreadSummary = {
         id: action.threadId,
-        name: `Agent ${list.length + 1}`,
+        name: fallbackName,
         updatedAt: 0,
         engineSource: action.engine,
         folderId: action.folderId ?? null,

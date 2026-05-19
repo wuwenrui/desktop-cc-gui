@@ -81,6 +81,18 @@ fn first_subagent_meta_string(meta: &Value, keys: &[&str]) -> Option<String> {
         .find_map(|key| super::claude_history::first_non_empty_string(meta.get(*key)))
 }
 
+fn is_generic_ordinal_agent_name(value: &str) -> bool {
+    let normalized = value.trim().to_ascii_lowercase();
+    let Some(ordinal) = normalized.strip_prefix("agent ") else {
+        return false;
+    };
+    !ordinal.is_empty() && ordinal.chars().all(|ch| ch.is_ascii_digit())
+}
+
+fn first_meaningful_subagent_meta_string(meta: &Value, keys: &[&str]) -> Option<String> {
+    first_subagent_meta_string(meta, keys).filter(|value| !is_generic_ordinal_agent_name(value))
+}
+
 pub(crate) async fn read_subagent_meta(meta_path: &Path) -> (Option<String>, Option<String>) {
     let Ok(contents) = fs::read_to_string(meta_path).await else {
         return (None, None);
@@ -88,7 +100,8 @@ pub(crate) async fn read_subagent_meta(meta_path: &Path) -> (Option<String>, Opt
     let Ok(meta) = serde_json::from_str::<Value>(&contents) else {
         return (None, None);
     };
-    let description = first_subagent_meta_string(&meta, &["description", "agentName", "name"]);
+    let description = first_meaningful_subagent_meta_string(&meta, &["description"])
+        .or_else(|| first_meaningful_subagent_meta_string(&meta, &["agentName", "name"]));
     let agent_type = first_subagent_meta_string(&meta, &["agentType", "subagentType", "type"]);
     (description, agent_type)
 }

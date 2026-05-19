@@ -120,6 +120,10 @@ function parseArgs(argv) {
   return config;
 }
 
+function toRepoPath(value) {
+  return value.replace(/\\/g, "/").replace(/^\/+/, "");
+}
+
 async function walkDirectory(directoryPath) {
   const entries = await fs.readdir(directoryPath, { withFileTypes: true });
   const files = [];
@@ -204,14 +208,24 @@ function countLines(content) {
 }
 
 function matchesPolicy(relativePath, policy) {
+  const normalizedRelativePath = toRepoPath(relativePath);
   const match = policy.match ?? {};
-  if (Array.isArray(match.exactPaths) && match.exactPaths.includes(relativePath)) {
+  if (
+    Array.isArray(match.exactPaths) &&
+    match.exactPaths.some((exactPath) => toRepoPath(exactPath) === normalizedRelativePath)
+  ) {
     return true;
   }
-  if (Array.isArray(match.prefixes) && match.prefixes.some((prefix) => relativePath.startsWith(prefix))) {
+  if (
+    Array.isArray(match.prefixes) &&
+    match.prefixes.some((prefix) => normalizedRelativePath.startsWith(toRepoPath(prefix)))
+  ) {
     return true;
   }
-  if (Array.isArray(match.suffixes) && match.suffixes.some((suffix) => relativePath.endsWith(suffix))) {
+  if (
+    Array.isArray(match.suffixes) &&
+    match.suffixes.some((suffix) => normalizedRelativePath.endsWith(toRepoPath(suffix)))
+  ) {
     return true;
   }
   return false;
@@ -278,7 +292,7 @@ function buildBaselineMap(baseline) {
   }
   return new Map(
     baseline.entries.map((entry) => [
-      entry.path,
+      toRepoPath(entry.path),
       entry,
     ]),
   );
@@ -373,7 +387,7 @@ export async function scanLargeFiles(options) {
   for (const absolutePath of sourceFiles) {
     const content = await fs.readFile(absolutePath, "utf8");
     const lineCount = countLines(content);
-    const relativePath = path.relative(options.root, absolutePath).split(path.sep).join("/");
+    const relativePath = toRepoPath(path.relative(options.root, absolutePath));
     const extension = path.extname(relativePath);
     const item = policyConfig
       ? classifyPolicyFile(relativePath, extension, lineCount, policyConfig, options.scope, baselineMap)
@@ -529,14 +543,14 @@ export async function main(argv = process.argv.slice(2)) {
     const generatedAt = new Date().toISOString();
     const markdown = buildMarkdownReport(scan, generatedAt);
     const markdownPath = await writeOptionalOutput(options.root, options.markdownOutput, markdown);
-    console.log(`Markdown report written: ${path.relative(options.root, markdownPath)}`);
+    console.log(`Markdown report written: ${toRepoPath(path.relative(options.root, markdownPath))}`);
   }
 
   if (options.baselineOutput) {
     const generatedAt = new Date().toISOString();
     const baselineJson = buildBaselineJson(scan, generatedAt);
     const baselinePath = await writeOptionalOutput(options.root, options.baselineOutput, baselineJson);
-    console.log(`Baseline JSON written: ${path.relative(options.root, baselinePath)}`);
+    console.log(`Baseline JSON written: ${toRepoPath(path.relative(options.root, baselinePath))}`);
   }
 
   const blockingItems = scan.results.filter((item) => item.status === "new" || item.status === "regressed");

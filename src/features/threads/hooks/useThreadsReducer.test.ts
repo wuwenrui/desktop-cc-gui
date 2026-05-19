@@ -94,6 +94,43 @@ describe("threadReducer", () => {
     });
   });
 
+  it("creates a weak Claude finalized row without using Agent N while pending identity is ambiguous", () => {
+    const state: ThreadState = {
+      ...initialState,
+      threadsByWorkspace: {
+        "ws-1": [
+          {
+            id: "claude-pending-old",
+            name: "旧任务",
+            updatedAt: 10,
+            engineSource: "claude",
+          },
+          {
+            id: "claude-pending-new",
+            name: "新任务",
+            updatedAt: 20,
+            engineSource: "claude",
+          },
+        ],
+      },
+      activeThreadIdByWorkspace: { "ws-1": "thread-neutral" },
+    };
+
+    const next = threadReducer(state, {
+      type: "ensureThread",
+      workspaceId: "ws-1",
+      threadId: "claude:real-session",
+      engine: "claude",
+    });
+
+    expect(next.threadsByWorkspace["ws-1"]?.map((thread) => thread.id)).toEqual([
+      "claude:real-session",
+      "claude-pending-old",
+      "claude-pending-new",
+    ]);
+    expect(next.threadsByWorkspace["ws-1"]?.[0]?.name).toBe("Claude Session");
+  });
+
   it("renames auto-generated thread on first user message", () => {
     const threads: ThreadSummary[] = [
       { id: "thread-1", name: "Agent 1", updatedAt: 1 },

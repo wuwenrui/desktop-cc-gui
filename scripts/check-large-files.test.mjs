@@ -35,7 +35,12 @@ test("resolvePolicy prefers exact and prefix matches before default fallback", a
   const policy = await loadPolicyConfig(root, "scripts/check-large-files.policy.json");
   assert.ok(policy);
   assert.equal(resolvePolicy("src/services/tauri.ts", policy)?.id, "bridge-runtime-critical");
+  assert.equal(resolvePolicy("src\\services\\tauri.ts", policy)?.id, "bridge-runtime-critical");
   assert.equal(resolvePolicy("src/features/messages/components/Messages.tsx", policy)?.id, "feature-hotpath");
+  assert.equal(
+    resolvePolicy("src\\features\\messages\\components\\Messages.tsx", policy)?.id,
+    "feature-hotpath",
+  );
   assert.equal(resolvePolicy("src/other/random.ts", policy)?.id, "default-source");
 });
 
@@ -113,6 +118,83 @@ test("scanLargeFiles reports baseline-aware regressions for policy fail scope", 
     assert.equal(scan.results[0]?.path, "src/services/tauri.ts");
     assert.equal(scan.results[0]?.status, "regressed");
     assert.equal(scan.results[0]?.delta, 1);
+  });
+});
+
+test("scanLargeFiles matches Windows-style baseline paths against canonical repo paths", async () => {
+  await withTempDir(async (root) => {
+    const policyPath = path.join(root, "policy.json");
+    const baselinePath = path.join(root, "baseline.json");
+    await fs.writeFile(
+      policyPath,
+      JSON.stringify(
+        {
+          version: "test-policy",
+          policies: [
+            {
+              id: "critical",
+              priority: "P0",
+              warnThreshold: 5,
+              failThreshold: 8,
+              match: {
+                exactPaths: ["src\\services\\tauri.ts"],
+              },
+            },
+          ],
+          defaultPolicy: {
+            id: "default-source",
+            priority: "P1",
+            warnThreshold: 10,
+            failThreshold: 12,
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+    await fs.writeFile(
+      baselinePath,
+      JSON.stringify(
+        {
+          generatedAt: "2026-04-22T00:00:00.000Z",
+          scope: "fail",
+          policyVersion: "test-policy",
+          entries: [
+            {
+              path: "src\\services\\tauri.ts",
+              lines: 9,
+              policyId: "critical",
+              priority: "P0",
+              warnThreshold: 5,
+              failThreshold: 8,
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    await writeLines(path.join(root, "src/services/tauri.ts"), 10);
+
+    const scan = await scanLargeFiles({
+      root,
+      policyFile: "policy.json",
+      baselineFile: "baseline.json",
+      threshold: 3000,
+      mode: "report",
+      markdownOutput: null,
+      baselineOutput: null,
+      scope: "fail",
+    });
+
+    assert.equal(scan.results.length, 1);
+    assert.equal(scan.results[0]?.path, "src/services/tauri.ts");
+    assert.equal(scan.results[0]?.policyId, "critical");
+    assert.equal(scan.results[0]?.baselineLines, 9);
+    assert.equal(scan.results[0]?.status, "regressed");
   });
 });
 

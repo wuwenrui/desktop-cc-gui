@@ -85,6 +85,7 @@ import {
   resolveThreadSourceMeta,
   restoreThreadParentLinksFromSnapshot,
   seedLastGoodClaudeIntoMerged,
+  seedLastGoodOpenCodeIntoMerged,
   listReplacementThreadCandidates,
   selectRecoveredNewThreadSummary,
   selectReplacementThreadByMessageHistory,
@@ -1942,6 +1943,13 @@ export function useThreadActions({
                 timeoutMs: NATIVE_SESSION_LIST_FETCH_TIMEOUT_MS,
               },
             });
+            // 与 Claude timeout 分支对称：seed last-good OpenCode 条目，
+            // 防止下游 catalog merge / archive merge 因看到空 OpenCode 子源而形成残缺基底。
+            seedLastGoodOpenCodeIntoMerged(
+              mergedById,
+              lastGoodThreadSummaries,
+              hiddenSharedBindingIds,
+            );
           }
           const opencodeSessions = Array.isArray(opencodeResult.value)
             ? opencodeResult.value
@@ -1980,6 +1988,25 @@ export function useThreadActions({
               mergedById.set(id, next);
             }
           });
+        } else {
+          // 与 Claude rejected 分支对称：补全此前缺失的 else，
+          // 确保 OpenCode 子源抛错时仍发出可观测诊断并 seed last-good，避免静默吞错。
+          rememberPartialSource("opencode-session-error");
+          onDebug?.({
+            id: `${Date.now()}-client-opencode-session-error`,
+            timestamp: Date.now(),
+            source: "client",
+            label: "thread/list opencode error",
+            payload: {
+              workspaceId: workspace.id,
+              error: String(opencodeResult.reason ?? "unknown error"),
+            },
+          });
+          seedLastGoodOpenCodeIntoMerged(
+            mergedById,
+            lastGoodThreadSummaries,
+            hiddenSharedBindingIds,
+          );
         }
         const projectCatalogValue =
           projectCatalogResult.status === "fulfilled" ? projectCatalogResult.value : null;

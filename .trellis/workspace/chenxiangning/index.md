@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-14.md`
-- **Total Sessions**: 485
+- **Total Sessions**: 487
 - **Last Active**: 2026-05-19
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-14.md` | ~416 | Active |
+| `journal-14.md` | ~525 | Active |
 | `journal-13.md` | ~1947 | Archived |
 | `journal-12.md` | ~1971 | Archived |
 | `journal-11.md` | ~1985 | Archived |
@@ -42,6 +42,8 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 487 | 2026-05-19 | 提交消息工具调用卡片与会话投影修复 | `cb261490`, `d3327f0f`, `4f40920b` | `feature/v0.5.0-md` |
+| 486 | 2026-05-19 | 统一多引擎列表超时兜底 | `10346e3d` | `feature/v0.5.0-md` |
 | 485 | 2026-05-19 | 稳定 CI flaky 测试 | `bed69513` | `feature/v0.5.0-md` |
 | 484 | 2026-05-19 | 归一化用户提问卡片交互 | `d142510b` | `feature/v0.5.0-md` |
 | 483 | 2026-05-18 | 加固 Claude 列表超时兜底 | `1f2f87f1` | `feature/v0.5.0-md` |
