@@ -1091,3 +1091,37 @@ Notes:
 ### Next Steps
 
 - None - task complete
+
+
+## Session 502: 拆分 useThreadsReducer 压缩生命周期测试
+
+**Date**: 2026-05-20
+**Task**: 拆分 useThreadsReducer 压缩生命周期测试
+**Branch**: `feature/v0.5.0-md`
+
+### Summary
+
+将 useThreadsReducer.test.ts 中 context compaction lifecycle、local Codex compaction message reconcile 与非 tool output delta 相关用例拆到 useThreadsReducer.context-compaction.test.ts；主测试文件从 2681 行降到 2266 行，large-file near-threshold watch 从 20 降到 19。验证通过：npm run typecheck；npx vitest run src/features/threads/hooks/useThreadsReducer*.test.ts；npm run check:large-files:near-threshold；npm run check:large-files:gate；git diff --check。阶段性未跑 heavy-test-noise，按治理约定留到最终整体收口。
+
+### Main Changes
+
+完成 useThreadsReducer 测试大文件治理切片：只移动测试用例，不改生产逻辑。新增 useThreadsReducer.context-compaction.test.ts 承接 context compaction lifecycle 与本地 compaction 消息 reconcile 相关用例，原 useThreadsReducer.test.ts 删除对应块。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `98f9b5bd` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
