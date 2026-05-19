@@ -1764,3 +1764,45 @@ Notes:
 ### Next Steps
 
 - None - task complete
+
+
+## Session 517: 对齐 harness 生产评审版本
+
+**Date**: 2026-05-20
+**Task**: 对齐 harness 生产评审版本
+**Branch**: `feature/v0.5.0-md`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+补充提交 harness governance 生产评审版本号和 99% 证据措辞对齐。
+
+提交内容：
+- 将战略文档状态从 v1.9 更新为 v1.10 production review closure。
+- 将 design.md 中 99% evidence-complete 定义收紧为实际 Windows/macOS/Linux result evidence 且无 unresolved platform qualifier。
+
+验证：
+- 文档补丁。
+- 前置全量本地 CI 已通过。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `cabd0577` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
