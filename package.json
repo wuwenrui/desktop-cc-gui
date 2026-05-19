@@ -24,6 +24,7 @@
     "check:branding": "node scripts/check-branding.mjs",
     "check:runtime-contracts": "npm run check:app-shell:runtime-contract && npm run check:git-history:runtime-contract",
     "check:engine-capability-matrix": "node scripts/check-engine-capability-matrix.mjs",
+    "check:capability-aware-policy-router": "node scripts/scan-engine-name-branches.mjs",
     "check:context-ledger-cost-budget": "node scripts/check-context-ledger-cost-budget.mjs",
     "check:checkpoint-policy-chain": "node scripts/check-checkpoint-policy-chain.mjs",
     "check:agent-domain-event-schema": "node scripts/check-agent-domain-event-schema.mjs",

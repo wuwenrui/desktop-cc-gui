@@ -1,13 +1,25 @@
 import type { EngineFeatures, EngineStatus, EngineType } from "../../types";
 import matrixFixture from "../../../openspec/changes/add-engine-capability-matrix-spec/specs/engine-capability-matrix/fixtures/matrix.json";
 
+const ENGINE_CAPABILITY_KEY_VALUES = [
+  "streaming.text",
+  "streaming.reasoning",
+  "streaming.tool-output",
+  "tool.use",
+  "tool.mcp",
+  "reasoning.effort",
+  "collaboration.mode",
+  "session.continuation",
+  "image.input",
+] as const;
+
 export type EngineCapabilityState =
   | "supported"
   | "compat-input"
   | "unsupported"
   | "unknown";
 
-export type EngineCapabilityKey = (typeof matrixFixture.capabilities)[number];
+export type EngineCapabilityKey = (typeof ENGINE_CAPABILITY_KEY_VALUES)[number];
 
 export type EngineCapabilityRuntimeStatus = {
   engine: EngineType;
@@ -22,7 +34,7 @@ const ENGINE_CAPABILITY_MATRIX = matrixFixture.engines as Record<
   Record<EngineCapabilityKey, EngineCapabilityState>
 >;
 
-export const ENGINE_CAPABILITY_KEYS = matrixFixture.capabilities as readonly EngineCapabilityKey[];
+export const ENGINE_CAPABILITY_KEYS = ENGINE_CAPABILITY_KEY_VALUES;
 
 export function getEngineCapabilityState(
   engine: EngineType,
