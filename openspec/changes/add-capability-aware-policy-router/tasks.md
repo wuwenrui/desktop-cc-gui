@@ -18,10 +18,10 @@
 - [x] 3.4 [P0] Run `npm run check:heavy-test-noise`.
 - [x] 3.5 [P0] Run `node --test scripts/check-large-files.test.mjs`.
 - [x] 3.6 [P0] Run `npm run check:large-files:near-threshold`.
-- [ ] 3.7 [P0] Run `npm run check:large-files:gate`.
+- [x] 3.7 [P0] Run `npm run check:large-files:gate`.
 - [x] 3.8 [P0] Confirm scanner/tests normalize paths and avoid shell-only, case-sensitive, or newline-fragile assumptions.
 - [x] 3.9 [P0] Run `openspec validate add-capability-aware-policy-router --strict --no-interactive`.
 
 ### Blocked Validation Notes
 
-- 3.7 remains blocked by pre-existing/parallel worktree debt: `src/features/threads/hooks/useThreadActions.ts` is 2935 lines and fails `feature-hotpath` large-file gate (`fail>2800`, `status=new`). This change does not modify that file.
+- 3.7 was unblocked by extracting thread-list helpers from `src/features/threads/hooks/useThreadActions.ts` into `useThreadActions.threadList.ts`; `npm run check:large-files:gate` now passes.

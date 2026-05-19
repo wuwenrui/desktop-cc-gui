@@ -24,10 +24,10 @@
 - [x] 4.4 [P0] Run `npm run check:heavy-test-noise`.
 - [x] 4.5 [P0] Run `node --test scripts/check-large-files.test.mjs`.
 - [x] 4.6 [P0] Run `npm run check:large-files:near-threshold`.
-- [ ] 4.7 [P0] Run `npm run check:large-files:gate`.
+- [x] 4.7 [P0] Run `npm run check:large-files:gate`.
 - [x] 4.8 [P0] Confirm readers normalize paths, tolerate CRLF/LF markdown, and avoid shell-only or case-sensitive assumptions.
 - [x] 4.9 [P0] Run `openspec validate integrate-openspec-trellis-bridge-into-status-panel --strict --no-interactive`.
 
 Blocked validation note:
 
-- `npm run check:large-files:gate` is blocked by pre-existing file `src/features/threads/hooks/useThreadActions.ts` at 2935 lines (`ts/tsx`, `feature-hotpath`, fail threshold 2800). The third slice added only modular governance evidence files and a small StatusPanel CSS section; `src/styles/status-panel.css` remains below the fail threshold but is reported by near-threshold governance as a watch item.
+- `npm run check:large-files:gate` was unblocked by extracting thread-list helpers from `src/features/threads/hooks/useThreadActions.ts` into `useThreadActions.threadList.ts`. The third slice added only modular governance evidence files and a small StatusPanel CSS section; `src/styles/status-panel.css` remains below the fail threshold but is reported by near-threshold governance as a watch item.
