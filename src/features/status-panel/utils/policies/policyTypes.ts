@@ -6,6 +6,7 @@ import type {
   FileChangeSummary,
   SubagentInfo,
 } from "../../types";
+import type { GovernanceEvidenceSnapshot } from "../../../governance/evidence";
 
 export type PolicyVerdictContribution = CheckpointVerdict | "no_contribution";
 
@@ -15,6 +16,7 @@ export type CheckpointPolicyEvidence = {
   failedSubagent: SubagentInfo | null;
   failedValidation: CheckpointValidationEvidence | null;
   fileChanges: readonly FileChangeSummary[];
+  governanceSnapshot: GovernanceEvidenceSnapshot | null;
   hasCompletedSubagentSet: boolean;
   hasCompletedTodoSet: boolean;
   hasEvidence: boolean;
@@ -33,6 +35,14 @@ export type PolicyDecision = {
   verdictContribution: PolicyVerdictContribution;
   reasonKey: string | null;
   sourceId: string | null;
+  evidenceSnapshotId?: string;
+  degradationReason?: string;
+  staleAt?: string;
+  gateContributions?: readonly {
+    gateId: string;
+    status: "pass" | "warn" | "fail" | "unknown";
+    degradationReason?: string;
+  }[];
 };
 
 export type Policy = {

@@ -58,4 +58,28 @@ describe("PolicyDecisionAuditPanel", () => {
 
     expect(container.firstChild).toBeNull();
   });
+
+  it("renders bridge snapshot metadata when present", () => {
+    render(
+      <PolicyDecisionAuditPanel
+        policyAudit={[
+          {
+            policyId: "costBudgetGovernancePolicy",
+            verdictContribution: "needs_review",
+            reasonKey: "statusPanel.policy.costBudgetGovernancePolicy.fail",
+            sourceId: "cost-budget",
+            evidenceSnapshotId: "snapshot-1",
+            degradationReason: "pricing-unavailable",
+            staleAt: "2026-05-20T00:00:00.000Z",
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("statusPanel.audit.title"));
+
+    expect(screen.getByText("snapshot-1")).toBeTruthy();
+    expect(screen.getByText("pricing-unavailable")).toBeTruthy();
+    expect(screen.getByText("2026-05-20T00:00:00.000Z")).toBeTruthy();
+  });
 });

@@ -760,6 +760,8 @@ describe("StatusPanel", () => {
           id: "openspec:tasks",
           source: "openspec",
           status: "warn",
+          degraded: false,
+          updatedAt: "1970-01-01T00:00:00.000Z",
           title: "OpenSpec tasks",
           summary: "1/2 task(s) complete.",
         },

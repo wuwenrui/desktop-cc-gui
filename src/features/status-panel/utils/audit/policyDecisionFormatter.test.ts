@@ -24,6 +24,9 @@ describe("formatPolicyDecision", () => {
       verdictLabel: "statusPanel.policy.verdict.needs_review",
       reasonLabel: "statusPanel.policy.customPolicy.needsReview",
       sourceLabel: "validation:typecheck",
+      evidenceSnapshotLabel: null,
+      degradationLabel: null,
+      staleLabel: null,
       hasSource: true,
     });
   });
@@ -58,5 +61,20 @@ describe("formatPolicyDecision", () => {
     const result = formatPolicyDecision(decision({ policyId: "unknownPolicy" }), t);
 
     expect(result.policyLabel).toBe("unknownPolicy");
+  });
+
+  it("formats bridge-fed audit metadata defensively", () => {
+    const result = formatPolicyDecision(
+      decision({
+        evidenceSnapshotId: "snapshot-1",
+        degradationReason: "pricing-unavailable",
+        staleAt: "2026-05-20T00:00:00.000Z",
+      }),
+      t,
+    );
+
+    expect(result.evidenceSnapshotLabel).toBe("snapshot-1");
+    expect(result.degradationLabel).toBe("pricing-unavailable");
+    expect(result.staleLabel).toBe("2026-05-20T00:00:00.000Z");
   });
 });

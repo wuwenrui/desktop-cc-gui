@@ -1,4 +1,5 @@
 import { corePolicy } from "./corePolicy";
+import { bridgeGovernancePolicies } from "./bridgeGovernancePolicies";
 import {
   lintValidationPolicy,
   testsValidationPolicy,
@@ -55,6 +56,7 @@ export const defaultPolicyRegistry = createPolicyRegistry([
   lintValidationPolicy,
   typecheckValidationPolicy,
   testsValidationPolicy,
+  ...bridgeGovernancePolicies,
 ]);
 
 function resolveMostSevereDecision(decisions: readonly PolicyDecision[]) {

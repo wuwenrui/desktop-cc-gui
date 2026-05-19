@@ -98,6 +98,8 @@ jobs:
         run: npm run check:context-ledger-cost-budget
       - name: Checkpoint policy chain
         run: npm run check:checkpoint-policy-chain
+      - name: Governance evidence bridge
+        run: npm run check:governance-evidence-bridge
       - name: Agent domain event schema
         run: npm run check:agent-domain-event-schema
       - name: Realtime event batching

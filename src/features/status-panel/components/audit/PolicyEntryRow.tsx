@@ -23,6 +23,15 @@ export function PolicyEntryRow({ decision }: PolicyEntryRowProps) {
         >
           {formatted.sourceLabel}
         </span>
+        {formatted.evidenceSnapshotLabel ? (
+          <span className="sp-policy-audit-source">{formatted.evidenceSnapshotLabel}</span>
+        ) : null}
+        {formatted.degradationLabel ? (
+          <span className="sp-policy-audit-source is-missing">{formatted.degradationLabel}</span>
+        ) : null}
+        {formatted.staleLabel ? (
+          <span className="sp-policy-audit-source is-missing">{formatted.staleLabel}</span>
+        ) : null}
       </span>
     </li>
   );

@@ -13,6 +13,7 @@ function baseEvidence(overrides: Partial<CheckpointPolicyEvidence> = {}): Checkp
     failedSubagent: null,
     failedValidation: null,
     fileChanges: [],
+    governanceSnapshot: null,
     hasCompletedSubagentSet: false,
     hasCompletedTodoSet: false,
     hasEvidence: false,

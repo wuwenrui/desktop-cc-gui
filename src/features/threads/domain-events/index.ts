@@ -1,4 +1,5 @@
 export * from "./eventFactories";
+export * from "./eventRuntime";
 export * from "./eventTypes";
 export * from "./events/base";
 export * from "./events/message";

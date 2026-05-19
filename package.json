@@ -27,6 +27,7 @@
     "check:capability-aware-policy-router": "node scripts/scan-engine-name-branches.mjs",
     "check:context-ledger-cost-budget": "node scripts/check-context-ledger-cost-budget.mjs",
     "check:checkpoint-policy-chain": "node scripts/check-checkpoint-policy-chain.mjs",
+    "check:governance-evidence-bridge": "node scripts/check-governance-evidence-bridge.mjs",
     "check:agent-domain-event-schema": "node scripts/check-agent-domain-event-schema.mjs",
     "check:realtime-event-batching": "node scripts/check-realtime-event-batching.mjs",
     "check:bundle-chunking": "node scripts/check-bundle-chunking.mjs",

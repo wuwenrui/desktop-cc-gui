@@ -7,10 +7,13 @@ export type FormattedPolicyDecision = {
   verdictLabel: string;
   reasonLabel: string;
   sourceLabel: string;
+  evidenceSnapshotLabel: string | null;
+  degradationLabel: string | null;
+  staleLabel: string | null;
   hasSource: boolean;
 };
 
-function normalizeToken(value: string | null) {
+function normalizeToken(value: string | null | undefined) {
   const trimmed = value?.trim();
   return trimmed && trimmed.length > 0 ? trimmed : null;
 }
@@ -34,6 +37,9 @@ export function formatPolicyDecision(
     verdictLabel: t(`statusPanel.policy.verdict.${decision.verdictContribution}`),
     reasonLabel: resolveReasonLabel(t, decision),
     sourceLabel: sourceId ?? t("statusPanel.audit.sourceUnavailable"),
+    evidenceSnapshotLabel: normalizeToken(decision.evidenceSnapshotId),
+    degradationLabel: normalizeToken(decision.degradationReason),
+    staleLabel: normalizeToken(decision.staleAt),
     hasSource: sourceId !== null,
   };
 }

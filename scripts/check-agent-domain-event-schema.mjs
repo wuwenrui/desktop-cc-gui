@@ -29,6 +29,7 @@ function readText(filePath) {
 for (const relativePath of [
   "eventTypes.ts",
   "eventFactories.ts",
+  "eventRuntime.ts",
   "eventDerivationFixtures.ts",
   "events/session.ts",
   "events/turn.ts",
@@ -65,6 +66,40 @@ const derivationSource = readText(path.join(DOMAIN_DIR, "eventDerivationFixtures
 for (const eventType of EVENT_TYPES) {
   if (!derivationSource.includes(`"${eventType}"`)) {
     fail(`derivation fixtures missing "${eventType}"`);
+  }
+}
+
+const runtimeSource = readText(path.join(DOMAIN_DIR, "eventRuntime.ts"));
+for (const token of [
+  "firstConsumer: \"governance-evidence-bridge\"",
+  "subscribe",
+  "createDomainEventRuntimeController",
+  "emitInternal",
+  "Object.freeze",
+]) {
+  if (!runtimeSource.includes(token)) {
+    fail(`eventRuntime missing token "${token}"`);
+  }
+}
+if (!runtimeSource.includes("export function createDomainEventRuntime(): DomainEventRuntime")) {
+  fail("eventRuntime must expose a subscribe-only createDomainEventRuntime() application surface");
+}
+const runtimeTypeMatch = runtimeSource.match(/export type DomainEventRuntime\s*=\s*\{([\s\S]*?)\n\};/);
+if (!runtimeTypeMatch) {
+  fail("eventRuntime must declare the application-facing DomainEventRuntime type");
+} else if (runtimeTypeMatch[1].includes("emitInternal")) {
+  fail("DomainEventRuntime must not expose emitInternal on the application-facing runtime type");
+}
+for (const forbidden of [
+  "localStorage",
+  "indexedDB",
+  "fetch(",
+  "WebSocket",
+  "postMessage",
+  "@tauri-apps/api",
+]) {
+  if (runtimeSource.includes(forbidden)) {
+    fail(`eventRuntime must not use persistence or transport token "${forbidden}"`);
   }
 }
 

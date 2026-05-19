@@ -85,8 +85,14 @@ describe("useGovernanceEvidence", () => {
         id: "governance:workspace-read",
         source: "workflow",
         status: "unknown",
+        degraded: true,
+        degradationReason: "governance-evidence-unavailable",
+        updatedAt: "1970-01-01T00:00:00.000Z",
         title: "Governance evidence",
         summary: "Governance files could not be read: bridge unavailable",
+        payload: {
+          kind: "legacy-workspace-evidence",
+        },
       },
     ]);
   });

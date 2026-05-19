@@ -16,6 +16,7 @@ function evidenceFor(
     failedSubagent: null,
     failedValidation: null,
     fileChanges: [],
+    governanceSnapshot: null,
     hasCompletedSubagentSet: false,
     hasCompletedTodoSet: false,
     hasEvidence: true,

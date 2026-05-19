@@ -72,6 +72,20 @@ for (const token of ["info", "warn", "block", "shouldInterruptRuntime: false"]) 
   }
 }
 
+const bridgeAdapterSource = readText(
+  path.join(ROOT, "src/features/governance/evidence/harnessEvidenceAdapters.ts"),
+);
+for (const token of [
+  "createCostBudgetGovernanceEvidence",
+  "BudgetThresholdSignal",
+  "shouldInterruptRuntime: false",
+  "source: \"cost-budget\"",
+]) {
+  if (!bridgeAdapterSource.includes(token)) {
+    fail(`harnessEvidenceAdapters missing cost-budget token "${token}"`);
+  }
+}
+
 const costBudgetLocaleTokens = [
   "cost: {",
   "budget: {",

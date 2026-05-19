@@ -12,8 +12,10 @@ const requiredFiles = [
   "corePolicy.ts",
   "policyRegistry.ts",
   "validationPolicies.ts",
+  "bridgeGovernancePolicies.ts",
   "policyRegistry.test.ts",
   "validationPolicies.test.ts",
+  "bridgeGovernancePolicies.test.ts",
 ].map((fileName) => path.join(POLICY_DIR, fileName));
 
 function fail(message) {
@@ -57,6 +59,22 @@ for (const token of ["corePolicy", "VERDICT_SEVERITY", "DEFAULT_AUDIT_LIMIT = 50
 const validationSource = readText(path.join(POLICY_DIR, "validationPolicies.ts"));
 if (validationSource.includes("verdictContribution: \"blocked\"")) {
   fail("optional validation policies must not contribute blocked");
+}
+
+const bridgePolicySource = readText(path.join(POLICY_DIR, "bridgeGovernancePolicies.ts"));
+for (const token of [
+  "governanceSnapshot",
+  "evidenceSnapshotId",
+  "costBudgetGovernancePolicy",
+  "largeFileGovernancePolicy",
+  "heavyTestNoiseGovernancePolicy",
+]) {
+  if (!bridgePolicySource.includes(token)) {
+    fail(`bridgeGovernancePolicies missing invariant token "${token}"`);
+  }
+}
+if (bridgePolicySource.includes("verdictContribution: \"blocked\"")) {
+  fail("bridge-fed governance policies must not contribute blocked");
 }
 
 const policyLocaleTokens = [

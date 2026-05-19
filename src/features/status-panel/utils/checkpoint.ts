@@ -1,4 +1,5 @@
 import type { ConversationItem } from "../../../types";
+import type { GovernanceEvidenceSnapshot } from "../../governance/evidence";
 import type {
   CheckpointAction,
   CheckpointKeyChange,
@@ -121,6 +122,7 @@ type BuildCheckpointViewModelInput = {
   isProcessing: boolean;
   generatedSummary?: CheckpointGeneratedSummary | null;
   canonicalFileFacts?: FileChangeSummary[] | null;
+  governanceSnapshot?: GovernanceEvidenceSnapshot | null;
 };
 
 export interface CheckpointGeneratedSummary {
@@ -136,6 +138,7 @@ export function buildCheckpointViewModel(
     commands,
     fileChanges: rawFileChanges,
     generatedSummary = null,
+    governanceSnapshot = null,
     isProcessing,
     subagents,
     todos,
@@ -198,6 +201,7 @@ export function buildCheckpointViewModel(
     failedSubagent,
     failedValidation,
     fileChanges,
+    governanceSnapshot,
     hasCompletedSubagentSet,
     hasCompletedTodoSet,
     hasEvidence,

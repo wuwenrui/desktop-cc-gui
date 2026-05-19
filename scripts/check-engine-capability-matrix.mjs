@@ -49,6 +49,9 @@ const capabilities = fixture.capabilities ?? [];
 const engines = fixture.engines ?? {};
 const tsSource = readText(TS_PATH);
 const rustSource = readText(RUST_PATH);
+const bridgeAdapterSource = readText(
+  path.join(ROOT, "src/features/governance/evidence/harnessEvidenceAdapters.ts"),
+);
 
 if (!Array.isArray(capabilities) || capabilities.length === 0) {
   fail("fixture must define non-empty capabilities");
@@ -76,6 +79,19 @@ for (const [engine, table] of Object.entries(engines)) {
 for (const engine of ["claude", "codex", "gemini", "opencode"]) {
   if (!engines[engine]) {
     fail(`fixture missing engine "${engine}"`);
+  }
+}
+
+for (const token of [
+  "createCapabilityGovernanceEvidence",
+  "EngineCapabilityRuntimeStatus",
+  "source: \"engine-capability-matrix\"",
+  "specState",
+  "runtimeState",
+  "available",
+]) {
+  if (!bridgeAdapterSource.includes(token)) {
+    fail(`harnessEvidenceAdapters missing capability evidence token "${token}"`);
   }
 }
 
