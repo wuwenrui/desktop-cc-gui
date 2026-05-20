@@ -489,7 +489,7 @@ export async function deriveProjectGovernanceProfile(
 export function createGovernanceConfigTemplate() {
   return JSON.stringify(
     {
-      $schema: "https://mossx.dev/schemas/governance.config.v1.json",
+      $schema: "https://ccgui.dev/schemas/governance.config.v1.json",
       version: 1,
       scripts: [],
       workflows: [],
