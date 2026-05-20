@@ -103,3 +103,9 @@
 - [x] 15.1 Calibrate proposal/design/spec/tasks to the final read-only curtain behavior.
 - [x] 15.2 Run focused validation for TypeScript, lint, Vitest, OpenSpec, large-file check, and diff whitespace.
 - [x] 15.3 Commit the session-management change set without unrelated governance/status-panel worktree changes.
+
+## 16. Heavy Test Timeout Follow-up
+
+- [x] 16.1 Stabilize `useWorkspaceSessionCatalog` effect dependencies so semantically identical filters do not trigger reload loops.
+- [x] 16.2 Preserve stale response handling when workspace selection is cleared.
+- [x] 16.3 Run focused Vitest, heavy-test-noise, and OpenSpec validation.

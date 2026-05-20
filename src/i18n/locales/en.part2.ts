@@ -5,7 +5,8 @@ const enPart2 = {
     minimize: "Minimize",
     clear: "Clear",
     emptyTitle: "No runtime notices yet",
-    emptyDescription: "Initialization progress and key errors will appear here.",
+    emptyDescription:
+      "Initialization progress and key errors will appear here.",
     statusIdle: "Idle",
     statusStreaming: "Running",
     statusError: "Error",
@@ -25,23 +26,30 @@ const enPart2 = {
     },
     runtime: {
       startupPending: "{{workspace}}: {{engine}} runtime is connecting...",
-      resumePending: "{{workspace}}: Runtime health check failed. Trying recovery.",
+      resumePending:
+        "{{workspace}}: Runtime health check failed. Trying recovery.",
       ready: "{{workspace}}: {{engine}} runtime is connected",
-      suspectStale: "{{workspace}}: Runtime health check failed. Trying recovery.",
+      suspectStale:
+        "{{workspace}}: Runtime health check failed. Trying recovery.",
       cooldown: "{{workspace}}: Runtime recovery failed. Cooldown is active.",
-      quarantined: "{{workspace}}: Runtime recovery failed and needs attention.",
+      quarantined:
+        "{{workspace}}: Runtime recovery failed and needs attention.",
       codexSessionStartHookSkipped:
         "Codex skipped the project SessionStart hook and created the session. Inspect `.codex/hooks.json`; project context may be incomplete. ({{reason}})",
     },
     startup: {
-      taskStarted: "Background load started: {{task}} ({{phase}} / {{workspace}})",
+      taskStarted:
+        "Background load started: {{task}} ({{phase}} / {{workspace}})",
       taskCompleted: "Background load completed: {{task}} ({{durationMs}}ms)",
       taskFailed: "Background load failed: {{task}}",
-      taskTimedOut: "Background load timed out: {{task}}. Degraded path is active.",
+      taskTimedOut:
+        "Background load timed out: {{task}}. Degraded path is active.",
       taskDegraded: "Background load degraded: {{task}} ({{reason}})",
       taskCancelled: "Background load cancelled: {{task}} ({{reason}})",
-      commandCompleted: "Internal command completed: {{command}} ({{workspace}} / {{durationMs}}ms)",
-      commandFailed: "Internal command failed: {{command}} ({{workspace}} / {{durationMs}}ms)",
+      commandCompleted:
+        "Internal command completed: {{command}} ({{workspace}} / {{durationMs}}ms)",
+      commandFailed:
+        "Internal command failed: {{command}} ({{workspace}} / {{durationMs}}ms)",
       shellReady: "Client shell is ready",
       inputReady: "Input is interactive",
       activeWorkspaceReady: "Active workspace first screen is ready",
@@ -82,8 +90,7 @@ const enPart2 = {
     loadingProgressAddProjectMessage:
       "Adding {{project}} to the current window.",
     loadingProgressOpenProjectTitle: "Opening project...",
-    loadingProgressOpenProjectMessage:
-      "Opening {{project}} in a new window.",
+    loadingProgressOpenProjectMessage: "Opening {{project}} in a new window.",
     delete: "Delete Workspace",
     deleteWorktree: "Delete Worktree",
     confirmDelete: "Are you sure you want to delete this workspace?",
@@ -133,7 +140,8 @@ const enPart2 = {
     startingConversation: "Starting...",
     continueLatestConversation: "Continue latest conversation",
     guidedStart: "Spec and execution guides",
-    guidedStartHint: "Choose OpenSpec or Spec-kit first, then run the general guides.",
+    guidedStartHint:
+      "Choose OpenSpec or Spec-kit first, then run the general guides.",
     guideProjectSpecTitle: "OpenSpec module",
     guideProjectSpecDescription:
       "For OpenSpec projects: inspect changes, specs, tasks, and verification status.",
@@ -147,23 +155,28 @@ const enPart2 = {
     guideProjectSpecPrompt:
       "Please read and summarize this project's key specs and constraints first (prioritize AGENTS.md, CLAUDE.md, README, and docs). Extract must-follow rules, boundaries, and common pitfalls.",
     guideCodebaseScanTitle: "Scan codebase quickly",
-    guideCodebaseScanDescription: "Map module boundaries, entry points, data flow, and dependencies.",
+    guideCodebaseScanDescription:
+      "Map module boundaries, entry points, data flow, and dependencies.",
     guideCodebaseScanPrompt:
       "Please perform a fast codebase scan and give me a structured project map: stack, core modules, main entry points, key dependencies, risks, and recommended low-risk change entry points.",
     guideImplementationPlanTitle: "Create implementation plan",
-    guideImplementationPlanDescription: "Break work into actionable steps with validation and rollback.",
+    guideImplementationPlanDescription:
+      "Break work into actionable steps with validation and rollback.",
     guideImplementationPlanPrompt:
       "Based on the current project context, create an executable implementation plan: objective, scope, step-by-step tasks, validation strategy, risks, and rollback plan. Prefer minimum viable changes.",
     guideRequirementsTitle: "Break down requirements",
-    guideRequirementsDescription: "Clarify goals, scope, and acceptance criteria before coding.",
+    guideRequirementsDescription:
+      "Clarify goals, scope, and acceptance criteria before coding.",
     guideRequirementsPrompt:
       "Help me break down this task. First summarize goals and constraints, then propose a concise implementation plan with risks and validation steps.",
     guideReviewTitle: "Run a code review",
-    guideReviewDescription: "Focus on correctness, regression risks, and missing tests.",
+    guideReviewDescription:
+      "Focus on correctness, regression risks, and missing tests.",
     guideReviewPrompt:
       "I want a focused code review. Prioritize bugs, behavior regressions, and missing tests. List findings by severity with clear file references.",
     guideDebugTitle: "Investigate a bug",
-    guideDebugDescription: "Trace symptoms, isolate root cause, and propose a fix path.",
+    guideDebugDescription:
+      "Trace symptoms, isolate root cause, and propose a fix path.",
     guideDebugPrompt:
       "Help me debug an issue. Ask for symptoms, likely scope, and reproduction steps, then propose a step-by-step root-cause investigation plan.",
     recentConversations: "Recent conversations",
@@ -179,7 +192,8 @@ const enPart2 = {
     deletingConversations: "Deleting...",
     deleteConversationFailed: "Failed to delete conversation.",
     archiveConversationFailed: "Failed to archive conversation.",
-    deleteConversationsPartial: "Deleted {{succeeded}} conversation(s), {{failed}} failed.",
+    deleteConversationsPartial:
+      "Deleted {{succeeded}} conversation(s), {{failed}} failed.",
     deleteErrorCode: {
       WORKSPACE_NOT_CONNECTED: "Workspace not connected",
       SESSION_NOT_FOUND: "Session not found",
@@ -201,16 +215,17 @@ const enPart2 = {
     // Clone
     newSharedSession: "Claude Code + Codex",
     newCloneAgent: "New clone agent",
-    createWorkingCopyOf: "Create a new working copy of \"{{name}}\".",
+    createWorkingCopyOf: 'Create a new working copy of "{{name}}".',
     copyName: "Copy name",
     copiesFolder: "Copies folder",
     suggested: "Suggested",
     useSuggested: "Use suggested",
     // Worktree
     newWorktreeAgent: "New worktree agent",
-    createWorktreeUnder: "Create a worktree under \"{{name}}\".",
+    createWorktreeUnder: 'Create a worktree under "{{name}}".',
     noviceGuideTitle: "Beginner quick guide (with examples)",
-    noviceGuideSubtitle: "No need to memorize commands. Follow the examples on the left.",
+    noviceGuideSubtitle:
+      "No need to memorize commands. Follow the examples on the left.",
     noviceGuideBranch:
       "Branch name: use intent-based naming. Example: feat/login-page (feature) or fix/token-timeout (bug fix).",
     noviceGuideBaseBranch:
@@ -222,7 +237,8 @@ const enPart2 = {
     noviceGuideSetupScript:
       "Worktree setup script: runs once after create. Common examples: pnpm install, or pnpm install && pnpm dev.",
     noviceGuideCancel: "Cancel: closes this dialog and creates nothing.",
-    noviceGuideCreate: "Create: creates the worktree using your selected base branch.",
+    noviceGuideCreate:
+      "Create: creates the worktree using your selected base branch.",
     branchName: "Branch name",
     branchNameHint:
       "Recommended: feat/login-page (feature) or fix/token-refresh-timeout (bug fix). Avoid vague names like test123.",
@@ -230,14 +246,16 @@ const enPart2 = {
     baseBranchHint:
       "Pick from dropdown only. Beginners can start with upstream/main; choose origin/main if you only sync with your fork.",
     baseBranchPlaceholder: "Please select",
-    baseBranchPlaceholderError: "Please choose a base branch from the dropdown first.",
+    baseBranchPlaceholderError:
+      "Please choose a base branch from the dropdown first.",
     baseBranchLoading: "Loading base branches...",
     baseBranchNoOptions: "No base branches available",
     baseBranchRootGroup: "Root group",
     baseBranchInvalid: "Base branch is invalid or unavailable.",
     basePreview: "Base preview",
     basePreviewUnavailable: "No base branch selected",
-    basePreviewHint: "Layered view: source group + branch + commit. Create will use exactly this start point.",
+    basePreviewHint:
+      "Layered view: source group + branch + commit. Create will use exactly this start point.",
     basePreviewSourceUnknown: "source pending",
     basePreviewCommitUnavailable: "commit unknown",
     nonGitRepositoryError:
@@ -245,11 +263,12 @@ const enPart2 = {
     nonGitRepositoryGuideTitle: "Initialize Git First",
     nonGitRepositoryGuideDescription:
       "Run the 3 commands below in your project root, then return to this dialog to continue.",
-    nonGitRepositoryAlertTitle: "Cannot create worktree: current folder is not a Git repository",
+    nonGitRepositoryAlertTitle:
+      "Cannot create worktree: current folder is not a Git repository",
     nonGitRepositoryAlertDescription:
       "Detected that `{{path}}` does not have Git metadata (.git). Please initialize Git and create at least one initial commit.",
     nonGitRepositoryAlertHint:
-      "Suggested flow: `git init` -> `git add . && git commit -m \"chore: init repository\"` -> return and create worktree.",
+      'Suggested flow: `git init` -> `git add . && git commit -m "chore: init repository"` -> return and create worktree.',
     nonGitRepositoryTechnicalDetail: "Technical detail (for troubleshooting)",
     baseBranchGroup: {
       local: "local",
@@ -261,15 +280,18 @@ const enPart2 = {
     publishToOriginHint:
       "When enabled, example command: `git push -u origin feat/login-page` right after creation.",
     worktreeCreateResultTitle: "Worktree Creation Result",
-    worktreeResultSuccessSubtitle: "Local and remote status are summarized for quick confirmation.",
+    worktreeResultSuccessSubtitle:
+      "Local and remote status are summarized for quick confirmation.",
     worktreeResultWarningSubtitle:
       "Local creation succeeded, but remote publish needs manual follow-up.",
     worktreeResultErrorTitle: "Critical Warning",
     worktreeCreateSuccess: "Worktree created locally: {{branch}}",
-    worktreePublishStatusCreatedTracking: "Remote publish succeeded. Tracking set to {{tracking}}.",
+    worktreePublishStatusCreatedTracking:
+      "Remote publish succeeded. Tracking set to {{tracking}}.",
     worktreePublishStatusCreatedNoTracking:
       "Remote publish succeeded, but no tracking branch was returned.",
-    worktreePublishStatusSkipped: "Remote publish was skipped by your current setting.",
+    worktreePublishStatusSkipped:
+      "Remote publish was skipped by your current setting.",
     worktreePublishStatusSkippedTracking:
       "Remote publish skipped. Existing tracking branch: {{tracking}}.",
     worktreePublishFailedRecoverable:
@@ -282,7 +304,8 @@ const enPart2 = {
       "Cannot create worktree: target path conflict detected ({{path}}). Change branch name or target folder, then retry.",
     worktreeCreateErrorBranchInvalid:
       "Cannot create worktree: branch name is invalid by Git rules ({{branch}}). Please rename and retry.",
-    worktreeCreateErrorBranchRequired: "Cannot create worktree: branch name is required.",
+    worktreeCreateErrorBranchRequired:
+      "Cannot create worktree: branch name is required.",
     worktreeSetupScript: "Worktree setup script",
     worktreeSetupScriptHint:
       "Runs once in a dedicated terminal after each new worktree is created. Example: `pnpm install` or `pnpm install && pnpm dev`.",
@@ -300,7 +323,8 @@ const enPart2 = {
     worktreeInfo: "Worktree info",
     name: "Name",
     confirmRename: "Confirm rename",
-    updateUpstreamBranchTo: "Do you want to update the upstream branch to {{branch}}?",
+    updateUpstreamBranchTo:
+      "Do you want to update the upstream branch to {{branch}}?",
     updateUpstreamPrompt: "Do you want to update the upstream branch to",
     updateUpstream: "Update upstream",
     terminal: "Terminal",
@@ -318,8 +342,8 @@ const enPart2 = {
     noBranchesFound: "No branches found",
     searchOrCreateBranch: "Search or create branch",
     searchBranches: "Search branches",
-    createBranch: "Create branch \"{{name}}\"",
-    createBranchNamed: "Create branch \"{{name}}\"",
+    createBranch: 'Create branch "{{name}}"',
+    createBranchNamed: 'Create branch "{{name}}"',
     // Branch validation
     branchCannotBeDot: "Branch name cannot be '.' or '..'.",
     branchCannotContainSpaces: "Branch name cannot contain spaces.",
@@ -331,7 +355,8 @@ const enPart2 = {
     branchCannotEndDot: "Branch name cannot end with '.'.",
     branchNameCannotBeDotOrDotDot: "Branch name cannot be '.' or '..'.",
     branchNameCannotContainSpaces: "Branch name cannot contain spaces.",
-    branchNameCannotStartOrEndWithSlash: "Branch name cannot start or end with '/'.",
+    branchNameCannotStartOrEndWithSlash:
+      "Branch name cannot start or end with '/'.",
     branchNameCannotEndWithDotLock: "Branch name cannot end with '.lock'.",
     branchNameCannotContainDotDot: "Branch name cannot contain '..'.",
     branchNameCannotContainAtBrace: "Branch name cannot contain '@{'.",
@@ -343,27 +368,31 @@ const enPart2 = {
     threads: "threads",
     // Delete dialogs
     deleteWorkspaceTitle: "Remove Workspace",
-    deleteWorkspaceConfirm: "Are you sure you want to remove \"{{name}}\"?",
+    deleteWorkspaceConfirm: 'Are you sure you want to remove "{{name}}"?',
     deleteWorkspaceMessage: "This will remove the workspace from ccgui.",
-    deleteWorkspaceWorktreeWarning: "This will also delete {{count}} worktree on disk.",
-    deleteWorkspaceWorktreeWarning_other: "This will also delete {{count}} worktrees on disk.",
+    deleteWorkspaceWorktreeWarning:
+      "This will also delete {{count}} worktree on disk.",
+    deleteWorkspaceWorktreeWarning_other:
+      "This will also delete {{count}} worktrees on disk.",
     deleteWorkspaceBeforeYouConfirm: "Before you continue:",
     deleteWorkspaceWillHappenTitle: "What will happen:",
     deleteWorkspaceWillNotHappenTitle: "What will not happen:",
-    deleteWorkspaceEffectListOnly: "The workspace will be removed from the ccgui list only.",
+    deleteWorkspaceEffectListOnly:
+      "The workspace will be removed from the ccgui list only.",
     deleteWorkspaceEffectSessions:
       "Active sessions under this workspace (and linked worktrees) will be closed.",
     deleteWorkspaceEffectDeleteWorktrees:
       "{{count}} linked worktree folder on disk will be deleted.",
     deleteWorkspaceEffectDeleteWorktrees_other:
       "{{count}} linked worktree folders on disk will be deleted.",
-    deleteWorkspaceEffectKeepFiles: "Code files in the main workspace folder will stay untouched.",
+    deleteWorkspaceEffectKeepFiles:
+      "Code files in the main workspace folder will stay untouched.",
     deleteWorkspaceEffectNoGitWrite:
       "No merge/rebase/push or other Git write operation will be executed.",
     deleteWorkspaceEffectReAdd:
       "You can add this workspace back later at any time and continue working.",
     reloadWorkspaceThreadsTitle: "Reload Threads",
-    reloadWorkspaceThreadsConfirm: "Reload the thread list for \"{{name}}\"?",
+    reloadWorkspaceThreadsConfirm: 'Reload the thread list for "{{name}}"?',
     reloadWorkspaceThreadsBeforeYouConfirm: "This action will:",
     reloadWorkspaceThreadsEffectRefresh:
       "Rescan this workspace's sessions and refresh the sidebar list.",
@@ -374,8 +403,9 @@ const enPart2 = {
     reloadWorkspaceThreadsEffectNoGitWrite:
       "Not run checkout/merge/rebase or any other Git write operation.",
     deleteWorktreeTitle: "Delete Worktree",
-    deleteWorktreeConfirm: "Are you sure you want to delete \"{{name}}\"?",
-    deleteWorktreeMessage: "This will close the agent, remove its worktree, and delete it from ccgui.",
+    deleteWorktreeConfirm: 'Are you sure you want to delete "{{name}}"?',
+    deleteWorktreeMessage:
+      "This will close the agent, remove its worktree, and delete it from ccgui.",
     deleteWorktreeFailed: "Delete worktree failed",
   },
 
@@ -397,8 +427,9 @@ const enPart2 = {
     copyPath: "Copy Path",
     revealInFinder: "Reveal in Finder",
     deleteItem: "Move to Trash",
-    deleteFileConfirm: "Are you sure you want to move \"{{name}}\" to the trash?",
-    deleteFolderConfirm: "Are you sure you want to move the folder \"{{name}}\" and all its contents to the trash?",
+    deleteFileConfirm: 'Are you sure you want to move "{{name}}" to the trash?',
+    deleteFolderConfirm:
+      'Are you sure you want to move the folder "{{name}}" and all its contents to the trash?',
     duplicateItem: "Duplicate",
     newFile: "New File",
     newFolder: "New Folder",
@@ -438,9 +469,12 @@ const enPart2 = {
     closeDetachedExplorer: "Close detached explorer",
     detachedExplorerTitle: "Detached explorer",
     detachedExplorerEmptyTitle: "Select a file to start browsing",
-    detachedExplorerEmptyBody: "The left tree stays scoped to this workspace, and the right pane opens files inside this detached window without overwriting the main editor session.",
-    detachedExplorerUnavailableTitle: "Detached explorer is missing workspace context",
-    detachedExplorerUnavailableBody: "Return to the main window file panel and open the detached explorer again to restore the current workspace.",
+    detachedExplorerEmptyBody:
+      "The left tree stays scoped to this workspace, and the right pane opens files inside this detached window without overwriting the main editor session.",
+    detachedExplorerUnavailableTitle:
+      "Detached explorer is missing workspace context",
+    detachedExplorerUnavailableBody:
+      "Return to the main window file panel and open the detached explorer again to restore the current workspace.",
     runConsoleTitle: "Run Console",
     runCommandPreview: "Command",
     runCommandPresetLabel: "Preset",
@@ -520,7 +554,8 @@ const enPart2 = {
     tabularPreviewTooLarge:
       "Table preview is limited to files up to {{maxMb}} MB. Open externally for larger workbooks.",
     documentPreviewTitle: "Document preview",
-    documentPreviewUnavailable: "Document preview is unavailable for this file.",
+    documentPreviewUnavailable:
+      "Document preview is unavailable for this file.",
     documentPreviewLegacyDocFallback:
       "Legacy .doc files are kept on explicit fallback. Open externally or convert to .docx for rich preview.",
     documentPreviewFallbackHint:
@@ -540,7 +575,8 @@ const enPart2 = {
     annotationPlaceholder: "Tell the AI what to notice or change here",
     annotationSubmit: "Annotate",
     markdownAnnotationToolbar: "Markdown preview annotation",
-    markdownAnnotationHint: "Annotate source line numbers in preview without changing the file",
+    markdownAnnotationHint:
+      "Annotate source line numbers in preview without changing the file",
     markdownFrontmatterLabel: "Metadata",
     markdownMermaidTabList: "Mermaid block view",
     markdownMermaidSource: "Source",
@@ -550,7 +586,8 @@ const enPart2 = {
     annotationStartLine: "Start line",
     annotationEndLine: "End line",
     annotationSelectionToolbar: "Code selection annotation",
-    annotationUnavailableForSelection: "Selection cannot map to current file lines",
+    annotationUnavailableForSelection:
+      "Selection cannot map to current file lines",
     // File editor
     backToChat: "Back to chat",
     preview: "Preview",
@@ -563,7 +600,8 @@ const enPart2 = {
     saveShortcut: "⌘S to save",
     externalChangeAutoSynced: "File changed on disk and has been synced.",
     externalChangeConflictTitle: "File changed on disk",
-    externalChangeConflictBody: "Unsaved local edits detected. {{count}} external update pending review.",
+    externalChangeConflictBody:
+      "Unsaved local edits detected. {{count}} external update pending review.",
     externalChangeReload: "Reload from disk",
     externalChangeKeepLocal: "Keep local edits",
     externalChangeCompare: "Compare",
@@ -640,7 +678,8 @@ const enPart2 = {
   specHub: {
     title: "Spec Hub",
     subtitle: "Track and execute spec-driven changes in this workspace.",
-    subtitleWithWorkspace: "Track and execute spec-driven changes in {{workspace}}.",
+    subtitleWithWorkspace:
+      "Track and execute spec-driven changes in {{workspace}}.",
     doctorTitle: "Environment Doctor",
     modeTitle: "Mode",
     modeManaged: "Managed",
@@ -700,7 +739,8 @@ const enPart2 = {
     },
     detached: {
       unavailableTitle: "Unable to restore the Spec Hub window",
-      unavailableBody: "The latest reader session is missing, invalid, or no longer available.",
+      unavailableBody:
+        "The latest reader session is missing, invalid, or no longer available.",
     },
     actionCenterTitle: "Action Orchestrator",
     actionCenterHint: "Use one engine for all actions on this page.",
@@ -725,8 +765,10 @@ const enPart2 = {
       streamTitle: "Live output",
       outputTitle: "Final output",
       logsTitle: "Execution logs",
-      validateSkipped: "Auto-completion failed and strict validate was skipped for this run.",
-      summaryCompletionFinished: "Verification artifact completed. Running strict verify.",
+      validateSkipped:
+        "Auto-completion failed and strict validate was skipped for this run.",
+      summaryCompletionFinished:
+        "Verification artifact completed. Running strict verify.",
       summarySuccess: "Auto-completion and verify flow finished.",
       status: {
         idle: "Idle",
@@ -783,20 +825,25 @@ const enPart2 = {
       },
       logDispatch: "Continue AI enhancement dispatched with {{engine}}.",
       logFinished: "Continue AI enhancement finished.",
-      logAutoApplyDispatch: "Continue AI enhancement finished. Auto-running Apply with {{engine}}.",
+      logAutoApplyDispatch:
+        "Continue AI enhancement finished. Auto-running Apply with {{engine}}.",
       logAutoApplyFinished: "Auto-run apply finished.",
-      logAutoApplySkipped: "Auto-run apply did not complete. Run Apply manually.",
+      logAutoApplySkipped:
+        "Auto-run apply did not complete. Run Apply manually.",
       autoApplyFailed: "Auto-run apply failed. Check Apply execution feedback.",
     },
     applyContinueBrief: {
       label: "Use Continue brief",
       summary: "Brief: {{summary}}",
-      stale: "Continue brief may be stale. Re-run Continue + AI Enhancement for fresh context.",
+      stale:
+        "Continue brief may be stale. Re-run Continue + AI Enhancement for fresh context.",
       missing: "No Continue brief yet. Run Continue + AI Enhancement first.",
     },
     nextStep: {
-      runContinueFirst: "Suggested next step: run Continue first, then Apply after specs delta is generated.",
-      runContinueThenApply: "Suggested next step: run Continue, then run Apply to complete core artifacts.",
+      runContinueFirst:
+        "Suggested next step: run Continue first, then Apply after specs delta is generated.",
+      runContinueThenApply:
+        "Suggested next step: run Continue, then run Apply to complete core artifacts.",
     },
     tab: {
       proposal: "Proposal",
@@ -833,8 +880,7 @@ const enPart2 = {
       specRootSavedDefault: "Restored default Spec root.",
       specRootMustBeAbsolute: "Spec root must be an absolute path.",
       agentLabel: "Auto-fill agent",
-      agentHint:
-        "Run once to analyze repository and write project context.",
+      agentHint: "Run once to analyze repository and write project context.",
       previewTitle: "Will write:",
       previewPending: "Run once to preview generated summary.",
       previewType: "Project Type: {{type}}",
@@ -850,11 +896,14 @@ const enPart2 = {
       projectTypeLegacy: "Legacy project",
       projectTypeNew: "New project",
       domainLabel: "Domain and goals",
-      domainPlaceholder: "Core business domain, expected outcomes, and boundaries",
+      domainPlaceholder:
+        "Core business domain, expected outcomes, and boundaries",
       architectureLabel: "Architecture",
-      architecturePlaceholder: "Services/modules, key dependencies, deployment model",
+      architecturePlaceholder:
+        "Services/modules, key dependencies, deployment model",
       constraintsLabel: "Constraints",
-      constraintsPlaceholder: "Compliance, cost, timeline, compatibility constraints",
+      constraintsPlaceholder:
+        "Compliance, cost, timeline, compatibility constraints",
       keyCommandsLabel: "Key commands",
       keyCommandsPlaceholder: "One command per line, e.g. pnpm test",
       ownersLabel: "Owners",
@@ -870,7 +919,8 @@ const enPart2 = {
       loadingProjectInfo: "Loading project context...",
       bootstrapSuccess: "OpenSpec initialization completed.",
       projectInfoSaved: "Project context updated.",
-      unsupported: "Project context management is only available for OpenSpec workspaces.",
+      unsupported:
+        "Project context management is only available for OpenSpec workspaces.",
     },
     timelineKind: {
       action: "Action",
@@ -907,7 +957,8 @@ const enPart2 = {
     noChanges: "No active changes found.",
     noChangesHint: "Create or sync a change under openspec/changes first.",
     noBacklogChanges: "No backlog changes yet.",
-    noBacklogChangesHint: "Move changes here when they are worth keeping but not part of the current working set.",
+    noBacklogChangesHint:
+      "Move changes here when they are worth keeping but not part of the current working set.",
     changeBacklogBadge: "Backlog",
     changeBacklogHint: "This change is parked in backlog pool.",
     changeRowAriaLabelBacklog:
@@ -918,7 +969,8 @@ const enPart2 = {
       removeFromBacklog: "Remove from backlog pool",
     },
     selectChange: "Select a change to inspect details.",
-    selectChangeHint: "Pick a change from the left to inspect artifacts and actions.",
+    selectChangeHint:
+      "Pick a change from the left to inspect artifacts and actions.",
     blockers: {
       expand: "Show {{count}} more",
       collapse: "Collapse",
@@ -929,11 +981,14 @@ const enPart2 = {
     truncated: "Truncated",
     taskProgress: "Tasks {{checked}}/{{total}}",
     taskProgressRequired: "Required {{checked}}/{{total}}",
-    tasksEditableRule: "Edit rule: only task rows are editable; list is read-only while actions run or task write-back is in progress.",
-    tasksReadonlyDuringAction: "An action is running. Tasks are temporarily read-only.",
+    tasksEditableRule:
+      "Edit rule: only task rows are editable; list is read-only while actions run or task write-back is in progress.",
+    tasksReadonlyDuringAction:
+      "An action is running. Tasks are temporarily read-only.",
     tasksUpdating: "Writing task updates, please wait...",
     emptyArtifact: "No content available.",
-    emptyArtifactHint: "This artifact file is not generated yet. Try Continue or Apply first.",
+    emptyArtifactHint:
+      "This artifact file is not generated yet. Try Continue or Apply first.",
     runningAction: "Running action...",
     proposal: {
       title: "Proposal Execution Feedback",
@@ -963,8 +1018,10 @@ const enPart2 = {
       emptyContentError: "Enter proposal content first.",
       emptyInputError: "Enter proposal content or attach at least one image.",
       imageCountExceeded: "You can attach up to {{count}} images.",
-      imageUnsupported: "Unsupported image format. Use png/jpg/jpeg/gif/webp/bmp/tiff.",
-      imageTooLarge: "Image is too large ({{size}}). Max 8 MB per pasted image.",
+      imageUnsupported:
+        "Unsupported image format. Use png/jpg/jpeg/gif/webp/bmp/tiff.",
+      imageTooLarge:
+        "Image is too large ({{size}}). Max 8 MB per pasted image.",
       summaryFallback: "Proposal processing completed.",
       runSuccess: "Proposal processing finished.",
       collapsePanel: "Collapse proposal feedback",
@@ -1010,7 +1067,8 @@ const enPart2 = {
     applyExecution: {
       title: "Apply Execution Feedback",
       executorLabel: "Apply executor",
-      executorHint: "Apply runs with the selected engine and auto-updates completed task checkboxes when possible.",
+      executorHint:
+        "Apply runs with the selected engine and auto-updates completed task checkboxes when possible.",
       collapsePanel: "Collapse feedback panel",
       expandPanel: "Expand feedback panel",
       closePanel: "Close feedback panel",
@@ -1080,7 +1138,8 @@ const enPart2 = {
     feedbackElapsed: "Elapsed {{duration}}",
     expandTimeline: "Expand",
     collapseTimeline: "Collapse",
-    passthroughHint: "Minimal compatibility mode: use passthrough external commands.",
+    passthroughHint:
+      "Minimal compatibility mode: use passthrough external commands.",
     openSpecKitDocs: "Open Spec-Kit docs",
     validationPanel: "Validation",
     emptyOutput: "No output.",
@@ -1096,22 +1155,26 @@ const enPart2 = {
       startedAt: "Started at: {{time}}",
       finishedAt: "Finished at: {{time}}",
       logsTitle: "Execution logs",
-      remediateHint: "Missing specs delta MUST be created before any task polish.",
+      remediateHint:
+        "Missing specs delta MUST be created before any task polish.",
       riskMissingSpecs: "Specs delta is missing and must be recovered first.",
       verifyPlanEnsureSpecs: "Confirm specs/**/*.md exists under this change.",
       sequenceFixSpecsFirst: "Recover specs delta first, then polish tasks.",
       summaryReady: "Core artifact audit passed. Specs delta already exists.",
       summaryRecovered: "Missing specs delta was recovered automatically.",
-      summaryStillMissing: "Specs delta is still missing after auto-recovery. Run Continue + Apply again.",
+      summaryStillMissing:
+        "Specs delta is still missing after auto-recovery. Run Continue + Apply again.",
       summaryFailed: "Combo recovery failed.",
       errorStillMissing: "Specs delta is still missing.",
       errorWithReason: "Combo recovery failed: {{reason}}",
       logDispatch: "Combo recovery audit started.",
       logAuditPassed: "Audit passed: specs delta exists.",
-      logAuditMissingSpecs: "Audit found missing specs delta. Starting auto-recovery.",
+      logAuditMissingSpecs:
+        "Audit found missing specs delta. Starting auto-recovery.",
       logRemediateDispatch: "Dispatching auto-recovery apply with {{engine}}.",
       logRemediateFinished: "Auto-recovery apply finished.",
-      logRemediateFailed: "Auto-recovery apply did not succeed. Verifying artifacts anyway.",
+      logRemediateFailed:
+        "Auto-recovery apply did not succeed. Verifying artifacts anyway.",
       status: {
         idle: "Idle",
         running: "Running",
@@ -1136,8 +1199,10 @@ const enPart2 = {
       action: "AI takeover fix",
       running: "AI takeover running...",
       autoArchiveLabel: "Auto-archive after takeover",
-      success: "{{engine}} takeover finished. Review result, then re-run verify/archive.",
-      successArchived: "Takeover finished and this change was archived automatically.",
+      success:
+        "{{engine}} takeover finished. Review result, then re-run verify/archive.",
+      successArchived:
+        "Takeover finished and this change was archived automatically.",
       outputTitle: "AI takeover result",
       streamTitle: "Live output",
       streamEmpty: "Waiting for agent output...",
@@ -1151,11 +1216,13 @@ const enPart2 = {
       collapsePanel: "Collapse AI takeover feedback",
       closePanel: "Close AI takeover feedback",
       refreshFailed: "Runtime refresh failed: {{reason}}",
-      turnTimeout: "Timed out waiting for agent completion. Check logs and retry.",
+      turnTimeout:
+        "Timed out waiting for agent completion. Check logs and retry.",
       turnErrorFallback: "Agent execution failed.",
       missingThreadId: "Failed to create takeover thread. Please retry.",
       archiveActionMissing: "Archive action is unavailable. Refresh and retry.",
-      stillBlocked: "Takeover finished but archive is still blocked: {{reason}}",
+      stillBlocked:
+        "Takeover finished but archive is still blocked: {{reason}}",
       archiveFailed: "Auto-archive failed after takeover: {{reason}}",
       archiveUnknownFailure: "Archive did not complete for an unknown reason.",
       status: {
@@ -1205,16 +1272,24 @@ const enPart2 = {
       noWorkspaceSelected: "No workspace selected.",
       selectWorkspaceFirst: "Select a workspace first.",
       noSupportedProvider: "No supported spec provider detected.",
-      openSupportedWorkspace: "Open a workspace with OpenSpec or spec-kit structure.",
-      installNode: "Install Node.js 18+ and make sure `node` is available in PATH.",
-      managedInstallOpenSpec: "Managed mode: install OpenSpec CLI, then click Refresh to re-run Doctor.",
-      fallbackByo: "Fallback: switch to BYO mode to use your existing environment settings.",
-      byoExposeOpenSpec: "BYO mode: expose `openspec` in PATH and verify `openspec --version` works.",
-      speckitOptional: "Spec-Kit CLI is optional in minimal mode, but enabling it improves diagnostics.",
+      openSupportedWorkspace:
+        "Open a workspace with OpenSpec or spec-kit structure.",
+      installNode:
+        "Install Node.js 18+ and make sure `node` is available in PATH.",
+      managedInstallOpenSpec:
+        "Managed mode: install OpenSpec CLI, then click Refresh to re-run Doctor.",
+      fallbackByo:
+        "Fallback: switch to BYO mode to use your existing environment settings.",
+      byoExposeOpenSpec:
+        "BYO mode: expose `openspec` in PATH and verify `openspec --version` works.",
+      speckitOptional:
+        "Spec-Kit CLI is optional in minimal mode, but enabling it improves diagnostics.",
       noSupportedWorkspace: "No supported spec workspace detected.",
-      speckitMinimalMode: "Spec-Kit is currently in minimal compatibility mode.",
+      speckitMinimalMode:
+        "Spec-Kit is currently in minimal compatibility mode.",
       noActiveChanges: "No active changes found under openspec/changes.",
-      providerMinimalMode: "This provider is running in minimal compatibility mode.",
+      providerMinimalMode:
+        "This provider is running in minimal compatibility mode.",
       missingProposal: "Missing proposal.md",
       missingDesign: "Missing design.md",
       missingTasks: "Missing tasks.md",
@@ -1234,9 +1309,12 @@ const enPart2 = {
       noStrictVerify: "No strict verify evidence recorded",
       latestStrictVerifyPassed: "Latest strict verify passed",
       latestStrictVerifyFailed: "Latest strict verify failed",
-      truncatedArtifactEvidence: "Artifact evidence is truncated ({{artifacts}}). Re-read before archive.",
-      validationFixHint: "Open the target file and fix the requirement mismatch before re-running verify.",
-      validationReadOutputHint: "Read command output and complete missing artifacts, then run verify again.",
+      truncatedArtifactEvidence:
+        "Artifact evidence is truncated ({{artifacts}}). Re-read before archive.",
+      validationFixHint:
+        "Open the target file and fix the requirement mismatch before re-running verify.",
+      validationReadOutputHint:
+        "Read command output and complete missing artifacts, then run verify again.",
       validationTarget: "Validation",
       notFound: "not found",
       nodeNotFound: "node not found",
@@ -1253,16 +1331,19 @@ const enPart2 = {
       providerMismatchNativeAction:
         "Provider mismatch: native action requires OpenSpec, got {{provider}}.",
       openspecInstructionsCaptured: "OpenSpec instructions captured.",
-      continueBriefAttached: "Continue brief attached to apply execution prompt.",
+      continueBriefAttached:
+        "Continue brief attached to apply execution prompt.",
       guidanceGeneratedSuccessfully: "Guidance generated successfully.",
       failedGenerateGuidance: "Failed to generate guidance.",
       failedGenerateApplyInstructions: "Failed to generate apply instructions.",
       timedOutWaitingApplyExecution: "Timed out waiting for apply execution.",
       applyExecutionFailed: "Apply execution failed.",
-      noThreadFallbackSyncExecution: "No thread id returned, fallback to sync execution.",
+      noThreadFallbackSyncExecution:
+        "No thread id returned, fallback to sync execution.",
       agentExecutionFinished: "Agent execution finished.",
       refreshingRuntimeState: "Refreshing runtime state.",
-      executionFinishedNoCodeChanges: "Execution finished with no code changes.",
+      executionFinishedNoCodeChanges:
+        "Execution finished with no code changes.",
       openSpecBootstrapFailed: "OpenSpec bootstrap failed",
       dispatchingExecution: "Dispatching execution to {{executor}}.",
       boundPromotedThread: "Bound promoted thread {{threadId}}.",
@@ -1275,10 +1356,12 @@ const enPart2 = {
         "Skipped unmatched task ids from execution output (invalid indices: {{count}}).",
       skippedUnmatchedTaskIdsWithRefs:
         "Skipped unmatched task ids from execution output (invalid indices: {{count}}). invalid refs: {{refs}}.",
-      writingCompletedTasksToTasks: "Writing {{count}} completed task(s) to tasks.md.",
+      writingCompletedTasksToTasks:
+        "Writing {{count}} completed task(s) to tasks.md.",
       applyStartedWith: "apply {{mode}} started with {{executor}}",
       autoMarkedTasks: "Auto-marked {{count}} task(s) as completed.",
-      executionFinishedChangedFiles: "Execution finished with {{count}} changed file(s).",
+      executionFinishedChangedFiles:
+        "Execution finished with {{count}} changed file(s).",
       taskWritebackFailed: "Task write-back failed: {{reason}}",
       nextSteps: "Next: {{steps}}",
     },
@@ -1312,7 +1395,8 @@ const enPart2 = {
     reviewRequest: "Review Request",
     approvalNeeded: "Approval needed",
     pendingBadge: "Pending approval",
-    reviewBeforeApply: "Review this request before the local bridge executes it.",
+    reviewBeforeApply:
+      "Review this request before the local bridge executes it.",
     inputRequested: "Input requested",
     fileChanges: "File changes",
     commandExecution: "Command execution",
@@ -1331,7 +1415,8 @@ const enPart2 = {
     approveEnter: "Approve (Enter)",
     remainingRequests: "{{count}} more approval request(s) waiting",
     applyingApprovedFileChange: "Applying approved file change",
-    resumingAfterApproval: "Approved. Applying the change locally and resuming Claude...",
+    resumingAfterApproval:
+      "Approved. Applying the change locally and resuming Claude...",
     userInputRequested: "User input requested",
     requestOf: "Request {{current}} of {{total}}",
     typeAnswerOptional: "Type your answer (optional)",
@@ -1352,7 +1437,8 @@ const enPart2 = {
   askUserQuestion: {
     title: "Claude has a question for you",
     progress: "Question {{current}} / {{total}}",
-    timeoutWarning: "Please respond soon. This dialog will auto-close in {{seconds}} seconds",
+    timeoutWarning:
+      "Please respond soon. This dialog will auto-close in {{seconds}} seconds",
     collapse: "Collapse",
     expand: "Expand",
     clickToAnswer: "Click to answer",
@@ -1410,7 +1496,7 @@ const enPart2 = {
       edit: "Edit",
       editTitle: "Edit Task",
       update: "Update",
-      dragToStart: "Please drag this task to \"In Progress\" to start",
+      dragToStart: 'Please drag this task to "In Progress" to start',
       delete: "Delete",
       cancelSchedule: "Cancel schedule",
       pauseSchedule: "Pause schedule",
@@ -1456,7 +1542,8 @@ const enPart2 = {
         chain: "Linked task group",
         count: "{{count}} items",
         bulkComplete: "Bulk complete",
-        bulkCompleteConfirm: "Confirm bulk complete for {{count}} tasks in this group?",
+        bulkCompleteConfirm:
+          "Confirm bulk complete for {{count}} tasks in this group?",
         loadMore: "Load {{count}} more",
         remaining: "{{count}} remaining",
       },
@@ -1498,10 +1585,14 @@ const enPart2 = {
           "Chained task must be auto-triggered by head step (#{{headOrder}}); current step is #{{currentOrder}}",
         chainRequiresExecutionCompletion:
           "Chained task must complete In Progress execution before entering Review/Done",
-        chainCompletedCannotBackToTodo: "Completed chained tasks cannot be moved back to Todo",
-        chainCompletedStatusLocked: "Completed chained tasks cannot be moved to other statuses",
-        scheduledTriggerBlocked: "Recurring trigger skipped while task is running",
-        dragIntoChainGroupBlocked: "Unlinked tasks cannot be dragged into linked groups",
+        chainCompletedCannotBackToTodo:
+          "Completed chained tasks cannot be moved back to Todo",
+        chainCompletedStatusLocked:
+          "Completed chained tasks cannot be moved to other statuses",
+        scheduledTriggerBlocked:
+          "Recurring trigger skipped while task is running",
+        dragIntoChainGroupBlocked:
+          "Unlinked tasks cannot be dragged into linked groups",
         manualBlocked: "Manually blocked",
         manualCancelled: "Schedule canceled manually",
       },
@@ -1512,12 +1603,15 @@ const enPart2 = {
         invalidRecurringInterval: "Recurring interval must be greater than 0.",
         invalidRecurringRule: "Unable to compute the next recurring time.",
         chainRequiresTodoTask: "Only todo tasks can join a task chain.",
-        downstreamCannotBeScheduled: "Downstream tasks cannot keep independent schedules.",
+        downstreamCannotBeScheduled:
+          "Downstream tasks cannot keep independent schedules.",
         chainSelfCycle: "A task cannot use itself as upstream.",
         chainPreviousNotFound: "Selected upstream task was not found.",
         chainRequiresTodoUpstream: "Upstream task must remain in todo status.",
-        chainMultiDownstream: "The selected upstream task already has a downstream task.",
-        chainCycleDetected: "Chain cycle detected. Please choose another upstream task.",
+        chainMultiDownstream:
+          "The selected upstream task already has a downstream task.",
+        chainCycleDetected:
+          "Chain cycle detected. Please choose another upstream task.",
       },
     },
     conversation: {
@@ -1532,7 +1626,8 @@ const enPart2 = {
       rename: "Rename",
       delete: "Delete",
       deleteConfirmTitle: "Confirm Delete",
-      deleteConfirmMessage: "Are you sure you want to delete panel \"{{name}}\"? {{count}} tasks in this panel will also be deleted. This action cannot be undone.",
+      deleteConfirmMessage:
+        'Are you sure you want to delete panel "{{name}}"? {{count}} tasks in this panel will also be deleted. This action cannot be undone.',
       cancel: "Cancel",
       confirmDelete: "Delete",
       searchPanels: "Search panels...",
@@ -1568,7 +1663,8 @@ const enPart2 = {
     contextLedgerSummaryBlocks_other: "{{count}} blocks",
     contextLedgerSummaryGroups: "{{count}} group",
     contextLedgerSummaryGroups_other: "{{count}} groups",
-    contextLedgerTruthNote: "Live projection · Built from the context snapshot used for this turn, not static help text.",
+    contextLedgerTruthNote:
+      "Live projection · Built from the context snapshot used for this turn, not static help text.",
     contextLedgerGroupRecentTurns: "Recent turns",
     contextLedgerGroupCompaction: "Compaction",
     contextLedgerGroupManualMemory: "Manual memory",
@@ -1590,10 +1686,13 @@ const enPart2 = {
     codeAnnotationSelection: "{{count}} code annotation",
     codeAnnotationSelection_other: "{{count}} code annotations",
     codeAnnotationSelectionHint: "Will send {{count}} code annotation to AI",
-    codeAnnotationSelectionHint_other: "Will send {{count}} code annotations to AI",
+    codeAnnotationSelectionHint_other:
+      "Will send {{count}} code annotations to AI",
     codeAnnotationRemove: "Remove code annotation for {{path}}",
-    contextLedgerCarryOverExplanationInherited: "This block was carried in by the last keep action. If you do not keep it again, it will be consumed after this send.",
-    contextLedgerCarryOverExplanationWillCarry: "This block is marked to stay for the next send once, then it will be consumed automatically.",
+    contextLedgerCarryOverExplanationInherited:
+      "This block was carried in by the last keep action. If you do not keep it again, it will be consumed after this send.",
+    contextLedgerCarryOverExplanationWillCarry:
+      "This block is marked to stay for the next send once, then it will be consumed automatically.",
     contextLedgerAttributionWorkspaceContext: "Workspace context",
     contextLedgerAttributionEngineInjected: "Engine rules",
     contextLedgerAttributionSystemInjected: "System rules",
@@ -1601,9 +1700,12 @@ const enPart2 = {
     contextLedgerAttributionConfidencePrecise: "Precise attribution",
     contextLedgerAttributionConfidenceCoarse: "Coarse attribution",
     contextLedgerAttributionConfidenceDegraded: "Degraded attribution",
-    contextLedgerAttributionExplanationPrecise: "This source is mapped back to a specific workspace-managed entry point.",
-    contextLedgerAttributionExplanationCoarse: "The client can only confirm the engine or system source class, not a single precise source object yet.",
-    contextLedgerAttributionExplanationDegraded: "The available source signal is incomplete. Treat this as best-effort attribution, not precise source truth.",
+    contextLedgerAttributionExplanationPrecise:
+      "This source is mapped back to a specific workspace-managed entry point.",
+    contextLedgerAttributionExplanationCoarse:
+      "The client can only confirm the engine or system source class, not a single precise source object yet.",
+    contextLedgerAttributionExplanationDegraded:
+      "The available source signal is incomplete. Treat this as best-effort attribution, not precise source truth.",
     contextLedgerFreshnessFresh: "Fresh",
     contextLedgerFreshnessPendingSync: "Pending sync",
     contextLedgerFreshnessUnknown: "Unknown",
@@ -1616,9 +1718,11 @@ const enPart2 = {
     contextLedgerTitleCompactionRunningAuto: "Automatic compaction running",
     contextLedgerTitleCompactionCompleted: "Compaction completed",
     contextLedgerTitleCompactionCompletedAuto: "Automatic compaction completed",
-    contextLedgerDetailUsageWindow: "{{usedTokens}} / {{contextWindowTokens}} window · {{totalTokens}} total",
+    contextLedgerDetailUsageWindow:
+      "{{usedTokens}} / {{contextWindowTokens}} window · {{totalTokens}} total",
     contextLedgerDetailUsageTotal: "{{totalTokens}} total",
-    contextLedgerInspectionUsageWindow: "Current window {{usedTokens}} / {{contextWindowTokens}} · {{totalTokens}} historical tokens",
+    contextLedgerInspectionUsageWindow:
+      "Current window {{usedTokens}} / {{contextWindowTokens}} · {{totalTokens}} historical tokens",
     contextLedgerInspectionUsageTotal: "{{totalTokens}} historical tokens",
     contextLedgerDetailCompactionPendingSync: "Waiting for usage refresh",
     contextLedgerBackendSourceWorkspaceManaged: "Workspace managed",
@@ -1631,9 +1735,12 @@ const enPart2 = {
     contextLedgerBackendSourceGlobalGemini: "Global .gemini",
     contextLedgerBackendSourceGlobalAgents: "Global .agents",
     contextLedgerComparisonLastSend: "Compared with last send",
-    contextLedgerComparisonPreCompaction: "Compared with pre-compaction snapshot",
-    contextLedgerComparisonLastSendHint: "Computed from ledger snapshots before and after the last send.",
-    contextLedgerComparisonPreCompactionHint: "Computed from ledger snapshots before and after compaction.",
+    contextLedgerComparisonPreCompaction:
+      "Compared with pre-compaction snapshot",
+    contextLedgerComparisonLastSendHint:
+      "Computed from ledger snapshots before and after the last send.",
+    contextLedgerComparisonPreCompactionHint:
+      "Computed from ledger snapshots before and after compaction.",
     contextLedgerComparisonAdded: "Added {{count}}",
     contextLedgerComparisonRemoved: "Removed {{count}}",
     contextLedgerComparisonRetained: "Retained {{count}}",
@@ -1695,12 +1802,16 @@ const enPart2 = {
       fork: "Fork run",
     },
     nextStep: {
-      monitor: "This run is still progressing. Monitor the current step or cancel if needed.",
-      openConversation: "Open the linked conversation next to provide input or inspect the latest output.",
-      resume: "This run is blocked. Resume it first to continue the current path.",
+      monitor:
+        "This run is still progressing. Monitor the current step or cancel if needed.",
+      openConversation:
+        "Open the linked conversation next to provide input or inspect the latest output.",
+      resume:
+        "This run is blocked. Resume it first to continue the current path.",
       retry: "This run failed. Retry it next or inspect the failure summary.",
       wait: "No action is needed right now. Let the run settle first.",
-      review: "Review diagnostics and artifacts first, then decide the next move.",
+      review:
+        "Review diagnostics and artifacts first, then decide the next move.",
       fork: "You can fork a new run from the current result to continue.",
     },
   },
@@ -1710,7 +1821,8 @@ const enPart2 = {
     locked: "Locked",
     brandKicker: "Codemoss Product Atlas",
     title: "ccgui Secure Lock · Engineering Capability Overview",
-    description: "Threads and tasks keep running in the background. Use this lock screen to review the full ccgui delivery loop: planning, execution orchestration, review, and shipping.",
+    description:
+      "Threads and tasks keep running in the background. Use this lock screen to review the full ccgui delivery loop: planning, execution orchestration, review, and shipping.",
     tabLabel: "Lock screen tab navigation",
     tabs: {
       live: "Live Sessions",
@@ -1719,24 +1831,29 @@ const enPart2 = {
       elements: "Element Guide",
     },
     liveTitle: "Live Session Stream",
-    liveDesc: "Only running session output is shown, auto-updated by latest activity.",
+    liveDesc:
+      "Only running session output is shown, auto-updated by latest activity.",
     liveEmpty: "No running session output right now.",
     liveRunning: "Running",
     capabilityTitle: "Capability Atlas",
-    capabilityDesc: "ccgui is not just a chat shell. It is a local-first engineering workspace designed for production flow.",
+    capabilityDesc:
+      "ccgui is not just a chat shell. It is a local-first engineering workspace designed for production flow.",
     journeyTitle: "Typical Delivery Journey",
     journeyDesc: "Most changes move through this sequence in ccgui:",
     elementsTitle: "Element Guide",
-    elementsDesc: "Use this page to quickly review each core module and its responsibility.",
+    elementsDesc:
+      "Use this page to quickly review each core module and its responsibility.",
     unlockTitle: "Unlock Panel",
-    unlockDesc: "Password file is ~/.ccgui/client/pwd.txt. If missing, unlock is allowed and the file is auto-created with a default value.",
+    unlockDesc:
+      "Password file is ~/.ccgui/client/pwd.txt. If missing, unlock is allowed and the file is auto-created with a default value.",
     passwordInput: "Enter unlock password",
     passwordPlaceholder: "Type password",
     passwordHint: "Press Enter or click Unlock after entering password.",
     unlock: "Unlock",
     invalidPassword: "Incorrect password. Try again.",
     storageTitle: "Password Storage",
-    storageDesc: "To change password, edit this file content directly and save.",
+    storageDesc:
+      "To change password, edit this file content directly and save.",
     storagePathLabel: "File path",
     facts: {
       integrationsLabel: "Multi-engine routing",
@@ -1748,57 +1865,81 @@ const enPart2 = {
     },
     journey: {
       planTitle: "Plan First",
-      planDesc: "Define scope, constraints, and task breakdown before touching code.",
+      planDesc:
+        "Define scope, constraints, and task breakdown before touching code.",
       executeTitle: "Execute With Context",
-      executeDesc: "Run with workspace and thread context, with Kanban task dispatch and parallel sessions.",
+      executeDesc:
+        "Run with workspace and thread context, with Kanban task dispatch and parallel sessions.",
       reviewTitle: "Review With Trace",
-      reviewDesc: "Keep tool traces, diffs, and debug records visible for reliable verification.",
+      reviewDesc:
+        "Keep tool traces, diffs, and debug records visible for reliable verification.",
       deliverTitle: "Deliver Cleanly",
-      deliverDesc: "Connect commits, branches, PR actions, and archive steps into reusable team assets.",
+      deliverDesc:
+        "Connect commits, branches, PR actions, and archive steps into reusable team assets.",
     },
     features: {
       workspaceGraphTitle: "Workspace Graph",
-      workspaceGraphDesc: "Manage repositories, worktrees, grouping, and ordering with fast context switching.",
+      workspaceGraphDesc:
+        "Manage repositories, worktrees, grouping, and ordering with fast context switching.",
       threadOrchestrationTitle: "Thread Orchestration",
-      threadOrchestrationDesc: "Supports history replay, queued prompts, interruption, auto-title, and long-run continuity.",
+      threadOrchestrationDesc:
+        "Supports history replay, queued prompts, interruption, auto-title, and long-run continuity.",
       engineRoutingTitle: "Engine Routing",
-      engineRoutingDesc: "Switch model, reasoning effort, access mode, and collaboration mode to fit each task.",
+      engineRoutingDesc:
+        "Switch model, reasoning effort, access mode, and collaboration mode to fit each task.",
       gitIntelligenceTitle: "Git Intelligence",
-      gitIntelligenceDesc: "Diff, Log, Commit, PR, and Issue views in one workflow without context hopping.",
+      gitIntelligenceDesc:
+        "Diff, Log, Commit, PR, and Issue views in one workflow without context hopping.",
       kanbanDispatchTitle: "Kanban Dispatch",
-      kanbanDispatchDesc: "Create sessions from tasks and keep execution status synced with board progress.",
+      kanbanDispatchDesc:
+        "Create sessions from tasks and keep execution status synced with board progress.",
       memoryEngineTitle: "Memory Engine",
-      memoryEngineDesc: "Persist project knowledge and preferences so future sessions start with context.",
+      memoryEngineDesc:
+        "Persist project knowledge and preferences so future sessions start with context.",
       unifiedSearchTitle: "Unified Search",
-      unifiedSearchDesc: "One palette across files, threads, messages, skills, and commands.",
+      unifiedSearchDesc:
+        "One palette across files, threads, messages, skills, and commands.",
       terminalObservabilityTitle: "Terminal + Observability",
-      terminalObservabilityDesc: "Built-in terminal and debug traces make troubleshooting faster and auditable.",
+      terminalObservabilityDesc:
+        "Built-in terminal and debug traces make troubleshooting faster and auditable.",
       composerControlTitle: "Composer Control",
-      composerControlDesc: "Centralized control for presets, shortcuts, fence rules, paste behavior, and dictation.",
+      composerControlDesc:
+        "Centralized control for presets, shortcuts, fence rules, paste behavior, and dictation.",
       promptAssetsTitle: "Prompt Assets",
-      promptAssetsDesc: "Manage workspace/global prompt assets and reuse them across delivery tasks.",
+      promptAssetsDesc:
+        "Manage workspace/global prompt assets and reuse them across delivery tasks.",
       collaborationModeTitle: "Collaboration Modes",
-      collaborationModeDesc: "Switch collaboration strategy for exploration, implementation, and review stages.",
+      collaborationModeDesc:
+        "Switch collaboration strategy for exploration, implementation, and review stages.",
       openEcosystemTitle: "Open Ecosystem",
-      openEcosystemDesc: "Open-in integration, plugin-ready extension points, and external tool interoperability.",
+      openEcosystemDesc:
+        "Open-in integration, plugin-ready extension points, and external tool interoperability.",
     },
     elements: {
       titlebarTitle: "Titlebar Controls",
-      titlebarDesc: "Project switch, branch actions, open-in options, lock trigger, and thread copy in one strip.",
+      titlebarDesc:
+        "Project switch, branch actions, open-in options, lock trigger, and thread copy in one strip.",
       sidebarTitle: "Workspace Sidebar",
-      sidebarDesc: "Manage workspace/worktree groups, thread lists, search filters, and quick project context switching.",
+      sidebarDesc:
+        "Manage workspace/worktree groups, thread lists, search filters, and quick project context switching.",
       composerTitle: "Composer Workspace",
-      composerDesc: "Rich input, code fences, commands, dictation, and context assembly in a single editor loop.",
+      composerDesc:
+        "Rich input, code fences, commands, dictation, and context assembly in a single editor loop.",
       gitPanelTitle: "Git Hub",
-      gitPanelDesc: "Diff, log, commit, PR, and issue context in one surface to reduce tool hopping.",
+      gitPanelDesc:
+        "Diff, log, commit, PR, and issue context in one surface to reduce tool hopping.",
       kanbanTitle: "Kanban Dispatch",
-      kanbanDesc: "Dispatch tasks into AI sessions and keep status linked to execution progress.",
+      kanbanDesc:
+        "Dispatch tasks into AI sessions and keep status linked to execution progress.",
       searchTitle: "Unified Search",
-      searchDesc: "A single entry point across files, threads, messages, skills, and commands.",
+      searchDesc:
+        "A single entry point across files, threads, messages, skills, and commands.",
       memoryTitle: "Memory Engine",
-      memoryDesc: "Persist long-term project knowledge to reduce repeated context setup.",
+      memoryDesc:
+        "Persist long-term project knowledge to reduce repeated context setup.",
       debugTitle: "Terminal + Debug",
-      debugDesc: "Built-in terminal and debug traces keep troubleshooting observable and auditable.",
+      debugDesc:
+        "Built-in terminal and debug traces keep troubleshooting observable and auditable.",
     },
   },
 
@@ -1902,7 +2043,8 @@ const enPart2 = {
         pass: "Engine runtime contract evidence is current.",
         warn: "Engine runtime contract evidence has advisory warnings.",
         fail: "Engine runtime contract evidence needs review.",
-        unknown: "Engine runtime contract evidence is unavailable or incomplete.",
+        unknown:
+          "Engine runtime contract evidence is unavailable or incomplete.",
       },
       costBudgetGovernancePolicy: {
         pass: "Cost budget evidence is current.",
@@ -1944,10 +2086,13 @@ const enPart2 = {
       partial: "Partial estimate",
       unknownModel: "Unknown model",
       degraded: {
-        "pricing-unavailable": "No traceable pricing is available for this model; cost is not silently treated as zero.",
-        "pricing-stale": "The pricing fixture is stale; this cost is informational only.",
+        "pricing-unavailable":
+          "No traceable pricing is available for this model; cost is not silently treated as zero.",
+        "pricing-stale":
+          "The pricing fixture is stale; this cost is informational only.",
         "usage-unavailable": "No token usage is available for cost projection.",
-        "block-level-cost-unsupported": "Block-level cost is not supported in this version.",
+        "block-level-cost-unsupported":
+          "Block-level cost is not supported in this version.",
         unknown: "Cost projection is degraded.",
       },
     },
@@ -1955,7 +2100,8 @@ const enPart2 = {
       threshold: {
         info: "Info threshold reached: {{amount}} / {{threshold}}",
         warn: "Warn threshold reached: {{amount}} / {{threshold}}",
-        block: "Block threshold reached: {{amount}} / {{threshold}}. This capability only signals; it does not interrupt runtime.",
+        block:
+          "Block threshold reached: {{amount}} / {{threshold}}. This capability only signals; it does not interrupt runtime.",
       },
     },
     checkpoint: {
@@ -1990,18 +2136,25 @@ const enPart2 = {
         idle: "Waiting for evidence",
       },
       summary: {
-        blockedValidation: "A required validation failed and needs to be fixed first.",
-        blockedCommand: "The latest command failed: {{command}}. If the system is still attempting automatic recovery, wait for this run to settle before stopping it.",
+        blockedValidation:
+          "A required validation failed and needs to be fixed first.",
+        blockedCommand:
+          "The latest command failed: {{command}}. If the system is still attempting automatic recovery, wait for this run to settle before stopping it.",
         blockedSubagent: "A delegated task stopped in an error state.",
-        runningValidation: "Validation is still running. Wait for the result before deciding.",
+        runningValidation:
+          "Validation is still running. Wait for the result before deciding.",
         runningCommand: "The latest command is still running: {{command}}",
         runningAgent: "At least one agent is still processing.",
         runningTodo: "There are still active tasks in progress.",
-        runningProcessing: "The current turn is still producing execution evidence.",
-        readyWithFiles: "{{count}} changed file(s) passed the observed core checks.",
+        runningProcessing:
+          "The current turn is still producing execution evidence.",
+        readyWithFiles:
+          "{{count}} changed file(s) passed the observed core checks.",
         ready: "The observed execution evidence looks settled.",
-        needsValidation: "Files changed, but core validations have not been run yet.",
-        manual: "The result is available, but it still needs a human review pass.",
+        needsValidation:
+          "Files changed, but core validations have not been run yet.",
+        manual:
+          "The result is available, but it still needs a human review pass.",
         idle: "No reliable execution evidence has been observed yet.",
       },
       evidence: {
@@ -2010,7 +2163,8 @@ const enPart2 = {
         validations: "Validations",
         requiredValidations: "Required",
         optionalValidations: "Optional",
-        fileChangeSummary: "+{{additions}}/-{{deletions}} across {{count}} files",
+        fileChangeSummary:
+          "+{{additions}}/-{{deletions}} across {{count}} files",
         runMissing: "Run first",
         runMissingGeneric: "Run the project's core validation script",
         tasks: "Tasks",
@@ -2058,7 +2212,8 @@ const enPart2 = {
       },
       keyChanges: {
         files: "Files touched",
-        filesSummary: "{{count}} files changed · +{{additions}} / -{{deletions}}",
+        filesSummary:
+          "{{count}} files changed · +{{additions}} / -{{deletions}}",
         tasks: "Task progress",
         tasksSummary: "{{completed}}/{{total}} tasks completed",
         agents: "Agent progress",
@@ -2068,9 +2223,11 @@ const enPart2 = {
         none: "No blocking risks detected.",
         commandFailed: "A command ended in error: {{command}}",
         validationFailed: "At least one validation ended in failure.",
-        validationMissing: "Core validations have not been run after file changes.",
+        validationMissing:
+          "Core validations have not been run after file changes.",
         subagentError: "An agent reported an error: {{agent}}",
-        manualReview: "The system has not observed enough evidence to declare a result yet.",
+        manualReview:
+          "The system has not observed enough evidence to declare a result yet.",
         severity: {
           high: "High",
           medium: "Medium",
@@ -2083,10 +2240,13 @@ const enPart2 = {
         retry: "Retry failed step",
         commit: "Commit when ready",
         hint: {
-          runMissingValidation: "Run the missing validation before deciding whether to continue.",
+          runMissingValidation:
+            "Run the missing validation before deciding whether to continue.",
           running: "Wait for the current execution evidence to settle.",
-          blocked: "Inspect the failing evidence first; if recovery is still in progress, wait for the run to settle before deciding to stop it.",
-          needs_review: "This result may still recover. Wait for execution to keep settling before taking action.",
+          blocked:
+            "Inspect the failing evidence first; if recovery is still in progress, wait for the run to settle before deciding to stop it.",
+          needs_review:
+            "This result may still recover. Wait for execution to keep settling before taking action.",
           ready: "The evidence is settled; do the final pre-commit check.",
         },
       },
@@ -2186,13 +2346,18 @@ const enPart2 = {
     contextDualViewTotalTokens: "Total {{tokens}}",
     contextDualViewEmpty: "No context usage yet",
     contextDualViewCompacting: "Compacting context...",
-    contextDualViewCompactingAuto: "Automatically compacting background information...",
+    contextDualViewCompactingAuto:
+      "Automatically compacting background information...",
     contextDualViewCompacted: "Compaction completed",
-    contextDualViewCompactedPendingSync: "Compaction completed. Waiting for background usage to refresh.",
-    contextDualViewCompactedPendingSyncAuto: "Automatic compaction completed. Waiting for background usage to refresh.",
+    contextDualViewCompactedPendingSync:
+      "Compaction completed. Waiting for background usage to refresh.",
+    contextDualViewCompactedPendingSyncAuto:
+      "Automatic compaction completed. Waiting for background usage to refresh.",
     contextDualViewWindowTitle: "Background info window:",
-    contextDualViewWindowUsage: "{{usedPercent}}% used ({{remainingPercent}}% remaining)",
-    contextDualViewWindowTokens: "{{usedTokens}} tokens used, {{totalTokens}} total",
+    contextDualViewWindowUsage:
+      "{{usedPercent}}% used ({{remainingPercent}}% remaining)",
+    contextDualViewWindowTokens:
+      "{{usedTokens}} tokens used, {{totalTokens}} total",
     contextDualViewAutoCompactionNote: "Codex background info compaction",
     contextDualViewAutoCompactionEnabled: "Auto compaction",
     contextDualViewAutoCompactionThreshold: "Threshold",
@@ -2205,12 +2370,14 @@ const enPart2 = {
     claudeContextTooltipWindowTokensLabel: "Window tokens",
     claudeContextInputDetail: "input {{tokens}}",
     claudeContextCachedDetail: "cached {{tokens}}",
-    claudeContextCachedExcludedDetail: "cached {{tokens}} does not count toward new turn usage",
+    claudeContextCachedExcludedDetail:
+      "cached {{tokens}} does not count toward new turn usage",
     claudeContextOutputDetail: "output {{tokens}}",
     claudeContextPending: "Fetching",
     claudeContextEstimatedWindow: "Estimated from message usage",
     claudeContextWindowEstimatedTokens: "{{tokens}} estimated",
-    claudeContextWindowUsedOnly: "{{tokens}} used, waiting for CLI window capacity",
+    claudeContextWindowUsedOnly:
+      "{{tokens}} used, waiting for CLI window capacity",
     claudeContextWindowCapacityPending: "Waiting for CLI window capacity",
     claudeContextCategoryTitle: "Category details",
     claudeContextMcpToolsTitle: "MCP tools",
@@ -2224,18 +2391,23 @@ const enPart2 = {
     },
     contextDualViewManualCompact: "Manually compact context",
     contextDualViewManualCompactHint: "Compact now",
-    contextDualViewManualCompactUnavailable: "Manual compaction is unavailable. Activate a Codex thread first.",
-    contextDualViewManualCompactFailed: "Failed to trigger context compaction. Please try again.",
+    contextDualViewManualCompactUnavailable:
+      "Manual compaction is unavailable. Activate a Codex thread first.",
+    contextDualViewManualCompactFailed:
+      "Failed to trigger context compaction. Please try again.",
     contextDualViewAriaLabel: "Dual context view status: {{state}}",
     noMatchingFiles: "No matching files",
     noMatchingCommands: "No matching commands",
     noMatchingHistory: "No matching history",
     noAvailableAgents: "No available agents",
-    openSourceBanner: "This project is guaranteed to be 100% open source (beware of pirated projects)",
-    sdkNotInstalled: "{{provider}} SDK is not installed. Please install the SDK to start chatting.",
+    openSourceBanner:
+      "This project is guaranteed to be 100% open source (beware of pirated projects)",
+    sdkNotInstalled:
+      "{{provider}} SDK is not installed. Please install the SDK to start chatting.",
     sdkStatusLoading: "Checking SDK status...",
     goInstallSdk: "Go to Install",
-    clearCommandDescription: "Clear conversation history and start a new session",
+    clearCommandDescription:
+      "Clear conversation history and start a new session",
     loadingFailed: "Loading failed",
     pleaseCloseAndReopen: "Please close and reopen",
     loadingSlashCommands: "Loading slash commands...",
@@ -2249,7 +2421,8 @@ const enPart2 = {
     fuseFromQueue: "Fuse",
     fusingQueuedMessage: "Fusing",
     fuseQueuedMessageFailed: "Fusion failed",
-    fuseQueuedMessageFailedDetail: "The queued message could not be merged into the active answer. Please try again.",
+    fuseQueuedMessageFailedDetail:
+      "The queued message could not be merged into the active answer. Please try again.",
     dragDropHint: "Drop files into composer",
     dragDropMore: "+{{count}} files",
     commands: {
@@ -2274,45 +2447,55 @@ const enPart2 = {
     default: {
       label: "Default Mode",
       tooltip: "Standard permission behavior",
-      description: "Requires manual confirmation for each operation, suitable for cautious use",
+      description:
+        "Requires manual confirmation for each operation, suitable for cautious use",
     },
     plan: {
       label: "Plan Mode",
       tooltip: "Plan mode - read-only analysis",
-      description: "Uses only read-only tools, generates plan for user approval",
+      description:
+        "Uses only read-only tools, generates plan for user approval",
     },
     acceptEdits: {
       label: "Agent Mode",
       tooltip: "Automatically accept file edits",
-      description: "Automatically accept file creation/editing, reducing confirmation steps",
+      description:
+        "Automatically accept file creation/editing, reducing confirmation steps",
     },
     bypassPermissions: {
       label: "Auto Mode",
       tooltip: "Bypass all permission checks",
-      description: "Fully automated, bypassing all permission checks [Use with caution]",
+      description:
+        "Fully automated, bypassing all permission checks [Use with caution]",
     },
   },
 
   claudeModes: {
     default: {
       label: "Suggest Mode (Preview)",
-      tooltip: "Claude Code preview approval mode. Some flows may still degrade while the full approval bridge is being completed.",
-      description: "Now available as a preview for validating Claude's default permission flow. If a degraded path is hit, the UI should guide users back to Plan mode.",
+      tooltip:
+        "Claude Code preview approval mode. Some flows may still degrade while the full approval bridge is being completed.",
+      description:
+        "Now available as a preview for validating Claude's default permission flow. If a degraded path is hit, the UI should guide users back to Plan mode.",
     },
     plan: {
       label: "Plan Mode",
       tooltip: "Claude Code read-only analysis mode.",
-      description: "Uses read-only tools for analysis and planning before taking action.",
+      description:
+        "Uses read-only tools for analysis and planning before taking action.",
     },
     acceptEdits: {
       label: "Auto Edit",
-      tooltip: "Claude Code auto-edit mode. Not enabled in the current rollout phase.",
-      description: "This mode stays unavailable until Claude approval semantics are verified.",
+      tooltip:
+        "Claude Code auto-edit mode. Not enabled in the current rollout phase.",
+      description:
+        "This mode stays unavailable until Claude approval semantics are verified.",
     },
     bypassPermissions: {
       label: "Full Auto",
       tooltip: "Claude Code mode that skips permission checks.",
-      description: "Hands-off execution for file writes and commands without approvals. Use with care.",
+      description:
+        "Hands-off execution for file writes and commands without approvals. Use with care.",
     },
   },
 
@@ -2320,23 +2503,30 @@ const enPart2 = {
   codexModes: {
     default: {
       label: "Suggest (approval)",
-      tooltip: "Codex approval_policy=untrusted \u2013 prompts before editing files or running shell commands.",
-      description: "Safest option. Every write or command requires your approval.",
+      tooltip:
+        "Codex approval_policy=untrusted \u2013 prompts before editing files or running shell commands.",
+      description:
+        "Safest option. Every write or command requires your approval.",
     },
     plan: {
       label: "Plan Mode",
       tooltip: "Plan mode - read-only analysis",
-      description: "Uses only read-only tools, generates plan for user approval",
+      description:
+        "Uses only read-only tools, generates plan for user approval",
     },
     acceptEdits: {
       label: "Auto Edit",
-      tooltip: "Codex approval_policy=auto-edit \u2013 automatically applies file patches, still asks before shell commands.",
-      description: "Auto-create and edit files via apply_patch while keeping command approvals.",
+      tooltip:
+        "Codex approval_policy=auto-edit \u2013 automatically applies file patches, still asks before shell commands.",
+      description:
+        "Auto-create and edit files via apply_patch while keeping command approvals.",
     },
     bypassPermissions: {
       label: "Full Auto",
-      tooltip: "Codex approval_policy=never \u2013 runs commands and writes files without prompting (workspace sandbox still enforced).",
-      description: "Hands-off mode. Codex executes edits and shell commands immediately.",
+      tooltip:
+        "Codex approval_policy=never \u2013 runs commands and writes files without prompting (workspace sandbox still enforced).",
+      description:
+        "Hands-off mode. Codex executes edits and shell commands immediately.",
     },
   },
 
@@ -2351,7 +2541,8 @@ const enPart2 = {
     codex: {
       gpt55: {
         label: "gpt-5.5",
-        description: "Frontier model for complex coding, research, and real-world work.",
+        description:
+          "Frontier model for complex coding, research, and real-world work.",
       },
       gpt54: {
         label: "gpt-5.4",
@@ -2359,7 +2550,8 @@ const enPart2 = {
       },
       gpt54mini: {
         label: "gpt-5.4-mini",
-        description: "Small, fast, and cost-efficient model for simpler coding tasks.",
+        description:
+          "Small, fast, and cost-efficient model for simpler coding tasks.",
       },
       gpt53codex: {
         label: "gpt-5.3-codex",
@@ -2374,275 +2566,6 @@ const enPart2 = {
         description: "Optimized for professional work and long-running agents.",
       },
     },
-  },
-
-  // Prompt enhancer
-  promptEnhancer: {
-    title: "Prompt Enhancer",
-    tooltip: "Enhance Prompt",
-    tooltipFull: "Rewrite prompt to provide more context and improve agent responses",
-    shortcut: "\u2318/ / Ctrl+/",
-    enhancing: "Enhancing prompt...",
-    originalPrompt: "Original Prompt",
-    enhancedPrompt: "Enhanced Prompt",
-    useEnhanced: "Use Enhanced",
-    keepOriginal: "Keep Original",
-    enhanceFailed: "Failed to enhance prompt",
-    emptyPrompt: "Please enter a prompt first",
-    copyEnhanced: "Copy Enhanced",
-  },
-
-  // Rewind
-  rewind: {
-    title: "Rewind Files to Previous State",
-    tooltip: "Rewind",
-    label: "Rewind",
-    tooltipFull: "Restore files to their state at this message",
-    notAvailable: "Rewind is not available in this session",
-    noEligibleMessage: "No rewindable user messages were found.",
-    selectPrompt: "Select a rewind target (1-{{count}}):",
-    invalidSelection: "Invalid rewind selection.",
-    confirmPrompt: 'Create a new thread from this message?\n"{{preview}}"',
-    dialogTitle: "Confirm {{engine}} rewind",
-    dialogDescription:
-      "Clicking rewind now only opens this confirmation dialog first. The rewind runs only after you explicitly confirm.",
-    targetSectionTitle: "Rewind starting point",
-    targetMessageLabel: "This rewind will roll back from this user message",
-    impactSectionTitle: "What will be removed",
-    impactUserMessages: "User messages removed",
-    impactAssistantMessages: "Assistant replies removed",
-    impactToolCalls: "Tool calls removed",
-    impactFiles: "Files involved",
-    impactSummary:
-      "After confirmation, the current linear history will roll back from this user message. That includes this user message and all later assistant replies, tool calls, and related changes.",
-    impactFollowUp:
-      "If files are listed below, their changes happened inside the history segment that will be rewound. Review them before confirming.",
-    workspaceRestoreSectionTitle: "Workspace file strategy",
-    modeMessagesAndFilesLabel: "Rewind messages + files",
-    modeMessagesAndFilesHint:
-      "Rewind the conversation history and restore the related workspace file changes together.",
-    modeMessagesOnlyLabel: "Messages only",
-    modeMessagesOnlyHint:
-      "Only rewind conversation history and leave current workspace files untouched.",
-    modeFilesOnlyLabel: "Files only",
-    modeFilesOnlyHint:
-      "Only restore the related files and keep the current conversation history unchanged.",
-    filesSectionTitle: "Affected files",
-    filesRailTitle: "Files",
-    filesEmpty: "No file changes were detected in the history segment being rewound.",
-    filesHint:
-      "This is a best-effort frontend summary of detected file changes so you can confirm the blast radius before proceeding.",
-    diffEmpty:
-      "No diff preview is available for this file. You can still review other files or open the main diff panel.",
-    openDiffAction: "Open In Diff Panel",
-    storeAction: "Store Changes",
-    storeActionBusy: "Storing...",
-    storeUnavailable:
-      "The current rewind context does not include enough session information to store changes.",
-    storeFailed: "Failed to store changes.",
-    storeRevealFailed: "Failed to open the stored changes directory.",
-    storeRevealAction: "Open Folder",
-    storeSuccessTitle: "Stored {{count}} file(s) and generated a reusable manifest snapshot.",
-    storeSuccessPrefix: "Saved to: ",
-    confirmAction: "Confirm rewind",
-    confirmActionBusy: "Rewinding...",
-    failed: "Failed to rewind conversation.",
-  },
-
-  // Threads
-  threads: {
-    rename: "Rename",
-    autoName: "Auto name",
-    autoNaming: "Auto naming...",
-    archive: "Archive",
-    delete: "Delete",
-    deleteThreadTitle: "Delete conversation",
-    deleteThreadMessage: 'Are you sure you want to delete "{{name}}"?',
-    deleteThreadHint: "This cannot be undone and the local session record will be removed.",
-    pin: "Pin",
-    unpin: "Unpin",
-    sync: "Sync",
-    reload: "Reload",
-    renamePlaceholder: "Enter thread name",
-    confirmDelete: "Are you sure you want to delete this thread?",
-    confirmArchive: "Are you sure you want to archive this thread?",
-    reloadThreads: "Reload threads",
-    syncFromServer: "Sync from server",
-    copyId: "Copy ID",
-    copyClaudeResumeCommand: "Copy Claude resume command",
-    openClaudeTui: "Open in Claude TUI",
-    claudeResumeCommandHelp:
-      "If the Claude TUI /resume picker misses this GUI session, run claude --resume <session_id> or /resume <session_id> explicitly.",
-    moveToFolder: "Move to folder",
-    moveToProjectRoot: "Project root",
-    searchFolderTargets: "Search folders...",
-    size: "Size",
-    deleteWorktree: "Delete worktree",
-    renameThread: "Rename thread",
-    currentName: "Current name:",
-    newName: "New name",
-    copyThread: "Copy thread",
-    untitledThread: "Untitled thread",
-    topbarSessionTabsAriaLabel: "Topbar session tabs",
-    memoryReferenceQuerying: "Memory Reference: querying project memory...",
-    memoryReferenceReferenced: "Memory Reference: referenced {{count}} project memories{{titlesSuffix}}",
-    memoryReferenceNoRelated: "Memory Reference: no related project memory found",
-    memoryReferenceTimeout: "Memory Reference: timed out, sent without memory brief",
-    memoryReferenceError: "Memory Reference: failed, sent without memory brief",
-    memoryReferenceTitlesSuffix: " - {{titles}}",
-    closeTab: "Close tab",
-    closeLeftTabs: "Close tabs to the left",
-    closeRightTabs: "Close tabs to the right",
-    closeAllTabs: "Close all tabs",
-    closeCompletedTabs: "Close completed tabs",
-    showLess: "Show less",
-    more: "More...",
-    loading: "Loading...",
-    searchOlder: "Search older...",
-    loadOlder: "Load older...",
-    hideExitedSessions: "Hide exited sessions",
-    showExitedSessions: "Show exited sessions",
-    exitedSessionsHidden: "{{count}} exited hidden",
-    subagentTreeExpanded: "Subagent tree expanded",
-    subagentTreeExpand: "Expand subagent tree",
-    subagentTreeCollapse: "Collapse subagent tree",
-    degradedWorkspaceRefreshAriaLabel: "Refresh incomplete thread list",
-    degradedWorkspaceRefreshTooltip: "This project's thread list is not fully refreshed yet and may be missing some conversations. Click to refresh it again.",
-    degradedWorkspaceRefreshingAriaLabel: "Refreshing thread list",
-    degradedWorkspaceRefreshingTooltip: "Refreshing thread list...",
-    sessionStopped: "Session stopped.",
-    sessionStoppedForFusion: "Switching to the merged follow-up and waiting for resume evidence...",
-    turnFailed: "Turn failed.",
-    turnFailedWithMessage: "Turn failed: {{message}}",
-    claudeMcpRouteMapped:
-      "MCP routing notice: detected `playwright-mcp`, automatically mapped this session to `chrome-devtools`.",
-    claudeMcpRouteUnavailable:
-      "MCP routing notice: detected `playwright-mcp`, but this session has not confirmed that tool is visible.",
-    turnFailedToStart: "Turn failed to start.",
-    turnFailedToStartWithMessage: "Turn failed to start: {{message}}",
-    turnStalled: "Turn stalled after user input. You can continue from the latest visible state.",
-    turnStalledWithMessage: "Turn stalled after user input: {{message}}",
-    fusionTurnStalled: "The merged follow-up did not resume. The thread is interactive again from the latest visible state.",
-    fusionTurnStalledWithMessage: "The merged follow-up did not resume: {{message}}",
-    firstPacketTimeout: "No initial response within {{seconds}}s. Network, proxy, or upstream service load may be causing delay. Please retry.",
-    codexNoProgressStalled: "Codex realtime received no new progress for {{seconds}}s. This turn is quarantined as stalled, so you can stop or resend safely.",
-    networkProxyHint: "Network connection failed. Check network and proxy settings (HTTP_PROXY / HTTPS_PROXY / ALL_PROXY / NO_PROXY), then retry.",
-    networkConnectionHint: "Network connection failed. Please verify your network is reachable, then retry.",
-    proxyBadge: "Proxy",
-    requestTimeoutHint: "Request timed out before receiving a response. Network jitter or upstream service load may be causing delay. Please retry.",
-    completionEmailSent: "Completion email sent.",
-    completionEmailSkipped: "No completed assistant answer was available, so no email was sent.",
-    completionEmailFailedTitle: "Completion email failed",
-    codexCompactionStarted: "Codex is compacting background information. The response will continue after it finishes.",
-    codexCompactionCompleted: "Codex completed background information compaction.",
-    contextCompactionFailed: "Context compaction failed.",
-    contextCompactionFailedWithMessage: "Context compaction failed: {{message}}",
-    claudeManualCompactUnavailable: "No active Claude conversation is available to compact. Open an existing Claude thread, then run /compact again.",
-    specRootContext: {
-      title: "External Spec Root (Priority)",
-      activeRoot: "Active root path",
-      priorityLabel: "Read policy",
-      priorityDetail: "Read this root first, then fall back to workspace openspec.",
-    },
-  },
-
-  // Config
-  config: {
-    switchProvider: "Switch provider",
-  },
-
-  // Reasoning depth
-  reasoning: {
-    title: "Select reasoning depth",
-    default: "Default",
-    claudeDefault: "Claude default",
-    defaultDescription: "Use the engine default reasoning behavior",
-    low: {
-      label: "Low",
-      description: "Quick responses with basic reasoning",
-    },
-    medium: {
-      label: "Medium",
-      description: "Balanced thinking (default)",
-    },
-    high: {
-      label: "High",
-      description: "Deep reasoning for complex tasks",
-    },
-    xhigh: {
-      label: "Extra High",
-      description: "Extra high reasoning depth",
-    },
-    max: {
-      label: "Max",
-      description: "Maximum reasoning depth",
-    },
-  },
-
-  // Providers
-  providers: {
-    claude: { label: "Claude Code" },
-    codex: { label: "Codex CLI" },
-    gemini: { label: "Gemini CLI" },
-    opencode: { label: "OpenCode" },
-  },
-
-  // Usage labels
-  usage: {
-    sessionReset: "Session resets",
-    weeklyReset: "Weekly resets",
-    credits: "Credits",
-    used: "used",
-    remaining: "remaining",
-    unlimited: "Unlimited",
-  },
-
-  // Menu
-  menu: {
-    // App menu
-    about: "About {{appName}}",
-    checkForUpdates: "Check for Updates…",
-    settings: "Settings…",
-    // File menu
-    file: "File",
-    newAgent: "New Agent",
-    newWorktreeAgent: "New Worktree Agent",
-    newCloneAgent: "New Clone Agent",
-    newWindow: "New Window",
-    addWorkspace: "Add Workspace…",
-    closeWindow: "Close Window",
-    quit: "Quit",
-    // Edit menu
-    edit: "Edit",
-    // Composer menu
-    composer: "Composer",
-    cycleModel: "Cycle Model",
-    cycleAccessMode: "Cycle Access Mode",
-    cycleReasoningMode: "Cycle Reasoning Mode",
-    cycleCollaborationMode: "Cycle Collaboration Mode",
-    // View menu
-    view: "View",
-    toggleProjectsSidebar: "Toggle Projects Sidebar",
-    toggleGitSidebar: "Toggle Right Sidebar",
-    toggleGlobalSearch: "Toggle Global Search",
-    toggleDebugPanel: "Toggle Debug Panel",
-    toggleTerminal: "Toggle Terminal",
-    nextAgent: "Next Agent",
-    previousAgent: "Previous Agent",
-    nextWorkspace: "Next Workspace",
-    previousWorkspace: "Previous Workspace",
-    toggleFullScreen: "Toggle Full Screen",
-    // Window menu
-    window: "Window",
-    minimize: "Minimize",
-    maximize: "Maximize",
-    reloadWindow: "Reload Window",
-    // Help menu
-    help: "Help",
-  },
-
-  clientDocumentation: {
-    open: "Client documentation",
   },
 };
 

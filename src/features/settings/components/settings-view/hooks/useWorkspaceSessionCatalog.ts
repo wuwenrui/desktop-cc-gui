@@ -88,7 +88,9 @@ function normalizeErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function toQuery(filters: WorkspaceSessionCatalogFilters): WorkspaceSessionCatalogQuery {
+function toQuery(
+  filters: WorkspaceSessionCatalogFilters,
+): WorkspaceSessionCatalogQuery {
   return {
     keyword: filters.keyword.trim() || null,
     engine: filters.engine.trim() || null,
@@ -97,9 +99,7 @@ function toQuery(filters: WorkspaceSessionCatalogFilters): WorkspaceSessionCatal
   };
 }
 
-function normalizeCatalogPage(
-  response: WorkspaceSessionCatalogPageLike,
-): {
+function normalizeCatalogPage(response: WorkspaceSessionCatalogPageLike): {
   data: WorkspaceSessionCatalogEntry[];
   nextCursor: string | null;
   partialSource: string | null;
@@ -128,10 +128,18 @@ function patchArchivedState(
       ? {
           ...entry,
           archivedAt:
-            archivedAtBySelectionKey.get(buildWorkspaceSessionSelectionKey(entry)) ?? null,
+            archivedAtBySelectionKey.get(
+              buildWorkspaceSessionSelectionKey(entry),
+            ) ?? null,
         }
       : entry,
   );
+}
+
+function clearCatalogEntries(
+  current: WorkspaceSessionCatalogEntry[],
+): WorkspaceSessionCatalogEntry[] {
+  return current.length === 0 ? current : [];
 }
 
 export function useWorkspaceSessionCatalog({
@@ -149,8 +157,12 @@ export function useWorkspaceSessionCatalog({
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isMutating, setIsMutating] = useState(false);
   const requestSeqRef = useRef(0);
+  const { engine, folderId, keyword, status } = filters;
 
-  const query = useMemo(() => toQuery(filters), [filters]);
+  const query = useMemo(
+    () => toQuery({ engine, folderId, keyword, status }),
+    [engine, folderId, keyword, status],
+  );
 
   const loadPage = useCallback(
     async (pageMode: "replace" | "append", cursor?: string | null) => {
@@ -159,10 +171,14 @@ export function useWorkspaceSessionCatalog({
       const relatedEngineFilteredOut =
         mode === "project" &&
         source === "related" &&
-        Boolean(filters.engine) &&
-        filters.engine !== "codex";
-      if (!enabled || relatedEngineFilteredOut || (mode === "project" && !workspaceId)) {
-        setEntries([]);
+        Boolean(query.engine) &&
+        query.engine !== "codex";
+      if (
+        !enabled ||
+        relatedEngineFilteredOut ||
+        (mode === "project" && !workspaceId)
+      ) {
+        setEntries(clearCatalogEntries);
         setNextCursor(null);
         setPartialSource(null);
         setError(null);
@@ -195,11 +211,11 @@ export function useWorkspaceSessionCatalog({
                   cursor: cursor ?? null,
                   limit: SESSION_CATALOG_PAGE_SIZE,
                 })
-            : await listWorkspaceSessions(workspaceId!, {
-                query,
-                cursor: cursor ?? null,
-                limit: SESSION_CATALOG_PAGE_SIZE,
-              });
+              : await listWorkspaceSessions(workspaceId!, {
+                  query,
+                  cursor: cursor ?? null,
+                  limit: SESSION_CATALOG_PAGE_SIZE,
+                });
         if (requestSeqRef.current !== requestId) {
           return;
         }
@@ -228,7 +244,7 @@ export function useWorkspaceSessionCatalog({
         }
       }
     },
-    [enabled, filters.engine, mode, query, source, workspaceId],
+    [enabled, mode, query, source, workspaceId],
   );
 
   useEffect(() => {
@@ -261,7 +277,10 @@ export function useWorkspaceSessionCatalog({
 
       setIsMutating(true);
       try {
-        const entriesByWorkspaceId = new Map<string, WorkspaceSessionCatalogEntry[]>();
+        const entriesByWorkspaceId = new Map<
+          string,
+          WorkspaceSessionCatalogEntry[]
+        >();
         const unresolvedEntries: WorkspaceSessionCatalogMutationResult[] = [];
         selectedEntries.forEach((entry) => {
           if (entry.workspaceId === UNASSIGNED_WORKSPACE_ID) {
@@ -281,20 +300,34 @@ export function useWorkspaceSessionCatalog({
           entriesByWorkspaceId.set(entry.workspaceId, bucket);
         });
 
-        const mutationResults: WorkspaceSessionCatalogMutationResult[] = [...unresolvedEntries];
+        const mutationResults: WorkspaceSessionCatalogMutationResult[] = [
+          ...unresolvedEntries,
+        ];
         for (const [entryWorkspaceId, entryBucket] of entriesByWorkspaceId) {
           const sessionIds = entryBucket.map((entry) => entry.sessionId);
           const selectionKeyBySessionId = new Map(
-            entryBucket.map((entry) => [entry.sessionId, buildWorkspaceSessionSelectionKey(entry)]),
+            entryBucket.map((entry) => [
+              entry.sessionId,
+              buildWorkspaceSessionSelectionKey(entry),
+            ]),
           );
           try {
             let response: WorkspaceSessionBatchMutationResponse;
             if (kind === "archive") {
-              response = await archiveWorkspaceSessions(entryWorkspaceId, sessionIds);
+              response = await archiveWorkspaceSessions(
+                entryWorkspaceId,
+                sessionIds,
+              );
             } else if (kind === "unarchive") {
-              response = await unarchiveWorkspaceSessions(entryWorkspaceId, sessionIds);
+              response = await unarchiveWorkspaceSessions(
+                entryWorkspaceId,
+                sessionIds,
+              );
             } else if (kind === "delete") {
-              response = await deleteWorkspaceSessions(entryWorkspaceId, sessionIds);
+              response = await deleteWorkspaceSessions(
+                entryWorkspaceId,
+                sessionIds,
+              );
             } else {
               response = await assignWorkspaceSessionFolders(
                 entryWorkspaceId,
@@ -346,17 +379,23 @@ export function useWorkspaceSessionCatalog({
           .filter((item) => item.ok)
           .map((item) => item.selectionKey);
         if (succeededSelectionKeys.length > 0) {
-          const succeededSelectionKeySet = toSelectionKeySet(succeededSelectionKeys);
+          const succeededSelectionKeySet = toSelectionKeySet(
+            succeededSelectionKeys,
+          );
           setEntries((current) => {
             if (kind === "delete") {
               return current.filter(
                 (entry) =>
-                  !succeededSelectionKeySet.has(buildWorkspaceSessionSelectionKey(entry)),
+                  !succeededSelectionKeySet.has(
+                    buildWorkspaceSessionSelectionKey(entry),
+                  ),
               );
             }
             if (kind === "move-folder") {
               return current.map((entry) =>
-                succeededSelectionKeySet.has(buildWorkspaceSessionSelectionKey(entry))
+                succeededSelectionKeySet.has(
+                  buildWorkspaceSessionSelectionKey(entry),
+                )
                   ? { ...entry, folderId: options?.folderId ?? null }
                   : entry,
               );
@@ -366,7 +405,9 @@ export function useWorkspaceSessionCatalog({
             }
             return current.filter(
               (entry) =>
-                !succeededSelectionKeySet.has(buildWorkspaceSessionSelectionKey(entry)),
+                !succeededSelectionKeySet.has(
+                  buildWorkspaceSessionSelectionKey(entry),
+                ),
             );
           });
         }

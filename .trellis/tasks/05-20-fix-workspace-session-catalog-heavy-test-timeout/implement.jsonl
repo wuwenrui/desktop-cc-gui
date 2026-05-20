@@ -1,0 +1,6 @@
+{"file": ".trellis/workflow.md", "reason": "Project workflow and conventions"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend development guide"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "frontend quality and test gate"}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "hook async/effect stability"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "hook state source-of-truth"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "typed hook contract"}

@@ -4,11 +4,20 @@ import enPart2 from "./en.part2";
 import enPart3 from "./en.part3";
 import enPart4 from "./en.part4";
 import enPart5 from "./en.part5";
+import enPart6 from "./en.part6";
 
-const enPart2Settings = (enPart2 as { settings?: Partial<typeof enPart1.settings> }).settings ?? {};
-const enPart3Settings = (enPart3 as { settings?: Partial<typeof enPart1.settings> }).settings ?? {};
-const enPart2Composer = (enPart2 as { composer?: Partial<typeof enPart1.composer> }).composer ?? {};
-const enPart3Composer = (enPart3 as { composer?: Partial<typeof enPart1.composer> }).composer ?? {};
+const enPart2Settings =
+  (enPart2 as { settings?: Partial<typeof enPart1.settings> }).settings ?? {};
+const enPart3Settings =
+  (enPart3 as { settings?: Partial<typeof enPart1.settings> }).settings ?? {};
+const enPart1Composer =
+  (enPart1 as { composer?: Partial<typeof enPart6.composer> }).composer ?? {};
+const enPart2Composer =
+  (enPart2 as { composer?: Partial<typeof enPart6.composer> }).composer ?? {};
+const enPart3Composer =
+  (enPart3 as { composer?: Partial<typeof enPart6.composer> }).composer ?? {};
+const enPart6Composer =
+  (enPart6 as { composer?: Partial<typeof enPart6.composer> }).composer ?? {};
 
 const en = {
   ...enPart1Base,
@@ -17,10 +26,12 @@ const en = {
   ...enPart3,
   ...enPart4,
   ...enPart5,
+  ...enPart6,
   composer: {
-    ...enPart1.composer,
+    ...enPart1Composer,
     ...enPart2Composer,
     ...enPart3Composer,
+    ...enPart6Composer,
   },
   settings: {
     ...enPart1.settings,

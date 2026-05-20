@@ -1804,7 +1804,7 @@ describe("SettingsView Session management", () => {
 
     await waitFor(() => {
       expect(listWorkspaceSessions).toHaveBeenCalledWith("ws-b", {
-        query: { keyword: null, engine: null, status: "active" },
+        query: { keyword: null, engine: null, status: "active", folderId: null },
         cursor: null,
         limit: 100,
       });
@@ -1874,7 +1874,7 @@ describe("SettingsView Session management", () => {
 
     await waitFor(() => {
       expect(listWorkspaceSessions).toHaveBeenCalledWith("ws-1", {
-        query: { keyword: null, engine: null, status: "active" },
+        query: { keyword: null, engine: null, status: "active", folderId: null },
         cursor: null,
         limit: 100,
       });

@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { SessionListSection } from "./SessionManagementSessionList";
 import Archive from "lucide-react/dist/esm/icons/archive";
 import CheckSquare2 from "lucide-react/dist/esm/icons/check-square-2";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
@@ -13,15 +14,12 @@ import FolderPlus from "lucide-react/dist/esm/icons/folder-plus";
 import FolderTree from "lucide-react/dist/esm/icons/folder-tree";
 import GitBranch from "lucide-react/dist/esm/icons/git-branch";
 import Inbox from "lucide-react/dist/esm/icons/inbox";
-import Info from "lucide-react/dist/esm/icons/info";
 import ListCheck from "lucide-react/dist/esm/icons/list-check";
-import MessageSquareText from "lucide-react/dist/esm/icons/message-square-text";
 import RotateCw from "lucide-react/dist/esm/icons/rotate-cw";
 import SlidersHorizontal from "lucide-react/dist/esm/icons/sliders-horizontal";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 import Undo2 from "lucide-react/dist/esm/icons/undo-2";
 import X from "lucide-react/dist/esm/icons/x";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -44,7 +42,10 @@ import type {
   WorkspaceInfo,
   WorkspaceSettings,
 } from "../../../../../types";
-import { buildItemsFromThread, mergeThreadItems } from "../../../../../utils/threadItems";
+import {
+  buildItemsFromThread,
+  mergeThreadItems,
+} from "../../../../../utils/threadItems";
 import { parseClaudeHistoryMessages } from "../../../../threads/loaders/claudeHistoryLoader";
 import { parseCodexSessionHistory } from "../../../../threads/loaders/codexSessionHistory";
 import { parseGeminiHistoryMessages } from "../../../../threads/loaders/geminiHistoryParser";
@@ -62,6 +63,14 @@ import type {
   WorkspaceSessionFolder,
 } from "../../../../../services/tauri";
 import {
+  buildLoadedSessionFolderCountSummary,
+  buildSessionFolderNavItems,
+  buildWorkspaceOptions,
+  normalizeEngineType,
+  type GroupedWorkspace,
+  type SessionFolderCountSummary,
+} from "./sessionManagementSectionUtils";
+import {
   createWorkspaceSessionFolder,
   loadCodexSession,
   loadClaudeSession,
@@ -69,12 +78,6 @@ import {
   listWorkspaceSessionFolders,
   resumeThread,
 } from "../../../../../services/tauri";
-
-type GroupedWorkspace = {
-  id: string | null;
-  name: string;
-  workspaces: WorkspaceInfo[];
-};
 
 type NoticeState =
   | { kind: "success"; text: string }
@@ -94,32 +97,11 @@ type SessionManagementSectionProps = {
   onSessionsMutated?: (workspaceId: string) => void;
 };
 
-type WorkspaceOption = {
-  id: string;
-  label: string;
-  pickerLabel: string;
-  depth: number;
-  kind: "project" | "worktree";
-};
-
 type SessionFolderFilter = "__all__" | "__root__" | string;
-
-type SessionFolderNavItem = {
-  id: string;
-  label: string;
-  depth: number;
-  count: number;
-};
-
-type SessionFolderCountSummary = {
-  folderCountsById: Map<string, number>;
-  unassignedFolderCount: number;
-};
 
 const ENGINE_FILTER_ALL_VALUE = "__all__";
 const SESSION_FOLDER_FILTER_ALL = "__all__";
 const SESSION_FOLDER_FILTER_ROOT = "__root__";
-const UNASSIGNED_WORKSPACE_ID = "__global_unassigned__";
 const OWNER_UNRESOLVED_CODE = "OWNER_WORKSPACE_UNRESOLVED";
 const MISSING_MUTATION_RESULT_CODE = "MISSING_MUTATION_RESULT";
 const ALREADY_MISSING_CLEANED_CODE = "ALREADY_MISSING_CLEANED";
@@ -131,19 +113,6 @@ const DEFAULT_FILTERS: WorkspaceSessionCatalogFilters = {
   status: "active",
 };
 
-type SessionListSectionProps = {
-  title: string;
-  description?: string;
-  entries: WorkspaceSessionCatalogEntry[];
-  selectedIds: Record<string, true>;
-  workspaceLabelById: Map<string, string>;
-  engineFilterLabel: Record<string, string>;
-  locale: string;
-  onToggleSelection: (selectionKey: string) => void;
-  onOpenSessionCurtain: (entry: WorkspaceSessionCatalogEntry) => void;
-  t: ReturnType<typeof useTranslation>["t"];
-};
-
 type SessionCurtainState = {
   entry: WorkspaceSessionCatalogEntry;
   items: ConversationItem[];
@@ -153,205 +122,12 @@ type SessionCurtainState = {
   notice: string | null;
 };
 
-type CodexCurtainSourceResult = {
+export type CodexCurtainSourceResult = {
   source: "local" | "resume";
   items: ConversationItem[];
 };
 
-function getSortOrderValue(value: number | null | undefined) {
-  return typeof value === "number" ? value : Number.MAX_SAFE_INTEGER;
-}
-
-function buildWorkspaceOptions(
-  workspaces: WorkspaceInfo[],
-  groupedWorkspaces: GroupedWorkspace[],
-  scopeLabels: {
-    project: string;
-    worktree: string;
-  },
-): WorkspaceOption[] {
-  const rootById = new Map<string, WorkspaceInfo>();
-  const worktreesByParent = new Map<string, WorkspaceInfo[]>();
-
-  workspaces.forEach((workspace) => {
-    if ((workspace.kind ?? "main") === "worktree" && workspace.parentId) {
-      const bucket = worktreesByParent.get(workspace.parentId) ?? [];
-      bucket.push(workspace);
-      worktreesByParent.set(workspace.parentId, bucket);
-      return;
-    }
-    rootById.set(workspace.id, workspace);
-  });
-
-  const appendOptionsForWorkspace = (workspace: WorkspaceInfo, output: WorkspaceOption[]) => {
-    const groupPrefix =
-      groupedWorkspaces.find((group) => group.workspaces.some((item) => item.id === workspace.id))
-        ?.name ?? "";
-    const baseLabel = groupPrefix ? `${groupPrefix} / ${workspace.name}` : workspace.name;
-    output.push({
-      id: workspace.id,
-      label: baseLabel,
-      pickerLabel: groupPrefix
-        ? `${groupPrefix} / ${scopeLabels.project} ${workspace.name}`
-        : `${scopeLabels.project} ${workspace.name}`,
-      depth: 0,
-      kind: "project",
-    });
-    const worktrees = [...(worktreesByParent.get(workspace.id) ?? [])].sort((left, right) => {
-      const sortDiff =
-        getSortOrderValue(left.settings.sortOrder) - getSortOrderValue(right.settings.sortOrder);
-      if (sortDiff !== 0) {
-        return sortDiff;
-      }
-      return left.name.localeCompare(right.name);
-    });
-    worktrees.forEach((worktree) => {
-      const scopedLabel = `${scopeLabels.worktree} ${worktree.name}`;
-      output.push({
-        id: worktree.id,
-        label: `${groupPrefix ? `${groupPrefix} / ` : ""}${scopedLabel}`,
-        pickerLabel: `${groupPrefix ? `${groupPrefix} / ` : ""}${scopedLabel}`,
-        depth: 1,
-        kind: "worktree",
-      });
-    });
-  };
-
-  const orderedRoots = [...rootById.values()].sort((left, right) => {
-    const sortDiff =
-      getSortOrderValue(left.settings.sortOrder) - getSortOrderValue(right.settings.sortOrder);
-    if (sortDiff !== 0) {
-      return sortDiff;
-    }
-    return left.name.localeCompare(right.name);
-  });
-
-  const options: WorkspaceOption[] = [];
-  orderedRoots.forEach((workspace) => appendOptionsForWorkspace(workspace, options));
-  return options;
-}
-
-function normalizeSessionFolderId(value: string | null | undefined) {
-  const normalized = value?.trim();
-  return normalized ? normalized : null;
-}
-
-function buildSessionFolderNavItems(
-  folders: WorkspaceSessionFolder[],
-  folderCountsById: ReadonlyMap<string, number>,
-): SessionFolderNavItem[] {
-  const folderIds = new Set(folders.map((folder) => folder.id));
-  const parentById = new Map(
-    folders.map((folder) => [folder.id, normalizeSessionFolderId(folder.parentId)] as const),
-  );
-  const childrenByParent = new Map<string | null, WorkspaceSessionFolder[]>();
-
-  const hasCycle = (folderId: string) => {
-    const seen = new Set<string>();
-    let cursor: string | null = folderId;
-    while (cursor) {
-      if (seen.has(cursor)) {
-        return true;
-      }
-      seen.add(cursor);
-      cursor = parentById.get(cursor) ?? null;
-    }
-    return false;
-  };
-
-  [...folders]
-    .sort((left, right) =>
-      left.name.localeCompare(right.name) || left.createdAt - right.createdAt || left.id.localeCompare(right.id),
-    )
-    .forEach((folder) => {
-      const parentId = normalizeSessionFolderId(folder.parentId);
-      const safeParentId =
-        parentId && parentId !== folder.id && folderIds.has(parentId) && !hasCycle(folder.id)
-          ? parentId
-          : null;
-      const siblings = childrenByParent.get(safeParentId) ?? [];
-      siblings.push(folder);
-      childrenByParent.set(safeParentId, siblings);
-    });
-
-  const items: SessionFolderNavItem[] = [];
-  const visit = (parentId: string | null, depth: number) => {
-    (childrenByParent.get(parentId) ?? []).forEach((folder) => {
-      items.push({
-        id: folder.id,
-        label: folder.name,
-        depth,
-        count: folderCountsById.get(folder.id) ?? 0,
-      });
-      visit(folder.id, depth + 1);
-    });
-  };
-  visit(null, 1);
-  return items;
-}
-
-function buildLoadedSessionFolderCountSummary(
-  entries: WorkspaceSessionCatalogEntry[],
-): SessionFolderCountSummary {
-  const folderCountsById = new Map<string, number>();
-  const effectiveFolderBySessionId = buildEffectiveSessionFolderMap(entries);
-  let unassignedFolderCount = 0;
-
-  entries.forEach((entry) => {
-    const folderId = normalizeSessionFolderId(effectiveFolderBySessionId.get(entry.sessionId));
-    if (!folderId) {
-      unassignedFolderCount += 1;
-      return;
-    }
-    folderCountsById.set(folderId, (folderCountsById.get(folderId) ?? 0) + 1);
-  });
-
-  return {
-    folderCountsById,
-    unassignedFolderCount,
-  };
-}
-
-function buildEffectiveSessionFolderMap(entries: WorkspaceSessionCatalogEntry[]) {
-  const entryBySessionId = new Map(entries.map((entry) => [entry.sessionId, entry]));
-  const effectiveFolderBySessionId = new Map<string, string | null>();
-
-  const resolveEffectiveFolderId = (
-    entry: WorkspaceSessionCatalogEntry,
-    visiting: Set<string>,
-  ): string | null => {
-    if (effectiveFolderBySessionId.has(entry.sessionId)) {
-      return effectiveFolderBySessionId.get(entry.sessionId) ?? null;
-    }
-
-    const explicitFolderId = normalizeSessionFolderId(entry.folderId);
-    if (explicitFolderId) {
-      effectiveFolderBySessionId.set(entry.sessionId, explicitFolderId);
-      return explicitFolderId;
-    }
-
-    const parentSessionId = normalizeSessionFolderId(entry.parentSessionId);
-    const parent = parentSessionId ? entryBySessionId.get(parentSessionId) : null;
-    if (!parent || visiting.has(entry.sessionId)) {
-      effectiveFolderBySessionId.set(entry.sessionId, null);
-      return null;
-    }
-
-    visiting.add(entry.sessionId);
-    const inheritedFolderId = resolveEffectiveFolderId(parent, visiting);
-    visiting.delete(entry.sessionId);
-    effectiveFolderBySessionId.set(entry.sessionId, inheritedFolderId);
-    return inheritedFolderId;
-  };
-
-  entries.forEach((entry) => {
-    resolveEffectiveFolderId(entry, new Set());
-  });
-
-  return effectiveFolderBySessionId;
-}
-
-function resolveStatusFilterLabel(
+export function resolveStatusFilterLabel(
   status: WorkspaceSessionCatalogFilters["status"],
   t: ReturnType<typeof useTranslation>["t"],
 ) {
@@ -364,28 +140,27 @@ function resolveStatusFilterLabel(
   return t("settings.sessionManagementStatusActive");
 }
 
-function normalizeEngineType(engine: string): EngineType {
-  if (engine === "claude" || engine === "gemini" || engine === "opencode") {
-    return engine;
-  }
-  return "codex";
-}
-
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
 }
 
-function resolveNativeSessionId(entry: WorkspaceSessionCatalogEntry, engine: EngineType) {
-  const explicitSessionId = entry.canonicalSessionId?.trim() || entry.sessionId.trim();
+export function resolveNativeSessionId(
+  entry: WorkspaceSessionCatalogEntry,
+  engine: EngineType,
+) {
+  const explicitSessionId =
+    entry.canonicalSessionId?.trim() || entry.sessionId.trim();
   const enginePrefix = `${engine}:`;
   return explicitSessionId.startsWith(enginePrefix)
     ? explicitSessionId.slice(enginePrefix.length)
     : explicitSessionId;
 }
 
-function extractThreadFromResumeResponse(response: unknown): Record<string, unknown> | null {
+export function extractThreadFromResumeResponse(
+  response: unknown,
+): Record<string, unknown> | null {
   const root = asRecord(response);
   const result = asRecord(root?.result);
   const candidates = [
@@ -393,10 +168,16 @@ function extractThreadFromResumeResponse(response: unknown): Record<string, unkn
     asRecord(root?.thread),
     Array.isArray(root?.turns) ? root : null,
   ];
-  return candidates.find((candidate): candidate is Record<string, unknown> => Boolean(candidate)) ?? null;
+  return (
+    candidates.find((candidate): candidate is Record<string, unknown> =>
+      Boolean(candidate),
+    ) ?? null
+  );
 }
 
-function extractHistoryMessagesPayload(response: Record<string, unknown> | null) {
+export function extractHistoryMessagesPayload(
+  response: Record<string, unknown> | null,
+) {
   return asRecord(response)?.messages ?? response;
 }
 
@@ -471,24 +252,32 @@ async function resumeCodexThreadForCurtain(
   return null;
 }
 
-async function loadCodexLocalCurtainItems(
+export async function loadCodexLocalCurtainItems(
   workspaceId: string,
   requestedThreadId: string,
   entry: WorkspaceSessionCatalogEntry,
 ): Promise<CodexCurtainSourceResult> {
-  const response = await loadCodexSessionForCurtain(workspaceId, requestedThreadId, entry);
+  const response = await loadCodexSessionForCurtain(
+    workspaceId,
+    requestedThreadId,
+    entry,
+  );
   return {
     source: "local",
     items: parseCodexSessionHistory(response),
   };
 }
 
-async function loadCodexResumeCurtainItems(
+export async function loadCodexResumeCurtainItems(
   workspaceId: string,
   requestedThreadId: string,
   entry: WorkspaceSessionCatalogEntry,
 ): Promise<CodexCurtainSourceResult> {
-  const response = await resumeCodexThreadForCurtain(workspaceId, requestedThreadId, entry);
+  const response = await resumeCodexThreadForCurtain(
+    workspaceId,
+    requestedThreadId,
+    entry,
+  );
   const thread = extractThreadFromResumeResponse(response);
   return {
     source: "resume",
@@ -496,7 +285,7 @@ async function loadCodexResumeCurtainItems(
   };
 }
 
-async function loadCodexCurtainItemsWithTimeout(
+export async function loadCodexCurtainItemsWithTimeout(
   entry: WorkspaceSessionCatalogEntry,
 ): Promise<ConversationItem[]> {
   return new Promise((resolve) => {
@@ -537,7 +326,7 @@ async function loadCodexCurtainItemsWithTimeout(
   });
 }
 
-function getConversationItemText(item: ConversationItem) {
+export function getConversationItemText(item: ConversationItem) {
   if (item.kind === "message") {
     return item.text;
   }
@@ -564,7 +353,7 @@ function getConversationItemText(item: ConversationItem) {
   return "";
 }
 
-function getConversationItemLabel(
+export function getConversationItemLabel(
   item: ConversationItem,
   t: ReturnType<typeof useTranslation>["t"],
 ) {
@@ -591,24 +380,7 @@ function getConversationItemLabel(
   return t("settings.sessionManagementCurtainRoleImage");
 }
 
-function formatUpdatedAtDisplay(updatedAt: number, locale: string) {
-  if (!Number.isFinite(updatedAt) || updatedAt <= 0) {
-    return "--";
-  }
-  const date = new Date(updatedAt);
-  if (Number.isNaN(date.getTime())) {
-    return "--";
-  }
-  return new Intl.DateTimeFormat(locale || undefined, {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(date);
-}
-
-function parseVisibleThreadRootCountDraft(value: string): number | null {
+export function parseVisibleThreadRootCountDraft(value: string): number | null {
   const trimmed = value.trim();
   if (!trimmed) {
     return null;
@@ -620,7 +392,7 @@ function parseVisibleThreadRootCountDraft(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function resolveMutationFailureReason(
+export function resolveMutationFailureReason(
   result: WorkspaceSessionCatalogMutationResponse["results"][number],
   t: ReturnType<typeof useTranslation>["t"],
 ) {
@@ -633,193 +405,19 @@ function resolveMutationFailureReason(
   if (result.code === ALREADY_MISSING_CLEANED_CODE) {
     return t("settings.sessionManagementMissingSessionCleaned");
   }
-  return result.error?.trim() || t("settings.projectSessionDeleteUnknownReason");
-}
-
-function resolveAttributionReasonLabel(
-  entry: WorkspaceSessionCatalogEntry,
-  t: ReturnType<typeof useTranslation>["t"],
-) {
-  if (entry.attributionReason === "shared-worktree-family") {
-    return t("settings.sessionManagementAttributionReasonWorktreeFamily");
-  }
-  if (entry.attributionReason === "shared-git-root") {
-    return t("settings.sessionManagementAttributionReasonGitRoot");
-  }
-  if (entry.attributionReason === "parent-scope") {
-    return t("settings.sessionManagementAttributionReasonParentScope");
-  }
-  return null;
-}
-
-function resolveAttributionConfidenceLabel(
-  entry: WorkspaceSessionCatalogEntry,
-  t: ReturnType<typeof useTranslation>["t"],
-) {
-  if (entry.attributionConfidence === "high") {
-    return t("settings.sessionManagementAttributionConfidenceHigh");
-  }
-  if (entry.attributionConfidence === "medium") {
-    return t("settings.sessionManagementAttributionConfidenceMedium");
-  }
-  return null;
-}
-
-function SessionListSection({
-  title,
-  description,
-  entries,
-  selectedIds,
-  workspaceLabelById,
-  engineFilterLabel,
-  locale,
-  onToggleSelection,
-  onOpenSessionCurtain,
-  t,
-}: SessionListSectionProps) {
-  const [expandedDetailKeys, setExpandedDetailKeys] = useState<Record<string, boolean>>({});
-  const toggleDetail = (selectionKey: string) => {
-    setExpandedDetailKeys((current) => ({
-      ...current,
-      [selectionKey]: !current[selectionKey],
-    }));
-  };
-
   return (
-    <div className="space-y-3">
-      <div className="space-y-1">
-        <div className="text-sm font-semibold">{title}</div>
-        {description ? <div className="text-sm text-muted-foreground">{description}</div> : null}
-      </div>
-      <ul className="settings-project-sessions-list">
-        {entries.map((entry) => {
-          const selectionKey = buildWorkspaceSessionSelectionKey(entry);
-          const selected = Boolean(selectedIds[selectionKey]);
-          const engineLabel = engineFilterLabel[normalizeEngineType(entry.engine)] ?? entry.engine;
-          const ownerWorkspaceLabel =
-            entry.workspaceId === UNASSIGNED_WORKSPACE_ID
-              ? t("settings.sessionManagementWorkspaceUnassigned")
-              : entry.workspaceLabel ?? workspaceLabelById.get(entry.workspaceId) ?? entry.workspaceId;
-          const attributionReason = resolveAttributionReasonLabel(entry, t);
-          const attributionConfidence = resolveAttributionConfidenceLabel(entry, t);
-          const titleLabel = entry.title.trim() || t("settings.projectSessionItemUntitled");
-          const updatedAtDisplay = formatUpdatedAtDisplay(entry.updatedAt, locale);
-          const detailExpanded = Boolean(expandedDetailKeys[selectionKey]);
-          return (
-            <li key={selectionKey}>
-              <div
-                className={`settings-project-sessions-item${selected ? " is-selected" : ""}${detailExpanded ? " is-expanded" : ""}`}
-              >
-                <input
-                  type="checkbox"
-                  checked={selected}
-                  onChange={() => onToggleSelection(selectionKey)}
-                  aria-label={titleLabel}
-                />
-                <span className="settings-project-sessions-item-engine" aria-hidden>
-                  <EngineIcon engine={normalizeEngineType(entry.engine)} size={14} />
-                </span>
-                <span className="settings-project-sessions-item-content">
-                  <span className="settings-project-sessions-item-heading">
-                    <span className="settings-project-sessions-item-title">
-                      {titleLabel}
-                    </span>
-                    {entry.inconsistencyCode === "missing-on-disk" ? (
-                      <Badge variant="destructive" size="sm">
-                        {t("settings.sessionManagementBadgeMissingOnDisk")}
-                      </Badge>
-                    ) : null}
-                  </span>
-                  <span className="settings-project-sessions-item-date">{updatedAtDisplay}</span>
-                  <button
-                    type="button"
-                    className="settings-project-sessions-detail-toggle"
-                    aria-expanded={detailExpanded}
-                    aria-label={t("settings.sessionManagementDetailToggle")}
-                    title={t("settings.sessionManagementDetailToggle")}
-                    onClick={() => toggleDetail(selectionKey)}
-                  >
-                    <Info size={22} strokeWidth={2.1} aria-hidden />
-                  </button>
-                  <button
-                    type="button"
-                    className="settings-project-sessions-curtain-toggle"
-                    aria-label={t("settings.sessionManagementOpenCurtain")}
-                    title={t("settings.sessionManagementOpenCurtain")}
-                    onClick={() => onOpenSessionCurtain(entry)}
-                  >
-                    <MessageSquareText size={22} strokeWidth={2.1} aria-hidden />
-                  </button>
-                  {detailExpanded ? (
-                    <span className="settings-project-sessions-item-details">
-                      <span className="settings-project-sessions-detail-badges">
-                        {entry.archivedAt ? (
-                          <Badge variant="secondary" size="sm">
-                            {t("settings.sessionManagementBadgeArchived")}
-                          </Badge>
-                        ) : null}
-                        {entry.attributionStatus === "inferred-related" ? (
-                          <Badge variant="outline" size="sm">
-                            {t("settings.sessionManagementBadgeRelated")}
-                          </Badge>
-                        ) : null}
-                        {entry.childrenCount && entry.childrenCount > 0 ? (
-                          <Badge variant="outline" size="sm">
-                            {t("settings.sessionManagementChildrenCount", {
-                              count: entry.childrenCount,
-                            })}
-                          </Badge>
-                        ) : null}
-                        {attributionConfidence ? (
-                          <Badge variant="outline" size="sm">
-                            {attributionConfidence}
-                          </Badge>
-                        ) : null}
-                      </span>
-                      <span className="settings-project-sessions-detail-grid">
-                        <span>{t("settings.sessionManagementDetailEngine")}</span>
-                        <span>{engineLabel}</span>
-                        <span>{t("settings.sessionManagementDetailWorkspace")}</span>
-                        <span>{ownerWorkspaceLabel}</span>
-                        {entry.sourceLabel ? (
-                          <>
-                            <span>{t("settings.sessionManagementDetailSource")}</span>
-                            <span>{entry.sourceLabel}</span>
-                          </>
-                        ) : null}
-                        {attributionReason ? (
-                          <>
-                            <span>{t("settings.sessionManagementDetailAttribution")}</span>
-                            <span>{attributionReason}</span>
-                          </>
-                        ) : null}
-                        {entry.parentSessionId ? (
-                          <>
-                            <span>{t("settings.sessionManagementDetailParent")}</span>
-                            <span>
-                              {t("settings.sessionManagementParentSession", {
-                                id: entry.parentSessionId,
-                              })}
-                            </span>
-                          </>
-                        ) : null}
-                      </span>
-                    </span>
-                  ) : null}
-                </span>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
+    result.error?.trim() || t("settings.projectSessionDeleteUnknownReason")
   );
 }
 
 export function collectSucceededWorkspaceIds(
   results: WorkspaceSessionCatalogMutationResponse["results"],
 ): string[] {
-  return [...new Set(results.filter((item) => item.ok).map((item) => item.workspaceId))];
+  return [
+    ...new Set(
+      results.filter((item) => item.ok).map((item) => item.workspaceId),
+    ),
+  ];
 }
 
 export function SessionManagementSection({
@@ -841,7 +439,12 @@ export function SessionManagementSection({
     [t],
   );
   const workspaceOptions = useMemo(
-    () => buildWorkspaceOptions(workspaces, groupedWorkspaces, workspaceScopeLabels),
+    () =>
+      buildWorkspaceOptions(
+        workspaces,
+        groupedWorkspaces,
+        workspaceScopeLabels,
+      ),
     [groupedWorkspaces, workspaceScopeLabels, workspaces],
   );
   const workspaceLabelById = useMemo(
@@ -849,33 +452,40 @@ export function SessionManagementSection({
     [workspaceOptions],
   );
   const [workspaceId, setWorkspaceId] = useState<string | null>(
-    initialWorkspaceId && workspaceOptions.some((item) => item.id === initialWorkspaceId)
+    initialWorkspaceId &&
+      workspaceOptions.some((item) => item.id === initialWorkspaceId)
       ? initialWorkspaceId
-      : workspaceOptions[0]?.id ?? null,
+      : (workspaceOptions[0]?.id ?? null),
   );
   const appliedInitialWorkspaceIdRef = useRef<string | null>(null);
   const sessionCurtainLoadSeqRef = useRef(0);
   const [mode, setMode] = useState<WorkspaceSessionCatalogMode>("project");
-  const [filters, setFilters] = useState<WorkspaceSessionCatalogFilters>(DEFAULT_FILTERS);
+  const [filters, setFilters] =
+    useState<WorkspaceSessionCatalogFilters>(DEFAULT_FILTERS);
   const [selectedIds, setSelectedIds] = useState<Record<string, true>>({});
   const [deleteArmed, setDeleteArmed] = useState(false);
   const [notice, setNotice] = useState<NoticeState>(null);
   const [sessionFolderFilter, setSessionFolderFilter] =
     useState<SessionFolderFilter>(SESSION_FOLDER_FILTER_ALL);
-  const [sessionFolders, setSessionFolders] = useState<WorkspaceSessionFolder[]>([]);
+  const [sessionFolders, setSessionFolders] = useState<
+    WorkspaceSessionFolder[]
+  >([]);
   const [sessionFoldersLoading, setSessionFoldersLoading] = useState(false);
-  const [sessionFolderError, setSessionFolderError] = useState<string | null>(null);
+  const [sessionFolderError, setSessionFolderError] = useState<string | null>(
+    null,
+  );
   const [sessionFolderDraftOpen, setSessionFolderDraftOpen] = useState(false);
   const [sessionFolderDraftName, setSessionFolderDraftName] = useState("");
   const [isCreatingSessionFolder, setIsCreatingSessionFolder] = useState(false);
-  const [moveTargetFolderId, setMoveTargetFolderId] =
-    useState<string>(SESSION_FOLDER_FILTER_ROOT);
-  const [visibleThreadRootCountDraft, setVisibleThreadRootCountDraft] = useState(
-    String(DEFAULT_VISIBLE_THREAD_ROOT_COUNT),
+  const [moveTargetFolderId, setMoveTargetFolderId] = useState<string>(
+    SESSION_FOLDER_FILTER_ROOT,
   );
+  const [visibleThreadRootCountDraft, setVisibleThreadRootCountDraft] =
+    useState(String(DEFAULT_VISIBLE_THREAD_ROOT_COUNT));
   const [isSavingVisibleThreadRootCount, setIsSavingVisibleThreadRootCount] =
     useState(false);
-  const [sessionCurtain, setSessionCurtain] = useState<SessionCurtainState | null>(null);
+  const [sessionCurtain, setSessionCurtain] =
+    useState<SessionCurtainState | null>(null);
   const primarySource: WorkspaceSessionCatalogSource = "strict";
   const summaryQuery = useMemo(
     () => ({
@@ -916,7 +526,12 @@ export function SessionManagementSection({
     reload: reloadPrimary,
     loadMore: loadMorePrimary,
     mutate,
-  } = useWorkspaceSessionCatalog({ mode, workspaceId, filters: catalogFilters, source: primarySource });
+  } = useWorkspaceSessionCatalog({
+    mode,
+    workspaceId,
+    filters: catalogFilters,
+    source: primarySource,
+  });
   const {
     entries: relatedEntries,
     nextCursor: relatedNextCursor,
@@ -944,7 +559,8 @@ export function SessionManagementSection({
       return {
         folderCountsById: new Map(Object.entries(summaryFolderCountsById)),
         unassignedFolderCount:
-          projectionSummary.unassignedFolderCount ?? loadedFolderCountSummary.unassignedFolderCount,
+          projectionSummary.unassignedFolderCount ??
+          loadedFolderCountSummary.unassignedFolderCount,
       };
     }
     return loadedFolderCountSummary;
@@ -954,19 +570,21 @@ export function SessionManagementSection({
     summaryFolderCountsById,
   ]);
   const folderNavItems = useMemo(
-    () => buildSessionFolderNavItems(sessionFolders, effectiveFolderCountSummary.folderCountsById),
+    () =>
+      buildSessionFolderNavItems(
+        sessionFolders,
+        effectiveFolderCountSummary.folderCountsById,
+      ),
     [effectiveFolderCountSummary.folderCountsById, sessionFolders],
   );
   const folderIds = useMemo(
     () => new Set(sessionFolders.map((folder) => folder.id)),
     [sessionFolders],
   );
-  const visiblePrimaryEntries = useMemo(
-    () => primaryEntries,
-    [primaryEntries],
-  );
+  const visiblePrimaryEntries = useMemo(() => primaryEntries, [primaryEntries]);
   const visibleRelatedEntries = useMemo(
-    () => (sessionFolderFilter === SESSION_FOLDER_FILTER_ALL ? relatedEntries : []),
+    () =>
+      sessionFolderFilter === SESSION_FOLDER_FILTER_ALL ? relatedEntries : [],
     [relatedEntries, sessionFolderFilter],
   );
   const visibleEntries = useMemo(
@@ -977,28 +595,41 @@ export function SessionManagementSection({
     [mode, primaryEntries, visiblePrimaryEntries, visibleRelatedEntries],
   );
   const visiblePrimaryCount = visiblePrimaryEntries.length;
-  const projectScopeTotalCount = projectionSummary?.filteredTotal ?? visiblePrimaryCount;
+  const projectScopeTotalCount =
+    projectionSummary?.filteredTotal ?? visiblePrimaryCount;
   const selectedFolderTotalCount =
     sessionFolderFilter === SESSION_FOLDER_FILTER_ALL
       ? projectScopeTotalCount
       : sessionFolderFilter === SESSION_FOLDER_FILTER_ROOT
         ? effectiveFolderCountSummary.unassignedFolderCount
-        : effectiveFolderCountSummary.folderCountsById.get(sessionFolderFilter) ?? 0;
-  const filteredTotalCount = mode === "project" ? selectedFolderTotalCount : visiblePrimaryCount;
+        : (effectiveFolderCountSummary.folderCountsById.get(
+            sessionFolderFilter,
+          ) ?? 0);
+  const filteredTotalCount =
+    mode === "project" ? selectedFolderTotalCount : visiblePrimaryCount;
   const currentPageVisibleCount = visiblePrimaryCount;
-  const activeProjectionOwnerCount = projectionSummary?.ownerWorkspaceIds.length ?? 0;
+  const activeProjectionOwnerCount =
+    projectionSummary?.ownerWorkspaceIds.length ?? 0;
   const activeTotalCount = projectionSummary?.activeTotal ?? 0;
   const summaryPartialSource =
-    projectionSummary?.partialSources && projectionSummary.partialSources.length > 0
+    projectionSummary?.partialSources &&
+    projectionSummary.partialSources.length > 0
       ? projectionSummary.partialSources.join(",")
       : null;
   const primaryPartialSourceNotice =
-    primaryPartialSource && primaryPartialSource !== summaryPartialSource ? primaryPartialSource : null;
+    primaryPartialSource && primaryPartialSource !== summaryPartialSource
+      ? primaryPartialSource
+      : null;
 
-  const selectedCount = useMemo(() => Object.keys(selectedIds).length, [selectedIds]);
+  const selectedCount = useMemo(
+    () => Object.keys(selectedIds).length,
+    [selectedIds],
+  );
   const allSelected =
     visibleEntries.length > 0 &&
-    visibleEntries.every((entry) => Boolean(selectedIds[buildWorkspaceSessionSelectionKey(entry)]));
+    visibleEntries.every((entry) =>
+      Boolean(selectedIds[buildWorkspaceSessionSelectionKey(entry)]),
+    );
 
   const engineFilterLabel = useMemo(
     () => ({
@@ -1071,8 +702,12 @@ export function SessionManagementSection({
     await Promise.all([
       reloadPrimary(),
       mode === "project" ? reloadRelated() : Promise.resolve(),
-      mode === "project" && workspaceId ? reloadSessionFolders(workspaceId) : Promise.resolve(),
-      mode === "project" && workspaceId ? reloadProjectionSummary() : Promise.resolve(),
+      mode === "project" && workspaceId
+        ? reloadSessionFolders(workspaceId)
+        : Promise.resolve(),
+      mode === "project" && workspaceId
+        ? reloadProjectionSummary()
+        : Promise.resolve(),
     ]);
     resetSelection();
   };
@@ -1087,7 +722,9 @@ export function SessionManagementSection({
     setNotice(null);
   };
 
-  const handleSessionFolderFilterChange = (nextFolderFilter: SessionFolderFilter) => {
+  const handleSessionFolderFilterChange = (
+    nextFolderFilter: SessionFolderFilter,
+  ) => {
     setSessionFolderFilter(nextFolderFilter);
     setSessionFolderDraftOpen(false);
     setSessionFolderDraftName("");
@@ -1102,7 +739,9 @@ export function SessionManagementSection({
       const response = await listWorkspaceSessionFolders(targetWorkspaceId);
       setSessionFolders(response.folders);
     } catch (error) {
-      setSessionFolderError(error instanceof Error ? error.message : String(error));
+      setSessionFolderError(
+        error instanceof Error ? error.message : String(error),
+      );
       setSessionFolders([]);
     } finally {
       setSessionFoldersLoading(false);
@@ -1118,7 +757,11 @@ export function SessionManagementSection({
 
     setIsCreatingSessionFolder(true);
     try {
-      const response = await createWorkspaceSessionFolder(targetWorkspaceId, folderName, null);
+      const response = await createWorkspaceSessionFolder(
+        targetWorkspaceId,
+        folderName,
+        null,
+      );
       await reloadSessionFolders(targetWorkspaceId);
       setSessionFolderFilter(response.folder.id);
       setSessionFolderDraftOpen(false);
@@ -1171,23 +814,39 @@ export function SessionManagementSection({
     }
   };
 
-  const loadSessionCurtainItems = async (entry: WorkspaceSessionCatalogEntry) => {
+  const loadSessionCurtainItems = async (
+    entry: WorkspaceSessionCatalogEntry,
+  ) => {
     const engine = normalizeEngineType(entry.engine);
     const nativeSessionId = resolveNativeSessionId(entry, engine);
-    const ownerWorkspace = workspaces.find((workspace) => workspace.id === entry.workspaceId) ?? null;
+    const ownerWorkspace =
+      workspaces.find((workspace) => workspace.id === entry.workspaceId) ??
+      null;
 
     if ((engine === "claude" || engine === "gemini") && !ownerWorkspace?.path) {
-      throw new Error(t("settings.sessionManagementCurtainMissingWorkspacePath"));
+      throw new Error(
+        t("settings.sessionManagementCurtainMissingWorkspacePath"),
+      );
     }
 
     if (engine === "claude") {
-      const response = await loadClaudeSession(ownerWorkspace!.path, nativeSessionId);
-      return parseClaudeHistoryMessages(extractHistoryMessagesPayload(response));
+      const response = await loadClaudeSession(
+        ownerWorkspace!.path,
+        nativeSessionId,
+      );
+      return parseClaudeHistoryMessages(
+        extractHistoryMessagesPayload(response),
+      );
     }
 
     if (engine === "gemini") {
-      const response = await loadGeminiSession(ownerWorkspace!.path, nativeSessionId);
-      return parseGeminiHistoryMessages(extractHistoryMessagesPayload(response));
+      const response = await loadGeminiSession(
+        ownerWorkspace!.path,
+        nativeSessionId,
+      );
+      return parseGeminiHistoryMessages(
+        extractHistoryMessagesPayload(response),
+      );
     }
 
     if (engine === "codex") {
@@ -1270,7 +929,9 @@ export function SessionManagementSection({
     const handleSourceSettled = (result: CodexCurtainSourceResult) => {
       settledCount += 1;
       if (result.items.length > 0) {
-        hasVisibleItems = appendCodexCurtainItems(loadSeq, entry, result.items) || hasVisibleItems;
+        hasVisibleItems =
+          appendCodexCurtainItems(loadSeq, entry, result.items) ||
+          hasVisibleItems;
         if (hasVisibleItems) {
           clearLoadTimeout();
         }
@@ -1311,7 +972,9 @@ export function SessionManagementSection({
       .catch(handleSourceError);
   };
 
-  const handleOpenSessionCurtain = async (entry: WorkspaceSessionCatalogEntry) => {
+  const handleOpenSessionCurtain = async (
+    entry: WorkspaceSessionCatalogEntry,
+  ) => {
     const loadSeq = sessionCurtainLoadSeqRef.current + 1;
     sessionCurtainLoadSeqRef.current = loadSeq;
     setSessionCurtain({
@@ -1362,7 +1025,9 @@ export function SessionManagementSection({
     const loadSeq = sessionCurtainLoadSeqRef.current + 1;
     sessionCurtainLoadSeqRef.current = loadSeq;
     setSessionCurtain((current) =>
-      current ? { ...current, isLoading: true, error: null, notice: null } : current,
+      current
+        ? { ...current, isLoading: true, error: null, notice: null }
+        : current,
     );
     if (normalizeEngineType(entry.engine) === "codex") {
       startCodexSessionCurtainLoad(entry, loadSeq);
@@ -1404,7 +1069,10 @@ export function SessionManagementSection({
   }, [workspaceId, workspaceLabelById, workspaceOptions]);
   useEffect(() => {
     const nextInitialWorkspaceId = initialWorkspaceId ?? null;
-    if (!nextInitialWorkspaceId || !workspaceLabelById.has(nextInitialWorkspaceId)) {
+    if (
+      !nextInitialWorkspaceId ||
+      !workspaceLabelById.has(nextInitialWorkspaceId)
+    ) {
       return;
     }
     if (appliedInitialWorkspaceIdRef.current === nextInitialWorkspaceId) {
@@ -1476,7 +1144,10 @@ export function SessionManagementSection({
     setVisibleThreadRootCountDraft(String(effectiveVisibleThreadRootCount));
   }, [effectiveVisibleThreadRootCount, selectedWorkspace?.id]);
   const projectScopeWorktreeCount = useMemo(() => {
-    if (!selectedWorkspace || (selectedWorkspace.kind ?? "main") === "worktree") {
+    if (
+      !selectedWorkspace ||
+      (selectedWorkspace.kind ?? "main") === "worktree"
+    ) {
       return 0;
     }
     return workspaces.filter(
@@ -1490,8 +1161,7 @@ export function SessionManagementSection({
   const shouldShowProjectScopeHint =
     mode === "project" && projectScopeWorktreeCount > 0;
   const shouldShowVisibleCountHint =
-    mode === "project" &&
-    filteredTotalCount > currentPageVisibleCount;
+    mode === "project" && filteredTotalCount > currentPageVisibleCount;
   const statusFilterLabel = resolveStatusFilterLabel(filters.status, t);
 
   const handleMutation = async (kind: "archive" | "unarchive" | "delete") => {
@@ -1546,12 +1216,16 @@ export function SessionManagementSection({
         void Promise.all([
           shouldReloadPrimary ? reloadPrimary() : Promise.resolve(),
           shouldReloadRelated ? reloadRelated() : Promise.resolve(),
-          shouldReloadProjectionSummary ? reloadProjectionSummary() : Promise.resolve(),
+          shouldReloadProjectionSummary
+            ? reloadProjectionSummary()
+            : Promise.resolve(),
         ]);
       } else if (shouldReloadProjectionSummary) {
         void reloadProjectionSummary();
       }
-      const succeededWorkspaceIds = collectSucceededWorkspaceIds(response.results);
+      const succeededWorkspaceIds = collectSucceededWorkspaceIds(
+        response.results,
+      );
       succeededWorkspaceIds.forEach((ownerWorkspaceId) => {
         onSessionsMutated?.(ownerWorkspaceId);
       });
@@ -1591,7 +1265,9 @@ export function SessionManagementSection({
     }
 
     try {
-      const response = await mutate("move-folder", selectedEntries, { folderId: targetFolderId });
+      const response = await mutate("move-folder", selectedEntries, {
+        folderId: targetFolderId,
+      });
       const succeeded = response.results.filter((item) => item.ok);
       const failed = response.results.filter((item) => !item.ok);
       if (failed.length === 0) {
@@ -1610,15 +1286,19 @@ export function SessionManagementSection({
           text: t("settings.sessionManagementMutationPartial", {
             succeeded: succeeded.length,
             failed: failed.length,
-            reason: failed.map((item) => resolveMutationFailureReason(item, t)).join(" · "),
+            reason: failed
+              .map((item) => resolveMutationFailureReason(item, t))
+              .join(" · "),
           }),
         });
       }
 
       void Promise.all([reloadPrimary(), reloadProjectionSummary()]);
-      collectSucceededWorkspaceIds(response.results).forEach((ownerWorkspaceId) => {
-        onSessionsMutated?.(ownerWorkspaceId);
-      });
+      collectSucceededWorkspaceIds(response.results).forEach(
+        (ownerWorkspaceId) => {
+          onSessionsMutated?.(ownerWorkspaceId);
+        },
+      );
       if (failed.length > 0) {
         keepOnlySelected(failed.map((item) => item.selectionKey));
       } else {
@@ -1632,9 +1312,12 @@ export function SessionManagementSection({
     }
   };
 
-  const expandCount = mode === "global" ? primaryEntries.length : projectScopeTotalCount;
+  const expandCount =
+    mode === "global" ? primaryEntries.length : projectScopeTotalCount;
   const showProjectStrictEmpty =
-    mode === "project" && !primaryIsLoading && visiblePrimaryEntries.length === 0;
+    mode === "project" &&
+    !primaryIsLoading &&
+    visiblePrimaryEntries.length === 0;
   const showRelatedSection =
     mode === "project" &&
     sessionFolderFilter === SESSION_FOLDER_FILTER_ALL &&
@@ -1650,8 +1333,8 @@ export function SessionManagementSection({
       return t("settings.sessionManagementFolderUnassigned");
     }
     return (
-      sessionFolders.find((folder) => folder.id === sessionFolderFilter)?.name ??
-      t("settings.sessionManagementFolderAll")
+      sessionFolders.find((folder) => folder.id === sessionFolderFilter)
+        ?.name ?? t("settings.sessionManagementFolderAll")
     );
   }, [sessionFolderFilter, sessionFolders, t]);
 
@@ -1661,7 +1344,9 @@ export function SessionManagementSection({
         type="button"
         className={`settings-project-sessions-nav-item is-folder${sessionFolderFilter === SESSION_FOLDER_FILTER_ALL ? " is-active" : ""}`}
         style={{ paddingLeft: 10 + (workspaceDepth + 1) * 18 }}
-        onClick={() => handleSessionFolderFilterChange(SESSION_FOLDER_FILTER_ALL)}
+        onClick={() =>
+          handleSessionFolderFilterChange(SESSION_FOLDER_FILTER_ALL)
+        }
       >
         <span className="settings-project-sessions-nav-name">
           <ListCheck size={13} aria-hidden />
@@ -1675,7 +1360,9 @@ export function SessionManagementSection({
         type="button"
         className={`settings-project-sessions-nav-item is-folder${sessionFolderFilter === SESSION_FOLDER_FILTER_ROOT ? " is-active" : ""}`}
         style={{ paddingLeft: 10 + (workspaceDepth + 1) * 18 }}
-        onClick={() => handleSessionFolderFilterChange(SESSION_FOLDER_FILTER_ROOT)}
+        onClick={() =>
+          handleSessionFolderFilterChange(SESSION_FOLDER_FILTER_ROOT)
+        }
       >
         <span className="settings-project-sessions-nav-name">
           <Inbox size={13} aria-hidden />
@@ -1728,7 +1415,9 @@ export function SessionManagementSection({
               type="button"
               size="sm"
               onClick={() => void handleCreateRootSessionFolder()}
-              disabled={!sessionFolderDraftName.trim() || isCreatingSessionFolder}
+              disabled={
+                !sessionFolderDraftName.trim() || isCreatingSessionFolder
+              }
             >
               <FolderPlus size={14} aria-hidden />
               {isCreatingSessionFolder
@@ -1761,15 +1450,15 @@ export function SessionManagementSection({
           className={`settings-project-sessions-nav-item is-folder${sessionFolderFilter === folder.id ? " is-active" : ""}`}
           style={{ paddingLeft: 10 + (workspaceDepth + 1 + folder.depth) * 18 }}
           onClick={() => handleSessionFolderFilterChange(folder.id)}
-      >
-        <span className="settings-project-sessions-nav-name">
+        >
+          <span className="settings-project-sessions-nav-name">
             {sessionFolderFilter === folder.id ? (
               <FolderOpen size={13} aria-hidden />
             ) : (
               <Folder size={13} aria-hidden />
             )}
-          {folder.label}
-        </span>
+            {folder.label}
+          </span>
           <span className="settings-project-sessions-nav-count">
             {folder.count}
           </span>
@@ -1800,12 +1489,22 @@ export function SessionManagementSection({
         data-testid="settings-project-sessions-expand-toggle"
       >
         {expanded ? (
-          <ChevronDown className="settings-project-sessions-expand-icon" size={14} aria-hidden />
+          <ChevronDown
+            className="settings-project-sessions-expand-icon"
+            size={14}
+            aria-hidden
+          />
         ) : (
-          <ChevronRight className="settings-project-sessions-expand-icon" size={14} aria-hidden />
+          <ChevronRight
+            className="settings-project-sessions-expand-icon"
+            size={14}
+            aria-hidden
+          />
         )}
         <span className="settings-project-sessions-expand-label">{title}</span>
-        <span className="settings-project-sessions-expand-count">({expandCount})</span>
+        <span className="settings-project-sessions-expand-count">
+          ({expandCount})
+        </span>
       </button>
 
       {expanded ? (
@@ -1841,7 +1540,11 @@ export function SessionManagementSection({
                 variant="outline"
                 size="sm"
                 onClick={() => void handleRefresh()}
-                disabled={(mode === "project" && !workspaceId) || primaryIsLoading || isMutating}
+                disabled={
+                  (mode === "project" && !workspaceId) ||
+                  primaryIsLoading ||
+                  isMutating
+                }
               >
                 <RotateCw size={14} aria-hidden />
                 {t("settings.projectSessionRefresh")}
@@ -1851,7 +1554,10 @@ export function SessionManagementSection({
 
           <div className="settings-project-sessions-shell">
             {mode === "project" ? (
-              <aside className="settings-project-sessions-nav" aria-label={t("settings.workspacePickerLabel")}>
+              <aside
+                className="settings-project-sessions-nav"
+                aria-label={t("settings.workspacePickerLabel")}
+              >
                 <div className="settings-project-sessions-nav-title">
                   {t("settings.workspacePickerLabel")}
                 </div>
@@ -1880,7 +1586,9 @@ export function SessionManagementSection({
                             </span>
                           ) : null}
                         </button>
-                        {active ? renderSessionFolderNavControls(option.depth) : null}
+                        {active
+                          ? renderSessionFolderNavControls(option.depth)
+                          : null}
                       </Fragment>
                     );
                   })}
@@ -1900,7 +1608,10 @@ export function SessionManagementSection({
                 <div className="settings-project-sessions-control-head">
                   {mode === "project" && selectedWorkspace ? (
                     <div className="settings-project-sessions-scope-summary">
-                      <span>{workspaceLabelById.get(selectedWorkspace.id) ?? selectedWorkspace.name}</span>
+                      <span>
+                        {workspaceLabelById.get(selectedWorkspace.id) ??
+                          selectedWorkspace.name}
+                      </span>
                       <span aria-hidden>/</span>
                       <span>{activeFolderLabel}</span>
                     </div>
@@ -1939,7 +1650,9 @@ export function SessionManagementSection({
                             inputMode="numeric"
                             pattern="[0-9]*"
                             className="h-8 w-20"
-                            aria-label={t("settings.sessionManagementThreadVisibilityLabel")}
+                            aria-label={t(
+                              "settings.sessionManagementThreadVisibilityLabel",
+                            )}
                           />
                           <Button
                             type="button"
@@ -1952,7 +1665,9 @@ export function SessionManagementSection({
                           >
                             <CheckSquare2 size={14} aria-hidden />
                             {isSavingVisibleThreadRootCount
-                              ? t("settings.sessionManagementThreadVisibilitySaving")
+                              ? t(
+                                  "settings.sessionManagementThreadVisibilitySaving",
+                                )
                               : t("common.save")}
                           </Button>
                         </div>
@@ -1964,9 +1679,15 @@ export function SessionManagementSection({
                 <div className="settings-project-sessions-filterbar">
                   <Input
                     value={filters.keyword}
-                    onChange={(event) => handleFiltersChange({ keyword: event.target.value })}
-                    placeholder={t("settings.sessionManagementSearchPlaceholder")}
-                    aria-label={t("settings.sessionManagementSearchPlaceholder")}
+                    onChange={(event) =>
+                      handleFiltersChange({ keyword: event.target.value })
+                    }
+                    placeholder={t(
+                      "settings.sessionManagementSearchPlaceholder",
+                    )}
+                    aria-label={t(
+                      "settings.sessionManagementSearchPlaceholder",
+                    )}
                   />
 
                   {mode === "project" ? (
@@ -1974,14 +1695,20 @@ export function SessionManagementSection({
                       value={filters.engine || ENGINE_FILTER_ALL_VALUE}
                       onValueChange={(value) =>
                         handleFiltersChange({
-                          engine: value === ENGINE_FILTER_ALL_VALUE || value == null ? "" : value,
+                          engine:
+                            value === ENGINE_FILTER_ALL_VALUE || value == null
+                              ? ""
+                              : value,
                         })
                       }
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder={t("settings.sessionManagementEngineAll")}>
+                        <SelectValue
+                          placeholder={t("settings.sessionManagementEngineAll")}
+                        >
                           {engineFilterLabel[
-                            (filters.engine || "all") as keyof typeof engineFilterLabel
+                            (filters.engine ||
+                              "all") as keyof typeof engineFilterLabel
                           ] ?? t("settings.sessionManagementEngineAll")}
                         </SelectValue>
                       </SelectTrigger>
@@ -1989,10 +1716,18 @@ export function SessionManagementSection({
                         <SelectItem value={ENGINE_FILTER_ALL_VALUE}>
                           {t("settings.sessionManagementEngineAll")}
                         </SelectItem>
-                        <SelectItem value="codex">{engineFilterLabel.codex}</SelectItem>
-                        <SelectItem value="claude">{engineFilterLabel.claude}</SelectItem>
-                        <SelectItem value="gemini">{engineFilterLabel.gemini}</SelectItem>
-                        <SelectItem value="opencode">{engineFilterLabel.opencode}</SelectItem>
+                        <SelectItem value="codex">
+                          {engineFilterLabel.codex}
+                        </SelectItem>
+                        <SelectItem value="claude">
+                          {engineFilterLabel.claude}
+                        </SelectItem>
+                        <SelectItem value="gemini">
+                          {engineFilterLabel.gemini}
+                        </SelectItem>
+                        <SelectItem value="opencode">
+                          {engineFilterLabel.opencode}
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   ) : (
@@ -2005,7 +1740,8 @@ export function SessionManagementSection({
                     value={filters.status}
                     onValueChange={(value) =>
                       handleFiltersChange({
-                        status: value as WorkspaceSessionCatalogFilters["status"],
+                        status:
+                          value as WorkspaceSessionCatalogFilters["status"],
                       })
                     }
                   >
@@ -2025,333 +1761,383 @@ export function SessionManagementSection({
                       <SelectItem value="archived">
                         {t("settings.sessionManagementStatusArchived")}
                       </SelectItem>
-                      <SelectItem value="all">{t("settings.sessionManagementStatusAll")}</SelectItem>
+                      <SelectItem value="all">
+                        {t("settings.sessionManagementStatusAll")}
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
 
-          <div className="settings-project-sessions-toolbar">
-            <div className="settings-project-sessions-stats">
-              <span className="settings-project-sessions-selected">
-                {t("settings.projectSessionSelectedCount", { count: selectedCount })}
-              </span>
-              {mode === "project" ? (
-                <span className="settings-project-sessions-selected">
-                  {t("settings.sessionManagementFilteredTotalCount", { count: filteredTotalCount })}
-                </span>
-              ) : null}
-              {mode === "project" ? (
-                <span className="settings-project-sessions-selected">
-                  {t("settings.sessionManagementCurrentPageCount", {
-                    count: currentPageVisibleCount,
-                  })}
-                </span>
-              ) : null}
-            </div>
-            <div className="settings-project-sessions-actions">
-              <button
-                type="button"
-                className="settings-project-sessions-btn"
-                onClick={handleSelectAll}
-                disabled={visibleEntries.length === 0 || allSelected}
-              >
-                <CheckSquare2 size={14} aria-hidden />
-                {t("settings.projectSessionSelectAll")}
-              </button>
-              <button
-                type="button"
-                className="settings-project-sessions-btn"
-                onClick={resetSelection}
-                disabled={selectedCount === 0}
-              >
-                <CircleX size={14} aria-hidden />
-                {t("settings.projectSessionClearSelection")}
-              </button>
-              {mode === "project" ? (
-                <div className="settings-project-sessions-move-control">
-                  <Select
-                    value={moveTargetFolderId}
-                    onValueChange={(value) =>
-                      setMoveTargetFolderId(value ?? SESSION_FOLDER_FILTER_ROOT)
-                    }
-                  >
-                    <SelectTrigger
-                      className="settings-project-sessions-move-select"
-                      aria-label={t("settings.sessionManagementMoveTargetLabel")}
-                    >
-                      <SelectValue>
-                        {moveTargetFolderId === SESSION_FOLDER_FILTER_ROOT
-                          ? t("settings.sessionManagementFolderUnassigned")
-                          : sessionFolders.find((folder) => folder.id === moveTargetFolderId)?.name ??
-                            t("settings.sessionManagementMoveTargetLabel")}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={SESSION_FOLDER_FILTER_ROOT}>
-                        {t("settings.sessionManagementFolderUnassigned")}
-                      </SelectItem>
-                      {folderNavItems.map((folder) => (
-                        <SelectItem key={folder.id} value={folder.id}>
-                          {" ".repeat(Math.max(0, folder.depth - 1) * 2)}
-                          {folder.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+              <div className="settings-project-sessions-toolbar">
+                <div className="settings-project-sessions-stats">
+                  <span className="settings-project-sessions-selected">
+                    {t("settings.projectSessionSelectedCount", {
+                      count: selectedCount,
+                    })}
+                  </span>
+                  {mode === "project" ? (
+                    <span className="settings-project-sessions-selected">
+                      {t("settings.sessionManagementFilteredTotalCount", {
+                        count: filteredTotalCount,
+                      })}
+                    </span>
+                  ) : null}
+                  {mode === "project" ? (
+                    <span className="settings-project-sessions-selected">
+                      {t("settings.sessionManagementCurrentPageCount", {
+                        count: currentPageVisibleCount,
+                      })}
+                    </span>
+                  ) : null}
+                </div>
+                <div className="settings-project-sessions-actions">
                   <button
                     type="button"
                     className="settings-project-sessions-btn"
-                    onClick={() =>
-                      void handleMoveSelectedSessions(
-                        moveTargetFolderId === SESSION_FOLDER_FILTER_ROOT ? null : moveTargetFolderId,
-                      )
-                    }
+                    onClick={handleSelectAll}
+                    disabled={visibleEntries.length === 0 || allSelected}
+                  >
+                    <CheckSquare2 size={14} aria-hidden />
+                    {t("settings.projectSessionSelectAll")}
+                  </button>
+                  <button
+                    type="button"
+                    className="settings-project-sessions-btn"
+                    onClick={resetSelection}
+                    disabled={selectedCount === 0}
+                  >
+                    <CircleX size={14} aria-hidden />
+                    {t("settings.projectSessionClearSelection")}
+                  </button>
+                  {mode === "project" ? (
+                    <div className="settings-project-sessions-move-control">
+                      <Select
+                        value={moveTargetFolderId}
+                        onValueChange={(value) =>
+                          setMoveTargetFolderId(
+                            value ?? SESSION_FOLDER_FILTER_ROOT,
+                          )
+                        }
+                      >
+                        <SelectTrigger
+                          className="settings-project-sessions-move-select"
+                          aria-label={t(
+                            "settings.sessionManagementMoveTargetLabel",
+                          )}
+                        >
+                          <SelectValue>
+                            {moveTargetFolderId === SESSION_FOLDER_FILTER_ROOT
+                              ? t("settings.sessionManagementFolderUnassigned")
+                              : (sessionFolders.find(
+                                  (folder) => folder.id === moveTargetFolderId,
+                                )?.name ??
+                                t("settings.sessionManagementMoveTargetLabel"))}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={SESSION_FOLDER_FILTER_ROOT}>
+                            {t("settings.sessionManagementFolderUnassigned")}
+                          </SelectItem>
+                          {folderNavItems.map((folder) => (
+                            <SelectItem key={folder.id} value={folder.id}>
+                              {" ".repeat(Math.max(0, folder.depth - 1) * 2)}
+                              {folder.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <button
+                        type="button"
+                        className="settings-project-sessions-btn"
+                        onClick={() =>
+                          void handleMoveSelectedSessions(
+                            moveTargetFolderId === SESSION_FOLDER_FILTER_ROOT
+                              ? null
+                              : moveTargetFolderId,
+                          )
+                        }
+                        disabled={selectedCount === 0 || isMutating}
+                      >
+                        <FolderInput size={14} aria-hidden />
+                        {moveTargetFolderId === SESSION_FOLDER_FILTER_ROOT
+                          ? t("settings.sessionManagementMoveToUnfiled")
+                          : t("settings.sessionManagementMoveSelected")}
+                      </button>
+                    </div>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="settings-project-sessions-btn"
+                    onClick={() => void handleMutation("archive")}
                     disabled={selectedCount === 0 || isMutating}
                   >
-                    <FolderInput size={14} aria-hidden />
-                    {moveTargetFolderId === SESSION_FOLDER_FILTER_ROOT
-                      ? t("settings.sessionManagementMoveToUnfiled")
-                      : t("settings.sessionManagementMoveSelected")}
+                    <Archive size={14} aria-hidden />
+                    {t("settings.sessionManagementArchiveSelected")}
+                  </button>
+                  <button
+                    type="button"
+                    className="settings-project-sessions-btn"
+                    onClick={() => void handleMutation("unarchive")}
+                    disabled={selectedCount === 0 || isMutating}
+                  >
+                    <Undo2 size={14} aria-hidden />
+                    {t("settings.sessionManagementUnarchiveSelected")}
+                  </button>
+                  <button
+                    type="button"
+                    className="settings-project-sessions-btn is-danger"
+                    onClick={() => void handleMutation("delete")}
+                    disabled={selectedCount === 0 || isMutating}
+                    data-testid="settings-project-sessions-delete-selected"
+                  >
+                    <Trash2 size={14} aria-hidden />
+                    {deleteArmed
+                      ? t("settings.projectSessionConfirmDeleteSelected", {
+                          count: selectedCount,
+                        })
+                      : t("settings.projectSessionDeleteSelected")}
                   </button>
                 </div>
-              ) : null}
-              <button
-                type="button"
-                className="settings-project-sessions-btn"
-                onClick={() => void handleMutation("archive")}
-                disabled={selectedCount === 0 || isMutating}
-              >
-                <Archive size={14} aria-hidden />
-                {t("settings.sessionManagementArchiveSelected")}
-              </button>
-              <button
-                type="button"
-                className="settings-project-sessions-btn"
-                onClick={() => void handleMutation("unarchive")}
-                disabled={selectedCount === 0 || isMutating}
-              >
-                <Undo2 size={14} aria-hidden />
-                {t("settings.sessionManagementUnarchiveSelected")}
-              </button>
-              <button
-                type="button"
-                className="settings-project-sessions-btn is-danger"
-                onClick={() => void handleMutation("delete")}
-                disabled={selectedCount === 0 || isMutating}
-                data-testid="settings-project-sessions-delete-selected"
-              >
-                <Trash2 size={14} aria-hidden />
-                {deleteArmed
-                  ? t("settings.projectSessionConfirmDeleteSelected", { count: selectedCount })
-                  : t("settings.projectSessionDeleteSelected")}
-              </button>
-            </div>
-          </div>
-
-          {notice ? (
-            <div className={`settings-project-sessions-notice is-${notice.kind}`}>{notice.text}</div>
-          ) : null}
-          {shouldShowSidebarStatusHint ? (
-            <div className="settings-project-sessions-notice">
-              {t("settings.sessionManagementSidebarStatusHint", {
-                status: statusFilterLabel,
-              })}
-            </div>
-          ) : null}
-          {shouldShowProjectScopeHint ? (
-            <div className="settings-project-sessions-notice">
-              {t("settings.sessionManagementProjectScopeHint", {
-                count: projectScopeWorktreeCount,
-              })}
-            </div>
-          ) : null}
-          {shouldShowVisibleCountHint ? (
-            <div className="settings-project-sessions-notice">
-              {t("settings.sessionManagementVisibleWindowHint", {
-                visible: currentPageVisibleCount,
-                total: filteredTotalCount,
-              })}
-            </div>
-          ) : null}
-          {mode === "project" && activeProjectionOwnerCount > 1 ? (
-            <div className="settings-project-sessions-notice">
-              {t("settings.sessionManagementActiveProjectionScopeHint", {
-                count: activeProjectionOwnerCount,
-                active: activeTotalCount,
-              })}
-            </div>
-          ) : null}
-          {projectionSummaryLoading ? (
-            <div className="settings-project-sessions-notice">
-              {t("settings.sessionManagementProjectionLoading")}
-            </div>
-          ) : null}
-          {projectionSummaryError ? (
-            <div className="settings-project-sessions-notice is-error">
-              {projectionSummaryError}
-            </div>
-          ) : null}
-          {summaryPartialSource ? (
-            <div className="settings-project-sessions-notice">
-              {t("settings.sessionManagementPartialSource", { source: summaryPartialSource })}
-            </div>
-          ) : null}
-          {primaryPartialSourceNotice ? (
-            <div className="settings-project-sessions-notice">
-              {t("settings.sessionManagementPartialSource", { source: primaryPartialSourceNotice })}
-            </div>
-          ) : null}
-          {primaryError ? (
-            <div className="settings-project-sessions-notice is-error">{primaryError}</div>
-          ) : null}
-
-          {mode === "project" && !workspaceId ? (
-            <div className="settings-project-sessions-empty">
-              {t("settings.projectSessionWorkspaceRequired")}
-            </div>
-          ) : primaryIsLoading ? (
-            <div className="settings-project-sessions-empty">{t("settings.projectSessionLoading")}</div>
-          ) : mode === "global" && primaryEntries.length === 0 ? (
-            <div className="settings-project-sessions-empty space-y-3">
-              <div>
-                {t("settings.sessionManagementGlobalEmpty")}
               </div>
-            </div>
-          ) : (
-            <>
-              {mode === "project" ? (
-                <>
-                  {showProjectStrictEmpty ? (
-                    <div className="settings-project-sessions-empty space-y-3">
-                      <div>{t("settings.projectSessionEmpty")}</div>
-                      <div className="text-sm text-muted-foreground">
-                        {t("settings.sessionManagementProjectEmptyStrictHint")}
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleModeChange("global")}
-                      >
-                        <Archive size={14} aria-hidden />
-                        {t("settings.sessionManagementViewGlobalCta")}
-                      </Button>
-                    </div>
-                  ) : (
-                    <SessionListSection
-                      title={t("settings.sessionManagementStrictSectionTitle")}
-                      entries={visiblePrimaryEntries}
-                      selectedIds={selectedIds}
-                      workspaceLabelById={workspaceLabelById}
-                      engineFilterLabel={engineFilterLabel}
-                      locale={i18n.language}
-                      onToggleSelection={toggleSelection}
-                      onOpenSessionCurtain={(entry) => void handleOpenSessionCurtain(entry)}
-                      t={t}
-                    />
-                  )}
 
-                  {primaryNextCursor ? (
-                    <div className="flex justify-center">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => void loadMorePrimary()}
-                        disabled={primaryIsLoadingMore}
-                      >
-                        <ChevronsDown size={14} aria-hidden />
-                        {primaryIsLoadingMore
-                          ? t("settings.sessionManagementLoadingMore")
-                          : t("settings.sessionManagementLoadMore")}
-                      </Button>
-                    </div>
-                  ) : null}
+              {notice ? (
+                <div
+                  className={`settings-project-sessions-notice is-${notice.kind}`}
+                >
+                  {notice.text}
+                </div>
+              ) : null}
+              {shouldShowSidebarStatusHint ? (
+                <div className="settings-project-sessions-notice">
+                  {t("settings.sessionManagementSidebarStatusHint", {
+                    status: statusFilterLabel,
+                  })}
+                </div>
+              ) : null}
+              {shouldShowProjectScopeHint ? (
+                <div className="settings-project-sessions-notice">
+                  {t("settings.sessionManagementProjectScopeHint", {
+                    count: projectScopeWorktreeCount,
+                  })}
+                </div>
+              ) : null}
+              {shouldShowVisibleCountHint ? (
+                <div className="settings-project-sessions-notice">
+                  {t("settings.sessionManagementVisibleWindowHint", {
+                    visible: currentPageVisibleCount,
+                    total: filteredTotalCount,
+                  })}
+                </div>
+              ) : null}
+              {mode === "project" && activeProjectionOwnerCount > 1 ? (
+                <div className="settings-project-sessions-notice">
+                  {t("settings.sessionManagementActiveProjectionScopeHint", {
+                    count: activeProjectionOwnerCount,
+                    active: activeTotalCount,
+                  })}
+                </div>
+              ) : null}
+              {projectionSummaryLoading ? (
+                <div className="settings-project-sessions-notice">
+                  {t("settings.sessionManagementProjectionLoading")}
+                </div>
+              ) : null}
+              {projectionSummaryError ? (
+                <div className="settings-project-sessions-notice is-error">
+                  {projectionSummaryError}
+                </div>
+              ) : null}
+              {summaryPartialSource ? (
+                <div className="settings-project-sessions-notice">
+                  {t("settings.sessionManagementPartialSource", {
+                    source: summaryPartialSource,
+                  })}
+                </div>
+              ) : null}
+              {primaryPartialSourceNotice ? (
+                <div className="settings-project-sessions-notice">
+                  {t("settings.sessionManagementPartialSource", {
+                    source: primaryPartialSourceNotice,
+                  })}
+                </div>
+              ) : null}
+              {primaryError ? (
+                <div className="settings-project-sessions-notice is-error">
+                  {primaryError}
+                </div>
+              ) : null}
 
-                  {showRelatedSection ? (
-                    <div className="space-y-3">
-                      {relatedPartialSource ? (
-                        <div className="settings-project-sessions-notice">
-                          {t("settings.sessionManagementPartialSource", { source: relatedPartialSource })}
-                        </div>
-                      ) : null}
-                      {relatedError ? (
-                        <div className="settings-project-sessions-notice is-error">{relatedError}</div>
-                      ) : null}
-                      {relatedIsLoading ? (
-                        <div className="settings-project-sessions-empty">
-                          {t("settings.projectSessionLoading")}
-                        </div>
-                      ) : relatedEntries.length > 0 ? (
-                        <>
-                          <SessionListSection
-                            title={t("settings.sessionManagementRelatedSectionTitle")}
-                            description={t("settings.sessionManagementRelatedSectionDescription")}
-                            entries={visibleRelatedEntries}
-                            selectedIds={selectedIds}
-                            workspaceLabelById={workspaceLabelById}
-                            engineFilterLabel={engineFilterLabel}
-                            locale={i18n.language}
-                            onToggleSelection={toggleSelection}
-                            onOpenSessionCurtain={(entry) => void handleOpenSessionCurtain(entry)}
-                            t={t}
-                          />
-                          {relatedNextCursor ? (
-                            <div className="flex justify-center">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => void loadMoreRelated()}
-                                disabled={relatedIsLoadingMore}
-                              >
-                                <ChevronsDown size={14} aria-hidden />
-                                {relatedIsLoadingMore
-                                  ? t("settings.sessionManagementLoadingMore")
-                                  : t("settings.sessionManagementLoadMore")}
-                              </Button>
-                            </div>
-                          ) : null}
-                        </>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </>
+              {mode === "project" && !workspaceId ? (
+                <div className="settings-project-sessions-empty">
+                  {t("settings.projectSessionWorkspaceRequired")}
+                </div>
+              ) : primaryIsLoading ? (
+                <div className="settings-project-sessions-empty">
+                  {t("settings.projectSessionLoading")}
+                </div>
+              ) : mode === "global" && primaryEntries.length === 0 ? (
+                <div className="settings-project-sessions-empty space-y-3">
+                  <div>{t("settings.sessionManagementGlobalEmpty")}</div>
+                </div>
               ) : (
                 <>
-                  <SessionListSection
-                    title={t("settings.sessionManagementGlobalSectionTitle")}
-                    description={t("settings.sessionManagementGlobalSectionDescription")}
-                    entries={primaryEntries}
-                    selectedIds={selectedIds}
-                    workspaceLabelById={workspaceLabelById}
-                    engineFilterLabel={engineFilterLabel}
-                    locale={i18n.language}
-                    onToggleSelection={toggleSelection}
-                    onOpenSessionCurtain={(entry) => void handleOpenSessionCurtain(entry)}
-                    t={t}
-                  />
-                  {primaryNextCursor ? (
-                    <div className="flex justify-center">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => void loadMorePrimary()}
-                        disabled={primaryIsLoadingMore}
-                      >
-                        <ChevronsDown size={14} aria-hidden />
-                        {primaryIsLoadingMore
-                          ? t("settings.sessionManagementLoadingMore")
-                          : t("settings.sessionManagementLoadMore")}
-                      </Button>
-                    </div>
-                  ) : null}
+                  {mode === "project" ? (
+                    <>
+                      {showProjectStrictEmpty ? (
+                        <div className="settings-project-sessions-empty space-y-3">
+                          <div>{t("settings.projectSessionEmpty")}</div>
+                          <div className="text-sm text-muted-foreground">
+                            {t(
+                              "settings.sessionManagementProjectEmptyStrictHint",
+                            )}
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleModeChange("global")}
+                          >
+                            <Archive size={14} aria-hidden />
+                            {t("settings.sessionManagementViewGlobalCta")}
+                          </Button>
+                        </div>
+                      ) : (
+                        <SessionListSection
+                          title={t(
+                            "settings.sessionManagementStrictSectionTitle",
+                          )}
+                          entries={visiblePrimaryEntries}
+                          selectedIds={selectedIds}
+                          workspaceLabelById={workspaceLabelById}
+                          engineFilterLabel={engineFilterLabel}
+                          locale={i18n.language}
+                          onToggleSelection={toggleSelection}
+                          onOpenSessionCurtain={(entry) =>
+                            void handleOpenSessionCurtain(entry)
+                          }
+                          t={t}
+                        />
+                      )}
+
+                      {primaryNextCursor ? (
+                        <div className="flex justify-center">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => void loadMorePrimary()}
+                            disabled={primaryIsLoadingMore}
+                          >
+                            <ChevronsDown size={14} aria-hidden />
+                            {primaryIsLoadingMore
+                              ? t("settings.sessionManagementLoadingMore")
+                              : t("settings.sessionManagementLoadMore")}
+                          </Button>
+                        </div>
+                      ) : null}
+
+                      {showRelatedSection ? (
+                        <div className="space-y-3">
+                          {relatedPartialSource ? (
+                            <div className="settings-project-sessions-notice">
+                              {t("settings.sessionManagementPartialSource", {
+                                source: relatedPartialSource,
+                              })}
+                            </div>
+                          ) : null}
+                          {relatedError ? (
+                            <div className="settings-project-sessions-notice is-error">
+                              {relatedError}
+                            </div>
+                          ) : null}
+                          {relatedIsLoading ? (
+                            <div className="settings-project-sessions-empty">
+                              {t("settings.projectSessionLoading")}
+                            </div>
+                          ) : relatedEntries.length > 0 ? (
+                            <>
+                              <SessionListSection
+                                title={t(
+                                  "settings.sessionManagementRelatedSectionTitle",
+                                )}
+                                description={t(
+                                  "settings.sessionManagementRelatedSectionDescription",
+                                )}
+                                entries={visibleRelatedEntries}
+                                selectedIds={selectedIds}
+                                workspaceLabelById={workspaceLabelById}
+                                engineFilterLabel={engineFilterLabel}
+                                locale={i18n.language}
+                                onToggleSelection={toggleSelection}
+                                onOpenSessionCurtain={(entry) =>
+                                  void handleOpenSessionCurtain(entry)
+                                }
+                                t={t}
+                              />
+                              {relatedNextCursor ? (
+                                <div className="flex justify-center">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => void loadMoreRelated()}
+                                    disabled={relatedIsLoadingMore}
+                                  >
+                                    <ChevronsDown size={14} aria-hidden />
+                                    {relatedIsLoadingMore
+                                      ? t(
+                                          "settings.sessionManagementLoadingMore",
+                                        )
+                                      : t("settings.sessionManagementLoadMore")}
+                                  </Button>
+                                </div>
+                              ) : null}
+                            </>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </>
+                  ) : (
+                    <>
+                      <SessionListSection
+                        title={t(
+                          "settings.sessionManagementGlobalSectionTitle",
+                        )}
+                        description={t(
+                          "settings.sessionManagementGlobalSectionDescription",
+                        )}
+                        entries={primaryEntries}
+                        selectedIds={selectedIds}
+                        workspaceLabelById={workspaceLabelById}
+                        engineFilterLabel={engineFilterLabel}
+                        locale={i18n.language}
+                        onToggleSelection={toggleSelection}
+                        onOpenSessionCurtain={(entry) =>
+                          void handleOpenSessionCurtain(entry)
+                        }
+                        t={t}
+                      />
+                      {primaryNextCursor ? (
+                        <div className="flex justify-center">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => void loadMorePrimary()}
+                            disabled={primaryIsLoadingMore}
+                          >
+                            <ChevronsDown size={14} aria-hidden />
+                            {primaryIsLoadingMore
+                              ? t("settings.sessionManagementLoadingMore")
+                              : t("settings.sessionManagementLoadMore")}
+                          </Button>
+                        </div>
+                      ) : null}
+                    </>
+                  )}
                 </>
               )}
-            </>
-          )}
             </div>
           </div>
         </div>
@@ -2384,7 +2170,9 @@ export function SessionManagementSection({
                   </div>
                   <div className="settings-session-curtain-subtitle">
                     {sessionCurtain.entry.workspaceLabel ??
-                      workspaceLabelById.get(sessionCurtain.entry.workspaceId) ??
+                      workspaceLabelById.get(
+                        sessionCurtain.entry.workspaceId,
+                      ) ??
                       sessionCurtain.entry.workspaceId}
                   </div>
                 </div>
@@ -2395,7 +2183,9 @@ export function SessionManagementSection({
                   className="settings-session-curtain-icon-btn"
                   aria-label={t("settings.sessionManagementCurtainReload")}
                   title={t("settings.sessionManagementCurtainReload")}
-                  disabled={sessionCurtain.isLoading || sessionCurtain.isSending}
+                  disabled={
+                    sessionCurtain.isLoading || sessionCurtain.isSending
+                  }
                   onClick={() => void handleReloadSessionCurtain()}
                 >
                   <RotateCw size={22} strokeWidth={2.1} aria-hidden />
