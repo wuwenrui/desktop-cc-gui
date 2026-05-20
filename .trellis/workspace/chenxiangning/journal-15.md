@@ -355,3 +355,48 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 529: 记录会话切换保留编辑器契约
+
+**Date**: 2026-05-20
+**Task**: 记录会话切换保留编辑器契约
+**Branch**: `feature/v0.5.0-md`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| 项目 | 内容 |
+|------|------|
+| 问题 | 已修复的 topbar session switch editor split 行为需要沉淀到 OpenSpec，避免未来重构把交互重新退回“切 session 隐藏已打开文件”。 |
+| 记录 | 新增 `preserve-editor-on-topbar-session-switch` OpenSpec change，proposal 说明问题根因与边界，spec delta 修改 `workspace-topbar-session-tabs`，要求同 workspace topbar session switch 保留 desktop editor split。 |
+| 边界 | compact / phone / tablet、非 editor split、无 active file、跨 workspace 切换继续保持保守 fallback，避免旧 workspace 文件错误绑定到新 workspace。 |
+| 验证 | `openspec validate preserve-editor-on-topbar-session-switch --strict --no-interactive` 通过；`git diff --check` 通过。 |
+
+**Updated Files**:
+- `openspec/changes/preserve-editor-on-topbar-session-switch/proposal.md`
+- `openspec/changes/preserve-editor-on-topbar-session-switch/specs/workspace-topbar-session-tabs/spec.md`
+- `openspec/changes/preserve-editor-on-topbar-session-switch/tasks.md`
+- `openspec/changes/preserve-editor-on-topbar-session-switch/.openspec.yaml`
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `bc5ff2fd` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
