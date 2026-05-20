@@ -102,4 +102,4 @@
 
 - [x] 15.1 Calibrate proposal/design/spec/tasks to the final read-only curtain behavior.
 - [x] 15.2 Run focused validation for TypeScript, lint, Vitest, OpenSpec, large-file check, and diff whitespace.
-- [ ] 15.3 Commit the session-management change set without unrelated governance/status-panel worktree changes.
+- [x] 15.3 Commit the session-management change set without unrelated governance/status-panel worktree changes.
