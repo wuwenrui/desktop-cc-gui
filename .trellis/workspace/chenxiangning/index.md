@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-15.md`
-- **Total Sessions**: 534
-- **Last Active**: 2026-05-20
+- **Total Sessions**: 538
+- **Last Active**: 2026-05-21
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-15.md` | ~618 | Active |
+| `journal-15.md` | ~827 | Active |
 | `journal-14.md` | ~1969 | Archived |
 | `journal-13.md` | ~1947 | Archived |
 | `journal-12.md` | ~1971 | Archived |
@@ -43,6 +43,10 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 538 | 2026-05-21 | 回滚 Codex 终止漂移恢复链路 | `4456ed67` | `feature/v0.5.0-md` |
+| 537 | 2026-05-21 | 修复 Codex 终态 identity 缺失卡住生成 | `b2a04097` | `feature/v0.5.0-md` |
+| 536 | 2026-05-21 | 升级发布版本到 v0.5.0 | `0af58d83` | `feature/v0.5.0-md` |
+| 535 | 2026-05-21 | 根治 Markdown 文件预览渲染抖动 | `61a33feb` | `feature/v0.5.0-md` |
 | 534 | 2026-05-20 | 修复同工作区会话切换保留编辑器 | `2a2af6e1` | `feature/v0.5.0-md` |
 | 533 | 2026-05-20 | 收紧 Codex 后台终止漂移恢复边界 | `3e258333` | `feature/v0.5.0-md` |
 | 532 | 2026-05-20 | 统一 StatusPanel 证据与成本字号 | `7ffc4d2d` | `feature/v0.5.0-md` |

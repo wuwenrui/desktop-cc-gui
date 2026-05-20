@@ -724,46 +724,6 @@ describe("useThreadEventHandlers diagnostics", () => {
     ).toBe(false);
   });
 
-  it("does not quarantine shared completed turns as codex", () => {
-    const onDebug = vi.fn();
-    const options = makeOptions(onDebug);
-    const { result } = renderHook(() => useThreadEventHandlers(options));
-
-    act(() => {
-      result.current.onTurnStarted(
-        "ws-1",
-        "shared:thread-claude-completed",
-        "turn-claude-1",
-      );
-      result.current.onTurnCompleted(
-        "ws-1",
-        "shared:thread-claude-completed",
-        "turn-claude-1",
-      );
-    });
-
-    options.dispatch.mockClear();
-    onDebug.mockClear();
-
-    act(() => {
-      result.current.onItemUpdated("ws-1", "shared:thread-claude-completed", {
-        id: "cmd-claude-1",
-        type: "commandExecution",
-        turnId: "turn-claude-1",
-      });
-    });
-
-    expect(options.dispatch).toHaveBeenCalledWith({
-      type: "markContinuationEvidence",
-      threadId: "shared:thread-claude-completed",
-    });
-    expect(
-      collectDiagnosticCalls(onDebug).some(
-        (entry) => entry.label === "thread/session:turn-diagnostic:quarantined-codex-event-skipped",
-      ),
-    ).toBe(false);
-  });
-
   it("returns to the base no-progress window when an execution completion only carries item id", () => {
     const onDebug = vi.fn();
     const options = makeOptions(onDebug);

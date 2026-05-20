@@ -109,32 +109,4 @@ describe("useAppServerEvents completion turn identity", () => {
       root.unmount();
     });
   });
-
-  it("does not settle turn/completed against the highlighted Codex thread when thread identity is missing", async () => {
-    const handlers: Handlers = {
-      getActiveCodexThreadId: vi.fn(() => "thread-highlighted"),
-      onTurnCompleted: vi.fn(),
-    };
-    const { root } = await mount(handlers);
-
-    act(() => {
-      listener?.({
-        workspace_id: "ws-1",
-        message: {
-          method: "turn/completed",
-          params: {
-            turnId: "turn-without-thread",
-            result: { text: "final response" },
-          },
-        },
-      });
-    });
-
-    expect(handlers.getActiveCodexThreadId).not.toHaveBeenCalled();
-    expect(handlers.onTurnCompleted).not.toHaveBeenCalled();
-
-    await act(async () => {
-      root.unmount();
-    });
-  });
 });

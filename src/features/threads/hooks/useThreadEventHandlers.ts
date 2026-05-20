@@ -519,7 +519,7 @@ export function useThreadEventHandlers({
     ) => {
       const normalizedTurnId = turnId.trim();
       const engine = engineHint ?? inferThreadEngine(threadId);
-      if (threadId.startsWith("shared:") || engine !== "codex" || !normalizedTurnId) {
+      if (engine !== "codex" || !normalizedTurnId) {
         return;
       }
       const key = buildCodexTurnIdentityKey(threadId, normalizedTurnId);
@@ -1530,13 +1530,6 @@ export function useThreadEventHandlers({
   const settleCompletedTurn = useCallback(
     (workspaceId: string, threadId: string, normalizedTurnId: string) => {
       markRealtimeTurnTerminal(threadId, normalizedTurnId);
-      quarantineCodexTurn(
-        workspaceId,
-        threadId,
-        normalizedTurnId,
-        "turn-completed",
-        "turn/completed",
-      );
       const handled = onTurnCompleted(workspaceId, threadId, normalizedTurnId);
       let fallbackApplied = false;
       if (handled) {
@@ -1658,7 +1651,6 @@ export function useThreadEventHandlers({
       onTurnCompletedExternal,
       onTurnTerminalExternal,
       pendingInterruptsRef,
-      quarantineCodexTurn,
       setActiveTurnIdTracked,
     ],
   );

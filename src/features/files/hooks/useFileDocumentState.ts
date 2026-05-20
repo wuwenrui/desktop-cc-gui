@@ -44,6 +44,18 @@ export function useFileDocumentState({
     fileReadTargetDomain === "external-spec"
       ? fileReadTarget.externalSpecLogicalPath
       : null;
+  const fileReadTargetKey = [
+    workspaceId,
+    customSpecRoot ?? "",
+    workspaceRelativeFilePath,
+    fileReadTargetDomain,
+    fileReadNormalizedInputPath,
+    fileReadExternalSpecLogicalPath ?? "",
+    skipTextRead ? "binary" : "text",
+  ].join("\u001f");
+  const [loadedFileReadTargetKey, setLoadedFileReadTargetKey] = useState<string | null>(
+    null,
+  );
 
   const isDirty = useMemo(() => content !== savedContentRef.current, [content]);
   latestIsDirtyRef.current = isDirty;
@@ -57,6 +69,7 @@ export function useFileDocumentState({
       savedContentRef.current = "";
       setTruncated(false);
       externalDiskSnapshotRef.current = null;
+      setLoadedFileReadTargetKey(fileReadTargetKey);
       return;
     }
 
@@ -68,6 +81,7 @@ export function useFileDocumentState({
     setIsLoading(true);
     setIsSaving(false);
     setError(null);
+    setLoadedFileReadTargetKey(null);
 
     if (fileReadTargetDomain === "invalid") {
       setError("Invalid file path");
@@ -75,6 +89,7 @@ export function useFileDocumentState({
       savedContentRef.current = "";
       setTruncated(false);
       externalDiskSnapshotRef.current = null;
+      setLoadedFileReadTargetKey(fileReadTargetKey);
       setIsLoading(false);
       return;
     }
@@ -113,6 +128,7 @@ export function useFileDocumentState({
           content: nextContent,
           truncated: nextTruncated,
         };
+        setLoadedFileReadTargetKey(fileReadTargetKey);
       })
       .catch((readError) => {
         if (cancelled || currentRequest !== requestIdRef.current) return;
@@ -129,6 +145,7 @@ export function useFileDocumentState({
     };
   }, [
     customSpecRoot,
+    fileReadTargetKey,
     fileReadExternalSpecLogicalPath,
     fileReadNormalizedInputPath,
     fileReadTargetDomain,
@@ -204,7 +221,7 @@ export function useFileDocumentState({
   return {
     content,
     setContent,
-    isLoading,
+    isLoading: isLoading || loadedFileReadTargetKey !== fileReadTargetKey,
     isSaving,
     error,
     truncated,

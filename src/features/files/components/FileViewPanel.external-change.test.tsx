@@ -198,6 +198,63 @@ describe("FileViewPanel external change awareness in detached mode", () => {
       .toBe("const value = 2;");
   });
 
+  it("keeps markdown preview bound to the stable reading snapshot by default", async () => {
+    vi.mocked(readWorkspaceFile)
+      .mockResolvedValueOnce({ content: "# Original\n\n```mermaid\ngraph TD\nA-->B\n```", truncated: false })
+      .mockResolvedValue({ content: "# Updated\n\n```mermaid\ngraph TD\nA-->C\n```", truncated: false });
+
+    render(
+      <FileViewPanel
+        workspaceId="ws-ext-md-stable"
+        workspacePath="/repo"
+        filePath="docs/preview.md"
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+        externalChangeMonitoringEnabled
+        externalChangePollIntervalMs={20}
+      />,
+    );
+
+    await screen.findByRole("heading", { name: "Original" });
+    await waitFor(() => {
+      expect(screen.getByText("files.externalChangeAutoSynced")).toBeTruthy();
+      expect(vi.mocked(readWorkspaceFile).mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    expect(screen.getByRole("heading", { name: "Original" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Updated" })).toBeNull();
+  });
+
+  it("advances markdown preview snapshot when live mode is explicit", async () => {
+    vi.mocked(readWorkspaceFile)
+      .mockResolvedValueOnce({ content: "# Original", truncated: false })
+      .mockResolvedValue({ content: "# Updated", truncated: false });
+
+    render(
+      <FileViewPanel
+        workspaceId="ws-ext-md-live"
+        workspacePath="/repo"
+        filePath="docs/live.md"
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+        externalChangeMonitoringEnabled
+        externalChangePollIntervalMs={20}
+        markdownPreviewSnapshotMode="live"
+      />,
+    );
+
+    await screen.findByRole("heading", { name: "Original" });
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Updated" })).toBeTruthy();
+    });
+  });
+
   it("continues polling after the first tick", async () => {
     vi.mocked(readWorkspaceFile)
       .mockResolvedValueOnce({ content: "const value = 1;", truncated: false })

@@ -2285,6 +2285,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         codeAnnotations={selectedCodeAnnotations}
         externalChangeMonitoringEnabled={options.externalChangeMonitoringEnabled}
         externalChangeTransportMode={options.externalChangeTransportMode}
+        markdownPreviewSnapshotMode={options.liveEditPreviewEnabled ? "live" : "stable"}
         saveFileShortcut={options.saveFileShortcut}
         findInFileShortcut={options.findInFileShortcut}
       />

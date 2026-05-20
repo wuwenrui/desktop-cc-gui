@@ -551,6 +551,9 @@ const zhPart2 = {
     markdownMermaidRender: "渲染",
     markdownMermaidRendering: "正在渲染图表...",
     markdownMermaidRenderFailed: "渲染失败：{{message}}",
+    markdownHeavyBlockDeferred: "重型内容将在进入视口时渲染。",
+    markdownRenderBudgetBounded:
+      "为保持预览稳定，当前显示前 {{visibleCount}} / {{totalCount}} 行。",
     annotationStartLine: "起始行",
     annotationEndLine: "结束行",
     annotationSelectionToolbar: "代码选区标注",

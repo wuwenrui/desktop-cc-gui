@@ -616,3 +616,212 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 535: 根治 Markdown 文件预览渲染抖动
+
+**Date**: 2026-05-21
+**Task**: 根治 Markdown 文件预览渲染抖动
+**Branch**: `feature/v0.5.0-md`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| 项目 | 内容 |
+|------|------|
+| 背景 | 根据本地录屏确认 Markdown preview 在表格与 Mermaid 图之间反复闪烁，根因是 live 内容刷新、全文 ReactMarkdown 渲染、AI 标注全量扫描、Mermaid/KaTeX 重型渲染互相放大。 |
+| OpenSpec | 新增 `stabilize-file-markdown-preview-render-architecture` change，覆盖 preview snapshot、render pipeline、runtime stability 三类约束。 |
+| 实现 | 引入 `compileFileMarkdownDocument` 编译缓存；Markdown preview 支持 stable/live snapshot；大文档 progressive/bounded 渲染；Mermaid/KaTeX render cache；重型表格、图表、数学块、长代码块 lazy mount；AI 标注改为按 end line 分桶索引。 |
+| 稳定性 | `useFileDocumentState` 增加 target key，避免切换文件时旧内容短暂渲染到新文件预览。 |
+| 测试 | 新增 Markdown document utility 和 preview 渐进/边界/懒渲染测试；更新 FileViewPanel external-change 和 Mermaid 缓存预期。 |
+| 验证 | `openspec validate stabilize-file-markdown-preview-render-architecture --strict --no-interactive`、`npm run typecheck`、`npm run lint`、相关 Vitest 80 tests、`npm run test` 全量 524 files、`npm run check:large-files:gate` 均通过。 |
+
+**Updated Files**:
+- `openspec/changes/stabilize-file-markdown-preview-render-architecture/**`
+- `src/features/files/components/FileMarkdownPreview.tsx`
+- `src/features/files/utils/fileMarkdownDocument.ts`
+- `src/features/files/components/FileViewBody.tsx`
+- `src/features/files/components/FileViewPanel.tsx`
+- `src/features/files/components/FileExplorerWorkspace.tsx`
+- `src/features/files/hooks/useFileDocumentState.ts`
+- `src/features/layout/hooks/useLayoutNodes.tsx`
+- `src/features/files/components/FileMarkdownPreview.test.tsx`
+- `src/features/files/utils/fileMarkdownDocument.test.ts`
+- `src/features/files/components/FileViewPanel.external-change.test.tsx`
+- `src/features/files/components/FileViewPanel.test.tsx`
+- `src/i18n/locales/en.part2.ts`
+- `src/i18n/locales/zh.part2.ts`
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `61a33feb` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 536: 升级发布版本到 v0.5.0
+
+**Date**: 2026-05-21
+**Task**: 升级发布版本到 v0.5.0
+**Branch**: `feature/v0.5.0-md`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+Task goal: 修复 GitHub release job 因 v0.4.18 tag/release 已存在而失败的问题。
+Main changes: 将项目发布版本源从 0.4.18 统一升级到 0.5.0，覆盖 package.json、package-lock.json、src-tauri/tauri.conf.json。
+Affected modules: release/version metadata only；未修改 release workflow 和应用运行逻辑。
+Validation: 检查三处版本源均为 0.5.0；确认 upstream/origin 均无 refs/tags/v0.5.0；git diff 仅包含版本号变更。
+Follow-ups: 重新推送并运行 Release workflow，创建 v0.5.0 release。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0af58d83` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 537: 修复 Codex 终态 identity 缺失卡住生成
+
+**Date**: 2026-05-21
+**Task**: 修复 Codex 终态 identity 缺失卡住生成
+**Branch**: `feature/v0.5.0-md`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## Summary
+
+修复 Codex 偶发 final assistant 已可见但 composer 仍显示正在生成的问题。
+
+## Root Cause
+
+前两次修复为了避免 terminal event 串到高亮线程，禁止了 active-thread fallback；这个方向是对的，但没有补上安全的 ownership fallback，导致两类真实完成事件被丢弃：
+
+- `turn/completed` 缺 `threadId` 时无法使用已知 `turnId -> threadId` evidence 清算。
+- thread-owned assistant completion 缺 `turnId` 时不触发 bounded reconcile。
+
+## Changes
+
+- 在 `useAppServerEvents` 中记录 bounded `workspaceId + turnId -> threadId` ownership。
+- `turn/completed` 缺 `threadId` 时只从 recorded ownership 或唯一 active-turn resolver 恢复目标线程，不回退到 highlighted thread。
+- assistant completion 缺 `turnId` 时使用 `__unknown_turn__` 做 thread-scoped reconcile，仍通过 terminal-drift guard 清 processing。
+- 新增 OpenSpec change `fix-codex-terminal-identity-recovery`。
+- 更新 `.trellis/spec/guides/cross-layer-thinking-guide.md`，固化 realtime terminal ownership contract。
+
+## Validation
+
+- `npm exec vitest run src/features/app/hooks/useAppServerEvents.completion-turn-id.test.tsx src/features/threads/hooks/useThreadRealtimeHistoryReconcile.test.ts src/features/threads/hooks/useThreads.integration.test.tsx src/features/threads/hooks/useThreadsTerminalDrift.test.ts`
+- `npm exec vitest run src/features/app/hooks/useAppServerEvents.test.tsx src/features/app/hooks/useAppServerEvents.realtime-contract.test.tsx src/features/app/hooks/useAppServerEvents.routing.test.tsx src/features/app/hooks/useAppServerEvents.completion-turn-id.test.tsx`
+- `npm run typecheck`
+- `npm run lint`
+- `npm run check:runtime-contracts`
+- `npm run doctor:strict`
+- `npm run test`
+- `openspec validate fix-codex-terminal-identity-recovery --strict --no-interactive`
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b2a04097` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 538: 回滚 Codex 终止漂移恢复链路
+
+**Date**: 2026-05-21
+**Task**: 回滚 Codex 终止漂移恢复链路
+**Branch**: `feature/v0.5.0-md`
+
+### Summary
+
+按用户要求完整回滚 Codex 终止/漂移恢复修复链路，避免已结束会话被迟到事件复活。
+
+### Main Changes
+
+## 背景
+用户反馈 Codex 会话在上一轮修复后仍会偶发无法正常结束，并出现已终止对话被迟到状态复活的问题。
+
+## 本次处理
+- 撤销未提交的二次补丁，避免继续叠加错误方向。
+- 通过语义 revert 回滚以下运行时修复提交：
+  - 3e258333 fix(codex): 收紧后台终止漂移恢复边界
+  - 12af3ccb Fix
+  - b2a04097 fix(codex): 修复终态 identity 缺失卡住生成
+- 删除对应 OpenSpec 变更与测试资产，恢复到这些修复进入前的运行时行为。
+- 不回滚 release、Markdown、sidebar、workspace 等无关正常功能。
+
+## 验证
+- npm exec vitest run src/features/app/hooks/useAppServerEvents.test.tsx src/features/app/hooks/useAppServerEvents.realtime-contract.test.tsx src/features/app/hooks/useAppServerEvents.routing.test.tsx src/features/app/hooks/useAppServerEvents.tokenUsage.test.tsx src/features/app/hooks/useAppServerEvents.completion-turn-id.test.tsx src/features/threads/hooks/useThreadEventHandlers.test.ts src/features/threads/hooks/useThreadItemEvents.test.ts src/features/threads/hooks/useThreads.integration.test.tsx
+- npm run typecheck
+- npm run lint
+- npm run check:runtime-contracts
+- npm run doctor:strict
+- git diff --cached --check
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4456ed67` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

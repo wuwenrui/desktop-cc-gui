@@ -1642,7 +1642,7 @@ describe("FileViewPanel markdown modes", () => {
     await screen.findByTestId("file-markdown-mermaid-preview");
     expect(screen.getByRole("tab", { name: "Render" }).getAttribute("aria-selected")).toBe("true");
     expect(screen.getByRole("tab", { name: "Source" }).getAttribute("aria-selected")).toBe("false");
-    expect(mermaidRender.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(mermaidRender).toHaveBeenCalledTimes(1);
   });
 
   it("renders markdown math formulas while keeping mermaid blocks lazy", async () => {

@@ -134,6 +134,7 @@ type FileViewPanelProps = {
   externalChangeMonitoringEnabled?: boolean;
   externalChangeTransportMode?: "watcher" | "polling";
   externalChangePollIntervalMs?: number;
+  markdownPreviewSnapshotMode?: "stable" | "live";
   saveFileShortcut?: string | null;
   findInFileShortcut?: string | null;
   onSaveSuccess?: () => void;
@@ -551,6 +552,7 @@ export function FileViewPanel({
   externalChangeMonitoringEnabled = false,
   externalChangeTransportMode = "polling",
   externalChangePollIntervalMs = EXTERNAL_CHANGE_POLL_INTERVAL_MS,
+  markdownPreviewSnapshotMode = "stable",
   saveFileShortcut = "cmd+s",
   findInFileShortcut = "cmd+f",
   onSaveSuccess,
@@ -1741,6 +1743,7 @@ export function FileViewPanel({
       viewSurface={viewSurface}
       content={content}
       setContent={setContent}
+      markdownPreviewSnapshotMode={markdownPreviewSnapshotMode}
       cmRef={cmRef}
       handleCodeMirrorCreate={handleCodeMirrorCreate}
       onActiveFileLineRangeChange={onActiveFileLineRangeChange}

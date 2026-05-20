@@ -257,6 +257,7 @@ export function FileExplorerWorkspace({
             onClose={onCloseAllTabs}
             externalChangeMonitoringEnabled={externalChangeMonitoringEnabled}
             externalChangeTransportMode={externalChangeTransportMode}
+            markdownPreviewSnapshotMode={externalChangeMonitoringEnabled ? "live" : "stable"}
             headerLayout={fileViewHeaderLayout}
             onSingleRowLeadingAction={
               fileViewHeaderLayout === "single-row" ? handleToggleSidebar : undefined
