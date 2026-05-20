@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-15.md`
-- **Total Sessions**: 532
+- **Total Sessions**: 533
 - **Last Active**: 2026-05-20
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-15.md` | ~544 | Active |
+| `journal-15.md` | ~585 | Active |
 | `journal-14.md` | ~1969 | Archived |
 | `journal-13.md` | ~1947 | Archived |
 | `journal-12.md` | ~1971 | Archived |
@@ -43,6 +43,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 533 | 2026-05-20 | 收紧 Codex 后台终止漂移恢复边界 | `3e258333` | `feature/v0.5.0-md` |
 | 532 | 2026-05-20 | 统一 StatusPanel 证据与成本字号 | `7ffc4d2d` | `feature/v0.5.0-md` |
 | 531 | 2026-05-20 | 保持桌面编辑器分栏对话体验 | `47878ca0` | `feature/v0.5.0-md` |
 | 530 | 2026-05-20 | 动态治理证据与成本预算收口 | `0b83493d` | `feature/v0.5.0-md` |

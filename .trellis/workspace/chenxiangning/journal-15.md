@@ -542,3 +542,44 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 533: 收紧 Codex 后台终止漂移恢复边界
+
+**Date**: 2026-05-20
+**Task**: 收紧 Codex 后台终止漂移恢复边界
+**Branch**: `feature/v0.5.0-md`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| 项目 | 内容 |
+|------|------|
+| 修复目标 | 修复多会话/后台 Codex 会话中，已输出 final answer 但线程偶发停留在“正在生成响应...”的终止态漂移问题。 |
+| 核心改动 | 增加 assistant-completed 与 activation-terminal-drift 两条 bounded reconcile 路径，并在可证明终止时执行 Codex-only terminal settlement。 |
+| 边界加固 | 终止证据必须属于当前 processing window；旧 assistant final 不能结束后续 turn；shared/non-Codex 不进入 Codex quarantine；未知 tool status 继续视为活跃工作。 |
+| OpenSpec | 新增 `fix-codex-background-turn-terminal-reconciliation` change，补充 realtime canvas idempotency 与 stalled recovery contract。 |
+| 验证 | `git diff --check`、`openspec validate fix-codex-background-turn-terminal-reconciliation --strict --no-interactive`、`pnpm typecheck`、`pnpm lint`、相关 5 个 vitest 文件 68 个用例全部通过。 |
+| 留存状态 | 工作区仍保留一处非本次改动：`src/styles/status-panel-theme.test.ts`。 |
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3e258333` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
