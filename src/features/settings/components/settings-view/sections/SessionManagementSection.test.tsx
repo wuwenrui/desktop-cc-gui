@@ -122,6 +122,7 @@ describe("SessionManagementSection", () => {
 
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
   });
 
   it("renders owner workspace label for aggregated project entries", async () => {
@@ -433,6 +434,133 @@ describe("SessionManagementSection", () => {
       screen.queryByLabelText("settings.sessionManagementCurtainComposerPlaceholder"),
     ).toBeNull();
     expect(screen.queryByRole("button", { name: "settings.sessionManagementCurtainSend" })).toBeNull();
+  });
+
+  it("keeps the codex curtain timeout visible when late sources return no messages", async () => {
+    vi.mocked(listWorkspaceSessions).mockResolvedValue({
+      data: [
+        {
+          sessionId: "codex:chat",
+          workspaceId: "ws-1",
+          title: "Chat session",
+          updatedAt: 1710000000000,
+          engine: "codex",
+          archivedAt: null,
+          threadKind: "native",
+        },
+      ],
+      nextCursor: null,
+      partialSource: null,
+    });
+    let resolveLocal!: (
+      value: Awaited<ReturnType<typeof loadCodexSession>>,
+    ) => void;
+    let resolveResume!: (value: Awaited<ReturnType<typeof resumeThread>>) => void;
+    vi.mocked(loadCodexSession).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveLocal = resolve;
+      }) as ReturnType<typeof loadCodexSession>,
+    );
+    vi.mocked(resumeThread).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveResume = resolve;
+      }) as ReturnType<typeof resumeThread>,
+    );
+
+    render(
+      <SessionManagementSection
+        title="Session Management"
+        description="Manage sessions"
+        workspaces={[workspace]}
+        groupedWorkspaces={[{ id: null, name: "Ungrouped", workspaces: [workspace] }]}
+        initialWorkspaceId="ws-1"
+      />,
+    );
+
+    expect(await screen.findByText("Chat session")).toBeTruthy();
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByRole("button", { name: "settings.sessionManagementOpenCurtain" }));
+
+    act(() => {
+      vi.advanceTimersByTime(10_000);
+    });
+    expect(screen.getByText("settings.sessionManagementCurtainLoadTimeout")).toBeTruthy();
+
+    await act(async () => {
+      resolveLocal(null);
+      resolveResume({ thread: { turns: [] } });
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText("settings.sessionManagementCurtainLoadTimeout")).toBeTruthy();
+    expect(screen.getByText("settings.sessionManagementCurtainEmpty")).toBeTruthy();
+  });
+
+  it("allows late codex curtain history to replace a timeout notice", async () => {
+    vi.mocked(listWorkspaceSessions).mockResolvedValue({
+      data: [
+        {
+          sessionId: "codex:chat",
+          workspaceId: "ws-1",
+          title: "Chat session",
+          updatedAt: 1710000000000,
+          engine: "codex",
+          archivedAt: null,
+          threadKind: "native",
+        },
+      ],
+      nextCursor: null,
+      partialSource: null,
+    });
+    let resolveLocal!: (
+      value: Awaited<ReturnType<typeof loadCodexSession>>,
+    ) => void;
+    vi.mocked(loadCodexSession).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveLocal = resolve;
+      }) as ReturnType<typeof loadCodexSession>,
+    );
+    vi.mocked(resumeThread).mockReturnValueOnce(
+      new Promise(() => undefined) as ReturnType<typeof resumeThread>,
+    );
+
+    render(
+      <SessionManagementSection
+        title="Session Management"
+        description="Manage sessions"
+        workspaces={[workspace]}
+        groupedWorkspaces={[{ id: null, name: "Ungrouped", workspaces: [workspace] }]}
+        initialWorkspaceId="ws-1"
+      />,
+    );
+
+    expect(await screen.findByText("Chat session")).toBeTruthy();
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByRole("button", { name: "settings.sessionManagementOpenCurtain" }));
+
+    act(() => {
+      vi.advanceTimersByTime(10_000);
+    });
+    expect(screen.getByText("settings.sessionManagementCurtainLoadTimeout")).toBeTruthy();
+
+    await act(async () => {
+      resolveLocal({
+        entries: [
+          {
+            type: "response_item",
+            payload: {
+              type: "message",
+              role: "assistant",
+              content: [{ type: "output_text", text: "Late assistant reply" }],
+            },
+          },
+        ],
+      });
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText("Late assistant reply")).toBeTruthy();
+    expect(screen.queryByText("settings.sessionManagementCurtainLoadTimeout")).toBeNull();
   });
 
   it("renders selected project session folders and filters strict sessions by folder", async () => {

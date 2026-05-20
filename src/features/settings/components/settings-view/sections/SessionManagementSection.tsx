@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SessionListSection } from "./SessionManagementSessionList";
 import Archive from "lucide-react/dist/esm/icons/archive";
@@ -459,6 +459,7 @@ export function SessionManagementSection({
   );
   const appliedInitialWorkspaceIdRef = useRef<string | null>(null);
   const sessionCurtainLoadSeqRef = useRef(0);
+  const sessionCurtainTimeoutCleanupRef = useRef<(() => void) | null>(null);
   const [mode, setMode] = useState<WorkspaceSessionCatalogMode>("project");
   const [filters, setFilters] =
     useState<WorkspaceSessionCatalogFilters>(DEFAULT_FILTERS);
@@ -858,6 +859,11 @@ export function SessionManagementSection({
     return thread ? buildItemsFromThread(thread) : [];
   };
 
+  const clearActiveSessionCurtainTimeout = useCallback(() => {
+    sessionCurtainTimeoutCleanupRef.current?.();
+    sessionCurtainTimeoutCleanupRef.current = null;
+  }, []);
+
   const appendCodexCurtainItems = (
     loadSeq: number,
     entry: WorkspaceSessionCatalogEntry,
@@ -892,8 +898,10 @@ export function SessionManagementSection({
     entry: WorkspaceSessionCatalogEntry,
     loadSeq: number,
   ) => {
+    clearActiveSessionCurtainTimeout();
     let settledCount = 0;
     let hasVisibleItems = false;
+    let timedOutWithoutItems = false;
     let latestError: string | null = null;
     let timeoutId: number | null = null;
 
@@ -902,10 +910,16 @@ export function SessionManagementSection({
         window.clearTimeout(timeoutId);
         timeoutId = null;
       }
+      if (sessionCurtainTimeoutCleanupRef.current === clearLoadTimeout) {
+        sessionCurtainTimeoutCleanupRef.current = null;
+      }
     };
 
     const finishIfAllSourcesSettled = () => {
       if (settledCount < 2 || hasVisibleItems) {
+        return;
+      }
+      if (timedOutWithoutItems) {
         return;
       }
       clearLoadTimeout();
@@ -946,6 +960,11 @@ export function SessionManagementSection({
     };
 
     timeoutId = window.setTimeout(() => {
+      timeoutId = null;
+      if (sessionCurtainTimeoutCleanupRef.current === clearLoadTimeout) {
+        sessionCurtainTimeoutCleanupRef.current = null;
+      }
+      timedOutWithoutItems = true;
       setSessionCurtain((current) => {
         if (
           !current ||
@@ -963,6 +982,7 @@ export function SessionManagementSection({
         };
       });
     }, CODEX_SESSION_CURTAIN_LOAD_TIMEOUT_MS);
+    sessionCurtainTimeoutCleanupRef.current = clearLoadTimeout;
 
     void loadCodexLocalCurtainItems(entry.workspaceId, entry.sessionId, entry)
       .then(handleSourceSettled)
@@ -975,6 +995,7 @@ export function SessionManagementSection({
   const handleOpenSessionCurtain = async (
     entry: WorkspaceSessionCatalogEntry,
   ) => {
+    clearActiveSessionCurtainTimeout();
     const loadSeq = sessionCurtainLoadSeqRef.current + 1;
     sessionCurtainLoadSeqRef.current = loadSeq;
     setSessionCurtain({
@@ -1022,6 +1043,7 @@ export function SessionManagementSection({
     if (!entry || sessionCurtain.isLoading) {
       return;
     }
+    clearActiveSessionCurtainTimeout();
     const loadSeq = sessionCurtainLoadSeqRef.current + 1;
     sessionCurtainLoadSeqRef.current = loadSeq;
     setSessionCurtain((current) =>
@@ -1053,6 +1075,12 @@ export function SessionManagementSection({
           : current,
       );
     }
+  };
+
+  const handleCloseSessionCurtain = () => {
+    clearActiveSessionCurtainTimeout();
+    sessionCurtainLoadSeqRef.current += 1;
+    setSessionCurtain(null);
   };
 
   useEffect(() => {
@@ -1117,6 +1145,10 @@ export function SessionManagementSection({
     }
     setSessionFolderFilter(SESSION_FOLDER_FILTER_ALL);
   }, [folderIds, sessionFolderFilter]);
+  useEffect(
+    () => () => clearActiveSessionCurtainTimeout(),
+    [clearActiveSessionCurtainTimeout],
+  );
 
   const selectedWorkspace = useMemo(
     () => workspaces.find((entry) => entry.id === workspaceId) ?? null,
@@ -2146,7 +2178,7 @@ export function SessionManagementSection({
         <div
           className="settings-session-curtain-backdrop"
           role="presentation"
-          onClick={() => setSessionCurtain(null)}
+          onClick={handleCloseSessionCurtain}
         >
           <section
             className="settings-session-curtain-dialog"
@@ -2195,7 +2227,7 @@ export function SessionManagementSection({
                   className="settings-session-curtain-icon-btn"
                   aria-label={t("common.close")}
                   title={t("common.close")}
-                  onClick={() => setSessionCurtain(null)}
+                  onClick={handleCloseSessionCurtain}
                 >
                   <X size={22} strokeWidth={2.1} aria-hidden />
                 </button>

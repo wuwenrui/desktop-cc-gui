@@ -31,8 +31,34 @@ export type SessionFolderCountSummary = {
   unassignedFolderCount: number;
 };
 
+const deterministicCollator = new Intl.Collator("en", {
+  numeric: true,
+  sensitivity: "base",
+});
+
 function getSortOrderValue(value: number | null | undefined) {
   return typeof value === "number" ? value : Number.MAX_SAFE_INTEGER;
+}
+
+function compareStableText(left: string, right: string) {
+  const textDiff = deterministicCollator.compare(left, right);
+  return textDiff !== 0 ? textDiff : left.localeCompare(right);
+}
+
+function compareWorkspaceInfo(left: WorkspaceInfo, right: WorkspaceInfo) {
+  const sortDiff =
+    getSortOrderValue(left.settings.sortOrder) -
+    getSortOrderValue(right.settings.sortOrder);
+  if (sortDiff !== 0) {
+    return sortDiff;
+  }
+  return compareStableText(left.name, right.name) || left.id.localeCompare(right.id);
+}
+
+function buildSessionEntryKey(
+  entry: Pick<WorkspaceSessionCatalogEntry, "workspaceId" | "sessionId">,
+) {
+  return `${entry.workspaceId}::${entry.sessionId}`;
 }
 
 export function buildWorkspaceOptions(
@@ -77,15 +103,7 @@ export function buildWorkspaceOptions(
       kind: "project",
     });
     const worktrees = [...(worktreesByParent.get(workspace.id) ?? [])].sort(
-      (left, right) => {
-        const sortDiff =
-          getSortOrderValue(left.settings.sortOrder) -
-          getSortOrderValue(right.settings.sortOrder);
-        if (sortDiff !== 0) {
-          return sortDiff;
-        }
-        return left.name.localeCompare(right.name);
-      },
+      compareWorkspaceInfo,
     );
     worktrees.forEach((worktree) => {
       const scopedLabel = `${scopeLabels.worktree} ${worktree.name}`;
@@ -99,15 +117,7 @@ export function buildWorkspaceOptions(
     });
   };
 
-  const orderedRoots = [...rootById.values()].sort((left, right) => {
-    const sortDiff =
-      getSortOrderValue(left.settings.sortOrder) -
-      getSortOrderValue(right.settings.sortOrder);
-    if (sortDiff !== 0) {
-      return sortDiff;
-    }
-    return left.name.localeCompare(right.name);
-  });
+  const orderedRoots = [...rootById.values()].sort(compareWorkspaceInfo);
 
   const options: WorkspaceOption[] = [];
   orderedRoots.forEach((workspace) =>
@@ -150,7 +160,7 @@ export function buildSessionFolderNavItems(
   [...folders]
     .sort(
       (left, right) =>
-        left.name.localeCompare(right.name) ||
+        compareStableText(left.name, right.name) ||
         left.createdAt - right.createdAt ||
         left.id.localeCompare(right.id),
     )
@@ -193,7 +203,7 @@ export function buildLoadedSessionFolderCountSummary(
 
   entries.forEach((entry) => {
     const folderId = normalizeSessionFolderId(
-      effectiveFolderBySessionId.get(entry.sessionId),
+      effectiveFolderBySessionId.get(buildSessionEntryKey(entry)),
     );
     if (!folderId) {
       unassignedFolderCount += 1;
@@ -211,38 +221,54 @@ export function buildLoadedSessionFolderCountSummary(
 export function buildEffectiveSessionFolderMap(
   entries: WorkspaceSessionCatalogEntry[],
 ) {
-  const entryBySessionId = new Map(
-    entries.map((entry) => [entry.sessionId, entry]),
-  );
+  const entriesBySessionId = new Map<string, WorkspaceSessionCatalogEntry[]>();
+  entries.forEach((entry) => {
+    const bucket = entriesBySessionId.get(entry.sessionId) ?? [];
+    bucket.push(entry);
+    entriesBySessionId.set(entry.sessionId, bucket);
+  });
   const effectiveFolderBySessionId = new Map<string, string | null>();
+
+  const resolveParentEntry = (entry: WorkspaceSessionCatalogEntry) => {
+    const parentSessionId = normalizeSessionFolderId(entry.parentSessionId);
+    if (!parentSessionId) {
+      return null;
+    }
+    const parentCandidates = entriesBySessionId.get(parentSessionId) ?? [];
+    const sameWorkspaceParent =
+      parentCandidates.find((parent) => parent.workspaceId === entry.workspaceId) ??
+      null;
+    if (sameWorkspaceParent) {
+      return sameWorkspaceParent;
+    }
+    return parentCandidates.length === 1 ? parentCandidates[0] : null;
+  };
 
   const resolveEffectiveFolderId = (
     entry: WorkspaceSessionCatalogEntry,
     visiting: Set<string>,
   ): string | null => {
-    if (effectiveFolderBySessionId.has(entry.sessionId)) {
-      return effectiveFolderBySessionId.get(entry.sessionId) ?? null;
+    const entryKey = buildSessionEntryKey(entry);
+    if (effectiveFolderBySessionId.has(entryKey)) {
+      return effectiveFolderBySessionId.get(entryKey) ?? null;
     }
 
     const explicitFolderId = normalizeSessionFolderId(entry.folderId);
     if (explicitFolderId) {
-      effectiveFolderBySessionId.set(entry.sessionId, explicitFolderId);
+      effectiveFolderBySessionId.set(entryKey, explicitFolderId);
       return explicitFolderId;
     }
 
-    const parentSessionId = normalizeSessionFolderId(entry.parentSessionId);
-    const parent = parentSessionId
-      ? entryBySessionId.get(parentSessionId)
-      : null;
-    if (!parent || visiting.has(entry.sessionId)) {
-      effectiveFolderBySessionId.set(entry.sessionId, null);
+    const parent = resolveParentEntry(entry);
+    if (!parent || visiting.has(entryKey)) {
+      effectiveFolderBySessionId.set(entryKey, null);
       return null;
     }
 
-    visiting.add(entry.sessionId);
+    visiting.add(entryKey);
     const inheritedFolderId = resolveEffectiveFolderId(parent, visiting);
-    visiting.delete(entry.sessionId);
-    effectiveFolderBySessionId.set(entry.sessionId, inheritedFolderId);
+    visiting.delete(entryKey);
+    effectiveFolderBySessionId.set(entryKey, inheritedFolderId);
     return inheritedFolderId;
   };
 
