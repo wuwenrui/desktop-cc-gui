@@ -446,6 +446,7 @@ describe("Sidebar subagent tree", () => {
       />,
     );
 
+    expect(await screen.findByRole("treeitem", { name: "Target" })).toBeTruthy();
     const parentRow = await screen.findByText("Parent");
     await act(async () => {
       fireEvent.contextMenu(parentRow.closest(".thread-row") as HTMLElement);
