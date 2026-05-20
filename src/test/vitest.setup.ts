@@ -1,5 +1,18 @@
-import { cleanup } from "@testing-library/react";
+import { cleanup, configure } from "@testing-library/react";
 import { afterEach, vi } from "vitest";
+
+// Note: prewarmKatexAssets is intentionally NOT awaited in this global
+// setup. Awaiting it in beforeAll pushes every test file's mount past
+// the testing-library asyncUtilTimeout window because the lazy katex
+// chain (katex + rehype-katex + katex.min.css) blocks initial React
+// commits in jsdom. Math-specific tests should prewarm in their own
+// file-level beforeAll (see Markdown.math-rendering.test.tsx).
+
+// Raise Testing Library's async utility timeout so CI runners (where
+// component commit can be 20x slower than local) do not flake on
+// waitFor / findBy* assertions. Local runs unaffected because they
+// resolve well under 1s.
+configure({ asyncUtilTimeout: 5000 });
 
 afterEach(() => {
   cleanup();
@@ -877,6 +890,12 @@ vi.mock("react-i18next", () => ({
         "threads.turnFailedToStartWithMessage": "会话启动失败：{{message}}",
         "threads.fusionTurnStalled": "融合回复未能接上，当前线程已回到可继续操作的状态。",
         "threads.fusionTurnStalledWithMessage": "融合回复未能接上：{{message}}",
+        "files.markdownMermaidSource": "Source",
+        "files.markdownMermaidRender": "Render",
+        "files.markdownMermaidTabList": "Mermaid block view",
+        "files.markdownMermaidRendering": "Rendering diagram...",
+        "files.markdownMermaidRenderFailed": "Render failed: {{message}}",
+        "files.markdownFrontmatterLabel": "Metadata",
         "threads.untitledThread": "未命名对话",
         "messages.middleStepsCollapsedHint": "已折叠 {{count}} 条中间步骤（实时中）",
         "workspace.homeHeroTitle": "构建任何东西",

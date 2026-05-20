@@ -1,15 +1,11 @@
 use std::collections::{BTreeSet, HashMap, VecDeque};
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde_json::Value;
-use tokio::process::Child;
 use tokio::sync::{Mutex, Notify};
-#[cfg(unix)]
-use tokio::time::sleep;
 
 use crate::backend::app_server::{RuntimeShutdownSource, WorkspaceSession};
 use crate::state::AppState;
@@ -18,10 +14,10 @@ use crate::types::{AppSettings, WorkspaceEntry};
 #[cfg(test)]
 pub(crate) use self::pool_types::RuntimeLifecycleTransition;
 pub(crate) use self::pool_types::{
-    RuntimeEndedRecord, RuntimeEngineObservability, RuntimeForegroundWorkState,
-    RuntimeLifecycleState, RuntimePoolBudgetSnapshot, RuntimePoolDiagnostics, RuntimePoolRow,
-    RuntimePoolSnapshot, RuntimePoolSummary, RuntimeProcessDiagnostics, RuntimeStartupState,
-    RuntimeState,
+    runtime_pool_summary_from_rows, RuntimeEndedRecord, RuntimeEngineObservability,
+    RuntimeForegroundWorkState, RuntimeLifecycleState, RuntimePoolBudgetSnapshot,
+    RuntimePoolDiagnostics, RuntimePoolRow, RuntimePoolSnapshot, RuntimeProcessDiagnostics,
+    RuntimeStartupState, RuntimeState,
 };
 use self::process_diagnostics::{
     build_engine_observability, current_host_untracked_engine_roots, merge_process_diagnostics,
@@ -31,7 +27,8 @@ use self::process_diagnostics::{
 pub(crate) use self::session_lifecycle::stop_workspace_session_with_source;
 pub(crate) use self::session_lifecycle::{
     replace_workspace_session, replace_workspace_session_with_source, stop_workspace_session,
-    terminate_workspace_session, terminate_workspace_session_with_source,
+    terminate_workspace_session, terminate_workspace_session_process,
+    terminate_workspace_session_with_source,
 };
 #[cfg(test)]
 pub(crate) use self::session_lifecycle::{
@@ -49,6 +46,7 @@ const THREAD_CREATE_PENDING_SENTINEL: &str = "__thread-create-pending__";
 
 pub(crate) mod commands;
 mod event_sources;
+mod gates;
 mod identity;
 mod ledger;
 mod pool_types;
@@ -58,8 +56,14 @@ mod session_lifecycle;
 use self::event_sources::{
     event_method, event_stream_source, event_thread_id, event_turn_id, event_turn_source,
 };
+pub(crate) use self::gates::{RuntimeAcquireDisposition, RuntimeAcquireGate, RuntimeAcquireToken};
+use self::gates::{
+    RuntimeAcquireGateEntry, RuntimeReplacementGate, RuntimeReplacementGateEntry,
+    RuntimeReplacementToken,
+};
 use self::identity::{normalize_engine, runtime_key};
-use self::ledger::{write_json_atomically, PersistedRuntimeLedger};
+#[cfg(test)]
+use self::ledger::write_json_atomically;
 
 fn now_millis() -> u64 {
     SystemTime::now()
@@ -69,7 +73,7 @@ fn now_millis() -> u64 {
 }
 
 #[derive(Debug, Clone)]
-struct RuntimeEntry {
+pub(super) struct RuntimeEntry {
     workspace_id: String,
     workspace_name: String,
     workspace_path: String,
@@ -117,56 +121,6 @@ struct RuntimeEntry {
     recent_spawn_events: VecDeque<u64>,
     recent_replace_events: VecDeque<u64>,
     recent_force_kill_events: VecDeque<u64>,
-}
-
-#[cfg(test)]
-fn is_runtime_lifecycle_transition_allowed(
-    from: &RuntimeLifecycleState,
-    to: &RuntimeLifecycleState,
-) -> bool {
-    use RuntimeLifecycleState::*;
-    if from == to {
-        return true;
-    }
-    matches!(
-        (from, to),
-        (Idle, Acquiring)
-            | (Acquiring, Active)
-            | (Acquiring, Recovering)
-            | (Acquiring, Ended)
-            | (Active, Replacing)
-            | (Active, Stopping)
-            | (Active, Recovering)
-            | (Active, Ended)
-            | (Replacing, Active)
-            | (Replacing, Recovering)
-            | (Replacing, Ended)
-            | (Stopping, Ended)
-            | (Stopping, Acquiring)
-            | (Recovering, Active)
-            | (Recovering, Quarantined)
-            | (Recovering, Ended)
-            | (Quarantined, Acquiring)
-            | (Quarantined, Ended)
-            | (Ended, Acquiring)
-    )
-}
-
-#[cfg(test)]
-fn build_runtime_lifecycle_transition(
-    from: RuntimeLifecycleState,
-    to: RuntimeLifecycleState,
-    source: &str,
-    reason_code: Option<String>,
-) -> RuntimeLifecycleTransition {
-    let allowed = is_runtime_lifecycle_transition_allowed(&from, &to);
-    RuntimeLifecycleTransition {
-        from,
-        to,
-        source: source.to_string(),
-        reason_code,
-        allowed,
-    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -422,57 +376,14 @@ impl RuntimeEntry {
 
 #[derive(Debug)]
 pub(crate) struct RuntimeManager {
-    entries: Mutex<HashMap<String, RuntimeEntry>>,
-    diagnostics: Mutex<RuntimePoolDiagnostics>,
+    pub(super) entries: Mutex<HashMap<String, RuntimeEntry>>,
+    pub(super) diagnostics: Mutex<RuntimePoolDiagnostics>,
     recovery: Mutex<HashMap<String, RuntimeRecoveryEntry>>,
     startup_gates: Mutex<HashMap<String, RuntimeAcquireGateEntry>>,
     replacement_gates: Mutex<HashMap<String, RuntimeReplacementGateEntry>>,
     pinned_keys: Mutex<BTreeSet<String>>,
-    ledger_path: PathBuf,
+    pub(super) ledger_path: PathBuf,
     shutting_down: AtomicBool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct RuntimeAcquireToken {
-    key: String,
-    nonce: String,
-}
-
-#[derive(Debug, Clone)]
-struct RuntimeAcquireGateEntry {
-    notify: Arc<Notify>,
-    token: RuntimeAcquireToken,
-    started_at_ms: u64,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) enum RuntimeAcquireGate {
-    Leader(RuntimeAcquireToken),
-    Waiter(Arc<Notify>),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum RuntimeAcquireDisposition {
-    Leader(RuntimeAcquireToken),
-    Retry,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct RuntimeReplacementToken {
-    key: String,
-    nonce: String,
-}
-
-#[derive(Debug, Clone)]
-struct RuntimeReplacementGateEntry {
-    notify: Arc<Notify>,
-    token: RuntimeReplacementToken,
-}
-
-#[derive(Debug, Clone)]
-enum RuntimeReplacementGate {
-    Leader(RuntimeReplacementToken),
-    Waiter(Arc<Notify>),
 }
 
 #[derive(Debug, Clone)]
@@ -2209,216 +2120,6 @@ impl RuntimeManager {
             .map(|entry| !entry.pinned && !entry.has_active_work_protection())
             .unwrap_or(true)
     }
-
-    async fn persist_ledger(&self) -> Result<(), String> {
-        let rows = self
-            .entries
-            .lock()
-            .await
-            .values()
-            .filter(|entry| {
-                entry.pid.is_some()
-                    || entry.error.is_some()
-                    || entry.foreground_work_state.is_some()
-            })
-            .cloned()
-            .map(|entry| {
-                let mut entry = entry;
-                entry.note_foreground_work_timeout();
-                let state = Self::classify_state(&entry);
-                let turn_lease_count = entry.turn_leases.len() as u32;
-                let stream_lease_count = entry.stream_leases.len() as u32;
-                let lease_sources = entry.lease_sources();
-                let active_work_protected = entry.has_active_work_protection();
-                let active_work_reason = entry.active_work_reason();
-                let recent_spawn_count = entry.recent_spawn_count();
-                let recent_replace_count = entry.recent_replace_count();
-                let recent_force_kill_count = entry.recent_force_kill_count();
-                let runtime_generation = entry.runtime_generation();
-                let (lifecycle_state, reason_code, recovery_source, retryable, user_action) =
-                    Self::lifecycle_projection(&entry, &state);
-                RuntimePoolRow {
-                    workspace_id: entry.workspace_id,
-                    workspace_name: entry.workspace_name,
-                    workspace_path: entry.workspace_path,
-                    engine: entry.engine,
-                    state,
-                    lifecycle_state,
-                    pid: entry.pid,
-                    runtime_generation,
-                    wrapper_kind: entry.wrapper_kind,
-                    resolved_bin: entry.resolved_bin,
-                    started_at_ms: entry.started_at_ms,
-                    last_used_at_ms: entry.last_used_at_ms,
-                    pinned: entry.pinned,
-                    turn_lease_count,
-                    stream_lease_count,
-                    lease_sources,
-                    active_work_protected,
-                    active_work_reason,
-                    active_work_since_ms: entry
-                        .active_work_since_ms
-                        .or(entry.foreground_work_since_ms),
-                    active_work_last_renewed_at_ms: entry
-                        .active_work_last_renewed_at_ms
-                        .or(entry.foreground_work_last_event_at_ms),
-                    foreground_work_state: entry.foreground_work_state.clone(),
-                    foreground_work_source: entry.foreground_work_source.clone(),
-                    foreground_work_thread_id: entry.foreground_work_thread_id.clone(),
-                    foreground_work_turn_id: entry.foreground_work_turn_id.clone(),
-                    foreground_work_since_ms: entry.foreground_work_since_ms,
-                    foreground_work_timeout_at_ms: entry.foreground_work_timeout_at_ms,
-                    foreground_work_last_event_at_ms: entry.foreground_work_last_event_at_ms,
-                    foreground_work_timed_out: entry.foreground_work_timed_out,
-                    evict_candidate: entry.evict_candidate,
-                    eviction_reason: entry.eviction_reason,
-                    error: entry.error,
-                    last_exit_reason_code: entry.last_exit_reason_code,
-                    last_exit_message: entry.last_exit_message,
-                    last_exit_at_ms: entry.last_exit_at_ms,
-                    last_exit_code: entry.last_exit_code,
-                    last_exit_signal: entry.last_exit_signal,
-                    last_exit_pending_request_count: entry.last_exit_pending_request_count,
-                    process_diagnostics: entry.process_diagnostics,
-                    startup_state: entry.startup_state.clone(),
-                    last_recovery_source: entry.last_recovery_source.clone(),
-                    last_guard_state: entry.last_guard_state.clone(),
-                    last_replace_reason: entry.last_replace_reason.clone(),
-                    last_probe_failure: entry.last_probe_failure.clone(),
-                    last_probe_failure_source: entry.last_probe_failure_source.clone(),
-                    reason_code,
-                    recovery_source,
-                    retryable,
-                    user_action,
-                    has_stopping_predecessor: entry.has_stopping_predecessor,
-                    recent_spawn_count,
-                    recent_replace_count,
-                    recent_force_kill_count,
-                }
-            })
-            .collect::<Vec<_>>();
-        let diagnostics = self.diagnostics.lock().await.clone();
-        let payload = serde_json::to_string_pretty(&PersistedRuntimeLedger { rows, diagnostics })
-            .map_err(|error| error.to_string())?;
-        write_json_atomically(&self.ledger_path, &payload)
-    }
-
-    pub(crate) fn orphan_sweep_on_startup(&self, enabled: bool) {
-        if !enabled {
-            return;
-        }
-        let raw_ledger = match fs::read_to_string(&self.ledger_path) {
-            Ok(raw_ledger) => raw_ledger,
-            Err(_) => return,
-        };
-        let parsed = match serde_json::from_str::<PersistedRuntimeLedger>(&raw_ledger) {
-            Ok(parsed) => parsed,
-            Err(_) => return,
-        };
-        let mut diagnostics = parsed.diagnostics;
-        diagnostics.last_orphan_sweep_at_ms = Some(now_millis());
-        diagnostics.orphan_entries_found += parsed.rows.len() as u32;
-        for row in parsed.rows {
-            if let Some(process_diagnostics) = row.process_diagnostics {
-                diagnostics.startup_orphan_residue_processes = diagnostics
-                    .startup_orphan_residue_processes
-                    .saturating_add(process_diagnostics.node_processes);
-            }
-            let Some(pid) = row.pid else {
-                continue;
-            };
-            match terminate_pid_tree(pid) {
-                Ok(force_killed) => {
-                    diagnostics.orphan_entries_cleaned += 1;
-                    if force_killed {
-                        diagnostics.force_kill_count += 1;
-                    }
-                }
-                Err(_) => diagnostics.orphan_entries_failed += 1,
-            }
-        }
-        let payload = PersistedRuntimeLedger {
-            rows: Vec::new(),
-            diagnostics: diagnostics.clone(),
-        };
-        if let Ok(serialized) = serde_json::to_string_pretty(&payload) {
-            let _ = write_json_atomically(&self.ledger_path, &serialized);
-        }
-        *self.diagnostics.blocking_lock() = diagnostics;
-    }
-}
-
-fn runtime_pool_summary_from_rows(rows: &[RuntimePoolRow]) -> RuntimePoolSummary {
-    RuntimePoolSummary {
-        total_runtimes: rows.len(),
-        acquired_runtimes: rows
-            .iter()
-            .filter(|row| matches!(row.state, RuntimeState::Acquired))
-            .count(),
-        streaming_runtimes: rows
-            .iter()
-            .filter(|row| matches!(row.state, RuntimeState::Streaming))
-            .count(),
-        graceful_idle_runtimes: rows
-            .iter()
-            .filter(|row| matches!(row.state, RuntimeState::GracefulIdle))
-            .count(),
-        evictable_runtimes: rows
-            .iter()
-            .filter(|row| matches!(row.state, RuntimeState::Evictable))
-            .count(),
-        active_work_protected_runtimes: rows.iter().filter(|row| row.active_work_protected).count(),
-        pinned_runtimes: rows.iter().filter(|row| row.pinned).count(),
-        codex_runtimes: rows.iter().filter(|row| row.engine == "codex").count(),
-        claude_runtimes: rows.iter().filter(|row| row.engine == "claude").count(),
-    }
-}
-
-pub(crate) async fn terminate_workspace_session_process(child: &mut Child) -> Result<bool, String> {
-    #[cfg(unix)]
-    {
-        if let Some(pid) = child.id() {
-            let process_group_id = pid as libc::pid_t;
-            let terminate_status = unsafe { libc::kill(-process_group_id, libc::SIGTERM) };
-            if terminate_status == 0 {
-                sleep(Duration::from_millis(TERMINATE_GRACE_MILLIS)).await;
-                if matches!(child.try_wait(), Ok(Some(_))) {
-                    let _ = child.wait().await;
-                    return Ok(false);
-                }
-            }
-            let kill_status = unsafe { libc::kill(-process_group_id, libc::SIGKILL) };
-            if kill_status == 0 {
-                let _ = child.wait().await;
-                return Ok(true);
-            }
-        }
-    }
-
-    #[cfg(windows)]
-    {
-        if let Some(pid) = child.id() {
-            let output = crate::utils::async_command("taskkill")
-                .arg("/PID")
-                .arg(pid.to_string())
-                .arg("/T")
-                .arg("/F")
-                .output()
-                .await
-                .map_err(|error| format!("taskkill failed for pid {pid}: {error}"))?;
-            if output.status.success() || matches!(child.try_wait(), Ok(Some(_))) {
-                let _ = child.wait().await;
-                return Ok(true);
-            }
-        }
-    }
-
-    child
-        .kill()
-        .await
-        .map_err(|error| format!("Failed to kill process: {error}"))?;
-    let _ = child.wait().await;
-    Ok(true)
 }
 
 pub(crate) async fn shutdown_managed_runtimes(state: &AppState) {

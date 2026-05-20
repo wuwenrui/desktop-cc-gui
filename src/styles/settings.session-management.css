@@ -1,0 +1,776 @@
+/* ─── Project session management tree shell ─── */
+
+.settings-project-sessions {
+  --text-default: var(--text-primary);
+  --border-default: var(--border-muted);
+  --surface-muted: var(--surface-card-muted);
+  --project-session-accent: var(--primary, var(--text-accent));
+  --project-session-accent-text: var(--text-accent);
+  --project-session-danger: var(--destructive, var(--status-error));
+  --project-session-warning: var(--warning, var(--status-warning));
+  --project-session-border: var(--border-default, var(--border-muted));
+  --project-session-panel: var(--surface-card, var(--surface-control));
+  --project-session-panel-muted: var(--surface-card-muted, var(--surface-control));
+}
+
+.settings-project-sessions-body {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-project-sessions-header {
+  margin-top: 0;
+  padding: 0;
+}
+
+.settings-project-sessions-title-wrap {
+  min-width: 0;
+}
+
+.settings-project-sessions-title-wrap h3 {
+  margin: 0;
+}
+
+.settings-project-sessions-title-wrap p {
+  max-width: 680px;
+}
+
+.settings-project-sessions-header-actions,
+.settings-project-sessions-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-project-sessions-mode-toggle {
+  padding: 3px;
+  border: 1px solid color-mix(in srgb, var(--project-session-border) 72%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-muted) 26%, transparent);
+}
+
+.settings-project-sessions-shell {
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.settings-project-sessions-nav {
+  border: 1px solid color-mix(in srgb, var(--project-session-border) 76%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--project-session-panel-muted) 42%, transparent);
+  padding: 10px;
+  position: sticky;
+  top: 8px;
+}
+
+.settings-project-sessions-nav-title {
+  padding: 2px 2px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.settings-project-sessions-nav-title.is-subsection {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--project-session-border) 58%, transparent);
+}
+
+.settings-project-sessions-nav-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 420px;
+  overflow: auto;
+}
+
+.settings-project-sessions-nav-item {
+  width: 100%;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: color-mix(in srgb, var(--text-default) 78%, var(--text-muted));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  text-align: left;
+  cursor: pointer;
+  position: relative;
+}
+
+.settings-project-sessions-nav-item:hover {
+  background: color-mix(in srgb, var(--surface-control) 50%, transparent);
+  color: var(--text-strong);
+}
+
+.settings-project-sessions-nav-item.is-active {
+  background: color-mix(in srgb, var(--project-session-accent) 18%, transparent);
+  color: var(--text-strong);
+}
+
+.settings-project-sessions-nav-item svg {
+  color: color-mix(in srgb, var(--project-session-accent-text) 82%, var(--text-muted));
+  flex-shrink: 0;
+}
+
+.settings-project-sessions-nav-item.is-worktree {
+  font-size: 12px;
+}
+
+.settings-project-sessions-nav-item.is-workspace {
+  font-weight: 700;
+}
+
+.settings-project-sessions-nav-item.is-folder {
+  color: color-mix(in srgb, var(--text-default) 68%, var(--text-muted));
+  font-size: 12px;
+  box-shadow: inset 1px 0 0 color-mix(in srgb, var(--project-session-border) 68%, transparent);
+}
+
+.settings-project-sessions-nav-item.is-folder.is-active {
+  color: var(--text-strong);
+}
+
+.settings-project-sessions-nav-item.is-folder.is-create {
+  border: 1px dashed color-mix(in srgb, var(--project-session-accent-text) 56%, var(--project-session-border));
+  color: color-mix(in srgb, var(--project-session-accent-text) 88%, var(--text-default));
+  box-shadow: none;
+}
+
+.settings-project-sessions-nav-hint {
+  padding: 7px 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.settings-project-sessions-nav-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+}
+
+.settings-project-sessions-nav-count {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.settings-project-sessions-nav-warning {
+  margin-top: 10px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--project-session-warning) 16%, transparent);
+  color: var(--text-muted);
+  padding: 8px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.settings-project-sessions-folder-draft {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-left: 1px solid color-mix(in srgb, var(--project-session-border) 68%, transparent);
+  padding: 4px 0 8px 10px;
+}
+
+.settings-project-sessions-folder-draft-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.settings-project-sessions-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-project-sessions-control-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid color-mix(in srgb, var(--project-session-border) 72%, transparent);
+  border-radius: 16px;
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--project-session-panel-muted) 38%, transparent),
+      color-mix(in srgb, var(--surface-control) 16%, transparent)
+    );
+  padding: 10px;
+}
+
+.settings-project-sessions-control-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.settings-project-sessions-filterbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(130px, 0.55fr) minmax(130px, 0.55fr);
+  gap: 10px;
+}
+
+.settings-project-sessions-move-control {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.settings-project-sessions-move-select {
+  min-width: 150px;
+  max-width: min(220px, 100%);
+  height: 30px;
+}
+
+.settings-project-sessions-static-filter {
+  min-height: 36px;
+  border: 1px solid color-mix(in srgb, var(--project-session-border) 70%, transparent);
+  border-radius: 10px;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+.settings-project-sessions-scope-summary {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid color-mix(in srgb, var(--project-session-border) 76%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--project-session-panel-muted) 34%, transparent);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 10px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.settings-project-sessions-scope-summary span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-project-sessions-scope-summary span[aria-hidden] {
+  flex-shrink: 0;
+}
+
+.settings-project-sessions-advanced {
+  position: relative;
+  max-width: 420px;
+}
+
+.settings-project-sessions-advanced summary {
+  list-style: none;
+  cursor: pointer;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--project-session-border) 66%, transparent);
+  background: color-mix(in srgb, var(--project-session-accent) 10%, var(--surface-control));
+  color: color-mix(in srgb, var(--project-session-accent-text) 86%, var(--text-default));
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 650;
+  padding: 6px 10px;
+  user-select: none;
+}
+
+.settings-project-sessions-advanced summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-project-sessions-advanced[open] summary {
+  color: var(--text-strong);
+  border-color: color-mix(in srgb, var(--project-session-accent) 48%, var(--project-session-border));
+}
+
+.settings-project-sessions-advanced-body {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 12;
+  width: min(440px, calc(100vw - 48px));
+  border: 1px solid color-mix(in srgb, var(--project-session-border) 78%, transparent);
+  border-radius: 14px;
+  background: var(--surface-popover, var(--surface-control));
+  box-shadow: 0 18px 50px color-mix(in srgb, var(--text-strong) 18%, transparent);
+  padding: 12px;
+}
+
+.settings-project-sessions-advanced-copy {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.settings-project-sessions-advanced-actions {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.settings-project-sessions-toolbar {
+  justify-content: space-between;
+  gap: 10px 16px;
+  border: 1px solid color-mix(in srgb, var(--project-session-border) 60%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--project-session-panel-muted) 18%, transparent);
+  padding: 8px 10px;
+}
+
+.settings-project-sessions-stats,
+.settings-project-sessions-actions {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-start;
+  min-width: 0;
+}
+
+.settings-project-sessions-stats {
+  color: var(--text-muted);
+}
+
+.settings-project-sessions-selected {
+  margin-right: 0;
+}
+
+.settings-project-sessions-btn {
+  border: 1px solid color-mix(in srgb, var(--project-session-accent) 38%, var(--project-session-border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--project-session-accent) 10%, transparent);
+  color: color-mix(in srgb, var(--project-session-accent-text) 88%, var(--text-default));
+  font-weight: 700;
+  padding: 5px 9px;
+  white-space: nowrap;
+  min-height: 28px;
+}
+
+.settings-project-sessions-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--project-session-accent) 18%, transparent);
+  border-color: color-mix(in srgb, var(--project-session-accent-text) 62%, var(--project-session-border));
+  color: var(--text-strong);
+}
+
+.settings-project-sessions-btn:disabled {
+  background: transparent;
+  border-color: color-mix(in srgb, var(--border-default) 42%, transparent);
+  color: color-mix(in srgb, var(--text-muted) 72%, transparent);
+}
+
+.settings-project-sessions-btn.is-danger {
+  background: color-mix(in srgb, var(--project-session-danger) 10%, transparent);
+  border-color: color-mix(in srgb, var(--project-session-danger) 44%, var(--project-session-border));
+  color: color-mix(in srgb, var(--project-session-danger) 90%, var(--text-default));
+}
+
+.settings-project-sessions-btn.is-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--project-session-danger) 18%, transparent);
+  border-color: color-mix(in srgb, var(--project-session-danger) 65%, var(--project-session-border));
+  color: var(--text-strong);
+}
+
+.settings-project-sessions-notice {
+  margin: 0;
+}
+
+.settings-project-sessions-list {
+  gap: 1px;
+  max-height: 560px;
+  padding: 2px 0;
+}
+
+.settings-project-sessions-item {
+  display: grid;
+  grid-template-columns: 18px 20px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  min-height: 34px;
+  padding: 5px 8px;
+  text-align: left;
+  cursor: default;
+}
+
+.settings-project-sessions-item input {
+  margin: 4px 0 0;
+  flex-shrink: 0;
+}
+
+.settings-project-sessions-item-engine {
+  margin-top: 2px;
+}
+
+.settings-project-sessions-item-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content 36px 36px;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 6px;
+  min-width: 0;
+}
+
+.settings-project-sessions-item-heading {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.settings-project-sessions-item-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  text-align: left;
+}
+
+.settings-project-sessions-item-date {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.3;
+  white-space: nowrap;
+  justify-self: end;
+}
+
+.settings-project-sessions-detail-toggle,
+.settings-project-sessions-curtain-toggle {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: color-mix(in srgb, var(--project-session-accent-text) 84%, var(--text-muted));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+
+.settings-project-sessions-detail-toggle:hover,
+.settings-project-sessions-detail-toggle[aria-expanded="true"],
+.settings-project-sessions-curtain-toggle:hover {
+  background: transparent;
+  color: var(--project-session-accent-text);
+}
+
+.settings-project-sessions-detail-toggle:focus-visible,
+.settings-project-sessions-curtain-toggle:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--project-session-accent-text) 48%, transparent);
+  outline-offset: 2px;
+}
+
+.settings-project-sessions-item-details {
+  grid-column: 1 / -1;
+  border: 1px solid color-mix(in srgb, var(--project-session-border) 56%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--project-session-panel-muted) 36%, transparent);
+  display: grid;
+  gap: 8px;
+  padding: 8px 10px;
+}
+
+.settings-project-sessions-detail-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.settings-project-sessions-detail-grid {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 5px 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.settings-project-sessions-detail-grid > span:nth-child(odd) {
+  color: var(--text-faint);
+}
+
+.settings-project-sessions-detail-grid > span:nth-child(even) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 960px) {
+  .settings-project-sessions-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-project-sessions-nav {
+    position: static;
+  }
+
+  .settings-project-sessions-control-head,
+  .settings-project-sessions-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-project-sessions-header-actions {
+    justify-content: space-between;
+  }
+
+  .settings-project-sessions-filterbar {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-project-sessions-advanced,
+  .settings-project-sessions-advanced-body {
+    max-width: none;
+    width: 100%;
+  }
+
+  .settings-project-sessions-advanced-body {
+    position: static;
+    margin-top: 8px;
+  }
+
+  .settings-project-sessions-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-project-sessions-actions {
+    align-items: flex-start;
+  }
+
+  .settings-project-sessions-item-heading {
+    flex-wrap: wrap;
+  }
+
+  .settings-project-sessions-item-content {
+    grid-template-columns: minmax(0, 1fr) max-content 36px 36px;
+  }
+
+  .settings-project-sessions-item-date {
+    justify-self: start;
+    grid-column: 1 / 2;
+  }
+
+  .settings-project-sessions-detail-toggle {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+    align-self: center;
+  }
+
+  .settings-project-sessions-curtain-toggle {
+    grid-column: 4;
+    grid-row: 1 / span 2;
+    align-self: center;
+  }
+}
+
+/* ─── Session curtain dialog ─── */
+
+.settings-session-curtain-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: color-mix(in srgb, var(--surface-overlay, #020617) 46%, transparent);
+  backdrop-filter: blur(12px);
+}
+
+.settings-session-curtain-dialog {
+  width: min(980px, calc(100vw - 40px));
+  height: min(760px, calc(100vh - 40px));
+  border: 1px solid color-mix(in srgb, var(--project-session-border) 78%, transparent);
+  border-radius: 18px;
+  background: var(--surface-card, var(--surface-control));
+  box-shadow: 0 28px 90px color-mix(in srgb, #000 34%, transparent);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  overflow: hidden;
+}
+
+.settings-session-curtain-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+  border-bottom: 1px solid color-mix(in srgb, var(--project-session-border) 72%, transparent);
+  background: color-mix(in srgb, var(--project-session-panel-muted) 36%, transparent);
+}
+
+.settings-session-curtain-title-wrap,
+.settings-session-curtain-actions {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: 10px;
+}
+
+.settings-session-curtain-engine {
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--project-session-accent) 12%, transparent);
+  color: var(--project-session-accent-text);
+  flex-shrink: 0;
+}
+
+.settings-session-curtain-title,
+.settings-session-curtain-subtitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-session-curtain-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-strong);
+}
+
+.settings-session-curtain-subtitle {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.settings-session-curtain-icon-btn {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: color-mix(in srgb, var(--project-session-accent-text) 92%, var(--text-muted));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+
+.settings-session-curtain-icon-btn:hover:not(:disabled) {
+  background: transparent;
+  color: var(--project-session-accent-text);
+}
+
+.settings-session-curtain-icon-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--project-session-accent-text) 48%, transparent);
+  outline-offset: 2px;
+}
+
+.settings-session-curtain-icon-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.settings-session-curtain-messages {
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-session-curtain-empty {
+  margin: auto;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.settings-session-curtain-message {
+  max-width: min(760px, 92%);
+  border: 1px solid color-mix(in srgb, var(--project-session-border) 60%, transparent);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--project-session-panel-muted) 38%, transparent);
+  align-self: flex-start;
+}
+
+.settings-session-curtain-message.is-user {
+  align-self: flex-end;
+  background: color-mix(in srgb, var(--project-session-accent) 13%, transparent);
+}
+
+.settings-session-curtain-message-label {
+  margin-bottom: 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.settings-session-curtain-message-text {
+  color: var(--text-default);
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.settings-session-curtain-status {
+  margin: 0 16px 10px;
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: color-mix(in srgb, var(--project-session-accent) 12%, transparent);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.settings-session-curtain-status.is-error {
+  background: color-mix(in srgb, var(--project-session-danger) 13%, transparent);
+  color: color-mix(in srgb, var(--project-session-danger) 90%, var(--text-default));
+}
+
+@media (max-width: 720px) {
+  .settings-session-curtain-backdrop {
+    padding: 10px;
+  }
+
+  .settings-session-curtain-dialog {
+    width: 100%;
+    height: calc(100vh - 20px);
+    border-radius: 14px;
+  }
+
+  .settings-session-curtain-message {
+    max-width: 100%;
+  }
+}

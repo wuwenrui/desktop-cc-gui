@@ -1,0 +1,457 @@
+const enPart6 = {
+  // Composer
+  composer: {
+    placeholder: "Message Codex…",
+    placeholderAsk: "Ask Claude Code to do something...",
+    placeholderAskWithEngine: "Ask {{engineName}} to do something...",
+    send: "Send",
+    stop: "Stop",
+    attachImage: "Attach image",
+    removeAttachment: "Remove attachment",
+    queue: "Queue",
+    editQueued: "Edit",
+    deleteQueued: "Delete",
+    collaborationMode: "Collaboration mode",
+    collaborationCode: "Code",
+    collaborationPlan: "Plan",
+    planModeToggle: "Plan mode",
+    planModeShort: "Plan",
+    collaborationModeDisabledHint:
+      "Enable collaboration modes in Settings > Experimental",
+    collaborationPlanHint:
+      "Plan mode: interactive questions (not update_plan).",
+    collaborationCodeInlineHint: "{{mode}} · directly implement code changes",
+    collaborationPlanInlineHint: "Plan · interactive Q&A",
+    collaborationOpenSettings: "Open Settings and enable collaboration mode",
+    engine: "Engine",
+    model: "Model",
+    agent: "Agent",
+    agentDefault: "Default agent",
+    noAgents: "No agents",
+    thinkingMode: "Thinking mode",
+    variant: "Variant",
+    agentAccess: "Agent access",
+    effortDefault: "Default",
+    readOnly: "Read only",
+    onRequest: "On-Request",
+    fullAccess: "Full access",
+    liveUsage: "Live usage",
+    speed: "Speed",
+    speedStandard: "Standard",
+    speedFast: "Fast",
+    forkQuickAction: "Fork",
+    reviewQuickAction: "Review",
+    contextFree: "Context free",
+    context: "Context",
+    contextUsageAriaLabel:
+      "Context usage: {{percent}} used, {{used}} / {{total}}",
+    noModels: "No models",
+    dragToResize: "Drag to resize",
+    expandInput: "Expand input",
+    collapseInput: "Collapse input",
+    collapsedProcessing: "Running, tap to expand",
+    addImage: "Add image",
+    completionEmailAriaLabel: "Send this turn by email when it completes",
+    completionEmailTooltip: "Email the next completed answer once",
+    completionEmailSelected: "Completion email is armed",
+    completionEmailSelectedTooltip: "Completion email is armed for this turn",
+    readinessAriaLabel: "{{target}} {{model}} composer readiness: {{activity}}",
+    readinessContextEmpty: "Context",
+    readinessContextWithItems: "Context",
+    readinessContextFileReference:
+      "{{count}} file reference(s) linked for this send",
+    readinessContextImage: "{{count}} image(s) attached for this send",
+    readinessContextAgent: "{{name}} selected for this send",
+    readinessJumpToRequest: "Answer",
+    readinessModeImpact: {
+      default: "Default permissions",
+      "read-only": "Read-only",
+      current: "Current workspace",
+      "full-access": "Full access",
+    },
+    readinessActivity: {
+      idle: "Ready",
+      processing: "Running",
+      waiting: "Waiting",
+      ingress: "Streaming",
+      queued: "Queued",
+      fusing: "Fusing",
+      blocked: "Blocked",
+      awaitingUserInput: "Needs input",
+    },
+    readinessDisabled: {
+      "runtime-recovering": "Runtime recovering",
+      "runtime-quarantined": "Reconnect required",
+      "runtime-ended": "Retry required",
+      "mode-blocked": "Mode blocked",
+      "config-loading": "Config loading",
+      "awaiting-user-input": "Answer request first",
+      "empty-draft": "Empty draft",
+    },
+    queueStatusWaiting: "Queued for next turn",
+    queueStatusFuseReady: "Can fuse into current turn",
+    queueStatusFusing: "Fusing into current turn",
+    queueStatusCommand: "Slash command waits for next turn",
+    // Review
+    reviewAgainstBaseBranch: "Review against a base branch",
+    prStyle: "(PR Style)",
+    reviewUncommittedChanges: "Review uncommitted changes",
+    reviewACommit: "Review a commit",
+    customReviewInstructions: "Custom review instructions",
+    startReview: "Start review",
+    pickRecentLocalBranch: "Pick a recent local branch:",
+    typeToSearchBranches: "Type to search branches",
+    loadingBranches: "Loading branches…",
+    noBranchesFoundDot: "No branches found.",
+    selectRecentCommit: "Select a recent commit:",
+    typeToSearchCommits: "Type to search commits",
+    loadingCommits: "Loading commits…",
+    noCommitsFound: "No commits found.",
+    instructions: "Instructions",
+    instructionsPlaceholder:
+      "Focus on correctness, edge cases, and missing tests.",
+    selectBaseBranch: "Select a base branch",
+    selectCommitToReview: "Select a commit to review",
+    selectReviewPreset: "Select a review preset",
+    // Launch script
+    runLaunchScript: "Run launch script",
+    setLaunchScript: "Set launch script",
+    launchScript: "Launch script",
+    newLaunchScript: "New launch script",
+    optionalLabel: "Optional label",
+    new: "New",
+    saving: "Saving...",
+    fileReference: "File reference",
+    activeFile: "Active file",
+    fileReferenceHint: "Toggle injecting active file path into message",
+    fileReferencePathOn: "Path linked",
+    fileReferencePathOff: "Path off",
+    manualMemorySelection: "{{count}} memory item(s) linked for this send",
+    manualMemorySelectionHint:
+      "Click × to remove. Selection clears after send.",
+    manualMemoryRemove: "Remove memory: {{title}}",
+    manualMemoryPickerTitle: "User input info",
+    manualMemoryPickerInputTitle: "User input: {{query}}",
+    manualMemoryPickerSelectedCount: "{{count}} selected",
+    manualMemoryPickerShortcutSelect: "Press Enter/Space to select",
+    manualMemoryPickerShortcutUnselect: "Press Enter/Space to unselect",
+    manualMemoryPickerPreviewEmpty:
+      "No additional detail is available for this memory.",
+    manualMemoryPickerPreviewFallback:
+      "Move highlight to preview memory details.",
+    manualMemoryPreviewExpand: "Expand detail",
+    manualMemoryPreviewCollapse: "Collapse detail",
+    memoryReferenceToggle: "Memory Reference",
+    memoryReferenceScope: "Scope",
+    memoryReferenceOff: "This send",
+    memoryReferenceOn: "Memory on",
+    memoryReferenceOffHint:
+      "Read-only project memory lookup for this Memory Brief. Turns off after send.",
+    memoryReferenceArmedHint:
+      "This send will query project memory read-only and build a traceable Memory Brief.",
+    memoryReferenceDialogTitle: "Memory reference",
+    memoryReferenceConfirm: "Enable",
+    noteCardSelection: "{{count}} note card(s) linked for this send",
+    noteCardSelectionHint: "Click × to remove. Selection clears after send.",
+    noteCardRemove: "Remove note: {{title}}",
+    noteCardPickerTitle: "Project notes",
+    noteCardPickerInputTitle: "Note: {{query}}",
+    noteCardPickerSelectedCount: "{{count}} selected",
+    noteCardPickerShortcutSelect: "Press Enter/Space to select",
+    noteCardPickerShortcutUnselect: "Press Enter/Space to unselect",
+    noteCardPickerPreviewEmpty:
+      "No additional content is available for this note.",
+    noteCardPickerPreviewFallback: "Move highlight to preview note details.",
+    noteCardPreviewExpand: "Expand note",
+    noteCardPreviewCollapse: "Collapse note",
+    noteCardArchivedBadge: "Archived",
+  },
+
+  // Runtime tail sections
+  config: {
+    switchProvider: "Switch provider",
+  },
+
+  reasoning: {
+    title: "Select reasoning depth",
+    default: "Default",
+    claudeDefault: "Claude default",
+    defaultDescription: "Use the engine default reasoning behavior",
+    low: {
+      label: "Low",
+      description: "Quick responses with basic reasoning",
+    },
+    medium: {
+      label: "Medium",
+      description: "Balanced thinking (default)",
+    },
+    high: {
+      label: "High",
+      description: "Deep reasoning for complex tasks",
+    },
+    xhigh: {
+      label: "Extra High",
+      description: "Extra high reasoning depth",
+    },
+    max: {
+      label: "Max",
+      description: "Maximum reasoning depth",
+    },
+  },
+
+  providers: {
+    claude: { label: "Claude Code" },
+    codex: { label: "Codex CLI" },
+    gemini: { label: "Gemini CLI" },
+    opencode: { label: "OpenCode" },
+  },
+
+  usage: {
+    sessionReset: "Session resets",
+    weeklyReset: "Weekly resets",
+    credits: "Credits",
+    used: "used",
+    remaining: "remaining",
+    unlimited: "Unlimited",
+  },
+
+  menu: {
+    // App menu
+    about: "About {{appName}}",
+    checkForUpdates: "Check for Updates…",
+    settings: "Settings…",
+    // File menu
+    file: "File",
+    newAgent: "New Agent",
+    newWorktreeAgent: "New Worktree Agent",
+    newCloneAgent: "New Clone Agent",
+    newWindow: "New Window",
+    addWorkspace: "Add Workspace…",
+    closeWindow: "Close Window",
+    quit: "Quit",
+    // Edit menu
+    edit: "Edit",
+    // Composer menu
+    composer: "Composer",
+    cycleModel: "Cycle Model",
+    cycleAccessMode: "Cycle Access Mode",
+    cycleReasoningMode: "Cycle Reasoning Mode",
+    cycleCollaborationMode: "Cycle Collaboration Mode",
+    // View menu
+    view: "View",
+    toggleProjectsSidebar: "Toggle Projects Sidebar",
+    toggleGitSidebar: "Toggle Right Sidebar",
+    toggleGlobalSearch: "Toggle Global Search",
+    toggleDebugPanel: "Toggle Debug Panel",
+    toggleTerminal: "Toggle Terminal",
+    nextAgent: "Next Agent",
+    previousAgent: "Previous Agent",
+    nextWorkspace: "Next Workspace",
+    previousWorkspace: "Previous Workspace",
+    toggleFullScreen: "Toggle Full Screen",
+    // Window menu
+    window: "Window",
+    minimize: "Minimize",
+    maximize: "Maximize",
+    reloadWindow: "Reload Window",
+    // Help menu
+    help: "Help",
+  },
+
+  clientDocumentation: {
+    open: "Client documentation",
+  },
+
+  // Conversation tail sections
+  promptEnhancer: {
+    title: "Prompt Enhancer",
+    tooltip: "Enhance Prompt",
+    tooltipFull:
+      "Rewrite prompt to provide more context and improve agent responses",
+    shortcut: "\u2318/ / Ctrl+/",
+    enhancing: "Enhancing prompt...",
+    originalPrompt: "Original Prompt",
+    enhancedPrompt: "Enhanced Prompt",
+    useEnhanced: "Use Enhanced",
+    keepOriginal: "Keep Original",
+    enhanceFailed: "Failed to enhance prompt",
+    emptyPrompt: "Please enter a prompt first",
+    copyEnhanced: "Copy Enhanced",
+  },
+
+  rewind: {
+    title: "Rewind Files to Previous State",
+    tooltip: "Rewind",
+    label: "Rewind",
+    tooltipFull: "Restore files to their state at this message",
+    notAvailable: "Rewind is not available in this session",
+    noEligibleMessage: "No rewindable user messages were found.",
+    selectPrompt: "Select a rewind target (1-{{count}}):",
+    invalidSelection: "Invalid rewind selection.",
+    confirmPrompt: 'Create a new thread from this message?\n"{{preview}}"',
+    dialogTitle: "Confirm {{engine}} rewind",
+    dialogDescription:
+      "Clicking rewind now only opens this confirmation dialog first. The rewind runs only after you explicitly confirm.",
+    targetSectionTitle: "Rewind starting point",
+    targetMessageLabel: "This rewind will roll back from this user message",
+    impactSectionTitle: "What will be removed",
+    impactUserMessages: "User messages removed",
+    impactAssistantMessages: "Assistant replies removed",
+    impactToolCalls: "Tool calls removed",
+    impactFiles: "Files involved",
+    impactSummary:
+      "After confirmation, the current linear history will roll back from this user message. That includes this user message and all later assistant replies, tool calls, and related changes.",
+    impactFollowUp:
+      "If files are listed below, their changes happened inside the history segment that will be rewound. Review them before confirming.",
+    workspaceRestoreSectionTitle: "Workspace file strategy",
+    modeMessagesAndFilesLabel: "Rewind messages + files",
+    modeMessagesAndFilesHint:
+      "Rewind the conversation history and restore the related workspace file changes together.",
+    modeMessagesOnlyLabel: "Messages only",
+    modeMessagesOnlyHint:
+      "Only rewind conversation history and leave current workspace files untouched.",
+    modeFilesOnlyLabel: "Files only",
+    modeFilesOnlyHint:
+      "Only restore the related files and keep the current conversation history unchanged.",
+    filesSectionTitle: "Affected files",
+    filesRailTitle: "Files",
+    filesEmpty:
+      "No file changes were detected in the history segment being rewound.",
+    filesHint:
+      "This is a best-effort frontend summary of detected file changes so you can confirm the blast radius before proceeding.",
+    diffEmpty:
+      "No diff preview is available for this file. You can still review other files or open the main diff panel.",
+    openDiffAction: "Open In Diff Panel",
+    storeAction: "Store Changes",
+    storeActionBusy: "Storing...",
+    storeUnavailable:
+      "The current rewind context does not include enough session information to store changes.",
+    storeFailed: "Failed to store changes.",
+    storeRevealFailed: "Failed to open the stored changes directory.",
+    storeRevealAction: "Open Folder",
+    storeSuccessTitle:
+      "Stored {{count}} file(s) and generated a reusable manifest snapshot.",
+    storeSuccessPrefix: "Saved to: ",
+    confirmAction: "Confirm rewind",
+    confirmActionBusy: "Rewinding...",
+    failed: "Failed to rewind conversation.",
+  },
+
+  threads: {
+    rename: "Rename",
+    autoName: "Auto name",
+    autoNaming: "Auto naming...",
+    archive: "Archive",
+    delete: "Delete",
+    deleteThreadTitle: "Delete conversation",
+    deleteThreadMessage: 'Are you sure you want to delete "{{name}}"?',
+    deleteThreadHint:
+      "This cannot be undone and the local session record will be removed.",
+    pin: "Pin",
+    unpin: "Unpin",
+    sync: "Sync",
+    reload: "Reload",
+    renamePlaceholder: "Enter thread name",
+    confirmDelete: "Are you sure you want to delete this thread?",
+    confirmArchive: "Are you sure you want to archive this thread?",
+    reloadThreads: "Reload threads",
+    syncFromServer: "Sync from server",
+    copyId: "Copy ID",
+    copyClaudeResumeCommand: "Copy Claude resume command",
+    openClaudeTui: "Open in Claude TUI",
+    claudeResumeCommandHelp:
+      "If the Claude TUI /resume picker misses this GUI session, run claude --resume <session_id> or /resume <session_id> explicitly.",
+    moveToFolder: "Move to folder",
+    moveToProjectRoot: "Project root",
+    searchFolderTargets: "Search folders...",
+    size: "Size",
+    deleteWorktree: "Delete worktree",
+    renameThread: "Rename thread",
+    currentName: "Current name:",
+    newName: "New name",
+    copyThread: "Copy thread",
+    untitledThread: "Untitled thread",
+    topbarSessionTabsAriaLabel: "Topbar session tabs",
+    memoryReferenceQuerying: "Memory Reference: querying project memory...",
+    memoryReferenceReferenced:
+      "Memory Reference: referenced {{count}} project memories{{titlesSuffix}}",
+    memoryReferenceNoRelated:
+      "Memory Reference: no related project memory found",
+    memoryReferenceTimeout:
+      "Memory Reference: timed out, sent without memory brief",
+    memoryReferenceError: "Memory Reference: failed, sent without memory brief",
+    memoryReferenceTitlesSuffix: " - {{titles}}",
+    closeTab: "Close tab",
+    closeLeftTabs: "Close tabs to the left",
+    closeRightTabs: "Close tabs to the right",
+    closeAllTabs: "Close all tabs",
+    closeCompletedTabs: "Close completed tabs",
+    showLess: "Show less",
+    more: "More...",
+    loading: "Loading...",
+    searchOlder: "Search older...",
+    loadOlder: "Load older...",
+    hideExitedSessions: "Hide exited sessions",
+    showExitedSessions: "Show exited sessions",
+    exitedSessionsHidden: "{{count}} exited hidden",
+    subagentTreeExpanded: "Subagent tree expanded",
+    subagentTreeExpand: "Expand subagent tree",
+    subagentTreeCollapse: "Collapse subagent tree",
+    degradedWorkspaceRefreshAriaLabel: "Refresh incomplete thread list",
+    degradedWorkspaceRefreshTooltip:
+      "This project's thread list is not fully refreshed yet and may be missing some conversations. Click to refresh it again.",
+    degradedWorkspaceRefreshingAriaLabel: "Refreshing thread list",
+    degradedWorkspaceRefreshingTooltip: "Refreshing thread list...",
+    sessionStopped: "Session stopped.",
+    sessionStoppedForFusion:
+      "Switching to the merged follow-up and waiting for resume evidence...",
+    turnFailed: "Turn failed.",
+    turnFailedWithMessage: "Turn failed: {{message}}",
+    claudeMcpRouteMapped:
+      "MCP routing notice: detected `playwright-mcp`, automatically mapped this session to `chrome-devtools`.",
+    claudeMcpRouteUnavailable:
+      "MCP routing notice: detected `playwright-mcp`, but this session has not confirmed that tool is visible.",
+    turnFailedToStart: "Turn failed to start.",
+    turnFailedToStartWithMessage: "Turn failed to start: {{message}}",
+    turnStalled:
+      "Turn stalled after user input. You can continue from the latest visible state.",
+    turnStalledWithMessage: "Turn stalled after user input: {{message}}",
+    fusionTurnStalled:
+      "The merged follow-up did not resume. The thread is interactive again from the latest visible state.",
+    fusionTurnStalledWithMessage:
+      "The merged follow-up did not resume: {{message}}",
+    firstPacketTimeout:
+      "No initial response within {{seconds}}s. Network, proxy, or upstream service load may be causing delay. Please retry.",
+    codexNoProgressStalled:
+      "Codex realtime received no new progress for {{seconds}}s. This turn is quarantined as stalled, so you can stop or resend safely.",
+    networkProxyHint:
+      "Network connection failed. Check network and proxy settings (HTTP_PROXY / HTTPS_PROXY / ALL_PROXY / NO_PROXY), then retry.",
+    networkConnectionHint:
+      "Network connection failed. Please verify your network is reachable, then retry.",
+    proxyBadge: "Proxy",
+    requestTimeoutHint:
+      "Request timed out before receiving a response. Network jitter or upstream service load may be causing delay. Please retry.",
+    completionEmailSent: "Completion email sent.",
+    completionEmailSkipped:
+      "No completed assistant answer was available, so no email was sent.",
+    completionEmailFailedTitle: "Completion email failed",
+    codexCompactionStarted:
+      "Codex is compacting background information. The response will continue after it finishes.",
+    codexCompactionCompleted:
+      "Codex completed background information compaction.",
+    contextCompactionFailed: "Context compaction failed.",
+    contextCompactionFailedWithMessage:
+      "Context compaction failed: {{message}}",
+    claudeManualCompactUnavailable:
+      "No active Claude conversation is available to compact. Open an existing Claude thread, then run /compact again.",
+    specRootContext: {
+      title: "External Spec Root (Priority)",
+      activeRoot: "Active root path",
+      priorityLabel: "Read policy",
+      priorityDetail:
+        "Read this root first, then fall back to workspace openspec.",
+    },
+  },
+};
+
+export default enPart6;

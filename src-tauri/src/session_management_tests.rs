@@ -60,6 +60,11 @@
             matched_workspace_id: None,
             matched_workspace_label: None,
             folder_id: None,
+            exists_on_disk: true,
+            inconsistency_code: None,
+            delete_mode: Some(SESSION_DELETE_MODE_PHYSICAL.to_string()),
+            physical_path: None,
+            children_count: None,
         }
     }
 
@@ -96,6 +101,44 @@
             r#"{{"timestamp":"{message_timestamp}","type":"response_item","payload":{{"type":"message","role":"user","content":[{{"type":"input_text","text":"{message}"}}]}}}}"#
         )
         .expect("write codex fixture message");
+    }
+
+    fn create_claude_project_dir(
+        base_dir: &Path,
+        workspace_path: &Path,
+    ) -> std::path::PathBuf {
+        let encoded = workspace_path
+            .to_string_lossy()
+            .chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || c == '-' {
+                    c
+                } else {
+                    '-'
+                }
+            })
+            .collect::<String>();
+        let project_dir = base_dir.join(encoded);
+        std::fs::create_dir_all(&project_dir).expect("create claude project dir");
+        project_dir
+    }
+
+    fn write_claude_session_fixture(
+        claude_projects_dir: &Path,
+        workspace_path: &Path,
+        session_id: &str,
+        cwd: &Path,
+        message: &str,
+    ) {
+        let project_dir = create_claude_project_dir(claude_projects_dir, workspace_path);
+        let session_path = project_dir.join(format!("{session_id}.jsonl"));
+        let mut file = std::fs::File::create(session_path).expect("create claude fixture");
+        writeln!(
+            file,
+            r#"{{"uuid":"user-1","timestamp":"2026-01-19T12:00:00.000Z","session_id":"{session_id}","cwd":"{}","message":{{"role":"user","content":"{message}"}}}}"#,
+            cwd.to_string_lossy()
+        )
+        .expect("write claude fixture");
     }
 
     fn codex_fixture_timestamp(minutes_before_latest: usize) -> String {
@@ -165,7 +208,7 @@
 
     #[test]
     fn active_keyword_and_archived_queries_require_exhaustive_scan() {
-        assert!(query_requires_exhaustive_scan(
+        assert!(!query_requires_exhaustive_scan(
             &WorkspaceSessionCatalogQuery::default()
         ));
         assert!(query_requires_exhaustive_scan(
@@ -173,6 +216,7 @@
                 keyword: Some("needle".to_string()),
                 engine: None,
                 status: Some("all".to_string()),
+                folder_id: None,
             }
         ));
         assert!(query_requires_exhaustive_scan(
@@ -180,6 +224,15 @@
                 keyword: None,
                 engine: None,
                 status: Some("archived".to_string()),
+                folder_id: None,
+            }
+        ));
+        assert!(query_requires_exhaustive_scan(
+            &WorkspaceSessionCatalogQuery {
+                keyword: None,
+                engine: None,
+                status: Some("active".to_string()),
+                folder_id: Some("folder-a".to_string()),
             }
         ));
         assert!(!query_requires_exhaustive_scan(
@@ -187,6 +240,7 @@
                 keyword: None,
                 engine: None,
                 status: Some("all".to_string()),
+                folder_id: None,
             }
         ));
     }
@@ -863,6 +917,7 @@
                 keyword: Some("needle".to_string()),
                 engine: None,
                 status: Some("all".to_string()),
+                folder_id: None,
             }),
             None,
             Some(10),
@@ -907,6 +962,7 @@
                 keyword: None,
                 engine: None,
                 status: Some("all".to_string()),
+                folder_id: None,
             }),
         )
         .await
@@ -959,6 +1015,136 @@
         ));
         assert!(!should_settle_delete_as_success("permission denied"));
         assert!(!should_settle_delete_as_success("workspace not connected"));
+    }
+
+    #[tokio::test]
+    async fn orphan_metadata_is_listed_for_cleanup_in_all_scope() {
+        let base = std::env::temp_dir().join(format!("session-orphan-list-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&base).expect("create temp dir");
+        let storage_path = base.join("workspaces.json");
+        std::fs::write(&storage_path, "[]").expect("seed storage path");
+        let workspace = workspace_entry("ws-1", "Workspace", "/tmp/ws-1", WorkspaceKind::Main, None);
+        let workspaces = Mutex::new(HashMap::from([(workspace.id.clone(), workspace)]));
+        let sessions = Mutex::new(HashMap::new());
+        let engine_manager = engine::EngineManager::new();
+        let folder = create_workspace_session_folder_core(
+            &workspaces,
+            &storage_path,
+            "ws-1".to_string(),
+            "Stale".to_string(),
+            None,
+        )
+        .await
+        .expect("create folder")
+        .folder;
+        with_catalog_metadata_mutation(&storage_path, "ws-1", |metadata| {
+            metadata
+                .archived_at_by_session_id
+                .insert("codex-missing".to_string(), 42);
+            metadata
+                .folder_id_by_session_id
+                .insert("codex-missing".to_string(), folder.id.clone());
+            Ok(())
+        })
+        .expect("write orphan metadata");
+
+        let page = list_workspace_sessions_core(
+            &workspaces,
+            &sessions,
+            &engine_manager,
+            &storage_path,
+            "ws-1".to_string(),
+            Some(WorkspaceSessionCatalogQuery {
+                keyword: None,
+                engine: None,
+                status: Some("all".to_string()),
+                folder_id: None,
+            }),
+            None,
+            Some(20),
+        )
+        .await
+        .expect("list sessions");
+
+        let orphan = page
+            .data
+            .iter()
+            .find(|entry| entry.session_id == "codex-missing")
+            .expect("orphan entry");
+        assert!(!orphan.exists_on_disk);
+        assert_eq!(
+            orphan.inconsistency_code.as_deref(),
+            Some(SESSION_INCONSISTENCY_MISSING_ON_DISK)
+        );
+        assert_eq!(
+            orphan.delete_mode.as_deref(),
+            Some(SESSION_DELETE_MODE_METADATA_CLEANUP)
+        );
+        assert_eq!(orphan.folder_id.as_deref(), Some(folder.id.as_str()));
+
+        std::fs::remove_dir_all(base).ok();
+    }
+
+    #[tokio::test]
+    async fn delete_missing_session_cleans_orphan_metadata_successfully() {
+        let base = std::env::temp_dir().join(format!("session-orphan-delete-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&base).expect("create temp dir");
+        let storage_path = base.join("workspaces.json");
+        std::fs::write(&storage_path, "[]").expect("seed storage path");
+        let codex_home = base.join("codex-home");
+        let workspace = workspace_with_codex_home("ws-1", "Workspace", "/tmp/ws-1", &codex_home);
+        let workspaces = Mutex::new(HashMap::from([(workspace.id.clone(), workspace)]));
+        let sessions = Mutex::new(HashMap::new());
+        let engine_manager = engine::EngineManager::new();
+        let folder = create_workspace_session_folder_core(
+            &workspaces,
+            &storage_path,
+            "ws-1".to_string(),
+            "Stale".to_string(),
+            None,
+        )
+        .await
+        .expect("create folder")
+        .folder;
+        with_catalog_metadata_mutation(&storage_path, "ws-1", |metadata| {
+            metadata
+                .archived_at_by_session_id
+                .insert("codex-missing".to_string(), 42);
+            metadata
+                .folder_id_by_session_id
+                .insert("codex-missing".to_string(), folder.id.clone());
+            Ok(())
+        })
+        .expect("write orphan metadata");
+
+        let response = delete_workspace_sessions_core(
+            &workspaces,
+            &sessions,
+            &engine_manager,
+            &storage_path,
+            "ws-1".to_string(),
+            vec!["codex-missing".to_string()],
+        )
+        .await
+        .expect("delete missing session");
+
+        assert_eq!(response.results.len(), 1);
+        assert!(response.results[0].ok);
+        assert_eq!(
+            response.results[0].code.as_deref(),
+            Some(SESSION_DELETE_CODE_ALREADY_MISSING_CLEANED)
+        );
+        assert_eq!(response.results[0].deleted_from_disk, Some(false));
+        assert_eq!(response.results[0].metadata_cleaned, Some(true));
+        let metadata = read_catalog_metadata(&storage_path, "ws-1").expect("read metadata");
+        assert!(!metadata
+            .archived_at_by_session_id
+            .contains_key("codex-missing"));
+        assert!(!metadata
+            .folder_id_by_session_id
+            .contains_key("codex-missing"));
+
+        std::fs::remove_dir_all(base).ok();
     }
 
     #[tokio::test]
@@ -1023,6 +1209,192 @@
 
         let ids: Vec<_> = scope.into_iter().map(|entry| entry.id).collect();
         assert_eq!(ids, vec!["worktree-a"]);
+    }
+
+    #[tokio::test]
+    async fn claude_child_workspace_session_is_not_claimed_by_parent_projection() {
+        let base = std::env::temp_dir().join(format!("claude-child-owner-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&base).expect("create temp dir");
+        let storage_path = base.join("workspaces.json");
+        std::fs::write(&storage_path, "[]").expect("seed storage path");
+
+        let repo_path = base.join("repo");
+        let child_path = repo_path.join("sub");
+        std::fs::create_dir_all(&child_path).expect("create child workspace path");
+
+        let claude_home = base.join("claude-home");
+        let claude_projects_dir = claude_home.join("projects");
+        let session_id = "child-claude-session";
+        write_claude_session_fixture(
+            &claude_projects_dir,
+            &repo_path,
+            session_id,
+            &child_path,
+            "child workspace task",
+        );
+
+        let parent = workspace_entry(
+            "parent",
+            "Parent",
+            &repo_path.to_string_lossy(),
+            WorkspaceKind::Main,
+            None,
+        );
+        let child = workspace_entry(
+            "child",
+            "Child",
+            &child_path.to_string_lossy(),
+            WorkspaceKind::Worktree,
+            Some("parent"),
+        );
+        let workspaces = Mutex::new(HashMap::from([
+            (parent.id.clone(), parent),
+            (child.id.clone(), child),
+        ]));
+        let engine_manager = engine::EngineManager::new();
+        engine_manager
+            .set_engine_config(
+                engine::EngineType::Claude,
+                engine::EngineConfig {
+                    home_dir: Some(claude_home.to_string_lossy().to_string()),
+                    ..engine::EngineConfig::default()
+                },
+            )
+            .await;
+
+        let parent_data = build_workspace_scope_catalog_data(
+            &workspaces,
+            &engine_manager,
+            &storage_path,
+            "parent",
+            SessionCatalogScanMode::Bounded(20),
+        )
+        .await
+        .expect("build parent catalog data");
+        let child_data = build_workspace_scope_catalog_data(
+            &workspaces,
+            &engine_manager,
+            &storage_path,
+            "child",
+            SessionCatalogScanMode::Bounded(20),
+        )
+        .await
+        .expect("build child catalog data");
+
+        let parent_claude_entries = parent_data
+            .entries
+            .iter()
+            .filter(|entry| entry.session_id == format!("claude:{session_id}"))
+            .collect::<Vec<_>>();
+        assert_eq!(parent_claude_entries.len(), 1);
+        assert_eq!(parent_claude_entries[0].workspace_id, "child");
+        assert_eq!(
+            parent_claude_entries[0].matched_workspace_id.as_deref(),
+            Some("child")
+        );
+
+        let child_claude_entries = child_data
+            .entries
+            .iter()
+            .filter(|entry| entry.session_id == format!("claude:{session_id}"))
+            .collect::<Vec<_>>();
+        assert_eq!(child_claude_entries.len(), 1);
+        assert_eq!(child_claude_entries[0].workspace_id, "child");
+        assert_eq!(
+            child_claude_entries[0].matched_workspace_id.as_deref(),
+            Some("child")
+        );
+
+        std::fs::remove_dir_all(base).ok();
+    }
+
+    #[tokio::test]
+    async fn claude_independent_nested_workspace_session_is_not_claimed_by_parent_projection() {
+        let base = std::env::temp_dir().join(format!("claude-nested-owner-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&base).expect("create temp dir");
+        let storage_path = base.join("workspaces.json");
+        std::fs::write(&storage_path, "[]").expect("seed storage path");
+
+        let repo_path = base.join("repo");
+        let child_path = repo_path.join("sub");
+        std::fs::create_dir_all(&child_path).expect("create child workspace path");
+
+        let claude_home = base.join("claude-home");
+        let claude_projects_dir = claude_home.join("projects");
+        let session_id = "nested-claude-session";
+        write_claude_session_fixture(
+            &claude_projects_dir,
+            &repo_path,
+            session_id,
+            &child_path,
+            "nested workspace task",
+        );
+
+        let parent = workspace_entry(
+            "parent",
+            "Parent",
+            &repo_path.to_string_lossy(),
+            WorkspaceKind::Main,
+            None,
+        );
+        let child = workspace_entry(
+            "child",
+            "Child",
+            &child_path.to_string_lossy(),
+            WorkspaceKind::Main,
+            None,
+        );
+        let workspaces = Mutex::new(HashMap::from([
+            (parent.id.clone(), parent),
+            (child.id.clone(), child),
+        ]));
+        let engine_manager = engine::EngineManager::new();
+        engine_manager
+            .set_engine_config(
+                engine::EngineType::Claude,
+                engine::EngineConfig {
+                    home_dir: Some(claude_home.to_string_lossy().to_string()),
+                    ..engine::EngineConfig::default()
+                },
+            )
+            .await;
+
+        let parent_data = build_workspace_scope_catalog_data(
+            &workspaces,
+            &engine_manager,
+            &storage_path,
+            "parent",
+            SessionCatalogScanMode::Bounded(20),
+        )
+        .await
+        .expect("build parent catalog data");
+        let child_data = build_workspace_scope_catalog_data(
+            &workspaces,
+            &engine_manager,
+            &storage_path,
+            "child",
+            SessionCatalogScanMode::Bounded(20),
+        )
+        .await
+        .expect("build child catalog data");
+
+        assert!(!parent_data
+            .entries
+            .iter()
+            .any(|entry| entry.session_id == format!("claude:{session_id}")));
+
+        let child_claude_entry = child_data
+            .entries
+            .iter()
+            .find(|entry| entry.session_id == format!("claude:{session_id}"))
+            .expect("child projection should include nested claude session");
+        assert_eq!(child_claude_entry.workspace_id, "child");
+        assert_eq!(
+            child_claude_entry.matched_workspace_id.as_deref(),
+            Some("child")
+        );
+
+        std::fs::remove_dir_all(base).ok();
     }
 
     #[test]
@@ -1090,6 +1462,7 @@
                 keyword: Some("bugfix".to_string()),
                 engine: None,
                 status: Some("active".to_string()),
+                folder_id: None,
             },
         );
 
@@ -1102,6 +1475,71 @@
                 filtered_total: 1,
             }
         );
+    }
+
+    #[test]
+    fn folder_count_summary_uses_filtered_entries_and_parent_folder_inheritance() {
+        let mut parent = catalog_entry("codex:parent", "main", Some("Main"), None);
+        parent.folder_id = Some("folder-a".to_string());
+        parent.title = "Bugfix parent".to_string();
+
+        let mut inherited_child = catalog_entry("codex:child", "main", Some("Main"), None);
+        inherited_child.parent_session_id = Some("codex:parent".to_string());
+        inherited_child.title = "Bugfix child".to_string();
+
+        let mut root = catalog_entry("codex:root", "main", Some("Main"), None);
+        root.title = "Bugfix root".to_string();
+
+        let mut filtered_out = catalog_entry("codex:other", "main", Some("Main"), None);
+        filtered_out.folder_id = Some("folder-a".to_string());
+        filtered_out.title = "Other topic".to_string();
+
+        let query = WorkspaceSessionCatalogQuery {
+            keyword: Some("bugfix".to_string()),
+            engine: None,
+            status: Some("active".to_string()),
+            folder_id: None,
+        };
+        let entries = [parent, inherited_child, root, filtered_out];
+        let filtered_entries = entries
+            .iter()
+            .filter(|entry| entry_matches_query(entry, &query))
+            .collect::<Vec<_>>();
+        let folder_counts = build_catalog_folder_count_summary(&filtered_entries);
+
+        assert_eq!(folder_counts.folder_counts_by_id.get("folder-a"), Some(&2));
+        assert_eq!(folder_counts.unassigned_folder_count, 1);
+    }
+
+    #[test]
+    fn catalog_page_filters_by_effective_folder_before_pagination() {
+        let mut newest = catalog_entry("codex:newest", "main", Some("Main"), None);
+        newest.updated_at = 300;
+
+        let mut parent = catalog_entry("codex:parent", "main", Some("Main"), None);
+        parent.updated_at = 200;
+        parent.folder_id = Some("folder-a".to_string());
+
+        let mut child = catalog_entry("codex:child", "main", Some("Main"), None);
+        child.updated_at = 100;
+        child.parent_session_id = Some("codex:parent".to_string());
+
+        let page = build_catalog_page(
+            vec![newest, parent, child],
+            WorkspaceSessionCatalogQuery {
+                keyword: None,
+                engine: None,
+                status: Some("active".to_string()),
+                folder_id: Some("folder-a".to_string()),
+            },
+            None,
+            Some(1),
+            None,
+        );
+
+        assert_eq!(page.data.len(), 1);
+        assert_eq!(page.data[0].session_id, "codex:parent");
+        assert_eq!(page.next_cursor, Some("offset:1".to_string()));
     }
 
     #[test]

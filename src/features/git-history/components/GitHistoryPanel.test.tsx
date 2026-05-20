@@ -532,15 +532,17 @@ describe("GitHistoryPanel interactions", () => {
   it("opens refresh dialog and refreshes only after confirm", async () => {
     render(<GitHistoryPanel workspace={workspace as never} />);
 
+    const refreshAction = await screen.findByRole("button", { name: "git.refresh" });
     await waitFor(() => {
-      expect(screen.getByText("git.refresh")).toBeTruthy();
+      expect(refreshAction.getAttribute("aria-disabled")).not.toBe("true");
     });
 
     const beforeCount = vi.mocked(tauriService.getGitCommitHistory).mock.calls.length;
-    fireEvent.click(screen.getByText("git.refresh"));
-    expect(screen.getByRole("dialog", { name: "git.historyRefreshDialogTitle" })).toBeTruthy();
+    fireEvent.click(refreshAction);
+    const refreshDialog = screen.getByRole("dialog", { name: "git.historyRefreshDialogTitle" });
+    expect(refreshDialog).toBeTruthy();
 
-    fireEvent.click(screen.getAllByText("git.refresh")[1]!);
+    fireEvent.click(within(refreshDialog).getByRole("button", { name: "git.refresh" }));
 
     await waitFor(() => {
       expect(vi.mocked(tauriService.getGitCommitHistory).mock.calls.length).toBeGreaterThan(beforeCount);

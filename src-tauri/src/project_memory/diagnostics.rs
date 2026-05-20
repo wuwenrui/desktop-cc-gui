@@ -3,9 +3,9 @@ use std::path::{Path, PathBuf};
 
 use super::{
     apply_conversation_turn_projection, is_conversation_turn_record, read_date_file,
-    read_workspace_memories, write_date_file, ProjectMemoryBadFile,
-    ProjectMemoryDiagnosticsResult, ProjectMemoryDuplicateTurnGroup, ProjectMemoryHealthCounts,
-    ProjectMemoryItem, ProjectMemoryReconcileResult,
+    read_workspace_memories, write_date_file, ProjectMemoryBadFile, ProjectMemoryDiagnosticsResult,
+    ProjectMemoryDuplicateTurnGroup, ProjectMemoryHealthCounts, ProjectMemoryItem,
+    ProjectMemoryReconcileResult,
 };
 
 fn is_memory_date_file_for_diagnostics(path: &Path) -> bool {
@@ -26,11 +26,9 @@ fn is_memory_date_file_for_diagnostics(path: &Path) -> bool {
         return false;
     }
     suffix == "json"
-        || (
-            suffix.len() == 8
-                && suffix.ends_with(".json")
-                && suffix[..3].chars().all(|ch| ch.is_ascii_digit())
-        )
+        || (suffix.len() == 8
+            && suffix.ends_with(".json")
+            && suffix[..3].chars().all(|ch| ch.is_ascii_digit()))
 }
 
 fn workspace_memory_files(ws_dir: &Path) -> Result<Vec<PathBuf>, String> {
@@ -92,14 +90,26 @@ fn duplicate_turn_groups(items: &[ProjectMemoryItem]) -> Vec<ProjectMemoryDuplic
         if item.deleted_at.is_some() {
             continue;
         }
-        let Some(thread_id) = item.thread_id.as_ref().filter(|value| !value.trim().is_empty()) else {
+        let Some(thread_id) = item
+            .thread_id
+            .as_ref()
+            .filter(|value| !value.trim().is_empty())
+        else {
             continue;
         };
-        let Some(turn_id) = item.turn_id.as_ref().filter(|value| !value.trim().is_empty()) else {
+        let Some(turn_id) = item
+            .turn_id
+            .as_ref()
+            .filter(|value| !value.trim().is_empty())
+        else {
             continue;
         };
         grouped
-            .entry((item.workspace_id.clone(), thread_id.clone(), turn_id.clone()))
+            .entry((
+                item.workspace_id.clone(),
+                thread_id.clone(),
+                turn_id.clone(),
+            ))
             .or_default()
             .push(item.id.clone());
     }
@@ -169,7 +179,12 @@ fn merge_turn_item(target: &mut ProjectMemoryItem, source: &ProjectMemoryItem) -
         target.user_input = source.user_input.clone();
         changed = true;
     }
-    if target.assistant_response.as_deref().unwrap_or("").trim().is_empty()
+    if target
+        .assistant_response
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
         && source
             .assistant_response
             .as_deref()

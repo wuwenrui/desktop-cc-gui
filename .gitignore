@@ -25,6 +25,7 @@ dist-ssr
 /release-artifacts
 .codex-worktrees/
 .ace-tool/
+.artifacts/
 release-local
 CLAUDE.md
 .claude.github/workflows/release.yml

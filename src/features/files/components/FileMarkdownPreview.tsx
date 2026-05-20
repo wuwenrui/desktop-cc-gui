@@ -14,8 +14,18 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import { useTranslation } from "react-i18next";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { Element } from "hast";
+import {
+  areKatexAssetsReady,
+  detectMathContent,
+  getCachedRehypeKatex,
+  loadKatexAssets,
+  normalizeMarkdownMathForFilePreview,
+  renderLatexFormula,
+} from "../../markdown/markdownMath";
 import { highlightLine } from "../../../utils/syntax";
 import {
   isThemeMutationAttribute,
@@ -30,6 +40,7 @@ import { formatCodeAnnotationLineRange } from "../../code-annotations/utils/code
 
 type FileMarkdownPreviewProps = {
   value: string;
+  documentKey?: string;
   className?: string;
   onAnnotationStart?: (lineRange: CodeAnnotationLineRange) => void;
   annotationDraft?: { lineRange: CodeAnnotationLineRange; body: string } | null;
@@ -52,6 +63,8 @@ type MermaidRenderState =
   | { status: "rendering" }
   | { status: "success"; svg: string }
   | { status: "error"; message: string };
+
+type MermaidBlockTab = "source" | "render";
 
 type FrontmatterField = {
   key: string;
@@ -88,6 +101,50 @@ const ANNOTATABLE_MARKDOWN_NODE_TAGS = new Set<string>([
   "table",
   "ul",
 ]);
+
+const MAX_CACHED_MERMAID_DOCUMENTS = 50;
+const mermaidTabSessionCache = new Map<string, Record<string, MermaidBlockTab>>();
+
+function hashStableString(value: string): string {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+  }
+  return hash.toString(36);
+}
+
+function readCachedMermaidTabs(documentKey: string): Record<string, MermaidBlockTab> {
+  return { ...(mermaidTabSessionCache.get(documentKey) ?? {}) };
+}
+
+function writeCachedMermaidTab(
+  documentKey: string,
+  blockKey: string,
+  activeTab: MermaidBlockTab,
+) {
+  const nextTabs = {
+    ...(mermaidTabSessionCache.get(documentKey) ?? {}),
+    [blockKey]: activeTab,
+  };
+  mermaidTabSessionCache.delete(documentKey);
+  mermaidTabSessionCache.set(documentKey, nextTabs);
+  while (mermaidTabSessionCache.size > MAX_CACHED_MERMAID_DOCUMENTS) {
+    const oldestDocumentKey = mermaidTabSessionCache.keys().next().value;
+    if (!oldestDocumentKey) {
+      break;
+    }
+    mermaidTabSessionCache.delete(oldestDocumentKey);
+  }
+}
+
+function createMermaidBlockKey(
+  node: MarkdownPositionTreeNode,
+  value: string,
+): string {
+  const startLine = node?.position?.start.line ?? 0;
+  const endLine = node?.position?.end.line ?? 0;
+  return `${startLine}:${endLine}:${hashStableString(value)}`;
+}
 
 function extractLanguageTag(className?: string) {
   if (!className) {
@@ -393,14 +450,45 @@ function FileMarkdownCodeBlock({
   );
 }
 
-function FileMarkdownMermaidBlock({
+function isMathCodeLanguage(languageTag: string | null) {
+  return languageTag === "math" || languageTag === "latex" || languageTag === "tex";
+}
+
+function FileMarkdownMathBlock({
   className,
   value,
 }: {
   className?: string;
   value: string;
 }) {
-  const [activeTab, setActiveTab] = useState<"source" | "render">("source");
+  const languageTag = extractLanguageTag(className);
+  const renderedHtml = renderLatexFormula(value);
+
+  if (!renderedHtml) {
+    return <FileMarkdownCodeBlock className={className} value={value} />;
+  }
+
+  return (
+    <div
+      className="fvp-file-markdown-math-block"
+      data-language={languageTag ?? "math"}
+      dangerouslySetInnerHTML={{ __html: renderedHtml }}
+    />
+  );
+}
+
+function FileMarkdownMermaidBlock({
+  activeTab,
+  className,
+  onActiveTabChange,
+  value,
+}: {
+  activeTab: MermaidBlockTab;
+  className?: string;
+  onActiveTabChange: (activeTab: MermaidBlockTab) => void;
+  value: string;
+}) {
+  const { t } = useTranslation();
   const [renderState, setRenderState] = useState<MermaidRenderState>({
     status: "idle",
   });
@@ -463,24 +551,28 @@ function FileMarkdownMermaidBlock({
     <div className="fvp-file-markdown-codeblock fvp-file-markdown-mermaid">
       <div className="fvp-file-markdown-codeblock-label">
         <span>Mermaid</span>
-        <div className="fvp-file-markdown-mermaid-tabs" role="tablist" aria-label="Mermaid block view">
+        <div
+          className="fvp-file-markdown-mermaid-tabs"
+          role="tablist"
+          aria-label={t("files.markdownMermaidTabList")}
+        >
           <button
             type="button"
             role="tab"
             aria-selected={activeTab === "source"}
             className={`fvp-file-markdown-mermaid-tab${activeTab === "source" ? " is-active" : ""}`}
-            onClick={() => setActiveTab("source")}
+            onClick={() => onActiveTabChange("source")}
           >
-            Source
+            {t("files.markdownMermaidSource")}
           </button>
           <button
             type="button"
             role="tab"
             aria-selected={activeTab === "render"}
             className={`fvp-file-markdown-mermaid-tab${activeTab === "render" ? " is-active" : ""}`}
-            onClick={() => setActiveTab("render")}
+            onClick={() => onActiveTabChange("render")}
           >
-            Render
+            {t("files.markdownMermaidRender")}
           </button>
         </div>
       </div>
@@ -500,11 +592,11 @@ function FileMarkdownMermaidBlock({
         />
       ) : renderState.status === "error" ? (
         <div className="fvp-file-markdown-mermaid-status fvp-file-markdown-mermaid-error">
-          Render failed: {renderState.message}
+          {t("files.markdownMermaidRenderFailed", { message: renderState.message })}
         </div>
       ) : (
         <div className="fvp-file-markdown-mermaid-status">
-          Rendering diagram...
+          {t("files.markdownMermaidRendering")}
         </div>
       )}
     </div>
@@ -513,6 +605,7 @@ function FileMarkdownMermaidBlock({
 
 export function FileMarkdownPreview({
   value,
+  documentKey,
   className = "fvp-file-markdown",
   onAnnotationStart,
   annotationDraft = null,
@@ -521,33 +614,92 @@ export function FileMarkdownPreview({
   renderAnnotationMarker,
   annotationActionLabel = "Annotate",
 }: FileMarkdownPreviewProps) {
+  const { t } = useTranslation();
+  const mermaidDocumentKey = useMemo(
+    () => documentKey ?? `inline:${hashStableString(value)}`,
+    [documentKey, value],
+  );
+  const [mermaidBlockTabs, setMermaidBlockTabs] = useState<Record<string, MermaidBlockTab>>(
+    () => readCachedMermaidTabs(mermaidDocumentKey),
+  );
+  useEffect(() => {
+    setMermaidBlockTabs(readCachedMermaidTabs(mermaidDocumentKey));
+  }, [mermaidDocumentKey]);
+  const handleMermaidBlockTabChange = useCallback((
+    blockKey: string,
+    activeTab: MermaidBlockTab,
+  ) => {
+    writeCachedMermaidTab(mermaidDocumentKey, blockKey, activeTab);
+    setMermaidBlockTabs((currentTabs) => {
+      if (currentTabs[blockKey] === activeTab) {
+        return currentTabs;
+      }
+      return {
+        ...currentTabs,
+        [blockKey]: activeTab,
+      };
+    });
+  }, [mermaidDocumentKey]);
   const frontmatter = useMemo(() => extractFrontmatter(value), [value]);
+  const normalizedMarkdown = useMemo(
+    () => normalizeMarkdownMathForFilePreview(frontmatter.body),
+    [frontmatter.body],
+  );
+  const markdownBody = normalizedMarkdown.value;
+  const markdownLineMap = normalizedMarkdown.lineMap;
+  const hasMathContent = useMemo(
+    () => detectMathContent(frontmatter.body) || detectMathContent(markdownBody),
+    [frontmatter.body, markdownBody],
+  );
+  const [katexReady, setKatexReady] = useState(() => areKatexAssetsReady());
+  useEffect(() => {
+    if (!hasMathContent || katexReady) {
+      return;
+    }
+    let cancelled = false;
+    loadKatexAssets().then(() => {
+      if (cancelled) {
+        return;
+      }
+      setKatexReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [hasMathContent, katexReady]);
   const rehypePlugins = useMemo(
-    () => [
-      rehypeRaw,
-      [rehypeSanitize, {
-        ...defaultSchema,
-        tagNames: [
-          ...(defaultSchema.tagNames ?? []),
-          "details",
-          "summary",
-          "abbr",
-          "mark",
-          "ins",
-          "del",
-          "sub",
-          "sup",
-          "kbd",
-          "var",
-          "samp",
-        ],
-        attributes: {
-          ...defaultSchema.attributes,
-          "*": [...(defaultSchema.attributes?.["*"] ?? []), "className", "class"],
-        },
-      }],
-    ] as Parameters<typeof ReactMarkdown>[0]["rehypePlugins"],
-    [],
+    () => {
+      const plugins: unknown[] = [
+        rehypeRaw,
+        [rehypeSanitize, {
+          ...defaultSchema,
+          tagNames: [
+            ...(defaultSchema.tagNames ?? []),
+            "details",
+            "summary",
+            "abbr",
+            "mark",
+            "ins",
+            "del",
+            "sub",
+            "sup",
+            "kbd",
+            "var",
+            "samp",
+          ],
+          attributes: {
+            ...defaultSchema.attributes,
+            "*": [...(defaultSchema.attributes?.["*"] ?? []), "className", "class"],
+          },
+        }],
+      ];
+      const cachedRehypeKatex = getCachedRehypeKatex();
+      if (katexReady && cachedRehypeKatex) {
+        plugins.push(cachedRehypeKatex);
+      }
+      return plugins as Parameters<typeof ReactMarkdown>[0]["rehypePlugins"];
+    },
+    [katexReady],
   );
 
   const handleAnchorClick = useCallback((event: MouseEvent, href?: string) => {
@@ -572,7 +724,13 @@ export function FileMarkdownPreview({
     children: ReactNode,
     props?: Record<string, unknown>,
   ) => {
-    const lineRange = resolveMarkdownNodeLineRange(node, frontmatter.bodyStartLine);
+    const normalizedLineRange = resolveMarkdownNodeLineRange(node, 1);
+    const lineRange = normalizedLineRange
+      ? {
+          startLine: (markdownLineMap[normalizedLineRange.startLine - 1] ?? normalizedLineRange.startLine) + frontmatter.bodyStartLine - 1,
+          endLine: (markdownLineMap[normalizedLineRange.endLine - 1] ?? normalizedLineRange.endLine) + frontmatter.bodyStartLine - 1,
+        }
+      : null;
     const content = createElement(tagName, props, children);
     if (!lineRange) {
       return content;
@@ -581,7 +739,7 @@ export function FileMarkdownPreview({
       <MarkdownAnnotatableBlock
         lineRange={lineRange}
         node={node}
-        bodyStartLine={frontmatter.bodyStartLine}
+        bodyStartLine={1}
         onAnnotationStart={onAnnotationStart}
         annotationDraft={annotationDraft}
         annotations={annotations}
@@ -597,6 +755,7 @@ export function FileMarkdownPreview({
     annotationDraft,
     annotations,
     frontmatter.bodyStartLine,
+    markdownLineMap,
     onAnnotationStart,
     renderAnnotationDraft,
     renderAnnotationMarker,
@@ -631,11 +790,26 @@ export function FileMarkdownPreview({
       if (!codeClassName && !codeValue) {
         return renderAnnotatableBlock("div", node, <pre>{children}</pre>);
       }
-      if (extractLanguageTag(codeClassName) === "mermaid") {
+      const languageTag = extractLanguageTag(codeClassName);
+      if (languageTag === "mermaid") {
+        const mermaidBlockKey = createMermaidBlockKey(node, codeValue);
         return renderAnnotatableBlock(
           "div",
           node,
           <FileMarkdownMermaidBlock
+            activeTab={mermaidBlockTabs[mermaidBlockKey] ?? "source"}
+            className={codeClassName}
+            onActiveTabChange={(nextActiveTab) =>
+              handleMermaidBlockTabChange(mermaidBlockKey, nextActiveTab)}
+            value={codeValue}
+          />,
+        );
+      }
+      if (isMathCodeLanguage(languageTag)) {
+        return renderAnnotatableBlock(
+          "div",
+          node,
+          <FileMarkdownMathBlock
             className={codeClassName}
             value={codeValue}
           />,
@@ -650,13 +824,20 @@ export function FileMarkdownPreview({
         />,
       );
     },
-  }), [handleAnchorClick, renderAnnotatableBlock]);
+  }), [
+    handleAnchorClick,
+    handleMermaidBlockTabChange,
+    mermaidBlockTabs,
+    renderAnnotatableBlock,
+  ]);
 
   return (
     <div className={className} data-testid="file-markdown-preview">
       {frontmatter.fields.length > 0 ? (
         <section className="fvp-file-markdown-frontmatter" data-testid="file-markdown-frontmatter">
-          <div className="fvp-file-markdown-frontmatter-label">Metadata</div>
+          <div className="fvp-file-markdown-frontmatter-label">
+            {t("files.markdownFrontmatterLabel")}
+          </div>
           <dl className="fvp-file-markdown-frontmatter-grid">
             {frontmatter.fields.map((field) => (
               <div key={field.key} className="fvp-file-markdown-frontmatter-row">
@@ -668,11 +849,11 @@ export function FileMarkdownPreview({
         </section>
       ) : null}
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={rehypePlugins}
         components={components}
       >
-        {frontmatter.body}
+        {markdownBody}
       </ReactMarkdown>
     </div>
   );

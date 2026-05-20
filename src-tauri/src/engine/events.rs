@@ -998,8 +998,7 @@ mod tests {
                 engine_event_to_app_server_event(&event, "thread-contract", "item-contract")
                     .expect("canonical event maps to app-server payload");
             assert_eq!(
-                mapped.workspace_id,
-                "ws-contract",
+                mapped.workspace_id, "ws-contract",
                 "workspace should remain attached for {expected_method}"
             );
             assert_eq!(

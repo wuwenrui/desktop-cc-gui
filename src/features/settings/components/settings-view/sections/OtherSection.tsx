@@ -3,6 +3,7 @@ import { HistoryCompletionSettings } from "../../HistoryCompletionSettings";
 import { SessionRadarHistoryManagementSection } from "../../SessionRadarHistoryManagementSection";
 import type { SessionRadarEntry } from "../../../../session-activity/hooks/useSessionRadarFeed";
 import type { SessionRadarHistoryDeleteResult } from "../../../../session-activity/utils/sessionRadarHistoryManagement";
+import { CostBudgetSettingsSection } from "./CostBudgetSettingsSection";
 
 type OtherSectionProps = {
   title: string;
@@ -24,6 +25,8 @@ export function OtherSection({
       <div className="settings-section-title">{title}</div>
       <div className="settings-section-subtitle">{description}</div>
       <HistoryCompletionSettings />
+      <Separator className="my-4" />
+      <CostBudgetSettingsSection />
       <Separator className="my-4" />
       <SessionRadarHistoryManagementSection
         entries={sessionRadarRecentCompletedSessions}

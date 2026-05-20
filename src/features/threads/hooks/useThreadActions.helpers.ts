@@ -2,6 +2,13 @@ import type { ConversationItem, ThreadSummary } from "../../../types";
 import { previewThreadName } from "../../../utils/threadItems";
 import { asNumber, asString } from "../utils/threadNormalize";
 import { hasCodexBackgroundHelperPreview } from "../utils/codexBackgroundHelpers";
+import {
+  isWeakSessionDisplayTitle,
+  mergeSessionDisplaySummary,
+  normalizeSessionDisplayTitle,
+  projectSessionDisplaySummaries,
+  selectProjectedSessionDisplayName,
+} from "../utils/sessionDisplayProjection";
 import { matchesWorkspacePath } from "./useThreadActions.workspacePath";
 
 const CLAUDE_HISTORY_MESSAGE_ID_REGEX =
@@ -31,7 +38,9 @@ export type CodexCatalogSessionSummary = {
   folderId?: string | null;
 };
 
-export function normalizeThreadListPartialSource(value: unknown): string | null {
+export function normalizeThreadListPartialSource(
+  value: unknown,
+): string | null {
   if (typeof value !== "string") {
     return null;
   }
@@ -45,7 +54,10 @@ export function hasHealthyThreadSummaries(
   return (
     Array.isArray(threads) &&
     threads.length > 0 &&
-    !threads.some((thread) => thread.isDegraded)
+    !threads.some(
+      (thread) =>
+        thread.isDegraded || thread.partialSource || thread.degradedReason,
+    )
   );
 }
 
@@ -68,7 +80,9 @@ export function isWorkspaceNotConnectedError(error: unknown): boolean {
 }
 
 function normalizeThreadResumeErrorMessage(error: unknown): string {
-  return (error instanceof Error ? error.message : String(error)).trim().toLowerCase();
+  return (error instanceof Error ? error.message : String(error))
+    .trim()
+    .toLowerCase();
 }
 
 export function isThreadResumeNotFoundError(error: unknown): boolean {
@@ -89,13 +103,22 @@ export function inferThreadEngineSource(
     return summary.engineSource;
   }
   const normalized = threadId.trim().toLowerCase();
-  if (normalized.startsWith("claude:") || normalized.startsWith("claude-pending-")) {
+  if (
+    normalized.startsWith("claude:") ||
+    normalized.startsWith("claude-pending-")
+  ) {
     return "claude";
   }
-  if (normalized.startsWith("gemini:") || normalized.startsWith("gemini-pending-")) {
+  if (
+    normalized.startsWith("gemini:") ||
+    normalized.startsWith("gemini-pending-")
+  ) {
     return "gemini";
   }
-  if (normalized.startsWith("opencode:") || normalized.startsWith("opencode-pending-")) {
+  if (
+    normalized.startsWith("opencode:") ||
+    normalized.startsWith("opencode-pending-")
+  ) {
     return "opencode";
   }
   return "codex";
@@ -120,13 +143,14 @@ export function selectReplacementThreadSummary(params: {
   if (candidates.length === 0) {
     return null;
   }
-  const scored = scoreReplacementThreadCandidates(params)
-    .sort((left, right) => {
+  const scored = scoreReplacementThreadCandidates(params).sort(
+    (left, right) => {
       if (right.score !== left.score) {
         return right.score - left.score;
       }
       return right.entry.updatedAt - left.entry.updatedAt;
-    });
+    },
+  );
   const best = scored[0];
   const next = scored[1];
   if (!best) {
@@ -153,9 +177,7 @@ export function selectRecoveredNewThreadSummary(params: {
   }
 
   const previousIds = new Set(
-    params.previousSummaries
-      .map((entry) => entry.id.trim())
-      .filter(Boolean),
+    params.previousSummaries.map((entry) => entry.id.trim()).filter(Boolean),
   );
   const newlyDiscoveredCandidates = candidates.filter(
     (entry) => !previousIds.has(entry.id.trim()),
@@ -193,7 +215,11 @@ function scoreReplacementThreadCandidate(
   if (staleName && entry.name.trim() === staleName) {
     score += 100;
   }
-  if (staleSummary?.source && entry.source && staleSummary.source === entry.source) {
+  if (
+    staleSummary?.source &&
+    entry.source &&
+    staleSummary.source === entry.source
+  ) {
     score += 20;
   }
   if (
@@ -220,7 +246,8 @@ export function listReplacementThreadCandidates(params: {
 }): ThreadSummary[] {
   const { staleThreadId, summaries } = params;
   const staleSummary =
-    params.staleSummary ?? summaries.find((entry) => entry.id === staleThreadId);
+    params.staleSummary ??
+    summaries.find((entry) => entry.id === staleThreadId);
   const staleEngine = inferThreadEngineSource(staleThreadId, staleSummary);
   return summaries.filter((entry) => {
     if (!entry.id || entry.id === staleThreadId) {
@@ -281,13 +308,17 @@ function lineLooksLikeThreadRecoveryError(line: string): boolean {
   if (!THREAD_RECOVERY_PATTERNS.some((pattern) => lowered.includes(pattern))) {
     return false;
   }
-  return THREAD_RECOVERY_ERROR_PREFIXES.some((prefix) => lowered.startsWith(prefix));
+  return THREAD_RECOVERY_ERROR_PREFIXES.some((prefix) =>
+    lowered.startsWith(prefix),
+  );
 }
 
 function lineLooksLikeRuntimeReconnectError(line: string): boolean {
   const lowered = line.toLowerCase();
   return (
-    RUNTIME_PIPE_DISCONNECT_PATTERNS.some((pattern) => lowered.includes(pattern)) ||
+    RUNTIME_PIPE_DISCONNECT_PATTERNS.some((pattern) =>
+      lowered.includes(pattern),
+    ) ||
     lowered.includes("workspace not connected") ||
     lineLooksLikeThreadRecoveryError(line)
   );
@@ -306,7 +337,9 @@ function getRuntimeReconnectCandidate(text: string): string | null {
     return null;
   }
   if (lines.length === 1) {
-    return lineLooksLikeRuntimeReconnectError(lines[0] ?? "") ? (lines[0] ?? null) : null;
+    return lineLooksLikeRuntimeReconnectError(lines[0] ?? "")
+      ? (lines[0] ?? null)
+      : null;
   }
   if (!lines.every((line) => lineLooksLikeRuntimeReconnectError(line))) {
     return null;
@@ -336,26 +369,32 @@ function buildComparableRecoveryMessageSignature(
   ].join("\u0000");
 }
 
-function collectComparableRecoveryMessageSequence(items: ConversationItem[]): string[] {
+function collectComparableRecoveryMessageSequence(
+  items: ConversationItem[],
+): string[] {
   return items
     .filter(
-      (
-        item,
-      ): item is Extract<ConversationItem, { kind: "message" }> =>
+      (item): item is Extract<ConversationItem, { kind: "message" }> =>
         item.kind === "message" && !isTransientReconnectAssistantMessage(item),
     )
     .map(buildComparableRecoveryMessageSignature)
     .filter(Boolean);
 }
 
-function isComparableMessageSequencePrefix(prefix: string[], target: string[]): boolean {
+function isComparableMessageSequencePrefix(
+  prefix: string[],
+  target: string[],
+): boolean {
   if (prefix.length === 0 || prefix.length > target.length) {
     return false;
   }
   return prefix.every((value, index) => value === target[index]);
 }
 
-function countComparableMessageSuffixOverlap(left: string[], right: string[]): number {
+function countComparableMessageSuffixOverlap(
+  left: string[],
+  right: string[],
+): number {
   const maxLength = Math.min(left.length, right.length);
   let overlap = 0;
   while (overlap < maxLength) {
@@ -378,7 +417,8 @@ function scoreThreadRecoveryCandidateByMessages(
   candidateItems: ConversationItem[],
 ): number {
   const staleSequence = collectComparableRecoveryMessageSequence(staleItems);
-  const candidateSequence = collectComparableRecoveryMessageSequence(candidateItems);
+  const candidateSequence =
+    collectComparableRecoveryMessageSequence(candidateItems);
   if (staleSequence.length === 0 || candidateSequence.length === 0) {
     return 0;
   }
@@ -401,16 +441,22 @@ function scoreThreadRecoveryCandidateByMessages(
   if (messageSuffixOverlap >= 2) {
     return 2_000 + messageSuffixOverlap;
   }
-  const staleUserSequence = extractComparableRecoveryUserSequence(staleSequence);
-  const candidateUserSequence = extractComparableRecoveryUserSequence(candidateSequence);
+  const staleUserSequence =
+    extractComparableRecoveryUserSequence(staleSequence);
+  const candidateUserSequence =
+    extractComparableRecoveryUserSequence(candidateSequence);
   if (
     staleUserSequence.length > 0 &&
     staleUserSequence.length === candidateUserSequence.length &&
-    staleUserSequence.every((value, index) => value === candidateUserSequence[index])
+    staleUserSequence.every(
+      (value, index) => value === candidateUserSequence[index],
+    )
   ) {
     return 1_500 + staleUserSequence.length;
   }
-  if (isComparableMessageSequencePrefix(staleUserSequence, candidateUserSequence)) {
+  if (
+    isComparableMessageSequencePrefix(staleUserSequence, candidateUserSequence)
+  ) {
     return 1_000 + staleUserSequence.length;
   }
   const userSuffixOverlap = countComparableMessageSuffixOverlap(
@@ -470,7 +516,9 @@ export function mergeRecoveredThreadSummaries(
       mergedById.set(entry.id, entry);
     }
   });
-  return Array.from(mergedById.values()).sort((left, right) => right.updatedAt - left.updatedAt);
+  return Array.from(mergedById.values()).sort(
+    (left, right) => right.updatedAt - left.updatedAt,
+  );
 }
 
 export function isUserConversationMessage(
@@ -557,10 +605,14 @@ export function resolveClaudeRewindMessageIdFromHistory(params: {
       (item) => item.text === targetText,
     );
     if (historyMatches.length >= targetOccurrenceByText) {
-      return historyMatches[targetOccurrenceByText - 1]?.id ?? requestedMessageId;
+      return (
+        historyMatches[targetOccurrenceByText - 1]?.id ?? requestedMessageId
+      );
     }
     if (historyMatches.length > 0) {
-      return historyMatches[historyMatches.length - 1]?.id ?? requestedMessageId;
+      return (
+        historyMatches[historyMatches.length - 1]?.id ?? requestedMessageId
+      );
     }
   }
 
@@ -569,10 +621,14 @@ export function resolveClaudeRewindMessageIdFromHistory(params: {
   if (fallbackIndex >= 0 && fallbackIndex < historyUserItems.length) {
     return historyUserItems[fallbackIndex]?.id ?? requestedMessageId;
   }
-  return historyUserItems[historyUserItems.length - 1]?.id ?? requestedMessageId;
+  return (
+    historyUserItems[historyUserItems.length - 1]?.id ?? requestedMessageId
+  );
 }
 
-export function findLatestHistoryUserMessageId(items: ConversationItem[]): string {
+export function findLatestHistoryUserMessageId(
+  items: ConversationItem[],
+): string {
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = items[index];
     if (!isUserConversationMessage(item)) {
@@ -587,7 +643,9 @@ export function findLatestHistoryUserMessageId(items: ConversationItem[]): strin
   return "";
 }
 
-export function findFirstHistoryUserMessageId(items: ConversationItem[]): string {
+export function findFirstHistoryUserMessageId(
+  items: ConversationItem[],
+): string {
   for (let index = 0; index < items.length; index += 1) {
     const item = items[index];
     if (!isUserConversationMessage(item)) {
@@ -619,7 +677,9 @@ export function extractThreadSizeBytes(record: Record<string, unknown>) {
   );
 }
 
-function normalizeGeminiSessionSummary(value: unknown): GeminiSessionSummary | null {
+function normalizeGeminiSessionSummary(
+  value: unknown,
+): GeminiSessionSummary | null {
   if (!value || typeof value !== "object") {
     return null;
   }
@@ -637,7 +697,9 @@ function normalizeGeminiSessionSummary(value: unknown): GeminiSessionSummary | n
   };
 }
 
-export function normalizeGeminiSessionSummaries(value: unknown): GeminiSessionSummary[] {
+export function normalizeGeminiSessionSummaries(
+  value: unknown,
+): GeminiSessionSummary[] {
   if (!Array.isArray(value)) {
     return [];
   }
@@ -683,10 +745,14 @@ export function mergeGeminiSessionSummaries(
       mergedById.set(id, next);
     }
   });
-  return Array.from(mergedById.values()).sort((a, b) => b.updatedAt - a.updatedAt);
+  return Array.from(mergedById.values()).sort(
+    (a, b) => b.updatedAt - a.updatedAt,
+  );
 }
 
-function normalizeCatalogEngine(engine: CodexCatalogSessionSummary["engine"]): ThreadSummary["engineSource"] {
+function normalizeCatalogEngine(
+  engine: CodexCatalogSessionSummary["engine"],
+): ThreadSummary["engineSource"] {
   switch (engine) {
     case "claude":
     case "codex":
@@ -698,17 +764,6 @@ function normalizeCatalogEngine(engine: CodexCatalogSessionSummary["engine"]): T
   }
 }
 
-const GENERIC_CLAUDE_TITLE_PATTERN = /^(claude session|agent\s+\d+)$/i;
-
-function normalizeSummaryTitle(value: string | null | undefined): string {
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function isGenericClaudeSummaryTitle(value: string | null | undefined): boolean {
-  const normalized = normalizeSummaryTitle(value);
-  return !normalized || GENERIC_CLAUDE_TITLE_PATTERN.test(normalized);
-}
-
 function selectStableThreadSummaryName(params: {
   previous?: ThreadSummary;
   nextName: string;
@@ -716,46 +771,14 @@ function selectStableThreadSummaryName(params: {
   customTitle?: string;
   engineSource: ThreadSummary["engineSource"];
 }): string {
-  const mappedTitle = normalizeSummaryTitle(params.mappedTitle);
-  if (mappedTitle) {
-    return mappedTitle;
-  }
-  const customTitle = normalizeSummaryTitle(params.customTitle);
-  if (customTitle) {
-    return customTitle;
-  }
-  if (
-    params.engineSource === "claude" &&
-    params.previous &&
-    !isGenericClaudeSummaryTitle(params.previous.name) &&
-    isGenericClaudeSummaryTitle(params.nextName)
-  ) {
-    return params.previous.name;
-  }
-  return params.nextName;
+  return selectProjectedSessionDisplayName(params);
 }
 
 export function mergeThreadSummaryPreservingStableIdentity(
   previous: ThreadSummary | undefined,
   next: ThreadSummary,
 ): ThreadSummary {
-  if (!previous || previous.id !== next.id) {
-    return next;
-  }
-  const engineSource = next.engineSource ?? previous.engineSource;
-  const merged: ThreadSummary = {
-    ...previous,
-    ...next,
-    engineSource,
-    name: selectStableThreadSummaryName({
-      previous,
-      nextName: next.name,
-      engineSource,
-    }),
-    parentThreadId: next.parentThreadId ?? previous.parentThreadId ?? null,
-    folderId: next.folderId ?? previous.folderId ?? null,
-  };
-  return merged;
+  return mergeSessionDisplaySummary(previous, next);
 }
 
 export function mergeCodexCatalogSessionSummaries(
@@ -771,7 +794,7 @@ export function mergeCodexCatalogSessionSummaries(
   const mergedById = new Map<string, ThreadSummary>();
   baseSummaries.forEach((entry) => mergedById.set(entry.id, entry));
   codexSessions.forEach((session) => {
-    const title = session.title.trim();
+    const title = normalizeSessionDisplayTitle(session.title);
     const engineSource = normalizeCatalogEngine(session.engine);
     if (!title) {
       return;
@@ -788,7 +811,7 @@ export function mergeCodexCatalogSessionSummaries(
         ? session.parentSessionId.startsWith("claude:")
           ? session.parentSessionId
           : `claude:${session.parentSessionId}`
-        : session.parentSessionId ?? null;
+        : (session.parentSessionId ?? null);
     const mappedTitle = mappedTitles[session.sessionId];
     const customTitle = getCustomName(workspaceId, session.sessionId);
     const fallbackTitle = previewThreadName(
@@ -821,33 +844,80 @@ export function mergeCodexCatalogSessionSummaries(
       parentThreadId,
     };
     if (!prev || next.updatedAt >= prev.updatedAt) {
-      mergedById.set(session.sessionId, mergeThreadSummaryPreservingStableIdentity(prev, next));
+      mergedById.set(
+        session.sessionId,
+        mergeSessionDisplaySummary(prev, next, { mappedTitle, customTitle }),
+      );
     }
   });
-  return Array.from(mergedById.values()).sort((a, b) => b.updatedAt - a.updatedAt);
+  return Array.from(mergedById.values()).sort(
+    (a, b) => b.updatedAt - a.updatedAt,
+  );
 }
 
-function isPendingCodexThreadId(threadId: string): boolean {
-  return threadId.trim().toLowerCase().startsWith("codex-pending-");
+/**
+ * 用于 `isRetainableEngineContinuitySummary` 的引擎特定 pending 前缀映射。
+ *
+ * 设计契约：
+ * - Claude / Codex / OpenCode：检查对应 `<engine>-pending-` 前缀。
+ * - Pending thread 是短期占位态，不能被 last-good seed 复活为历史会话。
+ */
+type EngineSource = NonNullable<ThreadSummary["engineSource"]>;
+
+const PENDING_PREFIXES_BY_ENGINE: Partial<Record<EngineSource, string>> = {
+  claude: "claude-pending-",
+  codex: "codex-pending-",
+  opencode: "opencode-pending-",
+};
+
+function isPendingEngineThreadId(
+  engine: EngineSource,
+  threadId: string,
+): boolean {
+  const prefix = PENDING_PREFIXES_BY_ENGINE[engine];
+  if (!prefix) {
+    return false;
+  }
+  return threadId.trim().toLowerCase().startsWith(prefix);
 }
 
-function isRetainableCodexContinuitySummary(summary: ThreadSummary): boolean {
-  if (inferThreadEngineSource(summary.id, summary) !== "codex") {
+/**
+ * 引擎归一化的 retainable 判定：用于决定 last-good 中某条 summary 是否仍可作为
+ * sidebar 兜底 seed 的候选。规则跨引擎共享：
+ *
+ * - 引擎归属必须匹配 `engine` 参数；
+ * - shared / archived 条目 MUST 拒绝；
+ * - pending 前缀条目 MUST 拒绝（避免把短期占位 thread 当历史）。
+ *
+ * 既有 `isRetainableClaudeContinuitySummary` / `isRetainableCodexContinuitySummary`
+ * 现已收敛到该通用版本的薄包装，确保跨引擎行为收口在同一处。
+ */
+export function isRetainableEngineContinuitySummary(
+  engine: EngineSource,
+  summary: ThreadSummary,
+): boolean {
+  if (inferThreadEngineSource(summary.id, summary) !== engine) {
     return false;
   }
   if (summary.threadKind === "shared") {
     return false;
   }
-  if (isPendingCodexThreadId(summary.id)) {
+  if ((summary.archivedAt ?? 0) > 0) {
     return false;
   }
-  if ((summary.archivedAt ?? 0) > 0) {
+  if (isPendingEngineThreadId(engine, summary.id)) {
     return false;
   }
   return true;
 }
 
-export function shouldApplyCodexSidebarContinuity(partialSource: string | null): boolean {
+function isRetainableCodexContinuitySummary(summary: ThreadSummary): boolean {
+  return isRetainableEngineContinuitySummary("codex", summary);
+}
+
+export function shouldApplyCodexSidebarContinuity(
+  partialSource: string | null,
+): boolean {
   if (!partialSource) {
     return false;
   }
@@ -856,12 +926,12 @@ export function shouldApplyCodexSidebarContinuity(partialSource: string | null):
     return false;
   }
   return (
-    normalized.includes("thread-list")
-    || normalized.includes("codex")
-    || normalized.includes("workspace-not-connected")
-    || normalized.includes("runtime unavailable")
-    || normalized.includes("guarded-recovery")
-    || normalized.includes("local-session-scan")
+    normalized.includes("thread-list") ||
+    normalized.includes("codex") ||
+    normalized.includes("workspace-not-connected") ||
+    normalized.includes("runtime unavailable") ||
+    normalized.includes("guarded-recovery") ||
+    normalized.includes("local-session-scan")
   );
 }
 
@@ -875,28 +945,26 @@ export function mergeDegradedCodexContinuitySummaries(
   const mergedById = new Map<string, ThreadSummary>();
   baseSummaries.forEach((entry) => mergedById.set(entry.id, entry));
   fallbackSummaries.forEach((entry) => {
-    if (!isRetainableCodexContinuitySummary(entry) || mergedById.has(entry.id)) {
+    if (
+      !isRetainableCodexContinuitySummary(entry) ||
+      mergedById.has(entry.id)
+    ) {
       return;
     }
     mergedById.set(entry.id, entry);
   });
-  return Array.from(mergedById.values()).sort((left, right) => right.updatedAt - left.updatedAt);
+  return Array.from(mergedById.values()).sort(
+    (left, right) => right.updatedAt - left.updatedAt,
+  );
 }
 
 function isRetainableClaudeContinuitySummary(summary: ThreadSummary): boolean {
-  if (inferThreadEngineSource(summary.id, summary) !== "claude") {
-    return false;
-  }
-  if (summary.threadKind === "shared") {
-    return false;
-  }
-  if ((summary.archivedAt ?? 0) > 0) {
-    return false;
-  }
-  return true;
+  return isRetainableEngineContinuitySummary("claude", summary);
 }
 
-export function shouldApplyClaudeSidebarContinuity(partialSource: string | null): boolean {
+export function shouldApplyClaudeSidebarContinuity(
+  partialSource: string | null,
+): boolean {
   if (!partialSource) {
     return false;
   }
@@ -905,12 +973,12 @@ export function shouldApplyClaudeSidebarContinuity(partialSource: string | null)
     return false;
   }
   return (
-    normalized.includes("claude")
-    || normalized.includes("catalog")
-    || normalized.includes("first-page")
-    || normalized.includes("empty-thread-list")
-    || normalized.includes("partial")
-    || normalized.includes("timeout")
+    normalized.includes("claude") ||
+    normalized.includes("catalog") ||
+    normalized.includes("first-page") ||
+    normalized.includes("empty-thread-list") ||
+    normalized.includes("partial") ||
+    normalized.includes("timeout")
   );
 }
 
@@ -922,23 +990,122 @@ export function mergeDegradedClaudeContinuitySummaries(
   if (fallbackSummaries.length === 0) {
     return baseSummaries;
   }
-  const mergedById = new Map<string, ThreadSummary>();
-  baseSummaries.forEach((entry) => mergedById.set(entry.id, entry));
-  fallbackSummaries.forEach((entry) => {
-    if (excludedThreadIds.has(entry.id) || !isRetainableClaudeContinuitySummary(entry)) {
-      return;
-    }
-    const previous = mergedById.get(entry.id);
-    if (previous) {
-      mergedById.set(entry.id, mergeThreadSummaryPreservingStableIdentity(entry, previous));
-      return;
-    }
-    mergedById.set(entry.id, entry);
+  return projectSessionDisplaySummaries({
+    baseSummaries,
+    candidateSummaries: fallbackSummaries,
+    excludedThreadIds,
+    canRetainCandidate: isRetainableClaudeContinuitySummary,
+    mergeOlderCandidates: true,
   });
-  return Array.from(mergedById.values()).sort((left, right) => right.updatedAt - left.updatedAt);
 }
 
-export async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
+export function filterRetainableContinuitySummaries(
+  summaries: ThreadSummary[],
+  excludedThreadIds: ReadonlySet<string> = new Set(),
+): ThreadSummary[] {
+  return summaries.filter((summary) => {
+    if (excludedThreadIds.has(summary.id)) {
+      return false;
+    }
+    const engine = inferThreadEngineSource(summary.id, summary);
+    if (engine !== "claude" && engine !== "codex" && engine !== "opencode") {
+      return summary.threadKind !== "shared" && (summary.archivedAt ?? 0) <= 0;
+    }
+    return isRetainableEngineContinuitySummary(engine, summary);
+  });
+}
+
+/**
+ * 引擎归一化的 last-good seed：当指定引擎的 native listing 子请求 timeout / null / rejected 时，
+ * 把 last-good 列表里仍然适用的对应引擎条目（非 archived、非 shared、非 pending、未被 hidden binding
+ * 排除）seed 进当前正在合并的 mergedById。这是 partial-source merge 之前的第一道防线，避免下游
+ * catalog merge / archive merge 在只看到空子源时形成残缺基底。
+ *
+ * 设计契约（详见 `openspec/specs/sidebar-list-timeout-fallback/spec.md`）：
+ * - engine 联合类型仅含已纳入主链路 seed 的引擎（"claude" | "opencode"）。
+ * - Codex 走 `mergeCodexCatalogSessionSummaries` 的空源早退路径，主链路无需 seed。
+ * - Gemini 走 fire-and-forget 独立异步任务，timeout 时不触碰 mergedById，主链路无需 seed。
+ * - 任何后续把 Codex / Gemini 改成主链路同步合并的重构，MUST 重新评估该 engine 联合类型并补 seed。
+ *
+ * 该函数原地修改 mergedById；返回实际 seed 进去的条目数，便于诊断与测试。
+ */
+export function seedLastGoodEngineIntoMerged(
+  engine: "claude" | "opencode",
+  mergedById: Map<string, ThreadSummary>,
+  lastGoodSummaries: ThreadSummary[],
+  excludedThreadIds: ReadonlySet<string> = new Set(),
+): number {
+  if (lastGoodSummaries.length === 0) {
+    return 0;
+  }
+  let seeded = 0;
+  for (const entry of lastGoodSummaries) {
+    if (excludedThreadIds.has(entry.id)) {
+      continue;
+    }
+    if (!isRetainableEngineContinuitySummary(engine, entry)) {
+      continue;
+    }
+    const previous = mergedById.get(entry.id);
+    if (previous && previous.updatedAt >= entry.updatedAt) {
+      if (
+        isWeakSessionDisplayTitle(previous.name) &&
+        !isWeakSessionDisplayTitle(entry.name)
+      ) {
+        mergedById.set(entry.id, mergeSessionDisplaySummary(entry, previous));
+        seeded += 1;
+      }
+      continue;
+    }
+    mergedById.set(
+      entry.id,
+      previous ? mergeSessionDisplaySummary(previous, entry) : entry,
+    );
+    seeded += 1;
+  }
+  return seeded;
+}
+
+/**
+ * Claude 引擎兜底 seed 的薄包装：行为 100% 等价于
+ * `seedLastGoodEngineIntoMerged("claude", ...)`，保留为兼容 1f2f87f1 修复中既有调用点与
+ * `useThreadActions.timeout-fallback.test.tsx` 中的测试入口。
+ */
+export function seedLastGoodClaudeIntoMerged(
+  mergedById: Map<string, ThreadSummary>,
+  lastGoodSummaries: ThreadSummary[],
+  excludedThreadIds: ReadonlySet<string> = new Set(),
+): number {
+  return seedLastGoodEngineIntoMerged(
+    "claude",
+    mergedById,
+    lastGoodSummaries,
+    excludedThreadIds,
+  );
+}
+
+/**
+ * OpenCode 引擎兜底 seed 的薄包装：行为 100% 等价于
+ * `seedLastGoodEngineIntoMerged("opencode", ...)`，用于 OpenCode 子源 timeout / rejected 时
+ * 保留上一轮可用的 OpenCode 历史条目。
+ */
+export function seedLastGoodOpenCodeIntoMerged(
+  mergedById: Map<string, ThreadSummary>,
+  lastGoodSummaries: ThreadSummary[],
+  excludedThreadIds: ReadonlySet<string> = new Set(),
+): number {
+  return seedLastGoodEngineIntoMerged(
+    "opencode",
+    mergedById,
+    lastGoodSummaries,
+    excludedThreadIds,
+  );
+}
+
+export async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+): Promise<T | null> {
   let timer: ReturnType<typeof setTimeout> | null = null;
   try {
     return await Promise.race([
@@ -1014,7 +1181,9 @@ export function resolveRewindSupportedEngine(
   return "codex";
 }
 
-export function isLocalSessionScanUnavailable(result: Record<string, unknown>): boolean {
+export function isLocalSessionScanUnavailable(
+  result: Record<string, unknown>,
+): boolean {
   const marker = asString(result.partialSource ?? result.partial_source)
     .trim()
     .toLowerCase();
@@ -1071,10 +1240,9 @@ function normalizeThreadMetaValue(value: unknown): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-export function resolveThreadSourceMeta(thread: Record<string, unknown>): Pick<
-  ThreadSummary,
-  "source" | "provider" | "sourceLabel"
-> {
+export function resolveThreadSourceMeta(
+  thread: Record<string, unknown>,
+): Pick<ThreadSummary, "source" | "provider" | "sourceLabel"> {
   const source =
     normalizeThreadMetaValue(thread.source) ??
     normalizeThreadMetaValue(thread.sessionSource);
@@ -1084,7 +1252,7 @@ export function resolveThreadSourceMeta(thread: Record<string, unknown>): Pick<
     normalizeThreadMetaValue(thread.sessionProvider);
   const sourceLabel =
     normalizeThreadMetaValue(thread.sourceLabel) ??
-    (source && provider ? `${source}/${provider}` : source ?? provider);
+    (source && provider ? `${source}/${provider}` : (source ?? provider));
   return {
     source,
     provider,
@@ -1101,7 +1269,8 @@ function shouldIncludeThreadEntry(thread: Record<string, unknown>): boolean {
     asString(thread.title).trim(),
     asString(thread.name).trim(),
   ].filter(Boolean);
-  const isCodexHelperThread = hasCodexBackgroundHelperPreview(previewCandidates);
+  const isCodexHelperThread =
+    hasCodexBackgroundHelperPreview(previewCandidates);
   if (isCodexHelperThread) {
     return false;
   }
@@ -1155,7 +1324,10 @@ export function restoreThreadParentLinksFromSnapshot(
   });
 }
 
-export function collectRelatedThreadIdsFromSnapshot(threadId: string, items: ConversationItem[]) {
+export function collectRelatedThreadIdsFromSnapshot(
+  threadId: string,
+  items: ConversationItem[],
+) {
   const relatedThreadIds = new Set<string>();
   items.forEach((item) => {
     if (item.kind !== "tool" || item.toolType !== "collabToolCall") {
@@ -1216,7 +1388,8 @@ export function shouldReplaceUserInputQueueFromSnapshot(
     return true;
   }
   const hasSubmittedRecord = items.some(
-    (item) => item.kind === "tool" && item.toolType === "requestUserInputSubmitted",
+    (item) =>
+      item.kind === "tool" && item.toolType === "requestUserInputSubmitted",
   );
   if (hasSubmittedRecord) {
     return true;

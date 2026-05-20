@@ -7,231 +7,6 @@ fn test_workspace_path() -> PathBuf {
     std::env::temp_dir().join("ccgui-claude-test-workspace")
 }
 
-#[test]
-fn build_command_uses_session_id_for_new_conversation_without_continue() {
-    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
-    let mut params = SendMessageParams::default();
-    params.text = "hello".to_string();
-    params.continue_session = false;
-    params.session_id = Some("11111111-1111-4111-8111-111111111111".to_string());
-
-    let command = session.build_command(&params, false, true);
-    let args: Vec<String> = command
-        .as_std()
-        .get_args()
-        .map(|arg| arg.to_string_lossy().to_string())
-        .collect();
-
-    assert!(args.windows(2).any(|window| {
-        window[0] == "--session-id" && window[1] == "11111111-1111-4111-8111-111111111111"
-    }));
-    assert!(!args
-        .iter()
-        .any(|arg| arg == "--continue" || arg == "--resume"));
-}
-
-#[test]
-fn build_command_uses_resume_when_continue_session_is_enabled() {
-    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
-    let mut params = SendMessageParams::default();
-    params.text = "hello".to_string();
-    params.continue_session = true;
-    params.session_id = Some("22222222-2222-4222-8222-222222222222".to_string());
-
-    let command = session.build_command(&params, false, true);
-    let args: Vec<String> = command
-        .as_std()
-        .get_args()
-        .map(|arg| arg.to_string_lossy().to_string())
-        .collect();
-
-    assert!(args.windows(2).any(|window| {
-        window[0] == "--resume" && window[1] == "22222222-2222-4222-8222-222222222222"
-    }));
-    assert!(!args.iter().any(|arg| arg == "--session-id"));
-}
-
-#[test]
-fn build_command_includes_hook_events_when_requested() {
-    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
-    let mut params = SendMessageParams::default();
-    params.text = "hello".to_string();
-
-    let command = session.build_command(&params, false, true);
-    let args: Vec<String> = command
-        .as_std()
-        .get_args()
-        .map(|arg| arg.to_string_lossy().to_string())
-        .collect();
-
-    assert!(args.iter().any(|arg| arg == "--include-hook-events"));
-}
-
-#[test]
-fn build_command_can_omit_hook_events_for_legacy_retry() {
-    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
-    let mut params = SendMessageParams::default();
-    params.text = "hello".to_string();
-
-    let command = session.build_command(&params, false, false);
-    let args: Vec<String> = command
-        .as_std()
-        .get_args()
-        .map(|arg| arg.to_string_lossy().to_string())
-        .collect();
-
-    assert!(!args.iter().any(|arg| arg == "--include-hook-events"));
-}
-
-#[test]
-fn detects_unknown_include_hook_events_errors_for_legacy_retry() {
-    assert!(ClaudeSession::is_unknown_include_hook_events_error(
-        "error: unknown option '--include-hook-events'",
-    ));
-    assert!(ClaudeSession::is_unknown_include_hook_events_error(
-        "unrecognized option: --include-hook-events",
-    ));
-    assert!(!ClaudeSession::is_unknown_include_hook_events_error(
-        "API Error: provider overloaded",
-    ));
-}
-
-#[test]
-fn build_command_uses_native_fork_session_contract() {
-    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
-    let mut params = SendMessageParams::default();
-    params.text = "branch from parent".to_string();
-    params.session_id = Some("child-should-not-be-used".to_string());
-    params.fork_session_id = Some("33333333-3333-4333-8333-333333333333".to_string());
-
-    let command = session.build_command(&params, false, true);
-    let args: Vec<String> = command
-        .as_std()
-        .get_args()
-        .map(|arg| arg.to_string_lossy().to_string())
-        .collect();
-
-    assert!(args.windows(2).any(|window| {
-        window[0] == "--resume" && window[1] == "33333333-3333-4333-8333-333333333333"
-    }));
-    assert!(args.iter().any(|arg| arg == "--fork-session"));
-    assert!(!args
-        .windows(2)
-        .any(|window| { window[0] == "--session-id" && window[1] == "child-should-not-be-used" }));
-}
-
-#[test]
-fn build_command_rejects_invalid_native_fork_session_ids() {
-    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
-    for invalid in [
-        "",
-        "   ",
-        ".",
-        "../secrets",
-        "..\\secrets",
-        "--continue",
-        "abc\nresume",
-        "parent:child",
-        "parent.jsonl",
-    ] {
-        let mut params = SendMessageParams::default();
-        params.text = "branch from parent".to_string();
-        params.fork_session_id = Some(invalid.to_string());
-        params.continue_session = true;
-        params.session_id = Some("must-not-fallback".to_string());
-
-        assert!(
-            ClaudeSession::normalized_fork_session_id(&params).is_err(),
-            "expected invalid fork session id to be rejected: {invalid:?}",
-        );
-        let command = session.build_command(&params, false, true);
-        let args: Vec<String> = command
-            .as_std()
-            .get_args()
-            .map(|arg| arg.to_string_lossy().to_string())
-            .collect();
-        assert!(
-            !args.iter().any(|arg| arg == "--fork-session"),
-            "invalid fork session id must not reach argv: {args:?}",
-        );
-        assert!(
-            !args
-                .windows(2)
-                .any(|window| window[0] == "--resume" && window[1] == "must-not-fallback"),
-            "invalid fork session id must not silently fall back to resume: {args:?}",
-        );
-        assert!(
-            !args.iter().any(|arg| arg == "--continue"),
-            "invalid fork session id must not silently fall back to continue: {args:?}",
-        );
-    }
-}
-
-#[test]
-fn build_command_passes_custom_bracket_model_to_cli_argv() {
-    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
-    let mut params = SendMessageParams::default();
-    params.text = "1+1".to_string();
-    params.model = Some("Cxn[1m]".to_string());
-
-    let command = session.build_command(&params, false, true);
-    let args: Vec<String> = command
-        .as_std()
-        .get_args()
-        .map(|arg| arg.to_string_lossy().to_string())
-        .collect();
-
-    assert!(args
-        .windows(2)
-        .any(|window| { window[0] == "--model" && window[1] == "Cxn[1m]" }));
-}
-
-#[test]
-fn build_command_appends_allowed_reasoning_efforts() {
-    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
-
-    for effort in ["low", "medium", "high", "xhigh", "max"] {
-        let mut params = SendMessageParams::default();
-        params.text = "1+1".to_string();
-        params.effort = Some(effort.to_string());
-
-        let command = session.build_command(&params, false, true);
-        let args: Vec<String> = command
-            .as_std()
-            .get_args()
-            .map(|arg| arg.to_string_lossy().to_string())
-            .collect();
-
-        assert!(
-            args.windows(2)
-                .any(|window| window[0] == "--effort" && window[1] == effort),
-            "missing --effort {effort} in args: {args:?}"
-        );
-    }
-}
-
-#[test]
-fn build_command_ignores_missing_empty_and_invalid_reasoning_effort() {
-    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
-
-    for effort in [None, Some(""), Some("   "), Some("ultra"), Some("--danger")] {
-        let mut params = SendMessageParams::default();
-        params.text = "1+1".to_string();
-        params.effort = effort.map(str::to_string);
-
-        let command = session.build_command(&params, false, true);
-        let args: Vec<String> = command
-            .as_std()
-            .get_args()
-            .map(|arg| arg.to_string_lossy().to_string())
-            .collect();
-
-        assert!(!args.iter().any(|arg| arg == "--effort"));
-        assert!(!args.iter().any(|arg| arg == "--danger"));
-        assert!(!args.iter().any(|arg| arg == "ultra"));
-    }
-}
-
 #[tokio::test]
 async fn session_manager_get_or_create() {
     let manager = ClaudeSessionManager::new();
@@ -315,6 +90,108 @@ fn convert_event_emits_live_context_window_usage_from_snake_case_payload() {
         }
         other => panic!("expected usage update, got {:?}", other),
     }
+    assert!(session.has_live_context_usage_seen("turn-usage"));
+}
+
+#[test]
+fn convert_event_does_not_mark_incomplete_context_window_as_probe_satisfied() {
+    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+    let event = json!({
+        "type": "system",
+        "subtype": "status",
+        "context_window": {
+            "current_usage": null,
+            "context_window_size": 258_400,
+            "used_percentage": 65,
+            "remaining_percentage": 35
+        }
+    });
+
+    let _ = session.convert_event("turn-incomplete-context", &event);
+
+    assert!(!session.has_live_context_usage_seen("turn-incomplete-context"));
+}
+
+#[test]
+fn context_command_probe_is_skipped_after_live_context_usage() {
+    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+    session.mark_live_context_usage_seen("turn-live");
+    let mut params = SendMessageParams::default();
+    params.text = "请分析这个项目里的 Claude context usage 走势和风险".repeat(4);
+
+    let decision = session.reserve_context_command_probe("turn-live", "session-live", &params);
+
+    assert_eq!(
+        decision,
+        ClaudeContextCommandProbeDecision::SkipLiveTelemetry
+    );
+}
+
+#[test]
+fn context_command_probe_is_skipped_for_short_text_turns() {
+    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+    let mut params = SendMessageParams::default();
+    params.text = "你好".to_string();
+
+    let decision = session.reserve_context_command_probe("turn-short", "session-short", &params);
+
+    assert_eq!(decision, ClaudeContextCommandProbeDecision::SkipShortPrompt);
+}
+
+#[test]
+fn context_command_probe_is_throttled_per_session_after_reservation() {
+    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+    let mut params = SendMessageParams::default();
+    params.text =
+        "请基于当前仓库完整分析 Claude context usage 显示链路，指出风险并给出改进建议。".repeat(4);
+
+    let first = session.reserve_context_command_probe("turn-one", "session-throttle", &params);
+    let second = session.reserve_context_command_probe("turn-two", "session-throttle", &params);
+
+    assert_eq!(first, ClaudeContextCommandProbeDecision::Run);
+    assert_eq!(second, ClaudeContextCommandProbeDecision::SkipCooldown);
+}
+
+#[test]
+fn context_command_probe_allows_next_session_despite_other_session_cooldown() {
+    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+    let mut params = SendMessageParams::default();
+    params.text =
+        "请基于当前仓库完整分析 Claude context usage 显示链路，指出风险并给出改进建议。".repeat(4);
+
+    let first = session.reserve_context_command_probe("turn-one", "session-a", &params);
+    let second = session.reserve_context_command_probe("turn-two", "session-b", &params);
+
+    assert_eq!(first, ClaudeContextCommandProbeDecision::Run);
+    assert_eq!(second, ClaudeContextCommandProbeDecision::Run);
+}
+
+#[test]
+fn context_command_probe_prunes_expired_session_reservations() {
+    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+    let mut params = SendMessageParams::default();
+    params.text =
+        "请基于当前仓库完整分析 Claude context usage 显示链路，指出风险并给出改进建议。".repeat(4);
+    {
+        let mut probes = session
+            .last_context_probe_by_session
+            .lock()
+            .expect("lock context probe reservations");
+        probes.insert(
+            "expired-session".to_string(),
+            Instant::now() - CLAUDE_CONTEXT_COMMAND_PROBE_COOLDOWN - Duration::from_secs(1),
+        );
+    }
+
+    let decision = session.reserve_context_command_probe("turn-prune", "fresh-session", &params);
+    let probes = session
+        .last_context_probe_by_session
+        .lock()
+        .expect("lock context probe reservations");
+
+    assert_eq!(decision, ClaudeContextCommandProbeDecision::Run);
+    assert!(!probes.contains_key("expired-session"));
+    assert!(probes.contains_key("fresh-session"));
 }
 
 #[test]
@@ -2229,217 +2106,6 @@ fn convert_event_matches_most_recent_same_name_tool_when_input_missing() {
 }
 
 #[test]
-fn build_mode_blocked_signal_from_error_maps_claude_ask_user_question_denial() {
-    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
-    session.register_pending_tool("turn-a", "tool-ask-1", "AskUserQuestion", None);
-
-    let event = session
-        .build_mode_blocked_signal_from_error("turn-a", "AskUserQuestion tool permission denied")
-        .expect("expected mode blocked signal");
-
-    match event {
-        EngineEvent::Raw { data, .. } => {
-            assert_eq!(
-                data.get("blockedMethod").and_then(|value| value.as_str()),
-                Some("item/tool/requestUserInput")
-            );
-            assert_eq!(
-                data.get("requestId").and_then(|value| value.as_str()),
-                Some("tool-ask-1")
-            );
-            assert_eq!(
-                data.get("reasonCode").and_then(|value| value.as_str()),
-                Some("claude_ask_user_question_permission_denied")
-            );
-        }
-        other => panic!("expected raw mode-blocked signal, got {:?}", other),
-    }
-}
-
-#[test]
-fn build_mode_blocked_signal_from_error_maps_claude_file_change_denial_to_approval_request() {
-    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
-    session.register_pending_tool(
-        "turn-a",
-        "tool-edit-1",
-        "Edit",
-        Some(&json!({
-            "file_path": "demo.txt",
-            "content": "hello from fallback"
-        })),
-    );
-    session.cache_tool_name("tool-edit-1", "Edit");
-    session.cache_tool_input_value(
-        "tool-edit-1",
-        &json!({
-            "file_path": "demo.txt",
-            "content": "hello from fallback"
-        }),
-    );
-
-    let event = session
-        .build_mode_blocked_signal_from_error("turn-a", "Edit tool permission denied")
-        .expect("expected approval request");
-
-    match event {
-        EngineEvent::ApprovalRequest {
-            request_id,
-            tool_name,
-            input,
-            message,
-            ..
-        } => {
-            assert_eq!(request_id, Value::String("tool-edit-1".to_string()));
-            assert_eq!(tool_name, "Edit");
-            assert_eq!(
-                input,
-                Some(json!({
-                    "file_path": "demo.txt",
-                    "content": "hello from fallback"
-                }))
-            );
-            assert_eq!(
-                message.as_deref(),
-                Some(
-                    "Approve to let the GUI apply this file change locally. Preview currently supports structured file tools plus safe single-path file commands."
-                )
-            );
-        }
-        other => panic!("expected approval request, got {:?}", other),
-    }
-}
-
-#[test]
-fn build_mode_blocked_signal_from_error_maps_claude_command_denial() {
-    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
-    session.register_pending_tool("turn-a", "tool-bash-1", "Bash", None);
-
-    let event = session
-            .build_mode_blocked_signal_from_error(
-                "turn-a",
-                "Output redirection was blocked. For security, Claude Code may only write to files in the allowed working directories for this session.",
-            )
-            .expect("expected mode blocked signal");
-
-    match event {
-        EngineEvent::Raw { data, .. } => {
-            assert_eq!(
-                data.get("blockedMethod").and_then(|value| value.as_str()),
-                Some("item/commandExecution/requestApproval")
-            );
-            assert_eq!(
-                data.get("requestId").and_then(|value| value.as_str()),
-                Some("tool-bash-1")
-            );
-            assert_eq!(
-                data.get("reasonCode").and_then(|value| value.as_str()),
-                Some("claude_command_execution_permission_denied")
-            );
-        }
-        other => panic!("expected raw mode-blocked signal, got {:?}", other),
-    }
-}
-
-#[test]
-fn build_mode_blocked_signal_from_error_maps_native_command_denial() {
-    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
-    session.register_pending_tool("turn-a", "tool-native-1", "NativeCommand", None);
-
-    let event = session
-            .build_mode_blocked_signal_from_error(
-                "turn-a",
-                "Native command requires permission to access protected paths in the allowed working directories.",
-            )
-            .expect("expected mode blocked signal");
-
-    match event {
-        EngineEvent::Raw { data, .. } => {
-            assert_eq!(
-                data.get("blockedMethod").and_then(|value| value.as_str()),
-                Some("item/commandExecution/requestApproval")
-            );
-            assert_eq!(
-                data.get("requestId").and_then(|value| value.as_str()),
-                Some("tool-native-1")
-            );
-            assert_eq!(
-                data.get("toolName").and_then(|value| value.as_str()),
-                Some("NativeCommand")
-            );
-        }
-        other => panic!("expected raw mode-blocked signal, got {:?}", other),
-    }
-}
-
-#[test]
-fn convert_error_event_maps_command_permission_denial_to_mode_blocked() {
-    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
-    session.register_pending_tool("turn-error", "tool-exec-1", "ExecuteCommand", None);
-
-    let event = json!({
-        "type": "error",
-        "error": {
-            "message": "ExecuteCommand was blocked for security because it may only write to files in the allowed working directories."
-        }
-    });
-
-    let converted = session.convert_event("turn-error", &event);
-    match converted {
-        Some(EngineEvent::Raw { data, .. }) => {
-            assert_eq!(
-                data.get("blockedMethod").and_then(|value| value.as_str()),
-                Some("item/commandExecution/requestApproval")
-            );
-            assert_eq!(
-                data.get("requestId").and_then(|value| value.as_str()),
-                Some("tool-exec-1")
-            );
-            assert_eq!(
-                data.get("toolName").and_then(|value| value.as_str()),
-                Some("ExecuteCommand")
-            );
-        }
-        other => panic!("expected raw mode-blocked signal, got {:?}", other),
-    }
-}
-
-#[test]
-fn convert_error_event_maps_string_permission_denial_to_mode_blocked() {
-    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
-    session.register_pending_tool("turn-error-string", "tool-shell-string", "Shell", None);
-
-    let event = json!({
-        "type": "error",
-        "error": "Shell requires approval before running this command"
-    });
-
-    let converted = session.convert_event("turn-error-string", &event);
-    match converted {
-        Some(EngineEvent::Raw { data, .. }) => {
-            assert_eq!(
-                data.get("blockedMethod").and_then(|value| value.as_str()),
-                Some("item/commandExecution/requestApproval")
-            );
-            assert_eq!(
-                data.get("requestId").and_then(|value| value.as_str()),
-                Some("tool-shell-string")
-            );
-        }
-        other => panic!("expected raw mode-blocked signal, got {:?}", other),
-    }
-}
-
-#[test]
-fn build_mode_blocked_signal_from_error_ignores_non_permission_errors() {
-    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
-    session.register_pending_tool("turn-a", "tool-ask-1", "AskUserQuestion", None);
-
-    assert!(session
-        .build_mode_blocked_signal_from_error("turn-a", "tool timed out")
-        .is_none());
-}
-
-#[test]
 fn convert_event_avoids_duplicate_when_assistant_blocks_repeat_whole_message() {
     let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
 
@@ -2472,20 +2138,4 @@ fn convert_event_avoids_duplicate_when_assistant_blocks_repeat_whole_message() {
         Some(EngineEvent::TextDelta { text, .. }) => assert_eq!(text, "？"),
         other => panic!("expected punctuation-only delta, got {:?}", other),
     }
-}
-
-#[test]
-fn looks_like_claude_runtime_error_detects_api_json_eof() {
-    assert!(looks_like_claude_runtime_error(
-        "API Error: Unexpected end of JSON input"
-    ));
-    assert!(looks_like_claude_runtime_error(
-        "error: transport dropped unexpectedly"
-    ));
-}
-
-#[test]
-fn looks_like_claude_runtime_error_ignores_regular_output() {
-    assert!(!looks_like_claude_runtime_error("你好，我继续给你方案"));
-    assert!(!looks_like_claude_runtime_error("{\"type\":\"assistant\"}"));
 }

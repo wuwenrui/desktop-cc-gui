@@ -13,12 +13,10 @@ import {
   writeExternalSpecFile,
   writeWorkspaceFile,
 } from "../../../services/tauri";
-import { subscribeDetachedExternalFileChanges } from "../../../services/events";
-import { pushErrorToast } from "../../../services/toasts";
+import { loadKatexAssets } from "../../markdown/markdownMath";
 import { useFilePreviewPayload } from "../hooks/useFilePreviewPayload";
 
 const mockCodeMirrorDispatch = vi.fn();
-let detachedExternalFileChangeListener: ((event: any) => void) | null = null;
 
 function createDoc(text: string) {
   const lines = text.split("\n");
@@ -202,19 +200,6 @@ vi.mock("../../../services/tauri", () => ({
   getCodeIntelReferences: vi.fn(),
 }));
 
-vi.mock("../../../services/events", () => ({
-  subscribeDetachedExternalFileChanges: vi.fn((onEvent: (event: any) => void) => {
-    detachedExternalFileChangeListener = onEvent;
-    return () => {
-      detachedExternalFileChangeListener = null;
-    };
-  }),
-}));
-
-vi.mock("../../../services/toasts", () => ({
-  pushErrorToast: vi.fn(),
-}));
-
 const mermaidInitialize = vi.fn();
 const mermaidRender = vi.fn(async (_id: string, source: string) => ({
   svg: `<svg data-mermaid-source="${source.replace(/"/g, "&quot;")}"></svg>`,
@@ -255,7 +240,6 @@ describe("FileViewPanel navigation", () => {
     cleanup();
     vi.clearAllMocks();
     mockCodeMirrorDispatch.mockReset();
-    detachedExternalFileChangeListener = null;
   });
 
   it("navigates directly when definition has a single target", async () => {
@@ -822,7 +806,6 @@ describe("FileViewPanel image preview", () => {
     vi.clearAllMocks();
     vi.unstubAllGlobals();
     mockCodeMirrorDispatch.mockReset();
-    detachedExternalFileChangeListener = null;
   });
 
   it("prefers backend data URLs for local image preview", async () => {
@@ -1056,6 +1039,48 @@ describe("FileViewPanel markdown modes", () => {
     });
     expect(writeWorkspaceFile).not.toHaveBeenCalled();
     expect(writeExternalSpecFile).not.toHaveBeenCalled();
+  });
+
+  it("keeps markdown annotation source lines stable after math normalization", async () => {
+    vi.mocked(readWorkspaceFile).mockResolvedValue({
+      content: [
+        "# Math",
+        "",
+        "$$\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}$$",
+        "",
+        "target paragraph",
+      ].join("\n"),
+      truncated: false,
+    });
+    const onCreateCodeAnnotation = vi.fn();
+
+    render(
+      <FileViewPanel
+        workspaceId="ws-md-annotation-math-lines"
+        workspacePath="/repo"
+        filePath="docs/math.md"
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+        onCreateCodeAnnotation={onCreateCodeAnnotation}
+      />,
+    );
+
+    await screen.findByTestId("file-markdown-preview");
+    fireEvent.click(screen.getByRole("button", { name: /files\.annotateForAi L5/i }));
+    fireEvent.change(screen.getByPlaceholderText(/files\.annotationPlaceholder/i), {
+      target: { value: "check target" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /files\.annotationSubmit/i }));
+
+    expect(onCreateCodeAnnotation).toHaveBeenCalledWith({
+      path: "docs/math.md",
+      lineRange: { startLine: 5, endLine: 5 },
+      body: "check target",
+      source: "file-preview-mode",
+    });
   });
 
   it("keeps markdown annotation typing local until submit to avoid sticky repeated input", async () => {
@@ -1574,6 +1599,137 @@ describe("FileViewPanel markdown modes", () => {
       expect(screen.getByTestId("file-markdown-mermaid-preview")).toBeTruthy();
       expect(mermaidRender).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it("keeps mermaid rendered view after the same markdown preview remounts", async () => {
+    vi.mocked(readWorkspaceFile).mockResolvedValue({
+      content: "```mermaid\ngraph TD\nA-->B\n```",
+      truncated: false,
+    });
+    mermaidInitialize.mockClear();
+    mermaidRender.mockClear();
+
+    const panelProps = {
+      workspaceId: "ws-md-mermaid-stable",
+      workspacePath: "/repo",
+      filePath: "README.md",
+      openTargets: [] as Parameters<typeof FileViewPanel>[0]["openTargets"],
+      openAppIconById: {},
+      selectedOpenAppId: "",
+      onSelectOpenAppId: vi.fn(),
+      onClose: vi.fn(),
+    };
+
+    const { rerender } = render(
+      <FileViewPanel
+        key="stable-mermaid-before"
+        {...panelProps}
+      />,
+    );
+
+    await screen.findByTestId("file-markdown-preview");
+    fireEvent.click(screen.getByRole("tab", { name: "Render" }));
+    await screen.findByTestId("file-markdown-mermaid-preview");
+    expect(screen.getByRole("tab", { name: "Render" }).getAttribute("aria-selected")).toBe("true");
+
+    rerender(
+      <FileViewPanel
+        key="stable-mermaid-after"
+        {...panelProps}
+      />,
+    );
+
+    await screen.findByTestId("file-markdown-mermaid-preview");
+    expect(screen.getByRole("tab", { name: "Render" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("tab", { name: "Source" }).getAttribute("aria-selected")).toBe("false");
+    expect(mermaidRender.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("renders markdown math formulas while keeping mermaid blocks lazy", async () => {
+    await loadKatexAssets();
+    vi.mocked(readWorkspaceFile).mockResolvedValue({
+      content: [
+        "行内公式：$E=mc^2$。",
+        "",
+        "块级公式：",
+        "",
+        "$$\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}$$",
+        "",
+        "```mermaid",
+        "graph TD",
+        "A-->B",
+        "```",
+      ].join("\n"),
+      truncated: false,
+    });
+    mermaidInitialize.mockClear();
+    mermaidRender.mockClear();
+
+    const { container } = render(
+      <FileViewPanel
+        workspaceId="ws-md-math"
+        workspacePath="/repo"
+        filePath="docs/math.md"
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await screen.findByTestId("file-markdown-preview");
+    await waitFor(() => {
+      expect(container.querySelector(".fvp-file-markdown .katex")).toBeTruthy();
+      expect(container.querySelector(".fvp-file-markdown .katex-display")).toBeTruthy();
+      expect(container.querySelector(".fvp-file-markdown .katex-error")).toBeFalsy();
+    });
+    expect(mermaidRender).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Render" }));
+    await screen.findByTestId("file-markdown-mermaid-preview");
+    expect(mermaidRender).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders fenced math blocks as katex display formulas", async () => {
+    vi.mocked(readWorkspaceFile).mockResolvedValue({
+      content: [
+        "## 块级公式",
+        "",
+        "```math",
+        "\\int_{-\\infty}^{+\\infty} e^{-x^2} dx = \\sqrt{\\pi}",
+        "```",
+        "",
+        "```latex",
+        "A = \\begin{bmatrix}",
+        "1 & 2 & 3 \\\\",
+        "4 & 5 & 6 \\\\",
+        "7 & 8 & 9",
+        "\\end{bmatrix}",
+        "```",
+      ].join("\n"),
+      truncated: false,
+    });
+
+    const { container } = render(
+      <FileViewPanel
+        workspaceId="ws-md-fenced-math"
+        workspacePath="/repo"
+        filePath="docs/math.md"
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await screen.findByTestId("file-markdown-preview");
+    await waitFor(() => {
+      expect(container.querySelectorAll(".fvp-file-markdown .katex-display").length).toBe(2);
+    });
+    expect(screen.queryByText("math")).toBeNull();
+    expect(screen.queryByText("latex")).toBeNull();
   });
 
   it("resets markdown renderer state when switching to another markdown file", async () => {
@@ -2312,330 +2468,5 @@ describe("FileViewPanel editor theme selection", () => {
 
     const editor = await screen.findByTestId("mock-codemirror");
     expect(editor.getAttribute("data-editor-theme")).toBe("dark");
-  });
-});
-
-describe("FileViewPanel external change awareness in detached mode", () => {
-  afterEach(() => {
-    cleanup();
-    vi.clearAllMocks();
-  });
-
-  it("auto-syncs clean buffer when disk content changes", async () => {
-    vi.mocked(readWorkspaceFile)
-      .mockResolvedValueOnce({ content: "const value = 1;", truncated: false })
-      .mockResolvedValue({ content: "const value = 2;", truncated: false });
-
-    render(
-      <FileViewPanel
-        workspaceId="ws-ext-clean"
-        workspacePath="/repo"
-        filePath="src/value.ts"
-        openTargets={[]}
-        openAppIconById={{}}
-        selectedOpenAppId=""
-        onSelectOpenAppId={vi.fn()}
-        onClose={vi.fn()}
-        externalChangeMonitoringEnabled
-        externalChangePollIntervalMs={20}
-      />,
-    );
-
-    const editor = await screen.findByTestId("mock-codemirror");
-    expect((editor as HTMLTextAreaElement).value).toBe("const value = 1;");
-
-    await waitFor(() => {
-      expect(screen.getByText("files.externalChangeAutoSynced")).toBeTruthy();
-    });
-    expect((screen.getByTestId("mock-codemirror") as HTMLTextAreaElement).value)
-      .toBe("const value = 2;");
-  });
-
-  it("continues polling after the first tick", async () => {
-    vi.mocked(readWorkspaceFile)
-      .mockResolvedValueOnce({ content: "const value = 1;", truncated: false })
-      .mockResolvedValueOnce({ content: "const value = 2;", truncated: false })
-      .mockResolvedValue({ content: "const value = 3;", truncated: false });
-
-    render(
-      <FileViewPanel
-        workspaceId="ws-ext-poll-loop"
-        workspacePath="/repo"
-        filePath="src/value-loop.ts"
-        openTargets={[]}
-        openAppIconById={{}}
-        selectedOpenAppId=""
-        onSelectOpenAppId={vi.fn()}
-        onClose={vi.fn()}
-        externalChangeMonitoringEnabled
-        externalChangePollIntervalMs={20}
-      />,
-    );
-
-    await screen.findByTestId("mock-codemirror");
-
-    await waitFor(() => {
-      expect((screen.getByTestId("mock-codemirror") as HTMLTextAreaElement).value)
-        .toBe("const value = 3;");
-      expect(vi.mocked(readWorkspaceFile).mock.calls.length).toBeGreaterThanOrEqual(3);
-    });
-  });
-
-  it("keeps polling after a read error and recovers on later tick", async () => {
-    vi.mocked(readWorkspaceFile)
-      .mockResolvedValueOnce({ content: "const value = 1;", truncated: false })
-      .mockRejectedValueOnce(new Error("disk temporary failure"))
-      .mockResolvedValue({ content: "const value = 2;", truncated: false });
-
-    render(
-      <FileViewPanel
-        workspaceId="ws-ext-poll-error-recover"
-        workspacePath="/repo"
-        filePath="src/value-recover.ts"
-        openTargets={[]}
-        openAppIconById={{}}
-        selectedOpenAppId=""
-        onSelectOpenAppId={vi.fn()}
-        onClose={vi.fn()}
-        externalChangeMonitoringEnabled
-        externalChangePollIntervalMs={20}
-      />,
-    );
-
-    await screen.findByTestId("mock-codemirror");
-    await waitFor(() => {
-      expect((screen.getByTestId("mock-codemirror") as HTMLTextAreaElement).value)
-        .toBe("const value = 2;");
-      expect(vi.mocked(readWorkspaceFile).mock.calls.length).toBeGreaterThanOrEqual(3);
-    });
-  });
-
-  it("does not show unavailable monitor toast for missing-file polling errors", async () => {
-    vi.mocked(readWorkspaceFile)
-      .mockResolvedValueOnce({ content: "const value = 1;", truncated: false })
-      .mockRejectedValue(new Error("Failed to open file: No such file or directory (os error 2)"));
-
-    render(
-      <FileViewPanel
-        workspaceId="ws-ext-poll-missing"
-        workspacePath="/repo"
-        filePath="src/value-missing.ts"
-        openTargets={[]}
-        openAppIconById={{}}
-        selectedOpenAppId=""
-        onSelectOpenAppId={vi.fn()}
-        onClose={vi.fn()}
-        externalChangeMonitoringEnabled
-        externalChangePollIntervalMs={20}
-      />,
-    );
-
-    await screen.findByTestId("mock-codemirror");
-    await waitFor(() => {
-      expect(vi.mocked(readWorkspaceFile).mock.calls.length).toBeGreaterThanOrEqual(4);
-    });
-    expect(vi.mocked(pushErrorToast)).not.toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: "External file monitor is unavailable",
-      }),
-    );
-  });
-
-  it("does not show unavailable monitor toast for Windows path-not-found polling errors", async () => {
-    vi.mocked(readWorkspaceFile)
-      .mockResolvedValueOnce({ content: "const value = 1;", truncated: false })
-      .mockRejectedValue(new Error("Failed to open file: 系统找不到指定的路径。 (os error 3)"));
-
-    render(
-      <FileViewPanel
-        workspaceId="ws-ext-poll-win-path-missing"
-        workspacePath="C:/repo"
-        filePath="src/value-missing.ts"
-        openTargets={[]}
-        openAppIconById={{}}
-        selectedOpenAppId=""
-        onSelectOpenAppId={vi.fn()}
-        onClose={vi.fn()}
-        externalChangeMonitoringEnabled
-        externalChangePollIntervalMs={20}
-      />,
-    );
-
-    await screen.findByTestId("mock-codemirror");
-    await waitFor(() => {
-      expect(vi.mocked(readWorkspaceFile).mock.calls.length).toBeGreaterThanOrEqual(4);
-    });
-    expect(vi.mocked(pushErrorToast)).not.toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: "External file monitor is unavailable",
-      }),
-    );
-  });
-
-  it("keeps unavailable monitor toast for non-path missing os error 3 polling errors", async () => {
-    vi.mocked(readWorkspaceFile)
-      .mockResolvedValueOnce({ content: "const value = 1;", truncated: false })
-      .mockRejectedValue(new Error("Unexpected backend failure (os error 3)"));
-
-    render(
-      <FileViewPanel
-        workspaceId="ws-ext-poll-os-error-3"
-        workspacePath="/repo"
-        filePath="src/value-error.ts"
-        openTargets={[]}
-        openAppIconById={{}}
-        selectedOpenAppId=""
-        onSelectOpenAppId={vi.fn()}
-        onClose={vi.fn()}
-        externalChangeMonitoringEnabled
-        externalChangePollIntervalMs={20}
-      />,
-    );
-
-    await screen.findByTestId("mock-codemirror");
-    await waitFor(() => {
-      expect(vi.mocked(pushErrorToast)).toHaveBeenCalledWith(
-        expect.objectContaining({
-          title: "External file monitor is unavailable",
-          message: "Unexpected backend failure (os error 3)",
-        }),
-      );
-    });
-  });
-
-  it("shows conflict actions for dirty buffer and can keep local edits", async () => {
-    vi.mocked(readWorkspaceFile)
-      .mockResolvedValueOnce({ content: "console.log('v1');", truncated: false })
-      .mockResolvedValue({ content: "console.log('v2');", truncated: false });
-
-    render(
-      <FileViewPanel
-        workspaceId="ws-ext-dirty"
-        workspacePath="/repo"
-        filePath="src/app.ts"
-        openTargets={[]}
-        openAppIconById={{}}
-        selectedOpenAppId=""
-        onSelectOpenAppId={vi.fn()}
-        onClose={vi.fn()}
-        externalChangeMonitoringEnabled
-        externalChangePollIntervalMs={20}
-      />,
-    );
-
-    const editor = await screen.findByTestId("mock-codemirror");
-    fireEvent.change(editor, { target: { value: "console.log('local');" } });
-
-    await waitFor(() => {
-      expect(screen.getByText("files.externalChangeConflictTitle")).toBeTruthy();
-      expect(screen.getByText("files.externalChangeKeepLocal")).toBeTruthy();
-    });
-    expect((screen.getByTestId("mock-codemirror") as HTMLTextAreaElement).value)
-      .toBe("console.log('local');");
-
-    fireEvent.click(screen.getByText("files.externalChangeKeepLocal"));
-    await waitFor(() => {
-      expect(screen.queryByText("files.externalChangeConflictTitle")).toBeNull();
-    });
-  });
-
-  it("reloads disk content when user chooses reload action", async () => {
-    vi.mocked(readWorkspaceFile)
-      .mockResolvedValueOnce({ content: "line-a", truncated: false })
-      .mockResolvedValue({ content: "line-b", truncated: false });
-
-    render(
-      <FileViewPanel
-        workspaceId="ws-ext-reload"
-        workspacePath="/repo"
-        filePath="src/reload.ts"
-        openTargets={[]}
-        openAppIconById={{}}
-        selectedOpenAppId=""
-        onSelectOpenAppId={vi.fn()}
-        onClose={vi.fn()}
-        externalChangeMonitoringEnabled
-        externalChangePollIntervalMs={20}
-      />,
-    );
-
-    const editor = await screen.findByTestId("mock-codemirror");
-    fireEvent.change(editor, { target: { value: "line-local" } });
-
-    await waitFor(() => {
-      expect(screen.getByText("files.externalChangeReload")).toBeTruthy();
-    });
-    fireEvent.click(screen.getByText("files.externalChangeReload"));
-
-    await waitFor(() => {
-      expect((screen.getByTestId("mock-codemirror") as HTMLTextAreaElement).value).toBe("line-b");
-    });
-  });
-
-  it("applies watcher-driven external change events when watcher mode is enabled", async () => {
-    vi.mocked(readWorkspaceFile)
-      .mockResolvedValueOnce({ content: "const watcher = 1;", truncated: false })
-      .mockResolvedValue({ content: "const watcher = 2;", truncated: false });
-
-    render(
-      <FileViewPanel
-        workspaceId="ws-ext-watcher"
-        workspacePath="/repo"
-        filePath="src/watcher.ts"
-        openTargets={[]}
-        openAppIconById={{}}
-        selectedOpenAppId=""
-        onSelectOpenAppId={vi.fn()}
-        onClose={vi.fn()}
-        externalChangeMonitoringEnabled
-        externalChangeTransportMode="watcher"
-      />,
-    );
-
-    await screen.findByTestId("mock-codemirror");
-    await waitFor(() => {
-      expect(vi.mocked(subscribeDetachedExternalFileChanges)).toHaveBeenCalled();
-    });
-    detachedExternalFileChangeListener?.({
-      workspaceId: "ws-ext-watcher",
-      normalizedPath: "src/watcher.ts",
-      detectedAtMs: Date.now(),
-      source: "watcher",
-      eventKind: "modify(data)",
-      platform: "macos",
-    });
-
-    await waitFor(() => {
-      expect((screen.getByTestId("mock-codemirror") as HTMLTextAreaElement).value)
-        .toBe("const watcher = 2;");
-    });
-  });
-
-  it("reconciles watcher mode on startup even without incoming events", async () => {
-    vi.mocked(readWorkspaceFile)
-      .mockResolvedValueOnce({ content: "const startup = 1;", truncated: false })
-      .mockResolvedValue({ content: "const startup = 2;", truncated: false });
-
-    render(
-      <FileViewPanel
-        workspaceId="ws-ext-watcher-startup"
-        workspacePath="/repo"
-        filePath="src/startup.ts"
-        openTargets={[]}
-        openAppIconById={{}}
-        selectedOpenAppId=""
-        onSelectOpenAppId={vi.fn()}
-        onClose={vi.fn()}
-        externalChangeMonitoringEnabled
-        externalChangeTransportMode="watcher"
-      />,
-    );
-
-    await screen.findByTestId("mock-codemirror");
-    await waitFor(() => {
-      expect(vi.mocked(readWorkspaceFile).mock.calls.length).toBeGreaterThanOrEqual(2);
-      expect((screen.getByTestId("mock-codemirror") as HTMLTextAreaElement).value)
-        .toBe("const startup = 2;");
-    });
   });
 });

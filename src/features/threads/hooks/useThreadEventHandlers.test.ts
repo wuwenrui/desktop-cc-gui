@@ -6,6 +6,10 @@ import {
   CODEX_TURN_NO_PROGRESS_STALL_MS,
   useThreadEventHandlers,
 } from "./useThreadEventHandlers";
+import {
+  createDomainEventRuntimeController,
+  type DomainEventRuntimeController,
+} from "../domain-events";
 import { useThreadItemEvents } from "./useThreadItemEvents";
 import {
   noteThreadVisibleRender,
@@ -230,6 +234,7 @@ function makeOptions(onDebug = vi.fn()) {
     onAgentMessageCompletedExternal: vi.fn(),
     onCollaborationModeResolved: vi.fn(),
     onExitPlanModeToolCompleted: vi.fn(),
+    domainEventController: null as DomainEventRuntimeController | null,
   };
 }
 
@@ -291,6 +296,61 @@ describe("useThreadEventHandlers diagnostics", () => {
     expect(stalledEntry?.payload.isProcessing).toBe(true);
     expect(stalledEntry?.payload.activeTurnId).toBe("turn-1");
     expect(stalledEntry?.payload.hasExecutionItem).toBe(false);
+  });
+
+  it("emits bounded turn completed domain events through the internal controller", () => {
+    const domainEventController = createDomainEventRuntimeController();
+    const subscriber = vi.fn();
+    domainEventController.runtime.subscribe(subscriber);
+    const options = makeOptions();
+    options.domainEventController = domainEventController;
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-1");
+      vi.advanceTimersByTime(125);
+      result.current.onTurnCompleted("ws-1", "thread-1", "turn-1");
+    });
+
+    expect(subscriber).toHaveBeenCalledTimes(1);
+    expect(subscriber).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "turn.completed",
+        workspaceId: "ws-1",
+        sessionId: "thread-1",
+        turnId: "turn-1",
+        durationMs: 125,
+      }),
+    );
+  });
+
+  it("emits bounded turn failed domain events through the internal controller", () => {
+    const domainEventController = createDomainEventRuntimeController();
+    const subscriber = vi.fn();
+    domainEventController.runtime.subscribe(subscriber);
+    const options = makeOptions();
+    options.domainEventController = domainEventController;
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-1");
+      result.current.onTurnError("ws-1", "thread-1", "turn-1", {
+        message: "boom",
+        willRetry: false,
+        engine: "codex",
+      });
+    });
+
+    expect(subscriber).toHaveBeenCalledTimes(1);
+    expect(subscriber).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "turn.failed",
+        workspaceId: "ws-1",
+        sessionId: "thread-1",
+        turnId: "turn-1",
+        errorMessage: "boom",
+      }),
+    );
   });
 
   it("emits a waiting-for-first-delta diagnostic when no chunk arrives", () => {
@@ -664,6 +724,46 @@ describe("useThreadEventHandlers diagnostics", () => {
     ).toBe(false);
   });
 
+  it("does not quarantine shared completed turns as codex", () => {
+    const onDebug = vi.fn();
+    const options = makeOptions(onDebug);
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted(
+        "ws-1",
+        "shared:thread-claude-completed",
+        "turn-claude-1",
+      );
+      result.current.onTurnCompleted(
+        "ws-1",
+        "shared:thread-claude-completed",
+        "turn-claude-1",
+      );
+    });
+
+    options.dispatch.mockClear();
+    onDebug.mockClear();
+
+    act(() => {
+      result.current.onItemUpdated("ws-1", "shared:thread-claude-completed", {
+        id: "cmd-claude-1",
+        type: "commandExecution",
+        turnId: "turn-claude-1",
+      });
+    });
+
+    expect(options.dispatch).toHaveBeenCalledWith({
+      type: "markContinuationEvidence",
+      threadId: "shared:thread-claude-completed",
+    });
+    expect(
+      collectDiagnosticCalls(onDebug).some(
+        (entry) => entry.label === "thread/session:turn-diagnostic:quarantined-codex-event-skipped",
+      ),
+    ).toBe(false);
+  });
+
   it("returns to the base no-progress window when an execution completion only carries item id", () => {
     const onDebug = vi.fn();
     const options = makeOptions(onDebug);
@@ -1005,6 +1105,55 @@ describe("useThreadEventHandlers diagnostics", () => {
     expect(flushedEntry?.payload.source).toBe("assistant-completed");
     expect(flushedEntry?.payload.forcedByAssistantCompletion).toBe(true);
     expect(flushedEntry?.payload.remainingBlockers).toEqual([
+      expect.objectContaining({
+        itemType: "collabAgentToolCall",
+        status: "running",
+      }),
+    ]);
+  });
+
+  it("bypasses codex completion deferral when assistant stream ingress arrived before turn completion", () => {
+    const onDebug = vi.fn();
+    const options = makeOptions(onDebug);
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-1");
+      result.current.onItemStarted("ws-1", "thread-1", {
+        id: "agent-call-1",
+        type: "collabAgentToolCall",
+        tool: "spawn_agent",
+        status: "running",
+      });
+      result.current.onAgentMessageDelta({
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        itemId: "assistant-1",
+        delta: "visible answer tail",
+      });
+    });
+    options.markProcessing.mockClear();
+    options.setActiveTurnId.mockClear();
+
+    act(() => {
+      result.current.onTurnCompleted("ws-1", "thread-1", "turn-1");
+    });
+
+    expect(options.markProcessing).toHaveBeenCalledWith("thread-1", false);
+    expect(options.setActiveTurnId).toHaveBeenCalledWith("thread-1", null);
+    const labels = collectDiagnosticCalls(onDebug).map((entry) => entry.label);
+    expect(labels).not.toContain("thread/session:turn-diagnostic:turn-completed-deferred");
+    const bypassedEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) => entry.label === "thread/session:turn-diagnostic:turn-completed-deferred-bypassed",
+    );
+    expect(bypassedEntry?.payload).toEqual(
+      expect.objectContaining({
+        diagnosticCategory: "codex-collab-terminal-order",
+        deltaCount: 1,
+        blockerCount: 1,
+      }),
+    );
+    expect(bypassedEntry?.payload.remainingBlockers).toEqual([
       expect.objectContaining({
         itemType: "collabAgentToolCall",
         status: "running",

@@ -19,8 +19,12 @@ describe("status panel theme colors", () => {
     expect(statusPanelCss).toMatch(
       /\.sp-checkpoint-commit-message-section \.commit-message-input\s*\{[^}]*background:\s*var\(--sp-commit-surface-control\)/s,
     );
-    expect(statusPanelCss).not.toMatch(/sp-checkpoint-commit[\s\S]*var\(--success-color\)/);
-    expect(statusPanelCss).not.toMatch(/sp-checkpoint-commit[\s\S]*color:\s*#ef4444/);
+    expect(statusPanelCss).not.toMatch(
+      /sp-checkpoint-commit[\s\S]*var\(--success-color\)/,
+    );
+    expect(statusPanelCss).not.toMatch(
+      /sp-checkpoint-commit[\s\S]*color:\s*#ef4444/,
+    );
   });
 
   it("renders checkpoint commit action as a theme-aware icon text action", () => {
@@ -39,5 +43,39 @@ describe("status panel theme colors", () => {
     expect(statusPanelCss).not.toMatch(
       /\.sp-checkpoint-action--commit\s*\{[^}]*linear-gradient/s,
     );
+  });
+
+  it("keeps governance evidence compact and theme-token driven", () => {
+    expect(statusPanelCss).toMatch(
+      /\.sp-governance-evidence\s*\{[^}]*--sp-governance-chip-bg:\s*color-mix\([^}]*var\(--surface-item\)/s,
+    );
+    expect(statusPanelCss).toMatch(
+      /\.sp-governance-evidence\s*\{[^}]*font-family:\s*var\(--ui-font-family\)/s,
+    );
+    expect(statusPanelCss).toMatch(
+      /\.sp-governance-evidence\s*\{[^}]*--sp-governance-copy-size:\s*12px/s,
+    );
+    expect(statusPanelCss).toMatch(
+      /\.sp-governance-evidence-item\s*\{[^}]*display:\s*flex/s,
+    );
+    expect(statusPanelCss).toMatch(
+      /\.sp-governance-evidence-title\s*\{[^}]*font-size:\s*var\(--sp-governance-copy-size\)/s,
+    );
+    expect(statusPanelCss).toMatch(
+      /\.sp-governance-evidence-title\s*\{[^}]*overflow-wrap:\s*anywhere/s,
+    );
+    expect(statusPanelCss).toMatch(
+      /\.sp-governance-evidence-status\.is-pass\s*\{[^}]*color:\s*var\(--sp-governance-success\)/s,
+    );
+    expect(statusPanelCss).toMatch(
+      /\.sp-governance-evidence-status\.is-warn\s*\{[^}]*color:\s*var\(--sp-governance-warning\)/s,
+    );
+    expect(statusPanelCss).not.toMatch(
+      /\.sp-governance-evidence(?:-[\w-]+)?\s*\{[^}]*background:\s*#[0-9a-f]{3,8}/i,
+    );
+    expect(statusPanelCss).not.toMatch(
+      /\.sp-governance-evidence-title\s*\{[^}]*text-overflow:\s*ellipsis/s,
+    );
+    expect(statusPanelCss).not.toContain(".sp-checkpoint-evidence-trail");
   });
 });

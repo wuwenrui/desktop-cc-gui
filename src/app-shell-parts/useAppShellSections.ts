@@ -73,6 +73,11 @@ import {
   stripComposerKanbanTagsPreserveFormatting,
   syncKanbanExecutionEngineAndModel,
 } from "./useAppShellSections.kanbanHelpers";
+import {
+  getThreadSelectDiffCleanupAction,
+  shouldCollapseRightPanelOnThreadSelect,
+  shouldPreserveEditorOnThreadSelect,
+} from "./threadEditorPreservation";
 export {
   resolvePendingSessionThreadCandidate,
   resolveTaskThreadId,
@@ -601,11 +606,8 @@ export function useAppShellSections(ctx: any) {
       options?: MessageSendOptions,
     ) => {
       await handleComposerSendWithKanban(text, images, options);
-      if (!isCompact && centerMode === "editor") {
-        setCenterMode("chat");
-      }
     },
-    [centerMode, handleComposerSendWithKanban, isCompact, setCenterMode],
+    [handleComposerSendWithKanban],
   );
 
   const handleComposerQueueWithEditorFallback = useCallback(
@@ -615,11 +617,8 @@ export function useAppShellSections(ctx: any) {
       options?: MessageSendOptions,
     ) => {
       await handleComposerQueue(text, images, mergeSelectedAgentOption(options));
-      if (!isCompact && centerMode === "editor") {
-        setCenterMode("chat");
-      }
     },
-    [centerMode, handleComposerQueue, isCompact, mergeSelectedAgentOption, setCenterMode],
+    [handleComposerQueue, mergeSelectedAgentOption],
   );
 
   const handleRewindFromMessage = useCallback(
@@ -661,13 +660,32 @@ export function useAppShellSections(ctx: any) {
 
   const handleSelectWorkspaceInstance = useCallback(
     (workspaceId: string, threadId: string) => {
-      exitDiffView();
+      const preserveEditor = shouldPreserveEditorOnThreadSelect({
+        isCompact,
+        centerMode,
+        activeWorkspaceId,
+        targetWorkspaceId: workspaceId,
+        activeEditorFilePath,
+      });
+      const diffCleanupAction = getThreadSelectDiffCleanupAction(preserveEditor);
+      if (diffCleanupAction === "clear-selected-diff") {
+        setSelectedDiffPath(null);
+      } else {
+        exitDiffView();
+      }
       resetPullRequestSelection();
       setHomeOpen(false);
       setWorkspaceHomeWorkspaceId(null);
       setAppMode("chat");
       setActiveTab("codex");
-      collapseRightPanel();
+      if (
+        shouldCollapseRightPanelOnThreadSelect({
+          preserveEditor,
+          requestedCollapse: true,
+        })
+      ) {
+        collapseRightPanel();
+      }
       selectWorkspace(workspaceId);
       setActiveThreadId(threadId, workspaceId);
       const threads = threadsByWorkspace[workspaceId] ?? [];
@@ -677,12 +695,17 @@ export function useAppShellSections(ctx: any) {
       }
     },
     [
+      activeEditorFilePath,
+      activeWorkspaceId,
+      centerMode,
       exitDiffView,
       collapseRightPanel,
+      isCompact,
       resetPullRequestSelection,
       setActiveTab,
       setAppMode,
       setHomeOpen,
+      setSelectedDiffPath,
       setWorkspaceHomeWorkspaceId,
       selectWorkspace,
       setActiveEngine,
@@ -2465,10 +2488,14 @@ export function useAppShellSections(ctx: any) {
     getPinTimestamp,
     activeWorkspaceIdRef,
     activeThreadIdRef,
+    activeEditorFilePath,
+    centerMode,
     exitDiffView,
+    isCompact,
     resetPullRequestSelection,
     selectWorkspace,
     setActiveThreadId,
+    setSelectedDiffPath,
   });
 
   useAppMenuEvents({

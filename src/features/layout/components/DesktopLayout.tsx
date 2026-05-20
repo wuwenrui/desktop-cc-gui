@@ -94,6 +94,7 @@ export function DesktopLayout({
   const isEditorHorizontalSplitMode =
     isEditorSplitMode && editorSplitLayout === "horizontal";
   const isEditorSplitChatVisible = isEditorSplitMode && !isEditorFileMaximized;
+  const shouldPlaceComposerInChatColumn = isEditorSplitChatVisible;
   const hasBottomPanel = Boolean(planPanelNode);
 
   useEffect(() => {
@@ -322,6 +323,7 @@ export function DesktopLayout({
                     ref={chatLayerRef}
                   >
                     {messagesNode}
+                    {shouldPlaceComposerInChatColumn ? composerNode : null}
                   </div>
                 </div>
 
@@ -356,7 +358,7 @@ export function DesktopLayout({
                     </div>
                   </>
                 )}
-                {composerNode}
+                {shouldPlaceComposerInChatColumn ? null : composerNode}
                 {runtimeConsoleDockNode}
                 {terminalDockNode}
                 {debugPanelNode}

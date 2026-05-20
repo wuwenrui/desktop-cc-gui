@@ -26,6 +26,7 @@ import type {
 
 type FileViewBodyProps = {
   filePath: string;
+  documentKey: string;
   imageSrc: string | null;
   imageInfo: { width: number; height: number; sizeBytes: number | null } | null;
   handleImageLoad: (event: SyntheticEvent<HTMLImageElement>) => void;
@@ -321,6 +322,7 @@ function InlineAnnotationMarker({
 
 export function FileViewBody({
   filePath,
+  documentKey,
   imageSrc,
   imageInfo,
   handleImageLoad,
@@ -594,6 +596,7 @@ export function FileViewBody({
       <div className="fvp-preview-scroll">
         <FileMarkdownPreview
           key={filePath}
+          documentKey={documentKey}
           value={content}
           className="fvp-file-markdown fvp-markdown-github"
           onAnnotationStart={onPreviewAnnotationStart}

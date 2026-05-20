@@ -26,6 +26,7 @@ import { useThreadSelectors } from "./useThreadSelectors";
 import { useThreadStatus } from "./useThreadStatus";
 import { useThreadUserInput } from "./useThreadUserInput";
 import { useThreadCompletionEmail } from "./useThreadCompletionEmail";
+import { useThreadRealtimeHistoryReconcile } from "./useThreadRealtimeHistoryReconcile";
 import {
   resolveClaudeContinuationThreadId as resolveClaudeContinuationThreadIdFromState,
   shouldShowHistoryLoadingForSelectionThread,
@@ -79,9 +80,18 @@ import {
   syncSharedSessionSnapshot as syncSharedSessionSnapshotService,
 } from "../../shared-session/services/sharedSessions";
 import { normalizeSharedSessionEngine } from "../../shared-session/utils/sharedSessionEngines";
-import { hasPendingOptimisticUserBubble } from "../utils/queuedHandoffBubble";
 import { type ConversationCompletionEmailMetadata } from "../utils/conversationCompletionEmail";
 import { buildThreadBackgroundActivityProjection } from "../utils/threadBackgroundActivityProjection";
+import {
+  createDomainEventGovernanceConsumer,
+  createDomainEventRuntimeController,
+} from "../domain-events";
+import {
+  hasActiveTerminalDriftWork,
+  hasFinalAssistantCompletionEvidence,
+  isNativeCodexTerminalDriftThread,
+  normalizeTerminalDriftTurnId,
+} from "./useThreadsTerminalDrift";
 
 const AUTO_TITLE_REQUEST_TIMEOUT_MS = 8_000;
 const AUTO_TITLE_MAX_ATTEMPTS = 2;
@@ -89,10 +99,6 @@ const AUTO_TITLE_PENDING_STALE_MS = 20_000;
 const THREAD_ERROR_DUPLICATE_WINDOW_MS = 8_000;
 const THREAD_SWITCH_RESUME_DELAY_MS = 24;
 const THREAD_SWITCH_LOADED_REFRESH_MS = 20_000;
-const CODEX_REALTIME_HISTORY_RECONCILE_DELAY_MS = 1_200;
-const CODEX_REALTIME_HISTORY_RECONCILE_RETRY_DELAY_MS = 2_800;
-const CLAUDE_REALTIME_HISTORY_RECONCILE_DELAY_MS = 1_200;
-const CLAUDE_REALTIME_HISTORY_RECONCILE_RETRY_DELAY_MS = 2_800;
 const THREAD_ITEM_CACHE_MAX = 12;
 const THREAD_ITEM_CACHE_TRIM_WATERMARK = 2;
 
@@ -197,6 +203,20 @@ export function useThreads({
     loadSidebarSnapshot(),
     createInitialThreadState,
   );
+  const domainEventRuntimeController = useMemo(
+    () => createDomainEventRuntimeController(),
+    [],
+  );
+  const domainEventGovernanceConsumer = useMemo(
+    () => createDomainEventGovernanceConsumer(domainEventRuntimeController.runtime),
+    [domainEventRuntimeController],
+  );
+  useEffect(() => {
+    domainEventGovernanceConsumer.getSnapshot();
+    return () => {
+      domainEventGovernanceConsumer.unsubscribe();
+    };
+  }, [domainEventGovernanceConsumer]);
   const loadedThreadsRef = useRef<Record<string, boolean>>({});
   const threadStatusByIdRef = useRef(state.threadStatusById);
   const itemsByThreadRef = useRef(state.itemsByThread);
@@ -218,14 +238,6 @@ export function useThreads({
   const pendingAssistantCompletionRef = useRef<Record<string, PendingAssistantCompletion>>({});
   const recentThreadErrorsRef = useRef<Record<string, { message: string; at: number }>>({});
   const handledClaudeExitPlanToolIdsRef = useRef<Set<string>>(new Set());
-  const codexRealtimeReconciledTurnByThreadRef = useRef<Record<string, string>>({});
-  const codexRealtimeReconcileTimerByThreadRef = useRef<
-    Record<string, ReturnType<typeof setTimeout> | null>
-  >({});
-  const claudeRealtimeReconciledTurnByThreadRef = useRef<Record<string, string>>({});
-  const claudeRealtimeReconcileTimerByThreadRef = useRef<
-    Record<string, ReturnType<typeof setTimeout> | null>
-  >({});
   const sharedSessionSyncTimerByThreadRef = useRef<
     Record<string, ReturnType<typeof setTimeout> | null>
   >({});
@@ -400,20 +412,6 @@ export function useThreads({
         }
       });
       sharedSessionSyncTimerByThreadRef.current = {};
-      Object.values(codexRealtimeReconcileTimerByThreadRef.current).forEach((timer) => {
-        if (timer) {
-          clearTimeout(timer);
-        }
-      });
-      Object.values(claudeRealtimeReconcileTimerByThreadRef.current).forEach((timer) => {
-        if (timer) {
-          clearTimeout(timer);
-        }
-      });
-      codexRealtimeReconcileTimerByThreadRef.current = {};
-      codexRealtimeReconciledTurnByThreadRef.current = {};
-      claudeRealtimeReconcileTimerByThreadRef.current = {};
-      claudeRealtimeReconciledTurnByThreadRef.current = {};
     };
   }, []);
   const { applyCollabThreadLinks, applyCollabThreadLinksFromThread, updateThreadParent } =
@@ -738,244 +736,115 @@ export function useThreads({
     [dispatch, rawRefreshThread, resolveCanonicalThreadId],
   );
 
-  const shouldReconcileCodexRealtimeThread = useCallback(
-    (workspaceId: string, threadId: string) => {
-      const canonicalThreadId = resolveCanonicalThreadId(threadId);
-      if (
-        canonicalThreadId.startsWith("claude:") ||
-        canonicalThreadId.startsWith("claude-pending-") ||
-        canonicalThreadId.startsWith("gemini:") ||
-        canonicalThreadId.startsWith("gemini-pending-") ||
-        canonicalThreadId.startsWith("opencode:") ||
-        canonicalThreadId.startsWith("opencode-pending-") ||
-        canonicalThreadId.startsWith("shared:")
-      ) {
-        return false;
-      }
-      const thread = (state.threadsByWorkspace[workspaceId] ?? []).find(
-        (entry) => entry.id === canonicalThreadId,
-      );
-      if (thread?.threadKind === "shared") {
-        return false;
-      }
-      return !thread?.engineSource || thread.engineSource === "codex";
-    },
-    [resolveCanonicalThreadId, state.threadsByWorkspace],
-  );
-
-  const scheduleCodexRealtimeHistoryReconcile = useCallback(
-    (workspaceId: string, threadId: string, turnId: string, attempt = 0) => {
-      const canonicalThreadId = resolveCanonicalThreadId(threadId);
-      if (!shouldReconcileCodexRealtimeThread(workspaceId, canonicalThreadId)) {
+  const settleCodexTerminalDrift = useCallback(
+    (payload: {
+      workspaceId: string;
+      threadId: string;
+      turnId: string;
+      source: "turn-completed" | "assistant-completed" | "activation-terminal-drift";
+    }) => {
+      const canonicalThreadId = resolveCanonicalThreadId(payload.threadId);
+      const status = threadStatusByIdRef.current[canonicalThreadId];
+      if (!status?.isProcessing) {
         return;
       }
-      const reconciliationThreadKey = `${workspaceId}:${canonicalThreadId}`;
-      const reconciliationTurnId = turnId.trim() || "__unknown_turn__";
       if (
-        attempt === 0 &&
-        codexRealtimeReconciledTurnByThreadRef.current[reconciliationThreadKey] ===
-        reconciliationTurnId
+        !isNativeCodexTerminalDriftThread({
+          threadId: canonicalThreadId,
+          engine: getThreadEngine(payload.workspaceId, canonicalThreadId),
+          kind: getThreadKind(payload.workspaceId, canonicalThreadId),
+        })
       ) {
         return;
       }
-      codexRealtimeReconciledTurnByThreadRef.current[reconciliationThreadKey] =
-        reconciliationTurnId;
-      const previousTimer =
-        codexRealtimeReconcileTimerByThreadRef.current[reconciliationThreadKey];
-      if (previousTimer) {
-        clearTimeout(previousTimer);
+      const activeTurnId = activeTurnIdByThreadRef.current[canonicalThreadId] ?? null;
+      const terminalDriftTurnId = normalizeTerminalDriftTurnId(payload.turnId);
+      if (activeTurnId && terminalDriftTurnId && activeTurnId !== terminalDriftTurnId) {
+        return;
       }
-      const delay =
-        attempt > 0
-          ? CODEX_REALTIME_HISTORY_RECONCILE_RETRY_DELAY_MS
-          : CODEX_REALTIME_HISTORY_RECONCILE_DELAY_MS;
-      codexRealtimeReconcileTimerByThreadRef.current[reconciliationThreadKey] =
-        setTimeout(() => {
-          delete codexRealtimeReconcileTimerByThreadRef.current[reconciliationThreadKey];
-          const status = threadStatusByIdRef.current[canonicalThreadId];
-          if (status?.isProcessing && attempt === 0) {
-            scheduleCodexRealtimeHistoryReconcile(
-              workspaceId,
-              canonicalThreadId,
-              reconciliationTurnId,
-              attempt + 1,
-            );
-            return;
-          }
-          if (
-            attempt === 0 &&
-            hasPendingOptimisticUserBubble(
-              itemsByThreadRef.current[canonicalThreadId] ?? [],
-            )
-          ) {
-            scheduleCodexRealtimeHistoryReconcile(
-              workspaceId,
-              canonicalThreadId,
-              reconciliationTurnId,
-              attempt + 1,
-            );
-            return;
-          }
-          onDebug?.({
-            id: `${Date.now()}-codex-realtime-history-reconcile`,
-            timestamp: Date.now(),
-            source: "client",
-            label: "codex/realtime history reconcile",
-            payload: {
-              workspaceId,
-              threadId: canonicalThreadId,
-              turnId: reconciliationTurnId,
-              attempt,
-            },
-          });
-          void refreshThread(workspaceId, canonicalThreadId).catch((error) => {
-            onDebug?.({
-              id: `${Date.now()}-codex-realtime-history-reconcile-error`,
-              timestamp: Date.now(),
-              source: "error",
-              label: "codex/realtime history reconcile error",
-              payload: {
-                workspaceId,
-                threadId: canonicalThreadId,
-                turnId: reconciliationTurnId,
-                attempt,
-                error: error instanceof Error ? error.message : String(error),
-              },
-            });
-          });
-        }, delay);
+      const items = itemsByThreadRef.current[canonicalThreadId] ?? [];
+      if (
+        !hasFinalAssistantCompletionEvidence(items, {
+          processingStartedAt: status.processingStartedAt,
+        }) ||
+        hasActiveTerminalDriftWork(items)
+      ) {
+        return;
+      }
+      const completedTurnId = activeTurnId ?? terminalDriftTurnId ?? "";
+      dispatch({
+        type: "clearProcessingGeneratedImages",
+        threadId: canonicalThreadId,
+      });
+      dispatch({ type: "markTerminalSettlement", threadId: canonicalThreadId });
+      dispatch({
+        type: "finalizePendingToolStatuses",
+        threadId: canonicalThreadId,
+        status: "completed",
+      });
+      dispatch({
+        type: "markContextCompacting",
+        threadId: canonicalThreadId,
+        isCompacting: false,
+        timestamp: Date.now(),
+      });
+      dispatch({
+        type: "settleThreadPlanInProgress",
+        threadId: canonicalThreadId,
+        targetStatus: "completed",
+      });
+      markProcessing(canonicalThreadId, false);
+      setActiveTurnIdWithCompletionEmail(canonicalThreadId, null);
+      pendingInterruptsRef.current.delete(canonicalThreadId);
+      interruptedThreadsRef.current.delete(canonicalThreadId);
+      dispatch({ type: "resetAgentSegment", threadId: canonicalThreadId });
+      dispatch({ type: "markLatestAssistantMessageFinal", threadId: canonicalThreadId });
+      if (completedTurnId) {
+        settleCompletionEmailIntent(
+          payload.workspaceId,
+          canonicalThreadId,
+          completedTurnId,
+          "completed",
+        );
+      }
+      onDebug?.({
+        id: `${Date.now()}-codex-terminal-drift-settled`,
+        timestamp: Date.now(),
+        source: "client",
+        label: "codex/terminal drift settled",
+        payload: {
+          workspaceId: payload.workspaceId,
+          threadId: canonicalThreadId,
+          turnId: completedTurnId || null,
+          source: payload.source,
+        },
+      });
     },
     [
+      dispatch,
+      getThreadEngine,
+      getThreadKind,
+      markProcessing,
       onDebug,
-      refreshThread,
       resolveCanonicalThreadId,
-      shouldReconcileCodexRealtimeThread,
+      setActiveTurnIdWithCompletionEmail,
+      settleCompletionEmailIntent,
     ],
   );
 
-  const handleCodexTurnCompletedForHistoryReconcile = useCallback(
-    (payload: {
-      workspaceId: string;
-      threadId: string;
-      turnId: string;
-    }) => {
-      scheduleCodexRealtimeHistoryReconcile(
-        payload.workspaceId,
-        payload.threadId,
-        payload.turnId,
-      );
-    },
-    [scheduleCodexRealtimeHistoryReconcile],
-  );
-
-  const shouldReconcileClaudeRealtimeThread = useCallback((threadId: string) => {
-    const canonicalThreadId = resolveCanonicalThreadId(threadId);
-    return canonicalThreadId.startsWith("claude:");
-  }, [resolveCanonicalThreadId]);
-
-  const scheduleClaudeRealtimeHistoryReconcile = useCallback(
-    (workspaceId: string, threadId: string, turnId: string, attempt = 0) => {
-      const canonicalThreadId = resolveCanonicalThreadId(threadId);
-      if (!shouldReconcileClaudeRealtimeThread(canonicalThreadId)) {
-        return;
-      }
-      const reconciliationThreadKey = `${workspaceId}:${canonicalThreadId}`;
-      const reconciliationTurnId = turnId.trim() || "__unknown_turn__";
-      if (
-        attempt === 0 &&
-        claudeRealtimeReconciledTurnByThreadRef.current[reconciliationThreadKey] ===
-        reconciliationTurnId
-      ) {
-        return;
-      }
-      claudeRealtimeReconciledTurnByThreadRef.current[reconciliationThreadKey] =
-        reconciliationTurnId;
-      const previousTimer =
-        claudeRealtimeReconcileTimerByThreadRef.current[reconciliationThreadKey];
-      if (previousTimer) {
-        clearTimeout(previousTimer);
-      }
-      const delay =
-        attempt > 0
-          ? CLAUDE_REALTIME_HISTORY_RECONCILE_RETRY_DELAY_MS
-          : CLAUDE_REALTIME_HISTORY_RECONCILE_DELAY_MS;
-      claudeRealtimeReconcileTimerByThreadRef.current[reconciliationThreadKey] =
-        setTimeout(() => {
-          delete claudeRealtimeReconcileTimerByThreadRef.current[reconciliationThreadKey];
-          const status = threadStatusByIdRef.current[canonicalThreadId];
-          if (status?.isProcessing && attempt === 0) {
-            scheduleClaudeRealtimeHistoryReconcile(
-              workspaceId,
-              canonicalThreadId,
-              reconciliationTurnId,
-              attempt + 1,
-            );
-            return;
-          }
-          onDebug?.({
-            id: `${Date.now()}-claude-realtime-history-reconcile`,
-            timestamp: Date.now(),
-            source: "client",
-            label: "claude/realtime history reconcile",
-            payload: {
-              workspaceId,
-              threadId: canonicalThreadId,
-              turnId: reconciliationTurnId,
-              attempt,
-            },
-          });
-          void refreshThread(workspaceId, canonicalThreadId).catch((error) => {
-            onDebug?.({
-              id: `${Date.now()}-claude-realtime-history-reconcile-error`,
-              timestamp: Date.now(),
-              source: "error",
-              label: "claude/realtime history reconcile error",
-              payload: {
-                workspaceId,
-                threadId: canonicalThreadId,
-                turnId: reconciliationTurnId,
-                attempt,
-                error: error instanceof Error ? error.message : String(error),
-              },
-            });
-          });
-        }, delay);
-    },
-    [onDebug, refreshThread, resolveCanonicalThreadId, shouldReconcileClaudeRealtimeThread],
-  );
-
-  const handleClaudeTurnCompletedForHistoryReconcile = useCallback(
-    (payload: {
-      workspaceId: string;
-      threadId: string;
-      turnId: string;
-    }) => {
-      scheduleClaudeRealtimeHistoryReconcile(
-        payload.workspaceId,
-        payload.threadId,
-        payload.turnId,
-      );
-    },
-    [scheduleClaudeRealtimeHistoryReconcile],
-  );
-
-  const handleTurnCompletedForHistoryReconcile = useCallback(
-    (payload: {
-      workspaceId: string;
-      threadId: string;
-      turnId: string;
-    }) => {
-      if (payload.threadId.startsWith("claude:")) {
-        handleClaudeTurnCompletedForHistoryReconcile(payload);
-        return;
-      }
-      handleCodexTurnCompletedForHistoryReconcile(payload);
-    },
-    [
-      handleClaudeTurnCompletedForHistoryReconcile,
-      handleCodexTurnCompletedForHistoryReconcile,
-    ],
-  );
+  const {
+    handleCodexActivationTerminalDriftReconcile,
+    handleCodexAssistantCompletedForHistoryReconcile,
+    handleTurnCompletedForHistoryReconcile,
+  } = useThreadRealtimeHistoryReconcile({
+    itemsByThreadRef,
+    onDebug,
+    refreshThread,
+    resolveCanonicalThreadId,
+    settleCodexTerminalDrift,
+    threadStatusByIdRef,
+    threadsByWorkspace: state.threadsByWorkspace,
+  });
 
   useEffect(() => {
     if (!isWebServiceRuntime()) {
@@ -1841,6 +1710,30 @@ export function useThreads({
           historyLoadingThreadByWorkspaceRef.current[targetId] = null;
         }
       };
+      const scheduleActivationTerminalDriftReconcile = (targetThreadId: string) => {
+        const status = threadStatusByIdRef.current[targetThreadId];
+        const items = itemsByThreadRef.current[targetThreadId] ?? [];
+        const hasTerminalDriftEvidence =
+          status?.codexSilentSuspectedAt != null ||
+          hasFinalAssistantCompletionEvidence(items, {
+            processingStartedAt: status?.processingStartedAt,
+          });
+        if (
+          !hasTerminalDriftEvidence ||
+          !isNativeCodexTerminalDriftThread({
+            threadId: targetThreadId,
+            engine: getThreadEngine(targetId, targetThreadId),
+            kind: getThreadKind(targetId, targetThreadId),
+          })
+        ) {
+          return;
+        }
+        handleCodexActivationTerminalDriftReconcile({
+          workspaceId: targetId,
+          threadId: targetThreadId,
+          turnId: activeTurnIdByThreadRef.current[targetThreadId] ?? null,
+        });
+      };
       const canonicalThreadId = threadId ? resolveCanonicalThreadId(threadId) : null;
       dispatch({ type: "setActiveThreadId", workspaceId: targetId, threadId: canonicalThreadId });
       const previousTimer = lazyResumeTimerByWorkspaceRef.current[targetId];
@@ -1873,6 +1766,9 @@ export function useThreads({
         const shouldScheduleResume = !isLoaded || shouldRefreshLoaded;
         if (!shouldScheduleResume) {
           clearHistoryLoadingForThread(canonicalThreadId);
+          if (isProcessing) {
+            scheduleActivationTerminalDriftReconcile(canonicalThreadId);
+          }
           return;
         }
         const shouldShowHistoryLoading =
@@ -1953,6 +1849,7 @@ export function useThreads({
             threadStatusByIdRef.current[canonicalThreadId]?.isProcessing,
           );
           if (processingAtCallback) {
+            scheduleActivationTerminalDriftReconcile(canonicalThreadId);
             return;
           }
           const callbackLastRefreshAt =
@@ -1999,6 +1896,9 @@ export function useThreads({
     [
       activeWorkspaceId,
       dispatch,
+      getThreadEngine,
+      getThreadKind,
+      handleCodexActivationTerminalDriftReconcile,
       onDebug,
       resolveCanonicalThreadId,
       resumeThreadForWorkspace,
@@ -2397,6 +2297,7 @@ export function useThreads({
     pushThreadErrorMessage,
     onDebug,
     onWorkspaceConnected: handleWorkspaceConnected,
+    domainEventController: domainEventRuntimeController,
     applyCollabThreadLinks,
     approvalAllowlistRef,
     pendingInterruptsRef,
@@ -2410,7 +2311,10 @@ export function useThreads({
     getActiveTurnIdForThread: (threadId: string) =>
       state.activeTurnIdByThread[threadId] ?? null,
     renamePendingMemoryCaptureKey,
-    onAgentMessageCompletedExternal: handleAgentMessageCompletedForMemory,
+    onAgentMessageCompletedExternal: (payload) => {
+      handleAgentMessageCompletedForMemory(payload);
+      handleCodexAssistantCompletedForHistoryReconcile(payload);
+    },
     onTurnCompletedExternal: (payload) => {
       handleTurnCompletedForHistoryReconcile(payload);
     },

@@ -1,4 +1,4 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useReducer, useRef, useState, type DragEvent, type MouseEvent, type ReactNode, type RefObject } from "react";
+import { lazy, Suspense, useCallback, useDeferredValue, useEffect, useMemo, useReducer, useRef, useState, type DragEvent, type MouseEvent, type ReactNode, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left";
 import { Sidebar } from "../../app/components/Sidebar";
@@ -10,7 +10,6 @@ import { UpdateToast } from "../../update/components/UpdateToast";
 import { ErrorToasts } from "../../notifications/components/ErrorToasts";
 import { GlobalRuntimeNoticeDock } from "../../notifications/components/GlobalRuntimeNoticeDock";
 import { Composer } from "../../composer/components/Composer";
-import { GitDiffPanel } from "../../git/components/GitDiffPanel";
 import { GitDiffViewer } from "../../git/components/GitDiffViewer";
 import { FileTreePanel } from "../../files/components/FileTreePanel";
 import {
@@ -19,7 +18,6 @@ import {
   type RendererContextMenuState,
 } from "../../../components/ui/RendererContextMenu";
 import { WorkspaceSearchPanel } from "../../search/components/WorkspaceSearchPanel";
-import { FileViewPanel } from "../../files/components/FileViewPanel";
 import { PromptPanel } from "../../prompts/components/PromptPanel";
 import { ProjectMemoryPanel } from "../../project-memory/components/ProjectMemoryPanel";
 import { WorkspaceNoteCardPanel } from "../../note-cards/components/WorkspaceNoteCardPanel";
@@ -137,6 +135,18 @@ import {
   recordTopbarSessionActivation,
   type TopbarSessionWindows,
 } from "./topbarSessionTabs";
+import { buildWorkspaceHeaderGroups } from "./workspaceHeaderGroups";
+
+const GitDiffPanel = lazy(() =>
+  import("../../git/components/GitDiffPanel").then((m) => ({ default: m.GitDiffPanel })),
+);
+const FileViewPanel = lazy(() =>
+  import("../../files/components/FileViewPanel").then((m) => ({ default: m.FileViewPanel })),
+);
+
+function HeavyPanelFallback() {
+  return <div className="heavy-panel-fallback" aria-hidden="true" />;
+}
 
 type ThreadActivityStatus = {
   isProcessing: boolean;
@@ -1041,37 +1051,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     [isEditorFileMaximized, onOpenFile, onToggleEditorFileMaximized],
   );
   const groupedWorkspacesForHeader = useMemo(() => {
-    const worktreesByParent = new Map<string, WorkspaceInfo[]>();
-    const getSortOrder = (value?: number | null) =>
-      Number.isFinite(value) ? Number(value) : Number.MAX_SAFE_INTEGER;
-    const sortByOrderAndName = (a: WorkspaceInfo, b: WorkspaceInfo) => {
-      const orderDiff = getSortOrder(a.settings.sortOrder) - getSortOrder(b.settings.sortOrder);
-      if (orderDiff !== 0) {
-        return orderDiff;
-      }
-      return a.name.localeCompare(b.name);
-    };
-
-    options.workspaces
-      .filter((entry) => (entry.kind ?? "main") === "worktree" && Boolean(entry.parentId))
-      .forEach((worktree) => {
-        const parentId = worktree.parentId as string;
-        const bucket = worktreesByParent.get(parentId) ?? [];
-        bucket.push(worktree);
-        worktreesByParent.set(parentId, bucket);
-      });
-
-    worktreesByParent.forEach((entries) => {
-      entries.sort(sortByOrderAndName);
-    });
-
-    return options.groupedWorkspaces.map((group) => ({
-      ...group,
-      workspaces: group.workspaces.flatMap((workspace) => {
-        const worktrees = worktreesByParent.get(workspace.id) ?? [];
-        return worktrees.length > 0 ? [workspace, ...worktrees] : [workspace];
-      }),
-    }));
+    return buildWorkspaceHeaderGroups(options.groupedWorkspaces, options.workspaces);
   }, [options.groupedWorkspaces, options.workspaces]);
 
   topbarSessionWindowsRef.current = pruneTopbarSessionWindows(
@@ -2142,6 +2122,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     );
   } else {
     gitDiffPanelNode = (
+      <Suspense fallback={<HeavyPanelFallback />}>
       <GitDiffPanel
         workspaceId={options.activeWorkspace?.id ?? null}
         workspacePath={options.activeWorkspace?.path ?? null}
@@ -2173,6 +2154,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         stagedFiles={options.gitStatus.stagedFiles}
         unstagedFiles={options.gitStatus.unstagedFiles}
         onSelectFile={options.onSelectDiff}
+        onOpenFile={options.onOpenFile}
         selectedPath={sidebarSelectedDiffPath}
         logEntries={options.gitLogEntries}
         logTotal={options.gitLogTotal}
@@ -2233,6 +2215,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         onRemoveCodeAnnotation={handleRemoveCodeAnnotation}
         codeAnnotations={selectedCodeAnnotations}
       />
+      </Suspense>
     );
   }
 
@@ -2263,6 +2246,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
 
   const fileViewPanelNode =
     options.editorFilePath && options.activeWorkspace ? (
+      <Suspense fallback={<HeavyPanelFallback />}>
       <FileViewPanel
         workspaceId={options.activeWorkspace.id}
         workspacePath={options.activeWorkspace.path}
@@ -2304,6 +2288,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         saveFileShortcut={options.saveFileShortcut}
         findInFileShortcut={options.findInFileShortcut}
       />
+      </Suspense>
     ) : null;
 
   const planPanelNode = showBottomStatusPanel ? (
@@ -2318,6 +2303,9 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       isCodexEngine={isStatusPanelCodexEngine}
       activeThreadId={options.activeThreadId}
       activeTurnId={options.activeTurnId ?? null}
+      selectedEngine={options.selectedEngine}
+      selectedModelId={options.selectedModelId}
+      activeTokenUsage={options.activeTokenUsage}
       workspaceGitFiles={options.gitStatus.files}
       workspaceGitStagedFiles={options.gitStatus.stagedFiles}
       workspaceGitUnstagedFiles={options.gitStatus.unstagedFiles}

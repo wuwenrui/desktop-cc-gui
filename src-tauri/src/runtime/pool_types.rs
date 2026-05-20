@@ -229,6 +229,32 @@ pub(crate) struct RuntimePoolSummary {
     pub(crate) claude_runtimes: usize,
 }
 
+pub(crate) fn runtime_pool_summary_from_rows(rows: &[RuntimePoolRow]) -> RuntimePoolSummary {
+    RuntimePoolSummary {
+        total_runtimes: rows.len(),
+        acquired_runtimes: rows
+            .iter()
+            .filter(|row| matches!(row.state, RuntimeState::Acquired))
+            .count(),
+        streaming_runtimes: rows
+            .iter()
+            .filter(|row| matches!(row.state, RuntimeState::Streaming))
+            .count(),
+        graceful_idle_runtimes: rows
+            .iter()
+            .filter(|row| matches!(row.state, RuntimeState::GracefulIdle))
+            .count(),
+        evictable_runtimes: rows
+            .iter()
+            .filter(|row| matches!(row.state, RuntimeState::Evictable))
+            .count(),
+        active_work_protected_runtimes: rows.iter().filter(|row| row.active_work_protected).count(),
+        pinned_runtimes: rows.iter().filter(|row| row.pinned).count(),
+        codex_runtimes: rows.iter().filter(|row| row.engine == "codex").count(),
+        claude_runtimes: rows.iter().filter(|row| row.engine == "claude").count(),
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct RuntimePoolSnapshot {

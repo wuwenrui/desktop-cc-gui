@@ -27,7 +27,6 @@ import { usePullRequestComposer } from "./features/git/hooks/usePullRequestCompo
 import { useGitActions } from "./features/git/hooks/useGitActions";
 import { useAutoExitEmptyDiff } from "./features/git/hooks/useAutoExitEmptyDiff";
 import { useModels } from "./features/models/hooks/useModels";
-import { refreshCodexModelConfig } from "./features/models/refreshCodexModelConfig";
 import { useCollaborationModes } from "./features/collaboration/hooks/useCollaborationModes";
 import { useCollaborationModeSelection } from "./features/collaboration/hooks/useCollaborationModeSelection";
 import { useSkills } from "./features/skills/hooks/useSkills";
@@ -98,10 +97,6 @@ import {
 } from "./features/workspaces/components/WorkspaceHome";
 import { SpecHub } from "./features/spec/components/SpecHub";
 import { SearchPalette } from "./features/search/components/SearchPalette";
-import {
-  getHomeWorkspaceOptions,
-  resolveHomeWorkspaceId,
-} from "./features/home/utils/homeWorkspaceOptions";
 import { shouldHideHomeOnThreadActivation } from "./features/home/utils/homeVisibility";
 import { forceRefreshAgents } from "./features/composer/components/ChatInputBox/providers";
 import { recordSearchResultOpen } from "./features/search/ranking/recencyStore";
@@ -166,20 +161,8 @@ import { useCreateSessionLoading } from "./app-shell-parts/useCreateSessionLoadi
 import type { AgentTaskScrollRequest } from "./features/messages/types";
 import { useAppShellWorkspaceFlowsSection } from "./app-shell-parts/useAppShellWorkspaceFlowsSection";
 import { defineRuntimeThreadShellBoundary } from "./app-shell-parts/runtimeThreadBoundary";
-import { recordStartupMilestone } from "./features/startup-orchestration/utils/startupTrace";
-
-const resolveModelConfigEngine = (
-  providerId: string | undefined,
-  fallbackEngine: EngineType,
-): EngineType | null => {
-  if (providerId === "claude" || providerId === "codex" || providerId === "gemini") {
-    return providerId;
-  }
-  if (fallbackEngine === "claude" || fallbackEngine === "codex" || fallbackEngine === "gemini") {
-    return fallbackEngine;
-  }
-  return null;
-};
+import { useAppShellWorkspaceHomeState } from "./app-shell-parts/useAppShellWorkspaceHomeState";
+import { useModelConfigRefresh } from "./app-shell-parts/useModelConfigRefresh";
 
 export function AppShell() {
   const { t } = useTranslation();
@@ -266,31 +249,20 @@ export function AppShell() {
     addDebugEntry,
     queueSaveSettings,
   });
-  useEffect(() => {
-    if (inputReadyMilestoneRecordedRef.current || appSettingsLoading || !hasLoaded) {
-      return;
-    }
-    inputReadyMilestoneRecordedRef.current = true;
-    recordStartupMilestone("input-ready");
-  }, [appSettingsLoading, hasLoaded]);
-  const workspacesById = useMemo(
-    () => new Map(workspaces.map((workspace) => [workspace.id, workspace])),
-    [workspaces],
-  );
-  const workspacesByPath = useMemo(
-    () => new Map(workspaces.map((workspace) => [workspace.path, workspace])),
-    [workspaces],
-  );
-  const [homeOpen, setHomeOpen] = useState(true);
-  const homeWorkspaceOptions = useMemo(
-    () => getHomeWorkspaceOptions(groupedWorkspaces, workspaces),
-    [groupedWorkspaces, workspaces],
-  );
-  const homeWorkspaceDefaultId = homeWorkspaceOptions[0]?.id ?? null;
-  const homeWorkspaceSelectedId = useMemo(
-    () => resolveHomeWorkspaceId(activeWorkspaceId, homeWorkspaceOptions),
-    [activeWorkspaceId, homeWorkspaceOptions],
-  );
+  const {
+    homeOpen,
+    homeWorkspaceDefaultId,
+    homeWorkspaceSelectedId,
+    setHomeOpen,
+    workspacesById,
+    workspacesByPath,
+  } = useAppShellWorkspaceHomeState({
+    activeWorkspaceId,
+    appSettingsLoading,
+    groupedWorkspaces,
+    hasLoaded,
+    workspaces,
+  });
   const {
     sidebarWidth,
     rightPanelWidth,
@@ -329,6 +301,21 @@ export function AppShell() {
   const [appMode, setAppMode] = useState<AppMode>("chat");
   const [agentTaskScrollRequest, setAgentTaskScrollRequest] =
     useState<AgentTaskScrollRequest | null>(null);
+  const [activeEditorLineRange, setActiveEditorLineRange] = useState<{
+    startLine: number;
+    endLine: number;
+  } | null>(null);
+  const [fileReferenceMode, setFileReferenceMode] = useState<"path" | "none">("none");
+  const [editorSplitLayout, setEditorSplitLayout] = useState<"vertical" | "horizontal">(
+    "vertical",
+  );
+  const [isEditorFileMaximized, setIsEditorFileMaximized] = useState(false);
+  const [liveEditPreviewEnabled, setLiveEditPreviewEnabled] = useState(false);
+  const requestEditorOpenLayout = useCallback(() => {
+    collapseSidebar();
+    setEditorSplitLayout((current) => (current === "horizontal" ? current : "horizontal"));
+    setIsEditorFileMaximized((current) => (current ? false : current));
+  }, [collapseSidebar]);
   const appRootRef = useRef<HTMLDivElement | null>(null);
   const {
     gitHistoryPanelHeight,
@@ -403,7 +390,6 @@ export function AppShell() {
   const completionTrackerReadyRef = useRef(false);
   const completionTrackerBySessionRef = useRef<Record<string, any>>({});
   const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
-  const inputReadyMilestoneRecordedRef = useRef(false);
 
   const {
     updaterState,
@@ -522,17 +508,8 @@ export function AppShell() {
     prDiffs: gitPullRequestDiffs,
     prDiffsLoading: gitPullRequestDiffsLoading,
     prDiffsError: gitPullRequestDiffsError,
+    onOpenEditorLayoutRequest: requestEditorOpenLayout,
   });
-  const [activeEditorLineRange, setActiveEditorLineRange] = useState<{
-    startLine: number;
-    endLine: number;
-  } | null>(null);
-  const [fileReferenceMode, setFileReferenceMode] = useState<"path" | "none">("none");
-  const [editorSplitLayout, setEditorSplitLayout] = useState<"vertical" | "horizontal">(
-    "vertical",
-  );
-  const [isEditorFileMaximized, setIsEditorFileMaximized] = useState(false);
-  const [liveEditPreviewEnabled, setLiveEditPreviewEnabled] = useState(false);
 
   useEffect(() => {
     if (!activeEditorFilePath) {
@@ -540,7 +517,6 @@ export function AppShell() {
       setIsEditorFileMaximized(false);
     }
   }, [activeEditorFilePath]);
-
 
   const shouldLoadGitHubPanelData =
     gitPanelMode === "issues" ||
@@ -628,61 +604,12 @@ export function AppShell() {
     },
     onDebug: addDebugEntry,
   });
-  const [modelConfigRefreshingByEngine, setModelConfigRefreshingByEngine] =
-    useState<Partial<Record<EngineType, boolean>>>({});
-  const modelConfigRefreshInFlightRef =
-    useRef<Partial<Record<EngineType, boolean>>>({});
-  const handleRefreshModelConfig = useCallback(
-    async (providerId?: string) => {
-      const targetEngine = resolveModelConfigEngine(providerId, activeEngine);
-      if (!targetEngine || modelConfigRefreshInFlightRef.current[targetEngine]) {
-        return;
-      }
-      modelConfigRefreshInFlightRef.current = {
-        ...modelConfigRefreshInFlightRef.current,
-        [targetEngine]: true,
-      };
-      setModelConfigRefreshingByEngine((current) => ({
-        ...current,
-        [targetEngine]: true,
-      }));
-      addDebugEntry({
-        id: `${Date.now()}-model-config-refresh-start`,
-        timestamp: Date.now(),
-        source: "client",
-        label: "model/config refresh start",
-        payload: { engine: targetEngine },
-      });
-      try {
-        if (targetEngine === "codex") {
-          await refreshCodexModelConfig({ refreshModels });
-        } else {
-          await refreshEngineModels(targetEngine, { forceRefresh: true });
-        }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        addDebugEntry({
-          id: `${Date.now()}-model-config-refresh-error`,
-          timestamp: Date.now(),
-          source: "error",
-          label: "model/config refresh error",
-          payload: { engine: targetEngine, error: message },
-        });
-        throw error;
-      } finally {
-        modelConfigRefreshInFlightRef.current = {
-          ...modelConfigRefreshInFlightRef.current,
-          [targetEngine]: false,
-        };
-        setModelConfigRefreshingByEngine((current) => ({
-          ...current,
-          [targetEngine]: false,
-        }));
-      }
-    },
-    [activeEngine, addDebugEntry, refreshEngineModels, refreshModels],
-  );
-  const isModelConfigRefreshing = Boolean(modelConfigRefreshingByEngine[activeEngine]);
+  const { handleRefreshModelConfig, isModelConfigRefreshing } = useModelConfigRefresh({
+    activeEngine,
+    addDebugEntry,
+    refreshEngineModels,
+    refreshModels,
+  });
   const {
     openCodeAgents,
     resolveOpenCodeAgentForThread,
@@ -919,7 +846,6 @@ export function AppShell() {
       appSettings.composerListContinuation,
     ],
   );
-
 
   useSyncSelectedDiffPath({
     diffSource,

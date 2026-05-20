@@ -939,8 +939,8 @@ fn diagnostics_counts_health_duplicates_and_bad_files() {
     let dir = std::env::temp_dir().join("codemoss-test-memory-diagnostics");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    let make_turn = |id: &str, user_input: Option<&str>, assistant_response: Option<&str>| {
-        ProjectMemoryItem {
+    let make_turn =
+        |id: &str, user_input: Option<&str>, assistant_response: Option<&str>| ProjectMemoryItem {
             id: id.to_string(),
             workspace_id: "ws-1".to_string(),
             schema_version: Some(2),
@@ -969,8 +969,7 @@ fn diagnostics_counts_health_duplicates_and_bad_files() {
             workspace_name: None,
             workspace_path: None,
             engine: Some("codex".to_string()),
-        }
-    };
+        };
     write_date_file(
         &dir.join("2026-02-10.json"),
         &[
@@ -997,8 +996,8 @@ fn reconcile_dry_run_and_apply_merge_half_turns_without_deleting_facts() {
     let dir = std::env::temp_dir().join("codemoss-test-memory-reconcile");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    let make_turn = |id: &str, user_input: Option<&str>, assistant_response: Option<&str>| {
-        ProjectMemoryItem {
+    let make_turn =
+        |id: &str, user_input: Option<&str>, assistant_response: Option<&str>| ProjectMemoryItem {
             id: id.to_string(),
             workspace_id: "ws-1".to_string(),
             schema_version: Some(2),
@@ -1027,8 +1026,7 @@ fn reconcile_dry_run_and_apply_merge_half_turns_without_deleting_facts() {
             workspace_name: None,
             workspace_path: None,
             engine: Some("codex".to_string()),
-        }
-    };
+        };
     write_date_file(
         &dir.join("2026-02-10.json"),
         &[

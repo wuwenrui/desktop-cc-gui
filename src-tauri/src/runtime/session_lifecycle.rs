@@ -1,12 +1,62 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use tokio::process::Child;
 use tokio::sync::Mutex;
+#[cfg(unix)]
+use tokio::time::{sleep, Duration};
 
 use crate::backend::app_server::{RuntimeShutdownSource, WorkspaceSession};
 use crate::state::AppState;
 
-use super::{terminate_workspace_session_process, RuntimeManager, RuntimeReplacementGate};
+use super::{RuntimeManager, RuntimeReplacementGate, TERMINATE_GRACE_MILLIS};
+
+pub(crate) async fn terminate_workspace_session_process(child: &mut Child) -> Result<bool, String> {
+    #[cfg(unix)]
+    {
+        if let Some(pid) = child.id() {
+            let process_group_id = pid as libc::pid_t;
+            let terminate_status = unsafe { libc::kill(-process_group_id, libc::SIGTERM) };
+            if terminate_status == 0 {
+                sleep(Duration::from_millis(TERMINATE_GRACE_MILLIS)).await;
+                if matches!(child.try_wait(), Ok(Some(_))) {
+                    let _ = child.wait().await;
+                    return Ok(false);
+                }
+            }
+            let kill_status = unsafe { libc::kill(-process_group_id, libc::SIGKILL) };
+            if kill_status == 0 {
+                let _ = child.wait().await;
+                return Ok(true);
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        if let Some(pid) = child.id() {
+            let output = crate::utils::async_command("taskkill")
+                .arg("/PID")
+                .arg(pid.to_string())
+                .arg("/T")
+                .arg("/F")
+                .output()
+                .await
+                .map_err(|error| format!("taskkill failed for pid {pid}: {error}"))?;
+            if output.status.success() || matches!(child.try_wait(), Ok(Some(_))) {
+                let _ = child.wait().await;
+                return Ok(true);
+            }
+        }
+    }
+
+    child
+        .kill()
+        .await
+        .map_err(|error| format!("Failed to kill process: {error}"))?;
+    let _ = child.wait().await;
+    Ok(true)
+}
 
 pub(super) async fn close_runtime(
     state: &AppState,

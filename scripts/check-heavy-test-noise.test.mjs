@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { analyzeHeavyTestNoise } from "./check-heavy-test-noise.mjs";
 
 test("allows environment-owned warnings without violations", () => {
@@ -131,6 +131,41 @@ test("cli includes environment-owned warnings from process env metadata", async 
 
     assert.equal(result.status, 0);
     assert.match(result.stdout, /environment warnings: 1/);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("cli writes structured JSON report for governance evidence consumers", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "heavy-test-noise-"));
+  try {
+    const inputPath = path.join(tempDir, "log.txt");
+    const outputPath = path.join(tempDir, "heavy-test-noise.json");
+    await writeFile(inputPath, "[vitest-batch] completed 346 test files.\n", "utf8");
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        "scripts/check-heavy-test-noise.mjs",
+        "--input",
+        inputPath,
+        "--mode",
+        "report",
+        "--json-output",
+        outputPath,
+      ],
+      {
+        cwd: process.cwd(),
+        encoding: "utf8",
+      },
+    );
+
+    assert.equal(result.status, 0);
+    const report = JSON.parse(await readFile(outputPath, "utf8"));
+    assert.equal(report.schemaVersion, 1);
+    assert.equal(report.gate, "heavy-test-noise");
+    assert.equal(report.status, "pass");
+    assert.equal(report.breachCount, 0);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

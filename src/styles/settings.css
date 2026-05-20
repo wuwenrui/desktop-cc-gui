@@ -1,4 +1,5 @@
 @import "./settings.part1.css";
+@import "./settings.session-management.css";
 @import "./settings.part1.vendor-panels.css";
 @import "./settings.vendor-codex-runtime.css";
 @import "./settings.vendor-dialog.css";

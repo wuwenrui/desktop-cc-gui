@@ -169,7 +169,8 @@ pub(crate) async fn project_memory_create(
                         item.assistant_thinking_summary =
                             normalized_optional_text(input.assistant_thinking_summary.clone());
                     }
-                    if let Some(review_state) = normalized_review_state(input.review_state.clone()) {
+                    if let Some(review_state) = normalized_review_state(input.review_state.clone())
+                    {
                         item.review_state = Some(review_state);
                     }
                     if let Some(source) = input.source.clone() {

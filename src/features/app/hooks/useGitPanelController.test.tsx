@@ -251,6 +251,42 @@ describe("useGitPanelController editor tabs", () => {
     expect(result.current.centerMode).toBe("editor");
   });
 
+  it("requests the desktop editor layout when opening a file", () => {
+    const onOpenEditorLayoutRequest = vi.fn();
+    const { result } = renderHook(() =>
+      useGitPanelController(makeProps({ onOpenEditorLayoutRequest })),
+    );
+
+    act(() => {
+      result.current.handleOpenFile("src/App.tsx");
+    });
+
+    expect(onOpenEditorLayoutRequest).toHaveBeenCalledTimes(1);
+    expect(result.current.centerMode).toBe("editor");
+  });
+
+  it("does not request desktop editor layout in compact mode", () => {
+    const onOpenEditorLayoutRequest = vi.fn();
+    const setActiveTab = vi.fn();
+    const { result } = renderHook(() =>
+      useGitPanelController(
+        makeProps({
+          isCompact: true,
+          onOpenEditorLayoutRequest,
+          setActiveTab,
+        }),
+      ),
+    );
+
+    act(() => {
+      result.current.handleOpenFile("src/App.tsx");
+    });
+
+    expect(onOpenEditorLayoutRequest).not.toHaveBeenCalled();
+    expect(setActiveTab).toHaveBeenCalledWith("codex");
+    expect(result.current.centerMode).toBe("editor");
+  });
+
   it("re-activates existing tab without creating duplicates", () => {
     const { result } = renderHook(() => useGitPanelController(makeProps()));
 

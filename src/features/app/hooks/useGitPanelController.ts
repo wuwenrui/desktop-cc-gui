@@ -124,6 +124,7 @@ export function useGitPanelController({
   prDiffs,
   prDiffsLoading,
   prDiffsError,
+  onOpenEditorLayoutRequest,
 }: {
   activeWorkspace: WorkspaceInfo | null;
   gitDiffPreloadEnabled: boolean;
@@ -136,6 +137,7 @@ export function useGitPanelController({
   prDiffs: GitHubPullRequestDiff[];
   prDiffsLoading: boolean;
   prDiffsError: string | null;
+  onOpenEditorLayoutRequest?: () => void;
 }) {
   const [centerMode, setCenterMode] = useState<"chat" | "diff" | "editor" | "memory">("chat");
   const [openFileTabs, setOpenFileTabs] = useState<string[]>([]);
@@ -412,12 +414,15 @@ export function useGitPanelController({
           requestId: navigationRequestIdRef.current,
         });
       }
+      if (!isCompact) {
+        onOpenEditorLayoutRequest?.();
+      }
       setCenterMode("editor");
       if (isCompact) {
         setActiveTab("codex");
       }
     },
-    [activeWorkspace?.path, isCompact, setActiveTab],
+    [activeWorkspace?.path, isCompact, onOpenEditorLayoutRequest, setActiveTab],
   );
 
   const handleActivateFileTab = useCallback((path: string) => {

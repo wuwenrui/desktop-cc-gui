@@ -9,20 +9,30 @@ import type { WorkspaceInfo } from "../../../../../types";
 import {
   archiveWorkspaceSessions,
   deleteWorkspaceSessions,
+  loadCodexSession,
   getWorkspaceSessionProjectionSummary,
+  loadClaudeSession,
+  loadGeminiSession,
+  listWorkspaceSessionFolders,
   listGlobalCodexSessions,
   listProjectRelatedCodexSessions,
   listWorkspaceSessions,
+  resumeThread,
 } from "../../../../../services/tauri";
 
 vi.mock("../../../../../services/tauri", () => ({
   getWorkspaceSessionProjectionSummary: vi.fn(),
+  listWorkspaceSessionFolders: vi.fn(),
   listGlobalCodexSessions: vi.fn(),
   listProjectRelatedCodexSessions: vi.fn(),
   listWorkspaceSessions: vi.fn(),
   archiveWorkspaceSessions: vi.fn(),
   unarchiveWorkspaceSessions: vi.fn(),
   deleteWorkspaceSessions: vi.fn(),
+  loadClaudeSession: vi.fn(),
+  loadCodexSession: vi.fn(),
+  loadGeminiSession: vi.fn(),
+  resumeThread: vi.fn(),
 }));
 
 const workspace: WorkspaceInfo = {
@@ -86,6 +96,10 @@ describe("SessionManagementSection", () => {
       nextCursor: null,
       partialSource: null,
     });
+    vi.mocked(listWorkspaceSessionFolders).mockResolvedValue({
+      workspaceId: "ws-1",
+      folders: [],
+    });
     vi.mocked(listGlobalCodexSessions).mockResolvedValue({
       data: [],
       nextCursor: null,
@@ -96,10 +110,19 @@ describe("SessionManagementSection", () => {
       nextCursor: null,
       partialSource: null,
     });
+    vi.mocked(resumeThread).mockResolvedValue({
+      thread: {
+        turns: [],
+      },
+    });
+    vi.mocked(loadClaudeSession).mockResolvedValue({ messages: [] });
+    vi.mocked(loadCodexSession).mockResolvedValue(null);
+    vi.mocked(loadGeminiSession).mockResolvedValue({ messages: [] });
   });
 
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
   });
 
   it("renders owner workspace label for aggregated project entries", async () => {
@@ -149,18 +172,17 @@ describe("SessionManagementSection", () => {
       />,
     );
 
-    expect(await screen.findByText("Ungrouped / Workspace")).toBeTruthy();
-    expect(
-      await screen.findByText(
-        "Ungrouped / settings.sessionManagementScopeTagWorktree Workspace Worktree",
-      ),
-    ).toBeTruthy();
+    expect(await screen.findByText("Main session")).toBeTruthy();
+    expect(await screen.findByText("Worktree session")).toBeTruthy();
+    screen
+      .getAllByRole("button", { name: "settings.sessionManagementDetailToggle" })
+      .forEach((button) => fireEvent.click(button));
     expect(await screen.findAllByText("cli/codex")).toHaveLength(2);
     expect(await screen.findByText("settings.sessionManagementFilteredTotalCount")).toBeTruthy();
     expect(await screen.findByText("settings.sessionManagementCurrentPageCount")).toBeTruthy();
   });
 
-  it("marks root workspace picker entries as project scope", async () => {
+  it("renders workspace scope inside the left tree without a duplicate picker", async () => {
     render(
       <SessionManagementSection
         title="Session Management"
@@ -171,23 +193,521 @@ describe("SessionManagementSection", () => {
       />,
     );
 
-    const trigger = getEnabledButtonByTestId("settings-project-sessions-workspace-picker-trigger");
-    expect(trigger.textContent).toContain(
-      "Ungrouped / settings.sessionManagementScopeTagProject Workspace",
+    expect(
+      await screen.findByRole("button", {
+        name: /Ungrouped \/ settings\.sessionManagementScopeTagProject Workspace/,
+      }),
+    ).toBeTruthy();
+    expect(
+      await screen.findByRole("button", {
+        name: /Ungrouped \/ settings\.sessionManagementScopeTagWorktree Workspace Worktree/,
+      }),
+    ).toBeTruthy();
+    expect(screen.queryByTestId("settings-project-sessions-workspace-picker-trigger")).toBeNull();
+  });
+
+  it("renders the left project hierarchy and keeps user workspace switches as the active scope", async () => {
+    render(
+      <SessionManagementSection
+        title="Session Management"
+        description="Manage sessions"
+        workspaces={[workspace, worktree]}
+        groupedWorkspaces={[{ id: null, name: "Ungrouped", workspaces: [workspace, worktree] }]}
+        initialWorkspaceId="ws-1"
+      />,
     );
 
-    fireEvent.click(trigger);
+    const worktreeButton = await screen.findByRole("button", {
+      name: /settings\.sessionManagementScopeTagWorktree Workspace Worktree/,
+    });
+    fireEvent.click(worktreeButton);
 
+    await waitFor(() => {
+      expect(listWorkspaceSessions).toHaveBeenCalledWith(
+        "ws-2",
+        expect.objectContaining({
+          query: expect.objectContaining({ status: "active" }),
+        }),
+      );
+    });
+    await waitFor(() => {
+      const lastWorkspaceListCall = vi.mocked(listWorkspaceSessions).mock.calls.at(-1);
+      expect(lastWorkspaceListCall?.[0]).toBe("ws-2");
+    });
+  });
+
+  it("surfaces missing-on-disk rows for cleanup", async () => {
+    vi.mocked(getWorkspaceSessionProjectionSummary).mockResolvedValue({
+      scopeKind: "project",
+      ownerWorkspaceIds: ["ws-1"],
+      activeTotal: 0,
+      archivedTotal: 1,
+      allTotal: 1,
+      filteredTotal: 1,
+      partialSources: [],
+    });
+    vi.mocked(listWorkspaceSessions).mockResolvedValue({
+      data: [
+        {
+          sessionId: "codex-missing",
+          workspaceId: "ws-1",
+          title: "Missing session",
+          updatedAt: 42,
+          engine: "codex",
+          archivedAt: 42,
+          threadKind: "native",
+          existsOnDisk: false,
+          inconsistencyCode: "missing-on-disk",
+          deleteMode: "metadata-cleanup",
+        },
+      ],
+      nextCursor: null,
+      partialSource: null,
+    });
+
+    render(
+      <SessionManagementSection
+        title="Session Management"
+        description="Manage sessions"
+        workspaces={[workspace]}
+        groupedWorkspaces={[{ id: null, name: "Ungrouped", workspaces: [workspace] }]}
+        initialWorkspaceId="ws-1"
+      />,
+    );
+
+    expect(await screen.findByText("settings.sessionManagementBadgeMissingOnDisk")).toBeTruthy();
+  });
+
+  it("opens an independent session curtain from the row icon", async () => {
+    vi.mocked(listWorkspaceSessions).mockResolvedValue({
+      data: [
+        {
+          sessionId: "codex:chat",
+          workspaceId: "ws-1",
+          title: "Chat session",
+          updatedAt: 1710000000000,
+          engine: "codex",
+          archivedAt: null,
+          threadKind: "native",
+        },
+      ],
+      nextCursor: null,
+      partialSource: null,
+    });
+    vi.mocked(loadCodexSession).mockResolvedValueOnce({
+      entries: [
+        {
+          type: "response_item",
+          payload: {
+            type: "message",
+            role: "assistant",
+            content: [
+              {
+                type: "output_text",
+                text: "Loaded assistant reply",
+              },
+            ],
+          },
+        },
+      ],
+    });
+    vi.mocked(resumeThread).mockResolvedValueOnce({
+      thread: {
+        turns: [],
+      },
+    });
+
+    render(
+      <SessionManagementSection
+        title="Session Management"
+        description="Manage sessions"
+        workspaces={[workspace]}
+        groupedWorkspaces={[{ id: null, name: "Ungrouped", workspaces: [workspace] }]}
+        initialWorkspaceId="ws-1"
+      />,
+    );
+
+    expect(await screen.findByText("Chat session")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "settings.sessionManagementOpenCurtain" }));
+
+    expect(await screen.findByRole("dialog", { name: "settings.sessionManagementCurtainTitle" })).toBeTruthy();
+    expect(await screen.findByText("Loaded assistant reply")).toBeTruthy();
+    expect(loadCodexSession).toHaveBeenCalledWith("ws-1", "codex:chat");
+    expect(resumeThread).toHaveBeenCalledWith("ws-1", "codex:chat");
+  });
+
+  it("falls back to codex resume history when local session has no visible items", async () => {
+    vi.mocked(listWorkspaceSessions).mockResolvedValue({
+      data: [
+        {
+          sessionId: "codex:chat",
+          workspaceId: "ws-1",
+          title: "Chat session",
+          updatedAt: 1710000000000,
+          engine: "codex",
+          archivedAt: null,
+          threadKind: "native",
+        },
+      ],
+      nextCursor: null,
+      partialSource: null,
+    });
+    vi.mocked(loadCodexSession).mockResolvedValueOnce(null);
+    vi.mocked(resumeThread).mockResolvedValueOnce({
+      thread: {
+        turns: [
+          {
+            items: [
+              {
+                id: "assistant-1",
+                type: "agentMessage",
+                text: "Loaded assistant reply",
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    render(
+      <SessionManagementSection
+        title="Session Management"
+        description="Manage sessions"
+        workspaces={[workspace]}
+        groupedWorkspaces={[{ id: null, name: "Ungrouped", workspaces: [workspace] }]}
+        initialWorkspaceId="ws-1"
+      />,
+    );
+
+    expect(await screen.findByText("Chat session")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "settings.sessionManagementOpenCurtain" }));
+
+    expect(await screen.findByRole("dialog", { name: "settings.sessionManagementCurtainTitle" })).toBeTruthy();
+    expect(await screen.findByText("Loaded assistant reply")).toBeTruthy();
+    expect(resumeThread).toHaveBeenCalledWith("ws-1", "codex:chat");
+  });
+
+  it("renders the session curtain as a read-only viewer", async () => {
+    vi.mocked(listWorkspaceSessions).mockResolvedValue({
+      data: [
+        {
+          sessionId: "codex:chat",
+          workspaceId: "ws-1",
+          title: "Chat session",
+          updatedAt: 1710000000000,
+          engine: "codex",
+          archivedAt: null,
+          threadKind: "native",
+        },
+      ],
+      nextCursor: null,
+      partialSource: null,
+    });
+    vi.mocked(loadCodexSession).mockResolvedValueOnce({
+      entries: [
+        {
+          type: "response_item",
+          payload: {
+            type: "message",
+            role: "assistant",
+            content: [{ type: "output_text", text: "Read-only history" }],
+          },
+        },
+      ],
+    });
+
+    render(
+      <SessionManagementSection
+        title="Session Management"
+        description="Manage sessions"
+        workspaces={[workspace]}
+        groupedWorkspaces={[{ id: null, name: "Ungrouped", workspaces: [workspace] }]}
+        initialWorkspaceId="ws-1"
+      />,
+    );
+
+    expect(await screen.findByText("Chat session")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "settings.sessionManagementOpenCurtain" }));
+
+    expect(await screen.findByText("Read-only history")).toBeTruthy();
     expect(
-      await screen.findByRole("option", {
-        name: "Ungrouped / settings.sessionManagementScopeTagProject Workspace",
-      }),
-    ).toBeTruthy();
-    expect(
-      await screen.findByRole("option", {
-        name: "Ungrouped / settings.sessionManagementScopeTagWorktree Workspace Worktree",
-      }),
-    ).toBeTruthy();
+      screen.queryByLabelText("settings.sessionManagementCurtainComposerPlaceholder"),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "settings.sessionManagementCurtainSend" })).toBeNull();
+  });
+
+  it("keeps the codex curtain timeout visible when late sources return no messages", async () => {
+    vi.mocked(listWorkspaceSessions).mockResolvedValue({
+      data: [
+        {
+          sessionId: "codex:chat",
+          workspaceId: "ws-1",
+          title: "Chat session",
+          updatedAt: 1710000000000,
+          engine: "codex",
+          archivedAt: null,
+          threadKind: "native",
+        },
+      ],
+      nextCursor: null,
+      partialSource: null,
+    });
+    let resolveLocal!: (
+      value: Awaited<ReturnType<typeof loadCodexSession>>,
+    ) => void;
+    let resolveResume!: (value: Awaited<ReturnType<typeof resumeThread>>) => void;
+    vi.mocked(loadCodexSession).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveLocal = resolve;
+      }) as ReturnType<typeof loadCodexSession>,
+    );
+    vi.mocked(resumeThread).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveResume = resolve;
+      }) as ReturnType<typeof resumeThread>,
+    );
+
+    render(
+      <SessionManagementSection
+        title="Session Management"
+        description="Manage sessions"
+        workspaces={[workspace]}
+        groupedWorkspaces={[{ id: null, name: "Ungrouped", workspaces: [workspace] }]}
+        initialWorkspaceId="ws-1"
+      />,
+    );
+
+    expect(await screen.findByText("Chat session")).toBeTruthy();
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByRole("button", { name: "settings.sessionManagementOpenCurtain" }));
+
+    act(() => {
+      vi.advanceTimersByTime(10_000);
+    });
+    expect(screen.getByText("settings.sessionManagementCurtainLoadTimeout")).toBeTruthy();
+
+    await act(async () => {
+      resolveLocal(null);
+      resolveResume({ thread: { turns: [] } });
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText("settings.sessionManagementCurtainLoadTimeout")).toBeTruthy();
+    expect(screen.getByText("settings.sessionManagementCurtainEmpty")).toBeTruthy();
+  });
+
+  it("allows late codex curtain history to replace a timeout notice", async () => {
+    vi.mocked(listWorkspaceSessions).mockResolvedValue({
+      data: [
+        {
+          sessionId: "codex:chat",
+          workspaceId: "ws-1",
+          title: "Chat session",
+          updatedAt: 1710000000000,
+          engine: "codex",
+          archivedAt: null,
+          threadKind: "native",
+        },
+      ],
+      nextCursor: null,
+      partialSource: null,
+    });
+    let resolveLocal!: (
+      value: Awaited<ReturnType<typeof loadCodexSession>>,
+    ) => void;
+    vi.mocked(loadCodexSession).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveLocal = resolve;
+      }) as ReturnType<typeof loadCodexSession>,
+    );
+    vi.mocked(resumeThread).mockReturnValueOnce(
+      new Promise(() => undefined) as ReturnType<typeof resumeThread>,
+    );
+
+    render(
+      <SessionManagementSection
+        title="Session Management"
+        description="Manage sessions"
+        workspaces={[workspace]}
+        groupedWorkspaces={[{ id: null, name: "Ungrouped", workspaces: [workspace] }]}
+        initialWorkspaceId="ws-1"
+      />,
+    );
+
+    expect(await screen.findByText("Chat session")).toBeTruthy();
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByRole("button", { name: "settings.sessionManagementOpenCurtain" }));
+
+    act(() => {
+      vi.advanceTimersByTime(10_000);
+    });
+    expect(screen.getByText("settings.sessionManagementCurtainLoadTimeout")).toBeTruthy();
+
+    await act(async () => {
+      resolveLocal({
+        entries: [
+          {
+            type: "response_item",
+            payload: {
+              type: "message",
+              role: "assistant",
+              content: [{ type: "output_text", text: "Late assistant reply" }],
+            },
+          },
+        ],
+      });
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText("Late assistant reply")).toBeTruthy();
+    expect(screen.queryByText("settings.sessionManagementCurtainLoadTimeout")).toBeNull();
+  });
+
+  it("renders selected project session folders and filters strict sessions by folder", async () => {
+    vi.mocked(getWorkspaceSessionProjectionSummary).mockResolvedValue({
+      scopeKind: "project",
+      ownerWorkspaceIds: ["ws-1"],
+      activeTotal: 20,
+      archivedTotal: 0,
+      allTotal: 20,
+      filteredTotal: 20,
+      folderCountsById: { "folder-a": 7, "folder-b": 3 },
+      unassignedFolderCount: 10,
+      partialSources: [],
+    });
+    vi.mocked(listWorkspaceSessionFolders).mockResolvedValue({
+      workspaceId: "ws-1",
+      folders: [
+        {
+          id: "folder-a",
+          workspaceId: "ws-1",
+          parentId: null,
+          name: "Planning",
+          createdAt: 1,
+          updatedAt: 1,
+        },
+        {
+          id: "folder-b",
+          workspaceId: "ws-1",
+          parentId: "folder-a",
+          name: "Bugs",
+          createdAt: 2,
+          updatedAt: 2,
+        },
+      ],
+    });
+    const allFolderEntries = [
+        {
+          sessionId: "codex:folder",
+          workspaceId: "ws-1",
+          title: "Folder session",
+          updatedAt: 1710000000000,
+          engine: "codex",
+          archivedAt: null,
+          threadKind: "native",
+          folderId: "folder-a",
+        },
+        {
+          sessionId: "codex:root",
+          workspaceId: "ws-1",
+          title: "Root session",
+          updatedAt: 1710000000001,
+          engine: "codex",
+          archivedAt: null,
+          threadKind: "native",
+          folderId: null,
+        },
+    ];
+    vi.mocked(listWorkspaceSessions).mockImplementation(async (_workspaceId, options) => ({
+      data: options?.query?.folderId === "folder-a"
+        ? allFolderEntries.filter((entry) => entry.folderId === "folder-a")
+        : allFolderEntries,
+      nextCursor: null,
+      partialSource: null,
+    }));
+
+    render(
+      <SessionManagementSection
+        title="Session Management"
+        description="Manage sessions"
+        workspaces={[workspace]}
+        groupedWorkspaces={[{ id: null, name: "Ungrouped", workspaces: [workspace] }]}
+        initialWorkspaceId="ws-1"
+      />,
+    );
+
+    expect((await screen.findAllByText("settings.sessionManagementFolderAll")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Planning")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Bugs")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("20").length).toBeGreaterThan(0);
+    expect(screen.getByText("7")).toBeTruthy();
+    expect(screen.getByText("3")).toBeTruthy();
+    const planningButton = (await screen.findAllByText("Planning"))[0].closest("button");
+    expect(planningButton).toBeTruthy();
+    fireEvent.click(planningButton as HTMLButtonElement);
+
+    expect(await screen.findByText("Folder session")).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.queryByText("Root session")).toBeNull();
+    });
+  });
+
+  it("keeps child sessions visible when they inherit the parent folder", async () => {
+    vi.mocked(listWorkspaceSessionFolders).mockResolvedValue({
+      workspaceId: "ws-1",
+      folders: [
+        {
+          id: "folder-a",
+          workspaceId: "ws-1",
+          parentId: null,
+          name: "Planning",
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+    });
+    vi.mocked(listWorkspaceSessions).mockResolvedValue({
+      data: [
+        {
+          sessionId: "codex:parent",
+          workspaceId: "ws-1",
+          title: "Parent session",
+          updatedAt: 1710000000000,
+          engine: "codex",
+          archivedAt: null,
+          threadKind: "native",
+          folderId: "folder-a",
+        },
+        {
+          sessionId: "codex:child",
+          parentSessionId: "codex:parent",
+          workspaceId: "ws-1",
+          title: "Child session",
+          updatedAt: 1710000000001,
+          engine: "codex",
+          archivedAt: null,
+          threadKind: "native",
+          folderId: null,
+        },
+      ],
+      nextCursor: null,
+      partialSource: null,
+    });
+
+    render(
+      <SessionManagementSection
+        title="Session Management"
+        description="Manage sessions"
+        workspaces={[workspace]}
+        groupedWorkspaces={[{ id: null, name: "Ungrouped", workspaces: [workspace] }]}
+        initialWorkspaceId="ws-1"
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /Planning/ }));
+
+    expect(await screen.findByText("Parent session")).toBeTruthy();
+    expect(await screen.findByText("Child session")).toBeTruthy();
   });
 
   it("saves the workspace thread visibility count with clamping", async () => {
@@ -289,11 +809,12 @@ describe("SessionManagementSection", () => {
       />,
     );
 
-    expect(await screen.findAllByText("settings.sessionManagementFilteredTotalCount")).not.toHaveLength(0);
-    expect(await screen.findAllByText("settings.sessionManagementCurrentPageCount")).not.toHaveLength(0);
-    expect(await screen.findByText("settings.sessionManagementVisibleWindowHint")).toBeTruthy();
-    expect(await screen.findByText("settings.sessionManagementActiveProjectionScopeHint")).toBeTruthy();
-    expect(await screen.findByText("settings.sessionManagementPartialSource")).toBeTruthy();
+    expect(await screen.findByText("Session 0")).toBeTruthy();
+    expect(screen.getAllByText("settings.sessionManagementFilteredTotalCount")).not.toHaveLength(0);
+    expect(screen.getAllByText("settings.sessionManagementCurrentPageCount")).not.toHaveLength(0);
+    expect(screen.getByText("settings.sessionManagementVisibleWindowHint")).toBeTruthy();
+    expect(screen.getByText("settings.sessionManagementActiveProjectionScopeHint")).toBeTruthy();
+    expect(screen.getAllByText("settings.sessionManagementPartialSource")).not.toHaveLength(0);
   });
 
   it("switches to global archive mode and renders unassigned history label", async () => {
@@ -331,6 +852,10 @@ describe("SessionManagementSection", () => {
 
     clickFirstEnabledButtonByName("settings.sessionManagementModeGlobal");
 
+    expect(await screen.findByText("Detached session")).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "settings.sessionManagementDetailToggle" }),
+    );
     expect(await screen.findByText("settings.sessionManagementWorkspaceUnassigned")).toBeTruthy();
     expect(listGlobalCodexSessions).toHaveBeenCalled();
   });
@@ -537,6 +1062,9 @@ describe("SessionManagementSection", () => {
     ).toBeTruthy();
     expect(await screen.findByText("settings.sessionManagementRelatedSectionTitle")).toBeTruthy();
     expect(await screen.findByText("Sibling worktree session")).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "settings.sessionManagementDetailToggle" }),
+    );
     expect(await screen.findByText("settings.sessionManagementBadgeRelated")).toBeTruthy();
     expect(
       await screen.findByText("settings.sessionManagementAttributionReasonWorktreeFamily"),

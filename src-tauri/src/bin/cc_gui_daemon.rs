@@ -1687,6 +1687,15 @@ async fn handle_rpc_request(
                 .await?;
             serde_json::to_value(assignment).map_err(|err| err.to_string())
         }
+        "assign_workspace_session_folders" => {
+            let workspace_id = parse_string(&params, "workspaceId")?;
+            let session_ids = parse_string_array(&params, "sessionIds")?;
+            let folder_id = parse_optional_string(&params, "folderId");
+            let assignment = state
+                .assign_workspace_session_folders(workspace_id, session_ids, folder_id)
+                .await?;
+            serde_json::to_value(assignment).map_err(|err| err.to_string())
+        }
         "load_gemini_session" => {
             let workspace_path = parse_string(&params, "workspacePath")?;
             let session_id = parse_string(&params, "sessionId")?;

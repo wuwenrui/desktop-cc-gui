@@ -21,12 +21,24 @@ export interface WorkspaceSessionCatalogEntry {
   matchedWorkspaceId?: string | null;
   matchedWorkspaceLabel?: string | null;
   folderId?: string | null;
+  existsOnDisk?: boolean | null;
+  inconsistencyCode?:
+    | "missing-on-disk"
+    | "owner-unresolved"
+    | "metadata-orphaned"
+    | "source-degraded"
+    | string
+    | null;
+  deleteMode?: "physical" | "metadata-cleanup" | "unsupported" | string | null;
+  physicalPath?: string | null;
+  childrenCount?: number | null;
 }
 
 export interface WorkspaceSessionCatalogQuery {
   keyword?: string | null;
   engine?: string | null;
   status?: "active" | "archived" | "all" | null;
+  folderId?: string | null;
 }
 
 export interface WorkspaceSessionCatalogPage {
@@ -65,6 +77,8 @@ export interface WorkspaceSessionProjectionSummary {
   archivedTotal: number;
   allTotal: number;
   filteredTotal: number;
+  folderCountsById?: Record<string, number>;
+  unassignedFolderCount?: number;
   partialSources?: string[];
 }
 
@@ -74,6 +88,8 @@ export interface WorkspaceSessionBatchMutationResult {
   archivedAt?: number | null;
   error?: string | null;
   code?: string | null;
+  deletedFromDisk?: boolean | null;
+  metadataCleaned?: boolean | null;
 }
 
 export interface WorkspaceSessionBatchMutationResponse {
@@ -237,6 +253,18 @@ export async function assignWorkspaceSessionFolder(
   return invoke<WorkspaceSessionAssignmentResponse>("assign_workspace_session_folder", {
     workspaceId,
     sessionId,
+    folderId: folderId ?? null,
+  });
+}
+
+export async function assignWorkspaceSessionFolders(
+  workspaceId: string,
+  sessionIds: string[],
+  folderId?: string | null,
+): Promise<WorkspaceSessionBatchMutationResponse> {
+  return invoke<WorkspaceSessionBatchMutationResponse>("assign_workspace_session_folders", {
+    workspaceId,
+    sessionIds,
     folderId: folderId ?? null,
   });
 }

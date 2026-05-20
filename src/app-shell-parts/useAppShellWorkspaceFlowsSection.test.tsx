@@ -114,6 +114,7 @@ function createWorkspace(id: string): WorkspaceInfo {
 function createContext(overrides: Partial<Parameters<typeof useAppShellWorkspaceFlowsSection>[0]> = {}) {
   const workspace = createWorkspace("ws-1");
   return {
+    activeEditorFilePath: null,
     activeWorkspace: workspace,
     activeWorkspaceId: workspace.id,
     activeThreadId: "thread-1",
@@ -125,6 +126,7 @@ function createContext(overrides: Partial<Parameters<typeof useAppShellWorkspace
     closeTerminalPanel: vi.fn(),
     collapseRightPanel: vi.fn(),
     connectWorkspace: vi.fn(),
+    centerMode: "chat" as const,
     exitDiffView: vi.fn(),
     handleToggleTerminal: vi.fn(),
     isCompact: false,
@@ -206,6 +208,30 @@ describe("useAppShellWorkspaceFlowsSection", () => {
     expect(context.setSelectedKanbanTaskId).toHaveBeenCalledWith(null);
     expect(context.selectWorkspace).toHaveBeenCalledWith("ws-1");
     expect(context.setActiveThreadId).toHaveBeenCalledWith("thread-1", "ws-1");
+    expect(context.setActiveEngine).toHaveBeenCalledWith("codex");
+  });
+
+  it("keeps the desktop editor visible when notification switches within the same workspace", async () => {
+    const context = createContext({
+      activeEditorFilePath: "src/App.tsx",
+      centerMode: "editor",
+      threadsByWorkspace: {
+        "ws-1": [{ id: "thread-2", engineSource: "codex" }],
+      },
+    });
+    renderHook(() => useAppShellWorkspaceFlowsSection(context));
+
+    const handler = setNotificationActionHandlerMock.mock.calls.at(-1)?.[0] as
+      | ((extra: Record<string, unknown>) => void)
+      | undefined;
+
+    act(() => {
+      handler?.({ workspaceId: "ws-1", threadId: "thread-2" });
+    });
+
+    expect(context.exitDiffView).not.toHaveBeenCalled();
+    expect(context.collapseRightPanel).not.toHaveBeenCalled();
+    expect(context.setActiveThreadId).toHaveBeenCalledWith("thread-2", "ws-1");
     expect(context.setActiveEngine).toHaveBeenCalledWith("codex");
   });
 

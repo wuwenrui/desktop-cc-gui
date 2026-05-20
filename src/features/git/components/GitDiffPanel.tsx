@@ -1,5 +1,5 @@
-import type { GitHubIssue, GitHubPullRequest, GitLogEntry } from "../../../types";
-import type { CommitMessageEngine, CommitMessageLanguage } from "../../../services/tauri";
+import type { GitHubPullRequest, GitLogEntry } from "../../../types";
+import type { CommitMessageEngine } from "../../../services/tauri";
 import type {
   KeyboardEvent as ReactKeyboardEvent,
   MouseEvent as ReactMouseEvent,
@@ -25,7 +25,6 @@ import { useMemo, useState, useCallback, useEffect, useRef, type CSSProperties }
 import { createPortal } from "react-dom";
 import { matchesShortcutForPlatform } from "../../../utils/shortcuts";
 import { formatRelativeTime } from "../../../utils/time";
-import type { PanelTabId } from "../../layout/components/PanelTabs";
 import FileIcon from "../../../components/FileIcon";
 import { CommitMessageEngineIcon } from "./CommitMessageEngineIcon";
 import {
@@ -42,7 +41,6 @@ import {
   TREE_INDENT_STEP,
 } from "./GitDiffPanelFileSections";
 import { WorkspaceEditableDiffReviewSurface } from "./WorkspaceEditableDiffReviewSurface";
-import type { CodeAnnotationBridgeProps } from "../../code-annotations/types";
 import { GitDiffPanelSectionActions } from "./GitDiffPanelSectionActions";
 import {
   type InclusionState,
@@ -57,120 +55,7 @@ import {
   type RendererContextMenuItem,
   type RendererContextMenuState,
 } from "../../../components/ui/RendererContextMenu";
-
-type GitDiffPanelProps = CodeAnnotationBridgeProps & {
-  workspaceId?: string | null;
-  workspacePath?: string | null;
-  mode: "diff" | "log" | "issues" | "prs";
-  onModeChange: (mode: "diff" | "log" | "issues" | "prs") => void;
-  diffEntries?: {
-    path: string;
-    status: string;
-    diff: string;
-    isImage?: boolean;
-    oldImageData?: string | null;
-    newImageData?: string | null;
-    oldImageMime?: string | null;
-    newImageMime?: string | null;
-  }[];
-  gitDiffListView?: "flat" | "tree";
-  onGitDiffListViewChange?: (view: "flat" | "tree") => void;
-  toggleGitDiffListViewShortcut?: string | null;
-  filePanelMode: PanelTabId;
-  onFilePanelModeChange: (mode: PanelTabId) => void;
-  onOpenGitHistoryPanel?: () => void;
-  isGitHistoryOpen?: boolean;
-  worktreeApplyLabel?: string;
-  worktreeApplyTitle?: string | null;
-  worktreeApplyLoading?: boolean;
-  worktreeApplyError?: string | null;
-  worktreeApplySuccess?: boolean;
-  onApplyWorktreeChanges?: () => void | Promise<void>;
-  onRevertAllChanges?: () => void | Promise<void>;
-  branchName: string;
-  totalAdditions: number;
-  totalDeletions: number;
-  fileStatus: string;
-  diffViewStyle?: "split" | "unified";
-  onDiffViewStyleChange?: (style: "split" | "unified") => void;
-  error?: string | null;
-  logError?: string | null;
-  logLoading?: boolean;
-  logTotal?: number;
-  logAhead?: number;
-  logBehind?: number;
-  logAheadEntries?: GitLogEntry[];
-  logBehindEntries?: GitLogEntry[];
-  logUpstream?: string | null;
-  issues?: GitHubIssue[];
-  issuesTotal?: number;
-  issuesLoading?: boolean;
-  issuesError?: string | null;
-  pullRequests?: GitHubPullRequest[];
-  pullRequestsTotal?: number;
-  pullRequestsLoading?: boolean;
-  pullRequestsError?: string | null;
-  selectedPullRequest?: number | null;
-  onSelectPullRequest?: (pullRequest: GitHubPullRequest) => void;
-  gitRemoteUrl?: string | null;
-  gitRoot?: string | null;
-  gitRootCandidates?: string[];
-  gitRootScanDepth?: number;
-  gitRootScanLoading?: boolean;
-  gitRootScanError?: string | null;
-  gitRootScanHasScanned?: boolean;
-  onGitRootScanDepthChange?: (depth: number) => void;
-  onScanGitRoots?: () => void;
-  onSelectGitRoot?: (path: string) => void;
-  onClearGitRoot?: () => void;
-  onPickGitRoot?: () => void | Promise<void>;
-  selectedPath?: string | null;
-  onSelectFile?: (path: string | null) => void;
-  stagedFiles: {
-    path: string;
-    status: string;
-    additions: number;
-    deletions: number;
-  }[];
-  unstagedFiles: {
-    path: string;
-    status: string;
-    additions: number;
-    deletions: number;
-  }[];
-  onStageAllChanges?: () => void | Promise<void>;
-  onStageFile?: (path: string) => Promise<void> | void;
-  onUnstageFile?: (path: string) => Promise<void> | void;
-  onRevertFile?: (path: string) => Promise<void> | void;
-  logEntries: GitLogEntry[];
-  selectedCommitSha?: string | null;
-  onSelectCommit?: (entry: GitLogEntry) => void;
-  commitMessage?: string;
-  commitMessageLoading?: boolean;
-  commitMessageError?: string | null;
-  onCommitMessageChange?: (value: string) => void;
-  onGenerateCommitMessage?: (
-    language?: CommitMessageLanguage,
-    engine?: CommitMessageEngine,
-    selectedPaths?: string[],
-  ) => void | Promise<void>;
-  // Git operations
-  onCommit?: (selectedPaths?: string[]) => void | Promise<void>;
-  onCommitAndPush?: (selectedPaths?: string[]) => void | Promise<void>;
-  onCommitAndSync?: (selectedPaths?: string[]) => void | Promise<void>;
-  onPush?: () => void | Promise<void>;
-  onSync?: () => void | Promise<void>;
-  commitLoading?: boolean;
-  pushLoading?: boolean;
-  syncLoading?: boolean;
-  commitError?: string | null;
-  pushError?: string | null;
-  syncError?: string | null;
-  // For showing push button when there are commits to push
-  commitsAhead?: number;
-  onRefreshGitStatus?: () => void;
-  onRefreshGitDiffs?: () => void;
-};
+import type { GitDiffPanelProps } from "./GitDiffPanelTypes";
 
 type ModeMenuLayout = {
   align: "left" | "right";
@@ -999,6 +884,7 @@ export function GitDiffPanel({
   logTotal = 0,
   gitRemoteUrl = null,
   onSelectFile,
+  onOpenFile,
   logEntries,
   logAhead = 0,
   logBehind = 0,
@@ -1259,10 +1145,14 @@ export function GitDiffPanel({
         // Regular click: select single file and view it
         setSelectedFiles(new Set([path]));
         setLastClickedFile(path);
-        onSelectFile?.(path);
+        if (onOpenFile) {
+          onOpenFile(path);
+        } else {
+          onSelectFile?.(path);
+        }
       }
     },
-    [lastClickedFile, allFiles, onSelectFile],
+    [lastClickedFile, allFiles, onOpenFile, onSelectFile],
   );
 
   // Clear selection when files change
@@ -2007,7 +1897,7 @@ export function GitDiffPanel({
           <span className="git-root-path" title={activeRootPathDisplay}>
             {activeRootPathDisplay}
           </span>
-          {rootAlertText && <span className="git-root-inline-alert">{rootAlertText}</span>}
+          {rootAlertText ? <span className="git-root-inline-alert">{rootAlertText}</span> : null}
           {onScanGitRoots && (
             <button
               type="button"
@@ -2026,7 +1916,7 @@ export function GitDiffPanel({
       {mode === "diff" ? (
         <>
           {!useUnifiedDiffSummary && !rootAlertText ? <div className="diff-status">{diffStatusNode}</div> : null}
-          {worktreeApplyError && <div className="diff-error">{worktreeApplyError}</div>}
+          {worktreeApplyError ? <div className="diff-error">{worktreeApplyError}</div> : null}
         </>
       ) : mode === "log" ? (
         <>
@@ -2045,7 +1935,7 @@ export function GitDiffPanel({
         <>
           <div className="diff-status diff-status-issues">
             <span>{t("git.githubIssues")}</span>
-            {issuesLoading && <span className="git-panel-spinner" aria-hidden />}
+            {issuesLoading ? <span className="git-panel-spinner" aria-hidden /> : null}
           </div>
           <div className="git-log-sync">
             <span>{issuesTotal} {t("git.open")}</span>

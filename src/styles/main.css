@@ -1521,6 +1521,11 @@ body[data-panel-resizing="true"] .main {
   min-height: 0;
 }
 
+.content.is-editor-split .content-layer--chat {
+  display: flex;
+  flex-direction: column;
+}
+
 .content.is-editor-split-vertical {
   flex-direction: column;
 }
@@ -1606,6 +1611,18 @@ body[data-panel-resizing="true"] .main {
 .content.is-editor-split .messages-full {
   margin-top: 0;
   padding-top: 12px;
+}
+
+.content.is-editor-split .content-layer--chat > .messages-shell,
+.content.is-editor-split .content-layer--chat > .workspace-chat-stack {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.content.is-editor-split .content-layer--chat > .composer {
+  flex: 0 0 auto;
+  grid-column: auto;
+  grid-row: auto;
 }
 
 .content.is-editor-split .messages-anchor-rail {

@@ -132,3 +132,175 @@ useEffect(() => {
   }}
 />
 ```
+
+## Scenario: Shared User Input Question Card
+
+### 1. Scope / Trigger
+
+- Trigger：修改 `AskUserQuestionDialog`、`RequestUserInputMessage`、`UserInputQuestionCard`、`MessagesTimeline` 中的用户提问卡片渲染、宽度、tab、关闭或提交行为。
+- 目标：Claude `AskUserQuestion` 与 Codex `RequestUserInput` 使用同一交互语义，避免引擎分叉导致卡片 stuck、过窄、提前提交或时间线定位漂移。
+
+### 2. Signatures
+
+- `UserInputQuestionCard` MUST own visual/card interaction contract:
+  - `questions: RequestUserInputRequest["params"]["questions"]`
+  - `activeQuestionIndex: number`
+  - `onQuestionTabChange(nextQuestionIndex: number): void`
+  - `onOptionToggle(questionId: string, optionValue: string, multiSelect: boolean): void`
+  - `onDismiss(): void`
+  - `onSubmit(): void`
+- `RequestUserInputMessage` MUST own queue/draft/timeout/submission state.
+- `AskUserQuestionDialog` MUST own modal/composer-overlay state and final response handoff.
+
+### 3. Contracts
+
+- `questions.length > 1` MUST automatically enter step mode even if the caller does not explicitly pass `showStepActions`.
+- In step mode, non-final active tab primary action MUST be `Next` and MUST NOT call submit.
+- In step mode, final active tab primary action MUST be `Submit` and MUST submit all collected answers through the standard response contract.
+- Only one question body MAY be visible at a time; tabs and active body MUST be synchronized through `activeQuestionIndex`.
+- Live question cards MUST NOT reuse normal message `.bubble` width rules; use a dedicated card class such as `request-user-input-live-card`.
+- Ordinary chat bubble CSS MUST NOT be changed to fix question-card width.
+- Pending cards MUST expose explicit close/dismiss affordance and local dismissal MUST hide stale cards even when runtime-side dismiss has already settled.
+- Timeline rendering SHOULD anchor live request cards near their originating `item_id`; fallback tail rendering is allowed only when no anchor is available.
+
+### 4. Validation & Error Matrix
+
+| 场景 | 必须行为 | 禁止行为 |
+|---|---|---|
+| 多问题第一个 tab | 主按钮显示 `Next`，点击进入下一个 tab | 直接显示 `Submit` 并提交 |
+| 多问题最后一个 tab | 主按钮显示 `Submit`，提交全部答案 | 只提交当前 tab 或继续显示 `Next` |
+| 普通聊天气泡 | 保持原 `.bubble` 宽度语义 | 为放大问答卡片修改 `.bubble` 全局规则 |
+| stale/timeout card | 用户可关闭，本地隐藏 | 卡片一直吸底且无法关闭 |
+| anchored request | 卡片出现在对应 timeline 位置附近 | 永久固定在 composer 上方 |
+
+### 5. Good / Base / Bad Cases
+
+- Good：`RequestUserInputMessage` 使用 `<UserInputQuestionCard className="request-user-input-live-card" />`，自身处理 request state，卡片只处理 UI。
+- Base：`AskUserQuestionDialog` 继续控制 overlay 模式，但 body/options/actions 走同一个 shared card。
+- Bad：在 `RequestUserInputMessage` 里复制一套与 `AskUserQuestionDialog` 相似的 tab/action JSX。
+- Bad：给 live request card 加 `className="bubble"` 后再用更高优先级 CSS 覆盖 `.bubble`。
+
+### 6. Tests Required
+
+- `RequestUserInputMessage.test.tsx` MUST 覆盖多问题 tab 仅显示一个 body、非最终 tab `Next` 不提交、最终 tab `Submit` 提交全部 answers。
+- `AskUserQuestionDialog.test.tsx` MUST 覆盖多问题 `Next` / `Submit` 行为不回归。
+- `chatCanvasSmoke.test.tsx` SHOULD 覆盖 request card timeline anchor 与 dismiss 不污染后续消息顺序。
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```tsx
+<UserInputQuestionCard className="bubble" />
+```
+
+#### Correct
+
+```tsx
+<UserInputQuestionCard className="request-user-input-live-card" />
+```
+
+## Scenario: Status Panel Checkpoint Advisory Projection
+
+### 1. Scope / Trigger
+
+- Trigger：修改 `CheckpointPanel`、`StatusPanel` checkpoint view-model、`src/features/status-panel/utils/policies/**`、`src/features/governance/evidence/**` 或 checkpoint audit UI。
+- 目标：governance evidence 默认作为 advisory 信号进入 checkpoint，稳定展示 Summary / Advisory Signals / Evidence Trail / Policy Audit / Suggested Actions，不新增 blocking gate。
+
+### 2. Signatures
+
+- `PolicyDecision.enforcement: "blocking" | "advisory" | "informational"`
+- Bridge-fed `PolicyDecision` SHOULD carry provenance fields when available:
+  - `evidenceSnapshotId?: string`
+  - `evidenceObservedAt?: string`
+  - `evidenceArtifactPath?: string`
+  - `evidenceArtifactHash?: string`
+  - `evidenceQualifier?: string`
+  - `degradationReason?: string`
+  - `staleAt?: string`
+- `buildCheckpointSectionProjection(input)` MUST return:
+  - `summary`
+  - `advisorySignals`
+  - `evidenceTrail`
+  - `policyAudit`
+  - `suggestedActions`
+
+### 3. Contracts
+
+- Optional governance policies MUST NOT return `verdictContribution: "blocked"`; bridge-fed contributions must type-exclude `blocked`.
+- Existing core runtime/fatal failures MAY remain blocking and MUST NOT be softened by advisory governance.
+- Same-source governance evidence MUST select the most severe advisory contribution; a fresh `pass` row must not hide a same-source `warn`/`fail`/stale/degraded row.
+- Evidence Trail MUST preserve source id plus available provenance: observed time, artifact path/hash, qualifier, degraded reason, and stale time.
+- Suggested actions are guidance only: rendering them MUST NOT execute commands, mutate files, or change checkpoint verdict.
+- Suggested Actions MUST render primary user actions separately from optional command chips; long commands must truncate inside their own group and must not squeeze heading/hint copy into vertical text.
+- Compact checkpoint hosts MAY hide full audit rows, but MUST preserve advisory presence through count/source summary and an expansion path.
+
+### 4. Validation & Error Matrix
+
+| 场景 | 必须行为 | 禁止行为 |
+|---|---|---|
+| stale/missing/malformed governance artifact | 显示 advisory signal + evidence trail provenance | 升级为 `blocked` |
+| same source has pass and warn evidence | 选择 warn/fail/stale/degraded 作为 policy decision | 只取第一条 evidence |
+| compact popover has advisory evidence | 显示 advisory summary/source + dock expansion | 隐藏后让用户误以为治理证据干净 |
+| suggested validation command rendered | 可复制/查看命令，但保持 optional | render 时自动执行命令或修改 verdict |
+| suggested action panel contains long commands | 主动作与 optional command group 分层展示，文案横排可换行，命令 chip 截断 | 把 hint、主按钮、长命令塞进同一横行导致中文竖排或撑宽面板 |
+| core fatal/runtime failure | 保持 blocking 语义 | 被 advisory-only 规则降级 |
+
+### 5. Good / Base / Bad Cases
+
+- Good：`bridgeGovernancePolicies` 使用 `Exclude<PolicyVerdictContribution, "blocked">`，并把 provenance 映射到 `PolicyDecision`，`CheckpointPanel` 只渲染与复制建议命令。
+- Base：compact view 只显示 advisory count 与 source summary，完整 audit 留给 dock。
+- Bad：UI 文案改成 warning，但 policy decision 仍可能贡献 `blocked`。
+- Bad：Evidence Trail 只显示 snapshot id，不显示 artifact path/hash/observedAt，导致 advisory 缺口不可追溯。
+
+### 6. Tests Required
+
+- Policy tests MUST cover warn, fail, unknown, stale, malformed, platform-qualified, and same-source mixed evidence without `blocked`.
+- Projection tests MUST assert advisory signals, evidence trail provenance, and suggested action command mapping.
+- StatusPanel tests MUST cover dock full sections and compact advisory summary parity.
+- Conformance scripts MUST fail if bridge-fed governance policies can contribute `blocked` or omit structured enforcement/provenance fields.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```typescript
+const sourceEvidence = snapshot.evidence.find((entry) => entry.source === source);
+return {
+  verdictContribution: sourceEvidence?.status === "fail" ? "blocked" : "ready",
+};
+```
+
+#### Correct
+
+```typescript
+type AdvisoryBridgeContribution = Exclude<PolicyVerdictContribution, "blocked">;
+
+const sourceEvidence = selectMostSevereAdvisoryEvidence(snapshot, source);
+return {
+  verdictContribution: contributionForEvidence(sourceEvidence),
+  enforcement: "advisory",
+  evidenceObservedAt: sourceEvidence.provenance?.observedAt,
+  evidenceArtifactPath: sourceEvidence.provenance?.artifactPath,
+};
+```
+
+## Scenario: StatusPanel Evidence / Cost Dense Typography
+
+### 1. Scope / Trigger
+
+- Trigger：修改 `GovernanceEvidenceSection`、`CostBudgetSection`、`src/styles/status-panel.css` 中 `sp-governance-evidence` / `sp-cost-budget` 相关 selector，或调整 checkpoint typography 变量。
+- 目标：`治理证据` 与 `成本 / Budget` 是 dense operational evidence surface，必须保持低视觉噪音，避免被 checkpoint 通用字号回归带大。
+
+### 2. Contracts
+
+- `.sp-governance-evidence` MUST own local typography vars: `--sp-governance-label-size`、`--sp-governance-copy-size`、`--sp-governance-meta-size`。
+- `.sp-cost-budget` MUST own local typography vars: `--sp-cost-budget-label-size`、`--sp-cost-budget-copy-size`、`--sp-cost-budget-meta-size`。
+- Evidence / cost section MAY override `--sp-checkpoint-label-size` and `--sp-checkpoint-copy-size` only inside its own scoped root.
+- Global `.sp-checkpoint-*` typography MUST NOT be enlarged to fix or restyle evidence/cost rows.
+- Evidence title, summary, source/action chips, cost badges, token breakdown labels, budget bar, and degradation guides MUST remain compact, use one coherent local font-size scale inside the same section, and wrap horizontally; they must not become hero-scale or dominate the dock.
+
+### 3. Validation
+
+- CSS review MUST confirm the dense section overrides remain scoped to `.sp-governance-evidence` / `.sp-cost-budget`.
+- Visual QA SHOULD check that evidence rows and cost badges remain smaller than the main checkpoint headline and do not crowd the dock.

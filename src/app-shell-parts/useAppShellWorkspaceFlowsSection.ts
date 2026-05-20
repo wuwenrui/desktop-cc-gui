@@ -12,6 +12,10 @@ import { buildClaudeResumeTerminalCommand } from "../features/app/utils/claudeRe
 import { writeTerminalSession } from "../services/tauri";
 import type { AgentTaskScrollRequest } from "../features/messages/types";
 import type { AppSettings, DebugEntry, WorkspaceInfo, WorkspaceSettings } from "../types";
+import {
+  shouldCollapseRightPanelOnThreadSelect,
+  shouldPreserveEditorOnThreadSelect,
+} from "./threadEditorPreservation";
 
 const EMPTY_OPEN_APP_ICON_MAP: Record<string, string> = {};
 
@@ -30,6 +34,7 @@ type WorkspaceShellSettings = Pick<AppSettings, "workspaceGroups"> &
   Partial<Pick<AppSettings, "selectedOpenAppId">>;
 
 export type WorkspaceShellBoundary = {
+  activeEditorFilePath: string | null;
   activeWorkspace: WorkspaceInfo | null;
   activeWorkspaceId: string | null;
   activeThreadId: string | null;
@@ -45,6 +50,7 @@ export type WorkspaceShellBoundary = {
   closeTerminalPanel: () => void;
   collapseRightPanel: () => void;
   connectWorkspace: (workspace: WorkspaceInfo) => Promise<void>;
+  centerMode: "chat" | "diff" | "editor" | "memory";
   exitDiffView: () => void;
   handleToggleTerminal: () => void;
   isCompact: boolean;
@@ -95,6 +101,7 @@ export function useAppShellWorkspaceFlowsSection(
     activeWorkspace,
     activeWorkspaceId,
     activeThreadId,
+    activeEditorFilePath,
     addCloneAgent,
     addDebugEntry,
     alertError,
@@ -103,6 +110,7 @@ export function useAppShellWorkspaceFlowsSection(
     closeTerminalPanel,
     collapseRightPanel,
     connectWorkspace,
+    centerMode,
     exitDiffView,
     handleToggleTerminal,
     isCompact,
@@ -352,11 +360,25 @@ export function useAppShellWorkspaceFlowsSection(
       } = {},
     ) => {
       const { collapseRightPanel: shouldCollapseRightPanel = true } = options;
-      exitDiffView();
+      const preserveEditor = shouldPreserveEditorOnThreadSelect({
+        isCompact,
+        centerMode,
+        activeWorkspaceId,
+        targetWorkspaceId: workspaceId,
+        activeEditorFilePath,
+      });
+      if (!preserveEditor) {
+        exitDiffView();
+      }
       setAppMode("chat");
       setActiveTab("codex");
       setHomeOpen(false);
-      if (shouldCollapseRightPanel) {
+      if (
+        shouldCollapseRightPanelOnThreadSelect({
+          preserveEditor,
+          requestedCollapse: shouldCollapseRightPanel,
+        })
+      ) {
         collapseRightPanel();
       }
       setSelectedKanbanTaskId(null);
@@ -369,8 +391,12 @@ export function useAppShellWorkspaceFlowsSection(
       }
     },
     [
+      activeEditorFilePath,
+      activeWorkspaceId,
+      centerMode,
       exitDiffView,
       collapseRightPanel,
+      isCompact,
       selectWorkspace,
       setActiveEngine,
       setActiveTab,

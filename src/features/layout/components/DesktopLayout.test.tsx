@@ -33,7 +33,7 @@ function renderDesktopLayout(overrides: Partial<ComponentProps<typeof DesktopLay
       rightPanelToolbarNode={<div>right-toolbar</div>}
       gitDiffPanelNode={<div>activity-panel</div>}
       planPanelNode={<div>plan-panel</div>}
-      composerNode={<div>composer</div>}
+      composerNode={<div className="composer">composer</div>}
       runtimeConsoleDockNode={<div>runtime-dock</div>}
       terminalDockNode={<div>terminal-dock</div>}
       debugPanelNode={<div>debug-panel</div>}
@@ -87,7 +87,7 @@ describe("DesktopLayout", () => {
 
   it("keeps the composer mounted when the editor file is maximized", () => {
     cleanup();
-    const { container } = renderDesktopLayout({
+    const { container, getByText } = renderDesktopLayout({
       centerMode: "editor",
       isEditorFileMaximized: true,
     });
@@ -95,5 +95,39 @@ describe("DesktopLayout", () => {
     expect(container.querySelector(".content.is-editor-file-maximized")).toBeTruthy();
     expect(container.textContent ?? "").toContain("file-viewer");
     expect(container.textContent ?? "").toContain("composer");
+
+    const chatLayer = container.querySelector(".content-layer--chat");
+    const composer = getByText("composer");
+    expect(chatLayer?.contains(composer)).toBe(false);
+  });
+
+  it("places the composer inside the chat column in horizontal editor split", () => {
+    cleanup();
+    const { container, getByText } = renderDesktopLayout({
+      centerMode: "editor",
+      editorSplitLayout: "horizontal",
+    });
+
+    const content = container.querySelector(".content.is-editor-split-horizontal");
+    const chatLayer = container.querySelector(".content-layer--chat");
+    const editorLayer = container.querySelector(".content-layer--editor");
+    const composer = getByText("composer");
+
+    expect(content).toBeTruthy();
+    expect(chatLayer?.contains(getByText("messages"))).toBe(true);
+    expect(chatLayer?.contains(composer)).toBe(true);
+    expect(editorLayer?.contains(getByText("file-viewer"))).toBe(true);
+    expect(composer.parentElement).toBe(chatLayer);
+  });
+
+  it("keeps composer outside the chat layer in normal chat mode", () => {
+    cleanup();
+    const { container, getByText } = renderDesktopLayout();
+
+    const chatLayer = container.querySelector(".content-layer--chat");
+    const composer = getByText("composer");
+
+    expect(chatLayer?.contains(composer)).toBe(false);
+    expect(composer.parentElement?.className).toContain("main");
   });
 });

@@ -1,3 +1,5 @@
+import type { PolicyDecision } from "./utils/policies";
+
 export type SubagentNavigationTarget =
   | {
       kind: "thread";
@@ -110,6 +112,7 @@ export interface CheckpointViewModel {
   verdict: CheckpointVerdict;
   headline: CheckpointMessageToken;
   summary: CheckpointMessageToken | null;
+  policyAudit: readonly PolicyDecision[];
   evidence: {
     changedFiles: number | null;
     additions: number | null;

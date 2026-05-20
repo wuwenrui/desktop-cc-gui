@@ -123,6 +123,124 @@ async fn lists_and_loads_real_claude_subagent_transcripts() {
 }
 
 #[tokio::test]
+async fn ignores_generic_subagent_agent_name_for_summary_title() {
+    let unique = Uuid::new_v4().to_string();
+    let temp_root = std::env::temp_dir().join(format!("ccgui-subagent-generic-name-{}", unique));
+    let claude_home = temp_root.join("claude-home");
+    let base_dir = claude_home.join("projects");
+    let workspace_path = temp_root.join("workspace");
+    std::fs::create_dir_all(&workspace_path).expect("create workspace path");
+
+    let project_dir = create_project_dir(&base_dir, &workspace_path);
+    let parent_session_id = format!("parent-{}", unique);
+    let parent_session_path = project_dir.join(format!("{}.jsonl", parent_session_id));
+    write_jsonl_lines(
+        &parent_session_path,
+        &[json!({
+            "uuid": "parent-user",
+            "timestamp": "2026-05-10T01:00:00.000Z",
+            "cwd": workspace_path.to_string_lossy(),
+            "message": { "role": "user", "content": "启动子代理分析 sidebar" }
+        })],
+    );
+
+    let subagents_dir = project_dir.join(&parent_session_id).join("subagents");
+    std::fs::create_dir_all(&subagents_dir).expect("create subagents dir");
+    let agent_id = "b5e6403f261113239";
+    std::fs::write(
+        subagents_dir.join(format!("agent-{}.meta.json", agent_id)),
+        r#"{"agentType":"Explore","agentName":"Agent 202"}"#,
+    )
+    .expect("write subagent meta");
+    write_jsonl_lines(
+        &subagents_dir.join(format!("agent-{}.jsonl", agent_id)),
+        &[json!({
+            "uuid": "agent-user",
+            "timestamp": "2026-05-10T01:00:00.000Z",
+            "cwd": workspace_path.to_string_lossy(),
+            "agentId": agent_id,
+            "isSidechain": true,
+            "message": { "role": "user", "content": "检查 Claude session 显示为什么变成 Agent 202" }
+        })],
+    );
+
+    let config = test_config(&claude_home);
+    let sessions = list_claude_sessions_with_config(&workspace_path, None, Some(&config))
+        .await
+        .expect("list claude sessions");
+    let child_session_id = format!("subagent:{}:{}", parent_session_id, agent_id);
+    let child = sessions
+        .iter()
+        .find(|session| session.session_id == child_session_id)
+        .expect("real subagent session is listed");
+    assert_eq!(
+        child.first_message,
+        "检查 Claude session 显示为什么变成 Agent 202"
+    );
+
+    let _ = std::fs::remove_dir_all(&temp_root);
+}
+
+#[tokio::test]
+async fn ignores_generic_subagent_description_for_summary_title() {
+    let unique = Uuid::new_v4().to_string();
+    let temp_root = std::env::temp_dir().join(format!("ccgui-subagent-generic-desc-{}", unique));
+    let claude_home = temp_root.join("claude-home");
+    let base_dir = claude_home.join("projects");
+    let workspace_path = temp_root.join("workspace");
+    std::fs::create_dir_all(&workspace_path).expect("create workspace path");
+
+    let project_dir = create_project_dir(&base_dir, &workspace_path);
+    let parent_session_id = format!("parent-{}", unique);
+    let parent_session_path = project_dir.join(format!("{}.jsonl", parent_session_id));
+    write_jsonl_lines(
+        &parent_session_path,
+        &[json!({
+            "uuid": "parent-user",
+            "timestamp": "2026-05-10T01:00:00.000Z",
+            "cwd": workspace_path.to_string_lossy(),
+            "message": { "role": "user", "content": "启动子代理分析描述污染" }
+        })],
+    );
+
+    let subagents_dir = project_dir.join(&parent_session_id).join("subagents");
+    std::fs::create_dir_all(&subagents_dir).expect("create subagents dir");
+    let agent_id = "c5e6403f261113239";
+    std::fs::write(
+        subagents_dir.join(format!("agent-{}.meta.json", agent_id)),
+        r#"{"agentType":"Explore","description":"Agent 202"}"#,
+    )
+    .expect("write subagent meta");
+    write_jsonl_lines(
+        &subagents_dir.join(format!("agent-{}.jsonl", agent_id)),
+        &[json!({
+            "uuid": "agent-user",
+            "timestamp": "2026-05-10T01:00:00.000Z",
+            "cwd": workspace_path.to_string_lossy(),
+            "agentId": agent_id,
+            "isSidechain": true,
+            "message": { "role": "user", "content": "分析 description 被 Agent 202 覆盖的问题" }
+        })],
+    );
+
+    let config = test_config(&claude_home);
+    let sessions = list_claude_sessions_with_config(&workspace_path, None, Some(&config))
+        .await
+        .expect("list claude sessions");
+    let child_session_id = format!("subagent:{}:{}", parent_session_id, agent_id);
+    let child = sessions
+        .iter()
+        .find(|session| session.session_id == child_session_id)
+        .expect("real subagent session is listed");
+    assert_eq!(
+        child.first_message,
+        "分析 description 被 Agent 202 覆盖的问题"
+    );
+
+    let _ = std::fs::remove_dir_all(&temp_root);
+}
+
+#[tokio::test]
 async fn delete_claude_subagent_session_removes_real_transcript_and_meta() {
     let unique = Uuid::new_v4().to_string();
     let temp_root = std::env::temp_dir().join(format!("ccgui-delete-subagent-{}", unique));

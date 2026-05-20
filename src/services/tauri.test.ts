@@ -77,6 +77,7 @@ import {
   moveWorkspaceSessionFolder,
   deleteWorkspaceSessionFolder,
   assignWorkspaceSessionFolder,
+  assignWorkspaceSessionFolders,
   archiveWorkspaceSessions,
   unarchiveWorkspaceSessions,
   deleteWorkspaceSessions,
@@ -742,7 +743,17 @@ describe("tauri invoke wrappers", () => {
 
   it("maps workspace session batch mutations", async () => {
     const invokeMock = vi.mocked(invoke);
-    invokeMock.mockResolvedValue({});
+    invokeMock.mockResolvedValue({
+      results: [
+        {
+          sessionId: "opencode:1",
+          ok: true,
+          code: "ALREADY_MISSING_CLEANED",
+          deletedFromDisk: false,
+          metadataCleaned: true,
+        },
+      ],
+    });
 
     await archiveWorkspaceSessions("ws-2", ["claude:1", "codex-1"]);
     expect(invokeMock).toHaveBeenNthCalledWith(
@@ -764,10 +775,15 @@ describe("tauri invoke wrappers", () => {
       },
     );
 
-    await deleteWorkspaceSessions("ws-2", ["opencode:1"]);
+    const deleteResult = await deleteWorkspaceSessions("ws-2", ["opencode:1"]);
     expect(invokeMock).toHaveBeenNthCalledWith(3, "delete_workspace_sessions", {
       workspaceId: "ws-2",
       sessionIds: ["opencode:1"],
+    });
+    expect(deleteResult.results[0]).toMatchObject({
+      code: "ALREADY_MISSING_CLEANED",
+      deletedFromDisk: false,
+      metadataCleaned: true,
     });
   });
 
@@ -835,6 +851,17 @@ describe("tauri invoke wrappers", () => {
         workspaceId: "ws-2",
         sessionId: "claude:1",
         folderId: "folder-1",
+      },
+    );
+
+    await assignWorkspaceSessionFolders("ws-2", ["claude:1", "codex-2"], null);
+    expect(invokeMock).toHaveBeenNthCalledWith(
+      7,
+      "assign_workspace_session_folders",
+      {
+        workspaceId: "ws-2",
+        sessionIds: ["claude:1", "codex-2"],
+        folderId: null,
       },
     );
   });

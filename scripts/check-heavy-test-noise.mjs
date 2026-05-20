@@ -50,6 +50,7 @@ function parseArgs(argv) {
     input: null,
     mode: "fail",
     logOutput: path.join(".artifacts", "heavy-test-noise.log"),
+    jsonOutput: path.join(".artifacts", "heavy-test-noise.json"),
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -73,6 +74,15 @@ function parseArgs(argv) {
         throw new Error("Missing value for --log-output");
       }
       config.logOutput = value;
+      index += 1;
+      continue;
+    }
+    if (token === "--json-output") {
+      const value = argv[index + 1];
+      if (!value || value.startsWith("--")) {
+        throw new Error("Missing value for --json-output");
+      }
+      config.jsonOutput = value;
       index += 1;
       continue;
     }
@@ -249,6 +259,30 @@ function printViolations(report) {
   }
 }
 
+function buildStructuredReportJson(report, logSource, generatedAt) {
+  const breachCount =
+    report.actWarnings.length +
+    report.stdoutPayloads.length +
+    report.stderrPayloads.length;
+  return JSON.stringify(
+    {
+      schemaVersion: 1,
+      gate: "heavy-test-noise",
+      generatedAt,
+      status: breachCount > 0 ? "warn" : "pass",
+      exitCode: logSource.exitCode,
+      logPath: logSource.logPath.replace(/\\/g, "/"),
+      breachCount,
+      environmentWarningCount: report.environmentWarnings.length,
+      actWarningCount: report.actWarnings.length,
+      stdoutPayloadCount: report.stdoutPayloads.length,
+      stderrPayloadCount: report.stderrPayloads.length,
+    },
+    null,
+    2,
+  ) + "\n";
+}
+
 export async function runHeavySuiteAndCapture({ logOutput }) {
   const absoluteLogOutput = path.resolve(logOutput);
   await mkdir(path.dirname(absoluteLogOutput), { recursive: true });
@@ -303,6 +337,13 @@ async function main() {
   const report = analyzeHeavyTestNoise(logSource.logText, { env: process.env });
   printSummary(report);
   console.log(`  log path: ${logSource.logPath}`);
+
+  if (config.jsonOutput) {
+    const jsonOutput = path.resolve(config.jsonOutput);
+    await mkdir(path.dirname(jsonOutput), { recursive: true });
+    await writeFile(jsonOutput, buildStructuredReportJson(report, logSource, new Date().toISOString()), "utf8");
+    console.log(`  JSON report: ${jsonOutput}`);
+  }
 
   const hasViolations =
     report.actWarnings.length > 0 ||

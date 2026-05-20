@@ -1,0 +1,49 @@
+.composer-kanban-popover-mode {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-top: 1px solid color-mix(in srgb, var(--border-subtle) 60%, transparent);
+  margin-top: auto;
+}
+
+.composer-kanban-mode-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding-left: 2px;
+}
+
+.composer-kanban-mode-group {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  background: var(--surface-control);
+  padding: 3px;
+  border-radius: 8px;
+}
+
+.composer-kanban-mode-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  padding: 4px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  transition: all 0.15s;
+}
+
+.composer-kanban-mode-btn:hover {
+  color: var(--text-primary);
+}
+
+.composer-kanban-mode-btn.is-active {
+  background: var(--surface-card);
+  color: var(--text-strong);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  font-weight: 500;
+}

@@ -91,4 +91,21 @@ impl DaemonState {
         )
         .await
     }
+
+    pub(crate) async fn assign_workspace_session_folders(
+        &self,
+        workspace_id: String,
+        session_ids: Vec<String>,
+        folder_id: Option<String>,
+    ) -> Result<session_management::WorkspaceSessionBatchMutationResponse, String> {
+        session_management::assign_workspace_session_folders_core(
+            &self.workspaces,
+            &self.engine_manager,
+            self.storage_path.as_path(),
+            workspace_id,
+            session_ids,
+            folder_id,
+        )
+        .await
+    }
 }

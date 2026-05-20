@@ -7,9 +7,9 @@
 ## Current Status
 
 <!-- @@@auto:current-status -->
-- **Active File**: `journal-13.md`
-- **Total Sessions**: 473
-- **Last Active**: 2026-05-15
+- **Active File**: `journal-15.md`
+- **Total Sessions**: 534
+- **Last Active**: 2026-05-20
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,9 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-13.md` | ~1713 | Active |
+| `journal-15.md` | ~618 | Active |
+| `journal-14.md` | ~1969 | Archived |
+| `journal-13.md` | ~1947 | Archived |
 | `journal-12.md` | ~1971 | Archived |
 | `journal-11.md` | ~1985 | Archived |
 | `journal-10.md` | ~1985 | Archived |
@@ -41,6 +43,67 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 534 | 2026-05-20 | 修复同工作区会话切换保留编辑器 | `2a2af6e1` | `feature/v0.5.0-md` |
+| 533 | 2026-05-20 | 收紧 Codex 后台终止漂移恢复边界 | `3e258333` | `feature/v0.5.0-md` |
+| 532 | 2026-05-20 | 统一 StatusPanel 证据与成本字号 | `7ffc4d2d` | `feature/v0.5.0-md` |
+| 531 | 2026-05-20 | 保持桌面编辑器分栏对话体验 | `47878ca0` | `feature/v0.5.0-md` |
+| 530 | 2026-05-20 | 动态治理证据与成本预算收口 | `0b83493d` | `feature/v0.5.0-md` |
+| 529 | 2026-05-20 | 记录会话切换保留编辑器契约 | `bc5ff2fd` | `feature/v0.5.0-md` |
+| 528 | 2026-05-20 | 切换同工作区会话保留编辑器 | `e4479078` | `feature/v0.5.0-md` |
+| 527 | 2026-05-20 | Git 文件单击打开编辑器 | `3ce64477` | `feature/v0.5.0-md` |
+| 526 | 2026-05-20 | 修复会话管理边界条件 | `50574fac` | `feature/v0.5.0-md` |
+| 525 | 2026-05-20 | 修复会话管理 heavy gate 遗留问题 | `a59ceac2`, `ae19ab3d` | `feature/v0.5.0-md` |
+| 524 | 2026-05-20 | 收口 harness advisory governance | `9b6c4b09` | `feature/v0.5.0-md` |
+| 523 | 2026-05-20 | 标记会话管理提交收口 | `80ee6532` | `feature/v0.5.0-md` |
+| 522 | 2026-05-20 | 收口项目会话管理幕布 | `1f3fe6df` | `feature/v0.5.0-md` |
+| 521 | 2026-05-20 | Fix Codex deferred completion after assistant ingress | `1b75eb0b` | `feature/v0.5.0-md` |
+| 520 | 2026-05-20 | 修复 Markdown 预览自动刷新 | `4c2afcfa` | `feature/v0.5.0-md` |
+| 519 | 2026-05-20 | 收口 harness 治理 release-grade 闭环 | `6e64c779` | `feature/v0.5.0-md` |
+| 518 | 2026-05-20 | 修复 domain event runtime 测试 Storage 兼容性 | `29f589bc` | `feature/v0.5.0-md` |
+| 517 | 2026-05-20 | 对齐 harness 生产评审版本 | `cabd0577` | `feature/v0.5.0-md` |
+| 516 | 2026-05-20 | 补齐 harness 治理校准记录 | `203a2224` | `feature/v0.5.0-md` |
+| 515 | 2026-05-20 | 细化 harness 证据实施约束 | `249862a8` | `feature/v0.5.0-md` |
+| 514 | 2026-05-20 | 校准 harness 平台证据门槛 | `a1f799cd` | `feature/v0.5.0-md` |
+| 513 | 2026-05-20 | 拆分前端大文件模块边界 | `187fd30b` | `feature/v0.5.0-md` |
+| 512 | 2026-05-20 | 拆分 harness 运行时治理模块 | `fab60797` | `feature/v0.5.0-md` |
+| 511 | 2026-05-20 | 收口 harness 治理层90分提案 | `6b11f21d` | `feature/v0.5.0-md` |
+| 510 | 2026-05-20 | 打通 harness 治理证据闭环 | `2eafb213` | `feature/v0.5.0-md` |
+| 509 | 2026-05-20 | 迁出 Git History 面板常量和类型 | `a41d5c1e` | `feature/v0.5.0-md` |
+| 508 | 2026-05-20 | 拆分用户提问历史归一化 | `c0e1c765` | `feature/v0.5.0-md` |
+| 507 | 2026-05-20 | 拆分事件诊断工具 | `c81c151c` | `feature/v0.5.0-md` |
+| 506 | 2026-05-20 | 拆分消息线程解析职责 | `779c07b8` | `feature/v0.5.0-md` |
+| 505 | 2026-05-20 | 拆分实时历史对齐调度 | `a22cba8d` | `feature/v0.5.0-md` |
+| 504 | 2026-05-20 | 拆分线程动作加载职责 | `58da5764` | `feature/v0.5.0-md` |
+| 503 | 2026-05-20 | 拆分英文基础翻译分片 | `495bb867` | `feature/v0.5.0-md` |
+| 502 | 2026-05-20 | 拆分 useThreadsReducer 压缩生命周期测试 | `98f9b5bd` | `feature/v0.5.0-md` |
+| 501 | 2026-05-20 | 拆分 historyLoaders 回退测试 | `f6de5b3e` | `feature/v0.5.0-md` |
+| 500 | 2026-05-20 | 拆分 FileViewPanel 外部变更监控测试 | `f9eeda35` | `feature/v0.5.0-md` |
+| 499 | 2026-05-20 | 归档 harness 治理 OpenSpec 变更 | `92cefd0c` | `feature/v0.5.0-md` |
+| 498 | 2026-05-20 | 拆分 Sidebar 会话文件夹测试 | `ce539a2e` | `feature/v0.5.0-md` |
+| 497 | 2026-05-20 | 拆分 Messages 推理与计划交接测试 | `23c58d2b` | `feature/v0.5.0-md` |
+| 496 | 2026-05-20 | 拆分线程消息乐观渲染测试 | `eef1f298` | `feature/v0.5.0-md` |
+| 495 | 2026-05-19 | 拆分 useThreadActions 启动动作测试 | `5b1bafbd` | `feature/v0.5.0-md` |
+| 494 | 2026-05-19 | 解除 useThreadActions 大文件门禁阻塞 | `c382433f` | `feature/v0.5.0-md` |
+| 493 | 2026-05-19 | 收口 harness 剩余治理提案 | `867a4156` | `feature/v0.5.0-md` |
+| 492 | 2026-05-19 | 收口 harness 治理证据只读桥接 | `667af011` | `feature/v0.5.0-md` |
+| 491 | 2026-05-19 | 收口 harness capability 感知查询入口 | `552b8dc8` | `feature/v0.5.0-md` |
+| 490 | 2026-05-19 | 加固 Claude sidebar 会话列表兜底 | `aa646cb4` | `feature/v0.5.0-md` |
+| 489 | 2026-05-19 | 收口 harness policy 判决审计面板 | `82f34f9e` | `feature/v0.5.0-md` |
+| 488 | 2026-05-19 | 收口运行时能力与性能治理 | `403eef7d` | `feature/v0.5.0-md` |
+| 487 | 2026-05-19 | 提交消息工具调用卡片与会话投影修复 | `cb261490`, `d3327f0f`, `4f40920b` | `feature/v0.5.0-md` |
+| 486 | 2026-05-19 | 统一多引擎列表超时兜底 | `10346e3d` | `feature/v0.5.0-md` |
+| 485 | 2026-05-19 | 稳定 CI flaky 测试 | `bed69513` | `feature/v0.5.0-md` |
+| 484 | 2026-05-19 | 归一化用户提问卡片交互 | `d142510b` | `feature/v0.5.0-md` |
+| 483 | 2026-05-18 | 加固 Claude 列表超时兜底 | `1f2f87f1` | `feature/v0.5.0-md` |
+| 482 | 2026-05-18 | 修复 Markdown 收口回归 | `59acb6be` | `feature/v0.5.0-md` |
+| 481 | 2026-05-18 | 支持 Markdown 文件预览公式和图表渲染 | `7fdc8e5e` | `feature/v0.5.0-md` |
+| 480 | 2026-05-17 | 收口 harness 治理层设计提案 | `783c5ab8` | `feature/v0.5` |
+| 479 | 2026-05-16 | PR #564 与 chore/bump-version-0.5 语义融合 | `5fa60b2b` | `feature/v0.5` |
+| 478 | 2026-05-16 | 修复 Composer.rewind-confirm.test 在 CI 上的 waitFor 超时 | `1500a69a` | `feature/v0.5` |
+| 477 | 2026-05-16 | Archive add-runtime-perf-baseline 并同步主 spec | `8bfe9ccf` | `feature/v0.5` |
+| 476 | 2026-05-16 | 完成 add-runtime-perf-baseline 基线产出与三段式提交 | `d5c3b51e`, `db794925`, `3014c073` | `feature/v0.5` |
+| 475 | 2026-05-16 | 降低 Claude 上下文查询请求频率 | `742f4e75` | `feature/v0.5` |
+| 474 | 2026-05-15 | 稳定 Project Memory 面板转换测试时序 | `c6a7a456` | `feature/v0.4.18` |
 | 473 | 2026-05-15 | 发布前 OpenSpec 文档卫生收口 | `5bb8ad5b` | `feature/v0.4.18` |
 | 472 | 2026-05-15 | 稳定核心运行时与实时契约 | `f4d60742` | `feature/v0.4.18` |
 | 471 | 2026-05-15 | 记录 AppImage Wayland 修复验证 | `1263ee8e` | `feature/v0.4.18` |

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { getClientStoreSync, writeClientStoreValue } from "../../../services/clientStorage";
 
 type UseSidebarTogglesOptions = {
@@ -27,29 +27,29 @@ export function useSidebarToggles({ isCompact }: UseSidebarTogglesOptions) {
     writeClientStoreValue("layout", "rightPanelCollapsed", rightPanelCollapsed);
   }, [rightPanelCollapsed]);
 
-  const collapseSidebar = () => {
+  const collapseSidebar = useCallback(() => {
     if (!isCompact) {
-      setSidebarCollapsed(true);
+      setSidebarCollapsed((current) => (current ? current : true));
     }
-  };
+  }, [isCompact]);
 
-  const expandSidebar = () => {
+  const expandSidebar = useCallback(() => {
     if (!isCompact) {
-      setSidebarCollapsed(false);
+      setSidebarCollapsed((current) => (current ? false : current));
     }
-  };
+  }, [isCompact]);
 
-  const collapseRightPanel = () => {
+  const collapseRightPanel = useCallback(() => {
     if (!isCompact) {
-      setRightPanelCollapsed(true);
+      setRightPanelCollapsed((current) => (current ? current : true));
     }
-  };
+  }, [isCompact]);
 
-  const expandRightPanel = () => {
+  const expandRightPanel = useCallback(() => {
     if (!isCompact) {
-      setRightPanelCollapsed(false);
+      setRightPanelCollapsed((current) => (current ? false : current));
     }
-  };
+  }, [isCompact]);
 
   return {
     sidebarCollapsed,

@@ -13,6 +13,11 @@ import {
 import { OPENCODE_VARIANT_OPTIONS } from "./utils";
 import type { WorkspaceInfo } from "../types";
 import { archiveWorkspaceSessions } from "../services/tauri";
+import { shouldEnableMainFileExternalChangeMonitoring } from "./fileExternalMonitoring";
+import {
+  getThreadSelectDiffCleanupAction,
+  shouldPreserveEditorOnThreadSelect,
+} from "./threadEditorPreservation";
 
 type WorkspaceAliasPromptState = {
   workspaceId: string;
@@ -162,10 +167,12 @@ export function useAppShellLayoutNodesSection(ctx: any) {
       updateSharedSessionEngineSelection,
     ],
   );
-  const enableMainFileExternalChangeMonitoring = Boolean(
-    activeWorkspace &&
+  const enableMainFileExternalChangeMonitoring =
+    shouldEnableMainFileExternalChangeMonitoring({
+      activeWorkspace,
       activeEditorFilePath,
-  );
+      liveEditPreviewEnabled,
+    });
   const handleRenameWorkspaceAlias = useCallback(
     (workspace: WorkspaceInfo) => {
       const currentAlias =
@@ -414,12 +421,26 @@ export function useAppShellLayoutNodesSection(ctx: any) {
       });
     },
     onSelectThread: (workspaceId, threadId) => {
+      const preserveEditor = shouldPreserveEditorOnThreadSelect({
+        isCompact,
+        centerMode,
+        activeWorkspaceId,
+        targetWorkspaceId: workspaceId,
+        activeEditorFilePath,
+      });
+      const diffCleanupAction = getThreadSelectDiffCleanupAction(preserveEditor);
       closeSettings();
-      exitDiffView();
+      if (diffCleanupAction === "clear-selected-diff") {
+        setSelectedDiffPath(null);
+      } else {
+        exitDiffView();
+      }
       resetPullRequestSelection();
       setHomeOpen(false);
       setWorkspaceHomeWorkspaceId(null);
-      setCenterMode("chat");
+      if (!preserveEditor) {
+        setCenterMode("chat");
+      }
       setAppMode("chat");
       setActiveTab("codex");
       selectWorkspace(workspaceId);

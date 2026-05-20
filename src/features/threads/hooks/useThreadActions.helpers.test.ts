@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import type { ConversationItem, ThreadSummary } from "../../../types";
 import {
+  isRetainableEngineContinuitySummary,
   mergeDegradedClaudeContinuitySummaries,
   mergeCodexCatalogSessionSummaries,
+  seedLastGoodEngineIntoMerged,
   selectRecoveredNewThreadSummary,
   selectReplacementThreadByMessageHistory,
 } from "./useThreadActions.helpers";
@@ -219,6 +221,35 @@ describe("useThreadActions.helpers", () => {
     expect(merged.find((thread) => thread.id === "claude:session-1")?.name).toBe("稳定命名");
   });
 
+  it("does not let ordinal Agent catalog titles overwrite meaningful existing titles", () => {
+    const merged = mergeCodexCatalogSessionSummaries(
+      [
+        {
+          id: "claude:session-1",
+          name: "帮我审核一下这个 PR",
+          updatedAt: 100,
+          engineSource: "claude",
+          threadKind: "native",
+        },
+      ],
+      [
+        {
+          sessionId: "claude:session-1",
+          title: "Agent 202",
+          updatedAt: 120,
+          engine: "claude",
+        },
+      ],
+      "workspace-1",
+      {},
+      () => undefined,
+    );
+
+    expect(merged.find((thread) => thread.id === "claude:session-1")?.name).toBe(
+      "帮我审核一下这个 PR",
+    );
+  });
+
   it("does not resurrect excluded Claude rows during degraded continuity", () => {
     const merged = mergeDegradedClaudeContinuitySummaries(
       [],
@@ -242,6 +273,49 @@ describe("useThreadActions.helpers", () => {
     );
 
     expect(merged.map((thread) => thread.id)).toEqual(["claude:visible-native"]);
+  });
+
+  it("rejects pending placeholders in engine-aware continuity filters", () => {
+    const pendingByEngine = ["claude", "codex", "opencode"] as const;
+
+    for (const engine of pendingByEngine) {
+      const summary: ThreadSummary = {
+        id: `${engine}-pending-123`,
+        name: "Pending",
+        updatedAt: 100,
+        engineSource: engine,
+        threadKind: "native",
+      };
+
+      expect(isRetainableEngineContinuitySummary(engine, summary)).toBe(false);
+    }
+  });
+
+  it("does not seed pending OpenCode placeholders from last-good fallback", () => {
+    const mergedById = new Map<string, ThreadSummary>();
+    const seeded = seedLastGoodEngineIntoMerged(
+      "opencode",
+      mergedById,
+      [
+        {
+          id: "opencode-pending-123",
+          name: "Pending OpenCode",
+          updatedAt: 100,
+          engineSource: "opencode",
+          threadKind: "native",
+        },
+        {
+          id: "opencode:session-1",
+          name: "Real OpenCode",
+          updatedAt: 90,
+          engineSource: "opencode",
+          threadKind: "native",
+        },
+      ],
+    );
+
+    expect(seeded).toBe(1);
+    expect([...mergedById.keys()]).toEqual(["opencode:session-1"]);
   });
 
 });

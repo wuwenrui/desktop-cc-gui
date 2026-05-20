@@ -424,11 +424,8 @@ pub(crate) fn list_external_spec_tree_inner(
     let mut directories = vec!["openspec".to_string()];
     let mut limit_hit = false;
     if !resolved.exists {
-        let directory_entries = build_initial_directory_entries(
-            &files,
-            &directories,
-            WorkspaceScanState::Complete,
-        );
+        let directory_entries =
+            build_initial_directory_entries(&files, &directories, WorkspaceScanState::Complete);
         return Ok(workspace_files_response(
             files,
             directories,

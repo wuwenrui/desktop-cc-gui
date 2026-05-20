@@ -63,7 +63,9 @@ impl AppState {
         if previous_claude_bin != new_claude_bin {
             let sessions = self.engine_manager.claude_manager.list_sessions().await;
             for (workspace_id, _session) in sessions {
-                self.engine_manager.remove_claude_session(&workspace_id).await;
+                self.engine_manager
+                    .remove_claude_session(&workspace_id)
+                    .await;
             }
         }
 

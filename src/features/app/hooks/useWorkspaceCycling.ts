@@ -1,6 +1,10 @@
 import type { MutableRefObject } from "react";
 import { useCallback, useMemo } from "react";
 import type { ThreadSummary, WorkspaceInfo } from "../../../types";
+import {
+  getThreadSelectDiffCleanupAction,
+  shouldPreserveEditorOnThreadSelect,
+} from "../../../app-shell-parts/threadEditorPreservation";
 
 type ThreadRowsFn = (
   threads: ThreadSummary[],
@@ -20,10 +24,14 @@ type Params = {
   getPinTimestamp: (workspaceId: string, threadId: string) => number | null;
   activeWorkspaceIdRef: MutableRefObject<string | null>;
   activeThreadIdRef: MutableRefObject<string | null>;
+  activeEditorFilePath: string | null;
+  centerMode: "chat" | "diff" | "editor" | "memory";
   exitDiffView: () => void;
+  isCompact: boolean;
   resetPullRequestSelection: () => void;
   selectWorkspace: (workspaceId: string) => void;
   setActiveThreadId: (threadId: string | null, workspaceId: string) => void;
+  setSelectedDiffPath: (path: string | null) => void;
 };
 
 export function useWorkspaceCycling({
@@ -34,10 +42,14 @@ export function useWorkspaceCycling({
   getPinTimestamp,
   activeWorkspaceIdRef,
   activeThreadIdRef,
+  activeEditorFilePath,
+  centerMode,
   exitDiffView,
+  isCompact,
   resetPullRequestSelection,
   selectWorkspace,
   setActiveThreadId,
+  setSelectedDiffPath,
 }: Params) {
   const orderedWorkspaceIds = useMemo(() => {
     const worktreesByParent = new Map<string, WorkspaceInfo[]>();
@@ -116,7 +128,19 @@ export function useWorkspaceCycling({
           ? (index + 1) % orderedThreadIds.length
           : (index - 1 + orderedThreadIds.length) % orderedThreadIds.length;
       const nextThreadId = orderedThreadIds[nextIndex] ?? null;
-      exitDiffView();
+      const preserveEditor = shouldPreserveEditorOnThreadSelect({
+        isCompact,
+        centerMode,
+        activeWorkspaceId: workspaceId,
+        targetWorkspaceId: workspaceId,
+        activeEditorFilePath,
+      });
+      const diffCleanupAction = getThreadSelectDiffCleanupAction(preserveEditor);
+      if (diffCleanupAction === "clear-selected-diff") {
+        setSelectedDiffPath(null);
+      } else {
+        exitDiffView();
+      }
       resetPullRequestSelection();
       selectWorkspace(workspaceId);
       if (nextThreadId) {
@@ -124,13 +148,17 @@ export function useWorkspaceCycling({
       }
     },
     [
+      activeEditorFilePath,
+      centerMode,
       exitDiffView,
       getOrderedThreadIds,
       activeWorkspaceIdRef,
       activeThreadIdRef,
+      isCompact,
       resetPullRequestSelection,
       selectWorkspace,
       setActiveThreadId,
+      setSelectedDiffPath,
     ],
   );
 

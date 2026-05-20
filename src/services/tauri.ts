@@ -49,6 +49,7 @@ export type {
   WorkspaceSessionAssignmentResponse,
 } from "./tauri/sessionManagement";
 export {
+  assignWorkspaceSessionFolders,
   assignWorkspaceSessionFolder,
   archiveWorkspaceSessions,
   createWorkspaceSessionFolder,

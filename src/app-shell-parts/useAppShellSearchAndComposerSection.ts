@@ -15,6 +15,10 @@ import type {
   MessageSendOptions,
   WorkspaceInfo,
 } from "../types";
+import {
+  getThreadSelectDiffCleanupAction,
+  shouldPreserveEditorOnThreadSelect,
+} from "./threadEditorPreservation";
 
 type AppShellTab = "projects" | "codex" | "spec" | "git" | "log";
 type CenterMode = "chat" | "diff" | "editor" | "memory";
@@ -257,7 +261,19 @@ export function useAppShellSearchAndComposerSection(ctx: ComposerSearchShellBoun
           break;
         case "thread":
           if (result.workspaceId && result.threadId) {
-            exitDiffView();
+            const preserveEditor = shouldPreserveEditorOnThreadSelect({
+              isCompact,
+              centerMode,
+              activeWorkspaceId,
+              targetWorkspaceId: result.workspaceId,
+              activeEditorFilePath,
+            });
+            const diffCleanupAction = getThreadSelectDiffCleanupAction(preserveEditor);
+            if (diffCleanupAction === "clear-selected-diff") {
+              setSelectedDiffPath(null);
+            } else {
+              exitDiffView();
+            }
             setSelectedPullRequest(null);
             setSelectedCommitSha(null);
             setDiffSource("local");
@@ -291,7 +307,19 @@ export function useAppShellSearchAndComposerSection(ctx: ComposerSearchShellBoun
           break;
         case "message":
           if (result.workspaceId && result.threadId) {
-            exitDiffView();
+            const preserveEditor = shouldPreserveEditorOnThreadSelect({
+              isCompact,
+              centerMode,
+              activeWorkspaceId,
+              targetWorkspaceId: result.workspaceId,
+              activeEditorFilePath,
+            });
+            const diffCleanupAction = getThreadSelectDiffCleanupAction(preserveEditor);
+            if (diffCleanupAction === "clear-selected-diff") {
+              setSelectedDiffPath(null);
+            } else {
+              exitDiffView();
+            }
             setSelectedPullRequest(null);
             setSelectedCommitSha(null);
             setDiffSource("local");
@@ -333,6 +361,9 @@ export function useAppShellSearchAndComposerSection(ctx: ComposerSearchShellBoun
       closeSearchPalette();
     },
     [
+      activeEditorFilePath,
+      activeWorkspaceId,
+      centerMode,
       closeSearchPalette,
       exitDiffView,
       handleDraftChange,
@@ -348,6 +379,7 @@ export function useAppShellSearchAndComposerSection(ctx: ComposerSearchShellBoun
       setActiveThreadId,
       setKanbanViewState,
       setSelectedCommitSha,
+      setSelectedDiffPath,
       setSelectedKanbanTaskId,
       setSelectedPullRequest,
     ],

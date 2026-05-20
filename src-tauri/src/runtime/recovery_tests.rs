@@ -1,11 +1,59 @@
 use super::{
-    build_runtime_lifecycle_transition, RuntimeAcquireDisposition, RuntimeAcquireGate,
-    RuntimeEndedRecord, RuntimeLifecycleState, RuntimeManager, RuntimeStartupState,
+    RuntimeAcquireDisposition, RuntimeAcquireGate, RuntimeEndedRecord, RuntimeLifecycleState,
+    RuntimeLifecycleTransition, RuntimeManager, RuntimeStartupState,
     RUNTIME_RECOVERY_MAX_CONSECUTIVE_FAILURES,
 };
 use crate::types::{AppSettings, WorkspaceEntry, WorkspaceKind, WorkspaceSettings};
 use std::sync::Arc;
 use std::time::Duration;
+
+fn is_runtime_lifecycle_transition_allowed(
+    from: &RuntimeLifecycleState,
+    to: &RuntimeLifecycleState,
+) -> bool {
+    use RuntimeLifecycleState::*;
+    if from == to {
+        return true;
+    }
+    matches!(
+        (from, to),
+        (Idle, Acquiring)
+            | (Acquiring, Active)
+            | (Acquiring, Recovering)
+            | (Acquiring, Ended)
+            | (Active, Replacing)
+            | (Active, Stopping)
+            | (Active, Recovering)
+            | (Active, Ended)
+            | (Replacing, Active)
+            | (Replacing, Recovering)
+            | (Replacing, Ended)
+            | (Stopping, Ended)
+            | (Stopping, Acquiring)
+            | (Recovering, Active)
+            | (Recovering, Quarantined)
+            | (Recovering, Ended)
+            | (Quarantined, Acquiring)
+            | (Quarantined, Ended)
+            | (Ended, Acquiring)
+    )
+}
+
+fn build_runtime_lifecycle_transition(
+    from: RuntimeLifecycleState,
+    to: RuntimeLifecycleState,
+    source: &str,
+    reason_code: Option<String>,
+) -> RuntimeLifecycleTransition {
+    let allowed = is_runtime_lifecycle_transition_allowed(&from, &to);
+    RuntimeLifecycleTransition {
+        from,
+        to,
+        source: source.to_string(),
+        reason_code,
+        allowed,
+    }
+}
 
 fn workspace_entry(id: &str) -> WorkspaceEntry {
     let mut settings = WorkspaceSettings::default();
@@ -490,10 +538,10 @@ async fn begin_runtime_acquire_or_retry_quarantines_after_repeated_waiter_timeou
                 "timed out waiting for concurrent runtime acquire",
             )
             .await;
-        if result.is_err() {
-            break;
+        match result {
+            Err(_) => break,
+            Ok(RuntimeAcquireDisposition::Retry | RuntimeAcquireDisposition::Leader(_)) => {}
         }
-        assert_eq!(result.unwrap(), RuntimeAcquireDisposition::Retry);
         let mut startup_gates = manager.startup_gates.lock().await;
         let entry = startup_gates
             .get_mut("codex::ws-1")

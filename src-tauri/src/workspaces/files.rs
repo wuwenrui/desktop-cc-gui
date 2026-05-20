@@ -1111,11 +1111,8 @@ pub(crate) fn list_external_spec_tree_inner(
     let mut directories = vec!["openspec".to_string()];
     let mut limit_hit = false;
     if !resolved.exists {
-        let directory_entries = build_initial_directory_entries(
-            &files,
-            &directories,
-            WorkspaceScanState::Complete,
-        );
+        let directory_entries =
+            build_initial_directory_entries(&files, &directories, WorkspaceScanState::Complete);
         return Ok(workspace_files_response(
             files,
             directories,
@@ -1869,8 +1866,11 @@ mod tests {
     fn list_workspace_files_marks_truncated_directory_state_as_partial() {
         let root = std::env::temp_dir().join(format!("mossx-files-partial-{}", Uuid::new_v4()));
         std::fs::create_dir_all(root.join("packages/large")).expect("create large dir");
-        std::fs::write(root.join("packages/large/index.ts"), "export const large = true;\n")
-            .expect("write large file");
+        std::fs::write(
+            root.join("packages/large/index.ts"),
+            "export const large = true;\n",
+        )
+        .expect("write large file");
 
         let response = list_workspace_files_inner(&root, 1);
         let packages_entry = response
@@ -1942,7 +1942,10 @@ mod tests {
 
         assert_eq!(response.scan_state, WorkspaceScanState::Complete);
         assert!(!response.limit_hit);
-        assert_eq!(parent_entry.child_state, WorkspaceDirectoryChildState::Empty);
+        assert_eq!(
+            parent_entry.child_state,
+            WorkspaceDirectoryChildState::Empty
+        );
 
         std::fs::remove_dir_all(&root).expect("cleanup root");
     }
@@ -1965,7 +1968,10 @@ mod tests {
         assert_eq!(response.files.len() + response.directories.len(), 1);
         assert_eq!(response.scan_state, WorkspaceScanState::Partial);
         assert!(response.limit_hit);
-        assert_eq!(parent_entry.child_state, WorkspaceDirectoryChildState::Partial);
+        assert_eq!(
+            parent_entry.child_state,
+            WorkspaceDirectoryChildState::Partial
+        );
         assert!(parent_entry.has_more);
 
         std::fs::remove_dir_all(&root).expect("cleanup root");

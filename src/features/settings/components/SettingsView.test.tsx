@@ -21,8 +21,10 @@ import {
   deleteWorkspaceSessions,
   exportDiagnosticsBundle,
   getDaemonStatus,
+  getWorkspaceSessionProjectionSummary,
   getEmailSenderSettings,
   getWebServerStatus,
+  listWorkspaceSessionFolders,
   listWorkspaceSessions,
   localUsageStatistics,
   unarchiveWorkspaceSessions,
@@ -85,6 +87,8 @@ vi.mock("../../../services/tauri", async () => {
   );
   return {
     ...actual,
+    getWorkspaceSessionProjectionSummary: vi.fn(),
+    listWorkspaceSessionFolders: vi.fn(),
     listWorkspaceSessions: vi.fn(),
     archiveWorkspaceSessions: vi.fn(),
     unarchiveWorkspaceSessions: vi.fn(),
@@ -128,6 +132,21 @@ beforeEach(() => {
     data: [],
     nextCursor: null,
     partialSource: null,
+  });
+  vi.mocked(listWorkspaceSessionFolders).mockResolvedValue({
+    workspaceId: "ws-1",
+    folders: [],
+  });
+  vi.mocked(getWorkspaceSessionProjectionSummary).mockResolvedValue({
+    scopeKind: "project",
+    ownerWorkspaceIds: ["ws-1"],
+    activeTotal: 0,
+    archivedTotal: 0,
+    allTotal: 0,
+    filteredTotal: 0,
+    folderCountsById: {},
+    unassignedFolderCount: 0,
+    partialSources: [],
   });
   vi.mocked(archiveWorkspaceSessions).mockResolvedValue({ results: [] });
   vi.mocked(unarchiveWorkspaceSessions).mockResolvedValue({ results: [] });
@@ -1741,6 +1760,57 @@ describe("SettingsView Composer", () => {
 });
 
 describe("SettingsView Session management", () => {
+  it("opens session management on the active workspace instead of the first project", async () => {
+    vi.mocked(listWorkspaceSessions).mockResolvedValue({
+      data: [],
+      nextCursor: null,
+      partialSource: null,
+    });
+
+    render(
+      <SettingsView
+        workspaceGroups={[]}
+        groupedWorkspaces={[{ id: null, name: "Ungrouped", workspaces: [workspaceA, workspaceB] }]}
+        ungroupedLabel="Ungrouped"
+        onClose={vi.fn()}
+        onMoveWorkspace={vi.fn()}
+        onDeleteWorkspace={vi.fn()}
+        onCreateWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+        onRenameWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+        onMoveWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+        onDeleteWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+        onAssignWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+        reduceTransparency={false}
+        onToggleTransparency={vi.fn()}
+        appSettings={baseSettings}
+        openAppIconById={{}}
+        onUpdateAppSettings={vi.fn().mockResolvedValue(undefined)}
+        onRunDoctor={vi.fn().mockResolvedValue(createDoctorResult())}
+        activeWorkspace={workspaceB}
+        activeEngine="codex"
+        onUpdateWorkspaceCodexBin={vi.fn().mockResolvedValue(undefined)}
+        onUpdateWorkspaceSettings={vi.fn().mockResolvedValue(undefined)}
+        scaleShortcutTitle="Scale shortcut"
+        scaleShortcutText="Use Command +/-"
+        onTestNotificationSound={vi.fn()}
+        dictationModelStatus={null}
+        onDownloadDictationModel={vi.fn()}
+        onCancelDictationDownload={vi.fn()}
+        onRemoveDictationModel={vi.fn()}
+        initialSection="project-management"
+        initialHighlightTarget="project-sessions"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(listWorkspaceSessions).toHaveBeenCalledWith("ws-b", {
+        query: { keyword: null, engine: null, status: "active", folderId: null },
+        cursor: null,
+        limit: 100,
+      });
+    });
+  });
+
   it("loads session catalog entries for the active workspace", async () => {
     const workspace: WorkspaceInfo = {
       id: "ws-1",
@@ -1804,7 +1874,7 @@ describe("SettingsView Session management", () => {
 
     await waitFor(() => {
       expect(listWorkspaceSessions).toHaveBeenCalledWith("ws-1", {
-        query: { keyword: null, engine: null, status: "active" },
+        query: { keyword: null, engine: null, status: "active", folderId: null },
         cursor: null,
         limit: 100,
       });

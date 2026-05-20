@@ -276,6 +276,7 @@ pub(crate) fn invoke_handler(
         crate::session_management::move_workspace_session_folder,
         crate::session_management::delete_workspace_session_folder,
         crate::session_management::assign_workspace_session_folder,
+        crate::session_management::assign_workspace_session_folders,
         // Dictation
         crate::dictation::dictation_model_status,
         crate::dictation::dictation_download_model,

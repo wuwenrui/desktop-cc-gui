@@ -39,8 +39,10 @@ const zhPart2 = {
       taskTimedOut: "后台加载超时：{{task}}，已转入降级路径",
       taskDegraded: "后台加载降级：{{task}}（{{reason}}）",
       taskCancelled: "后台加载取消：{{task}}（{{reason}}）",
-      commandCompleted: "内部命令完成：{{command}}（{{workspace}} / {{durationMs}}ms）",
-      commandFailed: "内部命令失败：{{command}}（{{workspace}} / {{durationMs}}ms）",
+      commandCompleted:
+        "内部命令完成：{{command}}（{{workspace}} / {{durationMs}}ms）",
+      commandFailed:
+        "内部命令失败：{{command}}（{{workspace}} / {{durationMs}}ms）",
       shellReady: "客户端外壳已就绪",
       inputReady: "输入区已可交互",
       activeWorkspaceReady: "当前工作区首屏数据已就绪",
@@ -56,7 +58,8 @@ const zhPart2 = {
         "Claude 恢复命令已复制。如果 TUI 的 /resume picker 看不到这个 GUI 会话，请显式运行 claude --resume {{sessionId}} 或 /resume {{sessionId}}。",
     },
     error: {
-      createSessionRecoveryRequired: "{{workspace}}：会话创建失败，运行时正在恢复",
+      createSessionRecoveryRequired:
+        "{{workspace}}：会话创建失败，运行时正在恢复",
       threadTurnFailed:
         "{{engine}} 会话失败：{{message}} {{reasonCode}} {{actionHint}}",
     },
@@ -77,11 +80,9 @@ const zhPart2 = {
     loadingProgressCreateSessionMessage:
       "正在为 {{workspace}} 准备 {{engine}} 会话。",
     loadingProgressAddProjectTitle: "正在添加项目...",
-    loadingProgressAddProjectMessage:
-      "正在把 {{project}} 加入当前窗口。",
+    loadingProgressAddProjectMessage: "正在把 {{project}} 加入当前窗口。",
     loadingProgressOpenProjectTitle: "正在打开项目...",
-    loadingProgressOpenProjectMessage:
-      "正在把 {{project}} 打开到新窗口。",
+    loadingProgressOpenProjectMessage: "正在把 {{project}} 打开到新窗口。",
     delete: "删除工作区",
     deleteWorktree: "删除工作树",
     confirmDelete: "确定要删除此工作区吗？",
@@ -133,10 +134,12 @@ const zhPart2 = {
     guidedStart: "规范与执行引导",
     guidedStartHint: "先选择 OpenSpec / Spec-kit 规范入口，再执行通用引导。",
     guideProjectSpecTitle: "OpenSpec 规范中心",
-    guideProjectSpecDescription: "适用于 OpenSpec 项目：查看 changes、specs、tasks 与验证状态。",
+    guideProjectSpecDescription:
+      "适用于 OpenSpec 项目：查看 changes、specs、tasks 与验证状态。",
     specProviderOpenSpecAction: "进入 OpenSpec 模块",
     specProviderSpecKitTitle: "Spec-kit 兼容视图",
-    specProviderSpecKitDescription: "适用于 Spec-kit 项目：复用 Spec Hub 结构查看最小兼容工作流状态。",
+    specProviderSpecKitDescription:
+      "适用于 Spec-kit 项目：复用 Spec Hub 结构查看最小兼容工作流状态。",
     specProviderSpecKitAction: "进入 Spec-kit 视图",
     generalGuidesTitle: "通用执行引导",
     generalGuidesHint: "先需求，再执行与验证。",
@@ -147,7 +150,8 @@ const zhPart2 = {
     guideCodebaseScanPrompt:
       "请快速扫描当前代码库，给我一份结构化项目画像：技术栈、核心模块、主流程入口、关键依赖、风险点与改动建议切入点。",
     guideImplementationPlanTitle: "生成实施计划",
-    guideImplementationPlanDescription: "把需求拆成可执行步骤，包含验证与回滚。",
+    guideImplementationPlanDescription:
+      "把需求拆成可执行步骤，包含验证与回滚。",
     guideImplementationPlanPrompt:
       "请基于当前项目上下文生成一份可执行实施计划：目标、范围、步骤、验证方式、风险与回滚方案，优先最小可落地改动。",
     guideRequirementsTitle: "先梳理需求",
@@ -175,7 +179,8 @@ const zhPart2 = {
     deletingConversations: "删除中...",
     deleteConversationFailed: "删除会话失败。",
     archiveConversationFailed: "归档会话失败。",
-    deleteConversationsPartial: "已删除 {{succeeded}} 条会话，{{failed}} 条删除失败。",
+    deleteConversationsPartial:
+      "已删除 {{succeeded}} 条会话，{{failed}} 条删除失败。",
     deleteErrorCode: {
       WORKSPACE_NOT_CONNECTED: "工作区未连接",
       SESSION_NOT_FOUND: "会话不存在",
@@ -197,14 +202,14 @@ const zhPart2 = {
     // 克隆
     newSharedSession: "Claude Code + Codex",
     newCloneAgent: "新建克隆代理",
-    createWorkingCopyOf: "创建 \"{{name}}\" 的新工作副本。",
+    createWorkingCopyOf: '创建 "{{name}}" 的新工作副本。',
     copyName: "副本名称",
     copiesFolder: "副本文件夹",
     suggested: "建议",
     useSuggested: "使用建议",
     // 工作树
     newWorktreeAgent: "新建工作树代理",
-    createWorktreeUnder: "在 \"{{name}}\" 下创建工作树。",
+    createWorktreeUnder: '在 "{{name}}" 下创建工作树。',
     noviceGuideTitle: "新手快速说明（带示例）",
     noviceGuideSubtitle: "不用记命令，按下面的示例选就不会走错。",
     noviceGuideBranch:
@@ -233,10 +238,12 @@ const zhPart2 = {
     baseBranchInvalid: "基线分支无效或不可用。",
     basePreview: "基线预览",
     basePreviewUnavailable: "尚未选择基线分支",
-    basePreviewHint: "这里会分层显示“来源组 + 分支名 + commit”，创建时将严格以此为准。",
+    basePreviewHint:
+      "这里会分层显示“来源组 + 分支名 + commit”，创建时将严格以此为准。",
     basePreviewSourceUnknown: "来源待确认",
     basePreviewCommitUnavailable: "commit 未知",
-    nonGitRepositoryError: "当前项目还不是 Git 仓库，请先初始化 Git（git init）后再创建工作树。",
+    nonGitRepositoryError:
+      "当前项目还不是 Git 仓库，请先初始化 Git（git init）后再创建工作树。",
     nonGitRepositoryGuideTitle: "先做 Git 初始化",
     nonGitRepositoryGuideDescription:
       "你可以先在项目根目录执行下面 3 条命令，完成后回到此弹窗即可继续。",
@@ -244,7 +251,7 @@ const zhPart2 = {
     nonGitRepositoryAlertDescription:
       "检测到 `{{path}}` 还没有 Git 元数据（.git）。请先初始化并至少提交一次初始 commit。",
     nonGitRepositoryAlertHint:
-      "建议流程：`git init` -> `git add . && git commit -m \"chore: init repository\"` -> 再返回创建工作树。",
+      '建议流程：`git init` -> `git add . && git commit -m "chore: init repository"` -> 再返回创建工作树。',
     nonGitRepositoryTechnicalDetail: "技术详情（用于排查）",
     baseBranchGroup: {
       local: "local",
@@ -257,13 +264,17 @@ const zhPart2 = {
       "开启示例：创建 feat/login-page 后自动执行 `git push -u origin feat/login-page`。",
     worktreeCreateResultTitle: "工作树创建结果",
     worktreeResultSuccessSubtitle: "本地与远端状态已汇总，可确认后继续开发。",
-    worktreeResultWarningSubtitle: "本地创建成功，但远端发布异常，请按提示处理。",
+    worktreeResultWarningSubtitle:
+      "本地创建成功，但远端发布异常，请按提示处理。",
     worktreeResultErrorTitle: "重点告警",
     worktreeCreateSuccess: "工作树已在本地创建：{{branch}}",
-    worktreePublishStatusCreatedTracking: "远端发布成功，已设置 tracking：{{tracking}}。",
-    worktreePublishStatusCreatedNoTracking: "远端发布成功，但未返回 tracking 信息。",
+    worktreePublishStatusCreatedTracking:
+      "远端发布成功，已设置 tracking：{{tracking}}。",
+    worktreePublishStatusCreatedNoTracking:
+      "远端发布成功，但未返回 tracking 信息。",
     worktreePublishStatusSkipped: "已按你的设置跳过远端发布。",
-    worktreePublishStatusSkippedTracking: "已跳过远端发布；当前 tracking：{{tracking}}。",
+    worktreePublishStatusSkippedTracking:
+      "已跳过远端发布；当前 tracking：{{tracking}}。",
     worktreePublishFailedRecoverable:
       "本地工作树已创建成功，但远端发布失败：{{reason}}。可复制下方命令稍后重试。",
     worktreePublishFailedReasonUnknown: "未知原因",
@@ -278,7 +289,8 @@ const zhPart2 = {
     worktreeSetupScript: "工作树设置脚本",
     worktreeSetupScriptHint:
       "在每次创建新工作树后，在专用终端中运行一次。示例：`pnpm install` 或 `pnpm install && pnpm dev`。",
-    actionsHint: "创建前核对：分支名称、基线预览、推送开关；取消不会修改任何内容。",
+    actionsHint:
+      "创建前核对：分支名称、基线预览、推送开关；取消不会修改任何内容。",
     // 空状态
     noWorkspaceSelected: "未选择工作区",
     chooseProjectToChat: "选择一个项目开始聊天。",
@@ -309,8 +321,8 @@ const zhPart2 = {
     noBranchesFound: "未找到分支",
     searchOrCreateBranch: "搜索或创建分支",
     searchBranches: "搜索分支",
-    createBranch: "创建分支 \"{{name}}\"",
-    createBranchNamed: "创建分支 \"{{name}}\"",
+    createBranch: '创建分支 "{{name}}"',
+    createBranchNamed: '创建分支 "{{name}}"',
     // 分支验证
     branchCannotBeDot: "分支名称不能是 '.' 或 '..'。",
     branchCannotContainSpaces: "分支名称不能包含空格。",
@@ -334,30 +346,37 @@ const zhPart2 = {
     threads: "个线程",
     // 删除弹窗
     deleteWorkspaceTitle: "移出工作区",
-    deleteWorkspaceConfirm: "确定要移出 \"{{name}}\" 吗？",
+    deleteWorkspaceConfirm: '确定要移出 "{{name}}" 吗？',
     deleteWorkspaceMessage: "这将从 ccgui 中移出该工作区。",
     deleteWorkspaceWorktreeWarning: "同时还将删除磁盘上的 {{count}} 个工作树。",
-    deleteWorkspaceWorktreeWarning_other: "同时还将删除磁盘上的 {{count}} 个工作树。",
+    deleteWorkspaceWorktreeWarning_other:
+      "同时还将删除磁盘上的 {{count}} 个工作树。",
     deleteWorkspaceBeforeYouConfirm: "执行前请确认：",
     deleteWorkspaceWillHappenTitle: "将会发生：",
     deleteWorkspaceWillNotHappenTitle: "不会发生：",
     deleteWorkspaceEffectListOnly: "仅从 ccgui 列表中移出该工作区。",
     deleteWorkspaceEffectSessions: "会关闭该工作区及其关联工作树的活跃会话。",
-    deleteWorkspaceEffectDeleteWorktrees: "会删除磁盘上的 {{count}} 个关联工作树目录。",
-    deleteWorkspaceEffectDeleteWorktrees_other: "会删除磁盘上的 {{count}} 个关联工作树目录。",
+    deleteWorkspaceEffectDeleteWorktrees:
+      "会删除磁盘上的 {{count}} 个关联工作树目录。",
+    deleteWorkspaceEffectDeleteWorktrees_other:
+      "会删除磁盘上的 {{count}} 个关联工作树目录。",
     deleteWorkspaceEffectKeepFiles: "不会删除主工作区目录里的代码文件。",
-    deleteWorkspaceEffectNoGitWrite: "不会执行 merge/rebase/push 等 Git 写操作。",
+    deleteWorkspaceEffectNoGitWrite:
+      "不会执行 merge/rebase/push 等 Git 写操作。",
     deleteWorkspaceEffectReAdd: "可随时通过“添加工作区”重新接入，继续开发。",
     reloadWorkspaceThreadsTitle: "重新加载会话",
-    reloadWorkspaceThreadsConfirm: "确认重新加载 \"{{name}}\" 的会话列表吗？",
+    reloadWorkspaceThreadsConfirm: '确认重新加载 "{{name}}" 的会话列表吗？',
     reloadWorkspaceThreadsBeforeYouConfirm: "执行后会进行以下操作：",
-    reloadWorkspaceThreadsEffectRefresh: "重新扫描该工作区的会话并刷新列表显示。",
-    reloadWorkspaceThreadsEffectDisplayOnly: "仅更新显示结果，列表顺序可能按最新活动时间变化。",
-    reloadWorkspaceThreadsEffectNoDelete: "不会删除任何会话、代码文件、分支或工作区。",
+    reloadWorkspaceThreadsEffectRefresh:
+      "重新扫描该工作区的会话并刷新列表显示。",
+    reloadWorkspaceThreadsEffectDisplayOnly:
+      "仅更新显示结果，列表顺序可能按最新活动时间变化。",
+    reloadWorkspaceThreadsEffectNoDelete:
+      "不会删除任何会话、代码文件、分支或工作区。",
     reloadWorkspaceThreadsEffectNoGitWrite:
       "不会执行 checkout/merge/rebase 等 Git 写操作。",
     deleteWorktreeTitle: "删除工作树",
-    deleteWorktreeConfirm: "确定要删除 \"{{name}}\" 吗？",
+    deleteWorktreeConfirm: '确定要删除 "{{name}}" 吗？',
     deleteWorktreeMessage: "这将关闭代理、移除工作树，并从 ccgui 中删除它。",
     deleteWorktreeFailed: "删除工作树失败",
   },
@@ -380,8 +399,8 @@ const zhPart2 = {
     copyPath: "复制路径",
     revealInFinder: "在访达中显示",
     deleteItem: "移到废纸篓",
-    deleteFileConfirm: "确定要将 \"{{name}}\" 移到废纸篓吗？",
-    deleteFolderConfirm: "确定要将文件夹 \"{{name}}\" 及其所有内容移到废纸篓吗？",
+    deleteFileConfirm: '确定要将 "{{name}}" 移到废纸篓吗？',
+    deleteFolderConfirm: '确定要将文件夹 "{{name}}" 及其所有内容移到废纸篓吗？',
     duplicateItem: "创建副本",
     newFile: "新建文件",
     newFolder: "新建文件夹",
@@ -421,9 +440,11 @@ const zhPart2 = {
     closeDetachedExplorer: "关闭独立文件窗口",
     detachedExplorerTitle: "独立文件窗口",
     detachedExplorerEmptyTitle: "选择一个文件开始浏览",
-    detachedExplorerEmptyBody: "左侧文件树保持当前工作区上下文，右侧内容区会在这个独立窗口中打开文件，不会覆盖主窗口编辑会话。",
+    detachedExplorerEmptyBody:
+      "左侧文件树保持当前工作区上下文，右侧内容区会在这个独立窗口中打开文件，不会覆盖主窗口编辑会话。",
     detachedExplorerUnavailableTitle: "独立文件窗口缺少工作区上下文",
-    detachedExplorerUnavailableBody: "请回到主窗口文件面板，再次点击独立文件窗口按钮以恢复当前工作区。",
+    detachedExplorerUnavailableBody:
+      "请回到主窗口文件面板，再次点击独立文件窗口按钮以恢复当前工作区。",
     runConsoleTitle: "运行控制台",
     runCommandPreview: "命令",
     runCommandPresetLabel: "预设",
@@ -496,7 +517,8 @@ const zhPart2 = {
     tabularPreviewTitle: "表格预览",
     tabularPreviewSheets: "工作表",
     tabularPreviewSheetStats: "{{rows}} 行 · {{columns}} 列",
-    tabularPreviewTruncatedHint: "预览会限制在前 {{rows}} 行、前 {{columns}} 列以内。",
+    tabularPreviewTruncatedHint:
+      "预览会限制在前 {{rows}} 行、前 {{columns}} 列以内。",
     tabularPreviewEmpty: "没有可显示的表格内容。",
     tabularPreviewUnavailable: "当前文件暂时无法提供表格预览。",
     tabularPreviewTooLarge:
@@ -523,6 +545,12 @@ const zhPart2 = {
     annotationSubmit: "注释",
     markdownAnnotationToolbar: "Markdown 预览标注",
     markdownAnnotationHint: "预览模式按源文件行号标注，不会修改原文",
+    markdownFrontmatterLabel: "元数据",
+    markdownMermaidTabList: "Mermaid 图表视图",
+    markdownMermaidSource: "源码",
+    markdownMermaidRender: "渲染",
+    markdownMermaidRendering: "正在渲染图表...",
+    markdownMermaidRenderFailed: "渲染失败：{{message}}",
     annotationStartLine: "起始行",
     annotationEndLine: "结束行",
     annotationSelectionToolbar: "代码选区标注",
@@ -539,7 +567,8 @@ const zhPart2 = {
     saveShortcut: "⌘S 保存",
     externalChangeAutoSynced: "文件已被外部更新，已自动同步到最新版本。",
     externalChangeConflictTitle: "检测到磁盘外部更新",
-    externalChangeConflictBody: "你有未保存的本地更改，已有 {{count}} 次外部更新等待处理。",
+    externalChangeConflictBody:
+      "你有未保存的本地更改，已有 {{count}} 次外部更新等待处理。",
     externalChangeReload: "使用磁盘版本",
     externalChangeKeepLocal: "保留本地更改",
     externalChangeCompare: "对比",
@@ -702,7 +731,8 @@ const zhPart2 = {
       outputTitle: "最终输出",
       logsTitle: "执行日志",
       validateSkipped: "补全失败，本次已跳过 strict validate。",
-      summaryCompletionFinished: "verification 产物补全完成，正在执行严格验证。",
+      summaryCompletionFinished:
+        "verification 产物补全完成，正在执行严格验证。",
       summarySuccess: "补全与验证流程执行完成。",
       status: {
         idle: "未运行",
@@ -759,7 +789,8 @@ const zhPart2 = {
       },
       logDispatch: "已发起 continue AI 增强（{{engine}}）。",
       logFinished: "continue AI 增强执行完成。",
-      logAutoApplyDispatch: "continue AI 增强完成，开始自动执行（{{engine}}）。",
+      logAutoApplyDispatch:
+        "continue AI 增强完成，开始自动执行（{{engine}}）。",
       logAutoApplyFinished: "自动执行完成。",
       logAutoApplySkipped: "自动执行未完成，请手动点击“执行”。",
       autoApplyFailed: "自动执行失败，请查看“执行反馈”弹窗。",
@@ -771,8 +802,10 @@ const zhPart2 = {
       missing: "暂无 Continue 摘要；可先执行“继续 + AI 增强”。",
     },
     nextStep: {
-      runContinueFirst: "下一步建议：先执行“继续”，生成 specs delta 后再执行“执行”。",
-      runContinueThenApply: "下一步建议：先执行“继续”，再执行“执行”补齐核心产物。",
+      runContinueFirst:
+        "下一步建议：先执行“继续”，生成 specs delta 后再执行“执行”。",
+      runContinueThenApply:
+        "下一步建议：先执行“继续”，再执行“执行”补齐核心产物。",
     },
     tab: {
       proposal: "提案",
@@ -790,11 +823,13 @@ const zhPart2 = {
     },
     bootstrap: {
       title: "OpenSpec 初始化引导",
-      description: "当前未检测到 OpenSpec 规范。选择智能体后自动采集项目背景并初始化。",
+      description:
+        "当前未检测到 OpenSpec 规范。选择智能体后自动采集项目背景并初始化。",
       projectInfoTitle: "项目信息",
       projectInfoDescription: "自动采集并更新 `openspec/project.md`。",
       specRootTitle: "Spec 位置配置",
-      specRootDescription: "可用绝对路径指定外部项目根目录（后端自动解析到 `openspec`）。",
+      specRootDescription:
+        "可用绝对路径指定外部项目根目录（后端自动解析到 `openspec`）。",
       specRootLabel: "自定义 Spec 根目录",
       specRootPlaceholder: "/absolute/path/to/project",
       specRootCurrent: "当前生效路径：{{path}}（{{source}}）",
@@ -879,7 +914,8 @@ const zhPart2 = {
     noChanges: "未发现活跃变更。",
     noChangesHint: "可先在 openspec/changes 下创建或同步一个变更。",
     noBacklogChanges: "需求池里还没有变更。",
-    noBacklogChangesHint: "把暂时不做、但又不该归档的变更移到这里，保持当前工作集更干净。",
+    noBacklogChangesHint:
+      "把暂时不做、但又不该归档的变更移到这里，保持当前工作集更干净。",
     changeBacklogBadge: "需求池",
     changeBacklogHint: "该变更当前已移入需求池。",
     changeRowAriaLabelBacklog:
@@ -926,12 +962,14 @@ const zhPart2 = {
       contentLabel: "提案内容",
       addImageAction: "添加图片",
       attachmentHint: "支持上传/粘贴/拖拽（最多 {{count}} 张）。",
-      contentPlaceholderCreate: "例如：为执行台增加提案输入弹窗，并支持 AI 自动创建新 change...",
+      contentPlaceholderCreate:
+        "例如：为执行台增加提案输入弹窗，并支持 AI 自动创建新 change...",
       contentPlaceholderAppend: "例如：补充交互细节、验收标准、边界条件...",
       emptyContentError: "请先输入提案内容。",
       emptyInputError: "请先输入提案内容，或至少添加一张图片。",
       imageCountExceeded: "最多可添加 {{count}} 张图片。",
-      imageUnsupported: "图片格式不支持，请使用 png/jpg/jpeg/gif/webp/bmp/tiff。",
+      imageUnsupported:
+        "图片格式不支持，请使用 png/jpg/jpeg/gif/webp/bmp/tiff。",
       imageTooLarge: "图片过大（{{size}}），单张粘贴图片上限 8 MB。",
       summaryFallback: "提案处理完成。",
       runSuccess: "提案已处理完成。",
@@ -978,7 +1016,8 @@ const zhPart2 = {
     applyExecution: {
       title: "执行反馈",
       executorLabel: "执行引擎",
-      executorHint: "Apply 会使用所选引擎执行，并在可识别时自动回写已完成任务。",
+      executorHint:
+        "Apply 会使用所选引擎执行，并在可识别时自动回写已完成任务。",
       collapsePanel: "折叠反馈窗",
       expandPanel: "展开反馈窗",
       closePanel: "关闭反馈窗",
@@ -1070,7 +1109,8 @@ const zhPart2 = {
       sequenceFixSpecsFirst: "先补 specs delta，再处理 tasks 收尾。",
       summaryReady: "核心产物检查通过，specs delta 已存在。",
       summaryRecovered: "检测到缺失后已自动补齐 specs delta。",
-      summaryStillMissing: "自动补齐后仍缺少 specs delta，建议再次执行“继续+执行”。",
+      summaryStillMissing:
+        "自动补齐后仍缺少 specs delta，建议再次执行“继续+执行”。",
       summaryFailed: "连招补齐执行失败。",
       errorStillMissing: "仍缺少 specs delta。",
       errorWithReason: "连招补齐失败：{{reason}}",
@@ -1096,7 +1136,8 @@ const zhPart2 = {
     },
     aiTakeover: {
       title: "归档阻塞 AI 接管",
-      description: "当归档被 blocker 或失败日志阻断时，调用智能体自动修复 spec delta 并回到可归档状态。",
+      description:
+        "当归档被 blocker 或失败日志阻断时，调用智能体自动修复 spec delta 并回到可归档状态。",
       agentLabel: "接管智能体",
       blockersTitle: "当前归档阻塞：",
       latestArchiveOutput: "最近一次归档输出",
@@ -1174,11 +1215,13 @@ const zhPart2 = {
       noSupportedProvider: "未检测到受支持的规范提供方。",
       openSupportedWorkspace: "请打开包含 OpenSpec 或 Spec-Kit 结构的工作区。",
       installNode: "请安装 Node.js 18+，并确保 PATH 中可用 `node`。",
-      managedInstallOpenSpec: "托管模式：请先安装 OpenSpec CLI，再点击刷新重新诊断。",
+      managedInstallOpenSpec:
+        "托管模式：请先安装 OpenSpec CLI，再点击刷新重新诊断。",
       fallbackByo: "可切换到自带环境模式，沿用你已有的环境配置。",
       byoExposeOpenSpec:
         "自带环境模式：请确保 PATH 中可用 `openspec`，并确认 `openspec --version` 可执行。",
-      speckitOptional: "Spec-Kit CLI 在最小模式下是可选项，但安装后可提升诊断能力。",
+      speckitOptional:
+        "Spec-Kit CLI 在最小模式下是可选项，但安装后可提升诊断能力。",
       noSupportedWorkspace: "未检测到受支持的规范工作区。",
       speckitMinimalMode: "Spec-Kit 当前以最小兼容模式运行。",
       noActiveChanges: "在 openspec/changes 下未发现活跃变更。",
@@ -1202,9 +1245,11 @@ const zhPart2 = {
       noStrictVerify: "尚未记录严格验证证据。",
       latestStrictVerifyPassed: "最近一次严格验证通过。",
       latestStrictVerifyFailed: "最近一次严格验证失败。",
-      truncatedArtifactEvidence: "产物证据被截断（{{artifacts}}），请在归档前重新读取。",
+      truncatedArtifactEvidence:
+        "产物证据被截断（{{artifacts}}），请在归档前重新读取。",
       validationFixHint: "请打开目标文件修复需求不匹配后，再次执行“验证”。",
-      validationReadOutputHint: "请根据命令输出补齐缺失产物后，再次执行“验证”。",
+      validationReadOutputHint:
+        "请根据命令输出补齐缺失产物后，再次执行“验证”。",
       validationTarget: "验证",
       notFound: "未找到",
       nodeNotFound: "未找到 node",
@@ -1218,7 +1263,8 @@ const zhPart2 = {
       requiredForWorkflow: "{{tool}} 是 {{provider}} 工作流必需项。",
       providerSupport: "{{provider}}（{{support}}）",
       gitRefDetected: "检测到关联 Git 引用：{{ref}}",
-      providerMismatchNativeAction: "提供方不匹配：原生动作要求 OpenSpec，当前为 {{provider}}。",
+      providerMismatchNativeAction:
+        "提供方不匹配：原生动作要求 OpenSpec，当前为 {{provider}}。",
       openspecInstructionsCaptured: "已捕获 OpenSpec 指令。",
       continueBriefAttached: "已将 Continue 摘要附加到 apply 执行提示中。",
       guidanceGeneratedSuccessfully: "已成功生成指引。",
@@ -1241,7 +1287,8 @@ const zhPart2 = {
       skippedUnmatchedTaskIds: "已跳过未匹配任务 ID（无效索引：{{count}}）。",
       skippedUnmatchedTaskIdsWithRefs:
         "已跳过未匹配任务 ID（无效索引：{{count}}），无效引用：{{refs}}。",
-      writingCompletedTasksToTasks: "正在将 {{count}} 个已完成任务回写到 tasks.md。",
+      writingCompletedTasksToTasks:
+        "正在将 {{count}} 个已完成任务回写到 tasks.md。",
       applyStartedWith: "已启动 apply {{mode}}，执行引擎：{{executor}}",
       autoMarkedTasks: "已自动勾选 {{count}} 个任务为完成。",
       executionFinishedChangedFiles: "执行完成，共变更 {{count}} 个文件。",
@@ -1322,6 +1369,7 @@ const zhPart2 = {
     collapse: "收起",
     expand: "展开",
     clickToAnswer: "点击回答",
+    questionTab: "问题 {{index}}",
     cancel: "取消",
     back: "上一步",
     next: "下一步",
@@ -1461,7 +1509,8 @@ const zhPart2 = {
         chainRequiresHeadTrigger: "串联任务需由头任务自动触发",
         chainRequiresHeadTriggerWithOrder:
           "串联任务需由头任务（串行#{{headOrder}}）自动触发，当前任务为串行#{{currentOrder}}",
-        chainRequiresExecutionCompletion: "串联任务需先在进行中执行完成后才能进入审查或归档",
+        chainRequiresExecutionCompletion:
+          "串联任务需先在进行中执行完成后才能进入审查或归档",
         chainCompletedCannotBackToTodo: "已执行完成的串联任务不允许拖回待办",
         chainCompletedStatusLocked: "串行任务已完成，不能再拖动到其他状态",
         scheduledTriggerBlocked: "任务执行中，已跳过本次周期触发",
@@ -1496,7 +1545,8 @@ const zhPart2 = {
       rename: "重命名",
       delete: "删除",
       deleteConfirmTitle: "确认删除",
-      deleteConfirmMessage: "确定要删除面板「{{name}}」吗？该面板下的 {{count}} 个任务将一并删除，此操作不可撤销。",
+      deleteConfirmMessage:
+        "确定要删除面板「{{name}}」吗？该面板下的 {{count}} 个任务将一并删除，此操作不可撤销。",
       cancel: "取消",
       confirmDelete: "确认删除",
       searchPanels: "搜索面板...",
@@ -1530,7 +1580,8 @@ const zhPart2 = {
     contextLedgerSummaryTokens: "{{tokens}} 标记",
     contextLedgerSummaryBlocks: "{{count}} 个条目",
     contextLedgerSummaryGroups: "{{count}} 个分组",
-    contextLedgerTruthNote: "实时投影 · 来自本轮将发送/刚使用的上下文快照，不是静态说明。",
+    contextLedgerTruthNote:
+      "实时投影 · 来自本轮将发送/刚使用的上下文快照，不是静态说明。",
     contextLedgerGroupRecentTurns: "最近轮次",
     contextLedgerGroupCompaction: "压缩状态",
     contextLedgerGroupManualMemory: "手动记忆",
@@ -1552,8 +1603,10 @@ const zhPart2 = {
     codeAnnotationSelection: "{{count}} 条代码标注",
     codeAnnotationSelectionHint: "将发送 {{count}} 条代码标注给 AI",
     codeAnnotationRemove: "删除 {{path}} 的代码标注",
-    contextLedgerCarryOverExplanationInherited: "这条上下文是上一轮 keep 带入的；如果本轮不再次保留，发送后会自动消耗。",
-    contextLedgerCarryOverExplanationWillCarry: "这条上下文已标记为 keep；下一轮会继续带入一次，随后自动消耗。",
+    contextLedgerCarryOverExplanationInherited:
+      "这条上下文是上一轮 keep 带入的；如果本轮不再次保留，发送后会自动消耗。",
+    contextLedgerCarryOverExplanationWillCarry:
+      "这条上下文已标记为 keep；下一轮会继续带入一次，随后自动消耗。",
     contextLedgerAttributionWorkspaceContext: "工作区上下文",
     contextLedgerAttributionEngineInjected: "引擎规则",
     contextLedgerAttributionSystemInjected: "系统规则",
@@ -1561,9 +1614,12 @@ const zhPart2 = {
     contextLedgerAttributionConfidencePrecise: "精确归因",
     contextLedgerAttributionConfidenceCoarse: "粗粒度归因",
     contextLedgerAttributionConfidenceDegraded: "降级归因",
-    contextLedgerAttributionExplanationPrecise: "这条来源已映射到明确的工作区或托管入口。",
-    contextLedgerAttributionExplanationCoarse: "当前只能确认它来自某类引擎或系统规则，还不能精确映射到单一来源对象。",
-    contextLedgerAttributionExplanationDegraded: "当前来源信号不足，这是一条最佳努力的归因结果，不应视为精确来源。",
+    contextLedgerAttributionExplanationPrecise:
+      "这条来源已映射到明确的工作区或托管入口。",
+    contextLedgerAttributionExplanationCoarse:
+      "当前只能确认它来自某类引擎或系统规则，还不能精确映射到单一来源对象。",
+    contextLedgerAttributionExplanationDegraded:
+      "当前来源信号不足，这是一条最佳努力的归因结果，不应视为精确来源。",
     contextLedgerFreshnessFresh: "最新",
     contextLedgerFreshnessPendingSync: "待同步",
     contextLedgerFreshnessUnknown: "未知",
@@ -1576,9 +1632,11 @@ const zhPart2 = {
     contextLedgerTitleCompactionRunningAuto: "自动压缩进行中",
     contextLedgerTitleCompactionCompleted: "压缩已完成",
     contextLedgerTitleCompactionCompletedAuto: "自动压缩已完成",
-    contextLedgerDetailUsageWindow: "{{usedTokens}} / {{contextWindowTokens}} 窗口 · 总计 {{totalTokens}}",
+    contextLedgerDetailUsageWindow:
+      "{{usedTokens}} / {{contextWindowTokens}} 窗口 · 总计 {{totalTokens}}",
     contextLedgerDetailUsageTotal: "总计 {{totalTokens}}",
-    contextLedgerInspectionUsageWindow: "当前窗口 {{usedTokens}} / {{contextWindowTokens}} · 历史总量 {{totalTokens}} 标记",
+    contextLedgerInspectionUsageWindow:
+      "当前窗口 {{usedTokens}} / {{contextWindowTokens}} · 历史总量 {{totalTokens}} 标记",
     contextLedgerInspectionUsageTotal: "历史总量 {{totalTokens}} 标记",
     contextLedgerDetailCompactionPendingSync: "等待用量刷新",
     contextLedgerBackendSourceWorkspaceManaged: "工作区托管",
@@ -1670,7 +1728,8 @@ const zhPart2 = {
     locked: "已锁定",
     brandKicker: "Codemoss Product Atlas",
     title: "ccgui 安全锁屏 · 工程能力总览",
-    description: "会话与任务在后台持续运行。你可以在锁屏页快速复盘 ccgui 的完整工程链路：从需求规划、执行编排、代码审阅到交付归档。",
+    description:
+      "会话与任务在后台持续运行。你可以在锁屏页快速复盘 ccgui 的完整工程链路：从需求规划、执行编排、代码审阅到交付归档。",
     tabLabel: "锁屏内容切换",
     tabs: {
       live: "实时会话",
@@ -1683,13 +1742,15 @@ const zhPart2 = {
     liveEmpty: "当前没有运行中的会话输出。",
     liveRunning: "运行中",
     capabilityTitle: "能力图谱",
-    capabilityDesc: "这不是聊天壳，而是一套围绕工程生产力构建的本地优先 AI 工作台。",
+    capabilityDesc:
+      "这不是聊天壳，而是一套围绕工程生产力构建的本地优先 AI 工作台。",
     journeyTitle: "典型工作流",
     journeyDesc: "一个需求在 ccgui 中通常这样落地：",
     elementsTitle: "界面元素介绍",
     elementsDesc: "锁屏页可直接回看核心模块职责，便于团队协作时统一认知。",
     unlockTitle: "解锁面板",
-    unlockDesc: "密码文件为 ~/.ccgui/client/pwd.txt。若文件缺失将允许解锁并自动创建默认密码文件。",
+    unlockDesc:
+      "密码文件为 ~/.ccgui/client/pwd.txt。若文件缺失将允许解锁并自动创建默认密码文件。",
     passwordInput: "输入解锁密码",
     passwordPlaceholder: "请输入密码",
     passwordHint: "输入密码后按 Enter 或点击按钮解锁。",
@@ -1710,47 +1771,65 @@ const zhPart2 = {
       planTitle: "Plan First",
       planDesc: "在改代码前先澄清边界、输出方案与任务拆分，降低返工成本。",
       executeTitle: "Execute With Context",
-      executeDesc: "按 workspace/thread 上下文执行，支持 Kanban 任务直投与多会话并行。",
+      executeDesc:
+        "按 workspace/thread 上下文执行，支持 Kanban 任务直投与多会话并行。",
       reviewTitle: "Review With Trace",
-      reviewDesc: "保留工具调用轨迹、diff 与调试信息，让问题定位和验收更可追溯。",
+      reviewDesc:
+        "保留工具调用轨迹、diff 与调试信息，让问题定位和验收更可追溯。",
       deliverTitle: "Deliver Cleanly",
       deliverDesc: "串联提交、分支、PR 与归档动作，把过程沉淀为团队资产。",
     },
     features: {
       workspaceGraphTitle: "Workspace Graph",
-      workspaceGraphDesc: "按项目分组管理仓库、工作树、排序与连接状态，秒级切换上下文。",
+      workspaceGraphDesc:
+        "按项目分组管理仓库、工作树、排序与连接状态，秒级切换上下文。",
       threadOrchestrationTitle: "Thread Orchestration",
-      threadOrchestrationDesc: "支持历史回放、队列消息、手动中断、自动命名与跨线程延续。",
+      threadOrchestrationDesc:
+        "支持历史回放、队列消息、手动中断、自动命名与跨线程延续。",
       engineRoutingTitle: "Engine Routing",
-      engineRoutingDesc: "在模型/推理强度/访问模式/协作模式之间快速切换，任务匹配引擎能力。",
+      engineRoutingDesc:
+        "在模型/推理强度/访问模式/协作模式之间快速切换，任务匹配引擎能力。",
       gitIntelligenceTitle: "Git Intelligence",
-      gitIntelligenceDesc: "Diff、Log、Commit、PR、Issue 一体化，减少“切窗口-丢上下文”的摩擦。",
+      gitIntelligenceDesc:
+        "Diff、Log、Commit、PR、Issue 一体化，减少“切窗口-丢上下文”的摩擦。",
       kanbanDispatchTitle: "Kanban Dispatch",
-      kanbanDispatchDesc: "从看板任务一键创建并驱动会话执行，支持任务状态与处理进度联动。",
+      kanbanDispatchDesc:
+        "从看板任务一键创建并驱动会话执行，支持任务状态与处理进度联动。",
       memoryEngineTitle: "Memory Engine",
-      memoryEngineDesc: "对项目认知进行持久化沉淀，让后续会话无需重复解释同一背景。",
+      memoryEngineDesc:
+        "对项目认知进行持久化沉淀，让后续会话无需重复解释同一背景。",
       unifiedSearchTitle: "Unified Search",
-      unifiedSearchDesc: "跨文件、会话、消息、skills、commands 的统一检索入口。",
+      unifiedSearchDesc:
+        "跨文件、会话、消息、skills、commands 的统一检索入口。",
       terminalObservabilityTitle: "Terminal + Observability",
-      terminalObservabilityDesc: "内置终端与调试日志，工具调用链路可见，问题定位更快。",
+      terminalObservabilityDesc:
+        "内置终端与调试日志，工具调用链路可见，问题定位更快。",
       composerControlTitle: "Composer Control",
-      composerControlDesc: "编辑器预设、快捷键、围栏策略、粘贴策略、语音输入统一配置。",
+      composerControlDesc:
+        "编辑器预设、快捷键、围栏策略、粘贴策略、语音输入统一配置。",
       promptAssetsTitle: "Prompt Assets",
-      promptAssetsDesc: "支持 workspace/global prompt 资产管理与复用，降低重复输入成本。",
+      promptAssetsDesc:
+        "支持 workspace/global prompt 资产管理与复用，降低重复输入成本。",
       collaborationModeTitle: "Collaboration Modes",
-      collaborationModeDesc: "可在不同协作策略间切换，以适配探索、执行、评审等阶段。",
+      collaborationModeDesc:
+        "可在不同协作策略间切换，以适配探索、执行、评审等阶段。",
       openEcosystemTitle: "Open Ecosystem",
-      openEcosystemDesc: "Open in、插件化能力与外部工具协同，保持工程流程开放可扩展。",
+      openEcosystemDesc:
+        "Open in、插件化能力与外部工具协同，保持工程流程开放可扩展。",
     },
     elements: {
       titlebarTitle: "Titlebar Controls",
-      titlebarDesc: "统一承载项目切换、分支操作、打开方式、锁屏与复制线程动作。",
+      titlebarDesc:
+        "统一承载项目切换、分支操作、打开方式、锁屏与复制线程动作。",
       sidebarTitle: "Workspace Sidebar",
-      sidebarDesc: "管理 workspace/worktree、会话分组、搜索过滤与最近活动入口。",
+      sidebarDesc:
+        "管理 workspace/worktree、会话分组、搜索过滤与最近活动入口。",
       composerTitle: "Composer Workspace",
-      composerDesc: "支持富文本输入、代码围栏、快捷命令、语音输入和上下文拼装。",
+      composerDesc:
+        "支持富文本输入、代码围栏、快捷命令、语音输入和上下文拼装。",
       gitPanelTitle: "Git Hub",
-      gitPanelDesc: "集成 diff/log/commit/pr/issue 信息，减少在外部工具间来回切换。",
+      gitPanelDesc:
+        "集成 diff/log/commit/pr/issue 信息，减少在外部工具间来回切换。",
       kanbanTitle: "Kanban Dispatch",
       kanbanDesc: "任务可一键投递到 AI 会话执行，保持状态与处理进度可追踪。",
       searchTitle: "Unified Search",
@@ -1793,6 +1872,157 @@ const zhPart2 = {
     expand: "展开状态面板",
     collapse: "收起状态面板",
     label: "状态面板",
+    policy: {
+      title: "Policy 审计",
+      count: "{{count}} 条决策",
+      noReason: "{{policy}} 未提供原因",
+      verdict: {
+        running: "运行",
+        blocked: "阻塞",
+        needs_review: "复核",
+        ready: "通过",
+        no_contribution: "跳过",
+      },
+      corePolicy: {
+        blocked: "核心规则判定存在阻塞风险。",
+        running: "核心规则判定当前仍在执行。",
+        ready: "核心规则判定当前证据可继续。",
+        needsReview: "核心规则判定需要复核。",
+      },
+      lintValidationPolicy: {
+        pass: "Lint 已通过。",
+        fail: "Lint 未通过，需要复核。",
+        running: "Lint 正在运行。",
+        notRun: "Lint 尚未运行。",
+      },
+      typecheckValidationPolicy: {
+        pass: "Typecheck 已通过。",
+        fail: "Typecheck 未通过，需要复核。",
+        running: "Typecheck 正在运行。",
+        notRun: "Typecheck 尚未运行。",
+      },
+      testsValidationPolicy: {
+        pass: "Tests 已通过。",
+        fail: "Tests 未通过，需要复核。",
+        running: "Tests 正在运行。",
+        notRun: "Tests 尚未运行。",
+      },
+      openspecGovernancePolicy: {
+        pass: "OpenSpec 治理证据当前可用。",
+        warn: "OpenSpec 治理证据存在提示项。",
+        fail: "OpenSpec 治理证据需要复核。",
+        unknown: "OpenSpec 治理证据不可用或不完整。",
+      },
+      largeFileGovernancePolicy: {
+        pass: "大文件治理证据当前可用。",
+        warn: "大文件治理证据存在提示项。",
+        fail: "大文件治理证据需要复核。",
+        unknown: "大文件治理证据不可用或不完整。",
+      },
+      heavyTestNoiseGovernancePolicy: {
+        pass: "重测试噪音证据当前可用。",
+        warn: "重测试噪音证据存在提示项。",
+        fail: "重测试噪音证据需要复核。",
+        unknown: "重测试噪音证据不可用或不完整。",
+      },
+      realtimeHarnessGovernancePolicy: {
+        pass: "Realtime harness 证据当前可用。",
+        warn: "Realtime harness 证据存在提示项。",
+        fail: "Realtime harness 证据需要复核。",
+        unknown: "Realtime harness 证据不可用或不完整。",
+      },
+      capabilityMismatchGovernancePolicy: {
+        pass: "引擎能力证据当前可用。",
+        warn: "引擎能力证据存在提示项。",
+        fail: "引擎能力证据需要复核。",
+        unknown: "引擎能力证据不可用或不完整。",
+      },
+      engineRuntimeGovernancePolicy: {
+        pass: "引擎运行时契约证据当前可用。",
+        warn: "引擎运行时契约证据存在提示项。",
+        fail: "引擎运行时契约证据需要复核。",
+        unknown: "引擎运行时契约证据不可用或不完整。",
+      },
+      costBudgetGovernancePolicy: {
+        pass: "成本预算证据当前可用。",
+        warn: "成本预算证据存在提示项。",
+        fail: "成本预算证据需要复核。",
+        unknown: "成本预算证据不可用或不完整。",
+      },
+    },
+    audit: {
+      title: "判决依据",
+      expandLabel: "{{count}} 条 policy 命中",
+      empty: "暂无 policy 判决",
+      reasonUnavailable: "{{policy}} 未提供原因",
+      sourceUnavailable: "暂无来源",
+      enforcement: {
+        advisory: "提示",
+        blocking: "阻塞",
+        informational: "信息",
+      },
+    },
+    governance: {
+      title: "治理证据",
+      loading: "正在读取证据...",
+      empty: "暂无治理证据",
+      count: "{{count}} 条证据 · {{needsAction}} 条需要处理",
+      group: {
+        needs_action: "需要处理 · {{count}}",
+        watch: "观察 · {{count}}",
+        passed: "已通过 · {{count}}",
+      },
+      meta: {
+        source: "来源：{{source}}",
+        artifact: "证据：{{path}}",
+        action: "动作：处理 {{reason}}",
+      },
+      status: {
+        pass: "通过",
+        warn: "警告",
+        fail: "失败",
+        unknown: "未知",
+      },
+    },
+    cost: {
+      title: "成本 / Budget",
+      session: "Session",
+      engine: "Engine",
+      model: "Model",
+      sessionId: "Session ID",
+      tokens: "Tokens",
+      tokenBreakdownLabel: "Token 用量拆分",
+      known: "价格已匹配",
+      partial: "部分估算",
+      unknownModel: "未知模型",
+      pricingSource: "pricing 来源：{{source}} · {{date}}",
+      historyDegraded: "成本历史只能以内存态继续，localStorage 写入失败。",
+      accumulated: {
+        session: "Session {{amount}}",
+        today: "Today {{amount}}",
+        month: "Month {{amount}}",
+      },
+      degraded: {
+        "pricing-unavailable":
+          "{{engine}}/{{model}} 没有可追溯 pricing，成本不会按 0 静默处理。",
+        "pricing-stale": "pricing fixture 已过期，当前成本仅供参考。",
+        "usage-unavailable": "当前没有 token usage，无法估算成本。",
+        "block-level-cost-unsupported": "当前版本不支持 block-level cost。",
+        unknown: "成本估算处于降级状态。",
+      },
+    },
+    budget: {
+      unconfigured: "Budget 未配置：这不是失败，只是当前不会做预算阈值判断。",
+      unsetShort: "Budget 未设置",
+      barLabel: "预算使用进度",
+      progress: "{{amount}} / {{limit}}",
+      threshold: {
+        info: "已达到 info 阈值：{{amount}} / {{threshold}}",
+        warn: "已达到 warn 阈值：{{amount}} / {{threshold}}",
+        block:
+          "已达到 block 阈值：{{amount}} / {{threshold}}。本能力只提示，不中断 runtime。",
+      },
+    },
     checkpoint: {
       verdictTitle: "结论",
       evidenceTitle: "证据",
@@ -1801,6 +2031,16 @@ const zhPart2 = {
       fileDetailsTitle: "文件明细",
       risksTitle: "风险",
       nextActionTitle: "下一步",
+      sections: {
+        summary: "总结",
+        advisorySignals: "提示信号",
+        evidenceTrail: "证据链",
+        policyAudit: "Policy 审计",
+        suggestedActions: "建议动作",
+      },
+      advisory: {
+        count: "{{count}} 条提示",
+      },
       verdict: {
         running: "进行中",
         blocked: "已阻塞",
@@ -1816,7 +2056,8 @@ const zhPart2 = {
       },
       summary: {
         blockedValidation: "关键验证已经失败，必须先修复后再继续。",
-        blockedCommand: "最近一条命令执行失败：{{command}}。如果系统仍在自动恢复，建议先等待本轮收敛，不必立刻停止。",
+        blockedCommand:
+          "最近一条命令执行失败：{{command}}。如果系统仍在自动恢复，建议先等待本轮收敛，不必立刻停止。",
         blockedSubagent: "有委托 Agent 落入错误状态，需要先处理。",
         runningValidation: "验证仍在执行中，先等待结果再做判断。",
         runningCommand: "最近一条命令仍在运行：{{command}}",
@@ -1835,13 +2076,66 @@ const zhPart2 = {
         validations: "验证",
         requiredValidations: "必选验证",
         optionalValidations: "可选验证",
-        fileChangeSummary: "+{{additions}}/-{{deletions}} 涉及 {{count}} 个文件",
+        fileChangeSummary:
+          "+{{additions}}/-{{deletions}} 涉及 {{count}} 个文件",
         runMissing: "建议先运行",
         runMissingGeneric: "请按项目脚本运行核心验证",
         tasks: "任务",
         agents: "Agent",
         inProgress: "进行中",
         settled: "已收敛",
+      },
+      evidenceTrail: {
+        count: "{{count}} 条证据",
+        sourceLabel: "来源",
+        snapshotLabel: "快照",
+        observedLabel: "观测",
+        artifactLabel: "文件",
+        hashLabel: "哈希",
+        qualifierLabel: "限定",
+        degradedLabel: "降级",
+        staleLabel: "过期",
+        snapshotRecorded: "快照已记录",
+        hashRecorded: "已校验",
+        policy: {
+          buildValidationPolicy: "Build 验证",
+          costBudgetGovernancePolicy: "成本预算",
+          heavyTestNoiseGovernancePolicy: "重测试噪声",
+          largeFileGovernancePolicy: "大文件治理",
+          lintValidationPolicy: "Lint 验证",
+          openspecGovernancePolicy: "OpenSpec 治理",
+          testsValidationPolicy: "Tests 验证",
+          typecheckValidationPolicy: "Typecheck 验证",
+        },
+        sourceName: {
+          build: "Build",
+          costBudget: "成本预算",
+          heavyTestNoise: "重测试噪声",
+          largeFile: "大文件",
+          lint: "Lint",
+          openspec: "OpenSpec",
+          tests: "Tests",
+          trellis: "Trellis",
+          typecheck: "Typecheck",
+        },
+        reason: {
+          governanceArtifactMalformed: "证据文件格式异常",
+          governanceEvidenceUnavailable: "证据暂不可解析",
+          pricingUnavailable: "模型价格未知",
+          stale: "证据已过期",
+        },
+        source: "来源：{{source}}",
+        snapshot: "快照：{{id}}",
+        observed: "观测时间：{{time}}",
+        artifact: "证据文件：{{path}}",
+        hash: "哈希：{{hash}}",
+        qualifier: "限定说明：{{qualifier}}",
+        degraded: "降级：{{reason}}",
+        stale: "过期：{{time}}",
+      },
+      suggested: {
+        validation: "可选：{{command}}",
+        governance: "可选 {{source}} 检查：{{command}}",
       },
       expandToDock: "在 dock 中查看完整结果",
       validations: {
@@ -1887,8 +2181,10 @@ const zhPart2 = {
         hint: {
           runMissingValidation: "先补齐未运行验证，再决定是否继续。",
           running: "等待当前执行收敛后再判断下一步。",
-          blocked: "先关注失败证据；若系统仍在自动恢复，建议先等待收敛，再决定是否中止。",
-          needs_review: "当前结果可能仍可恢复，请先等待执行继续收敛，不必立即处理。",
+          blocked:
+            "先关注失败证据；若系统仍在自动恢复，建议先等待收敛，再决定是否中止。",
+          needs_review:
+            "当前结果可能仍可恢复，请先等待执行继续收敛，不必立即处理。",
           ready: "当前证据已收敛，可进入提交前确认。",
         },
       },
@@ -1991,9 +2287,11 @@ const zhPart2 = {
     contextDualViewCompactingAuto: "正在自动压缩背景信息...",
     contextDualViewCompacted: "压缩已完成",
     contextDualViewCompactedPendingSync: "压缩已完成，背景信息用量待刷新",
-    contextDualViewCompactedPendingSyncAuto: "自动压缩已完成，背景信息用量待刷新",
+    contextDualViewCompactedPendingSyncAuto:
+      "自动压缩已完成，背景信息用量待刷新",
     contextDualViewWindowTitle: "背景信息窗口：",
-    contextDualViewWindowUsage: "{{usedPercent}}% 已用（剩余 {{remainingPercent}}%）",
+    contextDualViewWindowUsage:
+      "{{usedPercent}}% 已用（剩余 {{remainingPercent}}%）",
     contextDualViewWindowTokens: "已用 {{usedTokens}} 标记，共 {{totalTokens}}",
     contextDualViewAutoCompactionNote: "Codex 背景信息压缩",
     contextDualViewAutoCompactionEnabled: "自动压缩",
@@ -2026,7 +2324,8 @@ const zhPart2 = {
     },
     contextDualViewManualCompact: "手动压缩上下文",
     contextDualViewManualCompactHint: "上下文已压缩",
-    contextDualViewManualCompactUnavailable: "当前会话不可触发手动压缩，请先激活 Codex 对话线程。",
+    contextDualViewManualCompactUnavailable:
+      "当前会话不可触发手动压缩，请先激活 Codex 对话线程。",
     contextDualViewManualCompactFailed: "手动触发压缩失败，请稍后重试。",
     contextDualViewAriaLabel: "双上下文视图状态：{{state}}",
     noMatchingFiles: "无匹配文件",
@@ -2098,8 +2397,10 @@ const zhPart2 = {
   claudeModes: {
     default: {
       label: "建议模式（预览）",
-      tooltip: "Claude Code 预览审批模式。部分场景仍可能退化，完整审批桥仍在补齐。",
-      description: "现已开放预览，用于验证 Claude 默认权限流；若命中退化路径，界面会提示切换到 Plan 模式。",
+      tooltip:
+        "Claude Code 预览审批模式。部分场景仍可能退化，完整审批桥仍在补齐。",
+      description:
+        "现已开放预览，用于验证 Claude 默认权限流；若命中退化路径，界面会提示切换到 Plan 模式。",
     },
     plan: {
       label: "规划模式",
@@ -2122,7 +2423,8 @@ const zhPart2 = {
   codexModes: {
     default: {
       label: "建议模式",
-      tooltip: "Codex approval_policy=untrusted：执行命令或写文件前都会弹窗确认。",
+      tooltip:
+        "Codex approval_policy=untrusted：执行命令或写文件前都会弹窗确认。",
       description: "最安全的选择，每一步都需要你亲自批准。",
     },
     plan: {
@@ -2132,12 +2434,14 @@ const zhPart2 = {
     },
     acceptEdits: {
       label: "自动编辑",
-      tooltip: "Codex approval_policy=auto-edit：自动 apply_patch 写文件，命令仍需审批。",
+      tooltip:
+        "Codex approval_policy=auto-edit：自动 apply_patch 写文件，命令仍需审批。",
       description: "自动处理文件创建/编辑，但运行命令前仍会询问。",
     },
     bypassPermissions: {
       label: "全自动",
-      tooltip: "Codex approval_policy=never：命令与写入直接执行（workspace 沙箱仍生效）。",
+      tooltip:
+        "Codex approval_policy=never：命令与写入直接执行（workspace 沙箱仍生效）。",
       description: "完全免审批，写文件和执行命令立即生效，仅受沙箱限制。",
     },
   },
@@ -2176,271 +2480,6 @@ const zhPart2 = {
         description: "适合专业工作与长时间 agent 任务的模型",
       },
     },
-  },
-
-  // 提示词增强
-  promptEnhancer: {
-    title: "增强提示词",
-    tooltip: "增强提示词",
-    tooltipFull: "重写提示词以提供更多上下文并改善 AI 响应",
-    shortcut: "\u2318/ / Ctrl+/",
-    enhancing: "正在增强提示词...",
-    originalPrompt: "原始提示词",
-    enhancedPrompt: "增强后的提示词",
-    useEnhanced: "使用增强版本",
-    keepOriginal: "保留原始版本",
-    enhanceFailed: "增强提示词失败",
-    emptyPrompt: "请先输入提示词",
-    copyEnhanced: "复制增强版本",
-  },
-
-  // 回溯
-  rewind: {
-    title: "回溯文件到之前的状态",
-    tooltip: "回溯",
-    label: "回溯",
-    tooltipFull: "将文件恢复到此消息时的状态",
-    notAvailable: "当前会话不支持回溯",
-    noEligibleMessage: "未找到可回溯的用户消息。",
-    selectPrompt: "请选择回溯目标（1-{{count}}）：",
-    invalidSelection: "回溯目标选择无效。",
-    confirmPrompt: "将基于该消息创建新线程并回溯：\n“{{preview}}”",
-    dialogTitle: "确认回溯 {{engine}} 会话",
-    dialogDescription:
-      "点击回溯后现在只会先打开确认弹窗。只有你明确点击确认，才会真正执行回溯。",
-    targetSectionTitle: "本次回溯起点",
-    targetMessageLabel: "将从这条用户消息开始整体回退",
-    impactSectionTitle: "回溯影响范围",
-    impactUserMessages: "将移除的用户消息",
-    impactAssistantMessages: "将移除的助手回复",
-    impactToolCalls: "将移除的工具调用",
-    impactFiles: "涉及文件",
-    impactSummary:
-      "确认后，会从这条用户消息开始整体回退。也就是这条用户消息，以及它后面的助手回复、工具调用和相关变更，都会从当前线性历史里移除。",
-    impactFollowUp:
-      "如果下面列出了文件，表示这些文件对应的变更发生在将被回退的这段历史里，确认前请先核对。",
-    workspaceRestoreSectionTitle: "工作区文件策略",
-    modeMessagesAndFilesLabel: "回退消息 + 相关文件",
-    modeMessagesAndFilesHint:
-      "同时回退当前会话历史和这段历史对应的工作区文件变更。",
-    modeMessagesOnlyLabel: "只回退消息",
-    modeMessagesOnlyHint:
-      "只回退会话历史，不改写当前工作区中的文件内容。",
-    modeFilesOnlyLabel: "只回退文件",
-    modeFilesOnlyHint:
-      "只恢复这段历史对应的文件，不改写当前会话消息历史。",
-    filesSectionTitle: "受影响文件",
-    filesRailTitle: "文件列表",
-    filesEmpty: "这段回溯历史里没有识别到文件变更。",
-    filesHint: "这里只展示前端当前能识别到的文件变更摘要，用来帮助你确认风险。",
-    diffEmpty: "当前文件没有可用的 diff 预览，你仍然可以继续核对其他文件或直接进入主 Diff 面板。",
-    openDiffAction: "在 Diff 面板打开",
-    storeAction: "存储变更",
-    storeActionBusy: "正在存储...",
-    storeUnavailable: "当前回溯上下文缺少可用的会话信息，暂时无法存储变更。",
-    storeFailed: "存储变更失败。",
-    storeRevealFailed: "打开存储目录失败。",
-    storeRevealAction: "打开目录",
-    storeSuccessTitle: "已存储 {{count}} 个文件，并生成 manifest 存档。",
-    storeSuccessPrefix: "已保存到：",
-    confirmAction: "确认回溯",
-    confirmActionBusy: "正在回溯...",
-    failed: "回溯会话失败。",
-  },
-
-  // 对话
-  threads: {
-    rename: "重命名",
-    autoName: "自动命名",
-    autoNaming: "自动命名中...",
-    archive: "归档",
-    delete: "删除",
-    deleteThreadTitle: "删除会话",
-    deleteThreadMessage: "确定要删除“{{name}}”吗？",
-    deleteThreadHint: "删除后将无法恢复，该会话的本地记录也会一并移除。",
-    pin: "固定",
-    unpin: "取消固定",
-    sync: "同步",
-    reload: "重新加载",
-    renamePlaceholder: "输入对话名称",
-    confirmDelete: "确定要删除此对话吗？",
-    confirmArchive: "确定要归档此对话吗？",
-    reloadThreads: "重新加载对话",
-    syncFromServer: "从服务器同步",
-    copyId: "复制 ID",
-    copyClaudeResumeCommand: "复制 Claude 恢复命令",
-    openClaudeTui: "在 Claude TUI 中打开",
-    claudeResumeCommandHelp:
-      "如果 Claude TUI 的 /resume picker 看不到这个 GUI 会话，请显式运行 claude --resume <session_id> 或 /resume <session_id>。",
-    moveToFolder: "移动到文件夹",
-    moveToProjectRoot: "项目根目录",
-    searchFolderTargets: "搜索文件夹...",
-    size: "大小",
-    deleteWorktree: "删除工作树",
-    renameThread: "重命名对话",
-    currentName: "当前名称：",
-    newName: "新名称",
-    copyThread: "复制对话",
-    untitledThread: "未命名对话",
-    topbarSessionTabsAriaLabel: "顶部会话标签",
-    memoryReferenceQuerying: "记忆引用：正在查询项目记忆...",
-    memoryReferenceReferenced: "记忆引用：已引用 {{count}} 条项目记忆{{titlesSuffix}}",
-    memoryReferenceNoRelated: "记忆引用：未找到相关项目记忆",
-    memoryReferenceTimeout: "记忆引用：查询超时，已不带记忆摘要发送",
-    memoryReferenceError: "记忆引用：查询失败，已不带记忆摘要发送",
-    memoryReferenceTitlesSuffix: " - {{titles}}",
-    closeTab: "关闭标签",
-    closeLeftTabs: "关闭左侧标签",
-    closeRightTabs: "关闭右侧标签",
-    closeAllTabs: "关闭全部标签",
-    closeCompletedTabs: "关闭全部已完成标签",
-    showLess: "收起",
-    more: "更多...",
-    loading: "加载中...",
-    searchOlder: "搜索更早的...",
-    loadOlder: "加载更早的...",
-    hideExitedSessions: "隐藏已退出会话",
-    showExitedSessions: "显示已退出会话",
-    exitedSessionsHidden: "已隐藏 {{count}} 个已退出会话",
-    subagentTreeExpanded: "子代理树已展开",
-    subagentTreeExpand: "展开子代理树",
-    subagentTreeCollapse: "折叠子代理树",
-    degradedWorkspaceRefreshAriaLabel: "刷新不完整的会话列表",
-    degradedWorkspaceRefreshTooltip: "当前项目下的会话列表暂未完整刷新，可能缺少一部分会话。点击即可重新拉取。",
-    degradedWorkspaceRefreshingAriaLabel: "正在重新拉取会话列表",
-    degradedWorkspaceRefreshingTooltip: "正在重新拉取会话列表…",
-    sessionStopped: "会话已停止。",
-    sessionStoppedForFusion: "正在切换到融合回复，等待新的接续事件…",
-    turnFailed: "会话失败。",
-    turnFailedWithMessage: "会话失败：{{message}}",
-    claudeMcpRouteMapped:
-      "MCP 路由提示：检测到 `playwright-mcp`，当前会话已自动映射为 `chrome-devtools`。",
-    claudeMcpRouteUnavailable:
-      "MCP 路由提示：检测到 `playwright-mcp`，但当前会话未确认可见该工具。",
-    turnFailedToStart: "会话启动失败。",
-    turnFailedToStartWithMessage: "会话启动失败：{{message}}",
-    turnStalled: "用户输入已提交，但恢复链停住了。你可以从当前可见状态继续。",
-    turnStalledWithMessage: "用户输入已提交，但恢复链停住了：{{message}}",
-    fusionTurnStalled: "融合回复未能接上，当前线程已回到可继续操作的状态。",
-    fusionTurnStalledWithMessage: "融合回复未能接上：{{message}}",
-    firstPacketTimeout: "首次响应在 {{seconds}} 秒内未返回。可能是网络、代理或上游服务繁忙导致，请稍后重试。",
-    codexNoProgressStalled: "Codex 实时会话在 {{seconds}} 秒内没有收到新的进展。本轮已隔离为 stalled，可以安全停止或重新发送。",
-    networkProxyHint: "网络连接异常。请检查网络与代理配置（HTTP_PROXY / HTTPS_PROXY / ALL_PROXY / NO_PROXY）后重试。",
-    networkConnectionHint: "网络连接异常。请确认网络可达后重试。",
-    proxyBadge: "代理",
-    requestTimeoutHint: "请求在收到响应前已超时。可能是网络抖动或上游服务繁忙导致，请稍后重试。",
-    completionEmailSent: "完成提醒邮件已发送。",
-    completionEmailSkipped: "没有可发送的完整助手回答，本次未发送邮件。",
-    completionEmailFailedTitle: "完成提醒邮件发送失败",
-    codexCompactionStarted: "Codex 正在压缩背景信息，完成后会继续生成响应。",
-    codexCompactionCompleted: "Codex 已完成背景信息压缩。",
-    contextCompactionFailed: "上下文压缩失败。",
-    contextCompactionFailedWithMessage: "上下文压缩失败：{{message}}",
-    claudeManualCompactUnavailable: "当前没有可压缩的 Claude 会话。请先打开已有 Claude 线程，再重新执行 /compact。",
-    specRootContext: {
-      title: "外部 Spec 根目录（优先）",
-      activeRoot: "当前生效路径",
-      priorityLabel: "读取策略",
-      priorityDetail: "优先读取该目录，再回退到工作区默认 openspec。",
-    },
-  },
-
-  // 配置
-  config: {
-    switchProvider: "切换供应商",
-  },
-
-  // 推理深度
-  reasoning: {
-    title: "选择思考深度",
-    default: "默认",
-    claudeDefault: "Claude 默认",
-    defaultDescription: "使用引擎默认思考行为",
-    low: {
-      label: "较少",
-      description: "快速响应，基础推理",
-    },
-    medium: {
-      label: "中等",
-      description: "平衡思考（默认）",
-    },
-    high: {
-      label: "较多",
-      description: "深度推理，适合复杂任务",
-    },
-    xhigh: {
-      label: "极高",
-      description: "极高思考强度",
-    },
-    max: {
-      label: "最多",
-      description: "最高思考强度",
-    },
-  },
-
-  // 供应商
-  providers: {
-    claude: { label: "Claude Code" },
-    codex: { label: "Codex CLI" },
-    gemini: { label: "Gemini CLI" },
-    opencode: { label: "OpenCode" },
-  },
-
-  // 使用量标签
-  usage: {
-    sessionReset: "会话重置于",
-    weeklyReset: "每周重置于",
-    credits: "额度",
-    used: "已使用",
-    remaining: "剩余",
-    unlimited: "无限制",
-  },
-
-  // 菜单
-  menu: {
-    // 应用菜单
-    about: "关于 {{appName}}",
-    checkForUpdates: "检查更新…",
-    settings: "设置…",
-    // 文件菜单
-    file: "文件",
-    newAgent: "新建会话",
-    newWorktreeAgent: "新建工作树代理",
-    newCloneAgent: "新建克隆代理",
-    addWorkspace: "添加工作区…",
-    closeWindow: "关闭窗口",
-    quit: "退出",
-    // 编辑菜单
-    edit: "编辑",
-    // 编辑器菜单
-    composer: "编辑器",
-    cycleModel: "切换模型",
-    cycleAccessMode: "切换访问模式",
-    cycleReasoningMode: "切换推理模式",
-    cycleCollaborationMode: "切换协作模式",
-    // 视图菜单
-    view: "视图",
-    toggleProjectsSidebar: "切换项目侧边栏",
-    toggleGitSidebar: "切换右侧边栏",
-    toggleGlobalSearch: "切换全局搜索",
-    toggleDebugPanel: "切换调试面板",
-    toggleTerminal: "切换终端",
-    nextAgent: "下一个代理",
-    previousAgent: "上一个代理",
-    nextWorkspace: "下一个工作区",
-    previousWorkspace: "上一个工作区",
-    toggleFullScreen: "切换全屏",
-    // 窗口菜单
-    window: "窗口",
-    minimize: "最小化",
-    maximize: "最大化",
-    reloadWindow: "重新加载窗口",
-    // 帮助菜单
-    help: "帮助",
-  },
-
-  clientDocumentation: {
-    open: "客户端说明文档",
   },
 };
 

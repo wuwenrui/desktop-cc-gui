@@ -7,6 +7,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+#[cfg(test)]
+mod capability_matrix;
 pub mod claude;
 pub mod claude_history;
 #[cfg(test)]

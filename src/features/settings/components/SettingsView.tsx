@@ -16,18 +16,16 @@ import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 import FlaskConical from "lucide-react/dist/esm/icons/flask-conical";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import {
-  Globe,
-  Monitor,
-  Cog,
-  Keyboard,
-  ExternalLink,
-  Mail,
-  Archive,
-  NotebookPen,
-  Boxes,
-  Bot,
-} from "lucide-react";
+import Globe from "lucide-react/dist/esm/icons/globe";
+import Monitor from "lucide-react/dist/esm/icons/monitor";
+import Cog from "lucide-react/dist/esm/icons/cog";
+import Keyboard from "lucide-react/dist/esm/icons/keyboard";
+import ExternalLink from "lucide-react/dist/esm/icons/external-link";
+import Mail from "lucide-react/dist/esm/icons/mail";
+import Archive from "lucide-react/dist/esm/icons/archive";
+import NotebookPen from "lucide-react/dist/esm/icons/notebook-pen";
+import Boxes from "lucide-react/dist/esm/icons/boxes";
+import Bot from "lucide-react/dist/esm/icons/bot";
 import type {
   AppSettings,
   CodexDoctorResult,
@@ -506,17 +504,23 @@ export function SettingsView({
   );
   const [settingsWorkspaceId, setSettingsWorkspaceId] = useState<string | null>(null);
   const selectedSettingsWorkspace = useMemo(() => {
-    if (projects.length === 0) {
+    if (sessionWorkspaceOptions.length === 0) {
       return activeWorkspace;
     }
     if (settingsWorkspaceId) {
-      const matched = projects.find((workspace) => workspace.id === settingsWorkspaceId);
+      const matched = sessionWorkspaceOptions.find((workspace) => workspace.id === settingsWorkspaceId);
       if (matched) {
         return matched;
       }
     }
-    return projects[0] ?? null;
-  }, [activeWorkspace, projects, settingsWorkspaceId]);
+    if (
+      activeWorkspace &&
+      sessionWorkspaceOptions.some((workspace) => workspace.id === activeWorkspace.id)
+    ) {
+      return activeWorkspace;
+    }
+    return sessionWorkspaceOptions[0] ?? null;
+  }, [activeWorkspace, sessionWorkspaceOptions, settingsWorkspaceId]);
   const mcpContextWorkspace = useMemo(
     () => activeWorkspace ?? projects[0] ?? null,
     [activeWorkspace, projects],
@@ -636,17 +640,23 @@ export function SettingsView({
   }, [appSettings]);
 
   useEffect(() => {
-    if (projects.length === 0) {
+    if (sessionWorkspaceOptions.length === 0) {
       setSettingsWorkspaceId(null);
       return;
     }
     setSettingsWorkspaceId((current) => {
-      if (current && projects.some((workspace) => workspace.id === current)) {
+      if (current && sessionWorkspaceOptions.some((workspace) => workspace.id === current)) {
         return current;
       }
-      return projects[0]?.id ?? null;
+      if (
+        activeWorkspace &&
+        sessionWorkspaceOptions.some((workspace) => workspace.id === activeWorkspace.id)
+      ) {
+        return activeWorkspace.id;
+      }
+      return sessionWorkspaceOptions[0]?.id ?? null;
     });
-  }, [projects]);
+  }, [activeWorkspace, sessionWorkspaceOptions]);
 
   useEffect(() => {
     setGroupDrafts((prev) => {
@@ -729,8 +739,12 @@ export function SettingsView({
 
   useEffect(() => {
     if (
-      initialSection !== "agent-prompt-management" ||
-      initialHighlightTarget !== "prompt-library"
+      !(
+        (initialSection === "agent-prompt-management" &&
+          initialHighlightTarget === "prompt-library") ||
+        (initialSection === "project-management" &&
+          initialHighlightTarget === "project-sessions")
+      )
     ) {
       return;
     }

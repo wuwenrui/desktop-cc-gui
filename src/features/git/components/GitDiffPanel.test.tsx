@@ -585,6 +585,30 @@ describe("GitDiffPanel", () => {
     expect(onSelectFile).toHaveBeenCalledWith("src/a.ts");
   });
 
+  it("opens the file editor instead of selecting diff on regular row click", () => {
+    const onSelectFile = vi.fn();
+    const onOpenFile = vi.fn();
+    render(
+      <GitDiffPanel
+        {...baseProps}
+        gitDiffListView="flat"
+        onSelectFile={onSelectFile}
+        onOpenFile={onOpenFile}
+        unstagedFiles={[
+          { path: "src/a.ts", status: "M", additions: 1, deletions: 0 },
+        ]}
+      />,
+    );
+
+    const row = document.querySelector<HTMLElement>('.diff-row[data-path="src/a.ts"]');
+    expect(row).toBeTruthy();
+
+    fireEvent.click(row as HTMLElement);
+    expect(onOpenFile).toHaveBeenCalledTimes(1);
+    expect(onOpenFile).toHaveBeenCalledWith("src/a.ts");
+    expect(onSelectFile).not.toHaveBeenCalled();
+  });
+
   it("opens modal preview from explicit action without triggering row selection", () => {
     const onSelectFile = vi.fn();
     const onCreateCodeAnnotation = vi.fn();
