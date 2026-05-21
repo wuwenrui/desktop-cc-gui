@@ -2066,6 +2066,8 @@ const zhPart1 = {
     emailSecretPlaceholder: "输入新的授权码",
     emailSecretConfigured: "授权码已保存",
     emailSecretMissing: "授权码未配置",
+    emailShowSecret: "显示授权码",
+    emailHideSecret: "隐藏授权码",
     emailClearSecret: "清除授权码",
     emailEnableAndSave: "开启并保存邮件发送",
     emailSendTest: "发送测试邮件",

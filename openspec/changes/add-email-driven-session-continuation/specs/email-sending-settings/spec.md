@@ -47,6 +47,13 @@
 - **THEN** 系统 MUST 将凭据作为 secret 处理
 - **AND** 普通 AppSettings JSON、日志、toast、诊断包和邮件会话列表 MUST NOT 包含 secret 明文
 
+#### Scenario: saved authorization code is masked in settings UI
+
+- **WHEN** 用户打开邮件发送配置
+- **THEN** 授权码 / App Password 输入框 MUST 默认以脱敏状态展示
+- **AND** 用户 MUST 能通过明确的显示/隐藏 icon 临时切换明文可见性
+- **AND** 显示/隐藏切换 MUST 只影响当前 UI 输入框类型，不改变 secret 保存、清除、测试发送或提交 payload 语义
+
 #### Scenario: raw inbound mail is not persisted by default
 
 - **WHEN** 系统检查收件箱

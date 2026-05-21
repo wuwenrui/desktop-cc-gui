@@ -2021,6 +2021,44 @@
   outline: none;
 }
 
+.settings-secret-input-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.settings-secret-input {
+  padding-right: 42px;
+}
+
+.settings-secret-toggle {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text-muted);
+  background: transparent;
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+
+.settings-secret-toggle:hover,
+.settings-secret-toggle:focus-visible {
+  color: var(--text-strong);
+  background: color-mix(in srgb, var(--surface-muted) 82%, transparent);
+}
+
+.settings-secret-toggle:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--border-accent) 80%, var(--border-muted));
+  outline-offset: 2px;
+}
+
 .settings-row {
   display: flex;
   flex-direction: column;

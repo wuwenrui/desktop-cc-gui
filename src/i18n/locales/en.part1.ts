@@ -2098,6 +2098,8 @@ const enPart1 = {
     emailSecretPlaceholder: "Enter a new authorization code",
     emailSecretConfigured: "Secret saved",
     emailSecretMissing: "Secret not configured",
+    emailShowSecret: "Show secret",
+    emailHideSecret: "Hide secret",
     emailClearSecret: "Clear secret",
     emailEnableAndSave: "Enable and save email sending",
     emailSendTest: "Send test email",

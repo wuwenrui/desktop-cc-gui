@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import BookOpen from "lucide-react/dist/esm/icons/book-open";
 import ExternalLink from "lucide-react/dist/esm/icons/external-link";
+import Eye from "lucide-react/dist/esm/icons/eye";
+import EyeOff from "lucide-react/dist/esm/icons/eye-off";
 import Inbox from "lucide-react/dist/esm/icons/inbox";
 import Mail from "lucide-react/dist/esm/icons/mail";
 import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
@@ -187,6 +189,7 @@ export function EmailSenderSettings({
   const [secretDraft, setSecretDraft] = useState("");
   const [savedSecret, setSavedSecret] = useState("");
   const [secretConfigured, setSecretConfigured] = useState(false);
+  const [secretVisible, setSecretVisible] = useState(false);
   const [activeTab, setActiveTab] = useState<EmailSettingsTab>("send");
   const [inboundDraft, setInboundDraft] = useState<EmailInboundSettings>(
     appSettings.emailInbound ?? defaultEmailInboundSettings(),
@@ -700,14 +703,26 @@ export function EmailSenderSettings({
             </div>
             <div className="settings-field">
               <Label htmlFor="email-secret">{t("settings.emailSecret")}</Label>
-              <Input
-                id="email-secret"
-                type="text"
-                value={secretDraft}
-                onChange={(event) => updateSecretDraft(event.target.value)}
-                placeholder={secretConfigured ? t("settings.emailSecretConfigured") : t("settings.emailSecretPlaceholder")}
-                autoComplete="off"
-              />
+              <div className="settings-secret-input-wrap">
+                <Input
+                  id="email-secret"
+                  className="settings-secret-input"
+                  type={secretVisible ? "text" : "password"}
+                  value={secretDraft}
+                  onChange={(event) => updateSecretDraft(event.target.value)}
+                  placeholder={secretConfigured ? t("settings.emailSecretConfigured") : t("settings.emailSecretPlaceholder")}
+                  autoComplete="off"
+                />
+                <button
+                  type="button"
+                  className="settings-secret-toggle"
+                  onClick={() => setSecretVisible((current) => !current)}
+                  aria-label={secretVisible ? t("settings.emailHideSecret") : t("settings.emailShowSecret")}
+                  title={secretVisible ? t("settings.emailHideSecret") : t("settings.emailShowSecret")}
+                >
+                  {secretVisible ? <EyeOff size={16} aria-hidden /> : <Eye size={16} aria-hidden />}
+                </button>
+              </div>
             </div>
             <div className="settings-field">
               <Label htmlFor="email-recipient-inbox">{t("settings.emailTestRecipient")}</Label>

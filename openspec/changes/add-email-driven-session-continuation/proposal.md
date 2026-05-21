@@ -32,6 +32,7 @@
 - 新增低摩擦 reply command 解析：MVP 支持 `ACTION: NEXT`、`ACTION: CHANGE`、`ACTION: PAUSE`、`ACTION: STOP`、`ACTION: STATUS`，同时支持用户直接回复“继续 / 下一步 / 暂停 / 停止 / 状态”或直接写自然语言要求；直接自然语言会作为当前 session 的 `CHANGE` 指令处理。
 - 新增最小 inbound command ledger，只保存已过滤的 session command、状态、reject reason 和 sanitized detail，不保存无关邮件或完整原始邮件。
 - 设置页邮箱设置新增 tab：文档 / 发送配置 / 收信监听 / 邮件会话，支持查看活跃邮件 session、邮件事件时间线、待确认/异常回复，并跳转到对应 workspace、thread 和 turn anchor。
+- 发送配置中的授权码 / App Password 输入框默认以脱敏状态展示，并提供仅 UI 层的显示/隐藏切换；切换只改变输入框可见性，不改变 secret 保存、清除或测试发送语义。
 - 对重复回复、旧邮件回复、多封回复、缺失 context、歧义指令、运行中 session 等边界行为给出稳定处理策略。
 - 为真实邮件客户端补充抗干扰规则：只解析 `Reply above this line` 之前的新增内容，忽略 quoted thread、签名档、自动回复和转发内容。
 - 对高风险或超出邮件建议范围的指令进入确认队列，不直接执行。
@@ -97,6 +98,7 @@
 - 多 `ACTION`、过期 token、重复 reply、旧邮件 reply、签名失败、非白名单发件人均不会自动执行。
 - 普通无关邮件不会被保存、展示或进入 quarantine。
 - 邮件会话管理页可以查看有效邮件事件、待确认/异常项，并跳转到对应 workspace/thread/turn。
+- 邮件发送设置中的授权码输入框默认 MUST 脱敏；用户 MAY 通过明确的显示/隐藏 icon 临时查看或重新隐藏，且该 UI 状态不得改变 secret 存储或提交 payload。
 - 收信监听默认不修改远端邮箱状态；重复检查通过 local cursor 和 dedupe ledger 保证幂等。
 - 用户在会话中选择发送 completion email 后，该邮件默认创建可执行 reply target；未选择邮件发送的 session 不会被自动纳入邮件闭环。
 - 所有执行路径保留幂等去重和 audit 状态，邮件 side effect 不破坏现有 conversation lifecycle。

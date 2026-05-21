@@ -237,6 +237,30 @@ describe("EmailSenderSettings", () => {
 
     const secretInput = await screen.findByLabelText("settings.emailSecret");
     expect((secretInput as HTMLInputElement).value).toBe("stored-secret");
+    expect((secretInput as HTMLInputElement).type).toBe("password");
+  });
+
+  it("toggles secret masking from the UI only", async () => {
+    getEmailSenderSettingsMock.mockResolvedValue(
+      emailView({ secretConfigured: true, secret: "stored-secret" }),
+    );
+
+    render(
+      <EmailSenderSettings
+        t={t}
+        appSettings={baseSettings}
+        onUpdateAppSettings={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    const secretInput = await screen.findByLabelText("settings.emailSecret");
+    expect((secretInput as HTMLInputElement).type).toBe("password");
+
+    fireEvent.click(screen.getByRole("button", { name: "settings.emailShowSecret" }));
+    expect((secretInput as HTMLInputElement).type).toBe("text");
+
+    fireEvent.click(screen.getByRole("button", { name: "settings.emailHideSecret" }));
+    expect((secretInput as HTMLInputElement).type).toBe("password");
   });
 
   it("keeps backend-loaded enabled state instead of resetting to initial app settings", async () => {
@@ -345,7 +369,7 @@ describe("EmailSenderSettings", () => {
     await screen.findByText("settings.emailEnabledSaved");
   });
 
-  it("saves a new secret and keeps it visible", async () => {
+  it("saves a new secret while keeping the input masked", async () => {
     render(
       <EmailSenderSettings
         t={t}
@@ -366,6 +390,7 @@ describe("EmailSenderSettings", () => {
     await waitFor(() => {
       expect((secretInput as HTMLInputElement).value).toBe("super-secret");
     });
+    expect((secretInput as HTMLInputElement).type).toBe("password");
   });
 
   it("clears a configured secret", async () => {
