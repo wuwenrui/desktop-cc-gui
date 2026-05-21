@@ -40,7 +40,7 @@ describe("WebServiceSettings", () => {
   const originalCrypto = globalThis.crypto;
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     Object.defineProperty(globalThis, "crypto", {
       configurable: true,
       value: {
@@ -427,14 +427,17 @@ describe("WebServiceSettings", () => {
   });
 
   it("starts daemon from daemon controls", async () => {
-    getWebServerStatusMock.mockResolvedValue({
+    const stoppedWebServerStatus = {
       running: false,
       rpcEndpoint: "127.0.0.1:4732",
       webPort: 3080,
       addresses: [],
       webAccessToken: null,
       lastError: null,
-    });
+    };
+    getWebServerStatusMock
+      .mockResolvedValueOnce(stoppedWebServerStatus)
+      .mockResolvedValueOnce(stoppedWebServerStatus);
 
     render(
       <WebServiceSettings
@@ -447,10 +450,15 @@ describe("WebServiceSettings", () => {
     const startDaemonButton = await screen.findByRole("button", {
       name: "settings.webServiceDaemonStart",
     });
+    await waitFor(() => {
+      expect((startDaemonButton as HTMLButtonElement).disabled).toBe(false);
+    });
     fireEvent.click(startDaemonButton);
 
     await waitFor(() => {
       expect(startDaemonMock).toHaveBeenCalledTimes(1);
+      expect(getWebServerStatusMock).toHaveBeenCalledTimes(2);
     });
+    expect(screen.getByText("settings.webServiceDaemonRunning")).toBeTruthy();
   });
 });
