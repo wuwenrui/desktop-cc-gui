@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-15.md`
-- **Total Sessions**: 544
+- **Total Sessions**: 545
 - **Last Active**: 2026-05-21
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-15.md` | ~1160 | Active |
+| `journal-15.md` | ~1216 | Active |
 | `journal-14.md` | ~1969 | Archived |
 | `journal-13.md` | ~1947 | Archived |
 | `journal-12.md` | ~1971 | Archived |
@@ -43,6 +43,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 545 | 2026-05-21 | 收紧 Codex 空草稿失效会话恢复 | `805109d2` | `feature/v0.5.1` |
 | 544 | 2026-05-21 | 优化邮件会话列表管理 | `eff41116` | `feature/v0.5.1` |
 | 543 | 2026-05-21 | 邮件驱动 session 收口修复 | `4c2f9342` | `feature/v0.5.1` |
 | 542 | 2026-05-21 | 脱敏邮箱授权码输入 | `90f35cbc` | `feature/v0.5.1` |

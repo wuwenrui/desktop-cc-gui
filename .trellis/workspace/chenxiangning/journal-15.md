@@ -1158,3 +1158,59 @@ Follow-ups: 重新推送并运行 Release workflow，创建 v0.5.0 release。
 ### Next Steps
 
 - None - task complete
+
+
+## Session 545: 收紧 Codex 空草稿失效会话恢复
+
+**Date**: 2026-05-21
+**Task**: 收紧 Codex 空草稿失效会话恢复
+**Branch**: `feature/v0.5.1`
+
+### Summary
+
+修复 Codex 空草稿 thread not found/invalid id 的恢复边界，补充 OpenSpec 与回归测试。
+
+### Main Changes
+
+## 完成内容
+
+- 修复 Codex 首次发送空草稿在 refresh 抛出 `thread not found` 时无法进入 fresh replay fallback 的问题。
+- 将 legacy malformed `invalid thread id` fallback 收紧到同一 empty first-send draft 边界，避免 durable Codex 会话被静默替换。
+- 新增 OpenSpec change `fix-codex-empty-draft-stale-thread-auto-replay`，记录行为边界、非目标、风险与 rollback marker。
+- 补充 `useThreadMessaging` 回归测试，覆盖：
+  - 空草稿 refresh throw 后 fresh replay 当前 prompt。
+  - durable stale thread refresh throw 不 fresh-replace。
+  - durable malformed invalid id 不 fresh-replace。
+
+## 验证
+
+- `pnpm vitest run src/features/threads/hooks/useThreadMessaging.test.tsx src/features/threads/utils/codexConversationLiveness.test.ts`：81 tests passed。
+- `npm run typecheck`：passed。
+- `npm run lint`：passed。
+- `openspec validate fix-codex-empty-draft-stale-thread-auto-replay --strict`：passed。
+- `git diff --check`：passed。
+
+## 影响范围
+
+- Codex send-path stale binding recovery。
+- 仅 Codex empty first-send draft 可自动 fresh-create 并重放当前 prompt。
+- durable/unknown stale Codex 会话继续走保守错误/恢复路径。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `805109d2` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
