@@ -825,3 +825,45 @@ Follow-ups: 重新推送并运行 Release workflow，创建 v0.5.0 release。
 ### Next Steps
 
 - None - task complete
+
+
+## Session 539: 对齐成本分段文本颜色
+
+**Date**: 2026-05-21
+**Task**: 对齐成本分段文本颜色
+**Branch**: `feature/v0.5.0-md`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| 项目 | 内容 |
+|------|------|
+| 改动 | StatusPanel 成本预算 token breakdown 的文本 label 颜色与进度条 segment 一一对应。 |
+| 范围 | 仅调整 `TokenBreakdownBar` label class 与 `status-panel.css` 文本颜色映射，不改 token 计算、pricing、budget 或渲染条件。 |
+| 验证 | `npm exec vitest run src/features/status-panel/components/StatusPanel.test.tsx` 通过，74 tests passed。 |
+
+**Updated Files**:
+- `src/features/status-panel/components/CostBudgetSection.tsx`
+- `src/styles/status-panel.css`
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d099f94c` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

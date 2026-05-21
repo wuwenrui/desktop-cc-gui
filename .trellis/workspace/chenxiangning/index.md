@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-15.md`
-- **Total Sessions**: 538
+- **Total Sessions**: 539
 - **Last Active**: 2026-05-21
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-15.md` | ~827 | Active |
+| `journal-15.md` | ~869 | Active |
 | `journal-14.md` | ~1969 | Archived |
 | `journal-13.md` | ~1947 | Archived |
 | `journal-12.md` | ~1971 | Archived |
@@ -43,6 +43,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 539 | 2026-05-21 | 对齐成本分段文本颜色 | `d099f94c` | `feature/v0.5.0-md` |
 | 538 | 2026-05-21 | 回滚 Codex 终止漂移恢复链路 | `4456ed67` | `feature/v0.5.0-md` |
 | 537 | 2026-05-21 | 修复 Codex 终态 identity 缺失卡住生成 | `b2a04097` | `feature/v0.5.0-md` |
 | 536 | 2026-05-21 | 升级发布版本到 v0.5.0 | `0af58d83` | `feature/v0.5.0-md` |
