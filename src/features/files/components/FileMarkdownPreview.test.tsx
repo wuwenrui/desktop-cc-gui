@@ -1,12 +1,24 @@
 /** @vitest-environment jsdom */
 import { act } from "react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadKatexAssets } from "../../markdown/markdownMath";
-import { FileMarkdownPreview } from "./FileMarkdownPreview";
+import {
+  clearFileMarkdownPreviewRuntimeCachesForTests,
+  FileMarkdownPreview,
+} from "./FileMarkdownPreview";
 
 vi.mock("@tauri-apps/plugin-opener", () => ({
   openUrl: vi.fn(),
+}));
+
+vi.mock("mermaid", () => ({
+  default: {
+    initialize: vi.fn(),
+    render: vi.fn(async (_id: string, source: string) => ({
+      svg: `<svg data-mermaid-source="${source.replace(/"/g, "&quot;")}"></svg>`,
+    })),
+  },
 }));
 
 function makeParagraphMarkdown(lineCount: number) {
@@ -16,6 +28,7 @@ function makeParagraphMarkdown(lineCount: number) {
 
 describe("FileMarkdownPreview render budget", () => {
   afterEach(() => {
+    clearFileMarkdownPreviewRuntimeCachesForTests();
     vi.useRealTimers();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
@@ -106,6 +119,60 @@ describe("FileMarkdownPreview render budget", () => {
     expect(screen.queryByText("const line119 = 119;")).toBeNull();
   });
 
+  it("does not flash a revealed table back to the lazy placeholder during annotation rerenders", () => {
+    const tableMarkdown = [
+      "| 类型 | 典型网站 |",
+      "| --- | --- |",
+      "| 车企官网 | byd.com |",
+    ].join("\n");
+    const markdown = [
+      tableMarkdown,
+      "",
+      makeParagraphMarkdown(500),
+    ].join("\n");
+
+    const revealedTable = render(
+      <FileMarkdownPreview
+        documentKey="docs:stable-table"
+        value={tableMarkdown}
+      />,
+    );
+    expect(screen.getByText("byd.com")).toBeTruthy();
+    revealedTable.unmount();
+
+    const { rerender, unmount } = render(
+      <FileMarkdownPreview
+        documentKey="docs:stable-table"
+        value={markdown}
+      />,
+    );
+    expect(screen.queryByTestId("file-markdown-heavy-placeholder")).toBeNull();
+    expect(screen.getByText("byd.com")).toBeTruthy();
+
+    rerender(
+      <FileMarkdownPreview
+        documentKey="docs:stable-table"
+        value={markdown}
+        annotationDraft={{ lineRange: { startLine: 1, endLine: 3 }, body: "标注中" }}
+        renderAnnotationDraft={() => <div>annotation draft</div>}
+      />,
+    );
+
+    expect(screen.queryByTestId("file-markdown-heavy-placeholder")).toBeNull();
+    expect(screen.getByText("byd.com")).toBeTruthy();
+
+    unmount();
+    render(
+      <FileMarkdownPreview
+        documentKey="docs:stable-table"
+        value={markdown}
+      />,
+    );
+
+    expect(screen.queryByTestId("file-markdown-heavy-placeholder")).toBeNull();
+    expect(screen.getByText("byd.com")).toBeTruthy();
+  });
+
   it("keeps invalid fenced math fallback local to that block", async () => {
     await loadKatexAssets();
 
@@ -127,5 +194,36 @@ describe("FileMarkdownPreview render budget", () => {
     expect(screen.getByText("before math")).toBeTruthy();
     expect(screen.getByText("after math")).toBeTruthy();
     expect(screen.getByText("\\definitelyinvalid{")).toBeTruthy();
+  });
+
+  it("keeps Mermaid source/render switching inside a stable body", async () => {
+    render(
+      <FileMarkdownPreview
+        documentKey="docs:mermaid-stable-switch"
+        value={[
+          "```mermaid",
+          "graph TD",
+          "A-->B",
+          "```",
+        ].join("\n")}
+      />,
+    );
+
+    const sourceTab = screen.getByRole("tab", { name: /source|源码/i });
+    const renderTab = screen.getByRole("tab", { name: /render|渲染/i });
+    const body = screen.getByTestId("file-markdown-mermaid-body");
+
+    fireEvent.click(renderTab);
+    await screen.findByTestId("file-markdown-mermaid-preview");
+    expect(screen.getByTestId("file-markdown-mermaid-body")).toBe(body);
+
+    fireEvent.click(sourceTab);
+    expect(screen.getByTestId("file-markdown-mermaid-body")).toBe(body);
+
+    fireEvent.click(renderTab);
+    expect(screen.getByTestId("file-markdown-mermaid-body")).toBe(body);
+    expect(screen.queryByText(/rendering diagram|正在渲染|files\.markdownMermaidRendering/i))
+      .toBeNull();
+    expect(screen.getByTestId("file-markdown-mermaid-preview")).toBeTruthy();
   });
 });

@@ -38,9 +38,10 @@ type FileViewBodyProps = {
   previewPayloadLoading: boolean;
   previewPayloadError: string | null;
   viewSurface: FileViewSurface;
-  content: string;
-  setContent: (value: string) => void;
-  markdownPreviewSnapshotMode: "stable" | "live";
+    content: string;
+    setContent: (value: string) => void;
+    markdownPreviewSnapshotMode: "stable" | "live";
+    markdownPreviewRefreshKey?: number | null;
   cmRef: RefObject<ReactCodeMirrorRef | null>;
   handleCodeMirrorCreate: NonNullable<ReactCodeMirrorProps["onCreateEditor"]>;
   onActiveFileLineRangeChange?: (range: { startLine: number; endLine: number } | null) => void;
@@ -335,9 +336,10 @@ export function FileViewBody({
   previewPayloadLoading,
   previewPayloadError,
   viewSurface,
-  content,
-  setContent,
-  markdownPreviewSnapshotMode,
+    content,
+    setContent,
+    markdownPreviewSnapshotMode,
+    markdownPreviewRefreshKey,
   cmRef,
   handleCodeMirrorCreate,
   onActiveFileLineRangeChange,
@@ -392,11 +394,12 @@ export function FileViewBody({
         viewSurface.kind === "markdown-preview" &&
         currentSnapshot.content.length === 0 &&
         content.length > 0;
-      const shouldUseLatestContent =
-        documentChanged ||
-        markdownPreviewSnapshotMode === "live" ||
-        enteringMarkdownPreview ||
-        needsInitialSnapshot;
+        const shouldUseLatestContent =
+          documentChanged ||
+          markdownPreviewSnapshotMode === "live" ||
+          Boolean(markdownPreviewRefreshKey) ||
+          enteringMarkdownPreview ||
+          needsInitialSnapshot;
       if (!shouldUseLatestContent) {
         return currentSnapshot;
       }
@@ -414,8 +417,9 @@ export function FileViewBody({
   }, [
     content,
     documentKey,
-    isLoading,
-    markdownPreviewSnapshotMode,
+      isLoading,
+      markdownPreviewRefreshKey,
+      markdownPreviewSnapshotMode,
     viewSurface.kind,
   ]);
 

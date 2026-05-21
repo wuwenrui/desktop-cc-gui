@@ -24,6 +24,10 @@ import { FileExplorerWorkspace } from "./FileExplorerWorkspace";
 
 const EMPTY_OPEN_APP_ICON_MAP: Record<string, string> = {};
 
+function reportDetachedExternalChangeMonitorCleanupError(error: unknown) {
+  console.warn("[files] Failed to clear detached external change monitor", error);
+}
+
 function buildDetachedWorkspaceInfo(session: {
   workspaceId: string;
   workspaceName: string;
@@ -134,7 +138,8 @@ export function DetachedFileExplorerWindow() {
     let active = true;
     if (!externalChangeAwarenessEnabled || !isFocused || !activeFilePath) {
       setExternalChangeTransportMode("polling");
-      void clearDetachedExternalChangeMonitor(session.workspaceId).catch(() => {});
+      void clearDetachedExternalChangeMonitor(session.workspaceId)
+        .catch(reportDetachedExternalChangeMonitorCleanupError);
       return () => {
         active = false;
       };
@@ -146,11 +151,11 @@ export function DetachedFileExplorerWindow() {
       activeFilePath,
       externalChangeWatcherEnabled,
     )
-      .then((status) => {
+      .then(() => {
         if (!active) {
           return;
         }
-        setExternalChangeTransportMode(status.mode === "watcher" ? "watcher" : "polling");
+        setExternalChangeTransportMode("watcher");
       })
       .catch(() => {
         if (!active) {
@@ -174,7 +179,8 @@ export function DetachedFileExplorerWindow() {
       if (!session) {
         return;
       }
-      void clearDetachedExternalChangeMonitor(session.workspaceId).catch(() => {});
+      void clearDetachedExternalChangeMonitor(session.workspaceId)
+        .catch(reportDetachedExternalChangeMonitorCleanupError);
     };
   }, [session]);
 

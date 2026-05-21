@@ -453,9 +453,11 @@ type LayoutNodesOptions = {
     location?: EditorNavigationLocation,
     options?: OpenFileOptions,
   ) => void;
-  externalChangeMonitoringEnabled?: boolean;
-  externalChangeTransportMode?: "watcher" | "polling";
-  liveEditPreviewEnabled?: boolean;
+    externalChangeMonitoringEnabled?: boolean;
+    externalChangeTransportMode?: "watcher" | "polling";
+    externalChangeApplyMode?: "auto" | "manual";
+    externalChangeAutoApplyDebounceMs?: number;
+    liveEditPreviewEnabled?: boolean;
   onToggleLiveEditPreview?: () => void;
   onExitEditor: () => void;
   onExitDiff: () => void;
@@ -2283,9 +2285,11 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         onCreateCodeAnnotation={handleCreateCodeAnnotation}
         onRemoveCodeAnnotation={handleRemoveCodeAnnotation}
         codeAnnotations={selectedCodeAnnotations}
-        externalChangeMonitoringEnabled={options.externalChangeMonitoringEnabled}
-        externalChangeTransportMode={options.externalChangeTransportMode}
-        markdownPreviewSnapshotMode={options.liveEditPreviewEnabled ? "live" : "stable"}
+          externalChangeMonitoringEnabled={options.externalChangeMonitoringEnabled}
+          externalChangeTransportMode={options.externalChangeTransportMode}
+          externalChangeApplyMode={options.externalChangeApplyMode}
+          externalChangeAutoApplyDebounceMs={options.externalChangeAutoApplyDebounceMs}
+          markdownPreviewSnapshotMode={options.liveEditPreviewEnabled ? "live" : "stable"}
         saveFileShortcut={options.saveFileShortcut}
         findInFileShortcut={options.findInFileShortcut}
       />

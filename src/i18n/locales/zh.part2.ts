@@ -568,8 +568,13 @@ const zhPart2 = {
     saved: "已保存",
     unsavedChanges: "未保存的更改",
     saveShortcut: "⌘S 保存",
-    externalChangeAutoSynced: "文件已被外部更新，已自动同步到最新版本。",
-    externalChangeConflictTitle: "检测到磁盘外部更新",
+      externalChangeAutoSynced: "文件已被外部更新，已自动同步到最新版本。",
+      externalChangePendingTitle: "文件已在磁盘更新",
+      externalChangePendingBody:
+        "检测到 {{count}} 次外部更新。当前预览会保持稳定，刷新后再应用最新内容。",
+      externalChangeRefreshPreview: "刷新预览",
+      externalChangeKeepCurrent: "保留当前预览",
+      externalChangeConflictTitle: "检测到磁盘外部更新",
     externalChangeConflictBody:
       "你有未保存的本地更改，已有 {{count}} 次外部更新等待处理。",
     externalChangeReload: "使用磁盘版本",

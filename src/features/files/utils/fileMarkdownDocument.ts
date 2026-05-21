@@ -5,6 +5,13 @@ export type FileMarkdownFrontmatterField = {
   value: string;
 };
 
+export type FileMarkdownDocumentBlock = {
+  key: string;
+  markdown: string;
+  startLine: number;
+  endLine: number;
+};
+
 export type CompiledFileMarkdownDocument = {
   cacheKey: string;
   contentHash: string;
@@ -13,6 +20,7 @@ export type CompiledFileMarkdownDocument = {
   body: string;
   bodyStartLine: number;
   lineMap: number[];
+  blocks: FileMarkdownDocumentBlock[];
   metrics: {
     byteLength: number;
     lineCount: number;
@@ -33,6 +41,7 @@ const MAX_RICH_MARKDOWN_BYTES = 96_000;
 const MAX_RICH_MARKDOWN_LINES = 2_500;
 const MAX_RICH_MARKDOWN_BLOCKS = 900;
 const MAX_RICH_HEAVY_BLOCKS = 20;
+const MAX_PLAIN_MARKDOWN_BLOCK_LINES = 80;
 const compiledDocumentCache = new Map<string, CompiledFileMarkdownDocument>();
 
 export function hashStableString(value: string): string {
@@ -144,6 +153,164 @@ function countMarkdownBlocks(value: string) {
   return { blockCount, heavyBlockCount };
 }
 
+function createBlockKey(markdown: string, startLine: number, endLine: number) {
+  return `${startLine}:${endLine}:${hashStableString(markdown)}`;
+}
+
+function createMarkdownBlock(
+  lines: string[],
+  startIndex: number,
+  endIndexExclusive: number,
+): FileMarkdownDocumentBlock | null {
+  if (startIndex >= endIndexExclusive) {
+    return null;
+  }
+  const markdown = lines.slice(startIndex, endIndexExclusive).join("\n");
+  const startLine = startIndex + 1;
+  const endLine = endIndexExclusive;
+  return {
+    key: createBlockKey(markdown, startLine, endLine),
+    markdown,
+    startLine,
+    endLine,
+  };
+}
+
+function isFenceOpeningLine(line: string) {
+  return line.trim().match(/^(`{3,}|~{3,})/);
+}
+
+function isPipeTableDelimiterLine(line: string) {
+  return /^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line);
+}
+
+function isPipeTableCandidateLine(line: string) {
+  const trimmed = line.trim();
+  return trimmed.includes("|") && !isFenceOpeningLine(trimmed);
+}
+
+function isPipeTableStart(lines: string[], index: number) {
+  return (
+    isPipeTableCandidateLine(lines[index] ?? "") &&
+    isPipeTableDelimiterLine(lines[index + 1] ?? "")
+  );
+}
+
+function isPipeTableContinuationLine(line: string) {
+  return isPipeTableCandidateLine(line) || isPipeTableDelimiterLine(line);
+}
+
+function shouldKeepMarkdownBlockAtomic(lines: string[], startIndex: number, endIndexExclusive: number) {
+  for (let index = startIndex; index < endIndexExclusive; index += 1) {
+    const line = lines[index] ?? "";
+    const trimmed = line.trimStart();
+    if (
+      trimmed.startsWith(">") ||
+      /^[-+*]\s+/.test(trimmed) ||
+      /^\d+[.)]\s+/.test(trimmed) ||
+      /^\[[ xX]\]\s+/.test(trimmed) ||
+      /^\$\$/.test(trimmed) ||
+      /^ {4,}\S/.test(line)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function segmentMarkdownDocumentBlocks(value: string): FileMarkdownDocumentBlock[] {
+  if (!value) {
+    return [];
+  }
+  const lines = value.split(/\r?\n/);
+  const blocks: FileMarkdownDocumentBlock[] = [];
+  let blockStartIndex: number | null = null;
+  let index = 0;
+
+  const pushBlock = (endIndexExclusive: number) => {
+    if (blockStartIndex === null) {
+      return;
+    }
+    if (shouldKeepMarkdownBlockAtomic(lines, blockStartIndex, endIndexExclusive)) {
+      const block = createMarkdownBlock(lines, blockStartIndex, endIndexExclusive);
+      if (block) {
+        blocks.push(block);
+      }
+      blockStartIndex = null;
+      return;
+    }
+    for (
+      let chunkStartIndex = blockStartIndex;
+      chunkStartIndex < endIndexExclusive;
+      chunkStartIndex += MAX_PLAIN_MARKDOWN_BLOCK_LINES
+    ) {
+      const chunkEndIndex = Math.min(
+        chunkStartIndex + MAX_PLAIN_MARKDOWN_BLOCK_LINES,
+        endIndexExclusive,
+      );
+      const block = createMarkdownBlock(lines, chunkStartIndex, chunkEndIndex);
+      if (block) {
+        blocks.push(block);
+      }
+    }
+    blockStartIndex = null;
+  };
+
+  while (index < lines.length) {
+    const line = lines[index] ?? "";
+    const trimmed = line.trim();
+    if (!trimmed) {
+      pushBlock(index);
+      index += 1;
+      continue;
+    }
+
+    const fenceMatch = isFenceOpeningLine(line);
+    if (fenceMatch) {
+      pushBlock(index);
+      const marker = fenceMatch[1] ?? "```";
+      const markerChar = marker[0] ?? "`";
+      const fenceStartIndex = index;
+      index += 1;
+      while (index < lines.length) {
+        const candidate = (lines[index] ?? "").trim();
+        if (candidate.startsWith(markerChar.repeat(3))) {
+          index += 1;
+          break;
+        }
+        index += 1;
+      }
+      const block = createMarkdownBlock(lines, fenceStartIndex, index);
+      if (block) {
+        blocks.push(block);
+      }
+      continue;
+    }
+
+    if (isPipeTableStart(lines, index)) {
+      pushBlock(index);
+      const tableStartIndex = index;
+      index += 2;
+      while (index < lines.length && isPipeTableContinuationLine(lines[index] ?? "")) {
+        index += 1;
+      }
+      const block = createMarkdownBlock(lines, tableStartIndex, index);
+      if (block) {
+        blocks.push(block);
+      }
+      continue;
+    }
+
+    if (blockStartIndex === null) {
+      blockStartIndex = index;
+    }
+    index += 1;
+  }
+
+  pushBlock(lines.length);
+  return blocks;
+}
+
 function resolveRenderStrategy(metrics: CompiledFileMarkdownDocument["metrics"]) {
   if (
     metrics.byteLength > MAX_RICH_MARKDOWN_BYTES ||
@@ -173,6 +340,7 @@ export function compileFileMarkdownDocument({
   const frontmatter = extractFrontmatter(rawMarkdown);
   const normalizedMarkdown = normalizeMarkdownMathForFilePreview(frontmatter.body);
   const blockMetrics = countMarkdownBlocks(normalizedMarkdown.value);
+  const blocks = segmentMarkdownDocumentBlocks(normalizedMarkdown.value);
   const metrics = {
     byteLength: new TextEncoder().encode(rawMarkdown).length,
     lineCount: rawMarkdown.length === 0 ? 0 : rawMarkdown.split(/\r?\n/).length,
@@ -187,6 +355,7 @@ export function compileFileMarkdownDocument({
     body: normalizedMarkdown.value,
     bodyStartLine: frontmatter.bodyStartLine,
     lineMap: normalizedMarkdown.lineMap,
+    blocks,
     metrics,
     renderStrategy: resolveRenderStrategy(metrics),
   };

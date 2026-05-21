@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { useLayoutNodes } from "../features/layout/hooks/useLayoutNodes";
 import { MainHeaderActions } from "../features/app/components/MainHeaderActions";
@@ -12,7 +12,11 @@ import {
 } from "./manualThreadRecovery";
 import { OPENCODE_VARIANT_OPTIONS } from "./utils";
 import type { WorkspaceInfo } from "../types";
-import { archiveWorkspaceSessions } from "../services/tauri";
+import {
+  archiveWorkspaceSessions,
+  clearDetachedExternalChangeMonitor,
+  configureDetachedExternalChangeMonitor,
+} from "../services/tauri";
 import { shouldEnableMainFileExternalChangeMonitoring } from "./fileExternalMonitoring";
 import {
   getThreadSelectDiffCleanupAction,
@@ -35,10 +39,16 @@ function formatWorkspaceAliasError(error: unknown) {
   return String(error);
 }
 
+function reportMainFileExternalChangeMonitorCleanupError(error: unknown) {
+  console.warn("[files] Failed to clear main file external change monitor", error);
+}
+
 export function useAppShellLayoutNodesSection(ctx: any) {
   const clientUiVisibility = useClientUiVisibility();
   const [workspaceAliasPrompt, setWorkspaceAliasPrompt] =
     useState<WorkspaceAliasPromptState | null>(null);
+  const [mainFileExternalChangeTransportMode, setMainFileExternalChangeTransportMode] =
+    useState<"watcher" | "polling">("polling");
   const [focusedProjectMemoryId, setFocusedProjectMemoryId] = useState<string | null>(null);
   const [focusedProjectMemoryRequestKey, setFocusedProjectMemoryRequestKey] = useState(0);
   const [focusedWorkspaceNoteId, setFocusedWorkspaceNoteId] = useState<string | null>(null);
@@ -136,7 +146,7 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     unpinThread, updateCloneCopyName, updateCustomInstructions, updatePrompt, updateSharedSessionEngineSelection, updateWorkspaceCodexBin, updateWorkspaceSettings, updateWorktreeBaseRef, updateWorktreeBranch,
     updateWorktreePublishToOrigin, updateWorktreeSetupScript, updatedAt, updaterState, useSuggestedCloneCopiesFolder, userInputRequests, validModel, viewportHeight,
     wasProcessing, workspace, workspaceActivity, workspaceDropTargetRef, workspaceFilesPollingEnabled, workspaceGroups, workspaceHomeWorkspaceId, workspaceId,
-    workspaceNameByPath, workspacePath, workspaceSearchSources, workspaces, workspacesById, workspacesByPath, worktreeApplyError, worktreeApplyLoading,
+    workspaceNameByPath, workspaceSearchSources, workspaces, workspacesById, workspacesByPath, worktreeApplyError, worktreeApplyLoading,
     worktreeApplySuccess, worktreeCreateResult, worktreeLabel, worktreePrompt, worktreeRename, worktreeSetupScriptState,
     sessionRadarRunningSessions, sessionRadarRecentCompletedSessions, runningSessionCountByWorkspaceId, recentCompletedSessionCountByWorkspaceId,
   } = ctx;
@@ -167,12 +177,67 @@ export function useAppShellLayoutNodesSection(ctx: any) {
       updateSharedSessionEngineSelection,
     ],
   );
+  const mainFileExternalChangeAwarenessEnabled =
+    appSettings.detachedExternalChangeAwarenessEnabled !== false;
+  const mainFileExternalChangeWatcherEnabled =
+    appSettings.detachedExternalChangeWatcherEnabled !== false;
+  const activeWorkspaceExternalChangeId = activeWorkspace?.id ?? activeWorkspaceId ?? null;
+  const activeWorkspaceExternalChangePath = activeWorkspace?.path ?? null;
   const enableMainFileExternalChangeMonitoring =
+    mainFileExternalChangeAwarenessEnabled &&
     shouldEnableMainFileExternalChangeMonitoring({
       activeWorkspace,
       activeEditorFilePath,
-      liveEditPreviewEnabled,
     });
+
+  useEffect(() => {
+    if (
+      !enableMainFileExternalChangeMonitoring ||
+      !activeWorkspaceExternalChangeId ||
+      !activeWorkspaceExternalChangePath ||
+      !activeEditorFilePath
+    ) {
+      setMainFileExternalChangeTransportMode("polling");
+      if (activeWorkspaceExternalChangeId) {
+        void clearDetachedExternalChangeMonitor(activeWorkspaceExternalChangeId)
+          .catch(reportMainFileExternalChangeMonitorCleanupError);
+      }
+      return;
+    }
+
+    let active = true;
+    setMainFileExternalChangeTransportMode("watcher");
+    void configureDetachedExternalChangeMonitor(
+      activeWorkspaceExternalChangeId,
+      activeWorkspaceExternalChangePath,
+      activeEditorFilePath,
+      mainFileExternalChangeWatcherEnabled,
+    )
+      .then(() => {
+        if (!active) {
+          return;
+        }
+        setMainFileExternalChangeTransportMode("watcher");
+      })
+      .catch(() => {
+        if (!active) {
+          return;
+        }
+        setMainFileExternalChangeTransportMode("polling");
+      });
+
+    return () => {
+      active = false;
+      void clearDetachedExternalChangeMonitor(activeWorkspaceExternalChangeId)
+        .catch(reportMainFileExternalChangeMonitorCleanupError);
+    };
+  }, [
+    activeEditorFilePath,
+    activeWorkspaceExternalChangeId,
+    activeWorkspaceExternalChangePath,
+    enableMainFileExternalChangeMonitoring,
+    mainFileExternalChangeWatcherEnabled,
+  ]);
   const handleRenameWorkspaceAlias = useCallback(
     (workspace: WorkspaceInfo) => {
       const currentAlias =
@@ -675,9 +740,11 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     onCloseAllEditorTabs: handleCloseAllWorkspaceFileTabs,
     onActiveEditorLineRangeChange: setActiveEditorLineRange,
     onOpenFile: handleOpenWorkspaceFile,
-    externalChangeMonitoringEnabled: enableMainFileExternalChangeMonitoring,
-    externalChangeTransportMode: "polling",
-    onExitEditor: handleExitWorkspaceEditor,
+      externalChangeMonitoringEnabled: enableMainFileExternalChangeMonitoring,
+      externalChangeTransportMode: mainFileExternalChangeTransportMode,
+      externalChangeApplyMode: liveEditPreviewEnabled ? "auto" : "manual",
+      externalChangeAutoApplyDebounceMs: liveEditPreviewEnabled ? 700 : 0,
+      onExitEditor: handleExitWorkspaceEditor,
     onExitDiff: () => {
       setCenterMode("chat");
       handleSelectDiffForPanel(null);

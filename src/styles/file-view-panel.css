@@ -225,6 +225,11 @@
   font-size: 12px;
 }
 
+.fvp-external-change-banner.is-pending {
+  border-bottom-color: color-mix(in srgb, var(--accent) 24%, var(--border-subtle));
+  background: color-mix(in srgb, var(--surface-control) 64%, var(--surface-card));
+}
+
 .fvp-external-change-banner-copy {
   display: flex;
   flex-direction: column;
@@ -1305,6 +1310,7 @@
   margin: 0;
   padding: 1px 34px 1px 0;
   border-radius: 10px;
+  isolation: isolate;
 }
 
 .fvp-markdown-annotatable-block::after {
@@ -1319,7 +1325,7 @@
 
 .fvp-markdown-annotatable-block:hover,
 .fvp-markdown-annotatable-block:focus-within {
-  background: color-mix(in srgb, #2563eb 5%, transparent);
+  box-shadow: inset 2px 0 0 color-mix(in srgb, #2563eb 44%, transparent);
 }
 
 .fvp-markdown-annotation-button {
@@ -1352,12 +1358,28 @@
   padding-right: 0;
 }
 
+.fvp-markdown-annotatable-block:has(.fvp-file-markdown-table-wrap),
+.fvp-markdown-annotatable-block:has(.fvp-file-markdown-heavy-placeholder) {
+  padding-right: 0;
+}
+
 .fvp-markdown-annotatable-block:has(.fvp-file-markdown-codeblock)::after {
+  width: 0;
+}
+
+.fvp-markdown-annotatable-block:has(.fvp-file-markdown-table-wrap)::after,
+.fvp-markdown-annotatable-block:has(.fvp-file-markdown-heavy-placeholder)::after {
   width: 0;
 }
 
 .fvp-markdown-annotatable-block:has(.fvp-file-markdown-codeblock) > .fvp-markdown-annotation-button {
   top: -22px;
+  right: 8px;
+}
+
+.fvp-markdown-annotatable-block:has(.fvp-file-markdown-table-wrap) > .fvp-markdown-annotation-button,
+.fvp-markdown-annotatable-block:has(.fvp-file-markdown-heavy-placeholder) > .fvp-markdown-annotation-button {
+  top: -14px;
   right: 8px;
 }
 
@@ -1669,17 +1691,38 @@
   color: var(--fvp-token-function);
 }
 
+.fvp-file-markdown-mermaid {
+  overflow-anchor: none;
+}
+
+.fvp-file-markdown-mermaid .fvp-file-markdown-codeblock-label {
+  min-height: 34px;
+}
+
+.fvp-file-markdown-mermaid-body {
+  min-height: 160px;
+  overflow-anchor: none;
+}
+
+.fvp-file-markdown-mermaid-body > pre {
+  margin: 0;
+}
+
 .fvp-file-markdown-mermaid-tabs {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  min-height: 26px;
+  flex: 0 0 auto;
 }
 
 .fvp-file-markdown-mermaid-tab {
   border: 0;
   border-radius: 999px;
+  min-width: 48px;
   padding: 4px 8px;
   font-size: 10px;
+  line-height: 1.2;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--fvp-reader-faint);

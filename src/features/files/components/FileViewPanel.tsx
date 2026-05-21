@@ -131,10 +131,12 @@ type FileViewPanelProps = {
   onSingleRowLeadingAction?: () => void;
   singleRowLeadingDirection?: "left" | "right";
   singleRowLeadingLabel?: string;
-  externalChangeMonitoringEnabled?: boolean;
-  externalChangeTransportMode?: "watcher" | "polling";
-  externalChangePollIntervalMs?: number;
-  markdownPreviewSnapshotMode?: "stable" | "live";
+    externalChangeMonitoringEnabled?: boolean;
+    externalChangeTransportMode?: "watcher" | "polling";
+    externalChangePollIntervalMs?: number;
+    externalChangeApplyMode?: "auto" | "manual";
+    externalChangeAutoApplyDebounceMs?: number;
+    markdownPreviewSnapshotMode?: "stable" | "live";
   saveFileShortcut?: string | null;
   findInFileShortcut?: string | null;
   onSaveSuccess?: () => void;
@@ -549,10 +551,12 @@ export function FileViewPanel({
   onSingleRowLeadingAction,
   singleRowLeadingDirection = "left",
   singleRowLeadingLabel,
-  externalChangeMonitoringEnabled = false,
-  externalChangeTransportMode = "polling",
-  externalChangePollIntervalMs = EXTERNAL_CHANGE_POLL_INTERVAL_MS,
-  markdownPreviewSnapshotMode = "stable",
+    externalChangeMonitoringEnabled = false,
+    externalChangeTransportMode = "polling",
+    externalChangePollIntervalMs = EXTERNAL_CHANGE_POLL_INTERVAL_MS,
+    externalChangeApplyMode = "auto",
+    externalChangeAutoApplyDebounceMs = 0,
+    markdownPreviewSnapshotMode = "stable",
   saveFileShortcut = "cmd+s",
   findInFileShortcut = "cmd+f",
   onSaveSuccess,
@@ -757,14 +761,17 @@ export function FileViewPanel({
   });
   const {
     externalChangeConflict,
+    externalPendingRefresh,
     externalCompareOpen,
     externalAutoSyncAt,
     externalChangeSyncState,
     handleExternalReloadFromDisk,
+    handleExternalApplyPendingRefresh,
     handleExternalKeepLocal,
     handleExternalToggleCompare,
     setExternalChangeSyncState,
     setExternalChangeConflict,
+    setExternalPendingRefresh,
     setExternalCompareOpen,
     setExternalAutoSyncAt,
   } = useFileExternalSync({
@@ -775,7 +782,10 @@ export function FileViewPanel({
     externalChangeMonitoringEnabled,
     externalChangeTransportMode,
     externalChangePollIntervalMs,
+    externalChangeApplyMode,
+    externalChangeAutoApplyDebounceMs,
     isBinary: skipTextRead,
+    isDirty,
     isLoading,
     caseInsensitivePathCompare,
     setContent,
@@ -794,6 +804,7 @@ export function FileViewPanel({
       reduceExternalChangeSyncState(current, { type: "file-loaded" }),
     );
     setExternalChangeConflict(null);
+    setExternalPendingRefresh(null);
     setExternalCompareOpen(false);
     setExternalAutoSyncAt(null);
     onSaveSuccess?.();
@@ -801,6 +812,7 @@ export function FileViewPanel({
     handleDocumentSave,
     onSaveSuccess,
     setExternalChangeConflict,
+    setExternalPendingRefresh,
     setExternalChangeSyncState,
     setExternalCompareOpen,
     setExternalAutoSyncAt,
@@ -1212,14 +1224,18 @@ export function FileViewPanel({
     truncated,
     enabled: previewPayloadEnabled,
   });
-  const previewLanguage = renderProfile.previewLanguage;
-  const highlightedPreviewLanguage = useMemo(
-    () => (viewSurface.kind === "code-preview" && !viewSurface.useLowCostPreview
-      ? previewLanguage
-      : null),
-    [previewLanguage, viewSurface.kind, viewSurface.useLowCostPreview],
-  );
-  const lines = useMemo(() => content.split("\n"), [content]);
+    const previewLanguage = renderProfile.previewLanguage;
+    const shouldBuildCodePreviewLines = viewSurface.kind === "code-preview";
+    const highlightedPreviewLanguage = useMemo(
+      () => (shouldBuildCodePreviewLines && !viewSurface.useLowCostPreview
+        ? previewLanguage
+        : null),
+      [previewLanguage, shouldBuildCodePreviewLines, viewSurface.useLowCostPreview],
+    );
+    const lines = useMemo(
+      () => (shouldBuildCodePreviewLines ? content.split("\n") : []),
+      [content, shouldBuildCodePreviewLines],
+    );
   const visibleCodeAnnotations = useMemo(
     () =>
       codeAnnotations.filter((annotation) =>
@@ -1571,15 +1587,49 @@ export function FileViewPanel({
     </div>
   );
 
-  const renderExternalChangeNotice = () => {
-    if (externalChangeSyncState === "in-sync") {
-      return null;
-    }
-    if (externalChangeSyncState === "external-changed-clean" && !externalAutoSyncAt) {
-      return null;
-    }
-    if (externalChangeSyncState !== "external-changed-dirty" || !externalChangeConflict) {
-      return (
+    const renderExternalChangeNotice = () => {
+      if (externalChangeSyncState === "in-sync") {
+        return null;
+      }
+      if (externalPendingRefresh) {
+        return (
+          <div className="fvp-external-change-banner is-pending" role="status" aria-live="polite">
+            <div className="fvp-external-change-banner-copy">
+              <strong>{t("files.externalChangePendingTitle")}</strong>
+              <span>
+                {t("files.externalChangePendingBody", {
+                  count: externalPendingRefresh.updateCount,
+                })}
+              </span>
+            </div>
+            <div className="fvp-external-change-banner-actions">
+              <button
+                type="button"
+                className="ghost fvp-action-btn"
+                onClick={handleExternalToggleCompare}
+              >
+                {externalCompareOpen ? t("files.externalChangeHideCompare") : t("files.externalChangeCompare")}
+              </button>
+              <button
+                type="button"
+                className="ghost fvp-action-btn"
+                onClick={handleExternalKeepLocal}
+              >
+                {t("files.externalChangeKeepCurrent")}
+              </button>
+              <button
+                type="button"
+                className="primary fvp-action-btn"
+                onClick={handleExternalApplyPendingRefresh}
+              >
+                {t("files.externalChangeRefreshPreview")}
+              </button>
+            </div>
+          </div>
+        );
+      }
+      if (externalChangeSyncState !== "external-changed-dirty" || !externalChangeConflict) {
+        return (
         <div className="fvp-external-change-banner is-auto-sync" role="status" aria-live="polite">
           {t("files.externalChangeAutoSynced")}
         </div>
@@ -1620,18 +1670,19 @@ export function FileViewPanel({
         </div>
       </div>
     );
-  };
+    };
 
-  const renderExternalComparePanel = () => {
-    if (!externalCompareOpen || !externalChangeConflict) {
-      return null;
-    }
+    const renderExternalComparePanel = () => {
+      const diskSnapshot = externalChangeConflict ?? externalPendingRefresh;
+      if (!externalCompareOpen || !diskSnapshot) {
+        return null;
+      }
     const localPreview =
       content.length > 6_000 ? `${content.slice(0, 6_000)}\n\n...` : content;
     const diskPreview =
-      externalChangeConflict.diskContent.length > 6_000
-        ? `${externalChangeConflict.diskContent.slice(0, 6_000)}\n\n...`
-        : externalChangeConflict.diskContent;
+        diskSnapshot.diskContent.length > 6_000
+          ? `${diskSnapshot.diskContent.slice(0, 6_000)}\n\n...`
+          : diskSnapshot.diskContent;
     return (
       <div className="fvp-external-compare">
         <div className="fvp-external-compare-column">
@@ -1741,10 +1792,11 @@ export function FileViewPanel({
       previewPayloadLoading={previewPayloadLoading}
       previewPayloadError={previewPayloadError}
       viewSurface={viewSurface}
-      content={content}
-      setContent={setContent}
-      markdownPreviewSnapshotMode={markdownPreviewSnapshotMode}
-      cmRef={cmRef}
+        content={content}
+        setContent={setContent}
+        markdownPreviewSnapshotMode={markdownPreviewSnapshotMode}
+        markdownPreviewRefreshKey={externalAutoSyncAt}
+        cmRef={cmRef}
       handleCodeMirrorCreate={handleCodeMirrorCreate}
       onActiveFileLineRangeChange={onActiveFileLineRangeChange}
       onPreviewAnnotationStart={(lineRange) =>

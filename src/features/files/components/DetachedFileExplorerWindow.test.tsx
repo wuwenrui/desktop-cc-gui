@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 let focusState = false;
@@ -8,7 +8,10 @@ const closeMock = vi.fn(async () => undefined);
 const refreshFilesMock = vi.fn(async () => undefined);
 const refreshGitStatusMock = vi.fn(async () => undefined);
 const useCodeCssVarsMock = vi.fn();
-const configureDetachedExternalChangeMonitorMock = vi.fn(async () => ({ mode: "watcher" as const }));
+const configureDetachedExternalChangeMonitorMock = vi.fn(async (): Promise<{
+  mode: "watcher" | "polling";
+  fallbackReason?: string | null;
+}> => ({ mode: "watcher" }));
 const clearDetachedExternalChangeMonitorMock = vi.fn(async () => undefined);
 type MockDetachedSession = {
   workspaceId: string;
@@ -225,5 +228,36 @@ describe("DetachedFileExplorerWindow", () => {
         navigationTarget: null,
       }),
     );
+  });
+
+  it("uses event transport when the backend monitor falls back to metadata polling", async () => {
+    focusState = true;
+    detachedSession = {
+      ...detachedSession,
+      initialFilePath: "src/index.ts",
+      updatedAt: 4,
+    };
+    configureDetachedExternalChangeMonitorMock.mockResolvedValueOnce({
+      mode: "polling",
+      fallbackReason: "watcher-disabled-by-setting",
+    });
+
+    render(<DetachedFileExplorerWindow />);
+
+    await waitFor(() => {
+      expect(configureDetachedExternalChangeMonitorMock).toHaveBeenCalledWith(
+        "ws-1",
+        "/tmp/workspace",
+        "src/index.ts",
+        true,
+      );
+    });
+    await waitFor(() => {
+      expect(fileExplorerWorkspaceMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          externalChangeTransportMode: "watcher",
+        }),
+      );
+    });
   });
 });

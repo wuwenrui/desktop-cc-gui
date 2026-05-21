@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { collectGovernanceEvidence } from "./collectGovernanceEvidence";
 import { readGateArtifactEvidence } from "./gateArtifactEvidenceReader";
 import {
@@ -25,6 +25,10 @@ function createSnapshot(
 }
 
 describe("governance evidence readers", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("parses OpenSpec task progress across LF and CRLF markdown", async () => {
     const snapshot = createSnapshot({
       "openspec/changes/a/tasks.md": "- [x] done\r\n- [ ] todo\r\n",
@@ -164,6 +168,10 @@ describe("governance evidence readers", () => {
   });
 
   it("converts gate artifact JSON reports into governance evidence", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(
+      new Date("2026-05-20T12:00:00.000Z").getTime(),
+    );
+
     const largeFileGateReport = JSON.stringify({
       schemaVersion: 1,
       gate: "large-files",
@@ -298,6 +306,10 @@ describe("governance evidence readers", () => {
   });
 
   it("does not treat stale artifact evidence as fresh passing evidence", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(
+      new Date("2026-05-20T12:00:00.000Z").getTime(),
+    );
+
     const snapshot = createSnapshot({
       ".artifacts/large-files-gate.json": JSON.stringify({
         schemaVersion: 1,

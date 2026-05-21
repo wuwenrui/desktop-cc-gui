@@ -30,7 +30,7 @@ describe("useFileExternalSync", () => {
     vi.clearAllMocks();
   });
 
-  it("ignores stale polling refresh results after the file path changes", async () => {
+    it("ignores stale polling refresh results after the file path changes", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-04-13T00:00:00Z"));
     const firstRead = createDeferred<{ content: string; truncated: boolean }>();
@@ -44,6 +44,8 @@ describe("useFileExternalSync", () => {
         const [truncated, setTruncated] = useState(false);
         const savedContentRef = useRef(content);
         const latestIsDirtyRef = useRef(false);
+        const isDirty = content !== savedContentRef.current;
+        latestIsDirtyRef.current = isDirty;
         const externalDiskSnapshotRef = useRef<{ content: string; truncated: boolean } | null>({
           content,
           truncated,
@@ -58,6 +60,7 @@ describe("useFileExternalSync", () => {
           externalChangeTransportMode: "polling",
           externalChangePollIntervalMs: 20,
           isBinary: false,
+          isDirty,
           isLoading: false,
           caseInsensitivePathCompare: false,
           setContent: (value) => {
@@ -107,7 +110,139 @@ describe("useFileExternalSync", () => {
       await Promise.resolve();
     });
 
-    expect(result.current.content).toBe("fresh content");
-    expect(vi.mocked(pushErrorToast)).not.toHaveBeenCalled();
+      expect(result.current.content).toBe("fresh content");
+      expect(vi.mocked(pushErrorToast)).not.toHaveBeenCalled();
+    });
+
+    it("debounces clean auto-apply updates and keeps the latest disk snapshot", async () => {
+      vi.useFakeTimers();
+      vi.mocked(readWorkspaceFile)
+        .mockResolvedValueOnce({ content: "disk update 1", truncated: false })
+        .mockResolvedValue({ content: "disk update 2", truncated: false });
+
+      const { result } = renderHook(() => {
+        const [content, setContent] = useState("initial content");
+        const [truncated, setTruncated] = useState(false);
+        const savedContentRef = useRef(content);
+        const latestIsDirtyRef = useRef(false);
+        const isDirty = content !== savedContentRef.current;
+        latestIsDirtyRef.current = isDirty;
+        const externalDiskSnapshotRef = useRef<{ content: string; truncated: boolean } | null>({
+          content,
+          truncated,
+        });
+
+        const sync = useFileExternalSync({
+          filePath: "src/live.ts",
+          workspaceId: "ws-sync",
+          workspaceRelativeFilePath: "src/live.ts",
+          fileReadTargetDomain: "workspace",
+          externalChangeMonitoringEnabled: true,
+          externalChangeTransportMode: "polling",
+          externalChangePollIntervalMs: 20,
+          externalChangeApplyMode: "auto",
+          externalChangeAutoApplyDebounceMs: 100,
+          isBinary: false,
+          isDirty,
+          isLoading: false,
+          caseInsensitivePathCompare: false,
+          setContent,
+          setTruncated,
+          savedContentRef,
+          latestIsDirtyRef,
+          externalDiskSnapshotRef,
+          autoSyncedMessage: "auto synced",
+        });
+
+        return {
+          ...sync,
+          content,
+          setContent,
+        };
+      });
+
+      await act(async () => {
+        vi.advanceTimersByTime(25);
+        await Promise.resolve();
+      });
+      expect(result.current.content).toBe("initial content");
+
+      await act(async () => {
+        vi.advanceTimersByTime(25);
+        await Promise.resolve();
+      });
+      expect(result.current.content).toBe("initial content");
+
+      await act(async () => {
+        vi.advanceTimersByTime(100);
+        await Promise.resolve();
+      });
+
+      expect(result.current.content).toBe("disk update 2");
+    });
+
+    it("promotes a debounced clean update to conflict when local edits start before apply", async () => {
+      vi.useFakeTimers();
+      vi.mocked(readWorkspaceFile).mockReset();
+      vi.mocked(readWorkspaceFile)
+        .mockResolvedValue({ content: "disk update", truncated: false });
+
+      const { result } = renderHook(() => {
+        const [content, setContent] = useState("initial content");
+        const savedContentRef = useRef("initial content");
+        const isDirty = content !== savedContentRef.current;
+        const latestIsDirtyRef = useRef(isDirty);
+        latestIsDirtyRef.current = isDirty;
+        const externalDiskSnapshotRef = useRef<{ content: string; truncated: boolean } | null>({
+          content: "initial content",
+          truncated: false,
+        });
+
+        const sync = useFileExternalSync({
+          filePath: "src/live-dirty.ts",
+          workspaceId: "ws-sync",
+          workspaceRelativeFilePath: "src/live-dirty.ts",
+          fileReadTargetDomain: "workspace",
+          externalChangeMonitoringEnabled: true,
+          externalChangeTransportMode: "polling",
+          externalChangePollIntervalMs: 20,
+          externalChangeApplyMode: "auto",
+          externalChangeAutoApplyDebounceMs: 100,
+          isBinary: false,
+          isDirty,
+          isLoading: false,
+          caseInsensitivePathCompare: false,
+          setContent,
+          setTruncated: vi.fn(),
+          savedContentRef,
+          latestIsDirtyRef,
+          externalDiskSnapshotRef,
+          autoSyncedMessage: "auto synced",
+        });
+
+        return {
+          ...sync,
+          content,
+          setContent,
+        };
+      });
+
+      await act(async () => {
+        vi.advanceTimersByTime(25);
+        await Promise.resolve();
+      });
+
+      act(() => {
+        result.current.setContent("local edit");
+      });
+
+      await act(async () => {
+        vi.advanceTimersByTime(100);
+        await Promise.resolve();
+      });
+
+      expect(result.current.content).toBe("local edit");
+      expect(result.current.externalChangeConflict?.diskContent).toBe("disk update");
+      expect(result.current.externalPendingRefresh).toBeNull();
+    });
   });
-});

@@ -3,22 +3,11 @@ import { describe, expect, it } from "vitest";
 import { shouldEnableMainFileExternalChangeMonitoring } from "./fileExternalMonitoring";
 
 describe("shouldEnableMainFileExternalChangeMonitoring", () => {
-  it("keeps main file external monitoring disabled by default while a file is open", () => {
+  it("enables main file external change awareness while a file is open", () => {
     expect(
       shouldEnableMainFileExternalChangeMonitoring({
         activeWorkspace: { id: "workspace-1" },
         activeEditorFilePath: "docs/readme.md",
-        liveEditPreviewEnabled: false,
-      }),
-    ).toBe(false);
-  });
-
-  it("enables main file external monitoring only after live edit preview is enabled", () => {
-    expect(
-      shouldEnableMainFileExternalChangeMonitoring({
-        activeWorkspace: { id: "workspace-1" },
-        activeEditorFilePath: "docs/readme.md",
-        liveEditPreviewEnabled: true,
       }),
     ).toBe(true);
   });
@@ -28,16 +17,13 @@ describe("shouldEnableMainFileExternalChangeMonitoring", () => {
       shouldEnableMainFileExternalChangeMonitoring({
         activeWorkspace: null,
         activeEditorFilePath: "docs/readme.md",
-        liveEditPreviewEnabled: true,
       }),
     ).toBe(false);
     expect(
       shouldEnableMainFileExternalChangeMonitoring({
         activeWorkspace: { id: "workspace-1" },
         activeEditorFilePath: null,
-        liveEditPreviewEnabled: true,
       }),
     ).toBe(false);
   });
 });
-

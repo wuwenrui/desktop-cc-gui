@@ -168,10 +168,11 @@ describe("FileViewPanel external change awareness in detached mode", () => {
     detachedExternalFileChangeListener = null;
   });
 
-  it("auto-syncs clean buffer when disk content changes", async () => {
-    vi.mocked(readWorkspaceFile)
-      .mockResolvedValueOnce({ content: "const value = 1;", truncated: false })
-      .mockResolvedValue({ content: "const value = 2;", truncated: false });
+    it("auto-syncs clean buffer when disk content changes", async () => {
+      vi.mocked(readWorkspaceFile)
+        .mockResolvedValueOnce({ content: "const value = 1;", truncated: false })
+        .mockResolvedValueOnce({ content: "const value = 1;", truncated: false })
+        .mockResolvedValue({ content: "const value = 2;", truncated: false });
 
     render(
       <FileViewPanel
@@ -183,8 +184,8 @@ describe("FileViewPanel external change awareness in detached mode", () => {
         selectedOpenAppId=""
         onSelectOpenAppId={vi.fn()}
         onClose={vi.fn()}
-        externalChangeMonitoringEnabled
-        externalChangePollIntervalMs={20}
+          externalChangeMonitoringEnabled
+          externalChangePollIntervalMs={20}
       />,
     );
 
@@ -199,9 +200,10 @@ describe("FileViewPanel external change awareness in detached mode", () => {
   });
 
   it("keeps markdown preview bound to the stable reading snapshot by default", async () => {
-    vi.mocked(readWorkspaceFile)
-      .mockResolvedValueOnce({ content: "# Original\n\n```mermaid\ngraph TD\nA-->B\n```", truncated: false })
-      .mockResolvedValue({ content: "# Updated\n\n```mermaid\ngraph TD\nA-->C\n```", truncated: false });
+      vi.mocked(readWorkspaceFile)
+        .mockResolvedValueOnce({ content: "# Original\n\n```mermaid\ngraph TD\nA-->B\n```", truncated: false })
+        .mockResolvedValueOnce({ content: "# Original\n\n```mermaid\ngraph TD\nA-->B\n```", truncated: false })
+        .mockResolvedValue({ content: "# Updated\n\n```mermaid\ngraph TD\nA-->C\n```", truncated: false });
 
     render(
       <FileViewPanel
@@ -211,22 +213,95 @@ describe("FileViewPanel external change awareness in detached mode", () => {
         openTargets={[]}
         openAppIconById={{}}
         selectedOpenAppId=""
-        onSelectOpenAppId={vi.fn()}
-        onClose={vi.fn()}
-        externalChangeMonitoringEnabled
-        externalChangePollIntervalMs={20}
+          onSelectOpenAppId={vi.fn()}
+          onClose={vi.fn()}
+          externalChangeMonitoringEnabled
+          externalChangeApplyMode="manual"
+          externalChangePollIntervalMs={20}
       />,
     );
 
     await screen.findByRole("heading", { name: "Original" });
-    await waitFor(() => {
-      expect(screen.getByText("files.externalChangeAutoSynced")).toBeTruthy();
-      expect(vi.mocked(readWorkspaceFile).mock.calls.length).toBeGreaterThanOrEqual(2);
-    });
+      await waitFor(() => {
+        expect(screen.getByText("files.externalChangePendingTitle")).toBeTruthy();
+        expect(vi.mocked(readWorkspaceFile).mock.calls.length).toBeGreaterThanOrEqual(2);
+      });
 
     expect(screen.getByRole("heading", { name: "Original" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Updated" })).toBeNull();
-  });
+    });
+
+    it("applies pending clean external change only after explicit refresh in manual mode", async () => {
+      vi.mocked(readWorkspaceFile)
+        .mockResolvedValueOnce({ content: "# Original", truncated: false })
+        .mockResolvedValueOnce({ content: "# Original", truncated: false })
+        .mockResolvedValue({ content: "# Updated", truncated: false });
+
+      render(
+        <FileViewPanel
+          workspaceId="ws-ext-md-manual-refresh"
+          workspacePath="/repo"
+          filePath="docs/manual.md"
+          openTargets={[]}
+          openAppIconById={{}}
+          selectedOpenAppId=""
+          onSelectOpenAppId={vi.fn()}
+          onClose={vi.fn()}
+          externalChangeMonitoringEnabled
+          externalChangeApplyMode="manual"
+          externalChangePollIntervalMs={20}
+        />,
+      );
+
+      await screen.findByRole("heading", { name: "Original" });
+      await waitFor(() => {
+        expect(screen.getByText("files.externalChangeRefreshPreview")).toBeTruthy();
+      });
+      expect(screen.queryByRole("heading", { name: "Updated" })).toBeNull();
+
+      fireEvent.click(screen.getByText("files.externalChangeRefreshPreview"));
+
+      await waitFor(() => {
+        expect(screen.getByRole("heading", { name: "Updated" })).toBeTruthy();
+      });
+    });
+
+    it("promotes manual pending refresh to conflict when the local buffer becomes dirty", async () => {
+      vi.mocked(readWorkspaceFile)
+        .mockResolvedValueOnce({ content: "const value = 1;", truncated: false })
+        .mockResolvedValueOnce({ content: "const value = 1;", truncated: false })
+        .mockResolvedValue({ content: "const value = 2;", truncated: false });
+
+      render(
+        <FileViewPanel
+          workspaceId="ws-ext-pending-dirty"
+          workspacePath="/repo"
+          filePath="src/pending-dirty.ts"
+          openTargets={[]}
+          openAppIconById={{}}
+          selectedOpenAppId=""
+          onSelectOpenAppId={vi.fn()}
+          onClose={vi.fn()}
+          externalChangeMonitoringEnabled
+          externalChangeApplyMode="manual"
+          externalChangePollIntervalMs={20}
+        />,
+      );
+
+      const editor = await screen.findByTestId("mock-codemirror");
+      await waitFor(() => {
+        expect(screen.getByText("files.externalChangeRefreshPreview")).toBeTruthy();
+      });
+
+      fireEvent.change(editor, { target: { value: "const value = 3;" } });
+
+      await waitFor(() => {
+        expect(screen.getByText("files.externalChangeConflictTitle")).toBeTruthy();
+      });
+      expect(screen.queryByText("files.externalChangeRefreshPreview")).toBeNull();
+      expect((screen.getByTestId("mock-codemirror") as HTMLTextAreaElement).value)
+        .toBe("const value = 3;");
+    });
 
   it("advances markdown preview snapshot when live mode is explicit", async () => {
     vi.mocked(readWorkspaceFile)
@@ -515,7 +590,7 @@ describe("FileViewPanel external change awareness in detached mode", () => {
     });
   });
 
-  it("reconciles watcher mode on startup even without incoming events", async () => {
+  it("does not reread the whole file on watcher startup without incoming events", async () => {
     vi.mocked(readWorkspaceFile)
       .mockResolvedValueOnce({ content: "const startup = 1;", truncated: false })
       .mockResolvedValue({ content: "const startup = 2;", truncated: false });
@@ -536,10 +611,49 @@ describe("FileViewPanel external change awareness in detached mode", () => {
     );
 
     await screen.findByTestId("mock-codemirror");
+    expect(vi.mocked(readWorkspaceFile)).toHaveBeenCalledTimes(1);
+    expect((screen.getByTestId("mock-codemirror") as HTMLTextAreaElement).value)
+      .toBe("const startup = 1;");
+  });
+
+  it("ignores backend watcher fallback notices without rereading the file", async () => {
+    vi.mocked(readWorkspaceFile)
+      .mockResolvedValueOnce({ content: "const fallback = 1;", truncated: false })
+      .mockResolvedValue({ content: "const fallback = 2;", truncated: false });
+
+    render(
+      <FileViewPanel
+        workspaceId="ws-ext-watcher-fallback"
+        workspacePath="/repo"
+        filePath="src/fallback.ts"
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+        externalChangeMonitoringEnabled
+        externalChangeTransportMode="watcher"
+      />,
+    );
+
+    await screen.findByTestId("mock-codemirror");
     await waitFor(() => {
-      expect(vi.mocked(readWorkspaceFile).mock.calls.length).toBeGreaterThanOrEqual(2);
-      expect((screen.getByTestId("mock-codemirror") as HTMLTextAreaElement).value)
-        .toBe("const startup = 2;");
+      expect(vi.mocked(subscribeDetachedExternalFileChanges)).toHaveBeenCalled();
     });
+    detachedExternalFileChangeListener?.({
+      workspaceId: "ws-ext-watcher-fallback",
+      normalizedPath: "src/fallback.ts",
+      detectedAtMs: Date.now(),
+      source: "polling",
+      eventKind: "watcher-fallback",
+      platform: "macos",
+      fallbackReason: "watcher-disabled-by-setting",
+    });
+
+    await Promise.resolve();
+
+    expect(vi.mocked(readWorkspaceFile)).toHaveBeenCalledTimes(1);
+    expect((screen.getByTestId("mock-codemirror") as HTMLTextAreaElement).value)
+      .toBe("const fallback = 1;");
   });
 });
