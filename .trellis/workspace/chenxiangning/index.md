@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-15.md`
-- **Total Sessions**: 539
+- **Total Sessions**: 540
 - **Last Active**: 2026-05-21
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-15.md` | ~869 | Active |
+| `journal-15.md` | ~925 | Active |
 | `journal-14.md` | ~1969 | Archived |
 | `journal-13.md` | ~1947 | Archived |
 | `journal-12.md` | ~1971 | Archived |
@@ -43,6 +43,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 540 | 2026-05-21 | 稳定 Markdown 预览刷新与大文档渲染 | `f5515768` | `feature/v0.5.0-md` |
 | 539 | 2026-05-21 | 对齐成本分段文本颜色 | `d099f94c` | `feature/v0.5.0-md` |
 | 538 | 2026-05-21 | 回滚 Codex 终止漂移恢复链路 | `4456ed67` | `feature/v0.5.0-md` |
 | 537 | 2026-05-21 | 修复 Codex 终态 identity 缺失卡住生成 | `b2a04097` | `feature/v0.5.0-md` |

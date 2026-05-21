@@ -867,3 +867,59 @@ Follow-ups: 重新推送并运行 Release workflow，创建 v0.5.0 release。
 ### Next Steps
 
 - None - task complete
+
+
+## Session 540: 稳定 Markdown 预览刷新与大文档渲染
+
+**Date**: 2026-05-21
+**Task**: 稳定 Markdown 预览刷新与大文档渲染
+**Branch**: `feature/v0.5.0-md`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## Summary
+
+修复 Markdown 文件预览的自动刷新、闪烁和大文档卡顿问题：
+
+- 将主窗口文件外部变化处理拆成 awareness 与 apply，默认只提示外部变化，Live Preview 才 debounce 自动应用。
+- 使用 native watcher / metadata monitor 优先感知外部变化，减少打开其他文件编辑时的全量内容读取。
+- 大 Markdown 预览改为 block-level progressive rendering，保留 GitHub Markdown、frontmatter、table、code highlight、KaTeX、Mermaid 与 annotation line mapping。
+- 修复 dirty buffer 下外部变化可能覆盖本地未保存内容的竞态，pending refresh 会升级为 conflict。
+- 稳定 Mermaid source/render tab 与 table/card lazy reveal，已显示的重块不会因 annotation rerender 回退到 placeholder。
+- 补齐 heavy-test-noise 日期测试、runtime contract 与 monitor cleanup 可观测性问题。
+
+## Validation
+
+- npx vitest run src/features/files/components/FileMarkdownPreview.test.tsx src/features/files/utils/fileMarkdownDocument.test.ts src/features/files/components/FileViewPanel.external-change.test.tsx src/features/files/hooks/useFileExternalSync.test.tsx src/features/files/components/DetachedFileExplorerWindow.test.tsx src/app-shell-parts/fileExternalMonitoring.test.ts
+- npm run lint
+- npm run typecheck
+- npm run check:large-files:near-threshold
+- npm run check:large-files:gate
+- npm run check:heavy-test-noise
+- npm run check:runtime-contracts
+- npm run doctor:strict
+- openspec validate --changes stabilize-markdown-preview-awareness-and-large-rendering --strict --no-interactive
+- git diff --check
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f5515768` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
