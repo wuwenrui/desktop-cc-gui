@@ -2061,6 +2061,22 @@
   font-size: var(--sp-cost-budget-meta-size, 12px);
 }
 
+.sp-cost-token-breakdown-label.is-input {
+  color: #2563eb;
+}
+
+.sp-cost-token-breakdown-label.is-cached_input {
+  color: #14b8a6;
+}
+
+.sp-cost-token-breakdown-label.is-output {
+  color: #a855f7;
+}
+
+.sp-cost-token-breakdown-label.is-reasoning {
+  color: #f59e0b;
+}
+
 .sp-cost-v2-card {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

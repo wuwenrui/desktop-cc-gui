@@ -78,7 +78,10 @@ function TokenBreakdownBar({
       </div>
       <div className="sp-cost-token-breakdown-labels">
         {segments.map((segment) => (
-          <span key={segment.kind}>
+          <span
+            key={segment.kind}
+            className={`sp-cost-token-breakdown-label is-${segment.kind}`}
+          >
             {segment.kind}: {formatTokenCount(segment.tokens)}
           </span>
         ))}
