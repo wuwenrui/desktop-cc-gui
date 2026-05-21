@@ -1106,3 +1106,55 @@ Follow-ups: 重新推送并运行 Release workflow，创建 v0.5.0 release。
 ### Next Steps
 
 - None - task complete
+
+
+## Session 544: 优化邮件会话列表管理
+
+**Date**: 2026-05-21
+**Task**: 优化邮件会话列表管理
+**Branch**: `feature/v0.5.1`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| 项 | 内容 |
+|---|---|
+| OpenSpec | `improve-email-mail-session-list-controls` |
+| 核心改动 | 邮件会话 Settings tab 新增可反馈的刷新/清理、上方邮件详情面板、只删除本地邮件信息的行级动作。 |
+| 后端边界 | `mutate_mail_session` 新增 `delete_mail_records`，仅删除 matching `outgoing` / `commands` ledger records，保留 `sessions` control，不触碰真实 workspace/thread/runtime session 或远端邮箱。 |
+| 前端边界 | `EmailSenderSettings` 继续通过 `src/services/tauri.ts` typed bridge 调用，不新增 direct `invoke()`。 |
+| 测试 | 增加 Rust ledger mutation tests 与 `EmailSenderSettings` Vitest 覆盖刷新/清理反馈、查看邮件面板、删除成功/失败、打开会话不回归。 |
+
+**验证**:
+- `openspec validate "improve-email-mail-session-list-controls" --type change --strict --no-interactive`
+- `pnpm vitest run src/features/settings/components/settings-view/sections/EmailSenderSettings.test.tsx`
+- `cargo test --manifest-path src-tauri/Cargo.toml email::session_continuation --lib`
+- `npm run typecheck`
+- `npm run check:large-files`
+- `npm run lint -- --max-warnings=0`
+- `npm run check:runtime-contracts`
+
+**注意**:
+- 提交时刻工作区仍有其他任务遗留改动：`src/features/threads/hooks/useThreadMessaging*.tsx?` 与 `openspec/changes/fix-codex-empty-draft-stale-thread-auto-replay/`，本次未纳入提交。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `eff41116` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
