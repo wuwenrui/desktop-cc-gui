@@ -1877,3 +1877,60 @@ Validation:
 ### Next Steps
 
 - None - task complete
+
+
+## Session 560: 收紧会话目录事实边界
+
+**Date**: 2026-05-24
+**Task**: 收紧会话目录事实边界
+**Branch**: `feature/v0.5.2`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| 项目 | 内容 |
+|------|------|
+| OpenSpec | 完成 `stabilize-session-management-truth-boundaries` 的 P1/P2 收口，实现与提案、tasks、spec strict validation 对齐。 |
+| Backend | 收紧 session catalog truth boundary：source completeness cap 降级、bounded archive evidence、engine-neutral related sessions、stable cursor、owner-aware batch mutation partial results。 |
+| Frontend | 对齐 service mapping、Settings page cap visibility、sidebar/thread continuity 的 per-engine last-good 与 archived evidence guard。 |
+| Governance | 拆分 session management 子模块，large-file hard gate 通过；heavy-test-noise full sentry 通过。 |
+
+**提交**:
+- `6fe26f34 fix(session-management): 收紧会话目录事实边界`
+
+**关键验证**:
+- `npm run typecheck`
+- `openspec validate stabilize-session-management-truth-boundaries --strict --no-interactive`
+- `openspec validate --all --strict --no-interactive` -> 301 passed, 0 failed
+- `npm run check:large-files:gate` -> found=0
+- `node --test scripts/check-heavy-test-noise.test.mjs scripts/test-batched.test.mjs` -> 16 passed
+- `cargo test --manifest-path src-tauri/Cargo.toml session_management -- --nocapture` -> lib/daemon session_management targets passed
+- `npx vitest run src/features/settings/components/settings-view/hooks/useWorkspaceSessionCatalog.test.tsx src/features/settings/components/settings-view/sections/SessionManagementSection.test.tsx src/features/threads/hooks/useThreadActionsSessionCatalog.test.tsx src/features/threads/hooks/useThreadActions.test.tsx src/features/threads/hooks/useThreadActions.timeout-fallback.test.tsx src/services/tauri.test.ts` -> 6 files / 189 tests passed
+- `npm run check:runtime-contracts`
+- `git diff --check`
+- `npm run check:heavy-test-noise` -> completed 532 test files; act/stdout/stderr payload violations 0
+
+**留存注意**:
+- `openspec/changes/fix-stale-thread-recovery-confidence-gates/` 是另一个未跟踪 change，未纳入本次提交。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6fe26f34` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
