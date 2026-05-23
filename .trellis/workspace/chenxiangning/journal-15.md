@@ -1779,3 +1779,51 @@ Validation:
 ### Next Steps
 
 - None - task complete
+
+
+## Session 558: 刷新 OpenSpec 提案状态与项目索引
+
+**Date**: 2026-05-23
+**Task**: 刷新 OpenSpec 提案状态与项目索引
+**Branch**: `feature/v0.5.2`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+本次提交完成 OpenSpec 提案状态与项目索引的整体文档刷新，未改动运行时代码。
+
+**主要内容**:
+- 更新 `openspec/project.md`，将项目快照校准到 `2026-05-23` / `feature/v0.5.2`。
+- 为 28 个 active change 的 `proposal.md` 增加 `2026-05-23 Proposal Refresh` 状态段。
+- 新增 `openspec/docs/proposal-refresh-2026-05-23.md`，集中记录 active proposals 的任务状态、代码证据、后续关闭顺序。
+
+**验证**:
+- `openspec validate --all --strict --no-interactive` 通过：299 passed, 0 failed。
+- `git diff --check` 通过。
+- 提交前确认变更全部位于 `openspec/**`，没有修改 `src/**`、`src-tauri/**` 或其他运行时代码。
+
+**后续建议**:
+- 优先处理 `harden-claude-sidebar-list-timeout-fallback` 剩余 final gates。
+- 对 task-complete 的 OpenSpec changes 分批执行 verify / archive，降低 active change 噪音。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `be870fef` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

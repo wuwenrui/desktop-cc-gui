@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-15.md`
-- **Total Sessions**: 557
+- **Total Sessions**: 558
 - **Last Active**: 2026-05-23
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-15.md` | ~1781 | Active |
+| `journal-15.md` | ~1829 | Active |
 | `journal-14.md` | ~1969 | Archived |
 | `journal-13.md` | ~1947 | Archived |
 | `journal-12.md` | ~1971 | Archived |
@@ -43,6 +43,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 558 | 2026-05-23 | 刷新 OpenSpec 提案状态与项目索引 | `be870fef` | `feature/v0.5.2` |
 | 557 | 2026-05-23 | 收紧 Claude 会话控制面过滤 | `4baf7860` | `feature/v0.5.2` |
 | 556 | 2026-05-22 | 统一工作区会话目录读取链路 | `a56c9cea` | `feature/v0.5.2` |
 | 555 | 2026-05-22 | 统一 Git 文件树复选框与字体样式 | `89d219d8` | `feature/v0.5.2` |
