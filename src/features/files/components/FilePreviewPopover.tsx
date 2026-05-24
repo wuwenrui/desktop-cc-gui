@@ -5,6 +5,7 @@ import X from "lucide-react/dist/esm/icons/x";
 import { highlightLine, languageFromPath } from "../../../utils/syntax";
 import { OpenAppMenu } from "../../app/components/OpenAppMenu";
 import type { OpenAppTarget } from "../../../types";
+import { createFileDocumentSnapshot } from "../utils/fileDocumentSnapshot";
 
 type FilePreviewPopoverProps = {
   path: string;
@@ -30,6 +31,8 @@ type FilePreviewPopoverProps = {
   isLoading?: boolean;
   error?: string | null;
 };
+
+const FILE_POPOVER_MAX_TEXT_LINES = 360;
 
 export function FilePreviewPopover({
   path,
@@ -57,9 +60,18 @@ export function FilePreviewPopover({
 }: FilePreviewPopoverProps) {
   const { t } = useTranslation();
   const isImagePreview = previewKind === "image";
+  const documentSnapshot = useMemo(
+    () => createFileDocumentSnapshot(content, truncated, 0),
+    [content, truncated],
+  );
+  const visibleTextLineCount = isImagePreview
+    ? 0
+    : Math.min(FILE_POPOVER_MAX_TEXT_LINES, documentSnapshot.lineCount);
+  const isTextPreviewCapped =
+    !isImagePreview && visibleTextLineCount < documentSnapshot.lineCount;
   const lines = useMemo(
-    () => (isImagePreview ? [] : content.split("\n")),
-    [content, isImagePreview],
+    () => (isImagePreview ? [] : documentSnapshot.getLines(0, visibleTextLineCount)),
+    [documentSnapshot, isImagePreview, visibleTextLineCount],
   );
   const language = useMemo(() => languageFromPath(path), [path]);
   const selectionLabel = selection
@@ -83,22 +95,22 @@ export function FilePreviewPopover({
       <div className="file-preview-header">
         <div className="file-preview-title">
           <span className="file-preview-path">{path}</span>
-          {truncated && (
-            <span className="file-preview-warning">Truncated</span>
+          {(truncated || isTextPreviewCapped) && (
+            <span className="file-preview-warning">{t("files.truncated")}</span>
           )}
         </div>
         <button
           type="button"
           className="icon-button file-preview-close"
           onClick={onClose}
-          aria-label="Close preview"
-          title="Close preview"
+          aria-label={t("composer.closePreview")}
+          title={t("composer.closePreview")}
         >
           <X size={14} aria-hidden />
         </button>
       </div>
       {isLoading ? (
-        <div className="file-preview-status">Loading file...</div>
+        <div className="file-preview-status">{t("files.loadingFile")}</div>
       ) : error ? (
         <div className="file-preview-status file-preview-error">{error}</div>
       ) : isImagePreview ? (
@@ -121,7 +133,7 @@ export function FilePreviewPopover({
             </div>
           ) : (
             <div className="file-preview-status file-preview-error">
-              Image preview unavailable.
+              {t("files.imagePreviewLoadFailed")}
             </div>
           )}
         </div>

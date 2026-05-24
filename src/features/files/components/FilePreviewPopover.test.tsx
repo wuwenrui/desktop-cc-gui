@@ -108,4 +108,29 @@ describe("FilePreviewPopover", () => {
     expect(onLineMouseUp).toHaveBeenCalledWith(1, expect.any(Object));
     expect(onSelectLine).toHaveBeenCalledWith(1, expect.any(Object));
   });
+
+  it("caps large text previews instead of mounting every line", () => {
+    const { container } = render(
+      <FilePreviewPopover
+        path="src/large.ts"
+        absolutePath="/workspace/src/large.ts"
+        content={Array.from({ length: 500 }, (_, index) => `line-${index}`).join("\n")}
+        truncated={false}
+        previewKind="text"
+        imageSrc={null}
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        selection={null}
+        onSelectLine={vi.fn()}
+        onClearSelection={vi.fn()}
+        onAddSelection={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(container.querySelectorAll(".file-preview-line")).toHaveLength(360);
+    expect(screen.getByText("files.truncated")).toBeTruthy();
+  });
 });

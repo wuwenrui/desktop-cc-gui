@@ -1,10 +1,16 @@
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { highlightLine } from "../../../utils/syntax";
 import { resolveStructuredPreviewKind } from "../utils/fileRenderProfile";
+import {
+  createFileDocumentSnapshot,
+  type FileDocumentSnapshot,
+} from "../utils/fileDocumentSnapshot";
 
 type FileStructuredPreviewProps = {
   filePath: string;
   value: string;
+  documentSnapshot?: FileDocumentSnapshot;
   className?: string;
 };
 
@@ -23,6 +29,10 @@ type DockerSection = {
   notes: string[];
   instructions: DockerInstruction[];
 };
+
+const STRUCTURED_PREVIEW_MAX_PARSE_BYTES = 120_000;
+const STRUCTURED_PREVIEW_MAX_PARSE_LINES = 3_000;
+const STRUCTURED_PREVIEW_FALLBACK_LINES = 240;
 
 function renderHighlightedBlock(value: string, language: string | null) {
   return {
@@ -261,15 +271,78 @@ function DockerfilePreview({
   );
 }
 
+function BoundedStructuredFallback({
+  documentSnapshot,
+  className,
+  language,
+}: {
+  documentSnapshot: FileDocumentSnapshot;
+  className: string;
+  language: string | null;
+}) {
+  const { t } = useTranslation();
+  const visibleLineCount = Math.min(
+    STRUCTURED_PREVIEW_FALLBACK_LINES,
+    documentSnapshot.lineCount,
+  );
+  const visibleLines = useMemo(
+    () => documentSnapshot.getLines(0, visibleLineCount),
+    [documentSnapshot, visibleLineCount],
+  );
+
+  return (
+    <div className={className} data-testid="file-structured-preview">
+      <section className="fvp-structured-preview-section">
+        <div className="fvp-structured-preview-code">
+          <div className="fvp-structured-preview-code-label">
+            {t("files.markdownRenderBudgetBounded", {
+              visibleCount: visibleLineCount,
+              totalCount: documentSnapshot.lineCount,
+            })}
+          </div>
+          <pre>
+            <code
+              dangerouslySetInnerHTML={renderHighlightedBlock(
+                visibleLines.join("\n"),
+                language,
+              )}
+            />
+          </pre>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export function FileStructuredPreview({
   filePath,
   value,
+  documentSnapshot,
   className = "fvp-structured-preview",
 }: FileStructuredPreviewProps) {
+  const fallbackSnapshot = useMemo(
+    () => createFileDocumentSnapshot(value, false, 0),
+    [value],
+  );
+  const effectiveDocumentSnapshot = documentSnapshot ?? fallbackSnapshot;
   const previewKind = useMemo(
     () => resolveStructuredPreviewKind(filePath),
     [filePath],
   );
+  const exceedsStructuredBudget =
+    effectiveDocumentSnapshot.byteLength > STRUCTURED_PREVIEW_MAX_PARSE_BYTES ||
+    effectiveDocumentSnapshot.lineCount > STRUCTURED_PREVIEW_MAX_PARSE_LINES ||
+    effectiveDocumentSnapshot.truncated;
+
+  if (exceedsStructuredBudget) {
+    return (
+      <BoundedStructuredFallback
+        documentSnapshot={effectiveDocumentSnapshot}
+        className={className}
+        language={previewKind === "dockerfile" ? "docker" : "bash"}
+      />
+    );
+  }
 
   if (previewKind === "shell") {
     return <ShellPreview value={value} className={className} />;

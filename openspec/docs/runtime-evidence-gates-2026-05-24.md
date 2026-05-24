@@ -1,11 +1,12 @@
 # Runtime Evidence Gate Governance Report
 
-Generated at: 2026-05-24T06:43:34.104Z
+Generated at: 2026-05-24T11:31:59.707Z
 
 ## Archive Readiness
 
 | Change | Tasks | Recommendation | Qualifier |
 |---|---:|---|---|
+| refactor-file-open-rendering-scheduler | 37/37 | archive-candidate-after-qualifier-review | Review validation and platform qualifiers before archive. |
 | stabilize-runtime-performance-evidence-gates | 21/21 | archive-candidate-after-qualifier-review | Archive only after evidence report identifies measured/proxy/unsupported boundaries. |
 | fix-claude-issue529-second-turn-blank-session | 6/6 | archive-candidate-after-qualifier-review | Keep local manual QA and Windows/Claude-manual qualifiers explicit before archive. |
 | harden-claude-sidebar-list-timeout-fallback | 30/30 | archive-candidate-after-qualifier-review | Keep local manual QA and Windows/Claude-manual qualifiers explicit before archive. |

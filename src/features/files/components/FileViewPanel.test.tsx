@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FileViewPanel } from "./FileViewPanel";
 import {
@@ -63,6 +63,7 @@ vi.mock("@uiw/react-codemirror", async () => {
       value?: string;
       onChange?: (value: string) => void;
       onCreateEditor?: (view: any, state: any) => void;
+      onUpdate?: (update: any) => void;
       theme?: string;
     }
   >((props, ref) => {
@@ -97,6 +98,18 @@ vi.mock("@uiw/react-codemirror", async () => {
         data-editor-theme={props.theme ?? ""}
         value={props.value ?? ""}
         onChange={(event) => props.onChange?.(event.target.value)}
+        onSelect={(event) => {
+          const target = event.currentTarget;
+          viewRef.current.state.selection.main = {
+            from: target.selectionStart,
+            to: target.selectionEnd,
+            head: target.selectionEnd,
+          };
+          props.onUpdate?.({
+            selectionSet: true,
+            state: viewRef.current.state,
+          });
+        }}
       />
     );
   });
@@ -1568,6 +1581,58 @@ describe("FileViewPanel markdown modes", () => {
     expect(writeExternalSpecFile).not.toHaveBeenCalled();
   });
 
+  it("keeps editor line clicks local before publishing the composer file range", async () => {
+    vi.mocked(readWorkspaceFile).mockResolvedValue({
+      content: ["one", "two", "three"].join("\n"),
+      truncated: false,
+    });
+    const onActiveFileLineRangeChange = vi.fn();
+
+    render(
+      <FileViewPanel
+        workspaceId="ws-md-line-click"
+        workspacePath="/repo"
+        filePath="docs/guide.md"
+        activeFileLineRange={null}
+        onActiveFileLineRangeChange={onActiveFileLineRangeChange}
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await screen.findByTestId("file-markdown-preview");
+    fireEvent.click(screen.getByRole("button", { name: /edit/i }));
+    const editor = (await screen.findByTestId("mock-codemirror")) as HTMLTextAreaElement;
+    onActiveFileLineRangeChange.mockClear();
+
+    vi.useFakeTimers();
+    try {
+      editor.setSelectionRange(4, 4);
+      fireEvent.select(editor);
+
+      expect(screen.getAllByText("L2").length).toBeGreaterThan(0);
+      expect(onActiveFileLineRangeChange).not.toHaveBeenCalled();
+
+      act(() => {
+        vi.advanceTimersByTime(89);
+      });
+      expect(onActiveFileLineRangeChange).not.toHaveBeenCalled();
+
+      act(() => {
+        vi.advanceTimersByTime(1);
+      });
+      expect(onActiveFileLineRangeChange).toHaveBeenCalledWith({
+        startLine: 2,
+        endLine: 2,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("renders mermaid blocks lazily with per-block tabs", async () => {
     vi.mocked(readWorkspaceFile).mockResolvedValue({
       content: "```mermaid\ngraph TD\nA-->B\n```",
@@ -2412,6 +2477,41 @@ describe("FileViewPanel document preview modes", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /edit/i }));
     expect(await screen.findByTestId("mock-codemirror")).not.toBeNull();
+  });
+});
+
+describe("FileViewPanel code preview viewport pipeline", () => {
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it("uses virtualized rows for large code preview instead of mounting every line", async () => {
+    vi.mocked(readWorkspaceFile).mockResolvedValue({
+      content: Array.from({ length: 1_500 }, (_, index) => `const value${index} = ${index};`).join("\n"),
+      truncated: false,
+    });
+
+    const { container } = render(
+      <FileViewPanel
+        workspaceId="ws-code-virtual"
+        workspacePath="/repo"
+        filePath="src/large.ts"
+        initialMode="preview"
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector(".fvp-code-preview.is-virtualized")).toBeTruthy();
+    });
+    expect(container.querySelector(".fvp-code-preview")?.getAttribute("data-code-preview-line-count"))
+      .toBe("1500");
+    expect(container.querySelectorAll(".fvp-code-line").length).toBeLessThan(1_500);
   });
 });
 

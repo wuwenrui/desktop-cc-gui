@@ -8,6 +8,10 @@ import {
 } from "../../../services/tauri";
 import { pushErrorToast } from "../../../services/toasts";
 import type { FileReadTarget } from "../../../utils/workspacePaths";
+import {
+  createFileDocumentSnapshot,
+  type FileDocumentSnapshot,
+} from "../utils/fileDocumentSnapshot";
 
 type UseFileDocumentStateArgs = {
   workspaceId: string;
@@ -26,11 +30,14 @@ export function useFileDocumentState({
   skipTextRead,
   externalAbsoluteReadOnlyMessage,
 }: UseFileDocumentStateArgs) {
-  const [content, setContent] = useState("");
+  const [documentSnapshot, setDocumentSnapshot] = useState<FileDocumentSnapshot>(() =>
+    createFileDocumentSnapshot("", false, 0),
+  );
+  const content = documentSnapshot.content;
+  const truncated = documentSnapshot.truncated;
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [truncated, setTruncated] = useState(false);
   const savedContentRef = useRef("");
   const latestIsDirtyRef = useRef(false);
   const externalDiskSnapshotRef = useRef<{ content: string; truncated: boolean } | null>(null);
@@ -61,13 +68,51 @@ export function useFileDocumentState({
   latestIsDirtyRef.current = isDirty;
   latestContentRef.current = content;
 
+  const replaceDocumentSnapshot = useCallback((nextContent: string, nextTruncated: boolean) => {
+    setDocumentSnapshot((current) => {
+      if (current.content === nextContent && current.truncated === nextTruncated) {
+        return current;
+      }
+      return createFileDocumentSnapshot(
+        nextContent,
+        nextTruncated,
+        current.snapshotVersion + 1,
+      );
+    });
+  }, []);
+
+  const setContent = useCallback((nextContent: string) => {
+    setDocumentSnapshot((current) => {
+      if (current.content === nextContent) {
+        return current;
+      }
+      return createFileDocumentSnapshot(
+        nextContent,
+        current.truncated,
+        current.snapshotVersion + 1,
+      );
+    });
+  }, []);
+
+  const setTruncated = useCallback((nextTruncated: boolean) => {
+    setDocumentSnapshot((current) => {
+      if (current.truncated === nextTruncated) {
+        return current;
+      }
+      return createFileDocumentSnapshot(
+        current.content,
+        nextTruncated,
+        current.snapshotVersion + 1,
+      );
+    });
+  }, []);
+
   useEffect(() => {
     if (skipTextRead) {
       setIsLoading(false);
       setError(null);
-      setContent("");
+      replaceDocumentSnapshot("", false);
       savedContentRef.current = "";
-      setTruncated(false);
       externalDiskSnapshotRef.current = null;
       setLoadedFileReadTargetKey(fileReadTargetKey);
       return;
@@ -85,9 +130,8 @@ export function useFileDocumentState({
 
     if (fileReadTargetDomain === "invalid") {
       setError("Invalid file path");
-      setContent("");
+      replaceDocumentSnapshot("", false);
       savedContentRef.current = "";
-      setTruncated(false);
       externalDiskSnapshotRef.current = null;
       setLoadedFileReadTargetKey(fileReadTargetKey);
       setIsLoading(false);
@@ -121,9 +165,8 @@ export function useFileDocumentState({
         if (cancelled || currentRequest !== requestIdRef.current) return;
         const nextContent = response.content ?? "";
         const nextTruncated = Boolean(response.truncated);
-        setContent(nextContent);
+        replaceDocumentSnapshot(nextContent, nextTruncated);
         savedContentRef.current = nextContent;
-        setTruncated(nextTruncated);
         externalDiskSnapshotRef.current = {
           content: nextContent,
           truncated: nextTruncated,
@@ -149,6 +192,7 @@ export function useFileDocumentState({
     fileReadExternalSpecLogicalPath,
     fileReadNormalizedInputPath,
     fileReadTargetDomain,
+    replaceDocumentSnapshot,
     skipTextRead,
     workspaceId,
     workspaceRelativeFilePath,
@@ -221,6 +265,8 @@ export function useFileDocumentState({
   return {
     content,
     setContent,
+    documentSnapshot,
+    replaceDocumentSnapshot,
     isLoading: isLoading || loadedFileReadTargetKey !== fileReadTargetKey,
     isSaving,
     error,

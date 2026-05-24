@@ -1,6 +1,6 @@
 {
   "schemaVersion": "1.0",
-  "generatedAt": "2026-05-24T06:43:34.104Z",
+  "generatedAt": "2026-05-24T11:31:59.707Z",
   "sources": {
     "perfBaseline": "docs/perf/baseline.json",
     "browserScroll": "docs/perf/long-list-browser-scroll.json",
@@ -278,6 +278,12 @@
     "source": "openspec list --json",
     "completed": [
       {
+        "name": "refactor-file-open-rendering-scheduler",
+        "tasks": "37/37",
+        "recommendation": "archive-candidate-after-qualifier-review",
+        "qualifier": "Review validation and platform qualifiers before archive."
+      },
+      {
         "name": "stabilize-runtime-performance-evidence-gates",
         "tasks": "21/21",
         "recommendation": "archive-candidate-after-qualifier-review",
@@ -501,7 +507,7 @@
   ],
   "largeFileSummary": {
     "source": ".artifacts/large-files-near-threshold.json",
-    "generatedAt": "2026-05-24T06:36:31.078Z",
+    "generatedAt": "2026-05-24T11:03:18.589Z",
     "status": "warn",
     "candidates": [
       {

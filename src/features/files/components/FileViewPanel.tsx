@@ -1,4 +1,5 @@
 import {
+  startTransition,
   useCallback,
   useEffect,
   useMemo,
@@ -68,9 +69,9 @@ import {
 } from "../../../utils/workspacePaths";
 import { reduceExternalChangeSyncState } from "../externalChangeStateMachine";
 import {
-  measureFilePreviewMetrics,
   resolveFileRenderProfile,
 } from "../utils/fileRenderProfile";
+import { getFileDocumentSnapshotMetrics } from "../utils/fileDocumentSnapshot";
 import {
   resolveDefaultFileViewMode,
   resolveFileViewSurface,
@@ -85,6 +86,10 @@ import {
   isThemeMutationAttribute,
   readDocumentThemeAppearance,
 } from "../../theme/utils/themeAppearance";
+import {
+  DEFAULT_FILE_RENDER_PRESSURE,
+  type FileRenderPressure,
+} from "../types/fileRenderPressure";
 
 type FileViewPanelProps = {
   workspaceId: string;
@@ -137,11 +142,27 @@ type FileViewPanelProps = {
     externalChangeApplyMode?: "auto" | "manual";
     externalChangeAutoApplyDebounceMs?: number;
     markdownPreviewSnapshotMode?: "stable" | "live";
+    fileRenderPressure?: FileRenderPressure;
   saveFileShortcut?: string | null;
   findInFileShortcut?: string | null;
   onSaveSuccess?: () => void;
   onDirtyChange?: (isDirty: boolean) => void;
 };
+
+const EDITOR_LINE_RANGE_SYNC_DELAY_MS = 90;
+
+function formatEditorLineRangeKey(
+  range: { startLine: number; endLine: number } | null,
+) {
+  return range ? `${range.startLine}-${range.endLine}` : "none";
+}
+
+function isSameEditorLineRange(
+  left: { startLine: number; endLine: number } | null,
+  right: { startLine: number; endLine: number } | null,
+) {
+  return formatEditorLineRangeKey(left) === formatEditorLineRangeKey(right);
+}
 
 const EXTERNAL_CHANGE_POLL_INTERVAL_MS = 2_000;
 type EditorTheme = "light" | "dark";
@@ -557,6 +578,7 @@ export function FileViewPanel({
     externalChangeApplyMode = "auto",
     externalChangeAutoApplyDebounceMs = 0,
     markdownPreviewSnapshotMode = "stable",
+    fileRenderPressure = DEFAULT_FILE_RENDER_PRESSURE,
   saveFileShortcut = "cmd+s",
   findInFileShortcut = "cmd+f",
   onSaveSuccess,
@@ -584,7 +606,19 @@ export function FileViewPanel({
     source: "file-preview-mode" | "file-edit-mode";
     body: string;
   } | null>(null);
+  const [editorLocalLineRange, setEditorLocalLineRange] =
+    useState<CodeAnnotationLineRange | null>(() => activeFileLineRange);
   const annotationDraftBodyRef = useRef("");
+  const editorLocalLineRangeRef = useRef<CodeAnnotationLineRange | null>(
+    activeFileLineRange,
+  );
+  const pendingEditorLineRangeRef = useRef<CodeAnnotationLineRange | null>(
+    activeFileLineRange,
+  );
+  const editorLineRangeSyncTimerRef = useRef<number | null>(null);
+  const lastPublishedEditorLineRangeKeyRef = useRef(
+    formatEditorLineRangeKey(activeFileLineRange),
+  );
   const cmRef = useRef<ReactCodeMirrorRef>(null);
   const lastReportedLineRangeRef = useRef<string>("");
   const tabsContainerRef = useRef<HTMLDivElement | null>(null);
@@ -602,7 +636,7 @@ export function FileViewPanel({
   const activeAnnotationLineRange =
     annotationDraft?.source === "file-edit-mode"
       ? annotationDraft.lineRange
-      : activeFileLineRange;
+      : editorLocalLineRange ?? activeFileLineRange;
   const effectiveAnnotationDraftBody = annotationDraft
     ? annotationDraftBodyRef.current || annotationDraft.body
     : "";
@@ -650,6 +684,46 @@ export function FileViewPanel({
     annotationDraftBodyRef.current = "";
     setAnnotationDraft(null);
   }, [annotationDraft, filePath, onCreateCodeAnnotation]);
+  const clearPendingEditorLineRangeSync = useCallback(() => {
+    if (editorLineRangeSyncTimerRef.current !== null) {
+      window.clearTimeout(editorLineRangeSyncTimerRef.current);
+      editorLineRangeSyncTimerRef.current = null;
+    }
+  }, []);
+  const scheduleEditorLineRangePublish = useCallback(
+    (lineRange: CodeAnnotationLineRange | null) => {
+      pendingEditorLineRangeRef.current = lineRange;
+      clearPendingEditorLineRangeSync();
+      editorLineRangeSyncTimerRef.current = window.setTimeout(() => {
+        editorLineRangeSyncTimerRef.current = null;
+        const pendingLineRange = pendingEditorLineRangeRef.current;
+        const pendingKey = formatEditorLineRangeKey(pendingLineRange);
+        if (pendingKey === lastPublishedEditorLineRangeKeyRef.current) {
+          return;
+        }
+        lastPublishedEditorLineRangeKeyRef.current = pendingKey;
+        startTransition(() => {
+          onActiveFileLineRangeChange?.(pendingLineRange);
+        });
+      }, EDITOR_LINE_RANGE_SYNC_DELAY_MS);
+    },
+    [clearPendingEditorLineRangeSync, onActiveFileLineRangeChange],
+  );
+  const handleEditorLineRangeChange = useCallback(
+    (lineRange: CodeAnnotationLineRange | null) => {
+      if (isSameEditorLineRange(editorLocalLineRangeRef.current, lineRange)) {
+        return;
+      }
+      editorLocalLineRangeRef.current = lineRange;
+      startTransition(() => {
+        setEditorLocalLineRange((current) =>
+          isSameEditorLineRange(current, lineRange) ? current : lineRange,
+        );
+      });
+      scheduleEditorLineRangePublish(lineRange);
+    },
+    [scheduleEditorLineRangePublish],
+  );
   const [fileReferenceShouldRender, setFileReferenceShouldRender] = useState(false);
   const [fileReferenceVisible, setFileReferenceVisible] = useState(false);
   const usesSingleRowHeader = headerLayout === "single-row";
@@ -741,6 +815,8 @@ export function FileViewPanel({
   const {
     content,
     setContent,
+    documentSnapshot,
+    replaceDocumentSnapshot,
     error,
     isDirty,
     isLoading,
@@ -749,7 +825,6 @@ export function FileViewPanel({
     latestIsDirtyRef,
     externalDiskSnapshotRef,
     truncated,
-    setTruncated,
     handleSave: handleDocumentSave,
   } = useFileDocumentState({
     workspaceId,
@@ -788,8 +863,9 @@ export function FileViewPanel({
     isDirty,
     isLoading,
     caseInsensitivePathCompare,
-    setContent,
-    setTruncated,
+    replaceDocumentSnapshot,
+    previewSnapshotVersion: documentSnapshot.snapshotVersion,
+    fileRenderPressure,
     savedContentRef,
     latestIsDirtyRef,
     externalDiskSnapshotRef,
@@ -988,13 +1064,38 @@ export function FileViewPanel({
     skipTextRead,
   ]);
 
+  useEffect(() => () => clearPendingEditorLineRangeSync(), [
+    clearPendingEditorLineRangeSync,
+  ]);
+
+  useEffect(() => {
+    if (editorLocalLineRangeRef.current !== null || activeFileLineRange === null) {
+      return;
+    }
+    editorLocalLineRangeRef.current = activeFileLineRange;
+    pendingEditorLineRangeRef.current = activeFileLineRange;
+    lastPublishedEditorLineRangeKeyRef.current =
+      formatEditorLineRangeKey(activeFileLineRange);
+    setEditorLocalLineRange(activeFileLineRange);
+  }, [activeFileLineRange]);
+
   // Reset mode when file changes
   useEffect(() => {
     pendingOpenFindPanelRef.current = false;
     setMode(defaultMode);
+    clearPendingEditorLineRangeSync();
+    editorLocalLineRangeRef.current = null;
+    pendingEditorLineRangeRef.current = null;
+    lastPublishedEditorLineRangeKeyRef.current = "none";
+    setEditorLocalLineRange(null);
     onActiveFileLineRangeChange?.(null);
     lastReportedLineRangeRef.current = "";
-  }, [defaultMode, filePath, onActiveFileLineRangeChange]);
+  }, [
+    clearPendingEditorLineRangeSync,
+    defaultMode,
+    filePath,
+    onActiveFileLineRangeChange,
+  ]);
 
   useEffect(() => {
     if (typeof document === "undefined" || typeof MutationObserver === "undefined") {
@@ -1130,9 +1231,14 @@ export function FileViewPanel({
   // Switch to preview mode
   const handleEnterPreview = useCallback(() => {
     setMode("preview");
+    clearPendingEditorLineRangeSync();
+    editorLocalLineRangeRef.current = null;
+    pendingEditorLineRangeRef.current = null;
+    lastPublishedEditorLineRangeKeyRef.current = "none";
+    setEditorLocalLineRange(null);
     onActiveFileLineRangeChange?.(null);
     lastReportedLineRangeRef.current = "";
-  }, [onActiveFileLineRangeChange]);
+  }, [clearPendingEditorLineRangeSync, onActiveFileLineRangeChange]);
 
   const handleOpenFindPanel = useCallback(() => {
     if (skipTextRead || truncated) {
@@ -1198,8 +1304,8 @@ export function FileViewPanel({
 
   // Syntax highlighted lines for code preview
   const previewMetrics = useMemo(
-    () => measureFilePreviewMetrics(content, truncated),
-    [content, truncated],
+    () => getFileDocumentSnapshotMetrics(documentSnapshot),
+    [documentSnapshot],
   );
   const viewSurface = useMemo(
     () => resolveFileViewSurface(renderProfile, mode, previewMetrics),
@@ -1225,7 +1331,8 @@ export function FileViewPanel({
     enabled: previewPayloadEnabled,
   });
     const previewLanguage = renderProfile.previewLanguage;
-    const shouldBuildCodePreviewLines = viewSurface.kind === "code-preview";
+    const shouldBuildCodePreviewLines =
+      viewSurface.kind === "code-preview" && documentSnapshot.lineCount <= 1_000;
     const highlightedPreviewLanguage = useMemo(
       () => (shouldBuildCodePreviewLines && !viewSurface.useLowCostPreview
         ? previewLanguage
@@ -1233,8 +1340,11 @@ export function FileViewPanel({
       [previewLanguage, shouldBuildCodePreviewLines, viewSurface.useLowCostPreview],
     );
     const lines = useMemo(
-      () => (shouldBuildCodePreviewLines ? content.split("\n") : []),
-      [content, shouldBuildCodePreviewLines],
+      () =>
+        shouldBuildCodePreviewLines
+          ? documentSnapshot.getLines(0, documentSnapshot.lineCount)
+          : [],
+      [documentSnapshot, shouldBuildCodePreviewLines],
     );
   const visibleCodeAnnotations = useMemo(
     () =>
@@ -1312,10 +1422,11 @@ export function FileViewPanel({
 
   const visibleTabs = openTabs && openTabs.length > 0 ? openTabs : [filePath];
   const canCloseAllTabs = Boolean(onCloseAllTabs && visibleTabs.length > 0);
-  const activeFileLineLabel = activeFileLineRange
-    ? activeFileLineRange.startLine === activeFileLineRange.endLine
-      ? `L${activeFileLineRange.startLine}`
-      : `L${activeFileLineRange.startLine}-L${activeFileLineRange.endLine}`
+  const visibleActiveFileLineRange = editorLocalLineRange ?? activeFileLineRange;
+  const activeFileLineLabel = visibleActiveFileLineRange
+    ? visibleActiveFileLineRange.startLine === visibleActiveFileLineRange.endLine
+      ? `L${visibleActiveFileLineRange.startLine}`
+      : `L${visibleActiveFileLineRange.startLine}-L${visibleActiveFileLineRange.endLine}`
     : null;
 
   useEffect(() => {
@@ -1792,21 +1903,27 @@ export function FileViewPanel({
       previewPayloadLoading={previewPayloadLoading}
       previewPayloadError={previewPayloadError}
       viewSurface={viewSurface}
+        documentSnapshot={documentSnapshot}
         content={content}
         setContent={setContent}
+        fileRenderPressure={fileRenderPressure}
         markdownPreviewSnapshotMode={markdownPreviewSnapshotMode}
         markdownPreviewRefreshKey={externalAutoSyncAt}
         cmRef={cmRef}
       handleCodeMirrorCreate={handleCodeMirrorCreate}
-      onActiveFileLineRangeChange={onActiveFileLineRangeChange}
+      onActiveFileLineRangeChange={handleEditorLineRangeChange}
       onPreviewAnnotationStart={(lineRange) =>
         beginAnnotationDraft(lineRange, "file-preview-mode")
       }
       onEditorAnnotationStart={() => {
-        if (!activeAnnotationLineRange) {
+        const lineRange =
+          annotationDraft?.source === "file-edit-mode"
+            ? annotationDraft.lineRange
+            : editorLocalLineRangeRef.current ?? activeAnnotationLineRange;
+        if (!lineRange) {
           return;
         }
-        beginAnnotationDraft(activeAnnotationLineRange, "file-edit-mode");
+        beginAnnotationDraft(lineRange, "file-edit-mode");
       }}
       editorAnnotationLineRange={
         viewSurface.kind === "editor" ? activeAnnotationLineRange : null
@@ -1825,6 +1942,7 @@ export function FileViewPanel({
       lastReportedLineRangeRef={lastReportedLineRangeRef}
       editorExtensions={editorExtensions}
       editorTheme={editorTheme}
+      previewLanguage={previewLanguage}
       highlightedLines={highlightedLines}
       lines={lines}
       gitAddedLineNumberSet={gitAddedLineNumberSet}

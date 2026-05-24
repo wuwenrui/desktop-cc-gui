@@ -6,6 +6,7 @@ import {
   useState,
 } from "react";
 import type { DragEvent, MouseEvent } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
 import { convertFileSrc } from "@tauri-apps/api/core";
@@ -33,6 +34,7 @@ import {
   resolveGitRootWorkspacePrefix,
   resolveGitStatusPathCandidates,
 } from "../../../utils/workspacePaths";
+import { createFileDocumentSnapshot } from "../utils/fileDocumentSnapshot";
 import {
   writeDetachedFileTreeDragSnapshot,
   DETACHED_FILE_TREE_DRAG_BRIDGE_EVENT,
@@ -60,7 +62,19 @@ type FileTreeNode = {
 type VisibleTreeNodeEntry = {
   path: string;
   type: "file" | "folder" | "root";
+  depth: number;
+  node: FileTreeNode | null;
 };
+
+type VisibleFileTreeRow =
+  | { kind: "node"; entry: VisibleTreeNodeEntry & { node: FileTreeNode } }
+  | {
+      kind: "lazy-state";
+      path: string;
+      depth: number;
+      state: "loading" | "error" | "empty";
+      error: string | null;
+    };
 
 type FileTreePanelProps = {
   workspaceId: string;
@@ -152,6 +166,7 @@ const SPECIAL_BUILD_ARTIFACT_DIRECTORIES = new Set([
 ]);
 const CROSS_WINDOW_TREE_DRAG_REBROADCAST_THROTTLE_MS = 120;
 const EMPTY_DIRECTORY_METADATA: WorkspaceDirectoryEntry[] = [];
+const FILE_TREE_VIRTUALIZATION_THRESHOLD = 250;
 
 function setFileTreeDragBridge(paths: string[]) {
   if (typeof window === "undefined") {
@@ -799,6 +814,7 @@ export function FileTreePanel({
   const lastCrossWindowDragBroadcastRef = useRef(0);
   const dragImageCleanupRef = useRef<(() => void) | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
+  const fileTreeListRef = useRef<HTMLDivElement | null>(null);
   const [newFileParent, setNewFileParent] = useState<string | null>(null);
   const [newFileName, setNewFileName] = useState("");
   const newFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -979,18 +995,68 @@ export function FileTreePanel({
 
   const isRootVisibleExpanded = rootExpanded;
   const visibleTreeNodeEntries = useMemo(() => {
-    const entries: VisibleTreeNodeEntry[] = [{ path: "", type: "root" }];
-    const visit = (node: FileTreeNode) => {
-      entries.push({ path: node.path, type: node.type });
+    const entries: VisibleTreeNodeEntry[] = [{ path: "", type: "root", depth: 0, node: null }];
+    const visit = (node: FileTreeNode, depth: number) => {
+      entries.push({ path: node.path, type: node.type, depth, node });
       if (node.type === "folder" && expandedFolders.has(node.path)) {
-        node.children.forEach(visit);
+        node.children.forEach((child) => visit(child, depth + 1));
       }
     };
     if (rootExpanded) {
-      nodes.forEach(visit);
+      nodes.forEach((node) => visit(node, 1));
     }
     return entries;
   }, [expandedFolders, nodes, rootExpanded]);
+  const visibleFileTreeRows = useMemo(() => {
+    const rows: VisibleFileTreeRow[] = [];
+    for (const entry of visibleTreeNodeEntries) {
+      if (!entry.node) {
+        continue;
+      }
+      rows.push({ kind: "node", entry: entry as VisibleTreeNodeEntry & { node: FileTreeNode } });
+      const node = entry.node;
+      const isLazyFolder = node.type === "folder" && (node.isLazyLoadable ?? false);
+      const isExpanded = expandedFolders.has(node.path);
+      if (!isLazyFolder || !isExpanded || node.children.length > 0) {
+        continue;
+      }
+      const lazyLoadError = lazyDirectoryLoadErrors.get(node.path) ?? null;
+      rows.push({
+        kind: "lazy-state",
+        path: node.path,
+        depth: entry.depth + 1,
+        state: loadingLazyDirectories.has(node.path)
+          ? "loading"
+          : lazyLoadError
+            ? "error"
+            : "empty",
+        error: lazyLoadError,
+      });
+    }
+    return rows;
+  }, [
+    expandedFolders,
+    lazyDirectoryLoadErrors,
+    loadingLazyDirectories,
+    visibleTreeNodeEntries,
+  ]);
+  const shouldVirtualizeFileTree =
+    visibleFileTreeRows.length > FILE_TREE_VIRTUALIZATION_THRESHOLD;
+  const fileTreeRowVirtualizer = useVirtualizer({
+    count: shouldVirtualizeFileTree ? visibleFileTreeRows.length : 0,
+    getScrollElement: () => fileTreeListRef.current,
+    estimateSize: () => 28,
+    overscan: 16,
+    getItemKey: (index) => {
+      const row = visibleFileTreeRows[index];
+      if (!row) {
+        return index;
+      }
+      return row.kind === "node"
+        ? row.entry.path
+        : `${row.path}:lazy-${row.state}`;
+    },
+  });
   const visibleTreePathOrder = useMemo(
     () => visibleTreeNodeEntries.map((entry) => entry.path),
     [visibleTreeNodeEntries],
@@ -1480,13 +1546,19 @@ export function FileTreePanel({
         : [],
     [previewKind, t],
   );
+  const previewDocumentSnapshot = useMemo(
+    () => createFileDocumentSnapshot(previewContent, previewTruncated, 0),
+    [previewContent, previewTruncated],
+  );
 
   const handleAddSelection = useCallback(() => {
     if (previewKind !== "text" || !previewPath || !previewSelection || !onInsertText) {
       return;
     }
-    const lines = previewContent.split("\n");
-    const selected = lines.slice(previewSelection.start, previewSelection.end + 1);
+    const selected = previewDocumentSnapshot.getLines(
+      previewSelection.start,
+      previewSelection.end + 1,
+    );
     const language = languageFromPath(previewPath);
     const fence = language ? `\`\`\`${language}` : "```";
     const start = previewSelection.start + 1;
@@ -1496,7 +1568,7 @@ export function FileTreePanel({
     onInsertText(snippet);
     closePreview();
   }, [
-    previewContent,
+    previewDocumentSnapshot,
     previewKind,
     previewPath,
     previewSelection,
@@ -1844,6 +1916,225 @@ export function FileTreePanel({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [selectedNodePath, selectedNodeType, trashItem, copyPath]);
 
+  const renderVirtualTreeRow = (row: VisibleFileTreeRow) => {
+    if (row.kind === "lazy-state") {
+      if (row.state === "loading") {
+        return (
+          <div
+            className="file-tree-lazy-state"
+            style={{ paddingLeft: `${row.depth * 10 + 16}px` }}
+          >
+            {t("files.loadingFiles")}
+          </div>
+        );
+      }
+      if (row.state === "error") {
+        return (
+          <button
+            type="button"
+            className="file-tree-lazy-retry"
+            style={{ marginLeft: `${row.depth * 10}px` }}
+            onClick={() => void loadLazyDirectoryChildren(row.path)}
+            title={row.error ?? undefined}
+          >
+            {t("files.retryLoadFiles")}
+          </button>
+        );
+      }
+      return (
+        <div
+          className="file-tree-lazy-state"
+          style={{ paddingLeft: `${row.depth * 10 + 16}px` }}
+        >
+          {t("files.noFilesAvailable")}
+        </div>
+      );
+    }
+
+    const node = row.entry.node;
+    const depth = row.entry.depth;
+    const isFolder = node.type === "folder";
+    const isLazyFolder = isFolder && (node.isLazyLoadable ?? false);
+    const hasChildren = isFolder && node.children.length > 0;
+    const canExpand = isFolder && (hasChildren || isLazyFolder);
+    const isExpanded = canExpand && expandedFolders.has(node.path);
+    const rawGitStatus = isFolder
+      ? folderGitStatusMap.get(node.path) ?? null
+      : gitStatusMap.get(node.path) ?? null;
+    const fileGitStatus =
+      isFolder && rawGitStatus?.toUpperCase() === "D"
+        ? "M"
+        : rawGitStatus;
+    const gitStatusClass = fileGitStatus
+      ? ` git-${fileGitStatus.toLowerCase()}`
+      : "";
+    const isGitignored = isFolder
+      ? mergedGitignoredDirectories.has(node.path)
+      : mergedGitignoredFiles.has(node.path);
+    const isSelected = selectedNodePaths.has(node.path);
+    const isPrimarySelection = selectedNodePath === node.path;
+
+    return (
+      <div className="file-tree-row-wrap">
+        <button
+          type="button"
+          className={`file-tree-row${isFolder ? " is-folder" : " is-file"}${isGitignored ? " is-gitignored" : ""}${isSelected ? " is-selected" : ""}${isPrimarySelection ? " is-primary" : ""}`}
+          style={{ paddingLeft: `${depth * 10}px` }}
+          onClick={(event) => {
+            const isToggleSelect = event.metaKey || event.ctrlKey;
+            if (event.shiftKey) {
+              setRangeSelection(node.path, node.type);
+              return;
+            }
+            if (isToggleSelect) {
+              togglePathSelection(node.path, node.type);
+              return;
+            }
+            setSingleSelection(node.path, node.type);
+          }}
+          onDoubleClick={(event) => {
+            event.preventDefault();
+            if (isFolder) {
+              if (!canExpand) {
+                return;
+              }
+              toggleFolderExpandedState(node.path, isLazyFolder);
+              return;
+            }
+            if (onOpenFile) {
+              onOpenFile(node.path);
+              return;
+            }
+            openPreview(node.path, event.currentTarget);
+          }}
+          onContextMenu={(event) => {
+            if (!selectedNodePaths.has(node.path)) {
+              setSingleSelection(node.path, node.type);
+            } else {
+              setSelectedNodePath(node.path);
+              setSelectedNodeType(node.type);
+            }
+            showContextMenu(event, node.path, isFolder);
+          }}
+          draggable
+          onDragStart={(event: DragEvent<HTMLButtonElement>) => {
+            const dragSourcePaths = isSelected ? orderedSelectedNodePaths : [node.path];
+            const uniqueSourcePaths = Array.from(new Set(dragSourcePaths));
+            if (uniqueSourcePaths.length === 0) {
+              return;
+            }
+            if (!isSelected) {
+              setSingleSelection(node.path, node.type);
+            }
+            if (
+              typeof window !== "undefined" &&
+              (window.__fileTreeDragActive === true ||
+                typeof window.__fileTreeDragCleanup === "function")
+            ) {
+              clearFileTreeDragBridge();
+            }
+            const absolutePaths = uniqueSourcePaths.map((path) => resolvePath(path));
+            activeCrossWindowDragPathsRef.current = absolutePaths;
+            lastCrossWindowDragBroadcastRef.current = Date.now();
+            dragImageCleanupRef.current?.();
+            dragImageCleanupRef.current = null;
+            setFileTreeDragBridge(absolutePaths);
+            window.__fileTreeDragCleanup = bindChatDropTargetsForTreeDrag(absolutePaths);
+            setFileTreeDragPosition(event.clientX, event.clientY);
+            broadcastCrossWindowTreeDrag({ type: "start", paths: absolutePaths });
+            if (!event.dataTransfer) {
+              return;
+            }
+            const encodedPaths = JSON.stringify(absolutePaths);
+            event.dataTransfer.effectAllowed = "copy";
+            event.dataTransfer.setData("application/x-ccgui-file-paths", encodedPaths);
+            event.dataTransfer.setData("text/plain", absolutePaths.join("\n"));
+            if (
+              isWindowsDragPreviewRuntime() &&
+              typeof event.dataTransfer.setDragImage === "function"
+            ) {
+              const preview = createWindowsFileTreeDragImage(
+                absolutePaths[0] ?? "",
+                absolutePaths.length,
+                isFolder,
+              );
+              if (preview) {
+                event.dataTransfer.setDragImage(preview.element, 18, 14);
+                dragImageCleanupRef.current = preview.cleanup;
+              }
+            }
+          }}
+          onDrag={(event: DragEvent<HTMLButtonElement>) => {
+            setFileTreeDragPosition(event.clientX, event.clientY);
+            rebroadcastCrossWindowTreeDrag();
+          }}
+          onDragEnd={(event: DragEvent<HTMLButtonElement>) => {
+            activeCrossWindowDragPathsRef.current = [];
+            lastCrossWindowDragBroadcastRef.current = 0;
+            dragImageCleanupRef.current?.();
+            dragImageCleanupRef.current = null;
+            if (typeof window !== "undefined" && window.__fileTreeDragDropped === true) {
+              clearFileTreeDragBridge();
+              return;
+            }
+            const inserted = triggerChatInputInsertFromTreeDrag(
+              event,
+              window.__fileTreeDragPaths ?? [],
+            );
+            if (!inserted) {
+              const fallbackPaths = window.__fileTreeDragPaths ?? [];
+              const hasChatInput = Boolean(document.querySelector(".chat-input-box"));
+              if (hasChatInput && fallbackPaths.length > 0) {
+                insertPathsIntoChat(fallbackPaths);
+              }
+            }
+            clearFileTreeDragBridge();
+          }}
+        >
+          {isFolder && canExpand ? (
+            <span
+              className={`file-tree-chevron${isExpanded ? " is-open" : ""}`}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                toggleFolderExpandedState(node.path, isLazyFolder);
+              }}
+            >
+              ›
+            </span>
+          ) : (
+            <span className="file-tree-spacer" aria-hidden />
+          )}
+          <span className="file-tree-icon" aria-hidden>
+            <FileIcon filePath={node.name} isFolder={isFolder} isOpen={isExpanded} />
+          </span>
+          <span className={`file-tree-name${gitStatusClass}`}>{node.name}</span>
+        </button>
+        <button
+          type="button"
+          className={`ghost icon-button file-tree-action${isSelected ? " is-visible" : ""}`}
+          onMouseDown={(event) => {
+            event.stopPropagation();
+          }}
+          onClick={(event) => {
+            event.stopPropagation();
+            const absolutePath = resolvePath(node.path);
+            if (typeof window !== "undefined" && window.handleFilePathFromJava) {
+              window.handleFilePathFromJava(absolutePath);
+              return;
+            }
+            const mentionText = `@${absolutePath}${node.type === "file" ? " " : ""}`;
+            onInsertText?.(mentionText);
+          }}
+          aria-label={t("files.mentionFile", { name: node.name })}
+          title={t("files.mentionInChat")}
+        >
+          <Plus size={10} aria-hidden />
+        </button>
+      </div>
+    );
+  };
+
   const renderNode = (node: FileTreeNode, depth: number) => {
     const isFolder = node.type === "folder";
     const isLazyFolder = isFolder && (node.isLazyLoadable ?? false);
@@ -2120,7 +2411,13 @@ export function FileTreePanel({
           />
         </div>
       </div>
-      <div className={`file-tree-list${isRootVisibleExpanded && nodes.length > 0 ? " has-root-guide" : ""}`}>
+      <div
+        ref={fileTreeListRef}
+        className={`file-tree-list${isRootVisibleExpanded && nodes.length > 0 ? " has-root-guide" : ""}${
+          shouldVirtualizeFileTree ? " is-virtualized" : ""
+        }`}
+        data-file-tree-row-count={visibleFileTreeRows.length}
+      >
         {showLoading ? (
           <div className="file-tree-loading-row" role="status" aria-live="polite">
             <LoaderCircle className="file-tree-loading-spinner" size={13} aria-hidden />
@@ -2143,6 +2440,29 @@ export function FileTreePanel({
         ) : !hasTreeEntries ? (
           <div className="file-tree-empty">
             {t("files.noFilesAvailable")}
+          </div>
+        ) : shouldVirtualizeFileTree ? (
+          <div
+            className="file-tree-virtual-spacer"
+            style={{ height: `${fileTreeRowVirtualizer.getTotalSize()}px` }}
+          >
+            {fileTreeRowVirtualizer.getVirtualItems().map((virtualRow) => {
+              const row = visibleFileTreeRows[virtualRow.index];
+              if (!row) {
+                return null;
+              }
+              return (
+                <div
+                  key={virtualRow.key}
+                  ref={fileTreeRowVirtualizer.measureElement}
+                  data-index={virtualRow.index}
+                  className="file-tree-virtual-row"
+                  style={{ transform: `translateY(${virtualRow.start}px)` }}
+                >
+                  {renderVirtualTreeRow(row)}
+                </div>
+              );
+            })}
           </div>
         ) : (
           nodes.map((node) => renderNode(node, 1))

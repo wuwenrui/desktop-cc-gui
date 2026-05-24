@@ -13,6 +13,11 @@ import {
   type ExternalChangeSyncState,
 } from "../externalChangeStateMachine";
 import { normalizeComparablePath } from "../../../utils/workspacePaths";
+import {
+  DEFAULT_FILE_RENDER_PRESSURE,
+  hasForegroundFileRenderPressure,
+  type FileRenderPressure,
+} from "../types/fileRenderPressure";
 
 const EXTERNAL_CHANGE_NOTICE_MS = 3_200;
 const EXTERNAL_CHANGE_ERROR_TOAST_THRESHOLD = 3;
@@ -36,6 +41,7 @@ export type ExternalChangePendingRefresh = {
   diskTruncated: boolean;
   updateCount: number;
   detectedAt: number;
+  expectedSnapshotVersion: number;
 };
 
 type UseFileExternalSyncArgs = {
@@ -52,8 +58,9 @@ type UseFileExternalSyncArgs = {
   isDirty: boolean;
   isLoading: boolean;
   caseInsensitivePathCompare: boolean;
-  setContent: (value: string) => void;
-  setTruncated: (value: boolean) => void;
+  replaceDocumentSnapshot: (content: string, truncated: boolean) => void;
+  previewSnapshotVersion: number;
+  fileRenderPressure?: FileRenderPressure;
   savedContentRef: MutableRefObject<string>;
   latestIsDirtyRef: MutableRefObject<boolean>;
   externalDiskSnapshotRef: MutableRefObject<{ content: string; truncated: boolean } | null>;
@@ -100,8 +107,9 @@ export function useFileExternalSync({
   isDirty,
   isLoading,
   caseInsensitivePathCompare,
-  setContent,
-  setTruncated,
+  replaceDocumentSnapshot,
+  previewSnapshotVersion,
+  fileRenderPressure = DEFAULT_FILE_RENDER_PRESSURE,
   savedContentRef,
   latestIsDirtyRef,
   externalDiskSnapshotRef,
@@ -121,6 +129,11 @@ export function useFileExternalSync({
   const watcherRefreshQueuedRef = useRef(false);
   const fileVersionRef = useRef(0);
   const autoApplyTimeoutRef = useRef<number | null>(null);
+  const latestPreviewSnapshotVersionRef = useRef(previewSnapshotVersion);
+
+  useEffect(() => {
+    latestPreviewSnapshotVersionRef.current = previewSnapshotVersion;
+  }, [previewSnapshotVersion]);
 
   const clearAutoApplyTimeout = useCallback(() => {
     if (autoApplyTimeoutRef.current === null) {
@@ -169,9 +182,8 @@ export function useFileExternalSync({
       source: "polling" | "watcher" | string,
       eventKind: string,
     ) => {
-      setContent(nextContent);
+      replaceDocumentSnapshot(nextContent, nextTruncated);
       savedContentRef.current = nextContent;
-      setTruncated(nextTruncated);
       setExternalCompareOpen(false);
       setExternalChangeConflict(null);
       setExternalPendingRefresh(null);
@@ -189,7 +201,7 @@ export function useFileExternalSync({
         });
       }
     },
-    [autoSyncedMessage, savedContentRef, setContent, setTruncated],
+    [autoSyncedMessage, replaceDocumentSnapshot, savedContentRef],
   );
 
   const promoteExternalDiskSnapshotToConflict = useCallback(
@@ -233,10 +245,34 @@ export function useFileExternalSync({
         reduceExternalChangeSyncState(current, { type: "external-change-detected-clean" }),
       );
       clearAutoApplyTimeout();
+      const expectedSnapshotVersion = latestPreviewSnapshotVersionRef.current;
       autoApplyTimeoutRef.current = window.setTimeout(() => {
         autoApplyTimeoutRef.current = null;
         if (latestIsDirtyRef.current) {
           promoteExternalDiskSnapshotToConflict(nextContent, nextTruncated);
+          return;
+        }
+        if (expectedSnapshotVersion !== latestPreviewSnapshotVersionRef.current) {
+          setExternalAutoSyncAt(null);
+          setExternalPendingRefresh((current) => {
+            if (
+              current &&
+              current.diskContent === nextContent &&
+              current.diskTruncated === nextTruncated
+            ) {
+              return {
+                ...current,
+                expectedSnapshotVersion: latestPreviewSnapshotVersionRef.current,
+              };
+            }
+            return {
+              diskContent: nextContent,
+              diskTruncated: nextTruncated,
+              updateCount: Math.min(99, (current?.updateCount ?? 0) + 1),
+              detectedAt: Date.now(),
+              expectedSnapshotVersion: latestPreviewSnapshotVersionRef.current,
+            };
+          });
           return;
         }
         applyCleanExternalDiskSnapshot(nextContent, nextTruncated, source, eventKind);
@@ -275,7 +311,10 @@ export function useFileExternalSync({
         return;
       }
 
-      if (externalChangeApplyMode === "manual") {
+      const shouldKeepPendingRefresh =
+        externalChangeApplyMode === "manual" ||
+        hasForegroundFileRenderPressure(fileRenderPressure);
+      if (shouldKeepPendingRefresh) {
         clearAutoApplyTimeout();
         setExternalAutoSyncAt(null);
         setExternalChangeSyncState((current) =>
@@ -294,6 +333,7 @@ export function useFileExternalSync({
             diskTruncated: nextTruncated,
             updateCount: Math.min(99, (current?.updateCount ?? 0) + 1),
             detectedAt: Date.now(),
+            expectedSnapshotVersion: latestPreviewSnapshotVersionRef.current,
           };
         });
         return;
@@ -304,6 +344,7 @@ export function useFileExternalSync({
       clearAutoApplyTimeout,
       externalDiskSnapshotRef,
       externalChangeApplyMode,
+      fileRenderPressure,
       latestIsDirtyRef,
       promoteExternalDiskSnapshotToConflict,
       scheduleCleanExternalDiskSnapshot,
@@ -469,9 +510,11 @@ export function useFileExternalSync({
     if (!externalChangeConflict) {
       return;
     }
-    setContent(externalChangeConflict.diskContent);
+    replaceDocumentSnapshot(
+      externalChangeConflict.diskContent,
+      externalChangeConflict.diskTruncated,
+    );
     savedContentRef.current = externalChangeConflict.diskContent;
-    setTruncated(externalChangeConflict.diskTruncated);
     externalDiskSnapshotRef.current = {
       content: externalChangeConflict.diskContent,
       truncated: externalChangeConflict.diskTruncated,
@@ -482,7 +525,7 @@ export function useFileExternalSync({
     setExternalChangeSyncState((current) =>
       reduceExternalChangeSyncState(current, { type: "conflict-reload" }),
     );
-  }, [externalChangeConflict, externalDiskSnapshotRef, savedContentRef, setContent, setTruncated]);
+  }, [externalChangeConflict, externalDiskSnapshotRef, replaceDocumentSnapshot, savedContentRef]);
 
   const handleExternalApplyPendingRefresh = useCallback(() => {
     if (!externalPendingRefresh) {
@@ -496,10 +539,30 @@ export function useFileExternalSync({
       );
       return;
     }
+    if (
+      externalPendingRefresh.expectedSnapshotVersion !==
+      latestPreviewSnapshotVersionRef.current
+    ) {
+      clearAutoApplyTimeout();
+      if (savedContentRef.current === externalPendingRefresh.diskContent) {
+        setExternalCompareOpen(false);
+        setExternalPendingRefresh(null);
+        setExternalChangeSyncState("in-sync");
+        return;
+      }
+      promoteExternalDiskSnapshotToConflict(
+        externalPendingRefresh.diskContent,
+        externalPendingRefresh.diskTruncated,
+        externalPendingRefresh.updateCount,
+      );
+      return;
+    }
     clearAutoApplyTimeout();
-    setContent(externalPendingRefresh.diskContent);
+    replaceDocumentSnapshot(
+      externalPendingRefresh.diskContent,
+      externalPendingRefresh.diskTruncated,
+    );
     savedContentRef.current = externalPendingRefresh.diskContent;
-    setTruncated(externalPendingRefresh.diskTruncated);
     externalDiskSnapshotRef.current = {
       content: externalPendingRefresh.diskContent,
       truncated: externalPendingRefresh.diskTruncated,
@@ -519,9 +582,8 @@ export function useFileExternalSync({
     externalPendingRefresh,
     latestIsDirtyRef,
     promoteExternalDiskSnapshotToConflict,
+    replaceDocumentSnapshot,
     savedContentRef,
-    setContent,
-    setTruncated,
   ]);
 
   const handleExternalKeepLocal = useCallback(() => {

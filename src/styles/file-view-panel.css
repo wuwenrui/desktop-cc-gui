@@ -497,6 +497,22 @@
   width: max-content;
 }
 
+.fvp-code-preview.is-virtualized {
+  contain: strict;
+}
+
+.fvp-code-preview-virtual-spacer {
+  position: relative;
+  min-width: max-content;
+}
+
+.fvp-code-preview.is-virtualized .fvp-code-line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+}
+
 .fvp-code-line:hover {
   background: color-mix(in srgb, var(--surface-active) 35%, transparent);
 }

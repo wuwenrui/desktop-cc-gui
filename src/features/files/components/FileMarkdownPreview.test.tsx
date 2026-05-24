@@ -57,6 +57,35 @@ describe("FileMarkdownPreview render budget", () => {
     expect(preview.textContent).toContain("paragraph-500");
   });
 
+  it("uses a slower progressive cadence under active file render pressure", () => {
+    vi.useFakeTimers();
+
+    render(
+      <FileMarkdownPreview
+        documentKey="docs:pressure"
+        value={makeParagraphMarkdown(500)}
+        renderPressure={{
+          engineProcessing: true,
+          editorSplitChatVisible: true,
+          activeSurface: "editor",
+        }}
+      />,
+    );
+
+    const preview = screen.getByTestId("file-markdown-preview");
+    expect(preview.getAttribute("data-markdown-visible-lines")).toBe("360");
+
+    act(() => {
+      vi.advanceTimersByTime(16);
+    });
+    expect(preview.getAttribute("data-markdown-visible-lines")).toBe("360");
+
+    act(() => {
+      vi.advanceTimersByTime(80);
+    });
+    expect(preview.getAttribute("data-markdown-visible-lines")).toBe("500");
+  });
+
   it("uses a bounded projection for very large markdown documents", () => {
     render(
       <FileMarkdownPreview

@@ -922,6 +922,15 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     ),
   };
   const isThreadThinking = activeThreadStatus?.isProcessing ?? false;
+  const fileRenderPressure = useMemo(
+    () => ({
+      engineProcessing: isThreadThinking,
+      editorSplitChatVisible:
+        options.centerMode === "editor" && !options.isEditorFileMaximized,
+      activeSurface: "editor" as const,
+    }),
+    [isThreadThinking, options.centerMode, options.isEditorFileMaximized],
+  );
   const conversationEngine = useMemo(
     () =>
       resolveActiveConversationEngine(
@@ -2297,6 +2306,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
           externalChangeApplyMode={options.externalChangeApplyMode}
           externalChangeAutoApplyDebounceMs={options.externalChangeAutoApplyDebounceMs}
           markdownPreviewSnapshotMode={options.liveEditPreviewEnabled ? "live" : "stable"}
+          fileRenderPressure={fileRenderPressure}
         saveFileShortcut={options.saveFileShortcut}
         findInFileShortcut={options.findInFileShortcut}
       />
