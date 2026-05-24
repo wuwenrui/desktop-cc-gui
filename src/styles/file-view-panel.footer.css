@@ -243,6 +243,13 @@
   background: color-mix(in srgb, var(--surface-strong) 80%, transparent);
 }
 
+.fvp-file-reference-annotation {
+  padding: 2px 8px;
+  font-size: 10px;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
 .fvp-file-reference-toggle {
   border: 1px solid var(--border-subtle);
   border-radius: 999px;

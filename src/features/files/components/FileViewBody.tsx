@@ -53,8 +53,6 @@ type FileViewBodyProps = {
   handleCodeMirrorCreate: NonNullable<ReactCodeMirrorProps["onCreateEditor"]>;
   onActiveFileLineRangeChange?: (range: { startLine: number; endLine: number } | null) => void;
   onPreviewAnnotationStart?: (lineRange: CodeAnnotationLineRange) => void;
-  onEditorAnnotationStart?: () => void;
-  editorAnnotationLineRange?: CodeAnnotationLineRange | null;
   annotationDraft?: {
     lineRange: CodeAnnotationLineRange;
     source: "file-preview-mode" | "file-edit-mode";
@@ -530,8 +528,6 @@ export function FileViewBody({
   handleCodeMirrorCreate,
   onActiveFileLineRangeChange,
   onPreviewAnnotationStart,
-  onEditorAnnotationStart,
-  editorAnnotationLineRange,
   annotationDraft = null,
   codeAnnotations = [],
   onRemoveCodeAnnotation,
@@ -776,22 +772,6 @@ export function FileViewBody({
   if (viewSurface.kind === "editor") {
     return (
       <div className="fvp-editor">
-        {editorAnnotationLineRange ? (
-          <div className="fvp-annotation-toolbar">
-            <span>
-              {editorAnnotationLineRange.startLine === editorAnnotationLineRange.endLine
-                ? `L${editorAnnotationLineRange.startLine}`
-                : `L${editorAnnotationLineRange.startLine}-L${editorAnnotationLineRange.endLine}`}
-            </span>
-            <button
-              type="button"
-              className="fvp-annotation-trigger"
-              onClick={onEditorAnnotationStart}
-            >
-              {t("files.annotateForAi")}
-            </button>
-          </div>
-        ) : null}
         <CodeMirror
           key={filePath}
           ref={cmRef}

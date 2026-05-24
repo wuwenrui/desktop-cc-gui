@@ -1537,7 +1537,7 @@ describe("FileViewPanel markdown modes", () => {
     const onCreateCodeAnnotation = vi.fn();
     const onActiveFileLineRangeChange = vi.fn();
 
-    const { rerender } = render(
+    const { container, rerender } = render(
       <FileViewPanel
         workspaceId="ws-md-annotation-edit"
         workspacePath="/repo"
@@ -1572,6 +1572,12 @@ describe("FileViewPanel markdown modes", () => {
         onCreateCodeAnnotation={onCreateCodeAnnotation}
       />,
     );
+
+    expect(container.querySelector(".fvp-annotation-toolbar")).toBeNull();
+    const footerAnnotationButton = container.querySelector(
+      ".fvp-footer .fvp-file-reference-annotation",
+    );
+    expect(footerAnnotationButton).not.toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: /files\.annotateForAi/i }));
     expect(screen.getAllByText("L2-L3").length).toBeGreaterThan(0);

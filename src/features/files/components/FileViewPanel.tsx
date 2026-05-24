@@ -667,6 +667,16 @@ export function FileViewPanel({
     },
     [],
   );
+  const handleStartEditorAnnotation = useCallback(() => {
+    const lineRange =
+      annotationDraft?.source === "file-edit-mode"
+        ? annotationDraft.lineRange
+        : editorLocalLineRangeRef.current ?? activeAnnotationLineRange;
+    if (!lineRange) {
+      return;
+    }
+    beginAnnotationDraft(lineRange, "file-edit-mode");
+  }, [activeAnnotationLineRange, annotationDraft, beginAnnotationDraft]);
   const handleConfirmAnnotationDraft = useCallback((bodyOverride?: string) => {
     if (!annotationDraft) {
       return;
@@ -1915,19 +1925,6 @@ export function FileViewPanel({
       onPreviewAnnotationStart={(lineRange) =>
         beginAnnotationDraft(lineRange, "file-preview-mode")
       }
-      onEditorAnnotationStart={() => {
-        const lineRange =
-          annotationDraft?.source === "file-edit-mode"
-            ? annotationDraft.lineRange
-            : editorLocalLineRangeRef.current ?? activeAnnotationLineRange;
-        if (!lineRange) {
-          return;
-        }
-        beginAnnotationDraft(lineRange, "file-edit-mode");
-      }}
-      editorAnnotationLineRange={
-        viewSurface.kind === "editor" ? activeAnnotationLineRange : null
-      }
       annotationDraft={effectiveAnnotationDraft}
       codeAnnotations={visibleCodeAnnotations}
       onRemoveCodeAnnotation={onRemoveCodeAnnotation}
@@ -1987,6 +1984,15 @@ export function FileViewPanel({
             </code>
             {activeFileLineLabel ? (
               <span className="fvp-file-reference-lines">{activeFileLineLabel}</span>
+            ) : null}
+            {viewSurface.kind === "editor" && activeAnnotationLineRange ? (
+              <button
+                type="button"
+                className="fvp-annotation-trigger fvp-file-reference-annotation"
+                onClick={handleStartEditorAnnotation}
+              >
+                {t("files.annotateForAi")}
+              </button>
             ) : null}
             <button
               type="button"
