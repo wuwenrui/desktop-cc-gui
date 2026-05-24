@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-16.md`
-- **Total Sessions**: 568
+- **Total Sessions**: 569
 - **Last Active**: 2026-05-24
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-16.md` | ~311 | Active |
+| `journal-16.md` | ~356 | Active |
 | `journal-15.md` | ~1996 | Archived |
 | `journal-14.md` | ~1969 | Archived |
 | `journal-13.md` | ~1947 | Archived |
@@ -44,6 +44,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 569 | 2026-05-24 | 优化编辑态标注入口 | `4cce9d46` | `feature/v0.5.2` |
 | 568 | 2026-05-24 | 修复邮件设置密钥加载 CI 断言 | `24fd0862` | `feature/v0.5.2` |
 | 567 | 2026-05-24 | 重构文件打开渲染调度收口 | `8a24eabb` | `feature/v0.5.2` |
 | 566 | 2026-05-24 | 补全 v0.5.2 变更日志 | `aa0c405b` | `feature/v0.5.2` |

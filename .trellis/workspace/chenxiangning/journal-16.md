@@ -309,3 +309,48 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 569: 优化编辑态标注入口
+
+**Date**: 2026-05-24
+**Task**: 优化编辑态标注入口
+**Branch**: `feature/v0.5.2`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+完成文件编辑态标注入口收口：将编辑器内 sticky annotation toolbar 移除，改为复用底部文件引用栏展示“标注 AI”入口，避免鼠标点击不同行和编辑选区时触发布局/交互层扰动。
+
+主要改动：
+- FileViewBody 不再接收 editor annotation toolbar 相关 props，也不在 editor surface 内渲染 sticky 标注栏。
+- FileViewPanel 新增 handleStartEditorAnnotation，并在 footer 的文件引用区域根据 editor active line range 渲染标注按钮。
+- 样式从 editor body 转移到底部 footer，补充 .fvp-file-reference-annotation 紧凑样式。
+- 更新 FileViewPanel 测试，确认 editor 内 toolbar 不存在、footer 标注入口存在，并保留 L2-L3 annotation draft 行为。
+
+验证：
+- npx vitest run src/features/files/components/FileViewPanel.test.tsx 通过，60 tests。
+- npm run typecheck 通过。
+- npm run lint 通过。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4cce9d46` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
