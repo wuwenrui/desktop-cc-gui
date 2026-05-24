@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { buildWorkspaceSessionSelectionKey } from "../../settings/components/settings-view/hooks/useWorkspaceSessionCatalog";
-import { normalizeProjectCatalogSession } from "./useThreadActions.threadList";
+import {
+  normalizeProjectCatalogSession,
+  resolveThreadListCursorForDisplay,
+} from "./useThreadActions.threadList";
 
 describe("useThreadActions.threadList", () => {
   it("preserves additive catalog source fields during normalization", () => {
@@ -83,5 +86,22 @@ describe("useThreadActions.threadList", () => {
       sourceStatusReason: null,
       folderId: "folder-1",
     });
+  });
+
+  it("does not expose load-older cursor for catalog partial source without next cursor", () => {
+    expect(
+      resolveThreadListCursorForDisplay({
+        catalogCursor: null,
+        catalogPartialSource: "claude-scan-cap-reached",
+        runtimeCursor: null,
+      }),
+    ).toBeNull();
+    expect(
+      resolveThreadListCursorForDisplay({
+        catalogCursor: "offset:200",
+        catalogPartialSource: "claude-scan-cap-reached",
+        runtimeCursor: null,
+      }),
+    ).toBe("catalog::offset:200");
   });
 });

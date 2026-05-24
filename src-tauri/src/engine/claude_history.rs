@@ -39,7 +39,7 @@ pub(crate) const CLAUDE_ATTRIBUTION_REASON_PROJECT_DIRECTORY: &str = "claude-pro
 const CLAUDE_ATTRIBUTION_REASON_TRANSCRIPT_CWD: &str = "claude-transcript-cwd";
 const CLAUDE_ATTRIBUTION_REASON_GIT_ROOT: &str = "claude-git-root";
 const CLAUDE_SOURCE_FACT_CACHE_SCHEMA_VERSION: u32 = 1;
-const CLAUDE_SOURCE_FACT_SCANNER_VERSION: u32 = 1;
+const CLAUDE_SOURCE_FACT_SCANNER_VERSION: u32 = 2;
 fn normalize_session_id(session_id: &str) -> Result<String, String> {
     normalize_claude_session_id(session_id)
 }
@@ -475,17 +475,37 @@ async fn source_fact_file_fingerprint(path: &Path) -> (Option<u64>, Option<i64>)
     }
 }
 
-fn source_fact_cache_namespace(base_dir: &Path) -> String {
+fn source_fact_cache_namespace(
+    base_dir: &Path,
+    attribution_scopes: &[ClaudeSessionAttributionScope],
+) -> String {
     let mut hasher = Sha256::new();
     hasher.update(base_dir.to_string_lossy().as_bytes());
+    for scope in attribution_scopes {
+        hasher.update(b"\0scope\0");
+        hasher.update(scope.reason.as_bytes());
+        hasher.update(b"\0path\0");
+        hasher.update(scope.path.to_string_lossy().as_bytes());
+    }
     format!("{:x}", hasher.finalize())
 }
 
-fn source_fact_cache_path(cache_dir: &Path, namespace: &str, path: &Path) -> PathBuf {
+fn source_fact_cache_path(
+    cache_dir: &Path,
+    namespace: &str,
+    path: &Path,
+    allow_project_directory_fallback: bool,
+) -> PathBuf {
     let mut hasher = Sha256::new();
     hasher.update(namespace.as_bytes());
     hasher.update(b"\0");
     hasher.update(path.to_string_lossy().as_bytes());
+    hasher.update(b"\0fallback\0");
+    hasher.update(if allow_project_directory_fallback {
+        "true"
+    } else {
+        "false"
+    });
     cache_dir.join(format!("{:x}.json", hasher.finalize()))
 }
 
@@ -585,9 +605,9 @@ async fn scan_session_source_file_with_cache(
 ) -> ClaudeSessionScanOutcome {
     let (file_size_bytes, file_mtime_ms) = source_fact_file_fingerprint(path).await;
     let cache_path = if file_size_bytes.is_some() && file_mtime_ms.is_some() {
-        cache_dir
-            .zip(cache_namespace)
-            .map(|(dir, namespace)| source_fact_cache_path(dir, namespace, path))
+        cache_dir.zip(cache_namespace).map(|(dir, namespace)| {
+            source_fact_cache_path(dir, namespace, path, allow_project_directory_fallback)
+        })
     } else {
         None
     };
@@ -1023,7 +1043,7 @@ pub(crate) async fn list_claude_session_source_facts_from_base_dir(
     cache_dir: Option<&Path>,
 ) -> Result<ClaudeSessionSourceFactList, String> {
     timeout(LOCAL_SESSION_SCAN_TIMEOUT, async {
-        let cache_namespace = source_fact_cache_namespace(base_dir);
+        let cache_namespace = source_fact_cache_namespace(base_dir, attribution_scopes);
         let project_dirs = claude_project_dirs_for_path(base_dir, workspace_path);
         let project_dir_set = project_dirs.iter().cloned().collect::<HashSet<_>>();
         let mut scan_dirs = Vec::new();

@@ -499,6 +499,50 @@ export function useThreadEventHandlers({
     [clearTurnStallTimer, emitTurnDiagnostic, getThreadLifecycleSnapshot],
   );
 
+  const noteNonTextRuntimeProgress = useCallback(
+    (
+      threadId: string,
+      source: string,
+      evidence: {
+        itemType?: string | null;
+        itemId?: string | null;
+        itemEventKind?: "started" | "updated" | "completed" | "output-delta" | null;
+        outputLength?: number | null;
+      } = {},
+    ) => {
+      const diagnostic = turnDiagnosticsRef.current.get(threadId);
+      if (!diagnostic || diagnostic.completedAt !== null || diagnostic.errorAt !== null) {
+        return;
+      }
+      const now = Date.now();
+      diagnostic.lastProgressAt = now;
+      diagnostic.lastProgressSource = source;
+      diagnostic.progressSequence += 1;
+      if (diagnostic.firstDeltaAt === null) {
+        clearFirstDeltaTimer(threadId);
+      }
+      const lifecycle = getThreadLifecycleSnapshot(threadId);
+      emitTurnDiagnostic("non-text-runtime-progress", {
+        workspaceId: diagnostic.workspaceId,
+        threadId,
+        turnId: diagnostic.turnId,
+        source,
+        itemType: evidence.itemType ?? null,
+        itemId: evidence.itemId ?? null,
+        itemEventKind: evidence.itemEventKind ?? null,
+        outputLength: evidence.outputLength ?? null,
+        elapsedMs: Math.max(0, now - diagnostic.startedAt),
+        firstDeltaSeen: diagnostic.firstDeltaAt !== null,
+        progressSequence: diagnostic.progressSequence,
+        isProcessing: lifecycle.isProcessing,
+        activeTurnId: lifecycle.activeTurnId,
+        diagnosticCategory: "non-text-runtime-progress",
+        ...buildThreadStreamCorrelationDimensions(threadId),
+      });
+    },
+    [clearFirstDeltaTimer, emitTurnDiagnostic, getThreadLifecycleSnapshot],
+  );
+
   const clearAssistantSnapshotIngressForThread = useCallback((threadId: string) => {
     const prefix = `${threadId}\u0000`;
     assistantSnapshotIngressLengthRef.current.forEach((_value, key) => {
@@ -664,27 +708,34 @@ export function useThreadEventHandlers({
           ...buildThreadStreamCorrelationDimensions(threadId),
         });
       }
-      if (isExecutionItemType(itemType) && diagnostic.firstExecutionAt === null) {
-        diagnostic.firstExecutionAt = now;
-        diagnostic.firstExecutionEventKind = kind;
-        diagnostic.firstExecutionItemType = itemType;
-        diagnostic.firstExecutionItemId = itemId;
-        clearTurnStallTimer(threadId);
-        const lifecycle = getThreadLifecycleSnapshot(threadId);
-        emitTurnDiagnostic("first-execution-item", {
-          workspaceId: diagnostic.workspaceId,
-          threadId,
-          turnId: diagnostic.turnId,
-          itemEventKind: kind,
+      if (isExecutionItemType(itemType)) {
+        noteNonTextRuntimeProgress(threadId, `execution-item-${kind}`, {
           itemType,
           itemId,
-          elapsedMs: Math.max(0, now - diagnostic.startedAt),
-          deltaSinceMs:
-            diagnostic.firstDeltaAt === null ? null : Math.max(0, now - diagnostic.firstDeltaAt),
-          isProcessing: lifecycle.isProcessing,
-          activeTurnId: lifecycle.activeTurnId,
-          ...buildThreadStreamCorrelationDimensions(threadId),
+          itemEventKind: kind,
         });
+        if (diagnostic.firstExecutionAt === null) {
+          diagnostic.firstExecutionAt = now;
+          diagnostic.firstExecutionEventKind = kind;
+          diagnostic.firstExecutionItemType = itemType;
+          diagnostic.firstExecutionItemId = itemId;
+          clearTurnStallTimer(threadId);
+          const lifecycle = getThreadLifecycleSnapshot(threadId);
+          emitTurnDiagnostic("first-execution-item", {
+            workspaceId: diagnostic.workspaceId,
+            threadId,
+            turnId: diagnostic.turnId,
+            itemEventKind: kind,
+            itemType,
+            itemId,
+            elapsedMs: Math.max(0, now - diagnostic.startedAt),
+            deltaSinceMs:
+              diagnostic.firstDeltaAt === null ? null : Math.max(0, now - diagnostic.firstDeltaAt),
+            isProcessing: lifecycle.isProcessing,
+            activeTurnId: lifecycle.activeTurnId,
+            ...buildThreadStreamCorrelationDimensions(threadId),
+          });
+        }
       }
       if (applyActiveExecutionItemEvent(diagnostic, kind, itemType, itemId, item, now)) {
         scheduleCodexNoProgressTimer(threadId);
@@ -694,6 +745,7 @@ export function useThreadEventHandlers({
       clearTurnStallTimer,
       emitTurnDiagnostic,
       getThreadLifecycleSnapshot,
+      noteNonTextRuntimeProgress,
       scheduleCodexNoProgressTimer,
     ],
   );
@@ -1390,6 +1442,14 @@ export function useThreadEventHandlers({
           });
         }
       }
+      if (event.operation === "appendToolOutputDelta" && event.item.kind === "tool") {
+        noteNonTextRuntimeProgress(event.threadId, "normalized-tool-output-delta", {
+          itemType: event.item.toolType,
+          itemId: event.item.id,
+          itemEventKind: "output-delta",
+          outputLength: (event.delta ?? event.item.output ?? "").length,
+        });
+      }
       if (
         event.operation === "completeAgentMessage" &&
         event.item.kind === "message" &&
@@ -1439,11 +1499,78 @@ export function useThreadEventHandlers({
       isRealtimeTurnTerminalExact,
       maybeRecordAgentMessageSnapshotIngress,
       noteCodexTurnProgressEvidence,
+      noteNonTextRuntimeProgress,
       onNormalizedRealtimeEvent,
       recordAssistantCompletionEvidence,
       recordAssistantStreamIngress,
       shouldSkipLateCodexNormalizedEvent,
     ],
+  );
+
+  const onCommandOutputDeltaTracked = useCallback(
+    (
+      workspaceId: string,
+      threadId: string,
+      itemId: string,
+      delta: string,
+      turnId?: string | null,
+    ) => {
+      onCommandOutputDelta(workspaceId, threadId, itemId, delta, turnId);
+      if (interruptedThreadsRef.current.has(threadId)) {
+        return;
+      }
+      noteNonTextRuntimeProgress(threadId, "command-output-delta", {
+        itemType: "commandExecution",
+        itemId,
+        itemEventKind: "output-delta",
+        outputLength: delta.length,
+      });
+    },
+    [interruptedThreadsRef, noteNonTextRuntimeProgress, onCommandOutputDelta],
+  );
+
+  const onFileChangeOutputDeltaTracked = useCallback(
+    (
+      workspaceId: string,
+      threadId: string,
+      itemId: string,
+      delta: string,
+      turnId?: string | null,
+    ) => {
+      onFileChangeOutputDelta(workspaceId, threadId, itemId, delta, turnId);
+      if (interruptedThreadsRef.current.has(threadId)) {
+        return;
+      }
+      noteNonTextRuntimeProgress(threadId, "file-change-output-delta", {
+        itemType: "fileChange",
+        itemId,
+        itemEventKind: "output-delta",
+        outputLength: delta.length,
+      });
+    },
+    [interruptedThreadsRef, noteNonTextRuntimeProgress, onFileChangeOutputDelta],
+  );
+
+  const onTerminalInteractionTracked = useCallback(
+    (
+      workspaceId: string,
+      threadId: string,
+      itemId: string,
+      stdin: string,
+      turnId?: string | null,
+    ) => {
+      onTerminalInteraction(workspaceId, threadId, itemId, stdin, turnId);
+      if (interruptedThreadsRef.current.has(threadId)) {
+        return;
+      }
+      noteNonTextRuntimeProgress(threadId, "terminal-interaction", {
+        itemType: "commandExecution",
+        itemId,
+        itemEventKind: "output-delta",
+        outputLength: stdin.length,
+      });
+    },
+    [interruptedThreadsRef, noteNonTextRuntimeProgress, onTerminalInteraction],
   );
 
   const finalizeTurnDiagnostic = useCallback(
@@ -2090,9 +2217,9 @@ export function useThreadEventHandlers({
       onReasoningSummaryDelta,
       onReasoningSummaryBoundary,
       onReasoningTextDelta,
-      onCommandOutputDelta,
-      onTerminalInteraction,
-      onFileChangeOutputDelta,
+      onCommandOutputDelta: onCommandOutputDeltaTracked,
+      onTerminalInteraction: onTerminalInteractionTracked,
+      onFileChangeOutputDelta: onFileChangeOutputDeltaTracked,
       onThreadStarted,
       onTurnStarted: onTurnStartedTracked,
       onTurnCompleted: onTurnCompletedTracked,
@@ -2124,9 +2251,9 @@ export function useThreadEventHandlers({
       onReasoningSummaryDelta,
       onReasoningSummaryBoundary,
       onReasoningTextDelta,
-      onCommandOutputDelta,
-      onTerminalInteraction,
-      onFileChangeOutputDelta,
+      onCommandOutputDeltaTracked,
+      onTerminalInteractionTracked,
+      onFileChangeOutputDeltaTracked,
       onThreadStarted,
       onTurnStartedTracked,
       onTurnCompletedTracked,

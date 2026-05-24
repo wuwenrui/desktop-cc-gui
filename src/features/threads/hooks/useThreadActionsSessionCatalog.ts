@@ -13,6 +13,8 @@ import {
   type ProjectCatalogSessionSummary,
 } from "./useThreadActions.threadList";
 
+const ACTIVE_PROJECT_CATALOG_MAX_PAGES = 50;
+
 export type ListWorkspaceSessionsService = (
   workspaceId: string,
   options: {
@@ -40,6 +42,34 @@ type UseThreadActionsSessionCatalogOptions = {
     | ListWorkspaceSessionArchiveEvidenceService
     | null;
 };
+
+function mergeFirstPartialSource(
+  current: string | null,
+  incoming: string | null | undefined,
+): string | null {
+  if (current) {
+    return current;
+  }
+  const normalized = typeof incoming === "string" ? incoming.trim() : "";
+  return normalized.length > 0 ? normalized : null;
+}
+
+function mergeSourceStatusesByEngine(
+  current: WorkspaceSessionCatalogSourceStatus[],
+  incoming: WorkspaceSessionCatalogSourceStatus[] | null | undefined,
+): WorkspaceSessionCatalogSourceStatus[] {
+  if (!Array.isArray(incoming) || incoming.length === 0) {
+    return current;
+  }
+  const byEngine = new Map(current.map((status) => [status.engine, status]));
+  incoming.forEach((status) => {
+    if (!status.engine) {
+      return;
+    }
+    byEngine.set(status.engine, status);
+  });
+  return Array.from(byEngine.values());
+}
 
 export function useThreadActionsSessionCatalog({
   canListWorkspaceSessions,
@@ -119,30 +149,73 @@ export function useThreadActionsSessionCatalog({
       if (!canListWorkspaceSessions || !listWorkspaceSessionsService) {
         return null;
       }
-      const response: WorkspaceSessionCatalogPage | null = await withTimeout(
-        listWorkspaceSessionsService(workspaceId, {
-          query: { status: "active" },
-          cursor: null,
-          limit: SESSION_CATALOG_PAGE_SIZE,
-        }),
-        CODEX_SESSION_CATALOG_FETCH_TIMEOUT_MS,
-      );
-      if (!response) {
-        return {
-          sessions: [],
-          partialSource: "session-catalog-timeout",
-          nextCursor: null,
-          sourceStatuses: [],
-        };
-      }
-      const sessions = response.data
-        .map((entry: unknown) => normalizeProjectCatalogSession(entry))
-        .filter((entry): entry is ProjectCatalogSessionSummary => Boolean(entry));
+      const sessionsById = new Map<string, ProjectCatalogSessionSummary>();
+      const seenCursors = new Set<string>();
+      let cursor: string | null = null;
+      let partialSource: string | null = null;
+      let sourceStatuses: WorkspaceSessionCatalogSourceStatus[] = [];
+      let pageCount = 0;
+      do {
+        pageCount += 1;
+        if (cursor) {
+          if (seenCursors.has(cursor)) {
+            partialSource = mergeFirstPartialSource(
+              partialSource,
+              "session-catalog-cursor-loop",
+            );
+            cursor = null;
+            break;
+          }
+          seenCursors.add(cursor);
+        }
+        const response: WorkspaceSessionCatalogPage | null = await withTimeout(
+          listWorkspaceSessionsService(workspaceId, {
+            query: { status: "active" },
+            cursor,
+            limit: SESSION_CATALOG_PAGE_SIZE,
+          }),
+          CODEX_SESSION_CATALOG_FETCH_TIMEOUT_MS,
+        );
+        if (!response) {
+          partialSource = mergeFirstPartialSource(
+            partialSource,
+            "session-catalog-timeout",
+          );
+          cursor = null;
+          break;
+        }
+        response.data
+          .map((entry: unknown) => normalizeProjectCatalogSession(entry))
+          .filter((entry): entry is ProjectCatalogSessionSummary => Boolean(entry))
+          .forEach((entry) => {
+            if (!sessionsById.has(entry.sessionId)) {
+              sessionsById.set(entry.sessionId, entry);
+            }
+          });
+        partialSource = mergeFirstPartialSource(
+          partialSource,
+          response.partialSource,
+        );
+        sourceStatuses = mergeSourceStatusesByEngine(
+          sourceStatuses,
+          response.sourceStatuses,
+        );
+        cursor = response.nextCursor ?? null;
+        if (cursor && pageCount >= ACTIVE_PROJECT_CATALOG_MAX_PAGES) {
+          partialSource = mergeFirstPartialSource(
+            partialSource,
+            "session-catalog-page-cap",
+          );
+          cursor = null;
+          break;
+        }
+      } while (cursor);
+      const sessions = Array.from(sessionsById.values());
       return {
         sessions,
-        partialSource: response.partialSource ?? null,
-        nextCursor: response.nextCursor ?? null,
-        sourceStatuses: response.sourceStatuses ?? [],
+        partialSource,
+        nextCursor: cursor,
+        sourceStatuses,
       };
     },
     [canListWorkspaceSessions, listWorkspaceSessionsService],

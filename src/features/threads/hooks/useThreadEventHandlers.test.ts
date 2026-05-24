@@ -298,6 +298,53 @@ describe("useThreadEventHandlers diagnostics", () => {
     expect(stalledEntry?.payload.hasExecutionItem).toBe(false);
   });
 
+  it("does not report first-token delay while backend command activity is arriving", () => {
+    const onDebug = vi.fn();
+    const { result } = renderHook(() => useThreadEventHandlers(makeOptions(onDebug)));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "claude:session-command", "turn-1");
+    });
+
+    act(() => {
+      vi.advanceTimersByTime(100);
+      result.current.onItemStarted("ws-1", "claude:session-command", {
+        id: "cmd-1",
+        type: "commandExecution",
+        command: "echo '--- 探测各模块构建类型 ---'",
+        status: "running",
+      });
+      vi.advanceTimersByTime(6_000);
+    });
+
+    const labels = collectDiagnosticCalls(onDebug).map((entry) => entry.label);
+    expect(labels).not.toContain("thread/session:turn-diagnostic:waiting-for-first-delta");
+  });
+
+  it("does not report first-token delay while backend command output deltas are arriving", () => {
+    const onDebug = vi.fn();
+    const { result } = renderHook(() => useThreadEventHandlers(makeOptions(onDebug)));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "claude:session-command-output", "turn-1");
+    });
+
+    act(() => {
+      vi.advanceTimersByTime(100);
+      result.current.onCommandOutputDelta(
+        "ws-1",
+        "claude:session-command-output",
+        "cmd-1",
+        "Command: 探测各模块构建类型",
+        "turn-1",
+      );
+      vi.advanceTimersByTime(6_000);
+    });
+
+    const labels = collectDiagnosticCalls(onDebug).map((entry) => entry.label);
+    expect(labels).not.toContain("thread/session:turn-diagnostic:waiting-for-first-delta");
+  });
+
   it("emits bounded turn completed domain events through the internal controller", () => {
     const domainEventController = createDomainEventRuntimeController();
     const subscriber = vi.fn();

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MutableRefObject } from "react";
 import type { WorkspaceInfo } from "../types";
 import {
@@ -20,9 +20,9 @@ type ListThreadsForWorkspace = (
   options?: {
     preserveState?: boolean;
     includeOpenCodeSessions?: boolean;
-    startupHydrationMode?: "first-page" | "full-catalog";
+    startupHydrationMode?: "full-catalog";
   },
-) => Promise<void>;
+) => Promise<void | { applied?: boolean; stale?: boolean }>;
 
 type UseWorkspaceThreadListHydrationOptions = {
   activeWorkspaceId: string | null;
@@ -44,8 +44,22 @@ type UseWorkspaceThreadListHydrationResult = {
 };
 
 type ThreadHydrationPhase = "active-workspace" | "idle-prewarm" | "on-demand";
-type ThreadHydrationKind = "first-page" | "full-catalog" | "session-radar";
+type ThreadHydrationKind = "full-catalog" | "session-radar";
+type ThreadListHydrationResult =
+  | void
+  | { applied?: boolean; stale?: boolean };
 const ACTIVE_WORKSPACE_READY_MILESTONE: StartupMilestoneName = "active-workspace-ready";
+
+function isDiscardedStaleHydrationResult(
+  result: ThreadListHydrationResult,
+): boolean {
+  return (
+    typeof result === "object" &&
+    result !== null &&
+    result.applied === false &&
+    result.stale === true
+  );
+}
 
 function hasRecordedActiveWorkspaceReady() {
   return Boolean(getStartupTraceSnapshot().milestones[ACTIVE_WORKSPACE_READY_MILESTONE]);
@@ -55,8 +69,8 @@ function createThreadHydrationTask(
   workspace: WorkspaceInfo,
   phase: ThreadHydrationPhase,
   kind: ThreadHydrationKind,
-  run: () => Promise<void>,
-): StartupTaskDescriptor<void> {
+  run: () => Promise<ThreadListHydrationResult>,
+): StartupTaskDescriptor<ThreadListHydrationResult> {
   const dedupeKey = `thread-list:${kind}:${workspace.id}`;
   return {
     id: `thread-list:${kind}:${workspace.id}`,
@@ -92,30 +106,56 @@ export function useWorkspaceThreadListHydration({
   const autoHydratedActiveWorkspaceIdRef = useRef<string | null>(null);
   const [hydrationCycle, setHydrationCycle] = useState(0);
 
+  const backgroundHydrationWorkspaces = useMemo(() => {
+    const priorityIds = new Set(activeWorkspaceProjectionOwnerIds);
+    if (activeWorkspaceId) {
+      priorityIds.add(activeWorkspaceId);
+    }
+    const priorityWorkspaces: WorkspaceInfo[] = [];
+    const remainingWorkspaces: WorkspaceInfo[] = [];
+    workspaces.forEach((workspace) => {
+      if (priorityIds.has(workspace.id)) {
+        priorityWorkspaces.push(workspace);
+      } else {
+        remainingWorkspaces.push(workspace);
+      }
+    });
+    return [...priorityWorkspaces, ...remainingWorkspaces];
+  }, [activeWorkspaceId, activeWorkspaceProjectionOwnerIds, workspaces]);
+
   const listThreadsForWorkspaceTracked = useCallback<ListThreadsForWorkspace>(
     async (workspace, options) => {
       hydratingThreadListWorkspaceIdsRef.current.add(workspace.id);
       const phase =
         hydrationPhaseByWorkspaceIdRef.current.get(workspace.id) ??
-        (workspace.id === activeWorkspaceId ? "active-workspace" : "on-demand");
+        "on-demand";
       const kind =
         hydrationKindByWorkspaceIdRef.current.get(workspace.id) ??
-        (phase === "active-workspace" ? "first-page" : "full-catalog");
+        "full-catalog";
+      let hydrationResult: ThreadListHydrationResult = undefined;
       try {
-        await startupOrchestrator.run(
+        hydrationResult = await startupOrchestrator.run(
           createThreadHydrationTask(workspace, phase, kind, () =>
             listThreadsForWorkspace(workspace, {
               ...options,
-              startupHydrationMode: kind === "first-page" ? "first-page" : "full-catalog",
+              startupHydrationMode: "full-catalog",
             }),
           ),
         );
       } finally {
-        if (kind === "first-page" && phase === "active-workspace" && !hasRecordedActiveWorkspaceReady()) {
+        const discardedAsStale =
+          isDiscardedStaleHydrationResult(hydrationResult);
+        if (
+          !discardedAsStale &&
+          phase === "active-workspace" &&
+          !hasRecordedActiveWorkspaceReady()
+        ) {
           recordStartupMilestone(ACTIVE_WORKSPACE_READY_MILESTONE);
         }
-        hydratedThreadListWorkspaceIdsRef.current.add(workspace.id);
-        if (kind !== "first-page") {
+        if (!discardedAsStale) {
+          hydratedThreadListWorkspaceIdsRef.current.add(workspace.id);
+        }
+        if (!discardedAsStale) {
           fullyHydratedThreadListWorkspaceIdsRef.current.add(workspace.id);
         }
         hydratingThreadListWorkspaceIdsRef.current.delete(workspace.id);
@@ -124,7 +164,7 @@ export function useWorkspaceThreadListHydration({
         setHydrationCycle((current) => current + 1);
       }
     },
-    [activeWorkspaceId, listThreadsForWorkspace],
+    [listThreadsForWorkspace],
   );
 
   const ensureWorkspaceThreadListLoaded = useCallback(
@@ -160,7 +200,7 @@ export function useWorkspaceThreadListHydration({
       hydrationPhaseByWorkspaceIdRef.current.set(workspaceId, phase);
       hydrationKindByWorkspaceIdRef.current.set(
         workspaceId,
-        phase === "active-workspace" ? "first-page" : "full-catalog",
+        "full-catalog",
       );
       void listThreadsForWorkspaceTracked(workspace, {
         preserveState: options?.preserveState,
@@ -253,7 +293,7 @@ export function useWorkspaceThreadListHydration({
 
   const nextBackgroundWorkspaceThreadHydrationId =
     resolveNextWorkspaceThreadListHydrationId({
-      workspaces,
+      workspaces: backgroundHydrationWorkspaces,
       activeWorkspaceProjectionOwnerIds: activeWorkspaceProjectionOwnerIds.filter(
         (workspaceId) => workspaceId !== activeWorkspaceId,
       ),

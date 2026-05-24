@@ -474,6 +474,83 @@ async fn source_fact_cache_hits_and_invalidates_by_fingerprint() {
 }
 
 #[tokio::test]
+async fn source_fact_cache_is_scoped_by_attribution_context() {
+    let unique = Uuid::new_v4().to_string();
+    let temp_root = std::env::temp_dir().join(format!("ccgui-claude-cache-scope-{}", unique));
+    let base_dir = temp_root.join("claude-projects");
+    let cache_dir = temp_root.join("source-fact-cache");
+    let workspace_path = temp_root.join("workspace");
+    let unrelated_workspace_path = temp_root.join("unrelated");
+    std::fs::create_dir_all(&workspace_path).expect("create workspace path");
+    std::fs::create_dir_all(&unrelated_workspace_path).expect("create unrelated path");
+    let project_dir = create_project_dir(&base_dir, &workspace_path);
+    let session_id = format!("cache-scope-{}", unique);
+    let session_path = project_dir.join(format!("{}.jsonl", session_id));
+    write_jsonl_lines(
+        &session_path,
+        &[json!({
+            "uuid": "user-1",
+            "timestamp": "2026-05-24T01:00:00.000Z",
+            "cwd": workspace_path.to_string_lossy(),
+            "sessionId": session_id,
+            "message": { "role": "user", "content": "Visible in the owning workspace only" }
+        })],
+        "\n",
+    );
+
+    let unrelated_scopes = vec![ClaudeSessionAttributionScope::workspace_path(
+        unrelated_workspace_path.clone(),
+    )];
+    let unrelated = list_claude_session_source_facts_from_base_dir(
+        &base_dir,
+        &unrelated_workspace_path,
+        &unrelated_scopes,
+        Some(20),
+        Some(&cache_dir),
+    )
+    .await
+    .expect("unrelated scan");
+    assert!(unrelated.facts.is_empty());
+    assert!(unrelated.cache_metrics.rebuilds >= 1);
+
+    let owning_scopes = vec![ClaudeSessionAttributionScope::workspace_path(
+        workspace_path.clone(),
+    )];
+    let owning = list_claude_session_source_facts_from_base_dir(
+        &base_dir,
+        &workspace_path,
+        &owning_scopes,
+        Some(20),
+        Some(&cache_dir),
+    )
+    .await
+    .expect("owning scan");
+    assert!(owning
+        .facts
+        .iter()
+        .any(|fact| fact.canonical_session_id == session_id));
+    assert_eq!(owning.cache_metrics.hits, 0);
+    assert!(owning.cache_metrics.rebuilds >= 1);
+
+    let owning_again = list_claude_session_source_facts_from_base_dir(
+        &base_dir,
+        &workspace_path,
+        &owning_scopes,
+        Some(20),
+        Some(&cache_dir),
+    )
+    .await
+    .expect("owning cached scan");
+    assert!(owning_again.cache_metrics.hits >= 1);
+    assert!(owning_again
+        .facts
+        .iter()
+        .any(|fact| fact.canonical_session_id == session_id));
+
+    let _ = std::fs::remove_dir_all(&temp_root);
+}
+
+#[tokio::test]
 async fn source_fact_cache_excludes_full_inline_payloads() {
     let unique = Uuid::new_v4().to_string();
     let temp_root = std::env::temp_dir().join(format!("ccgui-claude-cache-redact-{}", unique));

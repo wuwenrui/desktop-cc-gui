@@ -44,7 +44,7 @@ const WORKSPACE_SESSION_SOURCE_COMPLETENESS_VALUES = new Set<
 
 type ThreadListCursorSource = "catalog" | "runtime";
 
-export type StartupThreadHydrationMode = "first-page" | "full-catalog";
+export type StartupThreadHydrationMode = "full-catalog";
 
 export type ThreadListCursorState = {
   source: ThreadListCursorSource;
@@ -128,9 +128,6 @@ export function resolveThreadListCursorForDisplay(params: {
 }): string | null {
   if (params.catalogCursor) {
     return encodeThreadListCursorState("catalog", params.catalogCursor);
-  }
-  if (params.catalogPartialSource) {
-    return encodeThreadListCursorState("catalog", null);
   }
   if (params.runtimeCursor) {
     return encodeThreadListCursorState("runtime", params.runtimeCursor);

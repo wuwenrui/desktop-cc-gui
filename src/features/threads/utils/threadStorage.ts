@@ -12,6 +12,15 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function isFinalizedNativeThreadId(threadId: string) {
+  const normalizedThreadId = threadId.toLowerCase();
+  return (
+    normalizedThreadId.startsWith("claude:") ||
+    normalizedThreadId.startsWith("gemini:") ||
+    normalizedThreadId.startsWith("opencode:")
+  );
+}
+
 export function loadThreadActivity(): ThreadActivityMap {
   return getClientStoreSync<ThreadActivityMap>("threads", "lastUserActivity") ?? {};
 }
@@ -63,6 +72,9 @@ export function normalizeThreadAliases(raw: unknown): ThreadAliasMap {
     const normalizedSource = source.trim();
     const normalizedTarget = target.trim();
     if (!normalizedSource || !normalizedTarget || normalizedSource === normalizedTarget) {
+      return;
+    }
+    if (isFinalizedNativeThreadId(normalizedSource)) {
       return;
     }
     normalized[normalizedSource] = normalizedTarget;
@@ -126,7 +138,8 @@ export function buildUpdatedThreadAliases(
   if (
     !normalizedOldThreadId ||
     !normalizedNewThreadId ||
-    normalizedOldThreadId === normalizedNewThreadId
+    normalizedOldThreadId === normalizedNewThreadId ||
+    isFinalizedNativeThreadId(normalizedOldThreadId)
   ) {
     return normalizedCurrent;
   }
@@ -150,6 +163,19 @@ export function buildUpdatedThreadAliases(
     normalizedCurrent[sourceThreadId] = canonicalThreadId;
   });
   return normalizedCurrent;
+}
+
+export function buildClearedThreadAliases(
+  current: ThreadAliasMap,
+  oldThreadId: string,
+): ThreadAliasMap {
+  const normalizedCurrent = normalizeThreadAliases(current);
+  const normalizedOldThreadId = oldThreadId.trim();
+  if (!normalizedOldThreadId) {
+    return normalizedCurrent;
+  }
+  delete normalizedCurrent[normalizedOldThreadId];
+  return normalizeThreadAliases(normalizedCurrent);
 }
 
 export function makePinKey(workspaceId: string, threadId: string): string {

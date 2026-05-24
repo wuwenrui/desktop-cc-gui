@@ -245,6 +245,7 @@ export function useThreads({
     getCustomName,
     resolveCanonicalThreadId,
     rememberThreadAlias,
+    clearThreadAlias,
     recordThreadActivity,
     pinThread,
     unpinThread,
@@ -259,6 +260,10 @@ export function useThreads({
   } = useThreadStorage();
 
   const activeWorkspaceId = activeWorkspace?.id ?? null;
+  const resolveWorkspacePath = useCallback((workspaceId: string) => {
+    const workspace = activeWorkspaceRef.current;
+    return workspace?.id === workspaceId ? workspace.path : null;
+  }, []);
   const { activeThreadId, activeItems } = useThreadSelectors({
     activeWorkspaceId,
     activeThreadIdByWorkspace: state.activeThreadIdByWorkspace,
@@ -700,6 +705,8 @@ export function useThreads({
     applyCollabThreadLinksFromThread,
     updateThreadParent,
     rememberThreadAlias,
+    clearThreadAlias,
+    resolveWorkspacePath,
     onThreadTitleMappingsLoaded: (workspaceId, titles) => {
       Object.entries(titles).forEach(([threadId, title]) => {
         if (!threadId.trim() || !title.trim()) {
