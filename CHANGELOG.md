@@ -2,6 +2,68 @@
 
 ---
 
+##### **2026年5月24日（v0.5.2）**
+
+中文：
+
+✨ Features
+- 统一 Claude 工作区会话目录读取链路，将 Sidebar、Workspace Home 和 Settings 的 session membership 收敛到共享 catalog projection，降低会话列表被吞或漂移的概率
+- 增加运行态证据门禁与稳定性校准链路，按 measured / proxy / unsupported / manual-only 分类性能与稳定性证据，强化 release 前验证闭环
+- 新增 Git diff tree 共享构建逻辑，统一 Git Diff 与 Git History/HUB worktree 的目录压缩、文件选择和路径展示规则
+
+🔧 Improvements
+- 收紧会话目录事实边界，明确 source completeness、archive evidence、related sessions、pagination cursor 与 metadata overlay 的职责边界
+- 收紧 active Sidebar 会话水合策略，使用完整 catalog 作为事实源，避免 first-page 快照或手动刷新覆盖完整会话列表
+- 强化 finalized native session isolation，阻止已落盘的 Claude / Gemini / OpenCode session 被 realtime update 或持久 alias 误改绑
+- 收紧 Claude 控制面过滤，避免普通对话里提到 `codex app-server` 时被错误当作控制面文本过滤
+- 改进 Windows Claude 流式诊断，将 command、tool、file、terminal 等 non-text runtime progress 作为可见进展，降低首包等待误判
+- 调整底部状态面板折叠语义，折叠态保留 dock tab bar 与展开入口，并将 OpenCode 纳入 baseline dock 支持
+- 移除 Composer 工具栏里重复的 status panel toggle 入口，让底部 dock 由自身控件负责展开和折叠
+- 统一 Git 文件树复选框位置、目录行职责、compact folder 展示、字体 token、状态色和 overlay close button 样式，降低 Git surfaces 之间的视觉漂移
+- 补齐 session-management、stale recovery 与 runtime evidence gate 的 OpenSpec 收尾、验证记录和平台证据限定说明
+- 升级应用版本号到 `0.5.2`，同步前端包与 Tauri 配置版本
+
+🐛 Fixes
+- 修复 Claude 第二轮或后续会话 reopen 后出现空白、无法切回原 session 的回归
+- 修复 catalog `partialSource` 被误当作 load-older cursor 的问题，避免 Sidebar 重复请求第一页或显示错误的“加载更早”入口
+- 修复会话恢复与目录全量水合中的状态漂移，避免 degraded source、scan cap 或 stale refresh 清空健康 engine 的会话快照
+- 修复底部状态面板折叠时 tab bar 被卸载的问题，避免 `用户对话 / 结果` 入口消失
+- 修复 Git worktree / diff 文件树复选框与字体样式不一致的问题，避免选择入口抢占文件阅读路径
+- 修复运行态证据报告在 missing / malformed source 场景下静默漏报的问题，改为显式 unsupported / degraded evidence
+- 修复 Messages timeline virtualizer unmount 时遗留 scroll-end fallback timer 的稳定性问题
+- 修复性能脚本临时目录前缀问题，避免运行时生成路径污染
+
+English:
+
+✨ Features
+- Unify the Claude workspace-session catalog read-chain so Sidebar, Workspace Home, and Settings converge on a shared catalog projection for session membership
+- Add runtime evidence gates and stability calibration with measured / proxy / unsupported / manual-only evidence classification before release closure
+- Add shared Git diff-tree construction so Git Diff and Git History/HUB worktree views use the same compact folder, file-selection, and path-display rules
+
+🔧 Improvements
+- Tighten session-directory truth boundaries across source completeness, archive evidence, related sessions, pagination cursors, and metadata overlay
+- Tighten active Sidebar hydration so the full catalog becomes the fact source instead of being overwritten by first-page snapshots or manual refreshes
+- Strengthen finalized native session isolation so persisted Claude / Gemini / OpenCode sessions are not rebound by realtime updates or stale aliases
+- Tighten Claude control-plane filtering so ordinary messages mentioning `codex app-server` remain visible conversation content
+- Improve Windows Claude stream diagnostics by treating command, tool, file, and terminal events as non-text runtime progress
+- Refine bottom status dock collapse semantics so collapsed state keeps the tab bar and expand entrypoint, with OpenCode included in baseline dock support
+- Remove the duplicate status-panel toggle from the Composer toolbar so the bottom dock owns its own expand/collapse controls
+- Standardize Git file-tree checkbox placement, folder-row responsibilities, compact folder rendering, typography tokens, status colors, and overlay close-button styling
+- Complete OpenSpec closeout and validation records for session management, stale recovery, and runtime evidence gates, including explicit platform-evidence qualifiers
+- Bump app version to `0.5.2` and align frontend/package metadata with Tauri configuration
+
+🐛 Fixes
+- Fix Claude second-or-later session reopen regressions where the original session could restore as a blank, non-switchable thread
+- Fix catalog `partialSource` being treated as a load-older cursor, preventing repeated first-page requests and misleading load-older affordances
+- Fix session recovery and full-directory hydration drift so degraded sources, scan caps, or stale refreshes do not clear healthy engine snapshots
+- Fix bottom status dock collapse unmounting the tab bar and hiding the `User conversation / Result` entrypoints
+- Fix Git worktree / diff file-tree checkbox and typography inconsistency so selection controls no longer interrupt file scanning
+- Fix runtime evidence reports silently dropping missing or malformed sources; they now emit explicit unsupported / degraded evidence
+- Fix Messages timeline virtualizer teardown stability by clearing pending scroll-end fallback timers on unmount
+- Fix temporary-path-prefix regressions in performance scripts
+
+---
+
 ##### **2026年5月22日（v0.5.1）**
 
 中文：

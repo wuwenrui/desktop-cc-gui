@@ -1,3 +1,11 @@
+## 2026-05-23 Proposal Refresh
+
+- **Current branch**: `feature/v0.5.2`; this refresh is documentation-only and does not change implementation code.
+- **Task state**: 32/32 checked; status = Completed / pending verify-archive.
+- **Code/document evidence**: runtime/session lifecycle tests、realtime parity/replay harness、large-file/heavy-test-noise gates、runtime contract scripts 与 cross-platform build scripts 已存在。
+- **Next action**: 归档前补 core runtime/realtime validation matrix，尤其区分本地 macOS 与 Windows/Linux CI evidence。
+- **Validation note**: `openspec validate --all --strict --no-interactive` passed 299 items in this documentation refresh.
+
 ## Why
 
 当前 `mossx` 的主干稳定性集中压在三条高风险链路上：

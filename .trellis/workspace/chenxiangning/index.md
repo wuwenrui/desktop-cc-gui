@@ -7,9 +7,9 @@
 ## Current Status
 
 <!-- @@@auto:current-status -->
-- **Active File**: `journal-15.md`
-- **Total Sessions**: 553
-- **Last Active**: 2026-05-22
+- **Active File**: `journal-16.md`
+- **Total Sessions**: 570
+- **Last Active**: 2026-05-24
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,8 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-15.md` | ~1569 | Active |
+| `journal-16.md` | ~407 | Active |
+| `journal-15.md` | ~1996 | Archived |
 | `journal-14.md` | ~1969 | Archived |
 | `journal-13.md` | ~1947 | Archived |
 | `journal-12.md` | ~1971 | Archived |
@@ -43,6 +44,23 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 570 | 2026-05-24 | 收敛文件底部标注交互 | `33a84e1a` | `feature/v0.5.2` |
+| 569 | 2026-05-24 | 优化编辑态标注入口 | `4cce9d46` | `feature/v0.5.2` |
+| 568 | 2026-05-24 | 修复邮件设置密钥加载 CI 断言 | `24fd0862` | `feature/v0.5.2` |
+| 567 | 2026-05-24 | 重构文件打开渲染调度收口 | `8a24eabb` | `feature/v0.5.2` |
+| 566 | 2026-05-24 | 补全 v0.5.2 变更日志 | `aa0c405b` | `feature/v0.5.2` |
+| 565 | 2026-05-24 | 修复 branding gate 临时目录前缀 | `99a8234d` | `feature/v0.5.2` |
+| 564 | 2026-05-24 | 性能证据门禁与稳定性校准收口 | `e13e5e73` | `feature/v0.5.2` |
+| 563 | 2026-05-24 | 修复 Claude 第二轮会话白板恢复 | `bcf0537b` | `feature/v0.5.2` |
+| 562 | 2026-05-24 | 校准会话管理重构收尾状态 | `98e1ff46` | `feature/v0.5.2` |
+| 561 | 2026-05-24 | 收紧会话恢复与目录全量水合 | `b7083ebf` | `feature/v0.5.2` |
+| 560 | 2026-05-24 | 收紧会话目录事实边界 | `6fe26f34` | `feature/v0.5.2` |
+| 559 | 2026-05-23 | 收尾 Claude sidebar fallback 自动化门禁 | `d53657ef` | `feature/v0.5.2` |
+| 558 | 2026-05-23 | 刷新 OpenSpec 提案状态与项目索引 | `be870fef` | `feature/v0.5.2` |
+| 557 | 2026-05-23 | 收紧 Claude 会话控制面过滤 | `4baf7860` | `feature/v0.5.2` |
+| 556 | 2026-05-22 | 统一工作区会话目录读取链路 | `a56c9cea` | `feature/v0.5.2` |
+| 555 | 2026-05-22 | 统一 Git 文件树复选框与字体样式 | `89d219d8` | `feature/v0.5.2` |
+| 554 | 2026-05-22 | 修复底部状态面板折叠挂载 | `1105940b` | `feature/v0.5.2` |
 | 553 | 2026-05-22 | 稳定 GitHistory worktree 未暂存提交测试 | `75b9cd12` | `feature/v0.5.1` |
 | 552 | 2026-05-22 | 对齐 StatusPanel dock 样式测试 | `506cf1e5` | `feature/v0.5.1` |
 | 551 | 2026-05-22 | 修复 Composer readiness 测试依赖污染 | `d682d9e2` | `feature/v0.5.1` |

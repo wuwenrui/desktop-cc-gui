@@ -11,6 +11,7 @@
 | [Cross-Layer Thinking Guide](./cross-layer-thinking-guide.md) | 保护 UI-runtime-backend contract | 触及 component + service + tauri/rust |
 | [Codex Unified Exec Override Contract](./codex-unified-exec-override-contract.md) | 固化 unified_exec 的 settings/runtime/global-config 边界 | 触及 experimental settings、Codex args、global config repair |
 | [Terminal Shell Configuration Contract](./terminal-shell-configuration.md) | 固化 built-in terminal shell path override 与平台 fallback 边界 | 触及 terminal shell path 设置或 `terminal_open` shell 解析 |
+| [Workspace Session Catalog Contract](./workspace-session-catalog-contract.md) | 固化 workspace session membership、ownership、metadata overlay、source-fact cache 边界 | 触及工作区会话列表、Claude history、Session Management、Sidebar session merge |
 
 ## 项目级触发信号（mossx）
 

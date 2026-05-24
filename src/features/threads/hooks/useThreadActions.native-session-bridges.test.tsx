@@ -236,6 +236,90 @@ describe("useThreadActions native session bridges", () => {
     ]);
   });
 
+  it("uses catalog source status as Claude membership authority", async () => {
+    vi.mocked(listThreads).mockResolvedValue({
+      result: {
+        data: [],
+        nextCursor: null,
+      },
+    });
+    vi.mocked(listClaudeSessions).mockResolvedValue([
+      {
+        sessionId: "native-outside-workspace",
+        firstMessage: "Native row from another workspace",
+        updatedAt: 1_730_400_000_000,
+      },
+    ]);
+    vi.mocked(getOpenCodeSessionList).mockResolvedValue([]);
+    vi.mocked(listWorkspaceSessions).mockImplementation(
+      async (_workspaceId, options) => {
+        if (options?.query?.status === "active") {
+          return {
+            data: [
+              {
+                sessionId: "claude:catalog-child",
+                stableSessionKey: "claude:child-ws:catalog-child",
+                canonicalSessionId: "catalog-child",
+                workspaceId: "child-ws",
+                matchedWorkspaceId: "child-ws",
+                engine: "claude",
+                title: "Catalog-owned Claude session",
+                updatedAt: 1_730_500_000_000,
+                archivedAt: null,
+                threadKind: "native",
+                sourceCompleteness: "complete",
+              },
+            ],
+            nextCursor: null,
+            partialSource: null,
+            sourceStatuses: [
+              {
+                engine: "claude",
+                completeness: "complete",
+              },
+            ],
+          };
+        }
+        return {
+          data: [],
+          nextCursor: null,
+          partialSource: null,
+          sourceStatuses: [],
+        };
+      },
+    );
+
+    const { result, dispatch } = renderActions();
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace);
+    });
+
+    expectSetThreadsDispatched(dispatch, "ws-1", [
+      {
+        id: "claude:catalog-child",
+        name: "Catalog-owned Claude session",
+        updatedAt: 1_730_500_000_000,
+        engineSource: "claude",
+      },
+    ]);
+    const setThreadsActions = dispatch.mock.calls
+      .map(([action]) => action)
+      .filter(
+        (
+          action,
+        ): action is {
+          type: "setThreads";
+          threads: Array<{ id: string }>;
+        } => action?.type === "setThreads",
+      );
+    const lastSetThreadsAction =
+      setThreadsActions[setThreadsActions.length - 1];
+    expect(lastSetThreadsAction.threads.map((thread) => thread.id)).toEqual([
+      "claude:catalog-child",
+    ]);
+  });
+
   it("keeps slower codex catalog scans visible in the sidebar", async () => {
     vi.useFakeTimers();
     vi.mocked(listThreads)

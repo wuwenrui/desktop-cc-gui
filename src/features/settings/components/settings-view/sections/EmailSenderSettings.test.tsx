@@ -288,7 +288,9 @@ describe("EmailSenderSettings", () => {
     );
 
     const secretInput = await screen.findByLabelText("settings.emailSecret");
-    expect((secretInput as HTMLInputElement).value).toBe("stored-secret");
+    await waitFor(() => {
+      expect((secretInput as HTMLInputElement).value).toBe("stored-secret");
+    });
     expect((secretInput as HTMLInputElement).type).toBe("password");
   });
 

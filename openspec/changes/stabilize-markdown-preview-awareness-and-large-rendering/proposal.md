@@ -1,3 +1,11 @@
+## 2026-05-23 Proposal Refresh
+
+- **Current branch**: `feature/v0.5.2`; this refresh is documentation-only and does not change implementation code.
+- **Task state**: 15/15 checked; status = Completed / pending verify-archive.
+- **Code/document evidence**: external change awareness state machine、manual refresh/live debounce、block-level Markdown projection 与 Mermaid stable body tests 已存在。
+- **Next action**: 归档前确认 external-change/live-preview focused tests 与 large Markdown smoke。
+- **Validation note**: `openspec validate --all --strict --no-interactive` passed 299 items in this documentation refresh.
+
 ## Why
 
 Markdown 文件预览仍存在两个用户可感知的问题：阅读态下外部变更感知与强制刷新边界不清，Live Preview 或外部写入会让已打开文档闪烁；大 Markdown 文件依赖整段 ReactMarkdown progressive 重建，数据越多越卡。

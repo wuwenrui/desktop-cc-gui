@@ -301,6 +301,106 @@ describe("useThreadActions Claude history refresh", () => {
     });
   });
 
+  it("hydrates issue 529 second-turn claude history rows on refresh", async () => {
+    vi.mocked(listThreads).mockResolvedValue({
+      result: { data: [], nextCursor: null },
+    });
+    vi.mocked(listClaudeSessions).mockResolvedValue([]);
+    vi.mocked(loadClaudeSession).mockResolvedValue({
+      messages: [
+        {
+          kind: "message",
+          id: "user-first",
+          role: "user",
+          text: "第一次消息正常",
+        },
+        {
+          kind: "message",
+          id: "user-second",
+          role: "user",
+          text: "第二次消息后不能白板",
+        },
+        {
+          kind: "tool",
+          id: "call-edit-1",
+          toolType: "Edit",
+          title: "Edit",
+          text: "{\"file_path\":\"/Users/chen/project/src/App.tsx\"}",
+          toolInput: {
+            file_path: "/Users/chen/project/src/App.tsx",
+            old_string: "Old title",
+            new_string: "测试APP",
+          },
+        },
+        {
+          kind: "message",
+          id: "assistant-final",
+          role: "assistant",
+          text: "第二次消息已完成",
+        },
+      ],
+    });
+
+    const { result, dispatch } = renderActions({
+      threadsByWorkspace: {
+        "ws-1": [
+          {
+            id: "claude:issue-529-session",
+            name: "第一次消息正常",
+            updatedAt: 1_779_500_000_000,
+            engineSource: "claude",
+            threadKind: "native",
+          },
+        ],
+      },
+      activeThreadIdByWorkspace: {
+        "ws-1": "claude:issue-529-session",
+      },
+      itemsByThread: {},
+    });
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace, {
+        preserveState: true,
+      });
+    });
+
+    await act(async () => {
+      await result.current.refreshThread("ws-1", "claude:issue-529-session");
+    });
+
+    expect(loadClaudeSession).toHaveBeenCalledWith(
+      "/tmp/codex",
+      "issue-529-session",
+    );
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreadItems",
+      threadId: "claude:issue-529-session",
+      items: expect.arrayContaining([
+        expect.objectContaining({
+          kind: "message",
+          role: "user",
+          text: "第二次消息后不能白板",
+        }),
+        expect.objectContaining({
+          kind: "tool",
+          id: "call-edit-1",
+          toolType: "fileChange",
+        }),
+        expect.objectContaining({
+          kind: "message",
+          role: "assistant",
+          text: "第二次消息已完成",
+        }),
+      ]),
+    });
+    expect(dispatch).not.toHaveBeenCalledWith({
+      type: "removeThread",
+      workspaceId: "ws-1",
+      threadId: "claude:issue-529-session",
+    });
+  });
+
   it("reconciles missing claude history entries instead of marking them loaded", async () => {
     vi.mocked(listThreads).mockResolvedValue({
       result: { data: [], nextCursor: null },

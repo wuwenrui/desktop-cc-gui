@@ -1,3 +1,11 @@
+## 2026-05-23 Proposal Refresh
+
+- **Current branch**: `feature/v0.5.2`; this refresh is documentation-only and does not change implementation code.
+- **Task state**: 8/8 checked; status = Completed / pending verify-archive.
+- **Code/document evidence**: `useFileExternalSync`、external change state machine、FileViewPanel external-change banner/tests 与 live preview debounce/manual refresh path 已存在。
+- **Next action**: 归档前确认 file external sync focused tests 与 live edit preview smoke。
+- **Validation note**: `openspec validate --all --strict --no-interactive` passed 299 items in this documentation refresh.
+
 ## Why
 
 Markdown 文件预览在主窗口文件模块中会被后台 external-change polling 定时刷新，导致阅读位置和渲染状态被周期性扰动。该行为把“打开文件阅读”和“显式 live preview/外部同步”混为一谈，需要收敛到稳定阅读默认值。

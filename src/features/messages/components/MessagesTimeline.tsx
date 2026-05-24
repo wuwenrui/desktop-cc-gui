@@ -52,6 +52,7 @@ import {
 import { buildTimelineProjectionRows, groupedEntryContainsItemId } from "./messagesTimelineProjection";
 import {
   estimateTimelineProjectionRowSize,
+  observeTimelineElementOffset,
   shouldVirtualizeTimelineRows,
 } from "./messagesTimelineVirtualization";
 
@@ -273,6 +274,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   });
   const timelineVirtualizer = useVirtualizer({
     count: shouldVirtualizeTimeline ? timelineProjectionRows.length : 0,
+    enabled: shouldVirtualizeTimeline,
     estimateSize: (index) =>
       estimateTimelineProjectionRowSize(timelineProjectionRows[index] ?? {
         kind: "bottomAnchor",
@@ -280,6 +282,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       }),
     getItemKey: (index) => timelineProjectionRows[index]?.key ?? `missing:${index}`,
     getScrollElement: () => scrollElementRef.current,
+    observeElementOffset: observeTimelineElementOffset,
     overscan: 12,
   });
 

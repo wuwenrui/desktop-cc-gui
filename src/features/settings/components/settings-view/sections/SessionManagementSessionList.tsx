@@ -11,6 +11,7 @@ import {
   normalizeEngineType,
   resolveAttributionConfidenceLabel,
   resolveAttributionReasonLabel,
+  resolveWorkspaceSessionDisplayTitle,
   UNASSIGNED_WORKSPACE_ID,
 } from "./sessionManagementSectionUtils";
 
@@ -75,8 +76,10 @@ export function SessionListSection({
             entry,
             t,
           );
-          const titleLabel =
-            entry.title.trim() || t("settings.projectSessionItemUntitled");
+          const titleLabel = resolveWorkspaceSessionDisplayTitle(
+            entry,
+            t("settings.projectSessionItemUntitled"),
+          );
           const updatedAtDisplay = formatUpdatedAtDisplay(
             entry.updatedAt,
             locale,

@@ -1,3 +1,11 @@
+## 2026-05-23 Proposal Refresh
+
+- **Current branch**: `feature/v0.5.2`; this refresh is documentation-only and does not change implementation code.
+- **Task state**: 17/17 checked; status = Completed / pending verify-archive.
+- **Code/document evidence**: `realtimeEventBatcher.ts`、`realtimeReplayHarness`、`check:realtime-event-batching` 与 realtime perf report scripts 已存在。
+- **Next action**: 归档前确认 realtime boundary/perf guard 与 no EventBus/subscription-store boundary。
+- **Validation note**: `openspec validate --all --strict --no-interactive` passed 299 items in this documentation refresh.
+
 ## Branch Calibration / 分支校准（2026-05-19）
 
 当前变更只以 `feature/v0.5.0-md` 为事实源。`feature/v0.5` 上曾出现的 batching contract、checker、task 勾选与 `implementation-evidence.md` 不再作为本变更依据；后续必须在当前分支重新实现。

@@ -28,7 +28,7 @@ export type DiffFile = {
   deletions: number;
 };
 
-export const TREE_INDENT_STEP = 10;
+export const TREE_INDENT_STEP = 8;
 
 function splitPath(path: string) {
   const parts = path.replace(/\\/g, "/").split("/").filter(Boolean);
@@ -187,16 +187,6 @@ export function DiffFileRow({
       }}
       onContextMenu={onContextMenu}
     >
-      <InclusionToggle
-        state={inclusionState}
-        label={inclusionLabel}
-        className="diff-row-selection"
-        disabled={inclusionDisabled}
-        stopPropagation
-        onToggle={() => {
-          void onSetCommitSelection?.([file.path], inclusionState !== "all");
-        }}
-      />
       <span className={`diff-icon ${statusClass}`} aria-hidden>
         {statusSymbol}
       </span>
@@ -293,6 +283,16 @@ export function DiffFileRow({
             </button>
           )}
         </div>
+        <InclusionToggle
+          state={inclusionState}
+          label={inclusionLabel}
+          className="diff-row-selection diff-row-selection--trailing"
+          disabled={inclusionDisabled}
+          stopPropagation
+          onToggle={() => {
+            void onSetCommitSelection?.([file.path], inclusionState !== "all");
+          }}
+        />
       </div>
     </div>
   );

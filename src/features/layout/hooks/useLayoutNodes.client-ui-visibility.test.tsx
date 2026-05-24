@@ -5,6 +5,11 @@ import type { ReactNode } from "react";
 import type { ConversationItem, WorkspaceInfo } from "../../../types";
 import { useLayoutNodes } from "./useLayoutNodes";
 
+const clientUiVisibilityMock = vi.hoisted(() => ({
+  visiblePanels: new Set<string>(),
+  visibleControls: new Set<string>(),
+}));
+
 vi.mock("react-i18next", () => ({
   initReactI18next: {
     type: "3rdParty",
@@ -19,38 +24,40 @@ vi.mock("../../client-ui-visibility/hooks/useClientUiVisibility", () => ({
   useClientUiVisibility: () => ({
     preference: {
       panels: {
-        topSessionTabs: false,
-        topRunControls: false,
-        topToolControls: false,
-        rightActivityToolbar: false,
-        bottomActivityPanel: true,
-        cornerStatusIndicator: false,
-        globalRuntimeNoticeDock: false,
+        topSessionTabs: clientUiVisibilityMock.visiblePanels.has("topSessionTabs"),
+        topRunControls: clientUiVisibilityMock.visiblePanels.has("topRunControls"),
+        topToolControls: clientUiVisibilityMock.visiblePanels.has("topToolControls"),
+        rightActivityToolbar: clientUiVisibilityMock.visiblePanels.has("rightActivityToolbar"),
+        bottomActivityPanel: clientUiVisibilityMock.visiblePanels.has("bottomActivityPanel"),
+        cornerStatusIndicator: clientUiVisibilityMock.visiblePanels.has("cornerStatusIndicator"),
+        globalRuntimeNoticeDock: clientUiVisibilityMock.visiblePanels.has("globalRuntimeNoticeDock"),
       },
       controls: {
-        "topRun.start": false,
-        "topTool.openWorkspace": false,
-        "topTool.runtimeConsole": false,
-        "topTool.terminal": false,
-        "topTool.focus": false,
-        "topTool.rightPanel": false,
-        "topTool.clientDocumentation": false,
-        "rightToolbar.activity": false,
-        "rightToolbar.radar": false,
-        "rightToolbar.git": false,
-        "rightToolbar.files": false,
-        "rightToolbar.search": false,
-        "bottomActivity.tasks": false,
-        "bottomActivity.agents": false,
-        "bottomActivity.checkpoint": false,
-        "bottomActivity.latestConversation": false,
-        "curtain.stickyUserBubble": false,
-        "cornerStatus.messageAnchors": false,
+        "topRun.start": clientUiVisibilityMock.visibleControls.has("topRun.start"),
+        "topTool.openWorkspace": clientUiVisibilityMock.visibleControls.has("topTool.openWorkspace"),
+        "topTool.runtimeConsole": clientUiVisibilityMock.visibleControls.has("topTool.runtimeConsole"),
+        "topTool.terminal": clientUiVisibilityMock.visibleControls.has("topTool.terminal"),
+        "topTool.focus": clientUiVisibilityMock.visibleControls.has("topTool.focus"),
+        "topTool.rightPanel": clientUiVisibilityMock.visibleControls.has("topTool.rightPanel"),
+        "topTool.clientDocumentation": clientUiVisibilityMock.visibleControls.has("topTool.clientDocumentation"),
+        "rightToolbar.activity": clientUiVisibilityMock.visibleControls.has("rightToolbar.activity"),
+        "rightToolbar.radar": clientUiVisibilityMock.visibleControls.has("rightToolbar.radar"),
+        "rightToolbar.git": clientUiVisibilityMock.visibleControls.has("rightToolbar.git"),
+        "rightToolbar.files": clientUiVisibilityMock.visibleControls.has("rightToolbar.files"),
+        "rightToolbar.search": clientUiVisibilityMock.visibleControls.has("rightToolbar.search"),
+        "bottomActivity.tasks": clientUiVisibilityMock.visibleControls.has("bottomActivity.tasks"),
+        "bottomActivity.agents": clientUiVisibilityMock.visibleControls.has("bottomActivity.agents"),
+        "bottomActivity.checkpoint": clientUiVisibilityMock.visibleControls.has("bottomActivity.checkpoint"),
+        "bottomActivity.latestConversation": clientUiVisibilityMock.visibleControls.has(
+          "bottomActivity.latestConversation",
+        ),
+        "curtain.stickyUserBubble": clientUiVisibilityMock.visibleControls.has("curtain.stickyUserBubble"),
+        "cornerStatus.messageAnchors": clientUiVisibilityMock.visibleControls.has("cornerStatus.messageAnchors"),
       },
     },
-    isPanelVisible: () => false,
-    isControlVisible: () => false,
-    isControlPreferenceVisible: () => false,
+    isPanelVisible: (id: string) => clientUiVisibilityMock.visiblePanels.has(id),
+    isControlVisible: (id: string) => clientUiVisibilityMock.visibleControls.has(id),
+    isControlPreferenceVisible: (id: string) => clientUiVisibilityMock.visibleControls.has(id),
     setPanelVisible: vi.fn(),
     setControlVisible: vi.fn(),
     resetVisibility: vi.fn(),
@@ -104,14 +111,19 @@ vi.mock("../../composer/components/Composer", () => ({
     onSend,
     sendLabel,
     onOpenDiffPath,
+    showStatusPanelToggleOverride,
   }: {
     draftText: string;
     onDraftChange: (next: string) => void;
     onSend: (text: string, images: string[]) => void;
     sendLabel: string;
     onOpenDiffPath?: (path: string) => void;
+    showStatusPanelToggleOverride?: boolean;
   }) => (
-    <form data-testid="composer">
+    <form
+      data-testid="composer"
+      data-show-status-panel-toggle-override={String(showStatusPanelToggleOverride)}
+    >
       <textarea
         aria-label="composer input"
         value={draftText}
@@ -221,7 +233,19 @@ vi.mock("../../terminal/components/TerminalPanel", () => ({
 }));
 
 vi.mock("../../status-panel/components/StatusPanel", () => ({
-  StatusPanel: () => <div data-testid="status-panel" />,
+  StatusPanel: ({
+    dockCollapsed,
+    selectedEngine,
+  }: {
+    dockCollapsed?: boolean;
+    selectedEngine?: string;
+  }) => (
+    <div
+      data-testid="status-panel"
+      data-dock-collapsed={String(dockCollapsed)}
+      data-selected-engine={String(selectedEngine ?? "")}
+    />
+  ),
 }));
 
 vi.mock("../../status-panel/hooks/useStatusPanelData", () => ({
@@ -637,6 +661,8 @@ function createLayoutOptions(
 
 describe("useLayoutNodes client UI visibility", () => {
   afterEach(() => {
+    clientUiVisibilityMock.visiblePanels.clear();
+    clientUiVisibilityMock.visibleControls.clear();
     vi.clearAllMocks();
   });
 
@@ -748,5 +774,35 @@ describe("useLayoutNodes client UI visibility", () => {
     fireEvent.click(screen.getByRole("button", { name: "open file reference" }));
 
     expect(onOpenFile).toHaveBeenCalledWith("src/App.tsx");
+  });
+
+  it("keeps the bottom status dock mounted when baseline tabs are visible and collapsed", () => {
+    clientUiVisibilityMock.visiblePanels.add("bottomActivityPanel");
+    clientUiVisibilityMock.visibleControls.add("bottomActivity.checkpoint");
+    clientUiVisibilityMock.visibleControls.add("bottomActivity.latestConversation");
+
+    const { result } = renderHook(() =>
+      useLayoutNodes(
+        createLayoutOptions({
+          bottomStatusPanelExpanded: false,
+          selectedEngine: "opencode",
+        }),
+      ),
+    );
+
+    expect(result.current.planPanelNode).toBeTruthy();
+
+    render(
+      <>
+        {result.current.composerNode}
+        {result.current.planPanelNode}
+      </>,
+    );
+
+    expect(screen.getByTestId("status-panel").dataset.dockCollapsed).toBe("true");
+    expect(screen.getByTestId("status-panel").dataset.selectedEngine).toBe("opencode");
+    expect(
+      screen.getByTestId("composer").dataset.showStatusPanelToggleOverride,
+    ).toBe("false");
   });
 });

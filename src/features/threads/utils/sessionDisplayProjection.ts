@@ -34,25 +34,28 @@ export function selectProjectedSessionDisplayName(params: {
   mappedTitle?: string;
   customTitle?: string;
 }): string {
-  const mappedTitle = normalizeSessionDisplayTitle(params.mappedTitle);
-  if (mappedTitle) {
-    return mappedTitle;
-  }
-
+  // Central title resolver: explicit user naming wins over mapped/native
+  // evidence, and weak fallbacks cannot erase a meaningful previous title.
   const customTitle = normalizeSessionDisplayTitle(params.customTitle);
   if (customTitle) {
     return customTitle;
   }
 
+  const mappedTitle = normalizeSessionDisplayTitle(params.mappedTitle);
+  if (mappedTitle) {
+    return mappedTitle;
+  }
+
+  const nextName = normalizeSessionDisplayTitle(params.nextName);
   if (
     params.previous &&
     getSessionDisplayTitleStrength(params.previous.name) >
-      getSessionDisplayTitleStrength(params.nextName)
+      getSessionDisplayTitleStrength(nextName)
   ) {
     return params.previous.name;
   }
 
-  return params.nextName;
+  return nextName;
 }
 
 export function mergeSessionDisplaySummary(

@@ -1,3 +1,11 @@
+## 2026-05-23 Proposal Refresh
+
+- **Current branch**: `feature/v0.5.2`; this refresh is documentation-only and does not change implementation code.
+- **Task state**: 51/51 checked; status = Completed / pending verify-archive.
+- **Code/document evidence**: 治理证据链已在 `StatusPanel` 注入 `createFrozenGovernanceEvidenceSnapshot`，并有 `check:governance-evidence-bridge`、`check:agent-domain-event-adoption`、large-file/heavy-test sentry脚本。
+- **Next action**: 归档前补 release-grade verification，区分本地 evidence、external CI qualifier、未观测平台结果。
+- **Validation note**: `openspec validate --all --strict --no-interactive` passed 299 items in this documentation refresh.
+
 ## Why
 
 The harness governance layer has moved beyond design-only work: evidence bridge, policy chain, audit surface, event schema, runtime batching, virtualization, and bundle chunking all have first-slice implementation evidence. The remaining gap is not another broad architecture essay; it is a coordinated readiness pass that closes the real UI policy path, turns governance gates into consumed evidence, and calibrates substrate work against code facts.

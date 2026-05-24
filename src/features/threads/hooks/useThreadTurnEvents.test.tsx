@@ -1225,7 +1225,7 @@ describe("useThreadTurnEvents", () => {
     expect(renameThreadTitleMapping).not.toHaveBeenCalled();
   });
 
-  it("rebinds active finalized claude thread when session id rotates", () => {
+  it("does not rebind active finalized claude thread when session id rotates", () => {
     const {
       result,
       dispatch,
@@ -1247,31 +1247,15 @@ describe("useThreadTurnEvents", () => {
       );
     });
 
-    expect(dispatch).toHaveBeenCalledWith({
-      type: "renameThreadId",
-      workspaceId: "ws-1",
-      oldThreadId: "claude:session-old",
-      newThreadId: "claude:session-new",
-    });
-    expect(renameCustomNameKey).toHaveBeenCalledWith(
-      "ws-1",
-      "claude:session-old",
-      "claude:session-new",
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "renameThreadId",
+      }),
     );
-    expect(renameAutoTitlePendingKey).toHaveBeenCalledWith(
-      "ws-1",
-      "claude:session-old",
-      "claude:session-new",
-    );
-    expect(renamePendingMemoryCaptureKey).toHaveBeenCalledWith(
-      "claude:session-old",
-      "claude:session-new",
-    );
-    expect(renameThreadTitleMapping).toHaveBeenCalledWith(
-      "ws-1",
-      "claude:session-old",
-      "claude:session-new",
-    );
+    expect(renameCustomNameKey).not.toHaveBeenCalled();
+    expect(renameAutoTitlePendingKey).not.toHaveBeenCalled();
+    expect(renamePendingMemoryCaptureKey).not.toHaveBeenCalled();
+    expect(renameThreadTitleMapping).not.toHaveBeenCalled();
   });
 
   it("infers engine from pending threads when session update thread id has no engine prefix", () => {

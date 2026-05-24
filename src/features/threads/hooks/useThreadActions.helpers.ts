@@ -18,6 +18,36 @@ type MessageConversationItem = Extract<ConversationItem, { kind: "message" }>;
 type UserConversationMessage = MessageConversationItem & { role: "user" };
 type RewindSupportedEngine = "claude" | "codex";
 
+export type ThreadRecoveryStrategy =
+  | "replacement"
+  | "new-discovery"
+  | "history-match"
+  | "fresh-continuation";
+
+export type ThreadRecoveryReasonCode =
+  | "matched"
+  | "ambiguous"
+  | "no-candidate"
+  | "low-confidence"
+  | "verified"
+  | "fresh-only";
+
+export type ThreadRecoveryDecision = {
+  oldThreadId: string;
+  candidateThreadId: string | null;
+  strategy: ThreadRecoveryStrategy;
+  confidence: number;
+  scoreGap: number;
+  featureSignals: string[];
+  reasonCode: ThreadRecoveryReasonCode;
+  isPersistent: boolean;
+  summary?: ThreadSummary;
+};
+
+const THREAD_RECOVERY_ALIAS_PERSISTENCE_THRESHOLD = 0.8;
+const THREAD_RECOVERY_REPLACEMENT_GAP_THRESHOLD = 50;
+const THREAD_RECOVERY_TIME_WINDOW_MS = 24 * 60 * 60 * 1000;
+
 export type GeminiSessionSummary = {
   sessionId: string;
   firstMessage: string;
@@ -27,8 +57,10 @@ export type GeminiSessionSummary = {
 
 export type CodexCatalogSessionSummary = {
   sessionId: string;
+  workspaceId?: string | null;
   title: string;
   updatedAt: number;
+  archivedAt?: number | null;
   sizeBytes?: number;
   parentSessionId?: string | null;
   engine?: ThreadSummary["engineSource"] | string | null;
@@ -124,7 +156,7 @@ export function inferThreadEngineSource(
   return "codex";
 }
 
-function isPendingThreadId(threadId: string): boolean {
+export function isPendingThreadId(threadId: string): boolean {
   const normalized = threadId.trim().toLowerCase();
   return (
     normalized.startsWith("claude-pending-") ||
@@ -139,11 +171,22 @@ export function selectReplacementThreadSummary(params: {
   summaries: ThreadSummary[];
   staleSummary?: ThreadSummary;
 }): ThreadSummary | null {
+  return selectReplacementThreadDecision(params).summary ?? null;
+}
+
+export function selectReplacementThreadDecision(params: {
+  staleThreadId: string;
+  summaries: ThreadSummary[];
+  staleSummary?: ThreadSummary;
+}): ThreadRecoveryDecision {
   const candidates = listReplacementThreadCandidates(params);
   if (candidates.length === 0) {
-    return null;
+    return buildNoCandidateThreadRecoveryDecision(
+      params.staleThreadId,
+      "replacement",
+    );
   }
-  const scored = scoreReplacementThreadCandidates(params).sort(
+  const scored = scoreDetailedReplacementThreadCandidates(params).sort(
     (left, right) => {
       if (right.score !== left.score) {
         return right.score - left.score;
@@ -154,15 +197,55 @@ export function selectReplacementThreadSummary(params: {
   const best = scored[0];
   const next = scored[1];
   if (!best) {
-    return null;
+    return buildNoCandidateThreadRecoveryDecision(
+      params.staleThreadId,
+      "replacement",
+    );
   }
+  const scoreGap = Math.max(0, best.score - (next?.score ?? 0));
   if (best.score > 0 && (!next || next.score < best.score)) {
-    return best.entry;
+    const confidence = resolveReplacementRecoveryConfidence(best.score, scoreGap);
+    return buildThreadRecoveryDecision({
+      oldThreadId: params.staleThreadId,
+      candidate: best.entry,
+      strategy: "replacement",
+      confidence,
+      scoreGap,
+      featureSignals: best.featureSignals,
+      reasonCode:
+        confidence >= THREAD_RECOVERY_ALIAS_PERSISTENCE_THRESHOLD
+          ? "verified"
+          : "low-confidence",
+    });
   }
   if (candidates.length === 1) {
-    return candidates[0] ?? null;
+    const candidate = candidates[0];
+    if (!candidate) {
+      return buildNoCandidateThreadRecoveryDecision(
+        params.staleThreadId,
+        "replacement",
+      );
+    }
+    return buildThreadRecoveryDecision({
+      oldThreadId: params.staleThreadId,
+      candidate,
+      strategy: "replacement",
+      confidence: 0.45,
+      scoreGap: 0,
+      featureSignals: ["sole_candidate"],
+      reasonCode: "low-confidence",
+    });
   }
-  return null;
+  return {
+    oldThreadId: params.staleThreadId,
+    candidateThreadId: null,
+    strategy: "replacement",
+    confidence: 0,
+    scoreGap,
+    featureSignals: ["ambiguous_score"],
+    reasonCode: "ambiguous",
+    isPersistent: false,
+  };
 }
 
 export function selectRecoveredNewThreadSummary(params: {
@@ -171,9 +254,21 @@ export function selectRecoveredNewThreadSummary(params: {
   summaries: ThreadSummary[];
   staleSummary?: ThreadSummary;
 }): ThreadSummary | null {
+  return selectRecoveredNewThreadDecision(params).summary ?? null;
+}
+
+export function selectRecoveredNewThreadDecision(params: {
+  staleThreadId: string;
+  previousSummaries: ThreadSummary[];
+  summaries: ThreadSummary[];
+  staleSummary?: ThreadSummary;
+}): ThreadRecoveryDecision {
   const candidates = listReplacementThreadCandidates(params);
   if (candidates.length === 0) {
-    return null;
+    return buildNoCandidateThreadRecoveryDecision(
+      params.staleThreadId,
+      "new-discovery",
+    );
   }
 
   const previousIds = new Set(
@@ -183,7 +278,25 @@ export function selectRecoveredNewThreadSummary(params: {
     (entry) => !previousIds.has(entry.id.trim()),
   );
   if (newlyDiscoveredCandidates.length === 1) {
-    return newlyDiscoveredCandidates[0] ?? null;
+    const candidate = newlyDiscoveredCandidates[0];
+    if (!candidate) {
+      return buildNoCandidateThreadRecoveryDecision(
+        params.staleThreadId,
+        "new-discovery",
+      );
+    }
+    const timeCoherent = isRecoveryTimeCoherent(candidate, params.staleSummary);
+    return buildThreadRecoveryDecision({
+      oldThreadId: params.staleThreadId,
+      candidate,
+      strategy: "new-discovery",
+      confidence: timeCoherent ? 0.84 : 0.58,
+      scoreGap: timeCoherent ? 30 : 0,
+      featureSignals: timeCoherent
+        ? ["sole_new_candidate", "time_window_coherent"]
+        : ["sole_new_candidate"],
+      reasonCode: timeCoherent ? "verified" : "low-confidence",
+    });
   }
 
   const staleUpdatedAt =
@@ -199,21 +312,123 @@ export function selectRecoveredNewThreadSummary(params: {
         entry.updatedAt > staleUpdatedAt,
     );
     if (strictlyNewerCandidates.length === 1) {
-      return strictlyNewerCandidates[0] ?? null;
+      const candidate = strictlyNewerCandidates[0];
+      if (!candidate) {
+        return buildNoCandidateThreadRecoveryDecision(
+          params.staleThreadId,
+          "new-discovery",
+        );
+      }
+      const timeCoherent = isRecoveryTimeCoherent(candidate, params.staleSummary);
+      return buildThreadRecoveryDecision({
+        oldThreadId: params.staleThreadId,
+        candidate,
+        strategy: "new-discovery",
+        confidence: timeCoherent ? 0.84 : 0.58,
+        scoreGap: timeCoherent ? 30 : 0,
+        featureSignals: timeCoherent
+          ? ["strictly_newer_candidate", "time_window_coherent"]
+          : ["strictly_newer_candidate"],
+        reasonCode: timeCoherent ? "verified" : "low-confidence",
+      });
     }
   }
 
-  return null;
+  return {
+    oldThreadId: params.staleThreadId,
+    candidateThreadId: null,
+    strategy: "new-discovery",
+    confidence: 0,
+    scoreGap: 0,
+    featureSignals:
+      newlyDiscoveredCandidates.length > 1
+        ? ["multiple_new_candidates"]
+        : ["no_unique_new_candidate"],
+    reasonCode: newlyDiscoveredCandidates.length > 1 ? "ambiguous" : "no-candidate",
+    isPersistent: false,
+  };
 }
 
-function scoreReplacementThreadCandidate(
+function buildNoCandidateThreadRecoveryDecision(
+  oldThreadId: string,
+  strategy: ThreadRecoveryStrategy,
+): ThreadRecoveryDecision {
+  return {
+    oldThreadId,
+    candidateThreadId: null,
+    strategy,
+    confidence: 0,
+    scoreGap: 0,
+    featureSignals: [],
+    reasonCode: "no-candidate",
+    isPersistent: false,
+  };
+}
+
+function buildThreadRecoveryDecision(params: {
+  oldThreadId: string;
+  candidate: ThreadSummary;
+  strategy: ThreadRecoveryStrategy;
+  confidence: number;
+  scoreGap: number;
+  featureSignals: string[];
+  reasonCode: ThreadRecoveryReasonCode;
+}): ThreadRecoveryDecision {
+  const confidence = Math.max(0, Math.min(1, params.confidence));
+  return {
+    oldThreadId: params.oldThreadId,
+    candidateThreadId: params.candidate.id,
+    strategy: params.strategy,
+    confidence,
+    scoreGap: params.scoreGap,
+    featureSignals: params.featureSignals,
+    reasonCode: params.reasonCode,
+    isPersistent:
+      confidence >= THREAD_RECOVERY_ALIAS_PERSISTENCE_THRESHOLD &&
+      params.reasonCode !== "ambiguous" &&
+      params.reasonCode !== "fresh-only",
+    summary: params.candidate,
+  };
+}
+
+function normalizeRecoveryTitle(value: string): string {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function isRecoveryTimeCoherent(
   entry: ThreadSummary,
   staleSummary?: ThreadSummary,
-): number {
+): boolean {
+  const staleUpdatedAt =
+    typeof staleSummary?.updatedAt === "number" &&
+    Number.isFinite(staleSummary.updatedAt)
+      ? staleSummary.updatedAt
+      : 0;
+  if (staleUpdatedAt <= 0 || !Number.isFinite(entry.updatedAt)) {
+    return false;
+  }
+  if (entry.updatedAt < staleUpdatedAt) {
+    return false;
+  }
+  return entry.updatedAt - staleUpdatedAt <= THREAD_RECOVERY_TIME_WINDOW_MS;
+}
+
+function scoreReplacementThreadCandidateDetailed(
+  entry: ThreadSummary,
+  staleSummary?: ThreadSummary,
+): { score: number; featureSignals: string[] } {
   const staleName = staleSummary?.name?.trim() ?? "";
   let score = 0;
+  const featureSignals: string[] = [];
   if (staleName && entry.name.trim() === staleName) {
     score += 100;
+    featureSignals.push("name_exact");
+  } else if (
+    staleName &&
+    normalizeRecoveryTitle(entry.name) === normalizeRecoveryTitle(staleName)
+  ) {
+    score += 70;
+    featureSignals.push("name_normalized_match");
   }
   if (
     staleSummary?.source &&
@@ -221,6 +436,7 @@ function scoreReplacementThreadCandidate(
     staleSummary.source === entry.source
   ) {
     score += 20;
+    featureSignals.push("source_match");
   }
   if (
     staleSummary?.provider &&
@@ -228,6 +444,7 @@ function scoreReplacementThreadCandidate(
     staleSummary.provider === entry.provider
   ) {
     score += 20;
+    featureSignals.push("provider_match");
   }
   if (
     staleSummary?.sourceLabel &&
@@ -235,8 +452,33 @@ function scoreReplacementThreadCandidate(
     staleSummary.sourceLabel === entry.sourceLabel
   ) {
     score += 20;
+    featureSignals.push("source_label_match");
   }
-  return score;
+  if (isRecoveryTimeCoherent(entry, staleSummary)) {
+    score += 30;
+    featureSignals.push("time_window_coherent");
+  }
+  return { score, featureSignals };
+}
+
+function scoreReplacementThreadCandidate(
+  entry: ThreadSummary,
+  staleSummary?: ThreadSummary,
+): number {
+  return scoreReplacementThreadCandidateDetailed(entry, staleSummary).score;
+}
+
+function resolveReplacementRecoveryConfidence(score: number, scoreGap: number): number {
+  if (score >= 130 && scoreGap >= 50) {
+    return 0.95;
+  }
+  if (score >= 100 && scoreGap >= THREAD_RECOVERY_REPLACEMENT_GAP_THRESHOLD) {
+    return 0.88;
+  }
+  if (score >= 70 && scoreGap >= THREAD_RECOVERY_REPLACEMENT_GAP_THRESHOLD) {
+    return 0.78;
+  }
+  return 0.6;
 }
 
 export function listReplacementThreadCandidates(params: {
@@ -272,6 +514,23 @@ export function scoreReplacementThreadCandidates(params: {
     entry,
     score: scoreReplacementThreadCandidate(entry, staleSummary),
   }));
+}
+
+export function scoreDetailedReplacementThreadCandidates(params: {
+  staleThreadId: string;
+  summaries: ThreadSummary[];
+  staleSummary?: ThreadSummary;
+}): Array<{ entry: ThreadSummary; score: number; featureSignals: string[] }> {
+  const staleSummary =
+    params.staleSummary ??
+    params.summaries.find((entry) => entry.id === params.staleThreadId);
+  return listReplacementThreadCandidates(params).map((entry) => {
+    const { score, featureSignals } = scoreReplacementThreadCandidateDetailed(
+      entry,
+      staleSummary,
+    );
+    return { entry, score, featureSignals };
+  });
 }
 
 const THREAD_RECOVERY_PATTERNS = [
@@ -476,6 +735,17 @@ export function selectReplacementThreadByMessageHistory(params: {
     items: ConversationItem[];
   }>;
 }): ThreadSummary | null {
+  return selectReplacementThreadByMessageHistoryDecision(params).summary ?? null;
+}
+
+export function selectReplacementThreadByMessageHistoryDecision(params: {
+  staleItems: ConversationItem[];
+  candidates: Array<{
+    summary: ThreadSummary;
+    items: ConversationItem[];
+  }>;
+  staleThreadId?: string;
+}): ThreadRecoveryDecision {
   const scored = params.candidates
     .map(({ summary, items }) => ({
       entry: summary,
@@ -491,12 +761,32 @@ export function selectReplacementThreadByMessageHistory(params: {
   const best = scored[0];
   const next = scored[1];
   if (!best) {
-    return null;
+    return buildNoCandidateThreadRecoveryDecision(
+      params.staleThreadId ?? "",
+      "history-match",
+    );
   }
   if (!next || next.score < best.score) {
-    return best.entry;
+    return buildThreadRecoveryDecision({
+      oldThreadId: params.staleThreadId ?? "",
+      candidate: best.entry,
+      strategy: "history-match",
+      confidence: 0.96,
+      scoreGap: Math.max(0, best.score - (next?.score ?? 0)),
+      featureSignals: ["history_boundary_match"],
+      reasonCode: "verified",
+    });
   }
-  return null;
+  return {
+    oldThreadId: params.staleThreadId ?? "",
+    candidateThreadId: null,
+    strategy: "history-match",
+    confidence: 0,
+    scoreGap: 0,
+    featureSignals: ["ambiguous_history_match"],
+    reasonCode: "ambiguous",
+    isPersistent: false,
+  };
 }
 
 export function mergeRecoveredThreadSummaries(
@@ -731,18 +1021,29 @@ export function mergeGeminiSessionSummaries(
     const updatedAt = Number.isFinite(session.updatedAt)
       ? Math.max(0, session.updatedAt)
       : 0;
+    const mappedTitle = mappedTitles[id];
+    const customTitle = getCustomName(workspaceId, id);
+    const fallbackTitle = previewThreadName(
+      session.firstMessage,
+      "Gemini Session",
+    );
     const next: ThreadSummary = {
       id,
-      name:
-        mappedTitles[id] ||
-        getCustomName(workspaceId, id) ||
-        previewThreadName(session.firstMessage, "Gemini Session"),
+      name: selectProjectedSessionDisplayName({
+        previous: prev,
+        nextName: fallbackTitle,
+        mappedTitle,
+        customTitle,
+      }),
       updatedAt,
       sizeBytes: session.fileSizeBytes,
       engineSource: "gemini",
     };
     if (!prev || next.updatedAt >= prev.updatedAt) {
-      mergedById.set(id, next);
+      mergedById.set(
+        id,
+        mergeSessionDisplaySummary(prev, next, { mappedTitle, customTitle }),
+      );
     }
   });
   return Array.from(mergedById.values()).sort(
@@ -813,7 +1114,13 @@ export function mergeCodexCatalogSessionSummaries(
           : `claude:${session.parentSessionId}`
         : (session.parentSessionId ?? null);
     const mappedTitle = mappedTitles[session.sessionId];
-    const customTitle = getCustomName(workspaceId, session.sessionId);
+    const ownerWorkspaceId = session.workspaceId ?? workspaceId;
+    const ownerCustomTitle = getCustomName(ownerWorkspaceId, session.sessionId);
+    const selectedWorkspaceCustomTitle =
+      ownerWorkspaceId === workspaceId
+        ? undefined
+        : getCustomName(workspaceId, session.sessionId);
+    const customTitle = ownerCustomTitle || selectedWorkspaceCustomTitle;
     const fallbackTitle = previewThreadName(
       title,
       engineSource === "claude"
@@ -834,6 +1141,12 @@ export function mergeCodexCatalogSessionSummaries(
         engineSource,
       }),
       updatedAt,
+      archivedAt:
+        typeof session.archivedAt === "number" &&
+        Number.isFinite(session.archivedAt) &&
+        session.archivedAt > 0
+          ? session.archivedAt
+          : undefined,
       sizeBytes: session.sizeBytes,
       engineSource,
       threadKind: "native",
@@ -975,7 +1288,6 @@ export function shouldApplyClaudeSidebarContinuity(
   return (
     normalized.includes("claude") ||
     normalized.includes("catalog") ||
-    normalized.includes("first-page") ||
     normalized.includes("empty-thread-list") ||
     normalized.includes("partial") ||
     normalized.includes("timeout")

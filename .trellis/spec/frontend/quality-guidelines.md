@@ -87,7 +87,8 @@ npm run doctor:strict
 - Loader MUST treat backend payload as `unknown` and narrow through local guards before filtering or rendering.
 - Loader MUST skip control-plane entries before producing `ConversationItem` rows.
 - Control-plane matching MUST require high-confidence structure: `method=initialize`, `params/payload.clientInfo.name/title=ccgui` with `capabilities.experimentalApi`, `developer_instructions`, or pure Codex app-server invocation text.
-- Loader MUST preserve normal user/assistant messages that merely mention `app-server` in natural language.
+- Pure Codex app-server text means `app-server` alone or command-token form such as `codex app-server`, `codex.exe app-server`, `codex.cmd app-server`, or `codex.bat app-server`.
+- Loader MUST preserve normal user/assistant messages that merely mention `app-server` or `codex app-server` in natural language.
 - Backend remains the authoritative session list/load sanitizer; frontend filtering is only a legacy/remote/cache fallback.
 
 ### 4. Validation & Error Matrix
@@ -97,7 +98,7 @@ npm run doctor:strict
 | old backend returns `initialize` payload | skip row | render pseudo user message |
 | old backend returns `developer_instructions` payload | skip row | show internal instructions |
 | mixed history includes real user message | keep real message | drop whole transcript |
-| user text mentions `app-server` | keep message | keyword-only filtering |
+| user text mentions `app-server` / `codex app-server` | keep message | keyword-only filtering |
 | unknown malformed history payload | return safe empty/parsed subset | throw during restore |
 
 ### 5. Good / Base / Bad Cases
@@ -110,7 +111,7 @@ npm run doctor:strict
 
 - Vitest: filters `initialize` / `developer_instructions` rows.
 - Vitest: mixed transcript keeps real user message.
-- Vitest: normal user text with `app-server` keyword is preserved.
+- Vitest: normal user text with `app-server` / `codex app-server` keyword is preserved, while pure command-token `codex app-server` is filtered.
 
 ### 7. Wrong vs Correct
 

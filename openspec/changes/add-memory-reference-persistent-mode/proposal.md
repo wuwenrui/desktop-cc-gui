@@ -1,3 +1,11 @@
+## 2026-05-23 Proposal Refresh
+
+- **Current branch**: `feature/v0.5.2`; this refresh is documentation-only and does not change implementation code.
+- **Task state**: 13/13 checked; status = Completed / pending verify-archive.
+- **Code/document evidence**: Composer 已使用 `memoryReferenceMode: off | single | always`，`ButtonArea` 提供 single/always 选择，`useThreadMessaging` 继续消费 `memoryReferenceEnabled`。
+- **Next action**: 归档前补 focused Composer/ButtonArea/memory reference tests 与 strict validation 证据。
+- **Validation note**: `openspec validate --all --strict --no-interactive` passed 299 items in this documentation refresh.
+
 ## Why
 
 Composer 的 Memory Reference 当前只有一个 one-shot 开关，但弹层文案只写“开启引用”，用户无法在发送前区分“只开本次”与“后续持续开启”。这会让需要连续多轮引用项目记忆的用户反复点按钮，也让一次性引用的关闭语义不够清楚。

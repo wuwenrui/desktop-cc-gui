@@ -40,13 +40,15 @@ import {
   renderSectionIndicator,
   TREE_INDENT_STEP,
 } from "./GitDiffPanelFileSections";
+import {
+  buildDiffTree,
+  compactDiffTree,
+  type DiffTreeFolderNode,
+} from "../utils/diffTree";
 import { WorkspaceEditableDiffReviewSurface } from "./WorkspaceEditableDiffReviewSurface";
 import { GitDiffPanelSectionActions } from "./GitDiffPanelSectionActions";
 import {
-  type InclusionState,
-  InclusionToggle,
   getFileInclusionState,
-  getInclusionStateForScope,
   normalizeDiffPath,
 } from "./GitDiffPanelInclusion";
 import {
@@ -136,67 +138,7 @@ function isEditableTarget(target: EventTarget | null) {
   );
 }
 
-type DiffTreeFolderNode = {
-  key: string;
-  name: string;
-  descendantPaths: string[];
-  folders: Map<string, DiffTreeFolderNode>;
-  files: DiffFile[];
-};
-
-export function buildDiffTree(
-  files: DiffFile[],
-  section: "staged" | "unstaged",
-): DiffTreeFolderNode {
-  const root: DiffTreeFolderNode = {
-    key: `${section}:/`,
-    name: "",
-    descendantPaths: [],
-    folders: new Map(),
-    files: [],
-  };
-  for (const file of files) {
-    const parts = file.path.replace(/\\/g, "/").split("/").filter(Boolean);
-    if (parts.length === 0) {
-      continue;
-    }
-    root.descendantPaths.push(file.path);
-    let node = root;
-    for (let index = 0; index < parts.length - 1; index += 1) {
-      const segment = parts[index] ?? "";
-      const nextKey = `${node.key}${segment}/`;
-      let child = node.folders.get(segment);
-      if (!child) {
-        child = {
-          key: nextKey,
-          name: segment,
-          descendantPaths: [],
-          folders: new Map(),
-          files: [],
-        };
-        node.folders.set(segment, child);
-      }
-      child.descendantPaths.push(file.path);
-      node = child;
-    }
-    node.files.push(file);
-  }
-  return root;
-}
-
-function hasToggleableTreePaths(
-  paths: string[],
-  isCommitPathLocked?: (path: string) => boolean,
-) {
-  return paths.some((path) => !isCommitPathLocked?.(path));
-}
-
-function getToggleableTreePaths(
-  paths: string[],
-  isCommitPathLocked?: (path: string) => boolean,
-) {
-  return paths.filter((path) => !isCommitPathLocked?.(path));
-}
+export { buildDiffTree, compactDiffTree };
 
 type DiffTreeSectionProps = DiffSectionProps & {
   collapsedFolders: Set<string>;
@@ -234,7 +176,7 @@ function DiffTreeSection({
   compactHeader = false,
 }: DiffTreeSectionProps) {
   const { t } = useTranslation();
-  const tree = useMemo(() => buildDiffTree(files, section), [files, section]);
+  const tree = useMemo(() => compactDiffTree(buildDiffTree(files, section)), [files, section]);
   const treeContainerRef = useRef<HTMLDivElement | null>(null);
   const normalizedIncludedPaths = useMemo(
     () => includedPaths.map((path) => normalizeDiffPath(path)),
@@ -396,39 +338,10 @@ function DiffTreeSection({
     [focusParentFolder, focusSiblingTreeNode],
   );
 
-  const getScopeInclusionState = useCallback(
-    (scopePath?: string | null) =>
-      getInclusionStateForScope(
-        normalizedIncludedPaths,
-        normalizedExcludedPaths,
-        normalizedPartialPaths,
-        scopePath,
-      ),
-    [normalizedExcludedPaths, normalizedIncludedPaths, normalizedPartialPaths],
-  );
-
-  const togglePathsForCurrentSection = useCallback(
-    (paths: string[], inclusionState: InclusionState) => {
-      const toggleablePaths = paths.filter((path) => !isCommitPathLocked?.(path));
-      if (toggleablePaths.length === 0) {
-        return;
-      }
-      onSetCommitSelection?.(toggleablePaths, inclusionState !== "all");
-    },
-    [isCommitPathLocked, onSetCommitSelection],
-  );
-
   const renderFolder = useCallback(
-    (folder: DiffTreeFolderNode, depth: number, parentKey?: string) => {
+    (folder: DiffTreeFolderNode<DiffFile>, depth: number, parentKey?: string) => {
       const isCollapsed = collapsedFolders.has(folder.key);
       const hasChildren = folder.folders.size > 0 || folder.files.length > 0;
-      const folderPaths = folder.descendantPaths;
-      const folderHasToggleablePaths = hasToggleableTreePaths(
-        folderPaths,
-        isCommitPathLocked,
-      );
-      const folderScopePath = normalizeDiffPath(folder.key.split(":/")[1] ?? "");
-      const folderInclusionState = getScopeInclusionState(folderScopePath);
       const treeIndentPx = depth * TREE_INDENT_STEP;
       const folderStyle = {
         paddingLeft: `${treeIndentPx}px`,
@@ -468,19 +381,6 @@ function DiffTreeSection({
               }
             }}
           >
-            <InclusionToggle
-              state={folderInclusionState}
-              label={t("git.commitSelectionToggleScope", { path: folder.name })}
-              className="git-commit-scope-toggle--folder"
-              disabled={!folderHasToggleablePaths}
-              stopPropagation
-              onToggle={() =>
-                togglePathsForCurrentSection(
-                  getToggleableTreePaths(folderPaths, isCommitPathLocked),
-                  folderInclusionState,
-                )
-              }
-            />
             <span className="diff-tree-folder-toggle" aria-hidden>
               {hasChildren ? (
                 isCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />
@@ -547,21 +447,18 @@ function DiffTreeSection({
       onOpenFilePreview,
       onSelectFile,
       onShowFileMenu,
-      getScopeInclusionState,
       includedPathSet,
       excludedPathSet,
       partialPathSet,
       isCommitPathLocked,
-      onSetCommitSelection,
       onStageFile,
       onToggleFolder,
       onUnstageFile,
       onDiscardFile,
+      onSetCommitSelection,
       section,
       selectedFiles,
       selectedPath,
-      t,
-      togglePathsForCurrentSection,
     ],
   );
 
@@ -653,19 +550,6 @@ function DiffTreeSection({
                 }
               }}
             >
-              <InclusionToggle
-                state={getScopeInclusionState()}
-                label={t("git.commitSelectionToggleScope", { path: rootFolderName })}
-                className="git-commit-scope-toggle--folder"
-                disabled={!hasToggleableTreePaths(tree.descendantPaths, isCommitPathLocked)}
-                stopPropagation
-                onToggle={() =>
-                  togglePathsForCurrentSection(
-                    getToggleableTreePaths(tree.descendantPaths, isCommitPathLocked),
-                    getScopeInclusionState(),
-                  )
-                }
-              />
               <span className="diff-tree-folder-toggle" aria-hidden>
                 {rootCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
               </span>

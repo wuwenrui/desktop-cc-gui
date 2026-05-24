@@ -281,6 +281,23 @@
   pointer-events: none;
 }
 
+.file-tree-list.is-virtualized {
+  gap: 0;
+  contain: strict;
+}
+
+.file-tree-virtual-spacer {
+  position: relative;
+  min-height: 100%;
+}
+
+.file-tree-virtual-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+}
+
 .file-tree-empty {
   font-size: 12px;
   color: var(--text-faint);

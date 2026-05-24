@@ -1,3 +1,11 @@
+## 2026-05-23 Proposal Refresh
+
+- **Current branch**: `feature/v0.5.2`; this refresh is documentation-only and does not change implementation code.
+- **Task state**: 21/21 checked; status = Completed / pending verify-archive.
+- **Code/document evidence**: `EmailMailSessionList`、timeline event、mutate mail session、settings inbound listener/mail sessions surface 与 related tests 已存在。
+- **Next action**: 归档前确认 email settings/session list focused tests 与 no-secret/raw-mail storage guard。
+- **Validation note**: `openspec validate --all --strict --no-interactive` passed 299 items in this documentation refresh.
+
 ## Why
 
 邮件会话列表已经能聚合 Moss 相关邮件事件，但当前管理体验有两个断点：一是用户只能在列表底部看到“查看邮件”结果，内容多时没有明显反馈，也不容易发现详情已经展开；二是“刷新会话”和“清理已处理记录”缺少明确的执行态与结果反馈，用户会误以为按钮不可用。

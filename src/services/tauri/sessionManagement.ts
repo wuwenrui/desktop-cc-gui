@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 export interface WorkspaceSessionCatalogEntry {
   sessionId: string;
+  stableSessionKey?: string | null;
   canonicalSessionId?: string | null;
   parentSessionId?: string | null;
   workspaceId: string;
@@ -13,6 +14,8 @@ export interface WorkspaceSessionCatalogEntry {
   threadKind: string;
   source?: string | null;
   sourceLabel?: string | null;
+  sourceCompleteness?: WorkspaceSessionSourceCompleteness | null;
+  sourceStatusReason?: string | null;
   sizeBytes?: number | null;
   cwd?: string | null;
   attributionStatus?: "strict-match" | "inferred-related" | "unassigned" | null;
@@ -34,6 +37,42 @@ export interface WorkspaceSessionCatalogEntry {
   childrenCount?: number | null;
 }
 
+export type WorkspaceSessionSourceCompleteness =
+  | "complete"
+  | "authoritative_empty"
+  | "partial"
+  | "degraded"
+  | "uncertain_empty";
+
+export interface WorkspaceSessionCatalogSourceStatus {
+  engine: string;
+  completeness: WorkspaceSessionSourceCompleteness;
+  reason?: string | null;
+  scannedCandidates?: number | null;
+  skippedCandidates?: number | null;
+  scanCapReached?: boolean | null;
+  diagnostics?: WorkspaceSessionCatalogDiagnostic[];
+  cache?: WorkspaceSessionSourceCacheMetrics | null;
+}
+
+export interface WorkspaceSessionCatalogDiagnostic {
+  engine: string;
+  code: string;
+  reason: string;
+  sessionId?: string | null;
+  physicalLocator?: string | null;
+  cwd?: string | null;
+  candidateCount?: number | null;
+}
+
+export interface WorkspaceSessionSourceCacheMetrics {
+  hits: number;
+  misses: number;
+  stale: number;
+  rebuilds: number;
+  failures: number;
+}
+
 export interface WorkspaceSessionCatalogQuery {
   keyword?: string | null;
   engine?: string | null;
@@ -44,7 +83,17 @@ export interface WorkspaceSessionCatalogQuery {
 export interface WorkspaceSessionCatalogPage {
   data: WorkspaceSessionCatalogEntry[];
   nextCursor?: string | null;
+  requestedLimit?: number | null;
+  effectiveLimit?: number | null;
+  limitCapped?: boolean;
   partialSource?: string | null;
+  sourceStatuses?: WorkspaceSessionCatalogSourceStatus[];
+}
+
+export interface WorkspaceSessionArchiveEvidence {
+  archivedAtBySessionId: Record<string, number>;
+  partialSource?: string | null;
+  sourceStatuses?: WorkspaceSessionCatalogSourceStatus[];
 }
 
 export interface WorkspaceSessionFolder {
@@ -80,10 +129,13 @@ export interface WorkspaceSessionProjectionSummary {
   folderCountsById?: Record<string, number>;
   unassignedFolderCount?: number;
   partialSources?: string[];
+  sourceStatuses?: WorkspaceSessionCatalogSourceStatus[];
 }
 
 export interface WorkspaceSessionBatchMutationResult {
   sessionId: string;
+  stableSessionKey?: string | null;
+  ownerWorkspaceId?: string | null;
   ok: boolean;
   archivedAt?: number | null;
   error?: string | null;
@@ -138,6 +190,31 @@ export async function listProjectRelatedCodexSessions(
     cursor: options?.cursor ?? null,
     limit: options?.limit ?? null,
   });
+}
+
+export async function listProjectRelatedSessions(
+  workspaceId: string,
+  options?: {
+    query?: WorkspaceSessionCatalogQuery | null;
+    cursor?: string | null;
+    limit?: number | null;
+  },
+): Promise<WorkspaceSessionCatalogPage> {
+  return invoke<WorkspaceSessionCatalogPage>("list_project_related_sessions", {
+    workspaceId,
+    query: options?.query ?? null,
+    cursor: options?.cursor ?? null,
+    limit: options?.limit ?? null,
+  });
+}
+
+export async function listWorkspaceSessionArchiveEvidence(
+  workspaceId: string,
+): Promise<WorkspaceSessionArchiveEvidence> {
+  return invoke<WorkspaceSessionArchiveEvidence>(
+    "list_workspace_session_archive_evidence",
+    { workspaceId },
+  );
 }
 
 export async function getWorkspaceSessionProjectionSummary(

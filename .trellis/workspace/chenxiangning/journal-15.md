@@ -1567,3 +1567,430 @@ Follow-ups: 重新推送并运行 Release workflow，创建 v0.5.0 release。
 ### Next Steps
 
 - None - task complete
+
+
+## Session 554: 修复底部状态面板折叠挂载
+
+**Date**: 2026-05-22
+**Task**: 修复底部状态面板折叠挂载
+**Branch**: `feature/v0.5.2`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| Area | Summary |
+|------|---------|
+| Layout | 修复底部 dock 状态面板折叠态被卸载的问题；当 bottom activity panel 可见、存在 active thread、且用户对话或结果 baseline tab 可见时保持挂载。 |
+| Engines | 将 OpenCode 纳入底部状态面板支持集合，和 Claude / Codex / Gemini 保持 baseline tab 可达性一致。 |
+| Composer | 主 Composer 显式关闭重复的 status panel layers toggle，由底部 dock 自身控件负责折叠/展开。 |
+| OpenSpec | 新增 change `fix-bottom-status-dock-collapse-stability`，补齐 proposal、design、tasks 和两个 capability delta specs。 |
+| Tests | 新增 layout hook regression case，覆盖折叠态 baseline tabs、OpenCode 和 Composer toggle override。 |
+
+**Validation**:
+- `openspec validate fix-bottom-status-dock-collapse-stability --strict --no-interactive`
+- `npx vitest run src/features/layout/hooks/useLayoutNodes.client-ui-visibility.test.tsx src/features/status-panel/components/StatusPanel.test.tsx src/features/composer/components/Composer.status-panel-toggle.test.tsx`
+- `npm run typecheck`
+- `npm run lint`
+
+**Updated Files**:
+- `src/features/layout/hooks/useLayoutNodes.tsx`
+- `src/features/layout/hooks/useLayoutNodes.client-ui-visibility.test.tsx`
+- `openspec/changes/fix-bottom-status-dock-collapse-stability/proposal.md`
+- `openspec/changes/fix-bottom-status-dock-collapse-stability/design.md`
+- `openspec/changes/fix-bottom-status-dock-collapse-stability/tasks.md`
+- `openspec/changes/fix-bottom-status-dock-collapse-stability/specs/status-panel-latest-user-message-tab/spec.md`
+- `openspec/changes/fix-bottom-status-dock-collapse-stability/specs/status-panel-checkpoint-module/spec.md`
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1105940b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 555: 统一 Git 文件树复选框与字体样式
+
+**Date**: 2026-05-22
+**Task**: 统一 Git 文件树复选框与字体样式
+**Branch**: `feature/v0.5.2`
+
+### Summary
+
+完成 Git/Git History/HUB 文件树复选框右置、树形目录 compact、字体样式归一、关闭按钮样式收口，并补充 OpenSpec artifacts。
+
+### Main Changes
+
+- 将 Git flat/tree 与 Git History/HUB worktree 的文件级 commit scope 复选框统一放到右侧 trailing control area，移除 tree root/folder 行前置复选框。
+- 抽取 `src/features/git/utils/diffTree.ts`，让 Git 与 HUB worktree 共用 `buildDiffTree` / `compactDiffTree`，并修复 compact dotted label collision，使用结构 key 而不是展示名作为 Map identity。
+- 归一 Git 与 HUB 文件树 typography 和状态色 token，兼容 built-in theme 与 custom theme。
+- 将 Git History/HUB overlay close chip 调整为 20x20 小圆角方形按钮，只改样式不改行为。
+- 新增/调整 Vitest 覆盖 checkbox placement、folder checkbox removal、package-style dotted folder display、branch-preserving compact、Windows-style path selection、compact label collision。
+- 回写 `openspec/changes/adjust-git-worktree-checkbox-placement/` 的 proposal/design/tasks/specs，并通过 strict validation。
+
+Validation:
+- `npx vitest run src/features/git/components/GitDiffPanel.test.tsx` passed, 42 tests.
+- `npm run typecheck` passed.
+- `npm run lint` passed.
+- `npm run check:large-files` passed, found=0.
+- `openspec validate adjust-git-worktree-checkbox-placement --type change --strict --no-interactive` passed.
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `89d219d8` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 556: 统一工作区会话目录读取链路
+
+**Date**: 2026-05-22
+**Task**: 统一工作区会话目录读取链路
+**Branch**: `feature/v0.5.2`
+
+### Summary
+
+实现并校准 workspace session catalog B+C 演进方案，覆盖 Claude/Codex 统一目录投影、Claude source fact cache、边界条件修复、大文件门禁拆分和 OpenSpec/Trellis 文档回写。
+
+### Main Changes
+
+## 本次完成
+
+- 基于 OpenSpec change `unify-claude-workspace-session-catalog` 完成方案 B+C 演进落地。
+- 后端统一 workspace session catalog projection，补齐 Claude/Codex session membership、metadata overlay、source completeness 与 diagnostic contract。
+- Claude 侧新增 source fact cache，并明确 cache 只缓存 bounded facts，不缓存 workspace ownership / UI overlay / full transcript。
+- 修复 Claude JSONL 行读取错误、scan cap 空结果、unreadable diagnostic、cache fingerprint 缺失、前端 catalog payload 异常值等边界条件。
+- 按 large-file governance 拆分 `claude_history.rs` 与 `session_management.rs`，避免 hard gate 超阈值。
+- 回写 OpenSpec proposal / design / implementation notes，并新增 Trellis contract 文档。
+
+## 关键验证
+
+- `openspec validate unify-claude-workspace-session-catalog --strict --no-interactive`
+- `openspec instructions apply --change "unify-claude-workspace-session-catalog" --json`
+- `cargo check --manifest-path src-tauri/Cargo.toml`
+- `cargo test --manifest-path src-tauri/Cargo.toml session_management -- --nocapture`
+- `cargo test --manifest-path src-tauri/Cargo.toml scan_session_source_file -- --nocapture`
+- `cargo test --manifest-path src-tauri/Cargo.toml source_fact_cache -- --nocapture`
+- `npx vitest run src/features/threads/hooks/useThreadActions.threadList.test.ts`
+- `npm run typecheck -- --pretty false`
+- `npm run lint`
+- `npm run check:runtime-contracts`
+- `npm run check:large-files:gate`
+- `npm run check:heavy-test-noise`
+- `node --test scripts/check-large-files.test.mjs`
+- `node --test scripts/check-heavy-test-noise.test.mjs scripts/test-batched.test.mjs`
+- `git diff --check`
+
+## 后续注意
+
+- `npm run check:large-files:near-threshold` 仍有 watch 项：`src-tauri/src/session_management.rs`、`src-tauri/src/engine/claude_history.rs` 等接近阈值，但 hard gate 已通过。
+- `npm run check:heavy-test-noise` 仅保留既有 npm config warning，无 act/stdout/stderr payload noise。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a56c9cea` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 557: 收紧 Claude 会话控制面过滤
+
+**Date**: 2026-05-23
+**Task**: 收紧 Claude 会话控制面过滤
+**Branch**: `feature/v0.5.2`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## Summary
+
+- 收紧 Claude history backend scanner 与 frontend fallback loader 的 control-plane 判断：纯 `app-server` / `codex app-server` 命令仍隐藏，自然语言提到 `codex app-server` 不再吞正常 Claude Code 会话。
+- 将 Settings / Session Management catalog 首批分页窗口从 `100` 提升到 `999`，Sidebar 启动分页保持独立 `200`。
+- 回写 `unify-claude-workspace-session-catalog` OpenSpec proposal/tasks/implementation notes，并同步 Trellis backend/frontend/workspace catalog contract。
+
+## Validation
+
+- `pnpm vitest run src/features/threads/loaders/claudeHistoryLoader.test.ts src/features/settings/components/settings-view/hooks/useWorkspaceSessionCatalog.test.tsx src/features/settings/components/SettingsView.test.tsx`：3 files / 84 tests passed
+- `cargo test --manifest-path src-tauri/Cargo.toml claude_history -- --nocapture`：lib 45 passed，daemon 33 passed
+- `openspec validate unify-claude-workspace-session-catalog --strict --no-interactive`：passed
+- `pnpm typecheck`：passed
+- `pnpm check:runtime-contracts`：passed，只有既有 npm config warning
+- `pnpm lint`：passed
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4baf7860` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 558: 刷新 OpenSpec 提案状态与项目索引
+
+**Date**: 2026-05-23
+**Task**: 刷新 OpenSpec 提案状态与项目索引
+**Branch**: `feature/v0.5.2`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+本次提交完成 OpenSpec 提案状态与项目索引的整体文档刷新，未改动运行时代码。
+
+**主要内容**:
+- 更新 `openspec/project.md`，将项目快照校准到 `2026-05-23` / `feature/v0.5.2`。
+- 为 28 个 active change 的 `proposal.md` 增加 `2026-05-23 Proposal Refresh` 状态段。
+- 新增 `openspec/docs/proposal-refresh-2026-05-23.md`，集中记录 active proposals 的任务状态、代码证据、后续关闭顺序。
+
+**验证**:
+- `openspec validate --all --strict --no-interactive` 通过：299 passed, 0 failed。
+- `git diff --check` 通过。
+- 提交前确认变更全部位于 `openspec/**`，没有修改 `src/**`、`src-tauri/**` 或其他运行时代码。
+
+**后续建议**:
+- 优先处理 `harden-claude-sidebar-list-timeout-fallback` 剩余 final gates。
+- 对 task-complete 的 OpenSpec changes 分批执行 verify / archive，降低 active change 噪音。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `be870fef` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 559: 收尾 Claude sidebar fallback 自动化门禁
+
+**Date**: 2026-05-23
+**Task**: 收尾 Claude sidebar fallback 自动化门禁
+**Branch**: `feature/v0.5.2`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+本次提交完成 `harden-claude-sidebar-list-timeout-fallback` 的 OpenSpec 文档收尾，未改动运行时代码。
+
+**主要内容**:
+- 将该 change 的任务状态从 25/30 更新为 26/30。
+- 标记 `npm run typecheck` 已在 2026-05-23 通过，关闭旧的外部 typecheck blocker。
+- 在 proposal、project snapshot、proposal refresh audit 中记录自动化 gate 已闭环。
+- 保留 5.1-5.3 manual QA 与 7.1 post-merge archive 为未完成，不伪造人工验证。
+
+**验证**:
+- `openspec validate harden-claude-sidebar-list-timeout-fallback --strict --no-interactive` 通过。
+- `openspec validate --all --strict --no-interactive` 通过：299 passed, 0 failed。
+- `git diff --check` 通过。
+- 收尾前已跑：`npm run typecheck`、focused sidebar Vitest 47 tests、session-activity/app Vitest 487 tests、4 个 Rust attribution exact tests。
+
+**后续建议**:
+- 在真实 dev build 中补 5.1-5.3 manual QA。
+- PR 合并后再执行 archive prep，不提前归档。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d53657ef` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 560: 收紧会话目录事实边界
+
+**Date**: 2026-05-24
+**Task**: 收紧会话目录事实边界
+**Branch**: `feature/v0.5.2`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| 项目 | 内容 |
+|------|------|
+| OpenSpec | 完成 `stabilize-session-management-truth-boundaries` 的 P1/P2 收口，实现与提案、tasks、spec strict validation 对齐。 |
+| Backend | 收紧 session catalog truth boundary：source completeness cap 降级、bounded archive evidence、engine-neutral related sessions、stable cursor、owner-aware batch mutation partial results。 |
+| Frontend | 对齐 service mapping、Settings page cap visibility、sidebar/thread continuity 的 per-engine last-good 与 archived evidence guard。 |
+| Governance | 拆分 session management 子模块，large-file hard gate 通过；heavy-test-noise full sentry 通过。 |
+
+**提交**:
+- `6fe26f34 fix(session-management): 收紧会话目录事实边界`
+
+**关键验证**:
+- `npm run typecheck`
+- `openspec validate stabilize-session-management-truth-boundaries --strict --no-interactive`
+- `openspec validate --all --strict --no-interactive` -> 301 passed, 0 failed
+- `npm run check:large-files:gate` -> found=0
+- `node --test scripts/check-heavy-test-noise.test.mjs scripts/test-batched.test.mjs` -> 16 passed
+- `cargo test --manifest-path src-tauri/Cargo.toml session_management -- --nocapture` -> lib/daemon session_management targets passed
+- `npx vitest run src/features/settings/components/settings-view/hooks/useWorkspaceSessionCatalog.test.tsx src/features/settings/components/settings-view/sections/SessionManagementSection.test.tsx src/features/threads/hooks/useThreadActionsSessionCatalog.test.tsx src/features/threads/hooks/useThreadActions.test.tsx src/features/threads/hooks/useThreadActions.timeout-fallback.test.tsx src/services/tauri.test.ts` -> 6 files / 189 tests passed
+- `npm run check:runtime-contracts`
+- `git diff --check`
+- `npm run check:heavy-test-noise` -> completed 532 test files; act/stdout/stderr payload violations 0
+
+**留存注意**:
+- `openspec/changes/fix-stale-thread-recovery-confidence-gates/` 是另一个未跟踪 change，未纳入本次提交。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6fe26f34` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 561: 收紧会话恢复与目录全量水合
+
+**Date**: 2026-05-24
+**Task**: 收紧会话恢复与目录全量水合
+**Branch**: `feature/v0.5.2`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## Summary
+
+完成 OpenSpec change `fix-stale-thread-recovery-confidence-gates` 的代码实现与提案回写，修复 Claude/Codex 会话恢复、Sidebar 会话列表对齐和 Windows Claude 运行态可见性问题。
+
+## Key Changes
+
+- 阻止 finalized native session identity 被 realtime `thread_session_id_updated` 或历史 `threadAliases` 改绑到另一个 finalized session。
+- 将 active Sidebar 项目会话列表统一为 `full-catalog` fact source，去掉 startup `first-page` 子集写入。
+- 让 active project `full-catalog` 内部消费 catalog `nextCursor`，直到无下一页或进入明确 degraded stop。
+- 修正 catalog `partialSource` 和 pagination 的边界，避免无真实 cursor 时显示 “加载更早的...”。
+- 手动/业务 tracked refresh 默认保持 `on-demand / full-catalog`，避免后续刷新把完整列表覆盖成子集。
+- Windows Claude command/tool/file/terminal 事件作为 non-text runtime progress，避免后端已有信息时误报 first-token pending。
+- 增加 recovery diagnostics、focused tests、OpenSpec proposal/design/tasks/specs 回写。
+
+## Validation
+
+- `npx vitest run src/features/threads/hooks/useThreadActionsSessionCatalog.test.tsx src/app-shell-parts/useWorkspaceThreadListHydration.test.tsx src/features/threads/hooks/useThreadActions.test.tsx src/features/threads/hooks/useThreadActions.threadList.test.ts src/features/threads/hooks/useThreadActions.helpers.test.ts src/features/threads/hooks/useThreadEventHandlers.test.ts src/features/threads/utils/streamLatencyDiagnostics.test.ts src/features/threads/utils/threadStorage.test.ts src/features/threads/hooks/useThreadTurnEvents.test.tsx src/features/threads/hooks/useThreads.sidebar-cache.test.tsx`
+- `cargo test --manifest-path src-tauri/Cargo.toml claude_history`
+- `npm run typecheck`
+- `npm run lint`
+- `npm run check:large-files:gate`
+- `npm run check:heavy-test-noise`
+- `openspec validate fix-stale-thread-recovery-confidence-gates --strict --no-interactive`
+
+## Remaining Manual Scope
+
+- 真实 Windows + Claude Code 手工烟测仍需补：large-context reopen、command-progress waiting、slow visible text、Sidebar/Strict count alignment、manual tracked refresh stability。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b7083ebf` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

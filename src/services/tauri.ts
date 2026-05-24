@@ -49,6 +49,11 @@ export type {
   WorkspaceSessionCatalogEntry,
   WorkspaceSessionCatalogQuery,
   WorkspaceSessionCatalogPage,
+  WorkspaceSessionCatalogSourceStatus,
+  WorkspaceSessionCatalogDiagnostic,
+  WorkspaceSessionArchiveEvidence,
+  WorkspaceSessionSourceCacheMetrics,
+  WorkspaceSessionSourceCompleteness,
   WorkspaceSessionProjectionSummary,
   WorkspaceSessionBatchMutationResult,
   WorkspaceSessionBatchMutationResponse,
@@ -67,6 +72,8 @@ export {
   getWorkspaceSessionProjectionSummary,
   listGlobalCodexSessions,
   listProjectRelatedCodexSessions,
+  listProjectRelatedSessions,
+  listWorkspaceSessionArchiveEvidence,
   listWorkspaceSessionFolders,
   listWorkspaceSessions,
   moveWorkspaceSessionFolder,
@@ -2110,6 +2117,10 @@ export async function engineInterrupt(workspaceId: string): Promise<void> {
 /**
  * List Claude Code session history for a workspace path.
  * Reads JSONL files from ~/.claude/projects/{encoded-path}/.
+ *
+ * This is a native history/detail source. Workspace session membership should
+ * come from listWorkspaceSessions so catalog source status can decide whether
+ * an empty Claude result is authoritative.
  */
 export async function listClaudeSessions(workspacePath: string, limit?: number | null): Promise<ClaudeSessionSummaryPayload[] | Record<string, unknown> | null | undefined> {
   return traceStartupInvoke("list_claude_sessions", "global", () =>

@@ -374,6 +374,62 @@ describe("useThreads sidebar cache", () => {
     }
   });
 
+  it("loads cached Claude sessions before live thread list seeds the workspace path", async () => {
+    vi.useFakeTimers();
+    writeClientStoreValue("threads", "sidebarSnapshot", {
+      version: 1,
+      updatedAt: 123,
+      workspaces: [workspace],
+      threadsByWorkspace: {
+        "ws-1": [
+          {
+            id: "claude:cached-session",
+            name: "Cached Claude chat",
+            updatedAt: 123,
+            engineSource: "claude",
+            threadKind: "native",
+          },
+        ],
+      },
+    });
+    vi.mocked(loadClaudeSession).mockResolvedValue({
+      messages: [
+        {
+          uuid: "msg-1",
+          type: "user",
+          message: { role: "user", content: "你好" },
+        },
+      ],
+    });
+
+    try {
+      const { result } = renderHook(() =>
+        useThreads({
+          activeWorkspace: workspace,
+          onWorkspaceConnected: vi.fn(),
+        }),
+      );
+
+      act(() => {
+        result.current.setActiveThreadId("claude:cached-session");
+      });
+
+      await act(async () => {
+        vi.advanceTimersByTime(50);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(loadClaudeSession).toHaveBeenCalledWith(
+        workspace.path,
+        "cached-session",
+      );
+      expect(result.current.historyLoadingByThreadId["claude:cached-session"]).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("does not mark pending Codex threads as history loading", () => {
     vi.useFakeTimers();
 

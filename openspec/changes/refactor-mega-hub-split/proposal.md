@@ -1,3 +1,11 @@
+## 2026-05-23 Proposal Refresh
+
+- **Current branch**: `feature/v0.5.2`; this refresh is documentation-only and does not change implementation code.
+- **Task state**: 16/16 checked; status = Completed / pending verify-archive.
+- **Code/document evidence**: `app-shell-parts/*`、`lazyViews.tsx`、`renderAppShell.tsx`、SpecHub/workspace sections 已形成拆分后 shell composition surface。
+- **Next action**: 归档前确认 typecheck、runtime contract checker 与 key app-shell focused tests。
+- **Validation note**: `openspec validate --all --strict --no-interactive` passed 299 items in this documentation refresh.
+
 ## Branch Calibration / 分支校准（2026-05-19）
 
 当前变更只以 `feature/v0.5.0-md` 为事实源。`feature/v0.5` 的任何治理实现尝试不作为本 change 的输入或完成证据。

@@ -15,7 +15,7 @@ import {
   loadGeminiSession,
   listWorkspaceSessionFolders,
   listGlobalCodexSessions,
-  listProjectRelatedCodexSessions,
+  listProjectRelatedSessions,
   listWorkspaceSessions,
   resumeThread,
 } from "../../../../../services/tauri";
@@ -24,7 +24,7 @@ vi.mock("../../../../../services/tauri", () => ({
   getWorkspaceSessionProjectionSummary: vi.fn(),
   listWorkspaceSessionFolders: vi.fn(),
   listGlobalCodexSessions: vi.fn(),
-  listProjectRelatedCodexSessions: vi.fn(),
+  listProjectRelatedSessions: vi.fn(),
   listWorkspaceSessions: vi.fn(),
   archiveWorkspaceSessions: vi.fn(),
   unarchiveWorkspaceSessions: vi.fn(),
@@ -105,7 +105,7 @@ describe("SessionManagementSection", () => {
       nextCursor: null,
       partialSource: null,
     });
-    vi.mocked(listProjectRelatedCodexSessions).mockResolvedValue({
+    vi.mocked(listProjectRelatedSessions).mockResolvedValue({
       data: [],
       nextCursor: null,
       partialSource: null,
@@ -796,6 +796,9 @@ describe("SessionManagementSection", () => {
         threadKind: "native",
       })),
       nextCursor: "offset:3",
+      requestedLimit: 999,
+      effectiveLimit: 200,
+      limitCapped: true,
       partialSource: null,
     });
 
@@ -815,6 +818,7 @@ describe("SessionManagementSection", () => {
     expect(screen.getByText("settings.sessionManagementVisibleWindowHint")).toBeTruthy();
     expect(screen.getByText("settings.sessionManagementActiveProjectionScopeHint")).toBeTruthy();
     expect(screen.getAllByText("settings.sessionManagementPartialSource")).not.toHaveLength(0);
+    expect(screen.getByText("settings.sessionManagementPageLimitCapped")).toBeTruthy();
   });
 
   it("switches to global archive mode and renders unassigned history label", async () => {
@@ -1024,7 +1028,7 @@ describe("SessionManagementSection", () => {
       nextCursor: null,
       partialSource: null,
     });
-    vi.mocked(listProjectRelatedCodexSessions).mockResolvedValueOnce({
+    vi.mocked(listProjectRelatedSessions).mockResolvedValueOnce({
       data: [
         {
           sessionId: "codex:related",
@@ -1107,7 +1111,7 @@ describe("SessionManagementSection", () => {
       nextCursor: null,
       partialSource: null,
     });
-    vi.mocked(listProjectRelatedCodexSessions)
+    vi.mocked(listProjectRelatedSessions)
       .mockResolvedValueOnce({
         data: [
           {
@@ -1156,7 +1160,7 @@ describe("SessionManagementSection", () => {
       expect(deleteWorkspaceSessions).toHaveBeenCalledWith("ws-2", ["codex:related"]);
     });
     await waitFor(() => {
-      expect(listProjectRelatedCodexSessions).toHaveBeenCalledTimes(2);
+      expect(listProjectRelatedSessions).toHaveBeenCalledTimes(2);
     });
     await waitFor(() => {
       expect(screen.queryByRole("checkbox", { name: "Sibling worktree session" })).toBeNull();

@@ -10,7 +10,7 @@ import {
   connectWorkspace as connectWorkspaceService,
   listThreadTitles as listThreadTitlesService,
   listThreads as listThreadsService,
-  listClaudeSessions as listClaudeSessionsService,
+  listClaudeSessions as listClaudeSessionsForFallbackSeedService,
   listGeminiSessions as listGeminiSessionsService,
   getOpenCodeSessionList as getOpenCodeSessionListService,
   loadClaudeSession as loadClaudeSessionService,
@@ -18,6 +18,7 @@ import {
   loadCodexSession as loadCodexSessionService,
   resumeThread as resumeThreadService,
 } from "../../../services/tauri";
+import type { WorkspaceSessionCatalogSourceStatus } from "../../../services/tauri";
 import * as tauriServices from "../../../services/tauri";
 import {
   buildItemsFromThread,
@@ -61,6 +62,10 @@ import {
   createRenameThreadTitleMappingAction,
 } from "./useThreadActions.sessionActions";
 import {
+  createThreadHistoryContinuationDecisionDebugEntry,
+  createThreadHistoryReadableSurfaceDebugEntry,
+} from "./useThreadActions.recoveryDiagnostics";
+import {
   collectRelatedThreadIdsFromSnapshot,
   extractThreadSizeBytes,
   filterRetainableContinuitySummaries,
@@ -68,6 +73,8 @@ import {
   inferThreadEngineSource,
   isAskUserQuestionToolItem,
   isLocalSessionScanUnavailable,
+  isPendingThreadId,
+  isRetainableEngineContinuitySummary,
   isTerminalToolStatus,
   isThreadResumeNotFoundError,
   isWorkspaceNotConnectedError,
@@ -86,15 +93,16 @@ import {
   seedLastGoodClaudeIntoMerged,
   seedLastGoodOpenCodeIntoMerged,
   listReplacementThreadCandidates,
-  selectRecoveredNewThreadSummary,
-  selectReplacementThreadByMessageHistory,
-  selectReplacementThreadSummary,
+  selectRecoveredNewThreadDecision,
+  selectReplacementThreadByMessageHistoryDecision,
+  selectReplacementThreadDecision,
   shouldApplyCodexSidebarContinuity,
   shouldApplyClaudeSidebarContinuity,
   shouldIncludeWorkspaceThreadEntry,
   shouldReplaceUserInputQueueFromSnapshot,
   withTimeout,
   type GeminiSessionSummary,
+  type ThreadRecoveryDecision,
 } from "./useThreadActions.helpers";
 import {
   buildPartialHistoryDiagnostic,
@@ -103,7 +111,10 @@ import {
 import { loadSidebarSnapshot } from "../utils/sidebarSnapshot";
 import { buildThreadDebugCorrelation } from "../utils/threadDebugCorrelation";
 import { useThreadActionsSessionRuntime } from "./useThreadActionsSessionRuntime";
-import { useThreadActionsSessionCatalog } from "./useThreadActionsSessionCatalog";
+import {
+  useThreadActionsSessionCatalog,
+  type ArchivedSessionMapResult,
+} from "./useThreadActionsSessionCatalog";
 import { useLoadOlderThreadsForWorkspace } from "./useThreadActionsLoadOlder";
 import { useThreadHistoryLoadingState } from "./useThreadHistoryLoadingState";
 import {
@@ -158,8 +169,158 @@ type UseThreadActionsOptions = {
     newThreadId: string,
   ) => void;
   rememberThreadAlias?: (oldThreadId: string, newThreadId: string) => void;
+  clearThreadAlias?: (oldThreadId: string) => void;
+  resolveWorkspacePath?: (workspaceId: string) => string | null;
   useUnifiedHistoryLoader?: boolean;
 };
+
+function findCatalogSourceStatusForEngine(
+  sourceStatuses: readonly WorkspaceSessionCatalogSourceStatus[] | undefined,
+  engine: string,
+): WorkspaceSessionCatalogSourceStatus | null {
+  const normalizedEngine = engine.trim().toLowerCase();
+  if (!normalizedEngine) {
+    return null;
+  }
+  return (
+    sourceStatuses?.find(
+      (status) => status.engine.trim().toLowerCase() === normalizedEngine,
+    ) ?? null
+  );
+}
+
+function isIncompleteCatalogSourceStatus(
+  sourceStatus: WorkspaceSessionCatalogSourceStatus | null,
+): boolean {
+  return (
+    sourceStatus?.completeness === "degraded" ||
+    sourceStatus?.completeness === "partial" ||
+    sourceStatus?.completeness === "uncertain_empty"
+  );
+}
+
+function hasAuthoritativeCatalogMembershipProof(
+  sourceStatuses: readonly WorkspaceSessionCatalogSourceStatus[] | undefined,
+): boolean {
+  return (
+    Array.isArray(sourceStatuses) &&
+    sourceStatuses.length > 0 &&
+    sourceStatuses.every(
+      (sourceStatus) => !isIncompleteCatalogSourceStatus(sourceStatus),
+    )
+  );
+}
+
+type ThreadEngineSource = NonNullable<ThreadSummary["engineSource"]>;
+type LastGoodThreadSummariesByEngine = Partial<
+  Record<ThreadEngineSource, ThreadSummary[]>
+>;
+
+const THREAD_ENGINE_SOURCES: ThreadEngineSource[] = [
+  "codex",
+  "claude",
+  "opencode",
+  "gemini",
+];
+
+function resolveThreadSummaryEngine(
+  summary: ThreadSummary,
+): ThreadEngineSource {
+  return (summary.engineSource ??
+    inferThreadEngineSource(summary.id, summary) ??
+    "codex") as ThreadEngineSource;
+}
+
+function isHealthyThreadSummary(summary: ThreadSummary): boolean {
+  return !summary.isDegraded && !summary.partialSource && !summary.degradedReason;
+}
+
+function healthyThreadSummariesForEngine(
+  threads: ThreadSummary[] | undefined,
+  engine: ThreadEngineSource,
+): ThreadSummary[] {
+  if (!Array.isArray(threads) || threads.length === 0) {
+    return [];
+  }
+  const engineThreads = threads.filter(
+    (thread) => resolveThreadSummaryEngine(thread) === engine,
+  );
+  if (engineThreads.length === 0 || engineThreads.some((thread) => !isHealthyThreadSummary(thread))) {
+    return [];
+  }
+  return engineThreads;
+}
+
+function flattenLastGoodEngineSnapshots(
+  snapshots: LastGoodThreadSummariesByEngine,
+): ThreadSummary[] {
+  const mergedById = new Map<string, ThreadSummary>();
+  THREAD_ENGINE_SOURCES.forEach((engine) => {
+    snapshots[engine]?.forEach((summary) => {
+      const previous = mergedById.get(summary.id);
+      if (!previous || summary.updatedAt >= previous.updatedAt) {
+        mergedById.set(summary.id, summary);
+      }
+    });
+  });
+  return Array.from(mergedById.values()).sort(
+    (left, right) => right.updatedAt - left.updatedAt,
+  );
+}
+
+function resolvePartialSourceEngine(
+  source: string,
+): ThreadEngineSource | "all" | null {
+  const normalized = source.trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+  if (normalized.includes("archive") || normalized.includes("empty-thread-list")) {
+    return "all";
+  }
+  if (normalized.includes("claude")) {
+    return "claude";
+  }
+  if (normalized.includes("opencode")) {
+    return "opencode";
+  }
+  if (normalized.includes("gemini")) {
+    return "gemini";
+  }
+  if (
+    normalized.includes("codex") ||
+    normalized.includes("workspace-not-connected") ||
+    normalized.includes("thread-list-live")
+  ) {
+    return "codex";
+  }
+  return "all";
+}
+
+function buildLastGoodSnapshotBlockedEngines(
+  sourceStatuses: readonly WorkspaceSessionCatalogSourceStatus[] | undefined,
+  partialSources: ReadonlySet<string>,
+): Set<ThreadEngineSource> {
+  const blocked = new Set<ThreadEngineSource>();
+  sourceStatuses?.forEach((sourceStatus) => {
+    const engine = sourceStatus.engine.trim().toLowerCase() as ThreadEngineSource;
+    if (
+      THREAD_ENGINE_SOURCES.includes(engine) &&
+      isIncompleteCatalogSourceStatus(sourceStatus)
+    ) {
+      blocked.add(engine);
+    }
+  });
+  partialSources.forEach((partialSource) => {
+    const engine = resolvePartialSourceEngine(partialSource);
+    if (engine === "all") {
+      THREAD_ENGINE_SOURCES.forEach((item) => blocked.add(item));
+    } else if (engine) {
+      blocked.add(engine);
+    }
+  });
+  return blocked;
+}
 
 type ResumeThreadForWorkspaceOptions = {
   preferLocalCodexHistory?: boolean;
@@ -183,6 +344,8 @@ export function useThreadActions({
   onThreadTitleMappingsLoaded,
   onRenameThreadTitleMapping,
   rememberThreadAlias,
+  clearThreadAlias,
+  resolveWorkspacePath,
   useUnifiedHistoryLoader = false,
 }: UseThreadActionsOptions) {
   const { historyLoadingByThreadId, setThreadHistoryLoading } =
@@ -194,6 +357,9 @@ export function useThreadActions({
   >({});
   const geminiRefreshAttemptedRef = useRef<Record<string, boolean>>({});
   const threadListRequestSeqRef = useRef<Record<string, number>>({});
+  const lastGoodThreadSummariesByWorkspaceEngineRef = useRef<
+    Record<string, LastGoodThreadSummariesByEngine>
+  >({});
   const previousThreadsByWorkspaceRef = useRef(threadsByWorkspace);
   const latestThreadsByWorkspaceRef = useRef(threadsByWorkspace);
   if (latestThreadsByWorkspaceRef.current !== threadsByWorkspace) {
@@ -208,10 +374,18 @@ export function useThreadActions({
     : null;
   const canListWorkspaceSessions =
     typeof listWorkspaceSessionsService === "function";
+  const listWorkspaceSessionArchiveEvidenceService =
+    Object.prototype.hasOwnProperty.call(
+      tauriServices,
+      "listWorkspaceSessionArchiveEvidence",
+    )
+      ? tauriServices.listWorkspaceSessionArchiveEvidence
+      : null;
   const { loadActiveProjectCatalogSessions, loadArchivedSessionMap } =
     useThreadActionsSessionCatalog({
       canListWorkspaceSessions,
       listWorkspaceSessionsService,
+      listWorkspaceSessionArchiveEvidenceService,
     });
   const {
     beginAutomaticRuntimeRecovery,
@@ -238,9 +412,89 @@ export function useThreadActions({
       if (hasHealthyThreadSummaries(snapshotThreads)) {
         return snapshotThreads;
       }
-      return [];
+      const snapshots: LastGoodThreadSummariesByEngine = {};
+      const candidateSources = [
+        currentThreads,
+        previousThreads,
+        stateThreads,
+        snapshotThreads,
+      ];
+      for (const engine of THREAD_ENGINE_SOURCES) {
+        const healthyEngineThreads = candidateSources
+          .map((threads) => healthyThreadSummariesForEngine(threads, engine))
+          .find((threads) => threads.length > 0);
+        snapshots[engine] =
+          healthyEngineThreads ??
+          lastGoodThreadSummariesByWorkspaceEngineRef.current[workspaceId]?.[
+            engine
+          ];
+      }
+      return flattenLastGoodEngineSnapshots(snapshots);
     },
     [threadsByWorkspace],
+  );
+
+  const getLastGoodThreadSummariesForEngine = useCallback(
+    (workspaceId: string, engine: ThreadEngineSource): ThreadSummary[] => {
+      const currentThreads = latestThreadsByWorkspaceRef.current[workspaceId];
+      const previousThreads =
+        previousThreadsByWorkspaceRef.current[workspaceId];
+      const stateThreads = threadsByWorkspace[workspaceId];
+      const snapshotThreads =
+        loadSidebarSnapshot()?.threadsByWorkspace[workspaceId];
+      return (
+        [
+          currentThreads,
+          previousThreads,
+          stateThreads,
+          snapshotThreads,
+        ]
+          .map((threads) => healthyThreadSummariesForEngine(threads, engine))
+          .find((threads) => threads.length > 0) ??
+        lastGoodThreadSummariesByWorkspaceEngineRef.current[workspaceId]?.[
+          engine
+        ] ??
+        []
+      );
+    },
+    [threadsByWorkspace],
+  );
+
+  const rememberLastGoodThreadSummariesByEngine = useCallback(
+    (
+      workspaceId: string,
+      summaries: ThreadSummary[],
+      blockedEngines: ReadonlySet<ThreadEngineSource>,
+    ) => {
+      const currentSnapshots =
+        lastGoodThreadSummariesByWorkspaceEngineRef.current[workspaceId] ?? {};
+      const nextSnapshots: LastGoodThreadSummariesByEngine = {
+        ...currentSnapshots,
+      };
+      let changed = false;
+      for (const engine of THREAD_ENGINE_SOURCES) {
+        if (blockedEngines.has(engine)) {
+          continue;
+        }
+        const healthyEngineThreads = healthyThreadSummariesForEngine(
+          summaries,
+          engine,
+        );
+        if (healthyEngineThreads.length === 0) {
+          continue;
+        }
+        nextSnapshots[engine] = healthyEngineThreads;
+        changed = true;
+      }
+      if (!changed) {
+        return;
+      }
+      lastGoodThreadSummariesByWorkspaceEngineRef.current = {
+        ...lastGoodThreadSummariesByWorkspaceEngineRef.current,
+        [workspaceId]: nextSnapshots,
+      };
+    },
+    [],
   );
 
   const removeThreadFromCachedSummaries = useCallback(
@@ -259,6 +513,23 @@ export function useThreadActions({
         ...previousThreadsByWorkspaceRef.current,
         [workspaceId]: filterOutThread(previousThreadsByWorkspaceRef.current),
       };
+      const currentSnapshots =
+        lastGoodThreadSummariesByWorkspaceEngineRef.current[workspaceId];
+      if (currentSnapshots) {
+        const nextSnapshots: LastGoodThreadSummariesByEngine = {};
+        THREAD_ENGINE_SOURCES.forEach((engine) => {
+          const nextEngineThreads = (currentSnapshots[engine] ?? []).filter(
+            (entry) => entry.id !== threadId,
+          );
+          if (nextEngineThreads.length > 0) {
+            nextSnapshots[engine] = nextEngineThreads;
+          }
+        });
+        lastGoodThreadSummariesByWorkspaceEngineRef.current = {
+          ...lastGoodThreadSummariesByWorkspaceEngineRef.current,
+          [workspaceId]: nextSnapshots,
+        };
+      }
     },
     [],
   );
@@ -305,21 +576,26 @@ export function useThreadActions({
   const applySessionArchiveState = useCallback(
     (
       summaries: ThreadSummary[],
-      archivedAtBySessionId: Map<string, number> | null,
+      archivedEvidence: ArchivedSessionMapResult | null,
     ): ThreadSummary[] => {
-      if (!archivedAtBySessionId) {
-        return summaries;
+      const isVisibleSessionSummary = (summary: ThreadSummary) =>
+        !isPendingThreadId(summary.id) &&
+        (!summary.archivedAt || summary.archivedAt <= 0);
+      if (!archivedEvidence) {
+        return summaries.filter(isVisibleSessionSummary);
       }
+      const { archivedAtBySessionId, isComplete } = archivedEvidence;
       const nextSummaries = summaries.map((summary) => {
         const archivedAt = archivedAtBySessionId.get(summary.id) ?? 0;
-        if (archivedAt <= 0) {
-          return { ...summary, archivedAt: undefined };
+        if (archivedAt > 0) {
+          return { ...summary, archivedAt };
         }
-        return { ...summary, archivedAt };
+        if ((summary.archivedAt ?? 0) > 0) {
+          return summary;
+        }
+        return isComplete ? { ...summary, archivedAt: undefined } : summary;
       });
-      return nextSummaries.filter(
-        (summary) => !summary.archivedAt || summary.archivedAt <= 0,
-      );
+      return nextSummaries.filter(isVisibleSessionSummary);
     },
     [],
   );
@@ -388,14 +664,14 @@ export function useThreadActions({
               ? createClaudeHistoryLoader({
                   workspaceId,
                   workspacePath:
-                    workspacePathsByIdRef.current[workspaceId] ?? null,
+                    workspacePathsByIdRef.current[workspaceId] ?? resolveWorkspacePath?.(workspaceId) ?? null,
                   loadClaudeSession: loadClaudeSessionService,
                 })
               : targetThreadId.startsWith("gemini:")
                 ? createGeminiHistoryLoader({
                     workspaceId,
                     workspacePath:
-                      workspacePathsByIdRef.current[workspaceId] ?? null,
+                      workspacePathsByIdRef.current[workspaceId] ?? resolveWorkspacePath?.(workspaceId) ?? null,
                     loadGeminiSession: loadGeminiSessionService,
                   })
                 : targetThreadId.startsWith("opencode:")
@@ -445,6 +721,37 @@ export function useThreadActions({
             effectiveThreadId === threadId
               ? localItems
               : (itemsByThread[effectiveThreadId] ?? []);
+          if (snapshotItems.length === 0) {
+            const reopenOutcome =
+              effectiveLocalItems.length > 0 ? "degraded-readable" : "failed";
+            onDebug?.(
+              createThreadHistoryReadableSurfaceDebugEntry({
+                workspaceId,
+                threadId: effectiveThreadId,
+                sourceThreadId: threadId,
+                reopenOutcome,
+                reasonCode:
+                  effectiveLocalItems.length > 0
+                    ? "last-good-local-items-preserved"
+                    : "history-hydrate-empty",
+                localItemCount: effectiveLocalItems.length,
+                snapshotItemCount: snapshotItems.length,
+                fallbackWarningCount: snapshot.fallbackWarnings.length,
+              }),
+            );
+          } else {
+            onDebug?.(
+              createThreadHistoryReadableSurfaceDebugEntry({
+                workspaceId,
+                threadId: effectiveThreadId,
+                sourceThreadId: threadId,
+                reopenOutcome: "recovered",
+                localItemCount: effectiveLocalItems.length,
+                snapshotItemCount: snapshotItems.length,
+                fallbackWarningCount: snapshot.fallbackWarnings.length,
+              }),
+            );
+          }
           const hasLocalPendingQueue = userInputRequests.some(
             (request) =>
               request.workspace_id === workspaceId &&
@@ -571,6 +878,7 @@ export function useThreadActions({
         };
         const recoverReplacementThread = async (): Promise<{
           threadId: string;
+          decision: ThreadRecoveryDecision;
           snapshot?: Awaited<
             ReturnType<ReturnType<typeof createHistoryLoader>["load"]>
           >;
@@ -603,10 +911,10 @@ export function useThreadActions({
                 }
               : undefined);
           let nextSummaries = existingSummaries;
-          let directRecoveredSummaryMatch: ThreadSummary | null = null;
+          let directRecoveredDecision: ThreadRecoveryDecision | null = null;
           if (engineSource === "codex") {
             const workspacePath = normalizeComparableWorkspacePath(
-              workspacePathsByIdRef.current[workspaceId] ?? "",
+              workspacePathsByIdRef.current[workspaceId] ?? resolveWorkspacePath?.(workspaceId) ?? "",
             );
             if (workspacePath) {
               const activeThreadId =
@@ -648,7 +956,7 @@ export function useThreadActions({
                 cursor = (result.nextCursor ?? result.next_cursor ?? null) as
                   | string
                   | null;
-                const replacementCandidate = selectReplacementThreadSummary({
+                const replacementCandidate = selectReplacementThreadDecision({
                   staleThreadId: threadId,
                   staleSummary: effectiveStaleSummary,
                   summaries: mergeRecoveredThreadSummaries(
@@ -677,7 +985,7 @@ export function useThreadActions({
                     "codex",
                   ),
                 });
-                if (replacementCandidate) {
+                if (replacementCandidate.summary && (replacementCandidate.isPersistent || !cursor)) {
                   break;
                 }
                 if (pagesFetched >= THREAD_RECOVERY_MAX_PAGES) {
@@ -711,7 +1019,7 @@ export function useThreadActions({
                   } satisfies ThreadSummary;
                 })
                 .filter((entry) => entry.id);
-              directRecoveredSummaryMatch = selectRecoveredNewThreadSummary({
+              directRecoveredDecision = selectRecoveredNewThreadDecision({
                 staleThreadId: threadId,
                 previousSummaries: recoveryBaselineSummaries,
                 summaries: refreshedCodexSummaries,
@@ -768,25 +1076,31 @@ export function useThreadActions({
               [workspaceId]: nextSummaries,
             };
           }
-          const summaryMatch = selectReplacementThreadSummary({
+          const summaryMatch = selectReplacementThreadDecision({
             staleThreadId: threadId,
             summaries: nextSummaries,
             staleSummary: effectiveStaleSummary,
           });
-          if (summaryMatch) {
-            return { threadId: summaryMatch.id };
+          if (summaryMatch.summary) {
+            return { threadId: summaryMatch.summary.id, decision: summaryMatch };
           }
-          const newlyRecoveredMatch = selectRecoveredNewThreadSummary({
+          const newlyRecoveredMatch = selectRecoveredNewThreadDecision({
             staleThreadId: threadId,
             previousSummaries: recoveryBaselineSummaries,
             summaries: nextSummaries,
             staleSummary: effectiveStaleSummary,
           });
-          if (newlyRecoveredMatch) {
-            return { threadId: newlyRecoveredMatch.id };
+          if (newlyRecoveredMatch.summary) {
+            return {
+              threadId: newlyRecoveredMatch.summary.id,
+              decision: newlyRecoveredMatch,
+            };
           }
-          if (directRecoveredSummaryMatch) {
-            return { threadId: directRecoveredSummaryMatch.id };
+          if (directRecoveredDecision?.summary) {
+            return {
+              threadId: directRecoveredDecision.summary.id,
+              decision: directRecoveredDecision,
+            };
           }
 
           const staleItems = itemsByThread[threadId] ?? [];
@@ -847,7 +1161,8 @@ export function useThreadActions({
               }
             },
           );
-          const historyMatch = selectReplacementThreadByMessageHistory({
+          const historyMatch = selectReplacementThreadByMessageHistoryDecision({
+            staleThreadId: threadId,
             staleItems,
             candidates: candidateSnapshots
               .filter(
@@ -865,14 +1180,15 @@ export function useThreadActions({
                 items: snapshot.items,
               })),
           });
-          if (!historyMatch) {
+          if (!historyMatch.summary) {
             return null;
           }
           const matchedSnapshot = candidateSnapshots.find(
-            (candidate) => candidate?.summary.id === historyMatch.id,
+            (candidate) => candidate?.summary.id === historyMatch.summary?.id,
           )?.snapshot;
           return {
-            threadId: historyMatch.id,
+            threadId: historyMatch.summary.id,
+            decision: historyMatch,
             ...(matchedSnapshot ? { snapshot: matchedSnapshot } : {}),
           };
         };
@@ -895,13 +1211,25 @@ export function useThreadActions({
                   replacementThreadId,
                   replacementSnapshot,
                 );
+                onDebug?.(
+                  createThreadHistoryContinuationDecisionDebugEntry({
+                    workspaceId,
+                    staleThreadId: threadId,
+                    replacementThreadId,
+                    decision: recoveredThread.decision,
+                  }),
+                );
                 dispatch({
                   type: "clearUserInputRequestsForThread",
                   workspaceId,
                   threadId,
                 });
                 loadedThreadsRef.current[threadId] = false;
-                rememberThreadAlias?.(threadId, replacementThreadId);
+                if (recoveredThread.decision.isPersistent) {
+                  rememberThreadAlias?.(threadId, replacementThreadId);
+                } else {
+                  clearThreadAlias?.(threadId);
+                }
                 dispatch({
                   type: "setActiveThreadId",
                   workspaceId,
@@ -916,6 +1244,13 @@ export function useThreadActions({
                     workspaceId,
                     staleThreadId: threadId,
                     replacementThreadId,
+                    recoveryStrategy: recoveredThread.decision.strategy,
+                    recoveryConfidence: recoveredThread.decision.confidence,
+                    recoveryScoreGap: recoveredThread.decision.scoreGap,
+                    recoveryReasonCode: recoveredThread.decision.reasonCode,
+                    recoveryFeatureSignals:
+                      recoveredThread.decision.featureSignals,
+                    aliasPersisted: recoveredThread.decision.isPersistent,
                   },
                 });
                 return replacementThreadId;
@@ -962,7 +1297,7 @@ export function useThreadActions({
       }
       // Claude sessions don't use Codex thread/resume RPC —
       // load message history from JSONL and populate the thread
-      const workspacePath = workspacePathsByIdRef.current[workspaceId];
+      const workspacePath = workspacePathsByIdRef.current[workspaceId] ?? resolveWorkspacePath?.(workspaceId) ?? "";
       if (threadId.startsWith("claude:")) {
         dispatch({
           type: "ensureThread",
@@ -996,6 +1331,30 @@ export function useThreadActions({
             const items = parseClaudeHistoryMessages(messagesData);
             if (items.length > 0) {
               dispatch({ type: "setThreadItems", threadId, items });
+              onDebug?.(
+                createThreadHistoryReadableSurfaceDebugEntry({
+                  workspaceId,
+                  threadId,
+                  reopenOutcome: "recovered",
+                  snapshotItemCount: items.length,
+                  localItemCount: localItems.length,
+                }),
+              );
+            } else {
+              onDebug?.(
+                createThreadHistoryReadableSurfaceDebugEntry({
+                  workspaceId,
+                  threadId,
+                  reopenOutcome:
+                    localItems.length > 0 ? "degraded-readable" : "failed",
+                  reasonCode:
+                    localItems.length > 0
+                      ? "last-good-local-items-preserved"
+                      : "history-hydrate-empty",
+                  snapshotItemCount: 0,
+                  localItemCount: localItems.length,
+                }),
+              );
             }
             dispatch({
               type: "setThreadHistoryRestoredAt",
@@ -1055,6 +1414,7 @@ export function useThreadActions({
                 threadId,
                 error: error instanceof Error ? error.message : String(error),
                 diagnosticCategory: diagnostic?.category ?? "partial_history",
+                reopenOutcome: localItems.length > 0 ? "degraded-readable" : "failed",
               },
             });
             if (isThreadResumeNotFoundError(error)) {
@@ -1261,9 +1621,11 @@ export function useThreadActions({
       itemsByThread,
       loadedThreadsRef,
       onDebug,
+      clearThreadAlias,
       rememberThreadAlias,
       replaceOnResumeRef,
       reconcileMissingClaudeThread,
+      resolveWorkspacePath,
       threadActivityRef,
       threadStatusById,
       threadsByWorkspace,
@@ -1339,10 +1701,7 @@ export function useThreadActions({
       const includeOpenCodeSessions = options?.includeOpenCodeSessions ?? true;
       const recoverySource = options?.recoverySource ?? "thread-list-live";
       const allowRuntimeReconnect = options?.allowRuntimeReconnect ?? true;
-      const startupHydrationMode =
-        options?.startupHydrationMode ?? "full-catalog";
-      const shouldDeferFullSessionCatalog =
-        startupHydrationMode === "first-page";
+      let appliedThreadListUpdate = false;
       const workspacePath = normalizeComparableWorkspacePath(workspace.path);
       if (!preserveState) {
         dispatch({
@@ -1370,15 +1729,17 @@ export function useThreadActions({
           { path: workspace.path },
         ),
       });
-      const archivedSessionMapPromise = shouldDeferFullSessionCatalog
-        ? Promise.resolve(null)
-        : loadArchivedSessionMap(workspace.id);
+      const archivedSessionMapPromise = loadArchivedSessionMap(workspace.id);
       try {
         let degradedPartialSource: string | null = null;
+        const partialSourcesSeen = new Set<string>();
         const rememberPartialSource = (value: unknown) => {
           const normalized = normalizeThreadListPartialSource(value);
-          if (normalized && !degradedPartialSource) {
-            degradedPartialSource = normalized;
+          if (normalized) {
+            partialSourcesSeen.add(normalized);
+            if (!degradedPartialSource) {
+              degradedPartialSource = normalized;
+            }
           }
         };
         let mappedTitles: Record<string, string> = {};
@@ -1590,9 +1951,6 @@ export function useThreadActions({
             ),
           );
           cursor = nextCursor;
-          if (shouldDeferFullSessionCatalog) {
-            break;
-          }
           if (
             matchingThreads.length === 0 &&
             pagesFetched >= maxPagesWithoutMatch
@@ -1683,7 +2041,7 @@ export function useThreadActions({
             const id = String(thread?.id ?? "");
             const preview = asString(thread?.preview ?? "").trim();
             const mappedTitle = mappedTitles[id];
-            const customName = mappedTitle || getCustomName(workspace.id, id);
+            const customName = getCustomName(workspace.id, id) || mappedTitle;
             const fallbackName = `Agent ${index + 1}`;
             const name = customName
               ? customName
@@ -1709,7 +2067,6 @@ export function useThreadActions({
           })
           .filter((entry) => entry.id && !hiddenSharedBindingIds.has(entry.id));
 
-        // Startup first-page hydration keeps native/session catalog scans out of the foreground path.
         let allSummaries: ThreadSummary[] = summaries;
         const mergedById = new Map<string, ThreadSummary>();
         allSummaries.forEach((entry) => mergedById.set(entry.id, entry));
@@ -1718,7 +2075,7 @@ export function useThreadActions({
         );
         const nativeSessionListLimit = resolveNativeSessionListLimit(workspace);
         const opencodeSessionsPromise =
-          includeOpenCodeSessions && !shouldDeferFullSessionCatalog
+          includeOpenCodeSessions
             ? withTimeout(
                 getOpenCodeSessionListService(workspace.id),
                 NATIVE_SESSION_LIST_FETCH_TIMEOUT_MS,
@@ -1727,29 +2084,46 @@ export function useThreadActions({
                 [] as Awaited<ReturnType<typeof getOpenCodeSessionListService>>,
               );
         const projectCatalogSessionsPromise =
-          canListWorkspaceSessions && !shouldDeferFullSessionCatalog
+          canListWorkspaceSessions
             ? loadActiveProjectCatalogSessions(workspace.id)
             : Promise.resolve(null);
         const [claudeResult, opencodeResult, projectCatalogResult] =
           await Promise.allSettled([
-            shouldDeferFullSessionCatalog
-              ? Promise.resolve([])
-              : withTimeout(
-                  listClaudeSessionsService(
-                    workspace.path,
-                    nativeSessionListLimit,
-                  ),
-                  NATIVE_SESSION_LIST_FETCH_TIMEOUT_MS,
-                ),
+            withTimeout(
+              listClaudeSessionsForFallbackSeedService(
+                workspace.path,
+                nativeSessionListLimit,
+              ),
+              NATIVE_SESSION_LIST_FETCH_TIMEOUT_MS,
+            ),
             opencodeSessionsPromise,
             projectCatalogSessionsPromise,
           ]);
+        const projectCatalogValue =
+          projectCatalogResult.status === "fulfilled"
+            ? projectCatalogResult.value
+            : null;
+        const catalogClaudeSourceStatus = findCatalogSourceStatusForEngine(
+          projectCatalogValue?.sourceStatuses,
+          "claude",
+        );
+        // Native Claude history is a legacy fallback/diagnostic seed here.
+        // When catalog reports Claude source status, catalog projection owns
+        // membership and native rows must not widen or erase that projection.
+        const shouldMergeNativeClaudeSessions = !catalogClaudeSourceStatus;
+        if (isIncompleteCatalogSourceStatus(catalogClaudeSourceStatus)) {
+          rememberPartialSource(
+            catalogClaudeSourceStatus?.reason ??
+              `claude-${catalogClaudeSourceStatus?.completeness}`,
+          );
+        }
         const claudeSuccessfulEmpty =
+          shouldMergeNativeClaudeSessions &&
           claudeResult.status === "fulfilled" &&
           Array.isArray(claudeResult.value) &&
           claudeResult.value.length === 0;
         if (claudeResult.status === "fulfilled") {
-          if (claudeResult.value === null) {
+          if (shouldMergeNativeClaudeSessions && claudeResult.value === null) {
             rememberPartialSource("claude-session-timeout");
             onDebug?.({
               id: `${Date.now()}-client-claude-session-timeout`,
@@ -1766,13 +2140,14 @@ export function useThreadActions({
             // 即便下游 partial-source 路径被绕过或将来重构，最终列表也不会丢失 Claude 历史。
             seedLastGoodClaudeIntoMerged(
               mergedById,
-              lastGoodThreadSummaries,
+              getLastGoodThreadSummariesForEngine(workspace.id, "claude"),
               hiddenSharedBindingIds,
             );
           }
-          const claudeSessions = Array.isArray(claudeResult.value)
-            ? claudeResult.value
-            : [];
+          const claudeSessions =
+            shouldMergeNativeClaudeSessions && Array.isArray(claudeResult.value)
+              ? claudeResult.value
+              : [];
           claudeSessions.forEach(
             (session: {
               sessionId: string;
@@ -1795,8 +2170,8 @@ export function useThreadActions({
               const next: ThreadSummary = {
                 id,
                 name:
-                  mappedTitle ||
                   customTitle ||
+                  mappedTitle ||
                   previewThreadName(session.firstMessage, "Claude Session"),
                 updatedAt,
                 sizeBytes: extractThreadSizeBytes(
@@ -1814,7 +2189,7 @@ export function useThreadActions({
               }
             },
           );
-        } else {
+        } else if (shouldMergeNativeClaudeSessions) {
           rememberPartialSource("claude-session-error");
           onDebug?.({
             id: `${Date.now()}-client-claude-session-error`,
@@ -1829,7 +2204,7 @@ export function useThreadActions({
           // 同 timeout 路径：reject 时也 seed last-good Claude，确保兜底前置。
           seedLastGoodClaudeIntoMerged(
             mergedById,
-            lastGoodThreadSummaries,
+            getLastGoodThreadSummariesForEngine(workspace.id, "claude"),
             hiddenSharedBindingIds,
           );
         }
@@ -1850,7 +2225,7 @@ export function useThreadActions({
             // 防止下游 catalog merge / archive merge 因看到空 OpenCode 子源而形成残缺基底。
             seedLastGoodOpenCodeIntoMerged(
               mergedById,
-              lastGoodThreadSummaries,
+              getLastGoodThreadSummariesForEngine(workspace.id, "opencode"),
               hiddenSharedBindingIds,
             );
           }
@@ -1910,14 +2285,10 @@ export function useThreadActions({
           });
           seedLastGoodOpenCodeIntoMerged(
             mergedById,
-            lastGoodThreadSummaries,
+            getLastGoodThreadSummariesForEngine(workspace.id, "opencode"),
             hiddenSharedBindingIds,
           );
         }
-        const projectCatalogValue =
-          projectCatalogResult.status === "fulfilled"
-            ? projectCatalogResult.value
-            : null;
         if (projectCatalogResult.status === "fulfilled") {
           if (projectCatalogValue === null) {
             rememberPartialSource("codex-catalog-timeout");
@@ -1981,7 +2352,10 @@ export function useThreadActions({
               thread.engineSource === "opencode" ||
               thread.id.startsWith("opencode:") ||
               thread.id.startsWith("opencode-pending-");
-            if (!isOpenCodeThread) {
+            if (
+              !isOpenCodeThread ||
+              !isRetainableEngineContinuitySummary("opencode", thread)
+            ) {
               return;
             }
             const prev = mergedById.get(thread.id);
@@ -2011,16 +2385,6 @@ export function useThreadActions({
         allSummaries = Array.from(mergedById.values()).sort(
           (a, b) => b.updatedAt - a.updatedAt,
         );
-        if (
-          shouldDeferFullSessionCatalog &&
-          lastGoodThreadSummaries.length > 0
-        ) {
-          allSummaries = mergeDegradedClaudeContinuitySummaries(
-            allSummaries,
-            lastGoodThreadSummaries,
-            hiddenSharedBindingIds,
-          );
-        }
         if (hasFreshGeminiCache && cachedGemini.sessions.length > 0) {
           allSummaries = mergeGeminiSessionSummaries(
             allSummaries,
@@ -2047,10 +2411,7 @@ export function useThreadActions({
           );
         }
         const archivedSessionMap = await archivedSessionMapPromise;
-        allSummaries = applySessionArchiveState(
-          allSummaries,
-          archivedSessionMap,
-        );
+        rememberPartialSource(archivedSessionMap?.partialSource);
         if (didChangeActivity) {
           const next = {
             ...threadActivityRef.current,
@@ -2061,15 +2422,23 @@ export function useThreadActions({
         }
 
         if (!isLatestThreadListRequest()) {
-          return;
+          return { applied: false, stale: true };
         }
 
         let visibleSummaries = allSummaries;
+        let lastGoodSnapshotCandidates: ThreadSummary[] | null = allSummaries;
+        const hasAuthoritativeEmptyCatalog =
+          visibleSummaries.length === 0 &&
+          !degradedPartialSource &&
+          hasAuthoritativeCatalogMembershipProof(
+            projectCatalogValue?.sourceStatuses,
+          );
         const emptyListFallbackSource =
-          visibleSummaries.length === 0
+          visibleSummaries.length === 0 && !hasAuthoritativeEmptyCatalog
             ? (degradedPartialSource ?? "empty-thread-list")
             : null;
         if (emptyListFallbackSource) {
+          lastGoodSnapshotCandidates = null;
           const fallbackThreads = filterRetainableContinuitySummaries(
             getLastGoodThreadSummaries(workspace.id),
             hiddenSharedBindingIds,
@@ -2108,16 +2477,17 @@ export function useThreadActions({
           if (shouldApplyClaudeSidebarContinuity(degradedPartialSource)) {
             visibleSummaries = mergeDegradedClaudeContinuitySummaries(
               visibleSummaries,
-              lastGoodThreadSummaries,
+              getLastGoodThreadSummariesForEngine(workspace.id, "claude"),
               hiddenSharedBindingIds,
             );
           }
           if (shouldApplyCodexSidebarContinuity(degradedPartialSource)) {
             visibleSummaries = mergeDegradedCodexContinuitySummaries(
               visibleSummaries,
-              lastGoodThreadSummaries,
+              getLastGoodThreadSummariesForEngine(workspace.id, "codex"),
             );
           }
+          lastGoodSnapshotCandidates = visibleSummaries;
           visibleSummaries = markThreadSummariesDegraded(
             visibleSummaries,
             degradedPartialSource,
@@ -2128,12 +2498,23 @@ export function useThreadActions({
           visibleSummaries,
           archivedSessionMap,
         );
+        if (lastGoodSnapshotCandidates) {
+          rememberLastGoodThreadSummariesByEngine(
+            workspace.id,
+            applySessionArchiveState(lastGoodSnapshotCandidates, archivedSessionMap),
+            buildLastGoodSnapshotBlockedEngines(
+              projectCatalogValue?.sourceStatuses,
+              partialSourcesSeen,
+            ),
+          );
+        }
 
         dispatch({
           type: "setThreads",
           workspaceId: workspace.id,
           threads: visibleSummaries,
         });
+        appliedThreadListUpdate = true;
         if (hasHealthyThreadSummaries(visibleSummaries)) {
           latestThreadsByWorkspaceRef.current = {
             ...latestThreadsByWorkspaceRef.current,
@@ -2167,7 +2548,7 @@ export function useThreadActions({
           geminiRefreshAttemptedRef.current[workspace.id] === true;
         const shouldRefreshGeminiSessions =
           hasGeminiSignal || !!cachedGemini || !hasAttemptedGeminiRefresh;
-        if (shouldRefreshGeminiSessions && !shouldDeferFullSessionCatalog) {
+        if (shouldRefreshGeminiSessions) {
           void (async () => {
             geminiRefreshAttemptedRef.current[workspace.id] = true;
             const geminiResult = await withTimeout(
@@ -2260,6 +2641,7 @@ export function useThreadActions({
             workspaceId: workspace.id,
             threads: degradedThreads,
           });
+          appliedThreadListUpdate = true;
           const diagnostic = buildPartialHistoryDiagnostic(
             `thread list error fallback: ${fallbackMessage}`,
           );
@@ -2309,6 +2691,7 @@ export function useThreadActions({
           });
         }
       }
+      return { applied: appliedThreadListUpdate };
     },
     [
       applySessionArchiveState,
@@ -2318,10 +2701,12 @@ export function useThreadActions({
       getCustomName,
       getAutomaticRuntimeRecoveryPartialSource,
       getLastGoodThreadSummaries,
+      getLastGoodThreadSummariesForEngine,
       loadActiveProjectCatalogSessions,
       loadArchivedSessionMap,
       onDebug,
       onThreadTitleMappingsLoaded,
+      rememberLastGoodThreadSummariesByEngine,
       activeThreadIdByWorkspace,
       threadActivityRef,
       threadsByWorkspace,

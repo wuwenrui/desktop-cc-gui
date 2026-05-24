@@ -5,9 +5,13 @@ import {
   isRetainableEngineContinuitySummary,
   mergeDegradedClaudeContinuitySummaries,
   mergeCodexCatalogSessionSummaries,
+  mergeGeminiSessionSummaries,
   seedLastGoodEngineIntoMerged,
+  selectRecoveredNewThreadDecision,
   selectRecoveredNewThreadSummary,
+  selectReplacementThreadDecision,
   selectReplacementThreadByMessageHistory,
+  selectReplacementThreadByMessageHistoryDecision,
 } from "./useThreadActions.helpers";
 
 describe("useThreadActions.helpers", () => {
@@ -97,6 +101,117 @@ describe("useThreadActions.helpers", () => {
     });
 
     expect(matched?.id).toBe("thread-recovered");
+  });
+
+  it("marks time-coherent newly discovered replacement as persistent", () => {
+    const staleSummary: ThreadSummary = {
+      id: "thread-stale",
+      name: "1",
+      updatedAt: 100,
+      engineSource: "codex",
+      threadKind: "native",
+    };
+    const recovered: ThreadSummary = {
+      id: "thread-recovered",
+      name: "1",
+      updatedAt: 105,
+      engineSource: "codex",
+      threadKind: "native",
+    };
+
+    const decision = selectRecoveredNewThreadDecision({
+      staleThreadId: "thread-stale",
+      staleSummary,
+      previousSummaries: [staleSummary],
+      summaries: [staleSummary, recovered],
+    });
+
+    expect(decision.summary?.id).toBe("thread-recovered");
+    expect(decision.isPersistent).toBe(true);
+    expect(decision.featureSignals).toContain("time_window_coherent");
+  });
+
+  it("keeps strictly newer replacements outside the recovery window non-persistent", () => {
+    const staleSummary: ThreadSummary = {
+      id: "thread-stale",
+      name: "1",
+      updatedAt: 100,
+      engineSource: "codex",
+      threadKind: "native",
+    };
+    const previousCandidate: ThreadSummary = {
+      id: "thread-previous",
+      name: "Previous",
+      updatedAt: 90,
+      engineSource: "codex",
+      threadKind: "native",
+    };
+    const recovered: ThreadSummary = {
+      id: "thread-recovered",
+      name: "Recovered much later",
+      updatedAt: 100 + 25 * 60 * 60 * 1000,
+      engineSource: "codex",
+      threadKind: "native",
+    };
+
+    const decision = selectRecoveredNewThreadDecision({
+      staleThreadId: "thread-stale",
+      staleSummary,
+      previousSummaries: [staleSummary, previousCandidate, recovered],
+      summaries: [staleSummary, previousCandidate, recovered],
+    });
+
+    expect(decision.summary?.id).toBe("thread-recovered");
+    expect(decision.reasonCode).toBe("low-confidence");
+    expect(decision.featureSignals).toEqual(["strictly_newer_candidate"]);
+    expect(decision.isPersistent).toBe(false);
+  });
+
+  it("keeps sole weak replacement candidates non-persistent", () => {
+    const candidate: ThreadSummary = {
+      id: "thread-only",
+      name: "Unrelated",
+      updatedAt: 10,
+      engineSource: "codex",
+      threadKind: "native",
+    };
+
+    const decision = selectReplacementThreadDecision({
+      staleThreadId: "thread-stale",
+      summaries: [candidate],
+    });
+
+    expect(decision.summary?.id).toBe("thread-only");
+    expect(decision.reasonCode).toBe("low-confidence");
+    expect(decision.isPersistent).toBe(false);
+  });
+
+  it("marks unique history-boundary matches as persistent", () => {
+    const staleItems: ConversationItem[] = [
+      {
+        id: "user-1",
+        kind: "message",
+        role: "user",
+        text: "继续写第二章",
+      },
+    ];
+    const candidate: ThreadSummary = {
+      id: "thread-history",
+      name: "第二章",
+      updatedAt: 10,
+      engineSource: "codex",
+      threadKind: "native",
+    };
+
+    const decision = selectReplacementThreadByMessageHistoryDecision({
+      staleThreadId: "thread-stale",
+      staleItems,
+      candidates: [{ summary: candidate, items: staleItems }],
+    });
+
+    expect(decision.summary?.id).toBe("thread-history");
+    expect(decision.strategy).toBe("history-match");
+    expect(decision.isPersistent).toBe(true);
   });
 
   it("selects the sole strictly newer replacement thread when stale summary falls out of the current list", () => {
@@ -247,6 +362,68 @@ describe("useThreadActions.helpers", () => {
 
     expect(merged.find((thread) => thread.id === "claude:session-1")?.name).toBe(
       "帮我审核一下这个 PR",
+    );
+  });
+
+  it("lets custom titles override mapped titles in catalog and Gemini merges", () => {
+    const catalogMerged = mergeCodexCatalogSessionSummaries(
+      [],
+      [
+        {
+          sessionId: "claude:session-1",
+          title: "Native title",
+          updatedAt: 120,
+          engine: "claude",
+        },
+      ],
+      "workspace-1",
+      { "claude:session-1": "Mapped title" },
+      () => "Custom title",
+    );
+    const geminiMerged = mergeGeminiSessionSummaries(
+      [],
+      [
+        {
+          sessionId: "session-2",
+          firstMessage: "Gemini native title",
+          updatedAt: 120,
+        },
+      ],
+      "workspace-1",
+      { "gemini:session-2": "Mapped Gemini title" },
+      () => "Custom Gemini title",
+    );
+
+    expect(catalogMerged.find((thread) => thread.id === "claude:session-1")?.name).toBe(
+      "Custom title",
+    );
+    expect(geminiMerged.find((thread) => thread.id === "gemini:session-2")?.name).toBe(
+      "Custom Gemini title",
+    );
+  });
+
+  it("uses catalog owner workspace when resolving aggregate custom titles", () => {
+    const merged = mergeCodexCatalogSessionSummaries(
+      [],
+      [
+        {
+          sessionId: "claude:session-1",
+          workspaceId: "child-workspace",
+          title: "Native child title",
+          updatedAt: 120,
+          engine: "claude",
+        },
+      ],
+      "parent-workspace",
+      {},
+      (workspaceId) =>
+        workspaceId === "child-workspace"
+          ? "Owner custom title"
+          : "Parent fallback title",
+    );
+
+    expect(merged.find((thread) => thread.id === "claude:session-1")?.name).toBe(
+      "Owner custom title",
     );
   });
 

@@ -1,3 +1,11 @@
+## 2026-05-23 Proposal Refresh
+
+- **Current branch**: `feature/v0.5.2`; this refresh is documentation-only and does not change implementation code.
+- **Task state**: 18/18 checked; status = Completed / pending verify-archive.
+- **Code/document evidence**: `SpecHub`/`lib/spec-core/runtime.ts` 与 StatusPanel governance evidence surface 已存在，OpenSpec/Trellis commands 通过 spec runtime action metadata 暴露。
+- **Next action**: 归档前确认 status panel bridge focused tests、spec runtime tests 与 strict validation。
+- **Validation note**: `openspec validate --all --strict --no-interactive` passed 299 items in this documentation refresh.
+
 ## Branch Calibration / 分支校准（2026-05-19）
 
 当前变更只以 `feature/v0.5.0-md` 为事实源。原始提案中的“双向同步、写回 tasks.md、文件 watcher、StatusPanel 新 tab”过重，且会让客户端修改治理工件。收敛后，本 change 只做**只读 governance evidence bridge**。

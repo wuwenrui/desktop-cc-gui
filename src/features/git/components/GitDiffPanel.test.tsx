@@ -99,7 +99,7 @@ vi.mock("./WorkspaceEditableDiffReviewSurface", () => ({
 }));
 
 import { GitDiffPanel } from "./GitDiffPanel";
-import { buildDiffTree } from "./GitDiffPanel";
+import { buildDiffTree, compactDiffTree } from "./GitDiffPanel";
 
 vi.mock("@tauri-apps/plugin-opener", () => ({
   openUrl: vi.fn(),
@@ -189,6 +189,29 @@ describe("GitDiffPanel", () => {
     const srcNode = tree.folders.get("src");
     expect(srcNode?.folders.has("app")).toBe(true);
     expect(tree.files.map((entry) => entry.path)).toEqual(["README.md"]);
+  });
+
+  it("keeps compact folder entries distinct when dotted display labels collide", () => {
+    const tree = compactDiffTree(
+      buildDiffTree(
+        [
+          { path: "a.b/file-a.ts", status: "M", additions: 1, deletions: 0 },
+          { path: "a/b/file-b.ts", status: "M", additions: 1, deletions: 0 },
+        ],
+        "unstaged",
+      ),
+    );
+
+    const folders = Array.from(tree.folders.values());
+    expect(folders.map((folder) => folder.name)).toEqual(["a.b", "a.b"]);
+    expect(folders.map((folder) => folder.key).sort()).toEqual([
+      "unstaged:/a.b/",
+      "unstaged:/a/b/",
+    ]);
+    expect(folders.flatMap((folder) => folder.files.map((file) => file.path)).sort()).toEqual([
+      "a.b/file-a.ts",
+      "a/b/file-b.ts",
+    ]);
   });
 
   it("supports tree keyboard navigation and Enter-to-open", () => {
@@ -339,6 +362,44 @@ describe("GitDiffPanel", () => {
     expect(folderRow).toBeTruthy();
     expect(fileRow).toBeTruthy();
     expect(badge).toBeTruthy();
+  });
+
+  it("renders single-path diff package folders in a.b.c style", () => {
+    render(
+      <GitDiffPanel
+        {...baseProps}
+        gitDiffListView="tree"
+        unstagedFiles={[
+          {
+            path: "test/java/com/example/demo/service/UserServiceTest.java",
+            status: "M",
+            additions: 95,
+            deletions: 2,
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("test.java.com.example.demo.service")).toBeTruthy();
+    expect(screen.queryByText("java")).toBeNull();
+    expect(screen.queryByText("com")).toBeNull();
+  });
+
+  it("keeps diff folder branches unmerged when a folder contains files and child folders", () => {
+    render(
+      <GitDiffPanel
+        {...baseProps}
+        gitDiffListView="tree"
+        unstagedFiles={[
+          { path: "service/UserService.java", status: "M", additions: 42, deletions: 2 },
+          { path: "service/impl/UserServiceImpl.java", status: "M", additions: 57, deletions: 3 },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("service")).toBeTruthy();
+    expect(screen.queryByText("service.impl")).toBeNull();
+    expect(screen.getByText("impl")).toBeTruthy();
   });
 
   it("renders compact tree summary in single-section tree mode", () => {
@@ -562,6 +623,30 @@ describe("GitDiffPanel", () => {
     ]);
   });
 
+  it("renders file commit selection checkbox as the trailing row control", () => {
+    const onSelectFile = vi.fn();
+    render(
+      <GitDiffPanel
+        {...baseProps}
+        gitDiffListView="flat"
+        onSelectFile={onSelectFile}
+        unstagedFiles={[
+          { path: "file.txt", status: "M", additions: 1, deletions: 0 },
+        ]}
+      />,
+    );
+
+    const rowMeta = document.querySelector('.diff-row[data-path="file.txt"] .diff-row-meta');
+    const selectionToggle = screen.getByRole("checkbox", {
+      name: "Toggle commit selection: file.txt",
+    });
+    expect(rowMeta?.lastElementChild).toBe(selectionToggle);
+    expect(selectionToggle.classList.contains("diff-row-selection--trailing")).toBe(true);
+
+    fireEvent.click(selectionToggle);
+    expect(onSelectFile).not.toHaveBeenCalled();
+  });
+
   it("opens inline preview from explicit action in tree mode", () => {
     const onSelectFile = vi.fn();
     render(
@@ -727,7 +812,7 @@ describe("GitDiffPanel", () => {
     expect(onCommit).toHaveBeenCalledWith(["file.txt"]);
   });
 
-  it("shows partial folder inclusion state and toggles only current section commit selection", async () => {
+  it("keeps tree folder rows free of commit checkboxes and selects scope from trailing file controls", async () => {
     const onStageFile = vi.fn();
     const onCommit = vi.fn();
     render(
@@ -748,16 +833,22 @@ describe("GitDiffPanel", () => {
       />,
     );
 
-    const folderCheckboxes = screen.getAllByRole("checkbox", {
-      name: "Toggle commit selection: src",
-    });
-    const folderCheckbox = folderCheckboxes[1];
-    if (!folderCheckbox) {
-      throw new Error("Expected src folder checkbox");
-    }
-    expect(folderCheckbox.getAttribute("aria-checked")).toBe("mixed");
+    expect(
+      screen.queryByRole("checkbox", {
+        name: "Toggle commit selection: src",
+      }),
+    ).toBeNull();
 
-    fireEvent.click(folderCheckbox);
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: "Toggle commit selection: src/pending-a.ts",
+      }),
+    );
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: "Toggle commit selection: src/pending-b.ts",
+      }),
+    );
     expect(onStageFile).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Toggle commit section" }));

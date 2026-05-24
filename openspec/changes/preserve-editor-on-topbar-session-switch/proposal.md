@@ -1,5 +1,13 @@
 # Proposal: Preserve Editor Split On Topbar Session Switch
 
+## 2026-05-23 Proposal Refresh
+
+- **Current branch**: `feature/v0.5.2`; this refresh is documentation-only and does not change implementation code.
+- **Task state**: 7/7 checked; status = Completed / pending verify-archive.
+- **Code/document evidence**: `threadEditorPreservation`、`selectedComposerSession` 与 workspace-flow/layout tests 覆盖同 workspace session switch 保留 editor split。
+- **Next action**: 归档前补 topbar/session switch focused test evidence；本 change 无 design.md 属可接受轻量变更但 archive 前应说明。
+- **Validation note**: `openspec validate --all --strict --no-interactive` passed 299 items in this documentation refresh.
+
 ## Why
 
 desktop workspace chat 支持“左侧聊天 + 右侧文件编辑器”的 editor split。用户在该状态下通过顶部 session tabs 切换同一 workspace 内的会话时，预期只是切换聊天上下文；已打开的文件、编辑器 tab 和 split layout 都应该继续保留。

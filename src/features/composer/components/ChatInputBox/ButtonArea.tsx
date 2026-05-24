@@ -15,7 +15,7 @@ function ToolGridIcon() {
 
 /**
  * ButtonArea - Bottom toolbar component
- * Contains mode selector, model selector, attachment button, prompt enhancer button, send/stop button
+ * Contains the compact tool dock, permission/reasoning controls, and send/stop actions.
  */
 export const ButtonArea = ({
   disabled = false,
@@ -58,7 +58,6 @@ export const ButtonArea = ({
   panelToggleSurface,
 }: ButtonAreaProps) => {
   const { t } = useTranslation();
-  // const fileInputRef = useRef<HTMLInputElement>(null);
   const isPlanModeEnabled = (selectedCollaborationModeId ?? 'code') === 'plan';
   const supportsStreamActivityPhaseFx =
     currentProvider === 'codex' ||

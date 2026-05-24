@@ -4,10 +4,12 @@ import type {
   KeyboardEvent,
   MutableRefObject,
   MouseEvent,
+  ReactNode,
   RefObject,
   SyntheticEvent,
 } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import CodeMirror, {
   type ReactCodeMirrorProps,
   type ReactCodeMirrorRef,
@@ -18,7 +20,10 @@ import { FilePdfPreview } from "./FilePdfPreview";
 import { FileStructuredPreview } from "./FileStructuredPreview";
 import { FileTabularPreview } from "./FileTabularPreview";
 import type { FilePreviewPayload } from "../hooks/useFilePreviewPayload";
+import type { FileDocumentSnapshot } from "../utils/fileDocumentSnapshot";
 import type { FileViewSurface } from "../utils/fileViewSurface";
+import { highlightLine } from "../../../utils/syntax";
+import type { FileRenderPressure } from "../types/fileRenderPressure";
 import type {
   CodeAnnotationLineRange,
   CodeAnnotationSelection,
@@ -38,16 +43,16 @@ type FileViewBodyProps = {
   previewPayloadLoading: boolean;
   previewPayloadError: string | null;
   viewSurface: FileViewSurface;
+    documentSnapshot: FileDocumentSnapshot;
     content: string;
     setContent: (value: string) => void;
+    fileRenderPressure: FileRenderPressure;
     markdownPreviewSnapshotMode: "stable" | "live";
     markdownPreviewRefreshKey?: number | null;
   cmRef: RefObject<ReactCodeMirrorRef | null>;
   handleCodeMirrorCreate: NonNullable<ReactCodeMirrorProps["onCreateEditor"]>;
   onActiveFileLineRangeChange?: (range: { startLine: number; endLine: number } | null) => void;
   onPreviewAnnotationStart?: (lineRange: CodeAnnotationLineRange) => void;
-  onEditorAnnotationStart?: () => void;
-  editorAnnotationLineRange?: CodeAnnotationLineRange | null;
   annotationDraft?: {
     lineRange: CodeAnnotationLineRange;
     source: "file-preview-mode" | "file-edit-mode";
@@ -61,6 +66,7 @@ type FileViewBodyProps = {
   lastReportedLineRangeRef: MutableRefObject<string>;
   editorExtensions: ReactCodeMirrorProps["extensions"];
   editorTheme: ReactCodeMirrorProps["theme"];
+  previewLanguage: string | null;
   highlightedLines: string[];
   lines: string[];
   gitAddedLineNumberSet: Set<number>;
@@ -322,6 +328,182 @@ function InlineAnnotationMarker({
   );
 }
 
+type CodePreviewVirtualListProps = {
+  documentSnapshot: FileDocumentSnapshot;
+  previewLanguage: string | null;
+  useLowCostPreview: boolean;
+  previewLineSelection: PreviewLineSelection | null;
+  previewAnnotations: CodeAnnotationSelection[];
+  previewDraft: {
+    lineRange: CodeAnnotationLineRange;
+    body: string;
+  } | null;
+  gitAddedLineNumberSet: Set<number>;
+  gitModifiedLineNumberSet: Set<number>;
+  onPreviewAnnotationStart?: (lineRange: CodeAnnotationLineRange) => void;
+  onPreviewLineClick: (lineNumber: number, event: MouseEvent<HTMLDivElement>) => void;
+  onPreviewLineMouseDown: (lineNumber: number, event: MouseEvent<HTMLDivElement>) => void;
+  onPreviewLineMouseEnter: (lineNumber: number) => void;
+  onPreviewLineMouseUp: () => void;
+  renderAnnotationDraft: (draft: {
+    lineRange: CodeAnnotationLineRange;
+    body: string;
+  }) => ReactNode;
+  renderAnnotationMarker: (annotation: CodeAnnotationSelection) => ReactNode;
+  t: (key: string) => string;
+};
+
+function CodePreviewVirtualList({
+  documentSnapshot,
+  previewLanguage,
+  useLowCostPreview,
+  previewLineSelection,
+  previewAnnotations,
+  previewDraft,
+  gitAddedLineNumberSet,
+  gitModifiedLineNumberSet,
+  onPreviewAnnotationStart,
+  onPreviewLineClick,
+  onPreviewLineMouseDown,
+  onPreviewLineMouseEnter,
+  onPreviewLineMouseUp,
+  renderAnnotationDraft,
+  renderAnnotationMarker,
+  t,
+}: CodePreviewVirtualListProps) {
+  const scrollParentRef = useRef<HTMLDivElement | null>(null);
+  const highlightedLineCacheRef = useRef<Map<string, string>>(new Map());
+  const annotationBucketsByEndLine = useMemo(() => {
+    const buckets = new Map<number, CodeAnnotationSelection[]>();
+    for (const annotation of previewAnnotations) {
+      const bucket = buckets.get(annotation.lineRange.endLine);
+      if (bucket) {
+        bucket.push(annotation);
+      } else {
+        buckets.set(annotation.lineRange.endLine, [annotation]);
+      }
+    }
+    return buckets;
+  }, [previewAnnotations]);
+
+  useEffect(() => {
+    highlightedLineCacheRef.current.clear();
+  }, [documentSnapshot.contentHash, previewLanguage, useLowCostPreview]);
+
+  const rowVirtualizer = useVirtualizer({
+    count: documentSnapshot.lineCount,
+    getScrollElement: () => scrollParentRef.current,
+    estimateSize: () => 23,
+    overscan: 12,
+    getItemKey: (index) => `${documentSnapshot.contentHash}:${index}`,
+  });
+
+  const getHighlightedLine = useCallback(
+    (lineIndex: number) => {
+      const lineText = documentSnapshot.getLineText(lineIndex);
+      if (useLowCostPreview) {
+        return lineText ? lineText.replace(/[&<>"']/g, (char) => {
+          switch (char) {
+            case "&":
+              return "&amp;";
+            case "<":
+              return "&lt;";
+            case ">":
+              return "&gt;";
+            case '"':
+              return "&quot;";
+            default:
+              return "&#39;";
+          }
+        }) : "&nbsp;";
+      }
+      const cacheKey = `${lineIndex}:${lineText}`;
+      const cached = highlightedLineCacheRef.current.get(cacheKey);
+      if (cached) {
+        return cached;
+      }
+      const html = highlightLine(lineText, previewLanguage) || "&nbsp;";
+      highlightedLineCacheRef.current.set(cacheKey, html);
+      return html;
+    },
+    [documentSnapshot, previewLanguage, useLowCostPreview],
+  );
+
+  return (
+    <div
+      ref={scrollParentRef}
+      className="fvp-code-preview is-virtualized"
+      role="list"
+      data-code-preview-line-count={documentSnapshot.lineCount}
+      data-code-preview-snapshot-version={documentSnapshot.snapshotVersion}
+    >
+      <div
+        className="fvp-code-preview-virtual-spacer"
+        style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
+      >
+        {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+          const lineNumber = virtualRow.index + 1;
+          const html = getHighlightedLine(virtualRow.index);
+          const isGitAddedLine = gitAddedLineNumberSet.has(lineNumber);
+          const isGitModifiedLine = gitModifiedLineNumberSet.has(lineNumber);
+          const isSelected = Boolean(
+            previewLineSelection &&
+              lineNumber >= previewLineSelection.start &&
+              lineNumber <= previewLineSelection.end,
+          );
+          const lineAnnotations = annotationBucketsByEndLine.get(lineNumber) ?? [];
+          const shouldRenderDraft = previewDraft?.lineRange.endLine === lineNumber;
+          return (
+            <div
+              key={virtualRow.key}
+              ref={rowVirtualizer.measureElement}
+              data-index={virtualRow.index}
+              className={`fvp-code-line${isGitModifiedLine ? " is-git-modified" : isGitAddedLine ? " is-git-added" : ""}${
+                isSelected ? " is-selected" : ""
+              }`}
+              role={onPreviewAnnotationStart ? "button" : undefined}
+              tabIndex={onPreviewAnnotationStart ? 0 : undefined}
+              aria-pressed={onPreviewAnnotationStart ? isSelected : undefined}
+              style={{ transform: `translateY(${virtualRow.start}px)` }}
+              onClick={(event) => onPreviewLineClick(lineNumber, event)}
+              onMouseDown={(event) => onPreviewLineMouseDown(lineNumber, event)}
+              onMouseEnter={() => onPreviewLineMouseEnter(lineNumber)}
+              onMouseUp={onPreviewLineMouseUp}
+            >
+              <span className="fvp-line-number">
+                {lineNumber}
+                {onPreviewAnnotationStart ? (
+                  <button
+                    type="button"
+                    className="fvp-line-annotation-button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onPreviewAnnotationStart({
+                        startLine: lineNumber,
+                        endLine: lineNumber,
+                      });
+                    }}
+                    aria-label={`${t("files.annotateForAi")} L${lineNumber}`}
+                    title={t("files.annotateForAi")}
+                  >
+                    +
+                  </button>
+                ) : null}
+              </span>
+              <span
+                className="fvp-line-text"
+                dangerouslySetInnerHTML={{ __html: html }}
+              />
+              {lineAnnotations.map(renderAnnotationMarker)}
+              {shouldRenderDraft && previewDraft ? renderAnnotationDraft(previewDraft) : null}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function FileViewBody({
   filePath,
   documentKey,
@@ -336,16 +518,16 @@ export function FileViewBody({
   previewPayloadLoading,
   previewPayloadError,
   viewSurface,
+    documentSnapshot,
     content,
     setContent,
+    fileRenderPressure,
     markdownPreviewSnapshotMode,
     markdownPreviewRefreshKey,
   cmRef,
   handleCodeMirrorCreate,
   onActiveFileLineRangeChange,
   onPreviewAnnotationStart,
-  onEditorAnnotationStart,
-  editorAnnotationLineRange,
   annotationDraft = null,
   codeAnnotations = [],
   onRemoveCodeAnnotation,
@@ -355,6 +537,7 @@ export function FileViewBody({
   lastReportedLineRangeRef,
   editorExtensions,
   editorTheme,
+  previewLanguage,
   highlightedLines,
   lines,
   gitAddedLineNumberSet,
@@ -589,22 +772,6 @@ export function FileViewBody({
   if (viewSurface.kind === "editor") {
     return (
       <div className="fvp-editor">
-        {editorAnnotationLineRange ? (
-          <div className="fvp-annotation-toolbar">
-            <span>
-              {editorAnnotationLineRange.startLine === editorAnnotationLineRange.endLine
-                ? `L${editorAnnotationLineRange.startLine}`
-                : `L${editorAnnotationLineRange.startLine}-L${editorAnnotationLineRange.endLine}`}
-            </span>
-            <button
-              type="button"
-              className="fvp-annotation-trigger"
-              onClick={onEditorAnnotationStart}
-            >
-              {t("files.annotateForAi")}
-            </button>
-          </div>
-        ) : null}
         <CodeMirror
           key={filePath}
           ref={cmRef}
@@ -658,6 +825,7 @@ export function FileViewBody({
           key={filePath}
           documentKey={documentKey}
           value={markdownPreviewContent}
+          renderPressure={fileRenderPressure}
           className="fvp-file-markdown fvp-markdown-github"
           onAnnotationStart={onPreviewAnnotationStart}
           annotationDraft={previewDraft}
@@ -695,6 +863,7 @@ export function FileViewBody({
           key={filePath}
           filePath={filePath}
           value={content}
+          documentSnapshot={documentSnapshot}
           className="fvp-structured-preview"
         />
       </div>
@@ -706,9 +875,35 @@ export function FileViewBody({
       ? `L${previewLineSelection.start}`
       : `L${previewLineSelection.start}-L${previewLineSelection.end}`
     : null;
+  const shouldUseVirtualCodePreview =
+    viewSurface.kind === "code-preview" && lines.length === 0 && documentSnapshot.lineCount > 0;
+  const renderPreviewAnnotationDraft = (draft: {
+    lineRange: CodeAnnotationLineRange;
+    body: string;
+  }) => (
+    <InlineAnnotationDraft
+      draft={draft}
+      t={t}
+      onBodyChange={onAnnotationDraftBodyChange}
+      onSelectionChange={(selection) => {
+        annotationDraftSelectionRef.current = selection;
+      }}
+      selectionSnapshot={annotationDraftSelectionRef.current}
+      onCancel={onAnnotationDraftCancel}
+      onConfirm={onAnnotationDraftConfirm}
+    />
+  );
+  const renderPreviewAnnotationMarker = (annotation: CodeAnnotationSelection) => (
+    <InlineAnnotationMarker
+      key={annotation.id}
+      annotation={annotation}
+      t={t}
+      onRemove={onRemoveCodeAnnotation}
+    />
+  );
 
   return (
-    <div className="fvp-code-preview" role="list">
+    <>
       {previewLineSelection && onPreviewAnnotationStart ? (
         <div className="fvp-preview-selection-toolbar" role="group" aria-label={t("files.annotationSelectionToolbar")}>
           <span>{previewSelectionLabel}</span>
@@ -733,7 +928,28 @@ export function FileViewBody({
           </button>
         </div>
       ) : null}
-      {lines.map((_, index) => {
+      {shouldUseVirtualCodePreview ? (
+        <CodePreviewVirtualList
+          documentSnapshot={documentSnapshot}
+          previewLanguage={previewLanguage}
+          useLowCostPreview={viewSurface.useLowCostPreview}
+          previewLineSelection={previewLineSelection}
+          previewAnnotations={previewAnnotations}
+          previewDraft={previewDraft}
+          gitAddedLineNumberSet={gitAddedLineNumberSet}
+          gitModifiedLineNumberSet={gitModifiedLineNumberSet}
+          onPreviewAnnotationStart={onPreviewAnnotationStart}
+          onPreviewLineClick={handlePreviewLineClick}
+          onPreviewLineMouseDown={handlePreviewLineMouseDown}
+          onPreviewLineMouseEnter={handlePreviewLineMouseEnter}
+          onPreviewLineMouseUp={handlePreviewLineMouseUp}
+          renderAnnotationDraft={renderPreviewAnnotationDraft}
+          renderAnnotationMarker={renderPreviewAnnotationMarker}
+          t={t}
+        />
+      ) : (
+        <div className="fvp-code-preview" role="list">
+          {lines.map((_, index) => {
         const html = highlightedLines[index] ?? "&nbsp;";
         const lineNumber = index + 1;
         const isGitAddedLine = gitAddedLineNumberSet.has(lineNumber);
@@ -786,29 +1002,16 @@ export function FileViewBody({
               dangerouslySetInnerHTML={{ __html: html }}
             />
             {lineAnnotations.map((annotation) => (
-              <InlineAnnotationMarker
-                key={annotation.id}
-                annotation={annotation}
-                t={t}
-                onRemove={onRemoveCodeAnnotation}
-              />
+              renderPreviewAnnotationMarker(annotation)
             ))}
             {shouldRenderDraft ? (
-              <InlineAnnotationDraft
-                draft={previewDraft}
-                t={t}
-                onBodyChange={onAnnotationDraftBodyChange}
-                onSelectionChange={(selection) => {
-                  annotationDraftSelectionRef.current = selection;
-                }}
-                selectionSnapshot={annotationDraftSelectionRef.current}
-                onCancel={onAnnotationDraftCancel}
-                onConfirm={onAnnotationDraftConfirm}
-              />
+              renderPreviewAnnotationDraft(previewDraft)
             ) : null}
           </div>
         );
-      })}
-    </div>
+          })}
+        </div>
+      )}
+    </>
   );
 }

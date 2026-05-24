@@ -258,6 +258,11 @@ export function FileExplorerWorkspace({
             externalChangeMonitoringEnabled={externalChangeMonitoringEnabled}
             externalChangeTransportMode={externalChangeTransportMode}
             markdownPreviewSnapshotMode={externalChangeMonitoringEnabled ? "live" : "stable"}
+            fileRenderPressure={{
+              engineProcessing: false,
+              editorSplitChatVisible: false,
+              activeSurface: "detached-explorer",
+            }}
             headerLayout={fileViewHeaderLayout}
             onSingleRowLeadingAction={
               fileViewHeaderLayout === "single-row" ? handleToggleSidebar : undefined

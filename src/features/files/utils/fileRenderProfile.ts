@@ -2,6 +2,7 @@ import {
   resolveFileLanguageFromPath,
   type EditorLanguageId,
 } from "../../../utils/fileLanguageRegistry";
+import { createFileDocumentSnapshot } from "./fileDocumentSnapshot";
 
 export type StructuredPreviewKind = "shell" | "dockerfile";
 
@@ -346,10 +347,11 @@ export function measureFilePreviewMetrics(
   value: string,
   truncated: boolean,
 ): FilePreviewMetrics {
+  const snapshot = createFileDocumentSnapshot(value, truncated, 0);
   return {
-    byteLength: new TextEncoder().encode(value).length,
-    lineCount: value.length === 0 ? 0 : value.split(/\r?\n/).length,
-    truncated,
+    byteLength: snapshot.byteLength,
+    lineCount: snapshot.lineCount,
+    truncated: snapshot.truncated,
   };
 }
 

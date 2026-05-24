@@ -1,3 +1,11 @@
+## 2026-05-23 Proposal Refresh
+
+- **Current branch**: `feature/v0.5.2`; this refresh is documentation-only and does not change implementation code.
+- **Task state**: 6/6 checked; status = Completed as deferred Tooling P2.
+- **Code/document evidence**: 当前代码已有 engine capability matrix 与治理 checker，但未实现 plugin scaffolder/template/dry-run onboarding kit。
+- **Next action**: 保持 deferred；等 capability query/runtime contract 稳定后重新评估 tooling proposal。
+- **Validation note**: `openspec validate --all --strict --no-interactive` passed 299 items in this documentation refresh.
+
 ## Branch Calibration / 分支校准（2026-05-19）
 
 当前变更只以 `feature/v0.5.0-md` 为事实源。原始方案是第 5 引擎接入脚手架，不属于当前 harness governance 治理层。收敛后，本 change 标记为 **Deferred / Tooling P2**。

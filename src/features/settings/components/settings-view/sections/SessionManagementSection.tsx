@@ -67,6 +67,7 @@ import {
   buildSessionFolderNavItems,
   buildWorkspaceOptions,
   normalizeEngineType,
+  resolveWorkspaceSessionDisplayTitle,
   type GroupedWorkspace,
   type SessionFolderCountSummary,
 } from "./sessionManagementSectionUtils";
@@ -520,6 +521,7 @@ export function SessionManagementSection({
     entries: primaryEntries,
     nextCursor: primaryNextCursor,
     partialSource: primaryPartialSource,
+    pageLimit: primaryPageLimit,
     error: primaryError,
     isLoading: primaryIsLoading,
     isLoadingMore: primaryIsLoadingMore,
@@ -537,6 +539,7 @@ export function SessionManagementSection({
     entries: relatedEntries,
     nextCursor: relatedNextCursor,
     partialSource: relatedPartialSource,
+    pageLimit: relatedPageLimit,
     error: relatedError,
     isLoading: relatedIsLoading,
     isLoadingMore: relatedIsLoadingMore,
@@ -1994,6 +1997,16 @@ export function SessionManagementSection({
                   })}
                 </div>
               ) : null}
+              {primaryPageLimit.limitCapped &&
+              primaryPageLimit.requestedLimit != null &&
+              primaryPageLimit.effectiveLimit != null ? (
+                <div className="settings-project-sessions-notice">
+                  {t("settings.sessionManagementPageLimitCapped", {
+                    requested: primaryPageLimit.requestedLimit,
+                    effective: primaryPageLimit.effectiveLimit,
+                  })}
+                </div>
+              ) : null}
               {primaryError ? (
                 <div className="settings-project-sessions-notice is-error">
                   {primaryError}
@@ -2076,6 +2089,19 @@ export function SessionManagementSection({
                               {t("settings.sessionManagementPartialSource", {
                                 source: relatedPartialSource,
                               })}
+                            </div>
+                          ) : null}
+                          {relatedPageLimit.limitCapped &&
+                          relatedPageLimit.requestedLimit != null &&
+                          relatedPageLimit.effectiveLimit != null ? (
+                            <div className="settings-project-sessions-notice">
+                              {t(
+                                "settings.sessionManagementPageLimitCapped",
+                                {
+                                  requested: relatedPageLimit.requestedLimit,
+                                  effective: relatedPageLimit.effectiveLimit,
+                                },
+                              )}
                             </div>
                           ) : null}
                           {relatedError ? (
@@ -2197,8 +2223,10 @@ export function SessionManagementSection({
                 </span>
                 <div>
                   <div className="settings-session-curtain-title">
-                    {sessionCurtain.entry.title.trim() ||
-                      t("settings.projectSessionItemUntitled")}
+                    {resolveWorkspaceSessionDisplayTitle(
+                      sessionCurtain.entry,
+                      t("settings.projectSessionItemUntitled"),
+                    )}
                   </div>
                   <div className="settings-session-curtain-subtitle">
                     {sessionCurtain.entry.workspaceLabel ??

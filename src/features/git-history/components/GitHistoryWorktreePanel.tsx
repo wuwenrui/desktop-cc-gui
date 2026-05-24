@@ -45,6 +45,11 @@ import { sanitizeGeneratedCommitMessage } from "../../../utils/commitMessage";
 import { localizeGitErrorMessage } from "../gitErrorI18n";
 import { runScopedCommitOperation } from "../../git/utils/commitScope";
 import {
+  buildDiffTree,
+  compactDiffTree,
+  type DiffTreeFolderNode,
+} from "../../git/utils/diffTree";
+import {
   clampRendererContextMenuPosition,
   RendererContextMenu,
   type RendererContextMenuState,
@@ -75,14 +80,7 @@ type GitStatusState = {
 
 type DiffSection = "staged" | "unstaged";
 
-type DiffTreeNode = {
-  key: string;
-  name: string;
-  path: string;
-  descendantPaths: string[];
-  folders: Map<string, DiffTreeNode>;
-  files: GitFileStatus[];
-};
+type DiffTreeNode = DiffTreeFolderNode<GitFileStatus>;
 
 type CollapsedFolder = {
   key: string;
@@ -157,70 +155,15 @@ function diffStatusClass(status: string) {
   }
 }
 
-function hasToggleablePaths(
-  paths: string[],
-  isCommitPathLocked: (path: string) => boolean,
-) {
-  return paths.some((path) => !isCommitPathLocked(path));
-}
-
-function getToggleablePaths(
-  paths: string[],
-  isCommitPathLocked: (path: string) => boolean,
-) {
-  return paths.filter((path) => !isCommitPathLocked(path));
-}
-
 function getTreeLineOpacity(depth: number): string {
   return depth === 1 ? "1" : "0";
-}
-
-function buildDiffTree(files: GitFileStatus[], section: DiffSection): DiffTreeNode {
-  const root: DiffTreeNode = {
-    key: `${section}:/`,
-    name: "",
-    path: "",
-    descendantPaths: [],
-    folders: new Map(),
-    files: [],
-  };
-
-  for (const file of files) {
-    const parts = file.path.replace(/\\/g, "/").split("/").filter(Boolean);
-    if (parts.length === 0) {
-      continue;
-    }
-    root.descendantPaths.push(file.path);
-    let node = root;
-    for (let index = 0; index < parts.length - 1; index += 1) {
-      const segment = parts[index] ?? "";
-      const key = `${node.key}${segment}/`;
-      let child = node.folders.get(segment);
-      if (!child) {
-        child = {
-          key,
-          name: segment,
-          path: node.path ? `${node.path}/${segment}` : segment,
-          descendantPaths: [],
-          folders: new Map(),
-          files: [],
-        };
-        node.folders.set(segment, child);
-      }
-      child.descendantPaths.push(file.path);
-      node = child;
-    }
-    node.files.push(file);
-  }
-
-  return root;
 }
 
 function collapseFolderChain(node: DiffTreeNode): CollapsedFolder {
   return {
     key: node.key,
     name: node.name,
-    iconName: node.name,
+    iconName: node.path || node.name,
     node,
   };
 }
@@ -789,16 +732,6 @@ export function GitHistoryWorktreePanel({
             }
           }}
         >
-          <InclusionToggle
-            state={inclusionState}
-            label={t("git.commitSelectionToggleFile", { path: file.path })}
-            className="diff-row-selection"
-            disabled={isCommitPathLocked(file.path)}
-            stopPropagation
-            onToggle={() => {
-              setCommitSelection([file.path], inclusionState !== "all");
-            }}
-          />
           <span
             className={`git-history-worktree-file-status diff-icon ${diffStatusClass(file.status)}`}
             aria-hidden
@@ -876,6 +809,16 @@ export function GitHistoryWorktreePanel({
                 </button>
               ) : null}
             </span>
+            <InclusionToggle
+              state={inclusionState}
+              label={t("git.commitSelectionToggleFile", { path: file.path })}
+              className="git-history-worktree-row-selection"
+              disabled={isCommitPathLocked(file.path)}
+              stopPropagation
+              onToggle={() => {
+                setCommitSelection([file.path], inclusionState !== "all");
+              }}
+            />
           </span>
         </div>
       );
@@ -898,37 +841,15 @@ export function GitHistoryWorktreePanel({
 
   const renderTreeRows = useCallback(
     (files: GitFileStatus[], section: DiffSection) => {
-      const tree = buildDiffTree(files, section);
+      const tree = compactDiffTree(buildDiffTree(files, section));
       const rootFolderKey = `${section}:__repo_root__/`;
       const rootCollapsed = collapsedFolders.has(rootFolderKey);
-      const rootFolderPaths = tree.descendantPaths;
-      const rootFolderInclusionState = getGroupInclusionState(
-        rootFolderPaths,
-        includedCommitPathSet,
-        excludedCommitPathSet,
-        partialCommitPathSet,
-      );
-      const rootHasToggleablePaths = hasToggleablePaths(
-        rootFolderPaths,
-        isCommitPathLocked,
-      );
       const walk = (node: DiffTreeNode, depth: number): ReactNode[] => {
         const rows: ReactNode[] = [];
         const folders = Array.from(node.folders.values()).sort((a, b) => a.name.localeCompare(b.name));
         for (const folder of folders) {
           const collapsedFolder = collapseFolderChain(folder);
           const collapsed = collapsedFolders.has(collapsedFolder.key);
-          const descendantPaths = collapsedFolder.node.descendantPaths;
-          const folderInclusionState = getGroupInclusionState(
-            descendantPaths,
-            includedCommitPathSet,
-            excludedCommitPathSet,
-            partialCommitPathSet,
-          );
-          const folderHasToggleablePaths = hasToggleablePaths(
-            descendantPaths,
-            isCommitPathLocked,
-          );
           const treeIndentPx = depth * 16;
           const folderStyle = {
             paddingLeft: `${treeIndentPx}px`,
@@ -947,28 +868,17 @@ export function GitHistoryWorktreePanel({
                 role="button"
                 tabIndex={0}
                 onClick={() => toggleFolder(collapsedFolder.key)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    toggleFolder(collapsedFolder.key);
-                  }
-                }}
-              >
-                <InclusionToggle
-                  state={folderInclusionState}
-                  label={t("git.commitSelectionToggleScope", {
-                    path: collapsedFolder.node.path || collapsedFolder.name,
-                  })}
-                  className="git-commit-scope-toggle--folder"
-                  disabled={!folderHasToggleablePaths}
-                  stopPropagation
-                  onToggle={() => {
-                    setCommitSelection(
-                      getToggleablePaths(descendantPaths, isCommitPathLocked),
-                      folderInclusionState !== "all",
-                    );
-                  }}
-                />
+              onKeyDown={(event) => {
+                const target = event.target as HTMLElement | null;
+                if (target?.closest("button")) {
+                  return;
+                }
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  toggleFolder(collapsedFolder.key);
+                }
+              }}
+            >
                 <span className="git-history-worktree-folder-caret diff-tree-folder-toggle" aria-hidden>
                   {collapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
                 </span>
@@ -1014,27 +924,16 @@ export function GitHistoryWorktreePanel({
             tabIndex={0}
             onClick={() => toggleFolder(rootFolderKey)}
             onKeyDown={(event) => {
+              const target = event.target as HTMLElement | null;
+              if (target?.closest("button")) {
+                return;
+              }
               if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault();
                 toggleFolder(rootFolderKey);
               }
             }}
           >
-            <InclusionToggle
-              state={rootFolderInclusionState}
-              label={t("git.commitSelectionToggleScope", {
-                path: resolvedRootFolderName,
-              })}
-              className="git-commit-scope-toggle--folder"
-              disabled={!rootHasToggleablePaths}
-              stopPropagation
-              onToggle={() => {
-                setCommitSelection(
-                  getToggleablePaths(rootFolderPaths, isCommitPathLocked),
-                  rootFolderInclusionState !== "all",
-                );
-              }}
-            />
             <span className="git-history-worktree-folder-caret diff-tree-folder-toggle" aria-hidden>
               {rootCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
             </span>
@@ -1059,14 +958,8 @@ export function GitHistoryWorktreePanel({
     },
     [
       collapsedFolders,
-      excludedCommitPathSet,
-      includedCommitPathSet,
-      isCommitPathLocked,
-      partialCommitPathSet,
       renderFileRow,
       resolvedRootFolderName,
-      setCommitSelection,
-      t,
       toggleFolder,
     ],
   );

@@ -398,10 +398,28 @@ fn has_experimental_api_capability(value: &Value) -> bool {
 
 fn is_codex_app_server_text(text: &str) -> bool {
     let trimmed = text.trim();
-    trimmed == "app-server"
-        || trimmed.ends_with(" app-server")
-        || trimmed.contains("codex app-server")
-        || trimmed.contains("developer_instructions=")
+    if trimmed == "app-server" || trimmed.contains("developer_instructions=") {
+        return true;
+    }
+
+    let mut tokens = trimmed.split_whitespace();
+    let Some(command) = tokens.next() else {
+        return false;
+    };
+    let Some(subcommand) = tokens.next() else {
+        return false;
+    };
+
+    is_codex_command_token(command) && subcommand == "app-server"
+}
+
+fn is_codex_command_token(token: &str) -> bool {
+    let command = token
+        .trim_matches(|character| character == '"' || character == '\'')
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(token);
+    matches!(command, "codex" | "codex.exe" | "codex.cmd" | "codex.bat")
 }
 
 fn content_contains_codex_app_server_control_plane(content: &Value) -> bool {

@@ -1,3 +1,11 @@
+## 2026-05-23 Proposal Refresh
+
+- **Current branch**: `feature/v0.5.2`; this refresh is documentation-only and does not change implementation code.
+- **Task state**: 0/7 checked; status = In progress / planning only.
+- **Code/document evidence**: 代码中仍只有既有 `codex_doctor`、`codexBin`、`codexArgs` 与 workspace override 底座；未发现 `codex_preview_launch_profile` 或完整 Launch Configuration preview/editor 落地。
+- **Next action**: 保持 active，不得归档；下一步先实现 backend effective preview 与 doctor 共用 resolution，再补 Settings/workspace inherit UX。
+- **Validation note**: `openspec validate --all --strict --no-interactive` passed 299 items in this documentation refresh.
+
 ## Why
 
 issue #377 想解决的核心不是“支持任意 shell 命令”，而是让用户能稳定地告诉桌面端：Codex 到底该用哪个可执行文件、带哪些额外参数启动。当前系统实际上已经具备这两类能力的底座：global `codexBin` / `codexArgs` 与 workspace `codex_bin` / `codexArgs`，但设置表达方式、优先级可见性和运行前校验仍然太弱，用户很难判断 GUI 最终会执行什么。

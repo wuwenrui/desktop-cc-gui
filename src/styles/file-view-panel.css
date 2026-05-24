@@ -497,6 +497,22 @@
   width: max-content;
 }
 
+.fvp-code-preview.is-virtualized {
+  contain: strict;
+}
+
+.fvp-code-preview-virtual-spacer {
+  position: relative;
+  min-width: max-content;
+}
+
+.fvp-code-preview.is-virtualized .fvp-code-line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+}
+
 .fvp-code-line:hover {
   background: color-mix(in srgb, var(--surface-active) 35%, transparent);
 }
@@ -563,21 +579,6 @@
 .fvp-code-line:hover .fvp-line-annotation-button,
 .fvp-line-annotation-button:focus-visible {
   opacity: 1;
-}
-
-.fvp-annotation-toolbar {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 6px 10px;
-  background: color-mix(in srgb, var(--surface-elevated) 92%, transparent);
-  border-bottom: 1px solid var(--border-subtle);
-  font-size: 11px;
-  color: var(--text-muted);
 }
 
 .fvp-annotation-trigger {
@@ -696,7 +697,7 @@
 }
 
 .fvp-annotation-draft-actions {
-  justify-content: flex-end;
+  justify-content: flex-start;
   margin-top: 8px;
 }
 

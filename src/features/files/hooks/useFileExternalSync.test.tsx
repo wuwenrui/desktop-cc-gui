@@ -42,6 +42,7 @@ describe("useFileExternalSync", () => {
       ({ filePath, workspaceRelativeFilePath }) => {
         const [content, setContent] = useState("initial content");
         const [truncated, setTruncated] = useState(false);
+        const [previewSnapshotVersion, setPreviewSnapshotVersion] = useState(0);
         const savedContentRef = useRef(content);
         const latestIsDirtyRef = useRef(false);
         const isDirty = content !== savedContentRef.current;
@@ -63,11 +64,12 @@ describe("useFileExternalSync", () => {
           isDirty,
           isLoading: false,
           caseInsensitivePathCompare: false,
-          setContent: (value) => {
-            savedContentRef.current = value;
+          replaceDocumentSnapshot: (value: string, nextTruncated: boolean) => {
             setContent(value);
+            setTruncated(nextTruncated);
+            setPreviewSnapshotVersion((version) => version + 1);
           },
-          setTruncated,
+          previewSnapshotVersion,
           savedContentRef,
           latestIsDirtyRef,
           externalDiskSnapshotRef,
@@ -123,6 +125,7 @@ describe("useFileExternalSync", () => {
       const { result } = renderHook(() => {
         const [content, setContent] = useState("initial content");
         const [truncated, setTruncated] = useState(false);
+        const [previewSnapshotVersion, setPreviewSnapshotVersion] = useState(0);
         const savedContentRef = useRef(content);
         const latestIsDirtyRef = useRef(false);
         const isDirty = content !== savedContentRef.current;
@@ -146,8 +149,12 @@ describe("useFileExternalSync", () => {
           isDirty,
           isLoading: false,
           caseInsensitivePathCompare: false,
-          setContent,
-          setTruncated,
+          replaceDocumentSnapshot: (value: string, nextTruncated: boolean) => {
+            setContent(value);
+            setTruncated(nextTruncated);
+            setPreviewSnapshotVersion((version) => version + 1);
+          },
+          previewSnapshotVersion,
           savedContentRef,
           latestIsDirtyRef,
           externalDiskSnapshotRef,
@@ -189,6 +196,7 @@ describe("useFileExternalSync", () => {
 
       const { result } = renderHook(() => {
         const [content, setContent] = useState("initial content");
+        const [previewSnapshotVersion, setPreviewSnapshotVersion] = useState(0);
         const savedContentRef = useRef("initial content");
         const isDirty = content !== savedContentRef.current;
         const latestIsDirtyRef = useRef(isDirty);
@@ -212,8 +220,11 @@ describe("useFileExternalSync", () => {
           isDirty,
           isLoading: false,
           caseInsensitivePathCompare: false,
-          setContent,
-          setTruncated: vi.fn(),
+          replaceDocumentSnapshot: (value: string) => {
+            setContent(value);
+            setPreviewSnapshotVersion((version) => version + 1);
+          },
+          previewSnapshotVersion,
           savedContentRef,
           latestIsDirtyRef,
           externalDiskSnapshotRef,
@@ -243,6 +254,154 @@ describe("useFileExternalSync", () => {
 
       expect(result.current.content).toBe("local edit");
       expect(result.current.externalChangeConflict?.diskContent).toBe("disk update");
+      expect(result.current.externalPendingRefresh).toBeNull();
+    });
+
+    it("keeps clean auto updates pending while file render pressure is active", async () => {
+      vi.useFakeTimers();
+      vi.mocked(readWorkspaceFile).mockReset();
+      vi.mocked(readWorkspaceFile).mockResolvedValue({
+        content: "disk update under pressure",
+        truncated: false,
+      });
+
+      const { result } = renderHook(() => {
+        const [content, setContent] = useState("initial content");
+        const [previewSnapshotVersion, setPreviewSnapshotVersion] = useState(0);
+        const savedContentRef = useRef("initial content");
+        const isDirty = content !== savedContentRef.current;
+        const latestIsDirtyRef = useRef(isDirty);
+        latestIsDirtyRef.current = isDirty;
+        const externalDiskSnapshotRef = useRef<{ content: string; truncated: boolean } | null>({
+          content: "initial content",
+          truncated: false,
+        });
+
+        const sync = useFileExternalSync({
+          filePath: "src/pressure.ts",
+          workspaceId: "ws-sync",
+          workspaceRelativeFilePath: "src/pressure.ts",
+          fileReadTargetDomain: "workspace",
+          externalChangeMonitoringEnabled: true,
+          externalChangeTransportMode: "polling",
+          externalChangePollIntervalMs: 20,
+          externalChangeApplyMode: "auto",
+          isBinary: false,
+          isDirty,
+          isLoading: false,
+          caseInsensitivePathCompare: false,
+          replaceDocumentSnapshot: (value: string) => {
+            setContent(value);
+            setPreviewSnapshotVersion((version) => version + 1);
+          },
+          previewSnapshotVersion,
+          fileRenderPressure: {
+            engineProcessing: true,
+            editorSplitChatVisible: true,
+            activeSurface: "editor",
+          },
+          savedContentRef,
+          latestIsDirtyRef,
+          externalDiskSnapshotRef,
+          autoSyncedMessage: "auto synced",
+        });
+
+        return {
+          ...sync,
+          content,
+        };
+      });
+
+      await act(async () => {
+        vi.advanceTimersByTime(25);
+        await Promise.resolve();
+      });
+
+      expect(result.current.content).toBe("initial content");
+      expect(result.current.externalPendingRefresh?.diskContent).toBe(
+        "disk update under pressure",
+      );
+      expect(result.current.externalChangeConflict).toBeNull();
+    });
+
+    it("keeps a clean debounced update visible when the preview snapshot changes before auto-apply", async () => {
+      vi.useFakeTimers();
+      vi.mocked(readWorkspaceFile).mockReset();
+      vi.mocked(readWorkspaceFile).mockResolvedValue({
+        content: "disk update after snapshot change",
+        truncated: false,
+      });
+
+      const { result } = renderHook(() => {
+        const [content, setContent] = useState("initial content");
+        const [previewSnapshotVersion, setPreviewSnapshotVersion] = useState(0);
+        const savedContentRef = useRef("initial content");
+        const isDirty = content !== savedContentRef.current;
+        const latestIsDirtyRef = useRef(isDirty);
+        latestIsDirtyRef.current = isDirty;
+        const externalDiskSnapshotRef = useRef<{ content: string; truncated: boolean } | null>({
+          content: "initial content",
+          truncated: false,
+        });
+
+        const sync = useFileExternalSync({
+          filePath: "src/debounced.ts",
+          workspaceId: "ws-sync",
+          workspaceRelativeFilePath: "src/debounced.ts",
+          fileReadTargetDomain: "workspace",
+          externalChangeMonitoringEnabled: true,
+          externalChangeTransportMode: "polling",
+          externalChangePollIntervalMs: 20,
+          externalChangeApplyMode: "auto",
+          externalChangeAutoApplyDebounceMs: 100,
+          isBinary: false,
+          isDirty,
+          isLoading: false,
+          caseInsensitivePathCompare: false,
+          replaceDocumentSnapshot: (value: string) => {
+            setContent(value);
+            setPreviewSnapshotVersion((version) => version + 1);
+          },
+          previewSnapshotVersion,
+          savedContentRef,
+          latestIsDirtyRef,
+          externalDiskSnapshotRef,
+          autoSyncedMessage: "auto synced",
+        });
+
+        return {
+          ...sync,
+          content,
+          bumpPreviewSnapshotVersion: () =>
+            setPreviewSnapshotVersion((version) => version + 1),
+        };
+      });
+
+      await act(async () => {
+        vi.advanceTimersByTime(25);
+        await Promise.resolve();
+      });
+
+      act(() => {
+        result.current.bumpPreviewSnapshotVersion();
+      });
+
+      await act(async () => {
+        vi.advanceTimersByTime(100);
+        await Promise.resolve();
+      });
+
+      expect(result.current.content).toBe("initial content");
+      expect(result.current.externalPendingRefresh?.diskContent).toBe(
+        "disk update after snapshot change",
+      );
+
+      act(() => {
+        result.current.handleExternalApplyPendingRefresh();
+      });
+
+      expect(result.current.content).toBe("disk update after snapshot change");
+      expect(result.current.externalChangeConflict).toBeNull();
       expect(result.current.externalPendingRefresh).toBeNull();
     });
   });

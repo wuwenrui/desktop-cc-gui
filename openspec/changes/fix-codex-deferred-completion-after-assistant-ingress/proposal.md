@@ -1,3 +1,11 @@
+## 2026-05-23 Proposal Refresh
+
+- **Current branch**: `feature/v0.5.2`; this refresh is documentation-only and does not change implementation code.
+- **Task state**: 7/7 checked; status = Completed / pending verify-archive.
+- **Code/document evidence**: `useThreadEventHandlers` 记录 deferred completion，assistant stream ingress 到达后释放 completion；测试覆盖 Codex assistant stream ingress before turn completion。
+- **Next action**: 归档前补 realtime/codex event focused tests 与 OpenSpec validation。
+- **Validation note**: `openspec validate --all --strict --no-interactive` passed 299 items in this documentation refresh.
+
 ## Why
 
 Codex long turns can leave the UI in `isProcessing=true` after the visible assistant answer has arrived when `turn/completed` is deferred behind stale collaboration child-agent blockers. The symptom is an already-rendered final-looking reply with the composer still showing "generating response", which becomes more likely in long conversations that use `spawn_agent` / `wait_agent`.

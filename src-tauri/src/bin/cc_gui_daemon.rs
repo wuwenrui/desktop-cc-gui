@@ -1598,6 +1598,31 @@ async fn handle_rpc_request(
                 .await?;
             serde_json::to_value(page).map_err(|err| err.to_string())
         }
+        "list_project_related_sessions" => {
+            let workspace_id = parse_string(&params, "workspaceId")?;
+            let query = parse_optional_value(&params, "query")
+                .filter(|value| !value.is_null())
+                .map(|value| {
+                    serde_json::from_value::<session_management::WorkspaceSessionCatalogQuery>(
+                        value,
+                    )
+                    .map_err(|err| format!("invalid `query`: {err}"))
+                })
+                .transpose()?;
+            let cursor = parse_optional_string(&params, "cursor");
+            let limit = parse_optional_u32(&params, "limit");
+            let page = state
+                .list_project_related_sessions(workspace_id, query, cursor, limit)
+                .await?;
+            serde_json::to_value(page).map_err(|err| err.to_string())
+        }
+        "list_workspace_session_archive_evidence" => {
+            let workspace_id = parse_string(&params, "workspaceId")?;
+            let evidence = state
+                .list_workspace_session_archive_evidence(workspace_id)
+                .await?;
+            serde_json::to_value(evidence).map_err(|err| err.to_string())
+        }
         "get_workspace_session_projection_summary" => {
             let workspace_id = parse_string(&params, "workspaceId")?;
             let query = parse_optional_value(&params, "query")

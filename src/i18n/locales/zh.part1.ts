@@ -1376,6 +1376,8 @@ const zhPart1 = {
     sessionManagementMissingSessionCleaned:
       "磁盘会话已不存在，已清理项目索引。",
     sessionManagementPartialSource: "当前结果包含降级来源：{{source}}",
+    sessionManagementPageLimitCapped:
+      "本次请求 {{requested}} 条，后端实际返回 {{effective}} 条一页；需要更多结果请继续加载。",
     sessionManagementBadgeArchived: "已归档",
     sessionManagementBadgeRelated: "推断相关",
     sessionManagementBadgeMissingOnDisk: "磁盘缺失",

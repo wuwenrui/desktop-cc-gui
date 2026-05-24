@@ -1,3 +1,11 @@
+## 2026-05-23 Proposal Refresh
+
+- **Current branch**: `feature/v0.5.2`; this refresh is documentation-only and does not change implementation code.
+- **Task state**: 26/26 checked; status = Completed / pending verify-archive.
+- **Code/document evidence**: `compileFileMarkdownDocument`、Mermaid/KaTeX caches、annotation/block model、large render path 与 file Markdown tests 已存在。
+- **Next action**: 归档前补 file Markdown architecture verification，包括 no-reparse/no-flicker/large document evidence。
+- **Validation note**: `openspec validate --all --strict --no-interactive` passed 299 items in this documentation refresh.
+
 ## Why
 
 Markdown 文件预览在加入数学公式、Mermaid 和 AI 标注后暴露出系统性卡顿与闪烁：同一份文档会因外部文件同步、annotation state、heavy block render 等非内容语义变化被反复全量解析和重建。现在需要从“局部补丁”升级为文件预览渲染架构治理，拆开文档快照、Markdown 编译、标注 overlay 与重型 block 生命周期。

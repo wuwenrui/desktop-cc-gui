@@ -40,14 +40,17 @@ import {
   resolveThreadListCursorForDisplay,
   type ProjectCatalogSessionSummary,
 } from "./useThreadActions.threadList";
-import type { ListWorkspaceSessionsService } from "./useThreadActionsSessionCatalog";
+import type {
+  ArchivedSessionMapResult,
+  ListWorkspaceSessionsService,
+} from "./useThreadActionsSessionCatalog";
 import type { ThreadAction, ThreadState } from "./useThreadsReducer";
 
 type UseLoadOlderThreadsForWorkspaceOptions = {
   activeThreadIdByWorkspace: ThreadState["activeThreadIdByWorkspace"];
   applySessionArchiveState: (
     summaries: ThreadSummary[],
-    archivedAtBySessionId: Map<string, number> | null,
+    archivedEvidence: ArchivedSessionMapResult | null,
   ) => ThreadSummary[];
   canListWorkspaceSessions: boolean;
   dispatch: Dispatch<ThreadAction>;
@@ -58,7 +61,7 @@ type UseLoadOlderThreadsForWorkspaceOptions = {
   listWorkspaceSessionsService: ListWorkspaceSessionsService | null;
   loadArchivedSessionMap: (
     workspaceId: string,
-  ) => Promise<Map<string, number> | null>;
+  ) => Promise<ArchivedSessionMapResult | null>;
   onDebug?: (entry: DebugEntry) => void;
   onThreadTitleMappingsLoaded?: (
     workspaceId: string,
@@ -149,10 +152,8 @@ export function useLoadOlderThreadsForWorkspace({
             catalogPartialSource = response.partialSource ?? null;
             catalogSessions = response.data
               .map((entry) => normalizeProjectCatalogSession(entry))
-              .filter(
-                (entry): entry is ProjectCatalogSessionSummary =>
-                  Boolean(entry) &&
-                  (entry!.workspaceId ?? workspace.id) === workspace.id,
+              .filter((entry): entry is ProjectCatalogSessionSummary =>
+                Boolean(entry),
               );
           } else {
             catalogPartialSource = "session-catalog-load-older-timeout";
@@ -231,7 +232,7 @@ export function useLoadOlderThreadsForWorkspace({
           }
           const preview = asString(thread?.preview ?? "").trim();
           const mappedTitle = mappedTitles[id];
-          const customName = mappedTitle || getCustomName(workspace.id, id);
+          const customName = getCustomName(workspace.id, id) || mappedTitle;
           const fallbackName = `Agent ${existing.length + additions.length + 1}`;
           const name = customName
             ? customName

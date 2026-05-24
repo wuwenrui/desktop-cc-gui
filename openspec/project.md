@@ -1,7 +1,7 @@
 # Project Context
 
 - Type: OpenSpec Workspace
-- Updated At: 2026-05-20T00:00:00+08:00
+- Updated At: 2026-05-24T00:00:00+08:00
 - Scope: governance snapshot for the current `mossx` repository workspace
 
 ## Domain
@@ -13,7 +13,7 @@ OpenSpec workflow and governance for `mossx`, covering change lifecycle, main sp
 - Spec artifacts: `openspec/specs/*`
 - Change workflow artifacts: `openspec/changes/<change-id>/{proposal,design,tasks,verification}.md`
 - Archive: `openspec/changes/archive/*`
-- Current workspace state: active changes = `15`, archive changes = `318`, main specs = `271`
+- Current workspace state: active changes = `32`, archive changes = `318`, main specs = `271`
 
 ## Entry Surfaces
 
@@ -41,92 +41,90 @@ OpenSpec workflow and governance for `mossx`, covering change lifecycle, main sp
 
 ## Active Changes
 
-### Branch Calibration Snapshot (2026-05-20)
+### Branch Calibration Snapshot (2026-05-24)
 
-Current implementation branch for this workspace snapshot is `feature/v0.5.0-md`.
+Current implementation branch for this workspace snapshot is `feature/v0.5.2`. This refresh reconciles OpenSpec proposal/project documents against current code facts, records a small hygiene cleanup for stale comments / whitespace, adds runtime evidence-gate reporting, and includes one narrow Messages timeline teardown-stability runtime fix.
 
-The harness governance core set was synced into main specs and archived on 2026-05-20 after proposal-local strict validation and a closure evidence pass. Earlier `feature/v0.5` completion evidence remains non-authoritative; authoritative evidence now lives in the archived change directories plus main specs.
+Strict OpenSpec validation after the runtime evidence-gate refresh passed: `openspec validate --all --strict --no-interactive` reported 303 passed, 0 failed.
 
-The archive included `formalize-engine-runtime-contract` with an explicit external-CI qualifier: local validation and workflow wiring were recorded, but remote three-platform CI results were not directly observable from the local closure session.
+Detailed proposal triage lives in `openspec/docs/proposal-refresh-2026-05-23.md`.
+Session-management closeout and manual-QA qualifiers live in `openspec/docs/session-management-refactor-closeout-2026-05-24.md`.
+Runtime evidence and archive-readiness classification lives in `openspec/docs/runtime-evidence-gates-2026-05-24.md`.
 
-### Archived Harness Governance Core Set
+### Inventory
 
-- `2026-05-20-formalize-engine-runtime-contract`
-- `2026-05-20-add-engine-capability-matrix-spec`
-- `2026-05-20-evolve-context-ledger-to-cost-budget`
-- `2026-05-20-evolve-checkpoint-to-policy-chain`
-- `2026-05-20-add-agent-domain-event-schema`
-- `2026-05-20-add-capability-aware-policy-router`
-- `2026-05-20-add-policy-decision-audit-surface`
-- `2026-05-20-add-governance-telemetry-loop`
-- `2026-05-20-wire-agent-domain-event-runtime`
+- Active changes: `32`
+- Archive changes: `318`
+- Main specs: `271`
+- Completed task sets still active: `31`
+- In-progress task sets: `1`
 
-### Archived Harness Governance Extension Set
+### In-Progress Changes
 
-- `2026-05-20-soften-harness-governance-to-advisory-mode`
-  - Calibration: bridge-fed governance remains advisory-only by default; optional governance policies type-exclude `blocked`, preserve evidence provenance in checkpoint Evidence Trail, and keep suggested actions optional.
-  - Residual: `npm run check:heavy-test-noise` failed in unrelated `useWorkspaceSessionCatalog.test.tsx` timeout cases owned by `refactor-workspace-session-management`; this was archived as advisory residual evidence, not a harness advisory blocking gate.
+- `add-codex-structured-launch-profile`
+  - Task state: `0/7`.
+  - Current code fact: existing `codex_doctor`, `codexBin`, `codexArgs`, and workspace override fields exist; `codex_preview_launch_profile` / Launch Configuration preview/editor contract is not implemented.
+  - Action: keep active for implementation.
 
-### Harness Governance Substrate Set
-
-- `refactor-mega-hub-split`
-- `optimize-realtime-event-batching`
-- `optimize-long-list-virtualization`
-- `optimize-bundle-chunking`
-
-### Harness Governance Release-Grade Readiness Set
-
-- `advance-harness-governance-to-90`
-  - Purpose: coordinate the remaining closure work required to move harness governance from first-slice foundation readiness to a 95%-99% governance-layer readiness bar. The change id keeps the earlier 90% wording for OpenSpec continuity; 90% is now the floor, not the final target.
-  - Current calibration: existing substrate changes are treated as first-slice complete with residual evidence gaps, not as total governance closure.
-  - Key gaps: live `GovernanceEvidenceSnapshot` injection into checkpoint policy input, artifact-backed gate result evidence, one bounded domain-event runtime adoption path, browser-level long-list evidence, trustworthy webview startup timing evidence or explicit unsupported rationale, evidence provenance/replay, safe recovery, operator handoff, and three-platform evidence.
-  - Production-grade hardening: S1 must resolve the current `StatusPanel` hook/useMemo ordering seam before snapshot injection; S3 requires a real `check:agent-domain-event-adoption` gate beyond schema checks; S6 treats consumed evidence provenance as mandatory; S7 requires per-platform evidence rows with command, artifact/run URL, date, commit, result, and qualifier.
-  - Percentage gate calibration: 95% may carry explicit Windows/Linux external-CI qualifiers when local macOS evidence and operational closure are complete; 99% requires actual Windows/macOS/Linux result evidence with no unresolved platform qualifier.
-
-### Harness Governance Extension / Follow-up Set
+### Deferred Completed Proposals
 
 - `add-cross-workspace-cost-admin-view`
+  - Deferred Product P2; current cost-budget substrate exists, but cross-workspace admin view, retention, storage, and export are intentionally not implemented in this governance pass.
 - `add-engine-plugin-onboarding-kit`
-- `integrate-openspec-trellis-bridge-into-status-panel`
+  - Deferred Tooling P2; capability-matrix substrate exists, but scaffolder/templates/dry-run onboarding are intentionally not implemented in this governance pass.
 
-### Other Active Changes
+### Completed Active Changes Pending Verification / Archive Decision
 
-- `stabilize-core-runtime-and-realtime-contracts`
-- `add-codex-structured-launch-profile`
+- `add-email-driven-session-continuation`
 - `add-file-markdown-math-preview`
-- `harden-claude-sidebar-list-timeout-fallback`
+- `add-memory-reference-persistent-mode`
+- `adjust-git-worktree-checkbox-placement`
+- `advance-harness-governance-to-90`
+- `desktop-editor-split-left-composer`
+- `dynamic-project-governance-evidence`
+- `fix-bottom-status-dock-collapse-stability`
+- `fix-codex-deferred-completion-after-assistant-ingress`
+- `fix-codex-empty-draft-stale-thread-auto-replay`
+- `fix-claude-issue529-second-turn-blank-session`
+- `fix-stale-thread-recovery-confidence-gates`
 - `fix-markdown-preview-auto-refresh`
+- `harden-claude-sidebar-list-timeout-fallback`
+- `improve-email-mail-session-list-controls`
+- `integrate-openspec-trellis-bridge-into-status-panel`
+- `optimize-bundle-chunking`
+- `optimize-long-list-virtualization`
+- `optimize-realtime-event-batching`
+- `preserve-editor-on-topbar-session-switch`
+- `refactor-mega-hub-split`
 - `refactor-workspace-session-management`
+- `stabilize-composer-control-surface`
+- `stabilize-core-runtime-and-realtime-contracts`
+- `stabilize-file-markdown-preview-render-architecture`
+- `stabilize-markdown-preview-awareness-and-large-rendering`
+- `stabilize-runtime-performance-evidence-gates`
+- `stabilize-session-management-truth-boundaries`
+- `unify-claude-workspace-session-catalog`
 
-> Harness governance closure status on 2026-05-20: the archived core and extension changes listed above were synchronized into `openspec/specs/**` and moved to `openspec/changes/archive/**`. Deferred contracts intentionally preserve their no-telemetry and no-EventBus boundaries.
+These changes have fully checked task lists but remain in `openspec/changes/` rather than archive. Treat the next step as closure hygiene: update verification artifacts, preserve platform/manual-test qualifiers, sync main specs only where needed, then archive.
 
-> Harness governance readiness calibration on 2026-05-20: current implementation is approximately 70% foundation-ready. The `advance-harness-governance-to-90` change is the active coordinating plan for the remaining closure work. Its target has been raised from a 90% minimum floor to 95%-99% governance-layer readiness by adding provenance/replay, cross-platform evidence, recovery, operator handoff, and archive closure requirements. It does not modify product code in its planning pass.
+### Code Fact Snapshot (2026-05-24)
 
-> Current status should be read from each change directory itself. `project.md` tracks workspace inventory and governance boundaries, not task-by-task execution detail.
+Current-branch code inventory shows proposal substrate in:
 
-### Code Fact Snapshot (2026-05-20)
+- Email continuation: `src/features/threads/utils/conversationCompletionEmail.ts`, `src/features/threads/hooks/useMailDrivenSessionContinuation.ts`, `src-tauri/src/email/session_continuation.rs`.
+- Markdown preview stability/math/rendering: `src/features/files/components/FileMarkdownPreview.tsx`, `src/features/files/utils/fileMarkdownDocument.ts`, `src/features/files/hooks/useFileExternalSync.ts`, `src/features/markdown/markdownMath.ts`.
+- Governance/status panel: `src/features/status-panel/components/StatusPanel.tsx`, `src/features/status-panel/components/CheckpointPanel.tsx`, `src/features/governance/evidence/*`, `scripts/check-governance-evidence-bridge.mjs`, `scripts/check-agent-domain-event-adoption.mjs`.
+- Workspace session catalog: `src-tauri/src/session_management*.rs`, `src-tauri/src/engine/claude_history_inline_tests.rs`, `src/services/tauri/sessionManagement.ts`, `src/services/tauri.test.ts`.
+- Thread recovery and sidebar catalog hydration: `src/features/threads/hooks/useThreadActions*.ts*`, `src/app-shell-parts/useWorkspaceThreadListHydration.ts`, `src/features/threads/utils/threadStorage.ts`, `src/features/threads/utils/streamLatencyDiagnostics.ts`.
+- Runtime/realtime/perf gates: `src/features/threads/contracts/realtimeEventBatcher.ts`, `src/features/threads/contracts/realtimeReplayHarness.ts`, `scripts/realtime-perf-report.ts`, `vite.config.ts`, `scripts/check-bundle-chunking.mjs`.
+- Runtime evidence gates: `scripts/generate-runtime-evidence-report.mjs`, `docs/perf/runtime-evidence-gates.{json,md}`, `openspec/docs/runtime-evidence-gates-2026-05-24.md`.
+- Composer/editor surfaces: `src/features/composer/components/ChatInputBox/*`, `src/app-shell-parts/threadEditorPreservation.ts`, `src/features/layout/components/DesktopLayout.tsx`.
 
-Current-branch code inventory shows harness/governance implementation traces in:
+This snapshot is evidence-oriented. It does not claim full product QA for each change; archive notes must record the exact focused tests, manual checks, and skipped/platform qualifiers.
 
-- `src/features/engine/engineCapabilityMatrix.ts`
-- `src/features/context-ledger/cost-budget.ts`
-- `src/features/context-ledger/cost/*`
-- `src/features/context-ledger/budget/*`
-- `src/features/status-panel/utils/policies/*`
-- `src/features/status-panel/components/CostBudgetSection.tsx`
-- `src/features/status-panel/components/audit/*`
-- `src/features/governance/evidence/*`
-- `src/features/threads/contracts/realtimeEventBatcher.ts`
-- `src/features/threads/contracts/realtimeReplayHarness.ts`
-- `src/features/messages/components/messagesTimelineVirtualization.ts`
-- `vite.config.ts`
-- `scripts/check-engine-capability-matrix.mjs`
-- `scripts/realtime-perf-report.ts`
-- `.github/workflows/ci.yml`
+2026-05-24 qualifier: local dev-build manual QA for the affected Claude Sidebar / Session Management flows is recorded as temporarily passing, but Windows + Claude manual QA is not covered in this environment. Do not convert that platform gap into a passing claim during archive.
 
-This snapshot is intentionally evidence-oriented. Archived harness governance completion evidence now lives in the archived change directories and main specs.
-
-Current code review also identified a live closure gap: `useGovernanceEvidence()` feeds the dock evidence surface, while `buildCheckpointViewModel()` currently supports `governanceSnapshot` input but the live `StatusPanel` construction path still needs to pass a frozen snapshot into that policy input. This is the first task in `advance-harness-governance-to-90`.
+Compatibility boundary: `listClaudeSessions`, `listProjectRelatedCodexSessions`, legacy bare-session metadata lookup, and legacy cursor parsing remain intentional compatibility / diagnostic paths. They are not the Sidebar membership truth source and should not be deleted as unused without a dedicated compatibility-removal change.
 
 ## Namespace Policy
 
@@ -170,6 +168,9 @@ Current code review also identified a live closure gap: `useGovernanceEvidence()
 
 ## Update History
 
+- 2026-05-24: Added active change `stabilize-runtime-performance-evidence-gates` and detected active change `fix-claude-issue529-second-turn-blank-session` in the current workspace. Workspace counts are now active=32, archive=318, specs=271; completed active task sets=31 and only `add-codex-structured-launch-profile` remains in-progress. Runtime performance evidence is now classified as measured/proxy/unsupported/manual-only in `docs/perf/runtime-evidence-gates.{json,md}` and archive-readiness/compatibility cleanup guidance is recorded in `openspec/docs/runtime-evidence-gates-2026-05-24.md`; Messages timeline virtualizer teardown cleanup is the only runtime behavior change in this refresh.
+- 2026-05-24: Recalibrated session-management and stale-thread recovery proposals after code/proposal audit. Workspace counts are now active=30, archive=318, specs=271; only `add-codex-structured-launch-profile` remains in-progress. Recorded local manual QA qualifiers and the missing Windows coverage boundary in `openspec/docs/session-management-refactor-closeout-2026-05-24.md`; retained compatibility APIs as intentional compatibility / diagnostic paths rather than dead code.
+- 2026-05-23: Refreshed active proposal inventory against `feature/v0.5.2` without code changes. Historical snapshot before the 2026-05-24 calibration: active changes 28, archive 318, specs 271. Added `openspec/docs/proposal-refresh-2026-05-23.md` and injected 2026-05-23 proposal refresh notes into active proposal docs. At that time `add-codex-structured-launch-profile` and `harden-claude-sidebar-list-timeout-fallback` were the only in-progress active changes; this row is superseded by the 2026-05-24 update above.
 - 2026-05-20: Added active change `advance-harness-governance-to-90` to coordinate the remaining harness governance readiness work. Calibrated the current state as first-slice foundation-ready rather than fully closed: evidence bridge, policy chain, audit surface, event runtime, batching, virtualization, chunking, and one hub split exist, but live snapshot injection, artifact-backed gate evidence, first runtime domain-event adoption, browser scroll evidence, and webview timing evidence remain open. Refreshed inventory to active=12, archive=316, specs=269.
 - 2026-05-20: Upgraded `advance-harness-governance-to-90` from a 90% readiness floor to a 95%-99% governance-layer readiness plan. Added release-grade requirements for evidence provenance, deterministic replay, recovery behavior, operator handoff, Windows/macOS/Linux evidence, and sync/archive closure while preserving the existing change id for OpenSpec continuity.
 - 2026-05-20: Hardened `advance-harness-governance-to-90` after production-grade review by removing a stale duplicate execution summary from `design.md`, adding explicit S1 `StatusPanel` hook/useMemo ordering constraints, requiring `check:agent-domain-event-adoption`, tightening consumed evidence provenance to MUST semantics, and defining per-platform implementation-evidence rows for 99% claims.

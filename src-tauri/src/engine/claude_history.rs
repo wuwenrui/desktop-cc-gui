@@ -7,11 +7,13 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
+use std::time::SystemTime;
 use tokio::fs;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::Semaphore;
@@ -33,9 +35,11 @@ use super::EngineConfig;
 
 const LOCAL_SESSION_SCAN_TIMEOUT: Duration = Duration::from_secs(60);
 const CLAUDE_ATTRIBUTION_STRICT_MATCH: &str = "strict-match";
-const CLAUDE_ATTRIBUTION_REASON_PROJECT_DIRECTORY: &str = "claude-project-directory";
+pub(crate) const CLAUDE_ATTRIBUTION_REASON_PROJECT_DIRECTORY: &str = "claude-project-directory";
 const CLAUDE_ATTRIBUTION_REASON_TRANSCRIPT_CWD: &str = "claude-transcript-cwd";
 const CLAUDE_ATTRIBUTION_REASON_GIT_ROOT: &str = "claude-git-root";
+const CLAUDE_SOURCE_FACT_CACHE_SCHEMA_VERSION: u32 = 1;
+const CLAUDE_SOURCE_FACT_SCANNER_VERSION: u32 = 2;
 fn normalize_session_id(session_id: &str) -> Result<String, String> {
     normalize_claude_session_id(session_id)
 }
@@ -61,6 +65,147 @@ pub struct ClaudeSessionSummary {
     pub parent_session_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub subagent_type: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ClaudeSessionSourceFact {
+    pub canonical_session_id: String,
+    pub display_session_id: String,
+    pub physical_path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub claude_project_dir: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cwd: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_session_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub first_real_user_message: Option<String>,
+    pub updated_at: i64,
+    pub created_at: i64,
+    pub message_count: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_size_bytes: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_mtime_ms: Option<i64>,
+    pub source_health: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attribution_status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attribution_reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subagent_type: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum ClaudeSessionScanDiagnosticCode {
+    UnreadableFile,
+    EmptyTranscript,
+    MissingSessionId,
+    CwdOutsideAttributionScope,
+    MissingCwdWithoutFallback,
+    MalformedTranscript,
+}
+
+impl ClaudeSessionScanDiagnosticCode {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::UnreadableFile => "unreadable-file",
+            Self::EmptyTranscript => "empty-transcript",
+            Self::MissingSessionId => "missing-session-id",
+            Self::CwdOutsideAttributionScope => "cwd-outside-attribution-scope",
+            Self::MissingCwdWithoutFallback => "missing-cwd-without-fallback",
+            Self::MalformedTranscript => "malformed-transcript",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ClaudeSessionScanDiagnostic {
+    pub code: ClaudeSessionScanDiagnosticCode,
+    pub reason: String,
+    pub physical_path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cwd: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ClaudeSessionScanOutcome {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fact: Option<ClaudeSessionSourceFact>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<ClaudeSessionScanDiagnostic>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ClaudeSessionSourceFactCacheMetrics {
+    pub hits: usize,
+    pub misses: usize,
+    pub stale: usize,
+    pub rebuilds: usize,
+    pub failures: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ClaudeSessionSourceFactList {
+    pub facts: Vec<ClaudeSessionSourceFact>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<ClaudeSessionScanDiagnostic>,
+    pub scanned_candidates: usize,
+    pub skipped_candidates: usize,
+    pub scan_cap_reached: bool,
+    pub cache_metrics: ClaudeSessionSourceFactCacheMetrics,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ClaudeSessionSourceFactCacheEntry {
+    schema_version: u32,
+    scanner_version: u32,
+    cache_namespace: String,
+    physical_path: String,
+    file_mtime_ms: Option<i64>,
+    file_size_bytes: Option<u64>,
+    fact: Option<ClaudeSessionSourceFact>,
+    #[serde(default)]
+    diagnostics: Vec<ClaudeSessionScanDiagnostic>,
+}
+
+impl ClaudeSessionSourceFact {
+    fn to_summary(&self) -> ClaudeSessionSummary {
+        let first_message = self.first_real_user_message.clone().unwrap_or_else(|| {
+            format!(
+                "Session {}",
+                &self.canonical_session_id[..8.min(self.canonical_session_id.len())]
+            )
+        });
+        ClaudeSessionSummary {
+            session_id: self.canonical_session_id.clone(),
+            first_message,
+            updated_at: self.updated_at,
+            created_at: self.created_at,
+            message_count: self.message_count,
+            file_size_bytes: self.file_size_bytes,
+            cwd: self.cwd.clone(),
+            attribution_status: self.attribution_status.clone(),
+            attribution_reason: self.attribution_reason.clone(),
+            parent_session_id: self.parent_session_id.clone(),
+            subagent_type: self.subagent_type.clone(),
+        }
+    }
+}
+
+impl ClaudeSessionScanOutcome {
+    fn into_summary(self) -> Option<ClaudeSessionSummary> {
+        self.fact.map(|fact| fact.to_summary())
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -295,16 +440,242 @@ fn extract_claude_entry_cwd(entry: &Value) -> Option<String> {
         })
 }
 
-/// Scan a single JSONL file and extract session summary metadata.
-/// Reads the file line-by-line to find the first user message and track timestamps.
-async fn scan_session_file(
+fn build_scan_diagnostic(
+    code: ClaudeSessionScanDiagnosticCode,
     path: &Path,
-    _workspace_path: &Path,
+    session_id: Option<String>,
+    cwd: Option<String>,
+) -> ClaudeSessionScanDiagnostic {
+    ClaudeSessionScanDiagnostic {
+        reason: code.as_str().to_string(),
+        code,
+        physical_path: path.to_string_lossy().to_string(),
+        session_id,
+        cwd,
+    }
+}
+
+fn system_time_to_epoch_millis(value: SystemTime) -> Option<i64> {
+    value
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .ok()
+        .and_then(|duration| i64::try_from(duration.as_millis()).ok())
+}
+
+async fn source_fact_file_fingerprint(path: &Path) -> (Option<u64>, Option<i64>) {
+    match fs::metadata(path).await {
+        Ok(metadata) => (
+            Some(metadata.len()),
+            metadata
+                .modified()
+                .ok()
+                .and_then(system_time_to_epoch_millis),
+        ),
+        Err(_) => (None, None),
+    }
+}
+
+fn source_fact_cache_namespace(
+    base_dir: &Path,
+    attribution_scopes: &[ClaudeSessionAttributionScope],
+) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(base_dir.to_string_lossy().as_bytes());
+    for scope in attribution_scopes {
+        hasher.update(b"\0scope\0");
+        hasher.update(scope.reason.as_bytes());
+        hasher.update(b"\0path\0");
+        hasher.update(scope.path.to_string_lossy().as_bytes());
+    }
+    format!("{:x}", hasher.finalize())
+}
+
+fn source_fact_cache_path(
+    cache_dir: &Path,
+    namespace: &str,
+    path: &Path,
+    allow_project_directory_fallback: bool,
+) -> PathBuf {
+    let mut hasher = Sha256::new();
+    hasher.update(namespace.as_bytes());
+    hasher.update(b"\0");
+    hasher.update(path.to_string_lossy().as_bytes());
+    hasher.update(b"\0fallback\0");
+    hasher.update(if allow_project_directory_fallback {
+        "true"
+    } else {
+        "false"
+    });
+    cache_dir.join(format!("{:x}.json", hasher.finalize()))
+}
+
+async fn read_cached_source_fact_outcome(
+    cache_path: &Path,
+    namespace: &str,
+    path: &Path,
+    file_size_bytes: Option<u64>,
+    file_mtime_ms: Option<i64>,
+    metrics: &mut ClaudeSessionSourceFactCacheMetrics,
+) -> Option<ClaudeSessionScanOutcome> {
+    let payload = match fs::read_to_string(cache_path).await {
+        Ok(payload) => payload,
+        Err(error) if error.kind() == ErrorKind::NotFound => {
+            metrics.misses += 1;
+            return None;
+        }
+        Err(_) => {
+            metrics.failures += 1;
+            return None;
+        }
+    };
+
+    let entry = match serde_json::from_str::<ClaudeSessionSourceFactCacheEntry>(&payload) {
+        Ok(entry) => entry,
+        Err(_) => {
+            metrics.failures += 1;
+            return None;
+        }
+    };
+
+    let physical_path = path.to_string_lossy();
+    let is_current = entry.schema_version == CLAUDE_SOURCE_FACT_CACHE_SCHEMA_VERSION
+        && entry.scanner_version == CLAUDE_SOURCE_FACT_SCANNER_VERSION
+        && entry.cache_namespace == namespace
+        && entry.physical_path == physical_path
+        && entry.file_size_bytes == file_size_bytes
+        && entry.file_mtime_ms == file_mtime_ms;
+
+    if !is_current {
+        metrics.stale += 1;
+        return None;
+    }
+
+    metrics.hits += 1;
+    Some(ClaudeSessionScanOutcome {
+        fact: entry.fact,
+        diagnostics: entry.diagnostics,
+    })
+}
+
+async fn write_cached_source_fact_outcome(
+    cache_path: &Path,
+    namespace: &str,
+    path: &Path,
+    file_size_bytes: Option<u64>,
+    file_mtime_ms: Option<i64>,
+    outcome: &ClaudeSessionScanOutcome,
+    metrics: &mut ClaudeSessionSourceFactCacheMetrics,
+) {
+    let Some(parent) = cache_path.parent() else {
+        metrics.failures += 1;
+        return;
+    };
+    if fs::create_dir_all(parent).await.is_err() {
+        metrics.failures += 1;
+        return;
+    }
+    let entry = ClaudeSessionSourceFactCacheEntry {
+        schema_version: CLAUDE_SOURCE_FACT_CACHE_SCHEMA_VERSION,
+        scanner_version: CLAUDE_SOURCE_FACT_SCANNER_VERSION,
+        cache_namespace: namespace.to_string(),
+        physical_path: path.to_string_lossy().to_string(),
+        file_mtime_ms,
+        file_size_bytes,
+        fact: outcome.fact.clone(),
+        diagnostics: outcome.diagnostics.clone(),
+    };
+    let Ok(payload) = serde_json::to_string(&entry) else {
+        metrics.failures += 1;
+        return;
+    };
+    if fs::write(cache_path, payload).await.is_err() {
+        metrics.failures += 1;
+        return;
+    }
+    metrics.rebuilds += 1;
+}
+
+async fn scan_session_source_file_with_cache(
+    path: &Path,
     attribution_scopes: &[ClaudeSessionAttributionScope],
     allow_project_directory_fallback: bool,
-) -> Option<ClaudeSessionSummary> {
-    let file = fs::File::open(path).await.ok()?;
-    let file_size_bytes = file.metadata().await.ok().map(|metadata| metadata.len());
+    cache_dir: Option<&Path>,
+    cache_namespace: Option<&str>,
+    metrics: &mut ClaudeSessionSourceFactCacheMetrics,
+) -> ClaudeSessionScanOutcome {
+    let (file_size_bytes, file_mtime_ms) = source_fact_file_fingerprint(path).await;
+    let cache_path = if file_size_bytes.is_some() && file_mtime_ms.is_some() {
+        cache_dir.zip(cache_namespace).map(|(dir, namespace)| {
+            source_fact_cache_path(dir, namespace, path, allow_project_directory_fallback)
+        })
+    } else {
+        None
+    };
+
+    if let (Some(cache_path), Some(namespace)) = (cache_path.as_ref(), cache_namespace) {
+        if let Some(outcome) = read_cached_source_fact_outcome(
+            cache_path,
+            namespace,
+            path,
+            file_size_bytes,
+            file_mtime_ms,
+            metrics,
+        )
+        .await
+        {
+            return outcome;
+        }
+    }
+
+    let outcome =
+        scan_session_source_file(path, attribution_scopes, allow_project_directory_fallback).await;
+
+    if let (Some(cache_path), Some(namespace)) = (cache_path.as_ref(), cache_namespace) {
+        write_cached_source_fact_outcome(
+            cache_path,
+            namespace,
+            path,
+            file_size_bytes,
+            file_mtime_ms,
+            &outcome,
+            metrics,
+        )
+        .await;
+    }
+
+    outcome
+}
+
+/// Scan a single JSONL file and extract session summary metadata.
+/// Reads the file line-by-line to find the first user message and track timestamps.
+async fn scan_session_source_file(
+    path: &Path,
+    attribution_scopes: &[ClaudeSessionAttributionScope],
+    allow_project_directory_fallback: bool,
+) -> ClaudeSessionScanOutcome {
+    let mut diagnostics = Vec::new();
+    let file = match fs::File::open(path).await {
+        Ok(file) => file,
+        Err(_) => {
+            diagnostics.push(build_scan_diagnostic(
+                ClaudeSessionScanDiagnosticCode::UnreadableFile,
+                path,
+                path.file_stem()
+                    .and_then(|value| value.to_str())
+                    .map(ToString::to_string),
+                None,
+            ));
+            return ClaudeSessionScanOutcome {
+                fact: None,
+                diagnostics,
+            };
+        }
+    };
+    let file_metadata = file.metadata().await.ok();
+    let file_size_bytes = file_metadata.as_ref().map(|metadata| metadata.len());
+    let file_mtime_ms = file_metadata
+        .and_then(|metadata| metadata.modified().ok())
+        .and_then(system_time_to_epoch_millis);
     let reader = BufReader::new(file);
     let mut lines = reader.lines();
 
@@ -313,8 +684,19 @@ async fn scan_session_file(
     let mut last_timestamp: Option<i64> = None;
     let mut message_count: usize = 0;
     let mut transcript_cwd: Option<String> = None;
+    let mut malformed_line_count: usize = 0;
+    let mut read_error_count: usize = 0;
 
-    while let Ok(Some(line)) = lines.next_line().await {
+    loop {
+        let Some(line) = (match lines.next_line().await {
+            Ok(line) => line,
+            Err(_) => {
+                read_error_count += 1;
+                break;
+            }
+        }) else {
+            break;
+        };
         let line = line.trim().to_string();
         if line.is_empty() {
             continue;
@@ -322,7 +704,10 @@ async fn scan_session_file(
 
         let entry: Value = match parse_claude_summary_entry(&line) {
             Ok(v) => v,
-            Err(_) => continue,
+            Err(_) => {
+                malformed_line_count += 1;
+                continue;
+            }
         };
 
         let classification = classify_claude_history_entry(&entry);
@@ -350,9 +735,11 @@ async fn scan_session_file(
             .and_then(|m| m.get("role"))
             .and_then(|r| r.as_str())
             .unwrap_or("");
+        let is_meta = is_claude_meta_entry(&entry, msg);
 
         if (role == "user" || role == "assistant")
             && matches!(classification, ClaudeHistoryEntryClassification::Normal)
+            && !is_meta
         {
             message_count += 1;
         }
@@ -362,10 +749,6 @@ async fn scan_session_file(
             && role == "user"
             && matches!(classification, ClaudeHistoryEntryClassification::Normal)
         {
-            let is_meta = entry
-                .get("isMeta")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
             if is_meta {
                 continue;
             }
@@ -378,23 +761,66 @@ async fn scan_session_file(
         }
     }
 
-    // Skip completely empty sessions (no messages at all)
-    if message_count < 1 {
-        return None;
-    }
-
     let session_id = path
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("")
         .to_string();
+    let diagnostic_session_id = if session_id.is_empty() {
+        None
+    } else {
+        Some(session_id.clone())
+    };
 
-    if session_id.is_empty() {
-        return None;
+    if malformed_line_count > 0 {
+        diagnostics.push(build_scan_diagnostic(
+            ClaudeSessionScanDiagnosticCode::MalformedTranscript,
+            path,
+            diagnostic_session_id.clone(),
+            transcript_cwd.clone(),
+        ));
+    }
+    if read_error_count > 0 {
+        diagnostics.push(build_scan_diagnostic(
+            ClaudeSessionScanDiagnosticCode::UnreadableFile,
+            path,
+            diagnostic_session_id.clone(),
+            transcript_cwd.clone(),
+        ));
     }
 
-    let first_message = first_user_message
-        .unwrap_or_else(|| format!("Session {}", &session_id[..8.min(session_id.len())]));
+    if message_count < 1 {
+        diagnostics.push(build_scan_diagnostic(
+            if read_error_count > 0 {
+                ClaudeSessionScanDiagnosticCode::UnreadableFile
+            } else if malformed_line_count > 0 {
+                ClaudeSessionScanDiagnosticCode::MalformedTranscript
+            } else {
+                ClaudeSessionScanDiagnosticCode::EmptyTranscript
+            },
+            path,
+            diagnostic_session_id,
+            transcript_cwd,
+        ));
+        return ClaudeSessionScanOutcome {
+            fact: None,
+            diagnostics,
+        };
+    }
+
+    if session_id.is_empty() {
+        diagnostics.push(build_scan_diagnostic(
+            ClaudeSessionScanDiagnosticCode::MissingSessionId,
+            path,
+            None,
+            transcript_cwd,
+        ));
+        return ClaudeSessionScanOutcome {
+            fact: None,
+            diagnostics,
+        };
+    }
+
     let now_ms = chrono::Utc::now().timestamp_millis();
     let matched_scope_reason = transcript_cwd.as_deref().and_then(|cwd| {
         attribution_scopes
@@ -402,29 +828,83 @@ async fn scan_session_file(
             .find(|scope| crate::local_usage::path_matches_workspace(cwd, &scope.path))
             .map(|scope| scope.reason.clone())
     });
-    if transcript_cwd.is_some() && matched_scope_reason.is_none() {
-        return None;
+    if transcript_cwd.is_some()
+        && matched_scope_reason.is_none()
+        && !allow_project_directory_fallback
+    {
+        diagnostics.push(build_scan_diagnostic(
+            ClaudeSessionScanDiagnosticCode::CwdOutsideAttributionScope,
+            path,
+            Some(session_id),
+            transcript_cwd,
+        ));
+        return ClaudeSessionScanOutcome {
+            fact: None,
+            diagnostics,
+        };
     }
     if transcript_cwd.is_none() && !allow_project_directory_fallback {
-        return None;
+        diagnostics.push(build_scan_diagnostic(
+            ClaudeSessionScanDiagnosticCode::MissingCwdWithoutFallback,
+            path,
+            Some(session_id),
+            None,
+        ));
+        return ClaudeSessionScanOutcome {
+            fact: None,
+            diagnostics,
+        };
     }
     let attribution_reason = Some(
         matched_scope_reason
             .unwrap_or_else(|| CLAUDE_ATTRIBUTION_REASON_PROJECT_DIRECTORY.to_string()),
     );
-    Some(ClaudeSessionSummary {
-        session_id,
-        first_message,
-        updated_at: last_timestamp.unwrap_or(now_ms),
-        created_at: first_timestamp.unwrap_or(now_ms),
-        message_count,
-        file_size_bytes,
-        cwd: transcript_cwd,
-        attribution_status: Some(CLAUDE_ATTRIBUTION_STRICT_MATCH.to_string()),
-        attribution_reason,
-        parent_session_id: None,
-        subagent_type: None,
-    })
+    ClaudeSessionScanOutcome {
+        fact: Some(ClaudeSessionSourceFact {
+            canonical_session_id: session_id.clone(),
+            display_session_id: session_id,
+            physical_path: path.to_string_lossy().to_string(),
+            claude_project_dir: path
+                .parent()
+                .map(|parent| parent.to_string_lossy().to_string()),
+            cwd: transcript_cwd,
+            parent_session_id: None,
+            first_real_user_message: first_user_message,
+            source_health: if malformed_line_count > 0 || read_error_count > 0 {
+                "partial".to_string()
+            } else {
+                "complete".to_string()
+            },
+            updated_at: last_timestamp.unwrap_or(now_ms),
+            created_at: first_timestamp.unwrap_or(now_ms),
+            message_count,
+            file_size_bytes,
+            file_mtime_ms,
+            attribution_status: Some(CLAUDE_ATTRIBUTION_STRICT_MATCH.to_string()),
+            attribution_reason,
+            subagent_type: None,
+        }),
+        diagnostics,
+    }
+}
+
+fn is_claude_meta_entry(entry: &Value, msg: Option<&Value>) -> bool {
+    entry
+        .get("isMeta")
+        .or_else(|| msg.and_then(|message| message.get("isMeta")))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+}
+
+async fn scan_session_file(
+    path: &Path,
+    _workspace_path: &Path,
+    attribution_scopes: &[ClaudeSessionAttributionScope],
+    allow_project_directory_fallback: bool,
+) -> Option<ClaudeSessionSummary> {
+    scan_session_source_file(path, attribution_scopes, allow_project_directory_fallback)
+        .await
+        .into_summary()
 }
 
 async fn scan_subagent_session_file(
@@ -454,6 +934,73 @@ async fn scan_subagent_session_file(
     Some(summary)
 }
 
+async fn scan_subagent_source_file(
+    path: &Path,
+    parent_session_id: &str,
+    attribution_scopes: &[ClaudeSessionAttributionScope],
+    allow_project_directory_fallback: bool,
+    cache_dir: Option<&Path>,
+    cache_namespace: Option<&str>,
+    cache_metrics: &mut ClaudeSessionSourceFactCacheMetrics,
+) -> ClaudeSessionScanOutcome {
+    let Some(agent_file_stem) = path.file_stem().and_then(|s| s.to_str()) else {
+        return ClaudeSessionScanOutcome {
+            fact: None,
+            diagnostics: vec![build_scan_diagnostic(
+                ClaudeSessionScanDiagnosticCode::MissingSessionId,
+                path,
+                None,
+                None,
+            )],
+        };
+    };
+    let Some(agent_id) = agent_file_stem.strip_prefix("agent-") else {
+        return ClaudeSessionScanOutcome {
+            fact: None,
+            diagnostics: vec![build_scan_diagnostic(
+                ClaudeSessionScanDiagnosticCode::MissingSessionId,
+                path,
+                None,
+                None,
+            )],
+        };
+    };
+    let Some(subagent_session_id) =
+        ClaudeSubagentSessionId::from_path_segments(parent_session_id, agent_id)
+    else {
+        return ClaudeSessionScanOutcome {
+            fact: None,
+            diagnostics: vec![build_scan_diagnostic(
+                ClaudeSessionScanDiagnosticCode::MissingSessionId,
+                path,
+                None,
+                None,
+            )],
+        };
+    };
+    let mut outcome = scan_session_source_file_with_cache(
+        path,
+        attribution_scopes,
+        allow_project_directory_fallback,
+        cache_dir,
+        cache_namespace,
+        cache_metrics,
+    )
+    .await;
+    if let Some(fact) = outcome.fact.as_mut() {
+        let (description, subagent_type) =
+            read_subagent_meta(&path.with_extension("meta.json")).await;
+        fact.canonical_session_id = subagent_session_id.to_session_id();
+        fact.display_session_id = fact.canonical_session_id.clone();
+        fact.parent_session_id = Some(parent_session_id.to_string());
+        if let Some(description) = description {
+            fact.first_real_user_message = Some(truncate(&description, 45));
+        }
+        fact.subagent_type = subagent_type;
+    }
+    outcome
+}
+
 pub async fn list_claude_sessions_with_config(
     workspace_path: &Path,
     limit: Option<usize>,
@@ -474,6 +1021,202 @@ pub async fn list_claude_sessions_for_attribution_scopes_with_config(
 ) -> Result<Vec<ClaudeSessionSummary>, String> {
     let base_dir = claude_projects_dir(config).ok_or("Cannot determine Claude home directory")?;
     list_claude_sessions_from_base_dir(&base_dir, workspace_path, &attribution_scopes, limit).await
+}
+
+pub(crate) async fn list_claude_session_source_facts_for_attribution_scopes_with_config(
+    workspace_path: &Path,
+    attribution_scopes: Vec<ClaudeSessionAttributionScope>,
+    limit: Option<usize>,
+    config: Option<&EngineConfig>,
+    cache_dir: Option<&Path>,
+) -> Result<ClaudeSessionSourceFactList, String> {
+    let base_dir = claude_projects_dir(config).ok_or("Cannot determine Claude home directory")?;
+    list_claude_session_source_facts_from_base_dir(
+        &base_dir,
+        workspace_path,
+        &attribution_scopes,
+        limit,
+        cache_dir,
+    )
+    .await
+}
+
+pub(crate) async fn list_claude_session_source_facts_from_base_dir(
+    base_dir: &Path,
+    workspace_path: &Path,
+    attribution_scopes: &[ClaudeSessionAttributionScope],
+    limit: Option<usize>,
+    cache_dir: Option<&Path>,
+) -> Result<ClaudeSessionSourceFactList, String> {
+    timeout(LOCAL_SESSION_SCAN_TIMEOUT, async {
+        let cache_namespace = source_fact_cache_namespace(base_dir, attribution_scopes);
+        let project_dirs = claude_project_dirs_for_path(base_dir, workspace_path);
+        let project_dir_set = project_dirs.iter().cloned().collect::<HashSet<_>>();
+        let mut scan_dirs = Vec::new();
+        let mut seen_dirs = HashSet::new();
+        for dir in project_dirs {
+            if seen_dirs.insert(dir.clone()) {
+                scan_dirs.push((dir, true));
+            }
+        }
+        for dir in all_claude_project_dirs(base_dir) {
+            if seen_dirs.insert(dir.clone()) {
+                scan_dirs.push((dir, false));
+            }
+        }
+
+        let mut jsonl_paths: Vec<(PathBuf, bool)> = Vec::new();
+        let mut subagent_jsonl_paths: Vec<(PathBuf, String, bool)> = Vec::new();
+        let mut seen_paths = HashSet::new();
+        let mut diagnostics = Vec::new();
+        let mut found_dir = false;
+
+        for (project_dir, allow_fallback) in scan_dirs {
+            if !project_dir.exists() {
+                continue;
+            }
+            found_dir = true;
+            let mut entries = match fs::read_dir(&project_dir).await {
+                Ok(entries) => entries,
+                Err(_) => {
+                    diagnostics.push(build_scan_diagnostic(
+                        ClaudeSessionScanDiagnosticCode::UnreadableFile,
+                        &project_dir,
+                        None,
+                        None,
+                    ));
+                    continue;
+                }
+            };
+
+            while let Ok(Some(entry)) = entries.next_entry().await {
+                let path = entry.path();
+                let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+                    continue;
+                };
+                if name.ends_with(".jsonl") && !name.starts_with("agent-") {
+                    let is_direct_project_dir = project_dir_set.contains(&project_dir);
+                    let allow_session_fallback = allow_fallback && is_direct_project_dir;
+                    if seen_paths.insert(path.clone()) {
+                        jsonl_paths.push((path.clone(), allow_session_fallback));
+                    }
+                    let parent_session_id = name.trim_end_matches(".jsonl").to_string();
+                    let subagents_dir = path.with_extension("").join("subagents");
+                    if subagents_dir.exists() {
+                        let mut subagent_entries = match fs::read_dir(&subagents_dir).await {
+                            Ok(entries) => entries,
+                            Err(_) => {
+                                diagnostics.push(build_scan_diagnostic(
+                                    ClaudeSessionScanDiagnosticCode::UnreadableFile,
+                                    &subagents_dir,
+                                    Some(parent_session_id.clone()),
+                                    None,
+                                ));
+                                continue;
+                            }
+                        };
+                        while let Ok(Some(subagent_entry)) = subagent_entries.next_entry().await {
+                            let subagent_path = subagent_entry.path();
+                            let Some(subagent_name) =
+                                subagent_path.file_name().and_then(|n| n.to_str())
+                            else {
+                                continue;
+                            };
+                            if subagent_name.starts_with("agent-")
+                                && subagent_name.ends_with(".jsonl")
+                                && seen_paths.insert(subagent_path.clone())
+                            {
+                                subagent_jsonl_paths.push((
+                                    subagent_path,
+                                    parent_session_id.clone(),
+                                    allow_session_fallback,
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if !found_dir {
+            return Ok(ClaudeSessionSourceFactList {
+                facts: Vec::new(),
+                diagnostics: Vec::new(),
+                scanned_candidates: 0,
+                skipped_candidates: 0,
+                scan_cap_reached: false,
+                cache_metrics: ClaudeSessionSourceFactCacheMetrics::default(),
+            });
+        }
+
+        jsonl_paths.sort_by(|left, right| left.0.cmp(&right.0));
+        subagent_jsonl_paths.sort_by(|left, right| left.0.cmp(&right.0));
+        let scanned_candidates = jsonl_paths.len() + subagent_jsonl_paths.len();
+        let mut facts = Vec::new();
+        let mut cache_metrics = ClaudeSessionSourceFactCacheMetrics::default();
+
+        for (path, allow_fallback) in jsonl_paths {
+            let outcome = scan_session_source_file_with_cache(
+                &path,
+                attribution_scopes,
+                allow_fallback,
+                cache_dir,
+                Some(&cache_namespace),
+                &mut cache_metrics,
+            )
+            .await;
+            diagnostics.extend(outcome.diagnostics);
+            if let Some(fact) = outcome.fact {
+                facts.push(fact);
+            }
+        }
+        for (path, parent_session_id, allow_fallback) in subagent_jsonl_paths {
+            let outcome = scan_subagent_source_file(
+                &path,
+                &parent_session_id,
+                attribution_scopes,
+                allow_fallback,
+                cache_dir,
+                Some(&cache_namespace),
+                &mut cache_metrics,
+            )
+            .await;
+            diagnostics.extend(outcome.diagnostics);
+            if let Some(fact) = outcome.fact {
+                facts.push(fact);
+            }
+        }
+
+        facts.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+        let limited_facts =
+            limit_claude_source_facts_preserving_relationships(facts, limit.unwrap_or(200));
+
+        let skipped_candidates = diagnostics
+            .iter()
+            .filter(|diagnostic| {
+                matches!(
+                    diagnostic.code,
+                    ClaudeSessionScanDiagnosticCode::CwdOutsideAttributionScope
+                        | ClaudeSessionScanDiagnosticCode::MissingCwdWithoutFallback
+                        | ClaudeSessionScanDiagnosticCode::EmptyTranscript
+                        | ClaudeSessionScanDiagnosticCode::MalformedTranscript
+                        | ClaudeSessionScanDiagnosticCode::MissingSessionId
+                        | ClaudeSessionScanDiagnosticCode::UnreadableFile
+                )
+            })
+            .count();
+
+        Ok(ClaudeSessionSourceFactList {
+            facts: limited_facts,
+            diagnostics,
+            scanned_candidates,
+            skipped_candidates,
+            scan_cap_reached: scanned_candidates > limit.unwrap_or(200),
+            cache_metrics,
+        })
+    })
+    .await
+    .map_err(|_| "Claude session source fact scan timed out".to_string())?
 }
 
 pub(crate) async fn list_claude_sessions_from_base_dir(
@@ -651,6 +1394,57 @@ fn limit_claude_sessions_preserving_relationships(
     let mut selected = sessions
         .into_iter()
         .filter(|session| selected_ids.contains(&session.session_id))
+        .collect::<Vec<_>>();
+    selected.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+    selected
+}
+
+fn limit_claude_source_facts_preserving_relationships(
+    facts: Vec<ClaudeSessionSourceFact>,
+    limit: usize,
+) -> Vec<ClaudeSessionSourceFact> {
+    if facts.len() <= limit {
+        return facts;
+    }
+
+    let by_session_id: HashMap<String, ClaudeSessionSourceFact> = facts
+        .iter()
+        .cloned()
+        .map(|fact| (fact.canonical_session_id.clone(), fact))
+        .collect();
+    let mut selected_ids: HashSet<String> = facts
+        .iter()
+        .take(limit)
+        .map(|fact| fact.canonical_session_id.clone())
+        .collect();
+
+    for fact in facts.iter().take(limit) {
+        if let Some(parent_session_id) = fact.parent_session_id.as_ref() {
+            selected_ids.insert(parent_session_id.clone());
+        }
+    }
+
+    let selected_parent_ids: HashSet<String> = selected_ids
+        .iter()
+        .filter(|session_id| {
+            by_session_id
+                .get(*session_id)
+                .map(|fact| fact.parent_session_id.is_none())
+                .unwrap_or(false)
+        })
+        .cloned()
+        .collect();
+    for fact in &facts {
+        if let Some(parent_session_id) = fact.parent_session_id.as_ref() {
+            if selected_parent_ids.contains(parent_session_id) {
+                selected_ids.insert(fact.canonical_session_id.clone());
+            }
+        }
+    }
+
+    let mut selected = facts
+        .into_iter()
+        .filter(|fact| selected_ids.contains(&fact.canonical_session_id))
         .collect::<Vec<_>>();
     selected.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
     selected
@@ -872,10 +1666,7 @@ pub(crate) async fn load_claude_session_from_base_dir(
         }
 
         // Skip meta entries
-        let is_meta = entry
-            .get("isMeta")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
+        let is_meta = is_claude_meta_entry(&entry, Some(msg));
         if is_meta {
             continue;
         }
@@ -1505,583 +2296,8 @@ pub async fn delete_claude_session_with_config(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{
-        encode_project_path, is_encoded_workspace_prefix_match, list_claude_sessions_from_base_dir,
-        load_claude_session_from_base_dir, ClaudeSessionAttributionScope,
-        CLAUDE_ATTRIBUTION_REASON_GIT_ROOT, CLAUDE_ATTRIBUTION_REASON_TRANSCRIPT_CWD,
-        CLAUDE_ATTRIBUTION_STRICT_MATCH,
-    };
-    use crate::engine::claude_history_entries::{
-        classify_claude_history_entry, is_claude_control_plane_entry,
-        ClaudeHistoryEntryClassification, ClaudeHistoryHiddenReason, ClaudeLocalControlEventType,
-        CLAUDE_CONTROL_EVENT_TOOL_TYPE,
-    };
-    use crate::engine::EngineConfig;
-    use serde_json::json;
-    use uuid::Uuid;
-
-    fn create_project_dir(
-        base_dir: &std::path::Path,
-        workspace_path: &std::path::Path,
-    ) -> std::path::PathBuf {
-        let project_dir = base_dir.join(encode_project_path(&workspace_path.to_string_lossy()));
-        std::fs::create_dir_all(&project_dir).expect("create project dir");
-        project_dir
-    }
-
-    fn write_jsonl_lines(path: &std::path::Path, lines: &[serde_json::Value], line_ending: &str) {
-        let payload = lines
-            .iter()
-            .map(|line| line.to_string())
-            .collect::<Vec<String>>()
-            .join(line_ending);
-        std::fs::write(path, format!("{}{}", payload, line_ending)).expect("write session");
-    }
-
-    fn synthetic_continuation_summary_text() -> String {
-        [
-            "This session is being continued from a previous conversation that ran out of context. The summary below covers the earlier portion of the conversation.",
-            "",
-            "Summary:",
-            "Primary Request and Intent:",
-            "The user asked to analyze the current project.",
-            "",
-            "Current Work:",
-            "Continue the conversation from where it left off without asking the user any further questions.",
-        ]
-        .join("\n")
-    }
-
-    #[test]
-    fn encoded_workspace_prefix_match_supports_nested_project_dirs() {
-        assert!(is_encoded_workspace_prefix_match(
-            "-Users-chenxiangning-code-AI-github-codeg-mossx",
-            "-Users-chenxiangning-code-AI-github-codeg"
-        ));
-        assert!(!is_encoded_workspace_prefix_match(
-            "-Users-chenxiangning-code-AI-github-codegen",
-            "-Users-chenxiangning-code-AI-github-codeg"
-        ));
-    }
-
-    #[tokio::test]
-    async fn list_claude_sessions_with_config_reads_configured_home_projects_dir() {
-        let unique = Uuid::new_v4().to_string();
-        let temp_root = std::env::temp_dir().join(format!("ccgui-claude-config-home-{}", unique));
-        let claude_home = temp_root.join("custom-claude-home");
-        let base_dir = claude_home.join("projects");
-        let workspace_path = temp_root.join("workspace");
-        std::fs::create_dir_all(&workspace_path).expect("create workspace path");
-        let project_dir = create_project_dir(&base_dir, &workspace_path);
-        let session_id = format!("configured-home-session-{}", unique);
-        let session_path = project_dir.join(format!("{}.jsonl", session_id));
-        write_jsonl_lines(
-            &session_path,
-            &[
-                json!({
-                    "uuid": "user-1",
-                    "timestamp": "2026-05-09T08:00:00.000Z",
-                    "session_id": session_id,
-                    "cwd": workspace_path.to_string_lossy(),
-                    "message": { "role": "user", "content": "Use configured Claude home" }
-                }),
-                json!({
-                    "uuid": "assistant-1",
-                    "timestamp": "2026-05-09T08:00:01.000Z",
-                    "session_id": session_id,
-                    "message": { "role": "assistant", "content": "Configured home detected." }
-                }),
-            ],
-            "\n",
-        );
-        let config = EngineConfig {
-            home_dir: Some(claude_home.to_string_lossy().to_string()),
-            ..EngineConfig::default()
-        };
-
-        let sessions =
-            super::list_claude_sessions_with_config(&workspace_path, Some(10), Some(&config))
-                .await
-                .expect("list sessions from configured home");
-
-        assert_eq!(sessions.len(), 1);
-        assert_eq!(sessions[0].session_id, session_id);
-        assert_eq!(sessions[0].first_message, "Use configured Claude home");
-
-        let _ = std::fs::remove_dir_all(&temp_root);
-    }
-
-    #[test]
-    fn control_plane_predicate_detects_codex_initialize_payload() {
-        let entry = json!({
-            "method": "initialize",
-            "params": {
-                "clientInfo": { "name": "ccgui", "title": "ccgui" },
-                "capabilities": { "experimentalApi": true }
-            }
-        });
-
-        assert!(is_claude_control_plane_entry(&entry));
-    }
-
-    #[test]
-    fn control_plane_predicate_does_not_filter_normal_app_server_text() {
-        let entry = json!({
-            "uuid": "user-normal",
-            "message": {
-                "role": "user",
-                "content": "Please inspect why the app-server keyword appears in logs."
-            }
-        });
-
-        assert!(!is_claude_control_plane_entry(&entry));
-    }
-
-    #[test]
-    fn local_control_classifier_detects_displayable_and_hidden_events() {
-        let resume_failure = json!({
-            "cwd": "C:\\Users\\fay\\code\\vinci",
-            "message": {
-                "role": "user",
-                "content": "<local-command-stdout>Session \u{1b}[1m1778306483383\u{1b}[22m was not found.</local-command-stdout>"
-            }
-        });
-        let model_changed = json!({
-            "cwd": "/Users/fay/code/vinci",
-            "message": {
-                "role": "user",
-                "content": "<local-command-stdout>Set model to \u{1b}[1mMiniMax-M2.7\u{1b}[22m</local-command-stdout>"
-            }
-        });
-        let interrupted = json!({
-            "message": {
-                "role": "user",
-                "content": "[Request interrupted by user]"
-            }
-        });
-        let synthetic = json!({
-            "message": {
-                "role": "assistant",
-                "model": "<synthetic>",
-                "content": "No response requested."
-            }
-        });
-        let local_command_system = json!({
-            "message": {
-                "role": "user",
-                "type": "system",
-                "subtype": "local_command",
-                "content": "local command metadata"
-            }
-        });
-        let natural_text = json!({
-            "message": {
-                "role": "user",
-                "content": "Please explain local-command stdout and resume behavior."
-            }
-        });
-
-        let resume_classification = classify_claude_history_entry(&resume_failure);
-        assert!(matches!(
-            resume_classification,
-            ClaudeHistoryEntryClassification::Displayable(ref event)
-                if event.event_type == ClaudeLocalControlEventType::ResumeFailed
-                    && event.detail == "Session 1778306483383 was not found."
-        ));
-
-        assert!(matches!(
-            classify_claude_history_entry(&model_changed),
-            ClaudeHistoryEntryClassification::Displayable(ref event)
-                if event.event_type == ClaudeLocalControlEventType::ModelChanged
-                    && event.detail == "Set model to MiniMax-M2.7"
-        ));
-
-        assert!(matches!(
-            classify_claude_history_entry(&interrupted),
-            ClaudeHistoryEntryClassification::Displayable(ref event)
-                if event.event_type == ClaudeLocalControlEventType::Interrupted
-        ));
-        assert!(matches!(
-            classify_claude_history_entry(&synthetic),
-            ClaudeHistoryEntryClassification::Hidden(ClaudeHistoryHiddenReason::SyntheticRuntime)
-        ));
-        assert!(matches!(
-            classify_claude_history_entry(&local_command_system),
-            ClaudeHistoryEntryClassification::Hidden(ClaudeHistoryHiddenReason::InternalRecord)
-        ));
-        assert_eq!(
-            classify_claude_history_entry(&natural_text),
-            ClaudeHistoryEntryClassification::Normal
-        );
-    }
-
-    #[test]
-    fn continuation_summary_classifier_detects_synthetic_runtime_without_keyword_overfiltering() {
-        let synthetic_summary = json!({
-            "uuid": "synthetic-summary",
-            "timestamp": "2026-05-09T09:00:00.000Z",
-            "isVisibleInTranscriptOnly": true,
-            "isCompactSummary": true,
-            "message": {
-                "role": "user",
-                "content": synthetic_continuation_summary_text()
-            }
-        });
-        let pasted_summary_discussion = json!({
-            "uuid": "real-pasted-summary-discussion",
-            "timestamp": "2026-05-09T09:00:01.000Z",
-            "message": {
-                "role": "user",
-                "content": synthetic_continuation_summary_text()
-            }
-        });
-        let normal_question = json!({
-            "uuid": "real-user-summary-question",
-            "message": {
-                "role": "user",
-                "content": "Why did `This session is being continued from a previous conversation` appear in my chat?"
-            }
-        });
-
-        assert_eq!(
-            classify_claude_history_entry(&synthetic_summary),
-            ClaudeHistoryEntryClassification::Hidden(ClaudeHistoryHiddenReason::SyntheticRuntime)
-        );
-        assert_eq!(
-            classify_claude_history_entry(&pasted_summary_discussion),
-            ClaudeHistoryEntryClassification::Normal
-        );
-        assert_eq!(
-            classify_claude_history_entry(&normal_question),
-            ClaudeHistoryEntryClassification::Normal
-        );
-    }
-
-    #[tokio::test]
-    async fn list_claude_sessions_uses_transcript_cwd_when_project_dir_does_not_match_workspace() {
-        let unique = Uuid::new_v4().to_string();
-        let temp_root = std::env::temp_dir().join(format!("ccgui-claude-cwd-{}", unique));
-        let base_dir = temp_root.join("claude-projects");
-        let workspace_path = temp_root.join("workspace");
-        let unrelated_path = temp_root.join("unrelated");
-        std::fs::create_dir_all(&workspace_path).expect("create workspace path");
-        std::fs::create_dir_all(&unrelated_path).expect("create unrelated path");
-        std::fs::create_dir_all(&base_dir).expect("create base dir");
-
-        let encoded_unrelated = unrelated_path
-            .to_string_lossy()
-            .chars()
-            .map(|c| {
-                if c.is_ascii_alphanumeric() || c == '-' {
-                    c
-                } else {
-                    '-'
-                }
-            })
-            .collect::<String>();
-        let project_dir = base_dir.join(encoded_unrelated);
-        std::fs::create_dir_all(&project_dir).expect("create unrelated claude project dir");
-
-        let session_id = format!("cwd-match-{}", unique);
-        let session_path = project_dir.join(format!("{}.jsonl", session_id));
-        let line = json!({
-            "uuid": "user-turn-1",
-            "timestamp": "2026-04-12T12:00:00.000Z",
-            "cwd": workspace_path.join("src").to_string_lossy(),
-            "message": {
-                "role": "user",
-                "content": "fix the sidebar session history"
-            }
-        });
-        std::fs::write(&session_path, format!("{}\n", line)).expect("write session");
-
-        let attribution_scopes = vec![ClaudeSessionAttributionScope::workspace_path(
-            workspace_path.clone(),
-        )];
-        let sessions = list_claude_sessions_from_base_dir(
-            &base_dir,
-            &workspace_path,
-            &attribution_scopes,
-            None,
-        )
-        .await
-        .expect("list claude sessions");
-        let summary = sessions
-            .iter()
-            .find(|session| session.session_id == session_id)
-            .expect("cwd matched session should be visible");
-        assert_eq!(
-            summary.attribution_status.as_deref(),
-            Some(CLAUDE_ATTRIBUTION_STRICT_MATCH)
-        );
-        assert_eq!(
-            summary.attribution_reason.as_deref(),
-            Some(CLAUDE_ATTRIBUTION_REASON_TRANSCRIPT_CWD)
-        );
-        assert_eq!(
-            summary.cwd.as_deref(),
-            Some(workspace_path.join("src").to_string_lossy().as_ref())
-        );
-
-        let _ = std::fs::remove_dir_all(&temp_root);
-    }
-
-    #[tokio::test]
-    async fn list_claude_sessions_uses_git_root_evidence_when_cwd_is_outside_workspace_path() {
-        let unique = Uuid::new_v4().to_string();
-        let temp_root = std::env::temp_dir().join(format!("ccgui-claude-git-root-{}", unique));
-        let base_dir = temp_root.join("claude-projects");
-        let workspace_path = temp_root.join("workspace").join("packages").join("app");
-        let git_root = temp_root.join("workspace");
-        let unrelated_path = temp_root.join("unrelated");
-        std::fs::create_dir_all(&workspace_path).expect("create workspace path");
-        std::fs::create_dir_all(git_root.join("tools")).expect("create git-root child path");
-        std::fs::create_dir_all(&unrelated_path).expect("create unrelated path");
-        std::fs::create_dir_all(&base_dir).expect("create base dir");
-
-        let encoded_unrelated = unrelated_path
-            .to_string_lossy()
-            .chars()
-            .map(|c| {
-                if c.is_ascii_alphanumeric() || c == '-' {
-                    c
-                } else {
-                    '-'
-                }
-            })
-            .collect::<String>();
-        let project_dir = base_dir.join(encoded_unrelated);
-        std::fs::create_dir_all(&project_dir).expect("create unrelated claude project dir");
-
-        let session_id = format!("git-root-match-{}", unique);
-        let session_path = project_dir.join(format!("{}.jsonl", session_id));
-        let line = json!({
-            "uuid": "user-turn-1",
-            "timestamp": "2026-04-12T12:00:00.000Z",
-            "cwd": git_root.join("tools").to_string_lossy(),
-            "message": {
-                "role": "user",
-                "content": "inspect repo scripts"
-            }
-        });
-        std::fs::write(&session_path, format!("{}\n", line)).expect("write session");
-
-        let attribution_scopes = vec![
-            ClaudeSessionAttributionScope::workspace_path(workspace_path.clone()),
-            ClaudeSessionAttributionScope::git_root(git_root.clone()),
-        ];
-        let sessions = list_claude_sessions_from_base_dir(
-            &base_dir,
-            &workspace_path,
-            &attribution_scopes,
-            None,
-        )
-        .await
-        .expect("list claude sessions");
-        let summary = sessions
-            .iter()
-            .find(|session| session.session_id == session_id)
-            .expect("git-root matched session should be visible");
-
-        assert_eq!(
-            summary.attribution_reason.as_deref(),
-            Some(CLAUDE_ATTRIBUTION_REASON_GIT_ROOT)
-        );
-        assert_eq!(
-            summary.attribution_status.as_deref(),
-            Some(CLAUDE_ATTRIBUTION_STRICT_MATCH)
-        );
-
-        let _ = std::fs::remove_dir_all(&temp_root);
-    }
-
-    #[tokio::test]
-    async fn load_claude_session_parses_reasoning_blocks() {
-        let unique = Uuid::new_v4().to_string();
-        let temp_root = std::env::temp_dir().join(format!("ccgui-claude-history-{}", unique));
-        let base_dir = temp_root.join("claude-projects");
-        let workspace_path = temp_root.join("workspace");
-        std::fs::create_dir_all(&workspace_path).expect("create workspace path");
-        std::fs::create_dir_all(&base_dir).expect("create base dir");
-
-        let project_dir = create_project_dir(&base_dir, &workspace_path);
-
-        let session_id = format!("reasoning-block-{}", unique);
-        let session_path = project_dir.join(format!("{}.jsonl", session_id));
-        let line = json!({
-            "uuid": "assistant-turn-1",
-            "timestamp": "2026-04-12T12:00:00.000Z",
-            "message": {
-                "role": "assistant",
-                "content": [
-                    {
-                        "type": "reasoning",
-                        "reasoning": "Inspect runtime state and compare the latest snapshots"
-                    },
-                    {
-                        "type": "text",
-                        "text": "Done"
-                    }
-                ]
-            }
-        });
-        std::fs::write(&session_path, format!("{}\n", line)).expect("write session");
-
-        let result = load_claude_session_from_base_dir(&base_dir, &workspace_path, &session_id)
-            .await
-            .expect("load session");
-        let reasoning = result
-            .messages
-            .iter()
-            .find(|message| message.kind == "reasoning")
-            .expect("reasoning message");
-        assert_eq!(
-            reasoning.text,
-            "Inspect runtime state and compare the latest snapshots"
-        );
-        assert!(result
-            .messages
-            .iter()
-            .any(|message| message.kind == "message" && message.text == "Done"));
-
-        let _ = std::fs::remove_dir_all(&temp_root);
-    }
-
-    #[tokio::test]
-    async fn load_claude_session_formats_local_control_events_and_hides_internal_rows() {
-        let unique = Uuid::new_v4().to_string();
-        let temp_root = std::env::temp_dir().join(format!("ccgui-claude-local-control-{}", unique));
-        let base_dir = temp_root.join("claude-projects");
-        let workspace_path = temp_root.join("workspace");
-        std::fs::create_dir_all(&workspace_path).expect("create workspace path");
-        std::fs::create_dir_all(&base_dir).expect("create base dir");
-        let project_dir = create_project_dir(&base_dir, &workspace_path);
-
-        let session_id = format!("local-control-{}", unique);
-        let session_path = project_dir.join(format!("{}.jsonl", session_id));
-        let lines = vec![
-            json!({
-                "timestamp": "2026-05-09T07:40:00.000Z",
-                "type": "permission-mode",
-                "cwd": workspace_path.to_string_lossy(),
-                "message": { "role": "user", "content": "default" }
-            }),
-            json!({
-                "uuid": "resume-cmd",
-                "timestamp": "2026-05-09T07:41:00.000Z",
-                "cwd": workspace_path.to_string_lossy(),
-                "message": { "role": "user", "content": "<command-name>/resume</command-name>" }
-            }),
-            json!({
-                "uuid": "resume-result",
-                "timestamp": "2026-05-09T07:41:01.000Z",
-                "cwd": workspace_path.to_string_lossy(),
-                "message": { "role": "user", "content": "<local-command-stdout>Session \u{1b}[1m1778306483383\u{1b}[22m was not found.</local-command-stdout>" }
-            }),
-            json!({
-                "uuid": "model-result",
-                "timestamp": "2026-05-09T07:42:01.000Z",
-                "cwd": workspace_path.to_string_lossy(),
-                "message": { "role": "user", "content": "<local-command-stdout>Set model to \u{1b}[1mMiniMax-M2.7\u{1b}[22m</local-command-stdout>" }
-            }),
-            json!({
-                "uuid": "interrupted",
-                "timestamp": "2026-05-09T07:43:01.000Z",
-                "cwd": workspace_path.to_string_lossy(),
-                "message": { "role": "user", "content": "[Request interrupted by user]" }
-            }),
-            json!({
-                "uuid": "synthetic-no-response",
-                "timestamp": "2026-05-09T07:44:01.000Z",
-                "message": {
-                    "role": "assistant",
-                    "model": "<synthetic>",
-                    "content": "No response requested."
-                }
-            }),
-            json!({
-                "uuid": "real-user",
-                "timestamp": "2026-05-09T07:45:01.000Z",
-                "cwd": workspace_path.to_string_lossy(),
-                "message": { "role": "user", "content": "你好" }
-            }),
-            json!({
-                "uuid": "real-assistant",
-                "timestamp": "2026-05-09T07:46:01.000Z",
-                "message": { "role": "assistant", "content": "你好，湘宁大兄弟！" }
-            }),
-        ];
-        write_jsonl_lines(&session_path, &lines, "\r\n");
-
-        let attribution_scopes = vec![ClaudeSessionAttributionScope::workspace_path(
-            workspace_path.clone(),
-        )];
-        let sessions = list_claude_sessions_from_base_dir(
-            &base_dir,
-            &workspace_path,
-            &attribution_scopes,
-            None,
-        )
-        .await
-        .expect("list claude sessions");
-        let summary = sessions
-            .iter()
-            .find(|session| session.session_id == session_id)
-            .expect("mixed local-control session should remain visible");
-        assert_eq!(summary.first_message, "你好");
-        assert_eq!(summary.message_count, 2);
-
-        let result = load_claude_session_from_base_dir(&base_dir, &workspace_path, &session_id)
-            .await
-            .expect("load session");
-        let control_events = result
-            .messages
-            .iter()
-            .filter(|message| message.tool_type.as_deref() == Some(CLAUDE_CONTROL_EVENT_TOOL_TYPE))
-            .collect::<Vec<_>>();
-        assert_eq!(control_events.len(), 3);
-        assert!(control_events.iter().any(|message| {
-            message.text == "Session 1778306483383 was not found."
-                && message.status.as_deref() == Some("failed")
-                && message
-                    .tool_input
-                    .as_ref()
-                    .and_then(|value| value.get("eventType"))
-                    .and_then(serde_json::Value::as_str)
-                    == Some("resumeFailed")
-        }));
-        assert!(control_events.iter().any(|message| {
-            message.text == "Set model to MiniMax-M2.7"
-                && message
-                    .tool_input
-                    .as_ref()
-                    .and_then(|value| value.get("eventType"))
-                    .and_then(serde_json::Value::as_str)
-                    == Some("modelChanged")
-        }));
-        assert!(control_events.iter().any(|message| {
-            message.text == "[Request interrupted by user]"
-                && message
-                    .tool_input
-                    .as_ref()
-                    .and_then(|value| value.get("eventType"))
-                    .and_then(serde_json::Value::as_str)
-                    == Some("interrupted")
-        }));
-        assert!(!result.messages.iter().any(|message| message
-            .text
-            .contains("<local-command-stdout>")
-            || message.text.contains("<command-name>")
-            || message.text == "No response requested."));
-        assert!(result
-            .messages
-            .iter()
-            .any(|message| message.id == "real-user" && message.text == "你好"));
-
-        let _ = std::fs::remove_dir_all(&temp_root);
-    }
-}
+#[path = "claude_history_inline_tests.rs"]
+mod tests;
 
 #[cfg(test)]
 #[path = "claude_history_filter_tests.rs"]

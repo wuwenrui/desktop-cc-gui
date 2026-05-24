@@ -1033,14 +1033,9 @@ export function useThreadTurnEvents({
         || (enginePrefix !== "opencode" && (threadId.startsWith("opencode:") || threadId.startsWith("opencode-pending-")))
       );
 
-      const shouldRebindActiveFinalizedThread =
-        threadId.startsWith(sameEngineFinalizedPrefix)
-        && threadId !== newThreadId
-        && activeThreadId === threadId;
       if (
         threadId.startsWith(sameEngineFinalizedPrefix)
         && threadId !== newThreadId
-        && !shouldRebindActiveFinalizedThread
       ) {
         logSessionTrace("skip:finalized-mismatch", {
           workspaceId,
@@ -1087,8 +1082,6 @@ export function useThreadTurnEvents({
         }
       } else if (isPendingThreadForEngine(enginePrefix, threadId)) {
         sourceThreadId = threadId;
-      } else if (shouldRebindActiveFinalizedThread) {
-        sourceThreadId = threadId;
       } else if (!hasAnyEnginePrefix && !hasForeignEnginePrefix) {
         const pendingThreadId = enginePrefix === "opencode"
           ? pendingOpenCode
@@ -1132,7 +1125,6 @@ export function useThreadTurnEvents({
           sourceThreadId,
           hasForeignEnginePrefix,
           enginePrefix,
-          shouldRebindActiveFinalizedThread,
           turnBoundPendingThreadId,
           turnId: turnId ?? null,
         });

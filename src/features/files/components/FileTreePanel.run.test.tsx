@@ -442,6 +442,36 @@ describe("FileTreePanel run action isolation", () => {
     expect(topZone?.contains(listZone as Node)).toBe(false);
   });
 
+  it("uses a virtualized row container for large visible file trees", () => {
+    const largeFiles = Array.from({ length: 320 }, (_, index) => `src/file-${index}.ts`);
+    const { container } = render(
+      <FileTreePanel
+        workspaceId="workspace-virtual-tree"
+        workspacePath="/tmp/workspace"
+        files={largeFiles}
+        directories={["src"]}
+        isLoading={false}
+        filePanelMode="files"
+        onFilePanelModeChange={() => undefined}
+        onOpenFile={() => undefined}
+        onInsertText={() => undefined}
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={() => undefined}
+        gitStatusFiles={[]}
+        gitignoredFiles={new Set<string>()}
+      />,
+    );
+
+    fireEvent.doubleClick(screen.getByRole("button", { name: /src/ }));
+
+    const listZone = container.querySelector(".file-tree-list");
+    expect(listZone?.classList.contains("is-virtualized")).toBe(true);
+    expect(listZone?.getAttribute("data-file-tree-row-count")).toBe("321");
+    expect(container.querySelector(".file-tree-virtual-spacer")).toBeTruthy();
+  });
+
   it("renders empty directories from workspace directory snapshot", () => {
     render(
       <FileTreePanel

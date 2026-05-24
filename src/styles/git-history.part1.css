@@ -225,11 +225,18 @@
 }
 
 .git-history-close-chip {
-  width: 24px;
-  height: 24px;
-  border-radius: 999px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  flex: 0 0 20px;
+  border-radius: 5px;
   border-color: color-mix(in srgb, var(--border-default) 72%, transparent);
   background: color-mix(in srgb, var(--surface-control, #1a2230) 66%, transparent);
+}
+
+.git-history-close-chip:hover {
+  border-color: color-mix(in srgb, var(--border-default) 86%, transparent);
+  background: color-mix(in srgb, var(--surface-control-hover, #263044) 84%, transparent);
 }
 
 .git-history-load-more {

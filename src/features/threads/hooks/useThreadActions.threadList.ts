@@ -1,4 +1,5 @@
 import type { ThreadSummary, WorkspaceInfo } from "../../../types";
+import type { WorkspaceSessionSourceCompleteness } from "../../../services/tauri";
 import {
   DEFAULT_VISIBLE_THREAD_ROOT_COUNT,
   normalizeVisibleThreadRootCount,
@@ -37,10 +38,13 @@ const MIN_NATIVE_SESSION_LIST_LIMIT = Math.min(
 );
 const THREAD_LIST_CURSOR_SOURCE_SEPARATOR = "::";
 const THREAD_LIST_CURSOR_CATALOG_ROOT = "__root__";
+const WORKSPACE_SESSION_SOURCE_COMPLETENESS_VALUES = new Set<
+  WorkspaceSessionSourceCompleteness
+>(["complete", "authoritative_empty", "partial", "degraded", "uncertain_empty"]);
 
 type ThreadListCursorSource = "catalog" | "runtime";
 
-export type StartupThreadHydrationMode = "first-page" | "full-catalog";
+export type StartupThreadHydrationMode = "full-catalog";
 
 export type ThreadListCursorState = {
   source: ThreadListCursorSource;
@@ -49,16 +53,20 @@ export type ThreadListCursorState = {
 
 export type ProjectCatalogSessionSummary = {
   sessionId: string;
+  stableSessionKey?: string | null;
   workspaceId?: string | null;
   matchedWorkspaceId?: string | null;
   title: string;
   updatedAt: number;
+  archivedAt?: number | null;
   sizeBytes?: number;
   parentSessionId?: string | null;
   engine?: ThreadSummary["engineSource"] | string | null;
   source?: string | null;
   provider?: string | null;
   sourceLabel?: string | null;
+  sourceCompleteness?: WorkspaceSessionSourceCompleteness | null;
+  sourceStatusReason?: string | null;
   folderId?: string | null;
 };
 
@@ -121,9 +129,6 @@ export function resolveThreadListCursorForDisplay(params: {
   if (params.catalogCursor) {
     return encodeThreadListCursorState("catalog", params.catalogCursor);
   }
-  if (params.catalogPartialSource) {
-    return encodeThreadListCursorState("catalog", null);
-  }
   if (params.runtimeCursor) {
     return encodeThreadListCursorState("runtime", params.runtimeCursor);
   }
@@ -151,6 +156,28 @@ export function countCatalogSessionsByEngine(
   }, {});
 }
 
+function normalizeOptionalCatalogString(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizeCatalogSourceCompleteness(
+  value: unknown,
+): WorkspaceSessionSourceCompleteness | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const normalized = value.trim().toLowerCase();
+  return WORKSPACE_SESSION_SOURCE_COMPLETENESS_VALUES.has(
+    normalized as WorkspaceSessionSourceCompleteness,
+  )
+    ? (normalized as WorkspaceSessionSourceCompleteness)
+    : null;
+}
+
 export function normalizeProjectCatalogSession(
   entry: unknown,
 ): ProjectCatalogSessionSummary | null {
@@ -159,16 +186,20 @@ export function normalizeProjectCatalogSession(
   }
   const session = entry as {
     sessionId?: unknown;
+    stableSessionKey?: unknown;
     title?: unknown;
     workspaceId?: unknown;
     matchedWorkspaceId?: unknown;
     updatedAt?: unknown;
+    archivedAt?: unknown;
     sizeBytes?: unknown;
     parentSessionId?: unknown;
     engine?: unknown;
     source?: unknown;
     provider?: unknown;
     sourceLabel?: unknown;
+    sourceCompleteness?: unknown;
+    sourceStatusReason?: unknown;
     folderId?: unknown;
   };
   const sessionId = String(session.sessionId ?? "").trim();
@@ -177,50 +208,35 @@ export function normalizeProjectCatalogSession(
   }
   return {
     sessionId,
-    workspaceId:
-      typeof session.workspaceId === "string" || session.workspaceId == null
-        ? (session.workspaceId ?? null)
-        : null,
-    matchedWorkspaceId:
-      typeof session.matchedWorkspaceId === "string" ||
-      session.matchedWorkspaceId == null
-        ? (session.matchedWorkspaceId ?? null)
-        : null,
+    stableSessionKey: normalizeOptionalCatalogString(session.stableSessionKey),
+    workspaceId: normalizeOptionalCatalogString(session.workspaceId),
+    matchedWorkspaceId: normalizeOptionalCatalogString(session.matchedWorkspaceId),
     title: String(session.title ?? "").trim(),
     updatedAt:
       typeof session.updatedAt === "number" &&
       Number.isFinite(session.updatedAt)
         ? session.updatedAt
         : 0,
+    archivedAt:
+      typeof session.archivedAt === "number" &&
+      Number.isFinite(session.archivedAt) &&
+      session.archivedAt > 0
+        ? session.archivedAt
+        : null,
     sizeBytes:
       typeof session.sizeBytes === "number" &&
       Number.isFinite(session.sizeBytes)
         ? session.sizeBytes
         : undefined,
-    parentSessionId:
-      typeof session.parentSessionId === "string" ||
-      session.parentSessionId == null
-        ? (session.parentSessionId ?? null)
-        : null,
-    engine:
-      typeof session.engine === "string" || session.engine == null
-        ? (session.engine ?? null)
-        : null,
-    source:
-      typeof session.source === "string" || session.source == null
-        ? (session.source ?? null)
-        : null,
-    provider:
-      typeof session.provider === "string" || session.provider == null
-        ? (session.provider ?? null)
-        : null,
-    sourceLabel:
-      typeof session.sourceLabel === "string" || session.sourceLabel == null
-        ? (session.sourceLabel ?? null)
-        : null,
-    folderId:
-      typeof session.folderId === "string" || session.folderId == null
-        ? (session.folderId ?? null)
-        : null,
+    parentSessionId: normalizeOptionalCatalogString(session.parentSessionId),
+    engine: normalizeOptionalCatalogString(session.engine),
+    source: normalizeOptionalCatalogString(session.source),
+    provider: normalizeOptionalCatalogString(session.provider),
+    sourceLabel: normalizeOptionalCatalogString(session.sourceLabel),
+    sourceCompleteness: normalizeCatalogSourceCompleteness(
+      session.sourceCompleteness,
+    ),
+    sourceStatusReason: normalizeOptionalCatalogString(session.sourceStatusReason),
+    folderId: normalizeOptionalCatalogString(session.folderId),
   };
 }

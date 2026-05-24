@@ -1,3 +1,11 @@
+## 2026-05-23 Proposal Refresh
+
+- **Current branch**: `feature/v0.5.2`; this refresh is documentation-only and does not change implementation code.
+- **Task state**: 57/57 checked; status = Completed / pending verify-archive.
+- **Code/document evidence**: 代码存在 `conversationCompletionEmail.ts`、`useMailDrivenSessionContinuation.ts` 与 `src-tauri/src/email/session_continuation.rs`；支持 reply delimiter、MOSS CONTEXT、natural reply、IMAP read-only intake、mail session ledger 与 settings management surface。
+- **Next action**: 补 archive 前 verification note，确认 focused frontend/backend/email tests 与 strict OpenSpec validation 后归档。
+- **Validation note**: `openspec validate --all --strict --no-interactive` passed 299 items in this documentation refresh.
+
 ## Why
 
 当前对话完成邮件已经可以把客户端运行结果发送到配置收件箱，但邮件正文偏长，且用户回复邮件后无法稳定回到对应 session 继续执行。用户希望把 completion email 迭代成一个简洁、可回复、可审计的邮件驱动式 session 闭环。

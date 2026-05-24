@@ -1,3 +1,11 @@
+## 2026-05-23 Proposal Refresh
+
+- **Current branch**: `feature/v0.5.2`; this refresh is documentation-only and does not change implementation code.
+- **Task state**: 22/22 checked; status = Completed / pending verify-archive.
+- **Code/document evidence**: Composer control surface 已拆到 ChatInputBox/ButtonArea/Footer、rewind modal CSS、queued handoff bubble、approval/background activity projection 等独立测试路径。
+- **Next action**: 归档前确认 composer focused tests、rewind modal smoke 与 no layout overlap/manual QA。
+- **Validation note**: `openspec validate --all --strict --no-interactive` passed 299 items in this documentation refresh.
+
 ## Why
 
 Composer 控制面在本轮 UI 收口前同时承担模型选择、模式选择、工具入口、上下文用量、记忆引用和发送按钮。底部区域逐步堆叠后出现了几个明显漂移：

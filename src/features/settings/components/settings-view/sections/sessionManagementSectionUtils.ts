@@ -4,6 +4,7 @@ import type {
   WorkspaceSessionCatalogEntry,
   WorkspaceSessionFolder,
 } from "../../../../../services/tauri";
+import { selectProjectedSessionDisplayName } from "../../../../threads/utils/sessionDisplayProjection";
 
 export type GroupedWorkspace = {
   id: string | null;
@@ -56,9 +57,13 @@ function compareWorkspaceInfo(left: WorkspaceInfo, right: WorkspaceInfo) {
 }
 
 function buildSessionEntryKey(
-  entry: Pick<WorkspaceSessionCatalogEntry, "workspaceId" | "sessionId">,
+  entry: Pick<
+    WorkspaceSessionCatalogEntry,
+    "workspaceId" | "sessionId" | "stableSessionKey"
+  >,
 ) {
-  return `${entry.workspaceId}::${entry.sessionId}`;
+  const stableKey = entry.stableSessionKey?.trim();
+  return `${entry.workspaceId}::${stableKey || entry.sessionId}`;
 }
 
 export function buildWorkspaceOptions(
@@ -286,6 +291,17 @@ export function normalizeEngineType(engine: string): EngineType {
     return engine;
   }
   return "codex";
+}
+
+export function resolveWorkspaceSessionDisplayTitle(
+  entry: Pick<WorkspaceSessionCatalogEntry, "title">,
+  fallbackTitle: string,
+) {
+  return selectProjectedSessionDisplayName({
+    nextName: entry.title,
+    mappedTitle: undefined,
+    customTitle: undefined,
+  }) || fallbackTitle;
 }
 
 export function formatUpdatedAtDisplay(updatedAt: number, locale: string) {

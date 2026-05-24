@@ -144,11 +144,24 @@ function hasExperimentalApiCapability(value: unknown) {
 
 function isCodexAppServerControlPlaneText(text: string) {
   const trimmed = text.trim();
+  if (trimmed === "app-server" || trimmed.includes("developer_instructions=")) {
+    return true;
+  }
+
+  const [command, subcommand] = trimmed.split(/\s+/);
+  return isCodexCommandToken(command) && subcommand === "app-server";
+}
+
+function isCodexCommandToken(token: string | undefined) {
+  if (!token) {
+    return false;
+  }
+  const command = token.replace(/^['"]|['"]$/g, "").split(/[\\/]/).pop();
   return (
-    trimmed === "app-server" ||
-    trimmed.endsWith(" app-server") ||
-    trimmed.includes("codex app-server") ||
-    trimmed.includes("developer_instructions=")
+    command === "codex" ||
+    command === "codex.exe" ||
+    command === "codex.cmd" ||
+    command === "codex.bat"
   );
 }
 

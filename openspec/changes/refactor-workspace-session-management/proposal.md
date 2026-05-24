@@ -1,5 +1,13 @@
 # Proposal: Refactor Workspace Session Management
 
+## 2026-05-23 Proposal Refresh
+
+- **Current branch**: `feature/v0.5.2`; this refresh is documentation-only and does not change implementation code.
+- **Task state**: 62/62 checked; status = Completed / pending verify-archive.
+- **Code/document evidence**: `session_management.rs/types/catalog_projection`、workspace session service mapping、folder counts、source statuses、batch mutations 与 catalog tests 已存在。
+- **Next action**: 归档前补 full session management verification，并明确与 `unify-claude-workspace-session-catalog` 的边界。
+- **Validation note**: `openspec validate --all --strict --no-interactive` passed 299 items in this documentation refresh.
+
 ## Summary
 
 重构 workspace / project 会话管理链路，解决 P0 级 session 消失、project catalog 与磁盘真实 session 不一致、父子会话归属漂移、查询慢、物理删除失败后无法自愈，以及会话整理缺少项目层级入口的问题。

@@ -1,3 +1,11 @@
+## 2026-05-23 Proposal Refresh
+
+- **Current branch**: `feature/v0.5.2`; this refresh is documentation-only and does not change implementation code.
+- **Task state**: 6/6 checked; status = Completed as deferred Product P2.
+- **Code/document evidence**: 当前代码已有 `CostBudgetSection` 与 context-ledger cost/budget evidence 底座，但未实现跨 workspace 成本总账、retention、export 或 admin view。
+- **Next action**: 保留 deferred proposal；等 cost-budget source capture 与 retention policy 稳定后另立产品实现。
+- **Validation note**: `openspec validate --all --strict --no-interactive` passed 299 items in this documentation refresh.
+
 ## Branch Calibration / 分支校准（2026-05-19）
 
 当前变更只以 `feature/v0.5.0-md` 为事实源。原始方案是成本管理产品功能，不是 harness 治理层底座。收敛后，本 change 标记为 **Deferred / Product P2**，不进入当前 harness governance 实施批次。

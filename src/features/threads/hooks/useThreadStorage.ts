@@ -3,6 +3,7 @@ import type { MutableRefObject } from "react";
 import {
   MAX_PINS_SOFT_LIMIT,
   buildUpdatedThreadAliases,
+  buildClearedThreadAliases,
   type CustomNamesMap,
   type PinnedThreadsMap,
   type ThreadAliasMap,
@@ -28,6 +29,7 @@ export type UseThreadStorageResult = {
   getCustomName: (workspaceId: string, threadId: string) => string | undefined;
   resolveCanonicalThreadId: (threadId: string) => string;
   rememberThreadAlias: (oldThreadId: string, newThreadId: string) => void;
+  clearThreadAlias: (oldThreadId: string) => void;
   recordThreadActivity: (
     workspaceId: string,
     threadId: string,
@@ -121,6 +123,12 @@ export function useThreadStorage(): UseThreadStorageResult {
     },
     [],
   );
+
+  const clearThreadAlias = useCallback((oldThreadId: string) => {
+    const next = buildClearedThreadAliases(threadAliasesRef.current, oldThreadId);
+    threadAliasesRef.current = next;
+    saveThreadAliases(next);
+  }, []);
 
   const recordThreadActivity = useCallback(
     (workspaceId: string, threadId: string, timestamp = Date.now()) => {
@@ -275,6 +283,7 @@ export function useThreadStorage(): UseThreadStorageResult {
     getCustomName,
     resolveCanonicalThreadId,
     rememberThreadAlias,
+    clearThreadAlias,
     recordThreadActivity,
     pinThread,
     unpinThread,

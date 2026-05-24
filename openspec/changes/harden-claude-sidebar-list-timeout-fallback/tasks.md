@@ -15,6 +15,16 @@
 - Claude Code session 仍可能从客户端 sidebar 消失，说明问题可能还存在于 successful-empty、catalog projection、archive/shared filtering 或 request race 路径。
 - 在子文件夹 workspace 创建的 Claude Code session 偶尔归到父文件夹，说明需要收紧 Claude session attribution / ownership 边界。
 
+2026-05-23 收尾复核结论：自动化 gate 已补齐，目标 change 继续保持 active，不归档。已验证：
+
+- `openspec validate harden-claude-sidebar-list-timeout-fallback --strict --no-interactive` 通过。
+- `npm run typecheck` 通过。
+- `npx vitest run src/features/threads/hooks/useThreadActions.timeout-fallback.test.tsx src/features/threads/hooks/useThreadActions.test.ts` 通过，2 files / 47 tests。
+- `npx vitest run src/features/session-activity src/features/app` 通过，60 files / 487 tests。
+- Rust attribution regression exact tests 通过：child workspace owner、independent nested workspace owner、worktree scope isolation、ambiguous git-root unassigned。
+
+2026-05-24 手工验证补记：维护者在本地 dev build 中完成 5.1-5.3 手动检查，当前暂时通过。Windows 专机不可用，因此本 change 不声明 Windows 覆盖；Windows 维度以后续外部机器或 CI 证据补齐。收尾记录见 `openspec/docs/session-management-refactor-closeout-2026-05-24.md`。
+
 ## 1. Specification
 
 - [x] 1.1 编写 `specs/claude-session-sidebar-state-parity/spec.md` delta，ADDED 4 个 Requirement，每个含 2-3 个 Scenario，覆盖：(a) Claude listing timeout 保留 last-good 条目；(b) 自污染防御；(c) partial-source 诊断不被消音；(d) 多次连续 timeout 不递减。
@@ -53,22 +63,23 @@
 - [x] 4.1 运行 `openspec validate harden-claude-sidebar-list-timeout-fallback --strict --no-interactive`。
     - **验收**：0 error，0 warning。
 - [x] 4.2 运行 `npx vitest run src/features/threads/hooks/useThreadActions.timeout-fallback.test.tsx`。
-    - **验收**：2026-05-19 运行通过，8/8 绿。
+    - **验收**：2026-05-23 运行通过，10/10 绿。
 - [x] 4.3 运行 `npx vitest run src/features/threads/hooks/useThreadActions.test.ts`（既有用例不退化）。
-    - **验收**：2026-05-19 运行通过，46/46 绿，无新增 skip。
-- [ ] 4.4 运行 `npm run typecheck`。
-    - **当前状态**：2026-05-19 运行失败，但错误来自当前工作区另一个未完成 change 的 `src/features/engine/capabilities/*`：`Unused '@ts-expect-error'` 与 `CapabilityLookupState` setState 类型不匹配；本 change 目标文件未暴露新增 typecheck error。
+    - **验收**：2026-05-23 运行通过，37/37 绿，无新增 skip。
+- [x] 4.4 运行 `npm run typecheck`。
+    - **验收**：2026-05-23 运行通过；2026-05-19 的外部 blocker 已不再复现。
 - [x] 4.5 运行 `npx vitest run src/features/session-activity src/features/app`（受影响周边模块的回归）。
-    - **验收**：2026-05-19 运行通过，58 个 test files / 483 tests 全绿。
+    - **验收**：2026-05-23 运行通过，60 个 test files / 487 tests 全绿。
 
 ## 5. Manual QA
 
-- [ ] 5.1 启动 mossx dev build，工作区下应有 ≥2 条 Claude 会话 + ≥1 条 Codex 会话；打开应用后等待 90 秒；列表 MUST 保持完整。
+- [x] 5.1 启动 mossx dev build，工作区下应有 ≥2 条 Claude 会话 + ≥1 条 Codex 会话；打开应用后等待 90 秒；列表 MUST 保持完整。
     - **验收**：肉眼观测列表数与启动时一致。
-- [ ] 5.2 临时把 `withTimeout` 第二参数改为 `1`（强制超时），重启验证 fallback 路径；恢复后再次验证。
+- [x] 5.2 临时把 `withTimeout` 第二参数改为 `1`（强制超时），重启验证 fallback 路径；恢复后再次验证。
     - **验收**：强制超时下列表仍保持完整 + Debug 面板看到 `thread/list claude timeout` 事件。
-- [ ] 5.3 在 Debug 面板检查 `partialSource` badge / `recoveryState === "degraded"` 标记是否正确呈现（不被新逻辑消音）。
+- [x] 5.3 在 Debug 面板检查 `partialSource` badge / `recoveryState === "degraded"` 标记是否正确呈现（不被新逻辑消音）。
     - **验收**：partial-source 仍可见。
+    - **当前状态**：2026-05-24 维护者本地手动验证暂时通过；CLI 未重复执行 dev build 观察。
 
 ## 6. Review Hardening
 
@@ -79,10 +90,11 @@
 - [x] 6.3 Update `openspec/project.md` 若有相关 capability 索引或 active changes 计数（按 OpenSpec 1.3.x 约定）。
     - **验收**：`openspec list` 显示本 change 为 active；`project.md` 是低漂移治理快照，本 change 不更新 active count。
 
-## 7. Archive Prep（不在本次执行）
+## 7. Archive Prep（本次仅记录，不执行归档命令）
 
-- [ ] 7.1 实现合并到 develop 后，运行 `openspec archive harden-claude-sidebar-list-timeout-fallback --strict`。
-    - **执行时机**：合并 PR 之后，由维护者执行。
+- [x] 7.1 记录 archive prep 约束：实现合并到 develop 后再运行 `openspec archive harden-claude-sidebar-list-timeout-fallback --strict`。
+    - **执行时机**：合并 PR 之后，由维护者执行；本轮仅补齐归档前 qualifier，不直接归档 active change。
+    - **验收**：`openspec/docs/session-management-refactor-closeout-2026-05-24.md` 明确本地 manual QA、自动化 gate、Windows 未覆盖与 archive 口径。
 
 ## 8. Continued Investigation: Claude Sessions Still Disappear
 
@@ -98,10 +110,10 @@
 ## 9. Continued Investigation: Subfolder Claude Session Attribution Drift
 
 - [x] 9.1 编写 Rust 复现测试：父 workspace `/repo` 与子 workspace `/repo/sub` 同时存在，Claude transcript `cwd=/repo/sub` 时，session MUST 归属子 workspace，不得被父 workspace claim。
-    - **验收**：新增/更新 `claude_child_workspace_session_is_not_claimed_by_parent_projection` 与 `claude_independent_nested_workspace_session_is_not_claimed_by_parent_projection`，覆盖 parent direct project dir scan、child transcript cwd、worktree child、independent nested child 四条入口。
+    - **验收**：新增/更新 `claude_child_workspace_session_is_not_claimed_by_parent_projection` 与 `claude_independent_nested_workspace_session_is_not_claimed_by_parent_projection`，覆盖 parent direct project dir scan、child transcript cwd、worktree child、independent nested child 四条入口；2026-05-23 exact cargo tests 通过。
 - [x] 9.2 收紧 `list_claude_sessions_for_attribution_scopes_with_config` / catalog projection 的 ownership：exact child path / longest workspace match 必须优先于 parent scope 与 git_root family inference。
     - **验收**：workspace-scope Claude catalog entry 生成后会通过 `apply_strict_attribution_owner` 按全量 workspace exact/longest owner 重归属；project projection 可以保留 child-owned 聚合 entry，但不会生成 parent-owned duplicate；独立 nested child 不在 parent scope 时会从 parent projection 过滤掉。
 - [x] 9.3 审计 `build_claude_attribution_scopes` 与 `infer_related_attribution_for_workspace`，避免 parent scope fallback 在多 child workspace 存在时把子 session 标成父级 related。
-    - **验收**：`resolve_catalog_entry_attribution` 已执行 longest unique workspace match；现有 `inferred_related_attribution_keeps_ambiguous_git_root_unassigned`、`catalog_workspace_scope_keeps_worktree_selection_isolated` 与新增 child-owner 测试共同覆盖歧义边界。
+    - **验收**：`resolve_catalog_entry_attribution` 已执行 longest unique workspace match；现有 `inferred_related_attribution_keeps_ambiguous_git_root_unassigned`、`catalog_workspace_scope_keeps_worktree_selection_isolated` 与新增 child-owner 测试共同覆盖歧义边界；2026-05-23 exact cargo tests 通过。
 - [x] 9.4 前端补 projection regression：同一 Claude session 在 parent / child projection 间移动时，sidebar 不得把 child-owned session 渲染到 parent folder root。
     - **验收**：`useThreadActions.timeout-fallback.test.tsx` 新增 owner-aware catalog merge regression；`normalizeProjectCatalogSession` 保留 `workspaceId/matchedWorkspaceId`，thread-list hydration 只合并当前 workspace owner 的 catalog entry。

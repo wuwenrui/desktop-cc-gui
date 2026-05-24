@@ -44,6 +44,12 @@ describe("parseClaudeHistoryMessages", () => {
       },
       {
         kind: "message",
+        id: "control-codex-app-server",
+        role: "user",
+        text: "codex app-server",
+      },
+      {
+        kind: "message",
         id: "real-user",
         role: "user",
         text: "Continue the real task",
@@ -72,6 +78,24 @@ describe("parseClaudeHistoryMessages", () => {
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({
       id: "real-user-app-server",
+      kind: "message",
+      role: "user",
+    });
+  });
+
+  it("does not filter normal user text mentioning codex app-server", () => {
+    const items = parseClaudeHistoryMessages([
+      {
+        kind: "message",
+        id: "real-user-codex-app-server",
+        role: "user",
+        text: "Please inspect why codex app-server appears in logs.",
+      },
+    ]);
+
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      id: "real-user-codex-app-server",
       kind: "message",
       role: "user",
     });

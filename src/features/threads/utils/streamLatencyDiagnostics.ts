@@ -75,12 +75,19 @@ export type ThreadStreamLatencySnapshot = {
 };
 
 const CADENCE_SAMPLE_LIMIT = 12;
-const RENDER_AMPLIFICATION_THRESHOLD_MS = 160;
-const VISIBLE_OUTPUT_STALL_THRESHOLD_MS = 700;
+const DEFAULT_FIRST_VISIBLE_LATENCY_THRESHOLD_MS = 120;
+const DEFAULT_RENDER_AMPLIFICATION_THRESHOLD_MS = 160;
+const DEFAULT_VISIBLE_OUTPUT_STALL_THRESHOLD_MS = 700;
 const CODEX_INGRESS_GAP_DIAGNOSTIC_MS = 2_000;
 const LARGE_INGRESS_TEXT_DIAGNOSTIC_CHARS = 1_000;
 const STREAM_MITIGATION_DISABLE_FLAG_KEY = "ccgui.debug.streamMitigation.disabled";
 const STREAM_LATENCY_TRACE_FLAG_KEY = "ccgui.debug.streamLatencyTrace";
+const STREAM_LATENCY_FIRST_VISIBLE_THRESHOLD_KEY =
+  "ccgui.debug.streamLatency.firstVisibleLatencyMs";
+const STREAM_LATENCY_RENDER_AMPLIFICATION_THRESHOLD_KEY =
+  "ccgui.debug.streamLatency.renderAmplificationMs";
+const STREAM_LATENCY_VISIBLE_OUTPUT_STALL_THRESHOLD_KEY =
+  "ccgui.debug.streamLatency.visibleOutputStallMs";
 
 const STREAM_MITIGATION_PROFILES: Readonly<Record<StreamMitigationProfileId, StreamMitigationProfile>> = {
   "claude-qwen-windows-render-safe": {
@@ -316,6 +323,40 @@ function readBooleanDebugFlag(key: string) {
   }
 }
 
+function readNonNegativeNumberDebugConfig(key: string, fallback: number) {
+  if (typeof window === "undefined") {
+    return fallback;
+  }
+  try {
+    const rawValue = window.localStorage.getItem(key);
+    const normalizedValue = rawValue?.trim() ?? "";
+    if (!normalizedValue) {
+      return fallback;
+    }
+    const parsed = Number(normalizedValue);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function getStreamLatencyThresholds() {
+  return {
+    firstVisibleLatencyMs: readNonNegativeNumberDebugConfig(
+      STREAM_LATENCY_FIRST_VISIBLE_THRESHOLD_KEY,
+      DEFAULT_FIRST_VISIBLE_LATENCY_THRESHOLD_MS,
+    ),
+    renderAmplificationMs: readNonNegativeNumberDebugConfig(
+      STREAM_LATENCY_RENDER_AMPLIFICATION_THRESHOLD_KEY,
+      DEFAULT_RENDER_AMPLIFICATION_THRESHOLD_MS,
+    ),
+    visibleOutputStallMs: readNonNegativeNumberDebugConfig(
+      STREAM_LATENCY_VISIBLE_OUTPUT_STALL_THRESHOLD_KEY,
+      DEFAULT_VISIBLE_OUTPUT_STALL_THRESHOLD_MS,
+    ),
+  };
+}
+
 export function isStreamLatencyTraceEnabled() {
   if (streamLatencyTraceEnabledCache === null) {
     streamLatencyTraceEnabledCache = readBooleanDebugFlag(STREAM_LATENCY_TRACE_FLAG_KEY);
@@ -491,11 +532,18 @@ function primeClaudeWindowsVisibleStreamCandidate(
   if (!candidateProfile || snapshot.candidateMitigationProfile === candidateProfile) {
     return snapshot;
   }
-  return {
+  const nextSnapshot: ThreadStreamLatencySnapshot = {
     ...snapshot,
     candidateMitigationProfile: candidateProfile,
     candidateMitigationReason: reason,
   };
+  appendRendererDiagnostic(
+    "stream-latency/mitigation-candidate-selected",
+    buildCorrelationPayload(nextSnapshot, {
+      candidateReason: reason,
+    }),
+  );
+  return nextSnapshot;
 }
 
 export function getThreadStreamLatencySnapshot(threadId: string | null) {
@@ -1052,7 +1100,8 @@ function maybeActivateMitigation(
   renderLagMs: number,
   visibleItemCount: number,
 ) {
-  if (snapshot.mitigationProfile || renderLagMs < RENDER_AMPLIFICATION_THRESHOLD_MS) {
+  const { renderAmplificationMs } = getStreamLatencyThresholds();
+  if (snapshot.mitigationProfile || renderLagMs < renderAmplificationMs) {
     return snapshot;
   }
   return maybeActivateClaudeWindowsMitigation(
@@ -1138,17 +1187,36 @@ export function noteThreadVisibleRender(
     };
 
     if (current.firstVisibleRenderAt === null) {
+      const { firstVisibleLatencyMs, renderAmplificationMs } =
+        getStreamLatencyThresholds();
       appendRendererDiagnostic(
         "stream-latency/first-visible-render",
         buildCorrelationPayload(nextSnapshot, {
           renderLagMs,
           visibleItemCount: input.visibleItemCount,
+          firstVisibleLatencyThresholdMs: firstVisibleLatencyMs,
         }),
       );
+      if (
+        input.visibleItemCount > 0 &&
+        renderLagMs >= firstVisibleLatencyMs &&
+        renderLagMs < renderAmplificationMs &&
+        isClaudeWindowsStream(nextSnapshot)
+      ) {
+        appendRendererDiagnostic(
+          "stream-latency/first-visible-latency",
+          buildCorrelationPayload(nextSnapshot, {
+            renderLagMs,
+            visibleItemCount: input.visibleItemCount,
+            firstVisibleLatencyThresholdMs: firstVisibleLatencyMs,
+            renderAmplificationThresholdMs: renderAmplificationMs,
+          }),
+        );
+      }
     }
 
     if (
-      renderLagMs >= RENDER_AMPLIFICATION_THRESHOLD_MS &&
+      renderLagMs >= getStreamLatencyThresholds().renderAmplificationMs &&
       !current.renderAmplificationReported
     ) {
       nextSnapshot = {
@@ -1192,7 +1260,8 @@ function scheduleVisibleOutputStallTimer(
   }
   const pendingSince = snapshot.pendingVisibleTextSinceDeltaAt;
   const elapsedMs = Math.max(0, (snapshot.lastDeltaAt ?? Date.now()) - pendingSince);
-  const delayMs = Math.max(0, VISIBLE_OUTPUT_STALL_THRESHOLD_MS - elapsedMs);
+  const { visibleOutputStallMs } = getStreamLatencyThresholds();
+  const delayMs = Math.max(0, visibleOutputStallMs - elapsedMs);
   const timer = setTimeout(() => {
     visibleOutputStallTimerByThread.delete(threadId);
     reportThreadVisibleOutputStallAfterFirstDelta(threadId, {

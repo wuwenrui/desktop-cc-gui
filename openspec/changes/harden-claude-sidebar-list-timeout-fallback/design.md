@@ -296,6 +296,7 @@ Then child MUST include the session with strict / high-confidence attribution
 
 ## Continued Rollout
 
-- 不归档本 change，直到第二阶段两个问题有 regression tests 与实现结果。
+- 第二阶段两个问题已有 regression tests 与实现结果；归档前保留 Windows 未覆盖 qualifier。
 - 第一阶段 timeout fallback 视为已完成基线，后续改动不得破坏 `useThreadActions.timeout-fallback.test.tsx`。
-- 若第二阶段触及 Rust attribution，执行至少 focused Rust tests + focused frontend sidebar tests；typecheck / full test 视改动半径决定。
+- 若后续继续触及 Rust attribution，执行至少 focused Rust tests + focused frontend sidebar tests；typecheck / full test 视改动半径决定。
+- 合并 PR 后执行 `openspec archive harden-claude-sidebar-list-timeout-fallback --strict`，并在 archive notes 中引用 `openspec/docs/session-management-refactor-closeout-2026-05-24.md`。

@@ -51,7 +51,7 @@ describe("sessionDisplayProjection", () => {
     expect(mergeSessionDisplaySummary(previous, next).name).toBe("Claude Session");
   });
 
-  it("lets custom and mapped titles override weak or meaningful candidates", () => {
+  it("lets custom titles override mapped titles and native candidates", () => {
     const previous: ThreadSummary = {
       id: "claude:session-1",
       name: "旧标题",
@@ -73,7 +73,37 @@ describe("sessionDisplayProjection", () => {
         { ...previous, name: "新标题", updatedAt: 120 },
         { mappedTitle: "映射标题", customTitle: "自定义标题" },
       ).name,
+    ).toBe("自定义标题");
+    expect(
+      mergeSessionDisplaySummary(
+        previous,
+        { ...previous, name: "新标题", updatedAt: 120 },
+        { mappedTitle: "映射标题" },
+      ).name,
     ).toBe("映射标题");
+  });
+
+  it("preserves parent relationship metadata during degraded continuity merges", () => {
+    const previous: ThreadSummary = {
+      id: "claude:child",
+      name: "子任务",
+      updatedAt: 100,
+      engineSource: "claude",
+      threadKind: "native",
+      parentThreadId: "claude:parent",
+    };
+    const next: ThreadSummary = {
+      id: "claude:child",
+      name: "Claude Session",
+      updatedAt: 120,
+      engineSource: "claude",
+      threadKind: "native",
+    };
+
+    expect(mergeSessionDisplaySummary(previous, next)).toMatchObject({
+      name: "子任务",
+      parentThreadId: "claude:parent",
+    });
   });
 
   it("projects degraded continuity candidates without resurrecting excluded rows", () => {

@@ -145,6 +145,27 @@ describe("GitHistoryWorktreePanel", () => {
     expect(document.querySelector(".git-history-worktree-engine-icon.commit-message-engine-icon")).toBeTruthy();
   });
 
+  it("renders file commit selection checkbox in the trailing meta area without opening diff", async () => {
+    const openDiffPath = vi.fn();
+    render(
+      <GitHistoryWorktreePanel
+        workspaceId="w1"
+        listView="tree"
+        onOpenDiffPath={openDiffPath}
+      />,
+    );
+
+    const selectionToggle = await screen.findByRole("checkbox", {
+      name: "Toggle commit selection: src/staged.ts",
+    });
+    expect(selectionToggle.closest(".diff-row-meta")).toBeTruthy();
+    expect(selectionToggle.classList.contains("git-history-worktree-row-selection")).toBe(true);
+
+    fireEvent.click(selectionToggle);
+
+    expect(openDiffPath).not.toHaveBeenCalled();
+  });
+
   it("keeps stage-file behavior unchanged", async () => {
     render(<GitHistoryWorktreePanel workspaceId="w1" listView="tree" />);
 
@@ -174,6 +195,64 @@ describe("GitHistoryWorktreePanel", () => {
     await waitFor(() => {
       expect(screen.getByText("unstaged.ts", { selector: ".diff-name-base" })).toBeTruthy();
     });
+  });
+
+  it("renders package-only worktree folders in a.b.c style", async () => {
+    mockGetGitStatus.mockResolvedValue({
+      branchName: "main",
+      files: [
+        {
+          path: "test/java/com/example/demo/service/UserServiceTest.java",
+          status: "M",
+          additions: 95,
+          deletions: 2,
+        },
+      ],
+      stagedFiles: [],
+      unstagedFiles: [
+        {
+          path: "test/java/com/example/demo/service/UserServiceTest.java",
+          status: "M",
+          additions: 95,
+          deletions: 2,
+        },
+      ],
+      totalAdditions: 95,
+      totalDeletions: 2,
+    });
+
+    render(<GitHistoryWorktreePanel workspaceId="w1" listView="tree" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("test.java.com.example.demo.service")).toBeTruthy();
+    });
+    expect(screen.queryByText("java", { selector: ".diff-tree-folder-name" })).toBeNull();
+    expect(screen.queryByText("com", { selector: ".diff-tree-folder-name" })).toBeNull();
+  });
+
+  it("keeps worktree branch folders unmerged when a folder contains files and child folders", async () => {
+    mockGetGitStatus.mockResolvedValue({
+      branchName: "main",
+      files: [
+        { path: "service/UserService.java", status: "M", additions: 42, deletions: 2 },
+        { path: "service/impl/UserServiceImpl.java", status: "M", additions: 57, deletions: 3 },
+      ],
+      stagedFiles: [],
+      unstagedFiles: [
+        { path: "service/UserService.java", status: "M", additions: 42, deletions: 2 },
+        { path: "service/impl/UserServiceImpl.java", status: "M", additions: 57, deletions: 3 },
+      ],
+      totalAdditions: 99,
+      totalDeletions: 5,
+    });
+
+    render(<GitHistoryWorktreePanel workspaceId="w1" listView="tree" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("service", { selector: ".diff-tree-folder-name" })).toBeTruthy();
+    });
+    expect(screen.queryByText("service.impl", { selector: ".diff-tree-folder-name" })).toBeNull();
+    expect(screen.getByText("impl", { selector: ".diff-tree-folder-name" })).toBeTruthy();
   });
 
   it("generates English commit message after menu selection", async () => {
@@ -294,7 +373,7 @@ describe("GitHistoryWorktreePanel", () => {
     });
   });
 
-  it("normalizes Windows tree folder selection to the same commit scope", async () => {
+  it("keeps tree folder rows free of commit checkboxes and normalizes Windows file selection", async () => {
     mockGetGitStatus.mockResolvedValue({
       branchName: "main",
       files: [{ path: "src\\feature\\only-unstaged.ts", status: "M", additions: 1, deletions: 0 }],
@@ -306,9 +385,15 @@ describe("GitHistoryWorktreePanel", () => {
 
     render(<GitHistoryWorktreePanel workspaceId="w1" listView="tree" />);
 
+    expect(
+      screen.queryByRole("checkbox", {
+        name: "Toggle commit selection: src",
+      }),
+    ).toBeNull();
+
     fireEvent.click(
       await screen.findByRole("checkbox", {
-        name: "Toggle commit selection: src",
+        name: "Toggle commit selection: src\\feature\\only-unstaged.ts",
       }),
     );
 

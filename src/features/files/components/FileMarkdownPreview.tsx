@@ -39,6 +39,11 @@ import type {
   CodeAnnotationSelection,
 } from "../../code-annotations/types";
 import { formatCodeAnnotationLineRange } from "../../code-annotations/utils/codeAnnotations";
+import {
+  DEFAULT_FILE_RENDER_PRESSURE,
+  hasForegroundFileRenderPressure,
+  type FileRenderPressure,
+} from "../types/fileRenderPressure";
 
 type FileMarkdownPreviewProps = {
   value: string;
@@ -50,6 +55,7 @@ type FileMarkdownPreviewProps = {
   renderAnnotationDraft?: (draft: { lineRange: CodeAnnotationLineRange; body: string }) => ReactNode;
   renderAnnotationMarker?: (annotation: CodeAnnotationSelection) => ReactNode;
   annotationActionLabel?: string;
+  renderPressure?: FileRenderPressure;
 };
 
 type PreviewPreNode = {
@@ -833,6 +839,7 @@ export function FileMarkdownPreview({
   renderAnnotationDraft,
   renderAnnotationMarker,
   annotationActionLabel = "Annotate",
+  renderPressure = DEFAULT_FILE_RENDER_PRESSURE,
 }: FileMarkdownPreviewProps) {
   const { t } = useTranslation();
   const mermaidDocumentKey = useMemo(
@@ -851,6 +858,7 @@ export function FileMarkdownPreview({
     () => resolveMarkdownRenderProjection(compiledDocument.metrics),
     [compiledDocument.metrics],
   );
+  const shouldUsePassiveCadence = hasForegroundFileRenderPressure(renderPressure);
   const markdownBodyLineCount = useMemo(
     () => compiledDocument.body.length === 0 ? 0 : compiledDocument.body.split(/\r?\n/).length,
     [compiledDocument.body],
@@ -869,6 +877,10 @@ export function FileMarkdownPreview({
   useEffect(() => {
     setVisibleLineLimit(effectiveInitialLineLimit);
   }, [compiledDocument.cacheKey, effectiveInitialLineLimit]);
+  const renderEpochRef = useRef(0);
+  useEffect(() => {
+    renderEpochRef.current += 1;
+  }, [compiledDocument.cacheKey, shouldUsePassiveCadence]);
   useEffect(() => {
     if (
       renderProjection.kind !== "progressive" ||
@@ -876,19 +888,24 @@ export function FileMarkdownPreview({
     ) {
       return;
     }
+    const scheduledEpoch = renderEpochRef.current;
     const timeoutId = window.setTimeout(() => {
+      if (scheduledEpoch !== renderEpochRef.current) {
+        return;
+      }
       setVisibleLineLimit((currentLineLimit) =>
         Math.min(
           currentLineLimit + renderProjection.chunkLineCount,
           effectiveMaxLineLimit,
         ),
       );
-    }, 16);
+    }, shouldUsePassiveCadence ? 96 : 16);
     return () => window.clearTimeout(timeoutId);
   }, [
     effectiveMaxLineLimit,
     renderProjection.chunkLineCount,
     renderProjection.kind,
+    shouldUsePassiveCadence,
     visibleLineLimit,
   ]);
     const projectedLineLimit =
@@ -1066,8 +1083,8 @@ export function FileMarkdownPreview({
       table: ({ node, children }) => renderAnnotatableBlock(
         "div",
         node,
-      <LazyMarkdownHeavyBlock
-        defer={renderProjection.kind !== "rich"}
+        <LazyMarkdownHeavyBlock
+        defer={shouldUsePassiveCadence || renderProjection.kind !== "rich"}
         label={t("files.markdownHeavyBlockDeferred")}
         revealKey={createHeavyBlockRevealKey({
           blockKey,
@@ -1096,7 +1113,7 @@ export function FileMarkdownPreview({
           "div",
           node,
           <LazyMarkdownHeavyBlock
-            defer={renderProjection.kind !== "rich"}
+            defer={shouldUsePassiveCadence || renderProjection.kind !== "rich"}
             label="Mermaid"
             revealKey={`${mermaidDocumentKey}:${mermaidBlockKey}:mermaid`}
           >
@@ -1115,7 +1132,7 @@ export function FileMarkdownPreview({
           "div",
           node,
           <LazyMarkdownHeavyBlock
-            defer={renderProjection.kind !== "rich"}
+            defer={shouldUsePassiveCadence || renderProjection.kind !== "rich"}
             label={languageTag ?? "math"}
             revealKey={createHeavyBlockRevealKey({
               blockKey,
@@ -1135,7 +1152,8 @@ export function FileMarkdownPreview({
         );
       }
       const shouldDeferCodeBlock =
-        renderProjection.kind !== "rich" && isHeavyCodeBlock(codeValue);
+        shouldUsePassiveCadence ||
+        (renderProjection.kind !== "rich" && isHeavyCodeBlock(codeValue));
       return renderAnnotatableBlock(
         "div",
         node,
@@ -1164,6 +1182,7 @@ export function FileMarkdownPreview({
     mermaidDocumentKey,
     renderAnnotatableBlock,
     renderProjection.kind,
+    shouldUsePassiveCadence,
     t,
   ]);
 

@@ -98,6 +98,24 @@ describe("WorkspaceHome", () => {
     expect(container.textContent).not.toContain("unknown");
   });
 
+  it("does not derive workspace session membership from recent thread props", () => {
+    renderWorkspaceHome(baseWorkspace, "feature/ref-layout", {
+      recentThreads: [
+        {
+          id: "recent-1",
+          workspaceId: "child-ws",
+          threadId: "claude:session-1",
+          title: "Child Claude should stay catalog-owned",
+          updatedAt: 10,
+          isProcessing: false,
+          isReviewing: false,
+        },
+      ],
+    });
+
+    expect(screen.queryByText("Child Claude should stay catalog-owned")).toBeNull();
+  });
+
   it("renders workspace-scoped task runs from Task Center storage", () => {
     mockedLoadTaskRunStore.mockReturnValue({
       version: 1,

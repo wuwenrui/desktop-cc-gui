@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { WorkspaceSessionCatalogEntry } from "../../../../../services/tauri";
-import { buildLoadedSessionFolderCountSummary } from "./sessionManagementSectionUtils";
+import {
+  buildLoadedSessionFolderCountSummary,
+  resolveWorkspaceSessionDisplayTitle,
+} from "./sessionManagementSectionUtils";
 
 function makeEntry(
   overrides: Partial<WorkspaceSessionCatalogEntry>,
@@ -46,5 +49,17 @@ describe("sessionManagementSectionUtils", () => {
 
     expect(summary.folderCountsById.get("folder-a")).toBe(2);
     expect(summary.unassignedFolderCount).toBe(2);
+  });
+
+  it("uses the shared title resolver for settings and curtain labels", () => {
+    expect(
+      resolveWorkspaceSessionDisplayTitle(
+        makeEntry({ title: "  修复 Claude 会话显示  " }),
+        "Untitled",
+      ),
+    ).toBe("修复 Claude 会话显示");
+    expect(resolveWorkspaceSessionDisplayTitle(makeEntry({ title: "" }), "Untitled")).toBe(
+      "Untitled",
+    );
   });
 });

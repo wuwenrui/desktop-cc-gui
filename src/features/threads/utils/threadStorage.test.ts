@@ -11,6 +11,7 @@ vi.mock("../../../services/clientStorage", () => ({
 }));
 
 import {
+  buildClearedThreadAliases,
   buildUpdatedThreadAliases,
   loadThreadAliases,
   resolveCanonicalThreadAlias,
@@ -29,6 +30,7 @@ describe("threadStorage aliases", () => {
       " ": "thread-blank",
       "thread-loop": "thread-loop",
       "thread-empty": "   ",
+      "claude:session-old": "claude:session-new",
     });
 
     expect(loadThreadAliases()).toEqual({
@@ -67,12 +69,36 @@ describe("threadStorage aliases", () => {
     expect(resolveCanonicalThreadAlias(aliases, "thread-old")).toBe("thread-next");
   });
 
+  it("does not alias finalized native session ids", () => {
+    expect(
+      buildUpdatedThreadAliases(
+        {
+          "claude:session-a": "claude:session-b",
+          "opencode:session-a": "opencode:session-b",
+          "gemini:session-a": "gemini:session-b",
+        },
+        "claude:session-current",
+        "claude:session-next",
+      ),
+    ).toEqual({});
+    expect(
+      buildUpdatedThreadAliases(
+        {},
+        "claude-pending-123",
+        "claude:session-next",
+      ),
+    ).toEqual({
+      "claude-pending-123": "claude:session-next",
+    });
+  });
+
   it("persists normalized alias maps", () => {
     saveThreadAliases({
       "thread-a": "thread-b",
       "thread-b": "thread-b",
       "thread-c": "thread-d",
       "thread-d": "thread-e",
+      "claude:session-old": "claude:session-new",
     });
 
     expect(clientStorageMocks.writeClientStoreValue).toHaveBeenCalledWith(
@@ -84,5 +110,19 @@ describe("threadStorage aliases", () => {
         "thread-d": "thread-e",
       },
     );
+  });
+
+  it("clears one persisted alias without deleting related canonical targets", () => {
+    const aliases = buildClearedThreadAliases(
+      {
+        "thread-stale": "thread-recovered",
+        "thread-old": "thread-recovered",
+      },
+      "thread-stale",
+    );
+
+    expect(aliases).toEqual({
+      "thread-old": "thread-recovered",
+    });
   });
 });

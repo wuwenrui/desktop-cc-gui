@@ -1,5 +1,13 @@
 # Proposal: Desktop Editor Split Keeps Composer In Chat Column
 
+## 2026-05-23 Proposal Refresh
+
+- **Current branch**: `feature/v0.5.2`; this refresh is documentation-only and does not change implementation code.
+- **Task state**: 8/8 checked; status = Completed / pending verify-archive.
+- **Code/document evidence**: `DesktopLayout`/`FileViewPanel` 已支持 editor split 与 composer chat-column placement；相关 test 覆盖 horizontal editor split 中 composer 位置。
+- **Next action**: 归档前确认 layout focused tests 与 visual/manual notes。
+- **Validation note**: `openspec validate --all --strict --no-interactive` passed 299 items in this documentation refresh.
+
 ## Why
 
 desktop editor split 现在把幕布与文件放在上方左右分栏，但 composer 仍在全局底部横跨整屏。用户在“边看文件边对话”时，输入框与幕布被视觉和空间上拆开，右侧文件也被底部 composer 挤短。

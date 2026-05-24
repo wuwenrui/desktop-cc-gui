@@ -1,6 +1,8 @@
-import { describe, expect, it } from "vitest";
+import type { Virtualizer } from "@tanstack/react-virtual";
+import { describe, expect, it, vi } from "vitest";
 import {
   estimateTimelineProjectionRowSize,
+  observeTimelineElementOffset,
   shouldVirtualizeTimelineRows,
   TIMELINE_VIRTUALIZATION_MIN_ROWS,
 } from "./messagesTimelineVirtualization";
@@ -67,5 +69,42 @@ describe("messagesTimelineVirtualization", () => {
     expect(estimateTimelineProjectionRowSize(groupRow)).toBeGreaterThan(
       estimateTimelineProjectionRowSize(singleRow),
     );
+  });
+
+  it("clears pending scroll-end fallback when virtualizer unmounts", () => {
+    const listeners = new Map<string, EventListener>();
+    const element = {
+      scrollLeft: 0,
+      scrollTop: 240,
+      addEventListener: vi.fn((eventName: string, listener: EventListener) => {
+        listeners.set(eventName, listener);
+      }),
+      removeEventListener: vi.fn(),
+    } as unknown as Element & { scrollLeft: number; scrollTop: number };
+    const setTimeoutSpy = vi.fn(() => 7);
+    const clearTimeoutSpy = vi.fn();
+    const targetWindow = {
+      setTimeout: setTimeoutSpy,
+      clearTimeout: clearTimeoutSpy,
+    } as unknown as Window & typeof globalThis;
+    const instance = {
+      scrollElement: element,
+      targetWindow,
+      options: {
+        horizontal: false,
+        isRtl: false,
+        isScrollingResetDelay: 150,
+        useScrollendEvent: false,
+      },
+    } as Virtualizer<Element, Element>;
+    const callback = vi.fn();
+
+    const cleanup = observeTimelineElementOffset(instance, callback);
+    listeners.get("scroll")?.(new Event("scroll"));
+    cleanup?.();
+
+    expect(callback).toHaveBeenCalledWith(240, true);
+    expect(setTimeoutSpy).toHaveBeenCalled();
+    expect(clearTimeoutSpy).toHaveBeenCalledWith(7);
   });
 });

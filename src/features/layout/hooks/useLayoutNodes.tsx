@@ -922,6 +922,15 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     ),
   };
   const isThreadThinking = activeThreadStatus?.isProcessing ?? false;
+  const fileRenderPressure = useMemo(
+    () => ({
+      engineProcessing: isThreadThinking,
+      editorSplitChatVisible:
+        options.centerMode === "editor" && !options.isEditorFileMaximized,
+      activeSurface: "editor" as const,
+    }),
+    [isThreadThinking, options.centerMode, options.isEditorFileMaximized],
+  );
   const conversationEngine = useMemo(
     () =>
       resolveActiveConversationEngine(
@@ -1638,7 +1647,8 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   const isStatusPanelEngine =
     options.selectedEngine === "claude" ||
     options.selectedEngine === "codex" ||
-    options.selectedEngine === "gemini";
+    options.selectedEngine === "gemini" ||
+    options.selectedEngine === "opencode";
   const isStatusPanelCodexEngine = options.selectedEngine === "codex";
   const {
     todoTotal,
@@ -1659,10 +1669,15 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     commandTotal > 0 ||
     options.isPlanMode ||
     Boolean(options.plan);
+  const hasVisibleBaselineStatusTab =
+    bottomActivityVisibleTabs.latestUserMessage ||
+    bottomActivityVisibleTabs.checkpoint;
   const shouldMountBottomStatusPanel =
     showBottomActivityPanel &&
     isStatusPanelEngine &&
-    (hasStatusPanelActivity || options.bottomStatusPanelExpanded);
+    (hasStatusPanelActivity ||
+      options.bottomStatusPanelExpanded ||
+      (hasVisibleBaselineStatusTab && Boolean(options.activeThreadId)));
   const showBottomStatusPanel =
     shouldMountBottomStatusPanel && options.bottomStatusPanelExpanded;
   const openBottomStatusPanel = options.onOpenPlanPanel;
@@ -1872,7 +1887,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         onReviewPromptConfirmCustom={options.onReviewPromptConfirmCustom}
       />
     ) : null;
-  const composerNode = renderComposerNode();
+  const composerNode = renderComposerNode(false);
   const homeComposerNode = renderComposerNode(false);
   const approvalToastsNode = null;
   const topbarTabContextMenuNode = topbarTabContextMenu ? (
@@ -2291,6 +2306,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
           externalChangeApplyMode={options.externalChangeApplyMode}
           externalChangeAutoApplyDebounceMs={options.externalChangeAutoApplyDebounceMs}
           markdownPreviewSnapshotMode={options.liveEditPreviewEnabled ? "live" : "stable"}
+          fileRenderPressure={fileRenderPressure}
         saveFileShortcut={options.saveFileShortcut}
         findInFileShortcut={options.findInFileShortcut}
       />

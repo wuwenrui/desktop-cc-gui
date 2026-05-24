@@ -59,7 +59,7 @@ cargo test --manifest-path src-tauri/Cargo.toml
 - Windows `.cmd/.bat` compatibility retry MAY run only after the same Codex capability gate path and MUST NOT convert a Claude wrapper into a Codex runtime.
 - Codex missing/custom mismatch errors MUST be Codex-specific and MUST NOT recommend installing Claude as a substitute.
 - Claude history scanner/load path MUST filter high-confidence control-plane entries before counting messages, deriving first message, or returning loaded messages.
-- The control-plane predicate MUST use structured signals such as JSON-RPC `initialize`, `clientInfo.name/title=ccgui` + `capabilities.experimentalApi`, `developer_instructions`, and pure Codex app-server invocation text. It MUST NOT filter normal user text merely because it mentions `app-server`.
+- The control-plane predicate MUST use structured signals such as JSON-RPC `initialize`, `clientInfo.name/title=ccgui` + `capabilities.experimentalApi`, `developer_instructions`, and pure Codex app-server invocation text. Pure Codex app-server text means `app-server` alone or command-token form such as `codex app-server`, `codex.exe app-server`, `codex.cmd app-server`, or `codex.bat app-server`. It MUST NOT filter normal user text merely because it mentions `app-server` or `codex app-server`.
 
 ### 4. Validation & Error Matrix
 
@@ -70,7 +70,7 @@ cargo test --manifest-path src-tauri/Cargo.toml
 | Windows Codex wrapper primary launch fails | allow wrapper retry only for Codex-capable wrapper | retry arbitrary non-Codex wrapper |
 | Claude JSONL only has control-plane payload | no visible session summary | create `app-server` / `developer` pseudo session |
 | Claude JSONL mixes real messages and control-plane payload | drop pollution and keep real messages | drop whole transcript or count pollution |
-| User asks about app-server in natural language | keep the message | keyword-only filtering |
+| User asks about app-server / codex app-server in natural language | keep the message | keyword-only filtering |
 
 ### 5. Good / Base / Bad Cases
 
@@ -84,7 +84,7 @@ cargo test --manifest-path src-tauri/Cargo.toml
 - Rust tests for wrapper eligibility and `app-server` arg construction.
 - Rust tests for control-plane-only Claude transcript not producing a session.
 - Rust tests for mixed Claude transcript preserving real user/assistant messages.
-- Rust tests proving normal user text containing `app-server` is not filtered.
+- Rust tests proving normal user text containing `app-server` or `codex app-server` is not filtered, while pure command-token `codex app-server` is filtered.
 - Frontend Vitest coverage for the matching loader fallback predicate.
 
 ### 7. Wrong vs Correct

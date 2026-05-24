@@ -1,3 +1,11 @@
+## 2026-05-23 Proposal Refresh
+
+- **Current branch**: `feature/v0.5.2`; this refresh is documentation-only and does not change implementation code.
+- **Task state**: 12/12 checked; status = Completed / pending verify-archive.
+- **Code/document evidence**: `FileMarkdownPreview.tsx` 已接入 `remark-math`、KaTeX asset loader/cache、Mermaid source/render tab；`FileViewPanel.test.tsx` 覆盖 inline/display/fenced math。
+- **Next action**: 归档前补 verification，确认 file-view Markdown focused tests、message math guard、typecheck 与 OpenSpec validation。
+- **Validation note**: `openspec validate --all --strict --no-interactive` passed 299 items in this documentation refresh.
+
 ## Why
 
 `.md` 文件预览已经有 dedicated file-preview Markdown renderer，并且现有对话消息 Markdown renderer 已支持 KaTeX 与 Mermaid。但文件预览链路目前只接入了 GFM 与 Mermaid fenced block，数学公式仍以原文显示，导致同一份 Markdown 在幕布/消息区与文件预览中表现不一致。

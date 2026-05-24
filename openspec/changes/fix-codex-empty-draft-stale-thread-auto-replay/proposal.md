@@ -1,3 +1,11 @@
+## 2026-05-23 Proposal Refresh
+
+- **Current branch**: `feature/v0.5.2`; this refresh is documentation-only and does not change implementation code.
+- **Task state**: 11/11 checked; status = Completed / pending verify-archive.
+- **Code/document evidence**: `codexConversationLiveness`、`useThreadMessaging` stale-thread retry、thread action stale recovery 与 related diagnostics tests 已存在。
+- **Next action**: 归档前确认 stale thread recovery focused tests、liveness guard 与 strict validation。
+- **Validation note**: `openspec validate --all --strict --no-interactive` passed 299 items in this documentation refresh.
+
 ## Why
 
 Newly created Codex conversations can occasionally keep a provisional `threadId` that was never durably accepted by Codex state. When the user sends the first prompt later, `thread not found` currently may surface as a stale-session recovery card even though the source is only an empty draft.

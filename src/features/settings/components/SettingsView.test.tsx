@@ -1806,7 +1806,7 @@ describe("SettingsView Session management", () => {
       expect(listWorkspaceSessions).toHaveBeenCalledWith("ws-b", {
         query: { keyword: null, engine: null, status: "active", folderId: null },
         cursor: null,
-        limit: 100,
+        limit: 999,
       });
     });
   });
@@ -1876,7 +1876,7 @@ describe("SettingsView Session management", () => {
       expect(listWorkspaceSessions).toHaveBeenCalledWith("ws-1", {
         query: { keyword: null, engine: null, status: "active", folderId: null },
         cursor: null,
-        limit: 100,
+        limit: 999,
       });
     });
     expect(await screen.findByText("Session A")).toBeTruthy();

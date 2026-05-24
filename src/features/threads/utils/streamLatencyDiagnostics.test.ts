@@ -154,6 +154,172 @@ describe("streamLatencyDiagnostics", () => {
     );
   });
 
+  it("records candidate mitigation separately from active mitigation", async () => {
+    mocks.isWindowsPlatform.mockReturnValue(true);
+    mocks.getCurrentClaudeConfig.mockResolvedValue({
+      apiKey: "",
+      baseUrl: "https://api.anthropic.test",
+      providerId: "custom",
+      providerName: "Custom Provider",
+    });
+
+    await primeThreadStreamLatencyContext({
+      workspaceId: "ws-1",
+      threadId: "thread-candidate",
+      engine: "claude",
+      model: "claude-sonnet-4.5",
+    });
+
+    noteThreadTurnStarted({
+      workspaceId: "ws-1",
+      threadId: "thread-candidate",
+      turnId: "turn-candidate",
+      startedAt: 2_000,
+    });
+    noteThreadDeltaReceived("thread-candidate", 2_050);
+
+    const snapshot = getThreadStreamLatencySnapshot("thread-candidate");
+
+    expect(snapshot?.candidateMitigationProfile).toBe(
+      "claude-windows-visible-stream",
+    );
+    expect(snapshot?.mitigationProfile).toBeNull();
+    expect(mocks.appendRendererDiagnostic).toHaveBeenCalledWith(
+      "stream-latency/mitigation-candidate-selected",
+      expect.objectContaining({
+        threadId: "thread-candidate",
+        candidateMitigationProfile: "claude-windows-visible-stream",
+        candidateMitigationReason: "first-delta-visible-stream-candidate",
+        mitigationProfile: null,
+        candidateReason: "first-delta-visible-stream-candidate",
+      }),
+    );
+  });
+
+  it("records first visible latency before render amplification", async () => {
+    mocks.isWindowsPlatform.mockReturnValue(true);
+    const getItem = vi.fn((key: string) =>
+      key === "ccgui.debug.streamLatency.firstVisibleLatencyMs"
+        ? "80"
+        : key === "ccgui.debug.streamLatency.renderAmplificationMs"
+          ? "200"
+          : null,
+    );
+    vi.stubGlobal("window", {
+      localStorage: { getItem },
+    });
+
+    await primeThreadStreamLatencyContext({
+      workspaceId: "ws-1",
+      threadId: "thread-first-visible",
+      engine: "claude",
+      model: "claude-sonnet-4.5",
+    });
+
+    noteThreadTurnStarted({
+      workspaceId: "ws-1",
+      threadId: "thread-first-visible",
+      turnId: "turn-first-visible",
+      startedAt: 1_000,
+    });
+    noteThreadDeltaReceived("thread-first-visible", 1_100);
+    noteThreadVisibleRender("thread-first-visible", {
+      visibleItemCount: 1,
+      renderAt: 1_230,
+    });
+
+    const snapshot = getThreadStreamLatencySnapshot("thread-first-visible");
+
+    expect(snapshot?.latencyCategory).toBeNull();
+    expect(snapshot?.mitigationProfile).toBeNull();
+    expect(snapshot?.firstVisibleRenderAfterDeltaMs).toBe(130);
+    expect(mocks.appendRendererDiagnostic).toHaveBeenCalledWith(
+      "stream-latency/first-visible-latency",
+      expect.objectContaining({
+        threadId: "thread-first-visible",
+        renderLagMs: 130,
+        firstVisibleLatencyThresholdMs: 80,
+        renderAmplificationThresholdMs: 200,
+      }),
+    );
+  });
+
+  it("ignores blank debug threshold values instead of treating them as zero", async () => {
+    mocks.isWindowsPlatform.mockReturnValue(true);
+    const getItem = vi.fn((key: string) =>
+      key === "ccgui.debug.streamLatency.firstVisibleLatencyMs"
+        ? "   "
+        : key === "ccgui.debug.streamLatency.renderAmplificationMs"
+          ? "200"
+          : null,
+    );
+    vi.stubGlobal("window", {
+      localStorage: { getItem },
+    });
+
+    await primeThreadStreamLatencyContext({
+      workspaceId: "ws-1",
+      threadId: "thread-blank-threshold",
+      engine: "claude",
+      model: "claude-sonnet-4.5",
+    });
+
+    noteThreadTurnStarted({
+      workspaceId: "ws-1",
+      threadId: "thread-blank-threshold",
+      turnId: "turn-blank-threshold",
+      startedAt: 1_000,
+    });
+    noteThreadDeltaReceived("thread-blank-threshold", 1_100);
+    noteThreadVisibleRender("thread-blank-threshold", {
+      visibleItemCount: 1,
+      renderAt: 1_200,
+    });
+
+    expect(mocks.appendRendererDiagnostic).not.toHaveBeenCalledWith(
+      "stream-latency/first-visible-latency",
+      expect.anything(),
+    );
+  });
+
+  it("does not report first visible latency for an empty visible render", async () => {
+    mocks.isWindowsPlatform.mockReturnValue(true);
+    const getItem = vi.fn((key: string) =>
+      key === "ccgui.debug.streamLatency.firstVisibleLatencyMs"
+        ? "80"
+        : key === "ccgui.debug.streamLatency.renderAmplificationMs"
+          ? "200"
+          : null,
+    );
+    vi.stubGlobal("window", {
+      localStorage: { getItem },
+    });
+
+    await primeThreadStreamLatencyContext({
+      workspaceId: "ws-1",
+      threadId: "thread-empty-render",
+      engine: "claude",
+      model: "claude-sonnet-4.5",
+    });
+
+    noteThreadTurnStarted({
+      workspaceId: "ws-1",
+      threadId: "thread-empty-render",
+      turnId: "turn-empty-render",
+      startedAt: 1_000,
+    });
+    noteThreadDeltaReceived("thread-empty-render", 1_100);
+    noteThreadVisibleRender("thread-empty-render", {
+      visibleItemCount: 0,
+      renderAt: 1_230,
+    });
+
+    expect(mocks.appendRendererDiagnostic).not.toHaveBeenCalledWith(
+      "stream-latency/first-visible-latency",
+      expect.anything(),
+    );
+  });
+
   it("classifies visible output stall after first delta independent of provider/model", async () => {
     mocks.isWindowsPlatform.mockReturnValue(true);
     mocks.getCurrentClaudeConfig.mockResolvedValue({

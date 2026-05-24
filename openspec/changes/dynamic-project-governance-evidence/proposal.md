@@ -1,3 +1,11 @@
+## 2026-05-23 Proposal Refresh
+
+- **Current branch**: `feature/v0.5.2`; this refresh is documentation-only and does not change implementation code.
+- **Task state**: 34/34 checked; status = Completed / pending verify-archive.
+- **Code/document evidence**: `src/features/governance/evidence/*`、`GovernanceEvidenceSection`、policy audit、cost/capability/gate adapters 与 replay fixtures 已存在。
+- **Next action**: 归档前补 evidence replay、policy audit、StatusPanel focused tests 与 strict validation 记录。
+- **Validation note**: `openspec validate --all --strict --no-interactive` passed 299 items in this documentation refresh.
+
 ## Why
 
 当前 `Governance evidence` 仍带有明显的 mossx/harness 专用色彩：OpenSpec tasks、large-file gate、heavy-test-noise、固定 harness scripts、固定 workflow、Trellis session record 被平铺成同一组证据。这个模型在 mossx 当前分支里可解释，但换到 Python、Rust、Go、Java 或普通 Node 项目时，会把“不适用”误报成“未知/异常”，用户看到的是固定 checklist，而不是当前项目真正需要治理的风险。

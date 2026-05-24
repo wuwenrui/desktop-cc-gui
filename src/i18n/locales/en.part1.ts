@@ -1354,6 +1354,8 @@ const enPart1 = {
       "The disk session was already missing, so the project index was cleaned.",
     sessionManagementPartialSource:
       "Current result includes fallback source: {{source}}",
+    sessionManagementPageLimitCapped:
+      "Requested {{requested}} sessions; backend returned a {{effective}}-session page. Load more to continue.",
     sessionManagementBadgeArchived: "Archived",
     sessionManagementBadgeRelated: "Inferred",
     sessionManagementBadgeMissingOnDisk: "Missing on disk",

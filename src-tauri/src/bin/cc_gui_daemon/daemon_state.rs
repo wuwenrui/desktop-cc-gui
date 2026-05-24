@@ -2381,13 +2381,45 @@ impl DaemonState {
         cursor: Option<String>,
         limit: Option<u32>,
     ) -> Result<session_management::WorkspaceSessionCatalogPage, String> {
-        session_management::list_project_related_codex_sessions_core(
+        session_management::list_project_related_sessions_core(
             &self.workspaces,
+            &self.engine_manager,
+            self.storage_path.as_path(),
+            workspace_id,
+            Some(session_management::force_codex_related_query(query)),
+            cursor,
+            limit,
+        )
+        .await
+    }
+
+    pub(super) async fn list_project_related_sessions(
+        &self,
+        workspace_id: String,
+        query: Option<session_management::WorkspaceSessionCatalogQuery>,
+        cursor: Option<String>,
+        limit: Option<u32>,
+    ) -> Result<session_management::WorkspaceSessionCatalogPage, String> {
+        session_management::list_project_related_sessions_core(
+            &self.workspaces,
+            &self.engine_manager,
             self.storage_path.as_path(),
             workspace_id,
             query,
             cursor,
             limit,
+        )
+        .await
+    }
+
+    pub(super) async fn list_workspace_session_archive_evidence(
+        &self,
+        workspace_id: String,
+    ) -> Result<session_management::WorkspaceSessionArchiveEvidence, String> {
+        session_management::list_workspace_session_archive_evidence_core(
+            &self.workspaces,
+            self.storage_path.as_path(),
+            workspace_id,
         )
         .await
     }
@@ -2415,6 +2447,7 @@ impl DaemonState {
         session_management::archive_workspace_sessions_core(
             &self.workspaces,
             &self.sessions,
+            &self.engine_manager,
             self.storage_path.as_path(),
             workspace_id,
             session_ids,
@@ -2429,6 +2462,7 @@ impl DaemonState {
     ) -> Result<session_management::WorkspaceSessionBatchMutationResponse, String> {
         session_management::unarchive_workspace_sessions_core(
             &self.workspaces,
+            &self.engine_manager,
             self.storage_path.as_path(),
             workspace_id,
             session_ids,
