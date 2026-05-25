@@ -657,3 +657,49 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 577: 稳定 Sidebar 会话文件夹测试
+
+**Date**: 2026-05-25
+**Task**: 稳定 Sidebar 会话文件夹测试
+**Branch**: `feature/v0.5.3`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+修复 Sidebar.session-folders 测试在 CI 中超时和 act warning 的问题。
+
+主要改动：
+- 将 moves a session subtree 用例中错误的 role=treeitem 查询改为按文本定位 Parent session，再取对应 .thread-row。
+- 将 context menu 打开、submenu hover、删除弹窗点击等会触发 React/Popover 状态更新的交互包进 act。
+- 删除文件夹失败用例改用 waitFor 等待 async delete mock 调用，避免未收口状态更新产生 heavy-test-noise act violations。
+
+验证：
+- node node_modules/vitest/vitest.mjs run --maxWorkers 1 --minWorkers 1 src/features/app/components/Sidebar.session-folders.test.tsx -t "moves a session subtree"
+- node node_modules/vitest/vitest.mjs run --maxWorkers 1 --minWorkers 1 src/features/app/components/Sidebar.session-folders.test.tsx
+- node node_modules/vitest/vitest.mjs run --maxWorkers 1 --minWorkers 1 src/features/app/components/Sidebar.test.tsx src/features/app/components/Sidebar.session-folders.test.tsx src/features/app/components/RequestUserInputMessage.test.tsx src/features/app/components/Sidebar.subagent-tree.test.tsx
+- npm run typecheck
+- npm run lint
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9d5e0a34` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
