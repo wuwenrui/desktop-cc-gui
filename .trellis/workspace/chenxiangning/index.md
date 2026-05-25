@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-16.md`
-- **Total Sessions**: 572
+- **Total Sessions**: 573
 - **Last Active**: 2026-05-25
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-16.md` | ~501 | Active |
+| `journal-16.md` | ~542 | Active |
 | `journal-15.md` | ~1996 | Archived |
 | `journal-14.md` | ~1969 | Archived |
 | `journal-13.md` | ~1947 | Archived |
@@ -44,6 +44,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 573 | 2026-05-25 | 校准 Context Ledger 提案证据 | `28357440` | `feature/v0.5.3` |
 | 572 | 2026-05-25 | 合并 Context Ledger 展开收起入口 | `e79604ab` | `feature/v0.5.3` |
 | 571 | 2026-05-25 | 优化会话移动反馈与子菜单定位 | `0f7a7350` | `feature/v0.5.3` |
 | 570 | 2026-05-24 | 收敛文件底部标注交互 | `33a84e1a` | `feature/v0.5.2` |

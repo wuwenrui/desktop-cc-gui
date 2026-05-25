@@ -499,3 +499,44 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 573: 校准 Context Ledger 提案证据
+
+**Date**: 2026-05-25
+**Task**: 校准 Context Ledger 提案证据
+**Branch**: `feature/v0.5.3`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| 项目 | 内容 |
+|------|------|
+| OpenSpec change | `unify-context-ledger-toggle-position` |
+| 校准提交 | `28357440 docs(openspec): 校准上下文账本提案证据` |
+| 校准内容 | 精读 `e79604ab` 的实际代码 diff 后，修正 proposal Impact：`ChatInputBox/styles/banners.css` 仅复用既有 `.composer-readiness-expand`，无净代码改动；补充 `ContextLedgerPanel.tsx` 为实际影响文件。 |
+| 精度增强 | 在 `verification.md` 增加 Code / Proposal Alignment 表，将 proposal claim 逐条映射到 `Composer.tsx`、`ComposerReadinessBar.tsx`、`ContextLedgerPanel.tsx` 与 focused tests 的证据。 |
+| 验证 | `openspec validate unify-context-ledger-toggle-position --strict --no-interactive` pass；`openspec validate --all --strict --no-interactive` pass，307 items / 0 failed；scoped `git diff --check` pass。 |
+| 边界 | 本次只改 OpenSpec proposal / verification 文档；未触碰功能代码；未 stage 无关 dirty worktree 文件。 |
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `28357440` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
