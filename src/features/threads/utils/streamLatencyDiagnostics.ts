@@ -27,6 +27,7 @@ export type StreamMitigationProfile = {
 };
 
 export type StreamIngressSource = "delta" | "snapshot" | "completion";
+export type StreamRecoverySource = "provider-final" | "live-shadow";
 
 export type ThreadStreamLatencySnapshot = {
   threadId: string;
@@ -46,6 +47,11 @@ export type ThreadStreamLatencySnapshot = {
   lastIngressSource: StreamIngressSource | null;
   lastIngressItemId: string | null;
   lastIngressTextLength: number;
+  lastReducerMergeCostMs: number | null;
+  lastNormalizationCostMs: number | null;
+  lastRenderCostMs: number | null;
+  lastRecoverySource: StreamRecoverySource | null;
+  lastRecoverySourceId: string | null;
   pendingRenderSinceDeltaAt: number | null;
   deltaCount: number;
   cadenceSamplesMs: number[];
@@ -80,6 +86,7 @@ const DEFAULT_RENDER_AMPLIFICATION_THRESHOLD_MS = 160;
 const DEFAULT_VISIBLE_OUTPUT_STALL_THRESHOLD_MS = 700;
 const CODEX_INGRESS_GAP_DIAGNOSTIC_MS = 2_000;
 const LARGE_INGRESS_TEXT_DIAGNOSTIC_CHARS = 1_000;
+const LONG_LIVE_ROW_DIAGNOSTIC_CHARS = 20_000;
 const STREAM_MITIGATION_DISABLE_FLAG_KEY = "ccgui.debug.streamMitigation.disabled";
 const STREAM_LATENCY_TRACE_FLAG_KEY = "ccgui.debug.streamLatencyTrace";
 const STREAM_LATENCY_FIRST_VISIBLE_THRESHOLD_KEY =
@@ -196,6 +203,11 @@ function createInitialSnapshot(threadId: string): ThreadStreamLatencySnapshot {
     lastIngressSource: null,
     lastIngressItemId: null,
     lastIngressTextLength: 0,
+    lastReducerMergeCostMs: null,
+    lastNormalizationCostMs: null,
+    lastRenderCostMs: null,
+    lastRecoverySource: null,
+    lastRecoverySourceId: null,
     pendingRenderSinceDeltaAt: null,
     deltaCount: 0,
     cadenceSamplesMs: [],
@@ -603,6 +615,11 @@ function buildCorrelationPayload(
     lastIngressSource: snapshot.lastIngressSource,
     lastIngressItemId: snapshot.lastIngressItemId,
     lastIngressTextLength: snapshot.lastIngressTextLength,
+    lastReducerMergeCostMs: snapshot.lastReducerMergeCostMs,
+    lastNormalizationCostMs: snapshot.lastNormalizationCostMs,
+    lastRenderCostMs: snapshot.lastRenderCostMs,
+    lastRecoverySource: snapshot.lastRecoverySource,
+    lastRecoverySourceId: snapshot.lastRecoverySourceId,
     pendingVisibleTextSinceDeltaAtMs:
       snapshot.startedAt !== null && snapshot.pendingVisibleTextSinceDeltaAt !== null
         ? Math.max(0, snapshot.pendingVisibleTextSinceDeltaAt - snapshot.startedAt)
@@ -833,6 +850,11 @@ export function buildThreadStreamCorrelationDimensions(threadId: string | null) 
       lastIngressSource: null,
       lastIngressItemId: null,
       lastIngressTextLength: 0,
+      lastReducerMergeCostMs: null,
+      lastNormalizationCostMs: null,
+      lastRenderCostMs: null,
+      lastRecoverySource: null,
+      lastRecoverySourceId: null,
       pendingVisibleTextSinceDeltaAtMs: null,
       lastRenderLagMs: null,
       chunkCadenceAvgMs: null,
@@ -931,6 +953,11 @@ export function noteThreadTurnStarted(input: {
     lastIngressSource: null,
     lastIngressItemId: null,
     lastIngressTextLength: 0,
+    lastReducerMergeCostMs: null,
+    lastNormalizationCostMs: null,
+    lastRenderCostMs: null,
+    lastRecoverySource: null,
+    lastRecoverySourceId: null,
     pendingRenderSinceDeltaAt: null,
     deltaCount: 0,
     cadenceSamplesMs: [],
@@ -1111,6 +1138,108 @@ function maybeActivateMitigation(
       renderLagMs,
       visibleItemCount,
     },
+  );
+}
+
+export function noteThreadReducerWorkMeasured(
+  threadId: string,
+  input: {
+    itemId: string;
+    textLength: number;
+    mergeCostMs: number;
+    normalizationCostMs: number;
+    measuredAt?: number;
+  },
+) {
+  const measuredAt = input.measuredAt ?? Date.now();
+  const textLength = normalizeVisibleTextLength(input.textLength);
+  const mergeCostMs = normalizeNonNegativeFiniteNumber(input.mergeCostMs) ?? 0;
+  const normalizationCostMs =
+    normalizeNonNegativeFiniteNumber(input.normalizationCostMs) ?? 0;
+  const nextSnapshot = updateThreadSnapshot(threadId, (current) => ({
+    ...current,
+    lastReducerMergeCostMs: mergeCostMs,
+    lastNormalizationCostMs: normalizationCostMs,
+  }));
+  if (textLength < LONG_LIVE_ROW_DIAGNOSTIC_CHARS && !isStreamLatencyTraceEnabled()) {
+    return;
+  }
+  appendRendererDiagnostic(
+    "stream-latency/reducer-work",
+    buildCorrelationPayload(nextSnapshot, {
+      itemId: input.itemId,
+      textLength,
+      mergeCostMs,
+      normalizationCostMs,
+      measuredAtMs:
+        nextSnapshot.startedAt !== null
+          ? Math.max(0, measuredAt - nextSnapshot.startedAt)
+          : null,
+    }),
+  );
+}
+
+export function noteThreadLiveRowRenderMeasured(
+  threadId: string,
+  input: {
+    itemId: string;
+    textLength: number;
+    renderCostMs: number;
+    renderAt?: number;
+  },
+) {
+  const renderAt = input.renderAt ?? Date.now();
+  const textLength = normalizeVisibleTextLength(input.textLength);
+  const renderCostMs = normalizeNonNegativeFiniteNumber(input.renderCostMs) ?? 0;
+  const nextSnapshot = updateThreadSnapshot(threadId, (current) => ({
+    ...current,
+    lastRenderCostMs: renderCostMs,
+  }));
+  if (textLength < LONG_LIVE_ROW_DIAGNOSTIC_CHARS && !isStreamLatencyTraceEnabled()) {
+    return;
+  }
+  appendRendererDiagnostic(
+    "stream-latency/long-live-row-render",
+    buildCorrelationPayload(nextSnapshot, {
+      itemId: input.itemId,
+      textLength,
+      renderCostMs,
+      renderAtMs:
+        nextSnapshot.startedAt !== null
+          ? Math.max(0, renderAt - nextSnapshot.startedAt)
+          : null,
+    }),
+  );
+}
+
+export function noteThreadRecoverySourceObserved(
+  threadId: string,
+  input: {
+    source: StreamRecoverySource;
+    sourceId?: string | null;
+    itemId?: string | null;
+    textLength?: number;
+    observedAt?: number;
+  },
+) {
+  const observedAt = input.observedAt ?? Date.now();
+  const nextSnapshot = updateThreadSnapshot(threadId, (current) => ({
+    ...current,
+    lastRecoverySource: input.source,
+    lastRecoverySourceId: normalizeNullableString(input.sourceId),
+  }));
+  appendRendererDiagnostic(
+    "stream-latency/recovery-source",
+    buildCorrelationPayload(nextSnapshot, {
+      recoverySource: input.source,
+      recoverySourceId: normalizeNullableString(input.sourceId),
+      itemId: normalizeNullableString(input.itemId),
+      textLength: normalizeVisibleTextLength(input.textLength ?? 0),
+      observedAtMs:
+        nextSnapshot.startedAt !== null
+          ? Math.max(0, observedAt - nextSnapshot.startedAt)
+          : null,
+    }),
   );
 }
 
@@ -1386,6 +1515,11 @@ export function completeThreadStreamTurn(threadId: string) {
     lastIngressSource: null,
     lastIngressItemId: null,
     lastIngressTextLength: 0,
+    lastReducerMergeCostMs: null,
+    lastNormalizationCostMs: null,
+    lastRenderCostMs: null,
+    lastRecoverySource: null,
+    lastRecoverySourceId: null,
     pendingRenderSinceDeltaAt: null,
     deltaCount: 0,
     cadenceSamplesMs: [],

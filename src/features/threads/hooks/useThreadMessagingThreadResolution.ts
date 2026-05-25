@@ -5,7 +5,7 @@ import {
   isClaudeRuntimeThreadId,
 } from "../utils/claudeForkThread";
 import { loadClaudeSession as loadClaudeSessionService } from "../../../services/tauri";
-import { parseClaudeHistoryMessages } from "../loaders/claudeHistoryLoader";
+import { parseClaudeHistoryMessagesWithShadowRecovery } from "../loaders/claudeHistoryLoader";
 import type { ThreadAction } from "./useThreadsReducer";
 
 type ThreadEngine = "claude" | "codex" | "gemini" | "opencode";
@@ -205,10 +205,13 @@ export function useThreadMessagingThreadResolution({
             ? (result as Record<string, unknown>)
             : {};
         const messagesData = record.messages ?? result;
-        const parsedItems = parseClaudeHistoryMessages(
+        const parsedItems = parseClaudeHistoryMessagesWithShadowRecovery({
           messagesData,
           workspacePath,
-        );
+          workspaceId: workspace.id,
+          threadId: finalizedThreadId,
+          sessionId: candidateSessionId,
+        });
         if (!hasClaudeTranscriptRebindEvidence(parsedItems)) {
           onDebug?.({
             id: `${Date.now()}-client-claude-candidate-reconcile-empty`,

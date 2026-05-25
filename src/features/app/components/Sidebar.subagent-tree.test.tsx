@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { writeClientStoreData } from "../../../services/clientStorage";
 import {
   assignWorkspaceSessionFolder,
+  assignWorkspaceSessionFolders,
   createWorkspaceSessionFolder,
   deleteWorkspaceSessionFolder,
   listWorkspaceSessionFolders,
@@ -79,6 +80,7 @@ vi.mock("../../../services/tauri", async (importOriginal) => {
   return {
     ...actual,
     assignWorkspaceSessionFolder: vi.fn(),
+    assignWorkspaceSessionFolders: vi.fn(),
     createWorkspaceSessionFolder: vi.fn(),
     deleteWorkspaceSessionFolder: vi.fn(),
     listWorkspaceSessionFolders: vi.fn(),
@@ -124,6 +126,9 @@ beforeEach(() => {
   vi.mocked(assignWorkspaceSessionFolder).mockResolvedValue({
     sessionId: "default-session",
     folderId: null,
+  });
+  vi.mocked(assignWorkspaceSessionFolders).mockResolvedValue({
+    results: [],
   });
   vi.mocked(createWorkspaceSessionFolder).mockResolvedValue({
     folder: {
@@ -409,9 +414,12 @@ describe("Sidebar subagent tree", () => {
         },
       ],
     });
-    vi.mocked(assignWorkspaceSessionFolder).mockResolvedValue({
-      sessionId: "assigned",
-      folderId: "folder-target",
+    vi.mocked(assignWorkspaceSessionFolders).mockResolvedValue({
+      results: [
+        { sessionId: "claude:parent", ok: true },
+        { sessionId: "claude:child-a", ok: true },
+        { sessionId: "claude:child-b", ok: true },
+      ],
     });
 
     render(
@@ -452,7 +460,8 @@ describe("Sidebar subagent tree", () => {
       fireEvent.contextMenu(parentRow.closest(".thread-row") as HTMLElement);
     });
     const threadMenu = await screen.findByRole("menu", { name: "threads.threadActions" });
-    const targetFolderItem = within(threadMenu).getByRole("menuitem", {
+    fireEvent.mouseEnter(within(threadMenu).getByRole("menuitem", { name: "Move to folder" }));
+    const targetFolderItem = await screen.findByRole("menuitem", {
       name: "Target",
     });
 
@@ -460,20 +469,11 @@ describe("Sidebar subagent tree", () => {
       fireEvent.click(targetFolderItem);
     });
 
-    expect(assignWorkspaceSessionFolder).toHaveBeenCalledWith(
+    expect(assignWorkspaceSessionFolders).toHaveBeenCalledWith(
       "ws-1",
-      "claude:parent",
+      ["claude:parent", "claude:child-a", "claude:child-b"],
       "folder-target",
     );
-    expect(assignWorkspaceSessionFolder).toHaveBeenCalledWith(
-      "ws-1",
-      "claude:child-a",
-      "folder-target",
-    );
-    expect(assignWorkspaceSessionFolder).toHaveBeenCalledWith(
-      "ws-1",
-      "claude:child-b",
-      "folder-target",
-    );
+    expect(assignWorkspaceSessionFolder).not.toHaveBeenCalled();
   });
 });

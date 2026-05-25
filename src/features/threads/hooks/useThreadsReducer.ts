@@ -1,6 +1,7 @@
 import type { ConversationItem, ThreadSummary } from "../../../types";
 import type { SidebarSnapshot } from "../utils/sidebarSnapshot";
 import {
+  MAX_ITEM_TEXT,
   normalizeItem,
   prepareThreadItems,
   upsertItem,
@@ -89,6 +90,10 @@ import type {
   ThreadAction,
   ThreadState,
 } from "./threadReducerTypes";
+import {
+  attachReplacedThreadId,
+  renameThreadStateIdentity,
+} from "./threadReducerThreadIdentity";
 export type { ThreadAction, ThreadState } from "./threadReducerTypes";
 
 const REDUCER_NOOP_GUARD_ENABLED = isReducerNoopGuardEnabled();
@@ -96,23 +101,6 @@ const INCREMENTAL_DERIVATION_ENABLED = isIncrementalDerivationEnabled();
 const PENDING_THREAD_LAST_AGENT_ANCHOR_TTL_MS = 5 * 60 * 1000;
 type GeneratedImageItem = Extract<ConversationItem, { kind: "generatedImage" }>;
 const emptyItems: Record<string, ConversationItem[]> = {};
-
-function attachReplacedThreadId(
-  thread: ThreadSummary,
-  replacedThreadId: string,
-): ThreadSummary {
-  if (thread.id === replacedThreadId) {
-    return thread;
-  }
-  const nativeThreadIds = thread.nativeThreadIds ?? [];
-  if (nativeThreadIds.includes(replacedThreadId)) {
-    return thread;
-  }
-  return {
-    ...thread,
-    nativeThreadIds: [...nativeThreadIds, replacedThreadId],
-  };
-}
 
 export const initialState: ThreadState = {
   activeThreadIdByWorkspace: {},
@@ -967,7 +955,9 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
             keepFinalMetadata,
           })
         ) {
-          list[index] = normalizeItem(list[index]);
+          list[index] = normalizeItem(list[index], {
+            preserveMessageTextLength: true,
+          });
           const nextThreadsByWorkspace = maybeRenameThreadFromAgent({
             workspaceId: action.workspaceId,
             threadId: action.threadId,
@@ -994,7 +984,9 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
           isFinal: false,
         });
       }
-      const updatedItems = prepareThreadItems(list);
+      const updatedItems = prepareThreadItems(list, {
+        preserveMessageTextIds: new Set([segmentedItemId]),
+      });
       const nextThreadsByWorkspace = maybeRenameThreadFromAgent({
         workspaceId: action.workspaceId,
         threadId: action.threadId,
@@ -1078,7 +1070,11 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
         list[index] = {
           ...nextBase,
           id: targetItemId,
-          text: mergeCompletedAgentText(existingItem.text, action.text),
+          text: mergeCompletedAgentText(
+            existingItem.text,
+            action.text,
+            true,
+          ),
           isFinal: true,
           finalCompletedAt: nextBase.finalCompletedAt ?? completedAt,
           ...(typeof nextBase.finalDurationMs === "number"
@@ -1098,7 +1094,9 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
           ...(derivedDuration !== null ? { finalDurationMs: derivedDuration } : {}),
         });
       }
-      const updatedItems = prepareThreadItems(list);
+      const updatedItems = prepareThreadItems(list, {
+        preserveMessageTextIds: new Set([targetItemId]),
+      });
       const nextThreadsByWorkspace = maybeRenameThreadFromAgent({
         workspaceId: action.workspaceId,
         threadId: action.threadId,
@@ -1349,11 +1347,23 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
             "idle",
         },
       );
+      const preserveMessageTextIds = new Set<string>();
+      for (const item of mergedItems) {
+        if (
+          item.kind === "message" &&
+          item.role === "assistant" &&
+          item.text.length > MAX_ITEM_TEXT
+        ) {
+          preserveMessageTextIds.add(item.id);
+        }
+      }
       return {
         ...state,
         itemsByThread: {
           ...state.itemsByThread,
-          [action.threadId]: prepareThreadItems(mergedItems),
+          [action.threadId]: prepareThreadItems(mergedItems, {
+            preserveMessageTextIds,
+          }),
         },
       };
     }
@@ -1447,242 +1457,12 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
       };
     case "renameThreadId": {
       const { workspaceId, oldThreadId, newThreadId } = action;
-      if (oldThreadId === newThreadId) {
-        return state;
-      }
-
-      // Update activeThreadIdByWorkspace
-      const newActiveThreadIdByWorkspace = { ...state.activeThreadIdByWorkspace };
-      if (newActiveThreadIdByWorkspace[workspaceId] === oldThreadId) {
-        newActiveThreadIdByWorkspace[workspaceId] = newThreadId;
-      }
-
-      // Update itemsByThread
-      const newItemsByThread = { ...state.itemsByThread };
-      if (newItemsByThread[oldThreadId]) {
-        const oldItems = newItemsByThread[oldThreadId] ?? [];
-        const existingItems = newItemsByThread[newThreadId] ?? [];
-        const oldHasUserMessage = oldItems.some(
-          (item) => item.kind === "message" && item.role === "user",
-        );
-        const existingHasUserMessage = existingItems.some(
-          (item) => item.kind === "message" && item.role === "user",
-        );
-        // If existing thread already has user history, append pending items to the tail
-        // so the latest user prompt is not truncated out by MAX_ITEMS_PER_THREAD.
-        // If existing thread only has assistant deltas (rename race), keep user-first order.
-        const mergedItems =
-          oldHasUserMessage && !existingHasUserMessage
-            ? [...oldItems, ...existingItems]
-            : [...existingItems, ...oldItems];
-        newItemsByThread[newThreadId] = prepareThreadItems([
-          ...mergedItems,
-        ]);
-        delete newItemsByThread[oldThreadId];
-      }
-
-      const newHistoryRestoredAtMsByThread = { ...state.historyRestoredAtMsByThread };
-      if (newHistoryRestoredAtMsByThread[oldThreadId] !== undefined) {
-        newHistoryRestoredAtMsByThread[newThreadId] =
-          newHistoryRestoredAtMsByThread[newThreadId]
-          ?? newHistoryRestoredAtMsByThread[oldThreadId]
-          ?? null;
-        delete newHistoryRestoredAtMsByThread[oldThreadId];
-      }
-
-      // Update threadsByWorkspace
-      const newThreadsByWorkspace = { ...state.threadsByWorkspace };
-      const workspaceThreads = newThreadsByWorkspace[workspaceId];
-      if (workspaceThreads) {
-        const renamedThreads = workspaceThreads.map((thread) =>
-          thread.id === oldThreadId
-            ? attachReplacedThreadId({ ...thread, id: newThreadId }, oldThreadId)
-            : thread,
-        );
-        const dedupedById = new Map<string, ThreadSummary>();
-        for (const thread of renamedThreads) {
-          const current = dedupedById.get(thread.id);
-          if (!current) {
-            dedupedById.set(thread.id, thread);
-            continue;
-          }
-          const nativeThreadIds = Array.from(
-            new Set([
-              ...(current.nativeThreadIds ?? []),
-              ...(thread.nativeThreadIds ?? []),
-            ]),
-          );
-          dedupedById.set(thread.id, {
-            ...current,
-            ...thread,
-            updatedAt: Math.max(current.updatedAt, thread.updatedAt),
-            nativeThreadIds: nativeThreadIds.length > 0 ? nativeThreadIds : undefined,
-          });
-        }
-        newThreadsByWorkspace[workspaceId] = Array.from(dedupedById.values());
-      }
-
-      // Update threadStatusById
-      const newThreadStatusById = { ...state.threadStatusById };
-      if (newThreadStatusById[oldThreadId]) {
-        const oldStatus = newThreadStatusById[oldThreadId];
-        const existingStatus = newThreadStatusById[newThreadId];
-        newThreadStatusById[newThreadId] = existingStatus
-          ? {
-              isProcessing: oldStatus.isProcessing || existingStatus.isProcessing,
-              hasUnread: oldStatus.hasUnread || existingStatus.hasUnread,
-              isReviewing: oldStatus.isReviewing || existingStatus.isReviewing,
-              isContextCompacting:
-                (oldStatus.isContextCompacting ?? false)
-                || (existingStatus.isContextCompacting ?? false),
-              processingStartedAt:
-                oldStatus.processingStartedAt ?? existingStatus.processingStartedAt,
-              lastDurationMs:
-                oldStatus.lastDurationMs ?? existingStatus.lastDurationMs,
-              heartbeatPulse:
-                oldStatus.heartbeatPulse ?? existingStatus.heartbeatPulse ?? 0,
-              continuationPulse:
-                oldStatus.continuationPulse
-                ?? existingStatus.continuationPulse
-                ?? 0,
-              terminalPulse:
-                oldStatus.terminalPulse ?? existingStatus.terminalPulse ?? 0,
-              codexCompactionSource:
-                oldStatus.codexCompactionLifecycleState !== "idle"
-                  ? (oldStatus.codexCompactionSource ?? null)
-                  : (existingStatus.codexCompactionSource ?? null),
-              codexCompactionLifecycleState:
-                oldStatus.codexCompactionLifecycleState !== "idle"
-                  ? (oldStatus.codexCompactionLifecycleState ?? "idle")
-                  : (existingStatus.codexCompactionLifecycleState ?? "idle"),
-              codexCompactionCompletedAt:
-                oldStatus.codexCompactionCompletedAt
-                ?? existingStatus.codexCompactionCompletedAt
-                ?? null,
-              lastTokenUsageUpdatedAt:
-                oldStatus.lastTokenUsageUpdatedAt
-                ?? existingStatus.lastTokenUsageUpdatedAt
-                ?? null,
-            }
-          : oldStatus;
-        delete newThreadStatusById[oldThreadId];
-      }
-
-      // Update activeTurnIdByThread
-      const newActiveTurnIdByThread = { ...state.activeTurnIdByThread };
-      if (newActiveTurnIdByThread[oldThreadId] !== undefined) {
-        newActiveTurnIdByThread[newThreadId] =
-          newActiveTurnIdByThread[oldThreadId] ??
-          newActiveTurnIdByThread[newThreadId] ??
-          null;
-        delete newActiveTurnIdByThread[oldThreadId];
-      }
-
-      const newCodexAcceptedTurnByThread = { ...state.codexAcceptedTurnByThread };
-      if (newCodexAcceptedTurnByThread[oldThreadId]) {
-        const oldFact = newCodexAcceptedTurnByThread[oldThreadId];
-        const existingFact = newCodexAcceptedTurnByThread[newThreadId];
-        newCodexAcceptedTurnByThread[newThreadId] =
-          existingFact?.fact === "accepted"
-            ? existingFact
-            : oldFact;
-        delete newCodexAcceptedTurnByThread[oldThreadId];
-      }
-
-      // Update tokenUsageByThread
-      const newTokenUsageByThread = { ...state.tokenUsageByThread };
-      if (newTokenUsageByThread[oldThreadId]) {
-        newTokenUsageByThread[newThreadId] =
-          newTokenUsageByThread[newThreadId] ?? newTokenUsageByThread[oldThreadId];
-        delete newTokenUsageByThread[oldThreadId];
-      }
-
-      // Update planByThread
-      const newPlanByThread = { ...state.planByThread };
-      if (newPlanByThread[oldThreadId] !== undefined) {
-        newPlanByThread[newThreadId] =
-          newPlanByThread[newThreadId] ?? newPlanByThread[oldThreadId];
-        delete newPlanByThread[oldThreadId];
-      }
-
-      // Update lastAgentMessageByThread
-      const newLastAgentMessageByThread = { ...state.lastAgentMessageByThread };
-      if (newLastAgentMessageByThread[oldThreadId]) {
-        const oldMessage = newLastAgentMessageByThread[oldThreadId];
-        const existingMessage = newLastAgentMessageByThread[newThreadId];
-        newLastAgentMessageByThread[newThreadId] =
-          existingMessage && existingMessage.timestamp > oldMessage.timestamp
-            ? existingMessage
-            : oldMessage;
-        delete newLastAgentMessageByThread[oldThreadId];
-      }
-
-      // Update agentSegmentByThread
-      const newAgentSegmentByThread = { ...state.agentSegmentByThread };
-      if (newAgentSegmentByThread[oldThreadId] !== undefined) {
-        newAgentSegmentByThread[newThreadId] = Math.max(
-          newAgentSegmentByThread[oldThreadId] ?? 0,
-          newAgentSegmentByThread[newThreadId] ?? 0,
-        );
-        delete newAgentSegmentByThread[oldThreadId];
-      }
-
-      // Update threadParentById
-      const newThreadParentById = { ...state.threadParentById };
-      if (newThreadParentById[oldThreadId]) {
-        newThreadParentById[newThreadId] = newThreadParentById[oldThreadId];
-        delete newThreadParentById[oldThreadId];
-      }
-      // Also update any threads that have oldThreadId as parent
-      for (const [threadId, parentId] of Object.entries(newThreadParentById)) {
-        if (parentId === oldThreadId) {
-          newThreadParentById[threadId] = newThreadId;
-        }
-      }
-
-      // Update hiddenThreadIdsByWorkspace
-      const newHiddenThreadIdsByWorkspace = { ...state.hiddenThreadIdsByWorkspace };
-      const workspaceHidden = newHiddenThreadIdsByWorkspace[workspaceId];
-      if (workspaceHidden?.[oldThreadId]) {
-        newHiddenThreadIdsByWorkspace[workspaceId] = {
-          ...workspaceHidden,
-          [newThreadId]: true,
-        };
-        delete newHiddenThreadIdsByWorkspace[workspaceId][oldThreadId];
-      }
-      const newUserInputRequests = state.userInputRequests.map((request) => {
-        if (
-          request.workspace_id !== workspaceId ||
-          request.params.thread_id !== oldThreadId
-        ) {
-          return request;
-        }
-        return {
-          ...request,
-          params: {
-            ...request.params,
-            thread_id: newThreadId,
-          },
-        };
+      return renameThreadStateIdentity({
+        state,
+        workspaceId,
+        oldThreadId,
+        newThreadId,
       });
-
-      return {
-        ...state,
-        activeThreadIdByWorkspace: newActiveThreadIdByWorkspace,
-        itemsByThread: newItemsByThread,
-        historyRestoredAtMsByThread: newHistoryRestoredAtMsByThread,
-        threadsByWorkspace: newThreadsByWorkspace,
-        threadStatusById: newThreadStatusById,
-        activeTurnIdByThread: newActiveTurnIdByThread,
-        codexAcceptedTurnByThread: newCodexAcceptedTurnByThread,
-        tokenUsageByThread: newTokenUsageByThread,
-        planByThread: newPlanByThread,
-        lastAgentMessageByThread: newLastAgentMessageByThread,
-        agentSegmentByThread: newAgentSegmentByThread,
-        threadParentById: newThreadParentById,
-        hiddenThreadIdsByWorkspace: newHiddenThreadIdsByWorkspace,
-        userInputRequests: newUserInputRequests,
-      };
     }
     case "appendReasoningSummary": {
       if (!shouldAcceptReasoningDelta(state, action.threadId)) {

@@ -28,7 +28,12 @@ import {
 } from "../../../services/tauri";
 import { previewThreadName } from "../../../utils/threadItems";
 import { loadSidebarSnapshot } from "../utils/sidebarSnapshot";
+import { writeClientStoreValue } from "../../../services/clientStorage";
 import { renderActions, workspace } from "./useThreadActions.test-utils";
+import {
+  appendLiveAssistantShadowDelta,
+  buildLiveAssistantShadowTranscriptId,
+} from "../utils/liveAssistantShadowTranscript";
 
 vi.mock("../../../services/tauri", () => ({
   startThread: vi.fn(),
@@ -398,6 +403,90 @@ describe("useThreadActions Claude history refresh", () => {
       type: "removeThread",
       workspaceId: "ws-1",
       threadId: "claude:issue-529-session",
+    });
+  });
+
+  it("recovers interrupted claude assistant message via shadow on direct refresh path", async () => {
+    writeClientStoreValue("threads", "liveAssistantShadowTranscripts", {});
+    appendLiveAssistantShadowDelta({
+      engine: "claude",
+      workspaceId: "ws-1",
+      threadId: "claude:aaa",
+      turnId: "turn-recover",
+      itemId: "shadow-assistant",
+      delta: "这是断点恢复内容",
+      timestamp: Date.now(),
+    });
+    const shadowId = buildLiveAssistantShadowTranscriptId({
+      engine: "claude",
+      workspaceId: "ws-1",
+      threadId: "claude:aaa",
+      turnId: "turn-recover",
+      itemId: "shadow-assistant",
+    });
+
+    vi.mocked(listThreads).mockResolvedValue({
+      result: { data: [], nextCursor: null },
+    });
+    vi.mocked(listClaudeSessions).mockResolvedValue([]);
+    vi.mocked(loadClaudeSession).mockResolvedValue({
+      messages: [
+        {
+          kind: "message",
+          id: "user-aaa",
+          role: "user",
+          text: "继续写长内容",
+          turnId: "turn-user",
+        },
+        {
+          kind: "reasoning",
+          id: "assistant-thinking",
+          role: "assistant",
+          text: "我先确认一下输出结构。",
+          turnId: "turn-recover",
+        },
+      ],
+    });
+
+    const { result, dispatch } = renderActions({
+      threadsByWorkspace: {
+        "ws-1": [
+          {
+            id: "claude:aaa",
+            name: "AAA",
+            updatedAt: 1_780_000_000_000,
+            engineSource: "claude",
+            threadKind: "native",
+          },
+        ],
+      },
+      activeThreadIdByWorkspace: {
+        "ws-1": "claude:aaa",
+      },
+    });
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace, {
+        preserveState: true,
+      });
+    });
+
+    await act(async () => {
+      await result.current.refreshThread("ws-1", "claude:aaa");
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreadItems",
+      threadId: "claude:aaa",
+      items: expect.arrayContaining([
+        expect.objectContaining({
+          id: "claude-shadow-recovered-shadow-assistant",
+          role: "assistant",
+          recoveredFromLiveShadow: true,
+          recoverySourceId: shadowId,
+          text: "这是断点恢复内容",
+        }),
+      ]),
     });
   });
 

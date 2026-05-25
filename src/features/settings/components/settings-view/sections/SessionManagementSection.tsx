@@ -46,7 +46,9 @@ import {
   buildItemsFromThread,
   mergeThreadItems,
 } from "../../../../../utils/threadItems";
-import { parseClaudeHistoryMessages } from "../../../../threads/loaders/claudeHistoryLoader";
+import {
+  parseClaudeHistoryMessagesWithShadowRecovery,
+} from "../../../../threads/loaders/claudeHistoryLoader";
 import { parseCodexSessionHistory } from "../../../../threads/loaders/codexSessionHistory";
 import { parseGeminiHistoryMessages } from "../../../../threads/loaders/geminiHistoryParser";
 import {
@@ -838,9 +840,13 @@ export function SessionManagementSection({
         ownerWorkspace!.path,
         nativeSessionId,
       );
-      return parseClaudeHistoryMessages(
-        extractHistoryMessagesPayload(response),
-      );
+      return parseClaudeHistoryMessagesWithShadowRecovery({
+        messagesData: extractHistoryMessagesPayload(response),
+        workspaceId: entry.workspaceId,
+        workspacePath: ownerWorkspace!.path,
+        threadId: `claude:${nativeSessionId}`,
+        sessionId: nativeSessionId,
+      });
     }
 
     if (engine === "gemini") {

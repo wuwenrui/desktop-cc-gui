@@ -2437,6 +2437,8 @@ const enPart1 = {
       "Model switch detected in the same session. A new backend session has been created to avoid timeouts.",
     doneIn: "Done in {{duration}}",
     copyMessage: "Copy message",
+    streamingPlainTextCollapsed:
+      "{{omittedChars}} chars omitted to keep live rendering smooth.",
     runtimeReconnectTitle: "Runtime connection lost",
     runtimeReconnectBrokenPipe:
       "The runtime pipe for this session message has been closed. Reconnect the runtime, then retry your send.",

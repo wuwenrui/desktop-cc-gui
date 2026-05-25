@@ -1,215 +1,33 @@
 // @vitest-environment jsdom
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ConversationItem, WorkspaceInfo } from "../../../types";
-import { useThreadMessaging } from "./useThreadMessaging";
-import type { ThreadState } from "./useThreadsReducer";
-import type { CodexAcceptedTurnRecord } from "../utils/codexConversationLiveness";
+import {
+  makeThreadMessagingHook,
+  resetThreadMessagingTestMocks,
+  workspace,
+} from "./useThreadMessaging.test-utils";
 import {
   compactThreadContext,
   engineInterruptTurn,
   engineInterrupt,
   engineSendMessage,
-  getWorkspaceFiles,
   interruptTurn,
   listGeminiSessions,
   loadClaudeSession,
-  listMcpServerStatus,
   sendUserMessage,
 } from "../../../services/tauri";
 import { getClientStoreSync } from "../../../services/clientStorage";
 import { pushErrorToast } from "../../../services/toasts";
-import {
-  clearGlobalRuntimeNotices,
-  getGlobalRuntimeNoticesSnapshot,
-} from "../../../services/globalRuntimeNotices";
+import { getGlobalRuntimeNoticesSnapshot } from "../../../services/globalRuntimeNotices";
 import { sendSharedSessionTurn } from "../../shared-session/runtime/sendSharedSessionTurn";
 
-vi.mock("../../../services/toasts", () => ({
-  pushErrorToast: vi.fn(),
-}));
-
-vi.mock("../../../services/tauri", () => ({
-  compactThreadContext: vi.fn(),
-  sendUserMessage: vi.fn(),
-  projectMemoryCaptureAuto: vi.fn(async () => null),
-  projectMemoryCaptureTurnInput: vi.fn(async () => null),
-  startReview: vi.fn(),
-  interruptTurn: vi.fn(),
-  listMcpServerStatus: vi.fn(),
-  getOpenCodeMcpStatus: vi.fn(),
-  getOpenCodeLspDiagnostics: vi.fn(),
-  getOpenCodeLspSymbols: vi.fn(),
-  getOpenCodeLspDocumentSymbols: vi.fn(),
-  importOpenCodeSession: vi.fn(),
-  exportOpenCodeSession: vi.fn(),
-  getOpenCodeStats: vi.fn(),
-  getWorkspaceFiles: vi.fn(),
-  shareOpenCodeSession: vi.fn(),
-  listExternalSpecTree: vi.fn(),
-  listGitBranches: vi.fn(),
-  getGitLog: vi.fn(),
-  listGeminiSessions: vi.fn(),
-  loadClaudeSession: vi.fn(),
-  engineSendMessage: vi.fn(),
-  engineInterruptTurn: vi.fn(),
-  engineInterrupt: vi.fn(),
-}));
-
-vi.mock("../../../services/clientStorage", () => ({
-  getClientStoreSync: vi.fn(),
-  writeClientStoreValue: vi.fn(),
-}));
-
-vi.mock("../../shared-session/runtime/sendSharedSessionTurn", () => ({
-  sendSharedSessionTurn: vi.fn(),
-}));
-
 describe("useThreadMessaging", () => {
-  const workspace: WorkspaceInfo = {
-    id: "ws-1",
-    name: "ccgui",
-    path: "/tmp/mossx",
-    connected: true,
-    settings: { sidebarCollapsed: false },
-  };
-
   beforeEach(() => {
-    vi.clearAllMocks();
-    clearGlobalRuntimeNotices();
-    vi.mocked(compactThreadContext).mockResolvedValue({ status: "completed" });
-    vi.mocked(getClientStoreSync).mockReturnValue(undefined);
-    vi.mocked(engineSendMessage).mockResolvedValue({
-      result: { turn: { id: "turn-1" } },
-    });
-    vi.mocked(sendUserMessage).mockResolvedValue({
-      result: { turn: { id: "turn-2" } },
-    });
-    vi.mocked(getWorkspaceFiles).mockResolvedValue({
-      files: ["openspec/changes/add-spec-hub/proposal.md", "openspec/changes/add-spec-hub/tasks.md"],
-      directories: ["openspec", "openspec/changes", "openspec/specs"],
-      gitignored_files: [],
-      gitignored_directories: [],
-    });
-    vi.mocked(listGeminiSessions).mockResolvedValue([]);
-    vi.mocked(loadClaudeSession).mockResolvedValue({ messages: [] });
-    vi.mocked(listMcpServerStatus).mockResolvedValue({ result: { data: [] } });
-    vi.mocked(engineInterrupt).mockResolvedValue();
-    vi.mocked(engineInterruptTurn).mockResolvedValue();
-    vi.mocked(interruptTurn).mockResolvedValue({});
-    vi.mocked(sendSharedSessionTurn).mockResolvedValue({
-      result: { turn: { id: "shared-turn-1" } },
-    });
+    resetThreadMessagingTestMocks();
   });
 
-  function makeHook(
-    activeEngine: "claude" | "codex" | "gemini" | "opencode",
-    overrides: {
-      workspace?: WorkspaceInfo;
-      activeThreadId?: string | null;
-      ensuredThreadId?: string | null;
-      activeTurnIdByThread?: Record<string, string | null>;
-      threadStatusById?: ThreadState["threadStatusById"];
-      codexAcceptedTurnByThread?: Record<string, CodexAcceptedTurnRecord>;
-      threadEngineById?: Record<string, "claude" | "codex" | "gemini" | "opencode" | undefined>;
-      itemsByThread?: Record<string, ConversationItem[]>;
-      startThreadForWorkspace?: ReturnType<typeof vi.fn>;
-      refreshThread?: ReturnType<typeof vi.fn>;
-      dispatch?: ReturnType<typeof vi.fn>;
-      runWithCreateSessionLoading?: ReturnType<typeof vi.fn>;
-      resolveComposerSelection?: () => {
-        id?: string | null;
-        model: string | null;
-        source?: string | null;
-        effort: string | null;
-        collaborationMode: Record<string, unknown> | null;
-      };
-      claudeThinkingVisible?: boolean;
-    } = {},
-  ) {
-    const activeThreadId =
-      "activeThreadId" in overrides ? overrides.activeThreadId ?? null : "thread-1";
-    const ensuredThreadId =
-      "ensuredThreadId" in overrides ? overrides.ensuredThreadId ?? null : activeThreadId;
-    const dispatch = overrides.dispatch ?? vi.fn();
-    const markProcessing = vi.fn();
-    const markReviewing = vi.fn();
-    const setActiveTurnId = vi.fn();
-    const recordThreadActivity = vi.fn();
-    const safeMessageActivity = vi.fn();
-    const pushThreadErrorMessage = vi.fn();
-    const onDebug = vi.fn();
-    const pendingInterruptsRef = { current: new Set<string>() };
-    const interruptedThreadsRef = { current: new Set<string>() };
-    const codexCompactionInFlightByThreadRef = { current: {} as Record<string, boolean> };
-
-    const startThreadForWorkspace =
-      overrides.startThreadForWorkspace ??
-      vi.fn(async () => ensuredThreadId);
-    const refreshThread = overrides.refreshThread ?? vi.fn(async () => null);
-
-    const hook = renderHook(() =>
-      useThreadMessaging({
-        activeWorkspace: overrides.workspace ?? workspace,
-        activeThreadId,
-        accessMode: "current",
-        model: null,
-        effort: null,
-        collaborationMode: null,
-        steerEnabled: false,
-        customPrompts: [],
-        activeEngine,
-        resolveComposerSelection: overrides.resolveComposerSelection,
-        claudeThinkingVisible: overrides.claudeThinkingVisible,
-        threadStatusById: overrides.threadStatusById ?? {},
-        itemsByThread: overrides.itemsByThread ?? {},
-        activeTurnIdByThread: overrides.activeTurnIdByThread ?? {},
-        codexAcceptedTurnByThread: overrides.codexAcceptedTurnByThread ?? {},
-        tokenUsageByThread: {},
-        rateLimitsByWorkspace: {},
-        codexCompactionInFlightByThreadRef,
-        pendingInterruptsRef,
-        interruptedThreadsRef,
-        dispatch,
-        getCustomName: () => undefined,
-        getThreadEngine: (_workspaceId, threadId) =>
-          overrides.threadEngineById?.[threadId] ?? undefined,
-        getThreadKind: (_workspaceId, threadId) =>
-          threadId.startsWith("shared:") ? "shared" : "native",
-        markProcessing,
-        markReviewing,
-        setActiveTurnId,
-        recordThreadActivity,
-        safeMessageActivity,
-        pushThreadErrorMessage,
-        ensureThreadForActiveWorkspace: async () => ensuredThreadId,
-        ensureThreadForWorkspace: async () => ensuredThreadId,
-        refreshThread,
-        forkThreadForWorkspace: async () => null,
-        updateThreadParent: vi.fn(),
-        startThreadForWorkspace,
-        onDebug,
-        runWithCreateSessionLoading: overrides.runWithCreateSessionLoading,
-      }),
-    );
-    return {
-      ...hook,
-      dispatch,
-      markProcessing,
-      markReviewing,
-      setActiveTurnId,
-      recordThreadActivity,
-      safeMessageActivity,
-      pushThreadErrorMessage,
-      onDebug,
-      codexCompactionInFlightByThreadRef,
-      pendingInterruptsRef,
-      interruptedThreadsRef,
-    };
-  }
-
   it("routes opencode thread through engineSendMessage", async () => {
-    const { result } = makeHook("opencode");
+    const { result } = makeThreadMessagingHook("opencode");
 
     await act(async () => {
       await result.current.sendUserMessageToThread(
@@ -229,7 +47,7 @@ describe("useThreadMessaging", () => {
 
   it("normalizes unsupported shared-session sends back to claude", async () => {
     const dispatch = vi.fn();
-    const { result } = makeHook("gemini", {
+    const { result } = makeThreadMessagingHook("gemini", {
       activeThreadId: "shared:thread-1",
       dispatch,
     });
@@ -262,7 +80,7 @@ describe("useThreadMessaging", () => {
 
   it("uses active shared engine selection instead of stale thread engine when sending", async () => {
     const dispatch = vi.fn();
-    const { result } = makeHook("claude", {
+    const { result } = makeThreadMessagingHook("claude", {
       activeThreadId: "shared:thread-sticky-engine",
       dispatch,
       threadEngineById: {
@@ -296,7 +114,7 @@ describe("useThreadMessaging", () => {
   });
 
   it("disables Claude CLI thinking for shared Claude sends when visibility is off", async () => {
-    const { result } = makeHook("claude", {
+    const { result } = makeThreadMessagingHook("claude", {
       activeThreadId: "shared:thread-disable-thinking",
       claudeThinkingVisible: false,
     });
@@ -326,7 +144,7 @@ describe("useThreadMessaging", () => {
       result: { turn: { id: "shared-turn-2" } },
       nativeThreadId: "550e8400-e29b-41d4-a716-446655440000",
     });
-    const { result } = makeHook("codex", {
+    const { result } = makeThreadMessagingHook("codex", {
       activeThreadId: "shared:thread-2",
       dispatch,
     });
@@ -355,7 +173,7 @@ describe("useThreadMessaging", () => {
       }
       return undefined;
     });
-    const { result } = makeHook("opencode");
+    const { result } = makeThreadMessagingHook("opencode");
 
     await act(async () => {
       await result.current.sendUserMessageToThread(workspace, "opencode-pending-abc", "hello");
@@ -370,7 +188,7 @@ describe("useThreadMessaging", () => {
   });
 
   it("sanitizes leaked claude model for opencode", async () => {
-    const { result } = makeHook("opencode");
+    const { result } = makeThreadMessagingHook("opencode");
 
     await act(async () => {
       await result.current.sendUserMessageToThread(
@@ -391,7 +209,7 @@ describe("useThreadMessaging", () => {
   });
 
   it("sanitizes leaked claude model for codex", async () => {
-    const { result } = makeHook("codex");
+    const { result } = makeThreadMessagingHook("codex");
 
     await act(async () => {
       await result.current.sendUserMessageToThread(
@@ -414,7 +232,7 @@ describe("useThreadMessaging", () => {
   });
 
   it("keeps custom claude model ids for claude engine", async () => {
-    const { result } = makeHook("claude");
+    const { result } = makeThreadMessagingHook("claude");
 
     await act(async () => {
       await result.current.sendUserMessageToThread(
@@ -436,7 +254,7 @@ describe("useThreadMessaging", () => {
   });
 
   it("disables Claude CLI thinking when Claude thinking visibility is off", async () => {
-    const { result } = makeHook("claude", {
+    const { result } = makeThreadMessagingHook("claude", {
       claudeThinkingVisible: false,
       threadEngineById: { "claude:session-1": "claude" },
     });
@@ -459,7 +277,7 @@ describe("useThreadMessaging", () => {
   });
 
   it("does not disable non-Claude thinking from the Claude visibility toggle", async () => {
-    const { result } = makeHook("opencode", {
+    const { result } = makeThreadMessagingHook("opencode", {
       claudeThinkingVisible: false,
     });
 
@@ -481,7 +299,7 @@ describe("useThreadMessaging", () => {
   });
 
   it("sends resolved Claude runtime model while diagnostics keep selected id and source", async () => {
-    const { result, onDebug } = makeHook("claude", {
+    const { result, onDebug } = makeThreadMessagingHook("claude", {
       resolveComposerSelection: () => ({
         id: "claude-sonnet-option",
         model: "sonnet",
@@ -519,7 +337,7 @@ describe("useThreadMessaging", () => {
   });
 
   it("sends custom Claude model ids with bracket suffix to the backend", async () => {
-    const { result, onDebug } = makeHook("claude", {
+    const { result, onDebug } = makeThreadMessagingHook("claude", {
       resolveComposerSelection: () => ({
         id: "Cxn[1m]",
         model: "Cxn[1m]",
@@ -563,7 +381,7 @@ describe("useThreadMessaging", () => {
   });
 
   it("keeps custom claude model ids with slash/colon/brackets for claude engine", async () => {
-    const { result } = makeHook("claude");
+    const { result } = makeThreadMessagingHook("claude");
 
     await act(async () => {
       await result.current.sendUserMessageToThread(
@@ -585,7 +403,7 @@ describe("useThreadMessaging", () => {
   });
 
   it("passes arbitrary claude custom model ids through to the backend", async () => {
-    const { result } = makeHook("claude");
+    const { result } = makeThreadMessagingHook("claude");
 
     await act(async () => {
       await result.current.sendUserMessageToThread(
@@ -607,7 +425,7 @@ describe("useThreadMessaging", () => {
   });
 
   it("passes overlong claude custom model ids through to the backend", async () => {
-    const { result } = makeHook("claude");
+    const { result } = makeThreadMessagingHook("claude");
     const overlongModelId = `m${"x".repeat(128)}`;
 
     await act(async () => {
@@ -630,7 +448,7 @@ describe("useThreadMessaging", () => {
   });
 
   it("sanitizes leaked codex default model for gemini", async () => {
-    const { result } = makeHook("gemini");
+    const { result } = makeThreadMessagingHook("gemini");
 
     await act(async () => {
       await result.current.sendUserMessageToThread(
@@ -652,7 +470,7 @@ describe("useThreadMessaging", () => {
   });
 
   it("keeps custom gemini model aliases for gemini engine", async () => {
-    const { result } = makeHook("gemini");
+    const { result } = makeThreadMessagingHook("gemini");
 
     await act(async () => {
       await result.current.sendUserMessageToThread(
@@ -674,7 +492,7 @@ describe("useThreadMessaging", () => {
   });
 
   it("clears gemini interrupted guard before a new send starts", async () => {
-    const { result, interruptedThreadsRef } = makeHook("gemini");
+    const { result, interruptedThreadsRef } = makeThreadMessagingHook("gemini");
     interruptedThreadsRef.current.add("gemini:session-1");
 
     await act(async () => {
@@ -702,7 +520,7 @@ describe("useThreadMessaging", () => {
   ] as const)(
     "clears stale interrupted guard before a new %s send starts",
     async (engine, threadId) => {
-      const { result, interruptedThreadsRef } = makeHook(engine, {
+      const { result, interruptedThreadsRef } = makeThreadMessagingHook(engine, {
         activeThreadId: threadId,
         ensuredThreadId: threadId,
         threadEngineById:
@@ -725,7 +543,7 @@ describe("useThreadMessaging", () => {
   );
 
   it("does not trigger auto title generation for opencode", async () => {
-    const { result } = makeHook("opencode");
+    const { result } = makeThreadMessagingHook("opencode");
 
     await act(async () => {
       await result.current.sendUserMessageToThread(
@@ -739,7 +557,7 @@ describe("useThreadMessaging", () => {
   });
 
   it("does not trigger auto title generation for codex", async () => {
-    const { result } = makeHook("codex");
+    const { result } = makeThreadMessagingHook("codex");
 
     await act(async () => {
       await result.current.sendUserMessageToThread(workspace, "thread-1", "hello codex");
@@ -749,7 +567,7 @@ describe("useThreadMessaging", () => {
   });
 
   it("does not trigger auto title generation for claude", async () => {
-    const { result } = makeHook("claude", {
+    const { result } = makeThreadMessagingHook("claude", {
       activeThreadId: "claude:session-1",
       ensuredThreadId: "claude:session-1",
     });
@@ -771,7 +589,7 @@ describe("useThreadMessaging", () => {
         sessionId: "session-xyz",
         result: { turn: { id: "turn-1" }, sessionId: "session-xyz" },
       });
-    const { result, pushThreadErrorMessage } = makeHook("claude", {
+    const { result, pushThreadErrorMessage } = makeThreadMessagingHook("claude", {
       activeThreadId: "claude-pending-abc",
       ensuredThreadId: "claude-pending-abc",
     });
@@ -837,7 +655,7 @@ describe("useThreadMessaging", () => {
       ],
     });
     const dispatch = vi.fn();
-    const { result, pushThreadErrorMessage } = makeHook("claude", {
+    const { result, pushThreadErrorMessage } = makeThreadMessagingHook("claude", {
       activeThreadId: "claude-pending-abc",
       ensuredThreadId: "claude-pending-abc",
       dispatch,
@@ -898,7 +716,7 @@ describe("useThreadMessaging", () => {
       ],
     });
     const dispatch = vi.fn();
-    const { result, pushThreadErrorMessage } = makeHook("claude", {
+    const { result, pushThreadErrorMessage } = makeThreadMessagingHook("claude", {
       activeThreadId: "claude-pending-user-only",
       ensuredThreadId: "claude-pending-user-only",
       dispatch,
@@ -933,7 +751,7 @@ describe("useThreadMessaging", () => {
   });
 
   it("blocks restored claude pending thread with local items even without memory marker", async () => {
-    const { result, pushThreadErrorMessage } = makeHook("claude", {
+    const { result, pushThreadErrorMessage } = makeThreadMessagingHook("claude", {
       activeThreadId: "claude-pending-restored",
       ensuredThreadId: "claude-pending-restored",
       itemsByThread: {
@@ -969,7 +787,7 @@ describe("useThreadMessaging", () => {
       result: { turn: { id: "turn-1" }, sessionId: "new-child-session" },
     });
     const threadId = "claude-fork:parent-session-1:local-1";
-    const { result } = makeHook("claude", {
+    const { result } = makeThreadMessagingHook("claude", {
       activeThreadId: threadId,
       ensuredThreadId: threadId,
       threadEngineById: {
@@ -1005,7 +823,7 @@ describe("useThreadMessaging", () => {
           session_id: "session-snake",
         },
       });
-    const { result, pushThreadErrorMessage } = makeHook("claude", {
+    const { result, pushThreadErrorMessage } = makeThreadMessagingHook("claude", {
       activeThreadId: "claude-pending-snake",
       ensuredThreadId: "claude-pending-snake",
     });
@@ -1047,7 +865,7 @@ describe("useThreadMessaging", () => {
         updatedAt: Date.now(),
       },
     ]);
-    const { result } = makeHook("gemini", {
+    const { result } = makeThreadMessagingHook("gemini", {
       activeThreadId: "gemini-pending-abc",
       ensuredThreadId: "gemini-pending-abc",
     });
@@ -1108,7 +926,7 @@ describe("useThreadMessaging", () => {
         updatedAt: Date.now(),
       },
     ]);
-    const { result } = makeHook("gemini", {
+    const { result } = makeThreadMessagingHook("gemini", {
       activeThreadId: "gemini-pending-ambiguous",
       ensuredThreadId: "gemini-pending-ambiguous",
     });
@@ -1142,7 +960,7 @@ describe("useThreadMessaging", () => {
   });
 
   it("continues finalized claude session with native thread id", async () => {
-    const { result } = makeHook("claude", {
+    const { result } = makeThreadMessagingHook("claude", {
       activeThreadId: "claude:session-native-1",
       ensuredThreadId: "claude:session-native-1",
     });
@@ -1174,7 +992,7 @@ describe("useThreadMessaging", () => {
           thread: { id: "claude:session-from-thread-id" },
         },
       });
-    const { result, pushThreadErrorMessage } = makeHook("claude", {
+    const { result, pushThreadErrorMessage } = makeThreadMessagingHook("claude", {
       activeThreadId: "claude-pending-def",
       ensuredThreadId: "claude-pending-def",
     });
@@ -1203,7 +1021,7 @@ describe("useThreadMessaging", () => {
   });
 
   it("routes by thread ownership when active engine mismatches", async () => {
-    const { result } = makeHook("codex");
+    const { result } = makeThreadMessagingHook("codex");
 
     await act(async () => {
       await result.current.sendUserMessageToThread(
@@ -1226,7 +1044,7 @@ describe("useThreadMessaging", () => {
       status: "completed",
       turnId: "compact-turn-1",
     });
-    const { result, dispatch, recordThreadActivity, safeMessageActivity } = makeHook("claude", {
+    const { result, dispatch, recordThreadActivity, safeMessageActivity } = makeThreadMessagingHook("claude", {
       activeThreadId: "claude:session-1",
       ensuredThreadId: "claude:session-1",
       threadEngineById: {
@@ -1277,7 +1095,7 @@ describe("useThreadMessaging", () => {
       recordThreadActivity,
       safeMessageActivity,
       codexCompactionInFlightByThreadRef,
-    } = makeHook("codex", {
+    } = makeThreadMessagingHook("codex", {
       activeThreadId: "thread-1",
       ensuredThreadId: "thread-1",
       threadEngineById: {
@@ -1316,7 +1134,7 @@ describe("useThreadMessaging", () => {
       result,
       dispatch,
       codexCompactionInFlightByThreadRef,
-    } = makeHook("codex", {
+    } = makeThreadMessagingHook("codex", {
       activeThreadId: "thread-1",
       ensuredThreadId: "thread-1",
       threadEngineById: {
@@ -1343,7 +1161,7 @@ describe("useThreadMessaging", () => {
       codexCompactionInFlightByThreadRef,
       pushThreadErrorMessage,
       safeMessageActivity,
-    } = makeHook("codex", {
+    } = makeThreadMessagingHook("codex", {
       activeThreadId: "thread-1",
       ensuredThreadId: "thread-1",
       threadEngineById: {
@@ -1376,7 +1194,7 @@ describe("useThreadMessaging", () => {
 
   it("does not create a new thread for /compact when no active claude thread exists", async () => {
     const startThreadForWorkspace = vi.fn(async () => "claude:session-new");
-    const { result } = makeHook("claude", {
+    const { result } = makeThreadMessagingHook("claude", {
       activeThreadId: null,
       ensuredThreadId: null,
       startThreadForWorkspace,
@@ -1399,7 +1217,7 @@ describe("useThreadMessaging", () => {
 
   it("rejects /compact on unsupported active thread without rebinding", async () => {
     const startThreadForWorkspace = vi.fn(async () => "claude:session-new");
-    const { result } = makeHook("gemini", {
+    const { result } = makeThreadMessagingHook("gemini", {
       activeThreadId: "thread-1",
       ensuredThreadId: "thread-1",
       threadEngineById: {
@@ -1424,7 +1242,7 @@ describe("useThreadMessaging", () => {
   });
 
   it("rejects /compact on pending claude thread to avoid creating a session just for compaction", async () => {
-    const { result } = makeHook("claude", {
+    const { result } = makeThreadMessagingHook("claude", {
       activeThreadId: "claude-pending-123",
       ensuredThreadId: "claude-pending-123",
       threadEngineById: {
@@ -1447,7 +1265,7 @@ describe("useThreadMessaging", () => {
   });
 
   it("interrupt routes codex thread through daemon rpc even when active engine is opencode", async () => {
-    const { result } = makeHook("opencode", {
+    const { result } = makeThreadMessagingHook("opencode", {
       activeThreadId: "thread-1",
       ensuredThreadId: "thread-1",
       activeTurnIdByThread: { "thread-1": "turn-1" },
@@ -1463,7 +1281,7 @@ describe("useThreadMessaging", () => {
   });
 
   it("shows fusion-specific stop copy without blocking same-thread realtime continuation", async () => {
-    const { result, dispatch, interruptedThreadsRef, pendingInterruptsRef } = makeHook("codex", {
+    const { result, dispatch, interruptedThreadsRef, pendingInterruptsRef } = makeThreadMessagingHook("codex", {
       activeThreadId: "thread-1",
       ensuredThreadId: "thread-1",
       activeTurnIdByThread: { "thread-1": "turn-1" },
@@ -1484,7 +1302,7 @@ describe("useThreadMessaging", () => {
   });
 
   it("keeps the default stop copy for a normal manual interrupt", async () => {
-    const { result, dispatch, interruptedThreadsRef } = makeHook("codex", {
+    const { result, dispatch, interruptedThreadsRef } = makeThreadMessagingHook("codex", {
       activeThreadId: "thread-1",
       ensuredThreadId: "thread-1",
       activeTurnIdByThread: { "thread-1": "turn-1" },
@@ -1504,7 +1322,7 @@ describe("useThreadMessaging", () => {
   });
 
   it("keeps plan handoff interrupts silent while still stopping the active turn", async () => {
-    const { result, dispatch, markProcessing, setActiveTurnId } = makeHook("claude", {
+    const { result, dispatch, markProcessing, setActiveTurnId } = makeThreadMessagingHook("claude", {
       activeThreadId: "claude:session-1",
       ensuredThreadId: "claude:session-1",
       activeTurnIdByThread: { "claude:session-1": "turn-1" },
@@ -1527,7 +1345,7 @@ describe("useThreadMessaging", () => {
   });
 
   it("interrupt routes opencode thread through engine interrupt only", async () => {
-    const { result } = makeHook("codex", {
+    const { result } = makeThreadMessagingHook("codex", {
       activeThreadId: "opencode:session-1",
       ensuredThreadId: "opencode:session-1",
       activeTurnIdByThread: { "opencode:session-1": "turn-9" },
@@ -1546,7 +1364,7 @@ describe("useThreadMessaging", () => {
     vi.mocked(engineInterruptTurn).mockRejectedValue(
       new Error("unknown method: engine_interrupt_turn"),
     );
-    const { result } = makeHook("codex", {
+    const { result } = makeThreadMessagingHook("codex", {
       activeThreadId: "opencode:session-1",
       ensuredThreadId: "opencode:session-1",
       activeTurnIdByThread: { "opencode:session-1": "turn-9" },
@@ -1562,7 +1380,7 @@ describe("useThreadMessaging", () => {
   });
 
   it("interrupt on cli-managed engine queues pending interrupt when turn id is not ready", async () => {
-    const { result, pendingInterruptsRef } = makeHook("claude", {
+    const { result, pendingInterruptsRef } = makeThreadMessagingHook("claude", {
       activeThreadId: "claude:session-1",
       ensuredThreadId: "claude:session-1",
       activeTurnIdByThread: {},
@@ -1588,7 +1406,7 @@ describe("useThreadMessaging", () => {
   });
 
   it("does not queue a pending interrupt after a stalled codex turn already settled", async () => {
-    const { result, pendingInterruptsRef, dispatch } = makeHook("codex", {
+    const { result, pendingInterruptsRef, dispatch } = makeThreadMessagingHook("codex", {
       activeThreadId: "thread-stalled",
       ensuredThreadId: "thread-stalled",
       activeTurnIdByThread: { "thread-stalled": null },
@@ -1620,7 +1438,7 @@ describe("useThreadMessaging", () => {
   });
 
   it("clears queued pending interrupt before starting a new claude send", async () => {
-    const { result, pendingInterruptsRef } = makeHook("claude", {
+    const { result, pendingInterruptsRef } = makeThreadMessagingHook("claude", {
       activeThreadId: "claude:session-1",
       ensuredThreadId: "claude:session-1",
       activeTurnIdByThread: {},
@@ -1641,7 +1459,7 @@ describe("useThreadMessaging", () => {
 
   it("creates new opencode pending thread when active thread id is not opencode-prefixed", async () => {
     const startThreadForWorkspace = vi.fn(async () => "opencode-pending-new");
-    const { result } = makeHook("opencode", {
+    const { result } = makeThreadMessagingHook("opencode", {
       activeThreadId: "thread-legacy",
       ensuredThreadId: "thread-legacy",
       threadEngineById: { "thread-legacy": "opencode" },
@@ -1667,7 +1485,7 @@ describe("useThreadMessaging", () => {
 
   it("keeps sending follow-up messages on the current compatible codex thread", async () => {
     const startThreadForWorkspace = vi.fn(async () => "thread-new-1");
-    const { result } = makeHook("codex", {
+    const { result } = makeThreadMessagingHook("codex", {
       activeThreadId: "thread-1",
       ensuredThreadId: "thread-1",
       threadEngineById: { "thread-1": "codex" },
@@ -1690,7 +1508,7 @@ describe("useThreadMessaging", () => {
   it("shows create-session loading when first send needs to create a thread", async () => {
     const startThreadForWorkspace = vi.fn(async () => "thread-new-1");
     const runWithCreateSessionLoading = vi.fn(async (_params, action) => action());
-    const { result } = makeHook("codex", {
+    const { result } = makeThreadMessagingHook("codex", {
       activeThreadId: null,
       ensuredThreadId: "thread-new-1",
       startThreadForWorkspace,
@@ -1722,7 +1540,7 @@ describe("useThreadMessaging", () => {
 
   it("does not show create-session loading for follow-up sends on existing threads", async () => {
     const runWithCreateSessionLoading = vi.fn(async (_params, action) => action());
-    const { result } = makeHook("codex", {
+    const { result } = makeThreadMessagingHook("codex", {
       activeThreadId: "thread-1",
       ensuredThreadId: "thread-1",
       threadEngineById: { "thread-1": "codex" },
@@ -1739,7 +1557,7 @@ describe("useThreadMessaging", () => {
   it("sends follow-up messages on the rewound codex child thread", async () => {
     const refreshThread = vi.fn(async () => null);
     const startThreadForWorkspace = vi.fn(async () => "thread-new-1");
-    const { result } = makeHook("codex", {
+    const { result } = makeThreadMessagingHook("codex", {
       activeThreadId: "thread-codex-rewind-1",
       ensuredThreadId: "thread-codex-rewind-1",
       threadEngineById: { "thread-codex-rewind-1": "codex" },
@@ -1762,7 +1580,7 @@ describe("useThreadMessaging", () => {
   });
 
   it("passes selected collaboration mode payload through codex send", async () => {
-    const { result } = makeHook("codex");
+    const { result } = makeThreadMessagingHook("codex");
     const collaborationMode = {
       mode: "plan",
       settings: {
@@ -1807,7 +1625,7 @@ describe("useThreadMessaging", () => {
     const refreshThread = vi.fn(async () => "thread-rebound-1");
     const startThreadForWorkspace = vi.fn(async () => "thread-rebound-1");
     const dispatch = vi.fn();
-    const { result } = makeHook("codex", {
+    const { result } = makeThreadMessagingHook("codex", {
       activeThreadId: "legacy-thread-id",
       ensuredThreadId: "legacy-thread-id",
       startThreadForWorkspace,
@@ -1858,7 +1676,7 @@ describe("useThreadMessaging", () => {
       } as never);
     const refreshThread = vi.fn(async () => null);
     const startThreadForWorkspace = vi.fn(async () => "thread-new-1");
-    const { result, pushThreadErrorMessage } = makeHook("codex", {
+    const { result, pushThreadErrorMessage } = makeThreadMessagingHook("codex", {
       activeThreadId: "legacy-thread-id",
       ensuredThreadId: "legacy-thread-id",
       startThreadForWorkspace,
@@ -1896,7 +1714,7 @@ describe("useThreadMessaging", () => {
     } as never);
     const refreshThread = vi.fn(async () => null);
     const startThreadForWorkspace = vi.fn(async () => "thread-should-not-start");
-    const { result, pushThreadErrorMessage } = makeHook("codex", {
+    const { result, pushThreadErrorMessage } = makeThreadMessagingHook("codex", {
       activeThreadId: "durable-thread-id",
       ensuredThreadId: "durable-thread-id",
       startThreadForWorkspace,
@@ -1936,7 +1754,7 @@ describe("useThreadMessaging", () => {
     } as never);
     const refreshThread = vi.fn(async () => null);
     const startThreadForWorkspace = vi.fn(async () => "thread-new-unknown");
-    const { result, pushThreadErrorMessage } = makeHook("codex", {
+    const { result, pushThreadErrorMessage } = makeThreadMessagingHook("codex", {
       activeThreadId: "legacy-thread-id",
       ensuredThreadId: "legacy-thread-id",
       startThreadForWorkspace,
@@ -1981,7 +1799,7 @@ describe("useThreadMessaging", () => {
     const refreshThread = vi.fn(async () => null);
     const startThreadForWorkspace = vi.fn(async () => "thread-fresh-local-draft");
     const dispatch = vi.fn();
-    const { result, recordThreadActivity, pushThreadErrorMessage } = makeHook("codex", {
+    const { result, recordThreadActivity, pushThreadErrorMessage } = makeThreadMessagingHook("codex", {
       activeThreadId: "legacy-thread-id",
       ensuredThreadId: "legacy-thread-id",
       startThreadForWorkspace,
@@ -2060,7 +1878,7 @@ describe("useThreadMessaging", () => {
     });
     const startThreadForWorkspace = vi.fn(async () => "thread-fresh-refresh-throw");
     const dispatch = vi.fn();
-    const { result, pushThreadErrorMessage, onDebug } = makeHook("codex", {
+    const { result, pushThreadErrorMessage, onDebug } = makeThreadMessagingHook("codex", {
       activeThreadId: "legacy-thread-id",
       ensuredThreadId: "legacy-thread-id",
       startThreadForWorkspace,
@@ -2129,7 +1947,7 @@ describe("useThreadMessaging", () => {
       throw new Error("thread not found: durable-thread-id");
     });
     const startThreadForWorkspace = vi.fn(async () => "thread-should-not-start");
-    const { result, pushThreadErrorMessage } = makeHook("codex", {
+    const { result, pushThreadErrorMessage } = makeThreadMessagingHook("codex", {
       activeThreadId: "durable-thread-id",
       ensuredThreadId: "durable-thread-id",
       startThreadForWorkspace,
@@ -2174,7 +1992,7 @@ describe("useThreadMessaging", () => {
     const refreshThread = vi.fn(async () => null);
     const startThreadForWorkspace = vi.fn(async () => "thread-fresh-draft");
     const dispatch = vi.fn();
-    const { result, recordThreadActivity } = makeHook("codex", {
+    const { result, recordThreadActivity } = makeThreadMessagingHook("codex", {
       activeThreadId: "legacy-thread-id",
       ensuredThreadId: "legacy-thread-id",
       startThreadForWorkspace,
@@ -2254,7 +2072,7 @@ describe("useThreadMessaging", () => {
           "The 'demo' model is not supported when using Codex with a ChatGPT account.",
       },
     } as never);
-    const { result, pushThreadErrorMessage } = makeHook("codex");
+    const { result, pushThreadErrorMessage } = makeThreadMessagingHook("codex");
 
     await act(async () => {
       await result.current.sendUserMessage("hello codex");
@@ -2286,7 +2104,7 @@ describe("useThreadMessaging", () => {
         message: "[RUNTIME_ENDED] Managed runtime ended before this conversation turn settled.",
       },
     } as never);
-    const { result } = makeHook("codex");
+    const { result } = makeThreadMessagingHook("codex");
 
     await act(async () => {
       await result.current.sendUserMessage("hello codex");
@@ -2315,7 +2133,7 @@ describe("useThreadMessaging", () => {
       result: { turn: { id: "turn-accepted" } },
     } as never);
     const dispatch = vi.fn();
-    const { result } = makeHook("codex", { dispatch });
+    const { result } = makeThreadMessagingHook("codex", { dispatch });
 
     await act(async () => {
       await result.current.sendUserMessage("hello codex");
@@ -2346,7 +2164,7 @@ describe("useThreadMessaging", () => {
       } as never);
     const refreshThread = vi.fn(async () => "thread-rebound-2");
     const dispatch = vi.fn();
-    const { result, onDebug } = makeHook("codex", {
+    const { result, onDebug } = makeThreadMessagingHook("codex", {
       activeThreadId: "legacy-thread-id",
       ensuredThreadId: "legacy-thread-id",
       refreshThread,
@@ -2413,7 +2231,7 @@ describe("useThreadMessaging", () => {
       } as never);
     const refreshThread = vi.fn(async () => "thread-rebound-3");
     const dispatch = vi.fn();
-    const { result, pushThreadErrorMessage } = makeHook("codex", {
+    const { result, pushThreadErrorMessage } = makeThreadMessagingHook("codex", {
       activeThreadId: "legacy-thread-id",
       ensuredThreadId: "legacy-thread-id",
       refreshThread,
@@ -2475,7 +2293,7 @@ describe("useThreadMessaging", () => {
     const refreshThread = vi.fn(async () => "legacy-thread-id");
     const startThreadForWorkspace = vi.fn(async () => "thread-new-1");
     const dispatch = vi.fn();
-    const { result } = makeHook("codex", {
+    const { result } = makeThreadMessagingHook("codex", {
       activeThreadId: "legacy-thread-id",
       ensuredThreadId: "legacy-thread-id",
       startThreadForWorkspace,
@@ -2518,7 +2336,7 @@ describe("useThreadMessaging", () => {
 
   it("does not attach selectedAgentIcon when sending without selected agent", async () => {
     const dispatch = vi.fn();
-    const { result } = makeHook("codex", { dispatch });
+    const { result } = makeThreadMessagingHook("codex", { dispatch });
 
     await act(async () => {
       await result.current.sendUserMessageToThread(workspace, "thread-1", "hello codex");
@@ -2543,7 +2361,7 @@ describe("useThreadMessaging", () => {
   });
 
   it("injects selected agent name marker into codex prompt block", async () => {
-    const { result } = makeHook("codex");
+    const { result } = makeThreadMessagingHook("codex");
 
     await act(async () => {
       await result.current.sendUserMessageToThread(
@@ -2579,7 +2397,7 @@ describe("useThreadMessaging", () => {
       ),
     );
     const { result, markProcessing, setActiveTurnId, pushThreadErrorMessage } =
-      makeHook("codex");
+      makeThreadMessagingHook("codex");
 
     await act(async () => {
       await result.current.sendUserMessageToThread(
@@ -2612,7 +2430,7 @@ describe("useThreadMessaging", () => {
       },
     });
     const { result, markProcessing, setActiveTurnId, pushThreadErrorMessage } =
-      makeHook("codex");
+      makeThreadMessagingHook("codex");
 
     await act(async () => {
       await result.current.sendUserMessageToThread(

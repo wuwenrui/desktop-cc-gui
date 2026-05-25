@@ -1,8 +1,6 @@
 import { useCallback, useMemo, useRef } from "react";
-import type { Dispatch, MutableRefObject } from "react";
 import type {
   ConversationItem,
-  DebugEntry,
   ThreadSummary,
   WorkspaceInfo,
 } from "../../../types";
@@ -15,10 +13,8 @@ import {
   getOpenCodeSessionList as getOpenCodeSessionListService,
   loadClaudeSession as loadClaudeSessionService,
   loadGeminiSession as loadGeminiSessionService,
-  loadCodexSession as loadCodexSessionService,
   resumeThread as resumeThreadService,
 } from "../../../services/tauri";
-import type { WorkspaceSessionCatalogSourceStatus } from "../../../services/tauri";
 import * as tauriServices from "../../../services/tauri";
 import {
   buildItemsFromThread,
@@ -28,18 +24,12 @@ import {
   previewThreadName,
 } from "../../../utils/threadItems";
 import {
-  createClaudeHistoryLoader,
-  parseClaudeHistoryMessages,
+  parseClaudeHistoryMessagesWithShadowRecovery,
 } from "../loaders/claudeHistoryLoader";
-import { createCodexHistoryLoader } from "../loaders/codexHistoryLoader";
-import { createGeminiHistoryLoader } from "../loaders/geminiHistoryLoader";
 import { parseGeminiHistoryMessages } from "../loaders/geminiHistoryParser";
-import { createOpenCodeHistoryLoader } from "../loaders/opencodeHistoryLoader";
-import { createSharedHistoryLoader } from "../loaders/sharedHistoryLoader";
 import { hydrateHistory } from "../assembly/conversationAssembler";
 import {
   listSharedSessions as listSharedSessionsService,
-  loadSharedSession as loadSharedSessionService,
 } from "../../shared-session/services/sharedSessions";
 import {
   normalizeSharedSessionSummaries,
@@ -73,7 +63,6 @@ import {
   inferThreadEngineSource,
   isAskUserQuestionToolItem,
   isLocalSessionScanUnavailable,
-  isPendingThreadId,
   isRetainableEngineContinuitySummary,
   isTerminalToolStatus,
   isThreadResumeNotFoundError,
@@ -108,13 +97,14 @@ import {
   buildPartialHistoryDiagnostic,
   resolveThreadStabilityDiagnostic,
 } from "../utils/stabilityDiagnostics";
-import { loadSidebarSnapshot } from "../utils/sidebarSnapshot";
 import { buildThreadDebugCorrelation } from "../utils/threadDebugCorrelation";
 import { useThreadActionsSessionRuntime } from "./useThreadActionsSessionRuntime";
+import { useThreadActionsSessionCatalog } from "./useThreadActionsSessionCatalog";
 import {
-  useThreadActionsSessionCatalog,
-  type ArchivedSessionMapResult,
-} from "./useThreadActionsSessionCatalog";
+  applySessionArchiveState,
+  useReconcileMissingClaudeThread,
+} from "./useThreadActions.localState";
+import { createThreadHistoryLoaderForThread } from "./useThreadActions.historyLoaderFactory";
 import { useLoadOlderThreadsForWorkspace } from "./useThreadActionsLoadOlder";
 import { useThreadHistoryLoadingState } from "./useThreadHistoryLoadingState";
 import {
@@ -139,188 +129,15 @@ import {
   resolveThreadListCursorForDisplay,
   type StartupThreadHydrationMode,
 } from "./useThreadActions.threadList";
-import type { ThreadAction, ThreadState } from "./useThreadsReducer";
-
-type UseThreadActionsOptions = {
-  dispatch: Dispatch<ThreadAction>;
-  itemsByThread: ThreadState["itemsByThread"];
-  userInputRequests: ThreadState["userInputRequests"];
-  threadsByWorkspace: ThreadState["threadsByWorkspace"];
-  activeThreadIdByWorkspace: ThreadState["activeThreadIdByWorkspace"];
-  threadListCursorByWorkspace: ThreadState["threadListCursorByWorkspace"];
-  threadStatusById: ThreadState["threadStatusById"];
-  onDebug?: (entry: DebugEntry) => void;
-  getCustomName: (workspaceId: string, threadId: string) => string | undefined;
-  threadActivityRef: MutableRefObject<Record<string, Record<string, number>>>;
-  loadedThreadsRef: MutableRefObject<Record<string, boolean>>;
-  replaceOnResumeRef: MutableRefObject<Record<string, boolean>>;
-  applyCollabThreadLinksFromThread: (
-    threadId: string,
-    thread: Record<string, unknown>,
-  ) => void;
-  updateThreadParent?: (parentId: string, childIds: string[]) => void;
-  onThreadTitleMappingsLoaded?: (
-    workspaceId: string,
-    titles: Record<string, string>,
-  ) => void;
-  onRenameThreadTitleMapping?: (
-    workspaceId: string,
-    oldThreadId: string,
-    newThreadId: string,
-  ) => void;
-  rememberThreadAlias?: (oldThreadId: string, newThreadId: string) => void;
-  clearThreadAlias?: (oldThreadId: string) => void;
-  resolveWorkspacePath?: (workspaceId: string) => string | null;
-  useUnifiedHistoryLoader?: boolean;
-};
-
-function findCatalogSourceStatusForEngine(
-  sourceStatuses: readonly WorkspaceSessionCatalogSourceStatus[] | undefined,
-  engine: string,
-): WorkspaceSessionCatalogSourceStatus | null {
-  const normalizedEngine = engine.trim().toLowerCase();
-  if (!normalizedEngine) {
-    return null;
-  }
-  return (
-    sourceStatuses?.find(
-      (status) => status.engine.trim().toLowerCase() === normalizedEngine,
-    ) ?? null
-  );
-}
-
-function isIncompleteCatalogSourceStatus(
-  sourceStatus: WorkspaceSessionCatalogSourceStatus | null,
-): boolean {
-  return (
-    sourceStatus?.completeness === "degraded" ||
-    sourceStatus?.completeness === "partial" ||
-    sourceStatus?.completeness === "uncertain_empty"
-  );
-}
-
-function hasAuthoritativeCatalogMembershipProof(
-  sourceStatuses: readonly WorkspaceSessionCatalogSourceStatus[] | undefined,
-): boolean {
-  return (
-    Array.isArray(sourceStatuses) &&
-    sourceStatuses.length > 0 &&
-    sourceStatuses.every(
-      (sourceStatus) => !isIncompleteCatalogSourceStatus(sourceStatus),
-    )
-  );
-}
-
-type ThreadEngineSource = NonNullable<ThreadSummary["engineSource"]>;
-type LastGoodThreadSummariesByEngine = Partial<
-  Record<ThreadEngineSource, ThreadSummary[]>
->;
-
-const THREAD_ENGINE_SOURCES: ThreadEngineSource[] = [
-  "codex",
-  "claude",
-  "opencode",
-  "gemini",
-];
-
-function resolveThreadSummaryEngine(
-  summary: ThreadSummary,
-): ThreadEngineSource {
-  return (summary.engineSource ??
-    inferThreadEngineSource(summary.id, summary) ??
-    "codex") as ThreadEngineSource;
-}
-
-function isHealthyThreadSummary(summary: ThreadSummary): boolean {
-  return !summary.isDegraded && !summary.partialSource && !summary.degradedReason;
-}
-
-function healthyThreadSummariesForEngine(
-  threads: ThreadSummary[] | undefined,
-  engine: ThreadEngineSource,
-): ThreadSummary[] {
-  if (!Array.isArray(threads) || threads.length === 0) {
-    return [];
-  }
-  const engineThreads = threads.filter(
-    (thread) => resolveThreadSummaryEngine(thread) === engine,
-  );
-  if (engineThreads.length === 0 || engineThreads.some((thread) => !isHealthyThreadSummary(thread))) {
-    return [];
-  }
-  return engineThreads;
-}
-
-function flattenLastGoodEngineSnapshots(
-  snapshots: LastGoodThreadSummariesByEngine,
-): ThreadSummary[] {
-  const mergedById = new Map<string, ThreadSummary>();
-  THREAD_ENGINE_SOURCES.forEach((engine) => {
-    snapshots[engine]?.forEach((summary) => {
-      const previous = mergedById.get(summary.id);
-      if (!previous || summary.updatedAt >= previous.updatedAt) {
-        mergedById.set(summary.id, summary);
-      }
-    });
-  });
-  return Array.from(mergedById.values()).sort(
-    (left, right) => right.updatedAt - left.updatedAt,
-  );
-}
-
-function resolvePartialSourceEngine(
-  source: string,
-): ThreadEngineSource | "all" | null {
-  const normalized = source.trim().toLowerCase();
-  if (!normalized) {
-    return null;
-  }
-  if (normalized.includes("archive") || normalized.includes("empty-thread-list")) {
-    return "all";
-  }
-  if (normalized.includes("claude")) {
-    return "claude";
-  }
-  if (normalized.includes("opencode")) {
-    return "opencode";
-  }
-  if (normalized.includes("gemini")) {
-    return "gemini";
-  }
-  if (
-    normalized.includes("codex") ||
-    normalized.includes("workspace-not-connected") ||
-    normalized.includes("thread-list-live")
-  ) {
-    return "codex";
-  }
-  return "all";
-}
-
-function buildLastGoodSnapshotBlockedEngines(
-  sourceStatuses: readonly WorkspaceSessionCatalogSourceStatus[] | undefined,
-  partialSources: ReadonlySet<string>,
-): Set<ThreadEngineSource> {
-  const blocked = new Set<ThreadEngineSource>();
-  sourceStatuses?.forEach((sourceStatus) => {
-    const engine = sourceStatus.engine.trim().toLowerCase() as ThreadEngineSource;
-    if (
-      THREAD_ENGINE_SOURCES.includes(engine) &&
-      isIncompleteCatalogSourceStatus(sourceStatus)
-    ) {
-      blocked.add(engine);
-    }
-  });
-  partialSources.forEach((partialSource) => {
-    const engine = resolvePartialSourceEngine(partialSource);
-    if (engine === "all") {
-      THREAD_ENGINE_SOURCES.forEach((item) => blocked.add(item));
-    } else if (engine) {
-      blocked.add(engine);
-    }
-  });
-  return blocked;
-}
+import {
+  buildLastGoodSnapshotBlockedEngines,
+  findCatalogSourceStatusForEngine,
+  hasAuthoritativeCatalogMembershipProof,
+  isIncompleteCatalogSourceStatus,
+  type LastGoodThreadSummariesByEngine,
+  useThreadActionsLastGoodSnapshots,
+} from "./useThreadActions.lastGoodSnapshots";
+import type { UseThreadActionsOptions } from "./useThreadActions.types";
 
 type ResumeThreadForWorkspaceOptions = {
   preferLocalCodexHistory?: boolean;
@@ -391,214 +208,26 @@ export function useThreadActions({
     beginAutomaticRuntimeRecovery,
     getAutomaticRuntimeRecoveryPartialSource,
   } = useAutomaticRuntimeRecovery(connectWorkspaceService);
+  const {
+    getLastGoodThreadSummaries,
+    getLastGoodThreadSummariesForEngine,
+    rememberLastGoodThreadSummariesByEngine,
+    removeThreadFromCachedSummaries,
+  } = useThreadActionsLastGoodSnapshots({
+    latestThreadsByWorkspaceRef,
+    previousThreadsByWorkspaceRef,
+    lastGoodThreadSummariesByWorkspaceEngineRef,
+    threadsByWorkspace,
+  });
 
-  const getLastGoodThreadSummaries = useCallback(
-    (workspaceId: string): ThreadSummary[] => {
-      const currentThreads = latestThreadsByWorkspaceRef.current[workspaceId];
-      if (hasHealthyThreadSummaries(currentThreads)) {
-        return currentThreads;
-      }
-      const previousThreads =
-        previousThreadsByWorkspaceRef.current[workspaceId];
-      if (hasHealthyThreadSummaries(previousThreads)) {
-        return previousThreads;
-      }
-      const stateThreads = threadsByWorkspace[workspaceId];
-      if (hasHealthyThreadSummaries(stateThreads)) {
-        return stateThreads;
-      }
-      const snapshotThreads =
-        loadSidebarSnapshot()?.threadsByWorkspace[workspaceId];
-      if (hasHealthyThreadSummaries(snapshotThreads)) {
-        return snapshotThreads;
-      }
-      const snapshots: LastGoodThreadSummariesByEngine = {};
-      const candidateSources = [
-        currentThreads,
-        previousThreads,
-        stateThreads,
-        snapshotThreads,
-      ];
-      for (const engine of THREAD_ENGINE_SOURCES) {
-        const healthyEngineThreads = candidateSources
-          .map((threads) => healthyThreadSummariesForEngine(threads, engine))
-          .find((threads) => threads.length > 0);
-        snapshots[engine] =
-          healthyEngineThreads ??
-          lastGoodThreadSummariesByWorkspaceEngineRef.current[workspaceId]?.[
-            engine
-          ];
-      }
-      return flattenLastGoodEngineSnapshots(snapshots);
-    },
-    [threadsByWorkspace],
-  );
-
-  const getLastGoodThreadSummariesForEngine = useCallback(
-    (workspaceId: string, engine: ThreadEngineSource): ThreadSummary[] => {
-      const currentThreads = latestThreadsByWorkspaceRef.current[workspaceId];
-      const previousThreads =
-        previousThreadsByWorkspaceRef.current[workspaceId];
-      const stateThreads = threadsByWorkspace[workspaceId];
-      const snapshotThreads =
-        loadSidebarSnapshot()?.threadsByWorkspace[workspaceId];
-      return (
-        [
-          currentThreads,
-          previousThreads,
-          stateThreads,
-          snapshotThreads,
-        ]
-          .map((threads) => healthyThreadSummariesForEngine(threads, engine))
-          .find((threads) => threads.length > 0) ??
-        lastGoodThreadSummariesByWorkspaceEngineRef.current[workspaceId]?.[
-          engine
-        ] ??
-        []
-      );
-    },
-    [threadsByWorkspace],
-  );
-
-  const rememberLastGoodThreadSummariesByEngine = useCallback(
-    (
-      workspaceId: string,
-      summaries: ThreadSummary[],
-      blockedEngines: ReadonlySet<ThreadEngineSource>,
-    ) => {
-      const currentSnapshots =
-        lastGoodThreadSummariesByWorkspaceEngineRef.current[workspaceId] ?? {};
-      const nextSnapshots: LastGoodThreadSummariesByEngine = {
-        ...currentSnapshots,
-      };
-      let changed = false;
-      for (const engine of THREAD_ENGINE_SOURCES) {
-        if (blockedEngines.has(engine)) {
-          continue;
-        }
-        const healthyEngineThreads = healthyThreadSummariesForEngine(
-          summaries,
-          engine,
-        );
-        if (healthyEngineThreads.length === 0) {
-          continue;
-        }
-        nextSnapshots[engine] = healthyEngineThreads;
-        changed = true;
-      }
-      if (!changed) {
-        return;
-      }
-      lastGoodThreadSummariesByWorkspaceEngineRef.current = {
-        ...lastGoodThreadSummariesByWorkspaceEngineRef.current,
-        [workspaceId]: nextSnapshots,
-      };
-    },
-    [],
-  );
-
-  const removeThreadFromCachedSummaries = useCallback(
-    (workspaceId: string, threadId: string) => {
-      const filterOutThread = (
-        source: Record<string, ThreadSummary[] | undefined>,
-      ): ThreadSummary[] => {
-        const current = source[workspaceId] ?? [];
-        return current.filter((entry) => entry.id !== threadId);
-      };
-      latestThreadsByWorkspaceRef.current = {
-        ...latestThreadsByWorkspaceRef.current,
-        [workspaceId]: filterOutThread(latestThreadsByWorkspaceRef.current),
-      };
-      previousThreadsByWorkspaceRef.current = {
-        ...previousThreadsByWorkspaceRef.current,
-        [workspaceId]: filterOutThread(previousThreadsByWorkspaceRef.current),
-      };
-      const currentSnapshots =
-        lastGoodThreadSummariesByWorkspaceEngineRef.current[workspaceId];
-      if (currentSnapshots) {
-        const nextSnapshots: LastGoodThreadSummariesByEngine = {};
-        THREAD_ENGINE_SOURCES.forEach((engine) => {
-          const nextEngineThreads = (currentSnapshots[engine] ?? []).filter(
-            (entry) => entry.id !== threadId,
-          );
-          if (nextEngineThreads.length > 0) {
-            nextSnapshots[engine] = nextEngineThreads;
-          }
-        });
-        lastGoodThreadSummariesByWorkspaceEngineRef.current = {
-          ...lastGoodThreadSummariesByWorkspaceEngineRef.current,
-          [workspaceId]: nextSnapshots,
-        };
-      }
-    },
-    [],
-  );
-
-  const reconcileMissingClaudeThread = useCallback(
-    (workspaceId: string, threadId: string) => {
-      loadedThreadsRef.current[threadId] = false;
-      dispatch({
-        type: "clearUserInputRequestsForThread",
-        workspaceId,
-        threadId,
-      });
-      const isSelectedThread =
-        activeThreadIdByWorkspace[workspaceId] === threadId;
-      const hasReadableItems = (itemsByThread[threadId]?.length ?? 0) > 0;
-      if (isSelectedThread && hasReadableItems) {
-        onDebug?.({
-          id: `${Date.now()}-claude-history-preserve-readable-surface`,
-          timestamp: Date.now(),
-          source: "client",
-          label: "thread/claude history preserve readable surface",
-          payload: {
-            workspaceId,
-            threadId,
-            reason: "selected-readable-surface",
-          },
-        });
-        return true;
-      }
-      removeThreadFromCachedSummaries(workspaceId, threadId);
-      dispatch({ type: "removeThread", workspaceId, threadId });
-      return false;
-    },
-    [
-      activeThreadIdByWorkspace,
-      dispatch,
-      itemsByThread,
-      loadedThreadsRef,
-      onDebug,
-      removeThreadFromCachedSummaries,
-    ],
-  );
-
-  const applySessionArchiveState = useCallback(
-    (
-      summaries: ThreadSummary[],
-      archivedEvidence: ArchivedSessionMapResult | null,
-    ): ThreadSummary[] => {
-      const isVisibleSessionSummary = (summary: ThreadSummary) =>
-        !isPendingThreadId(summary.id) &&
-        (!summary.archivedAt || summary.archivedAt <= 0);
-      if (!archivedEvidence) {
-        return summaries.filter(isVisibleSessionSummary);
-      }
-      const { archivedAtBySessionId, isComplete } = archivedEvidence;
-      const nextSummaries = summaries.map((summary) => {
-        const archivedAt = archivedAtBySessionId.get(summary.id) ?? 0;
-        if (archivedAt > 0) {
-          return { ...summary, archivedAt };
-        }
-        if ((summary.archivedAt ?? 0) > 0) {
-          return summary;
-        }
-        return isComplete ? { ...summary, archivedAt: undefined } : summary;
-      });
-      return nextSummaries.filter(isVisibleSessionSummary);
-    },
-    [],
-  );
+  const reconcileMissingClaudeThread = useReconcileMissingClaudeThread({
+    activeThreadIdByWorkspace,
+    dispatch,
+    itemsByThread,
+    loadedThreadsRef,
+    onDebug,
+    removeThreadFromCachedSummaries,
+  });
 
   const renameThreadTitleMapping = useMemo(
     () =>
@@ -655,37 +284,15 @@ export function useThreadActions({
       }
       if (useUnifiedHistoryLoader) {
         const createHistoryLoader = (targetThreadId: string) =>
-          targetThreadId.startsWith("shared:")
-            ? createSharedHistoryLoader({
-                workspaceId,
-                loadSharedSession: loadSharedSessionService,
-              })
-            : targetThreadId.startsWith("claude:")
-              ? createClaudeHistoryLoader({
-                  workspaceId,
-                  workspacePath:
-                    workspacePathsByIdRef.current[workspaceId] ?? resolveWorkspacePath?.(workspaceId) ?? null,
-                  loadClaudeSession: loadClaudeSessionService,
-                })
-              : targetThreadId.startsWith("gemini:")
-                ? createGeminiHistoryLoader({
-                    workspaceId,
-                    workspacePath:
-                      workspacePathsByIdRef.current[workspaceId] ?? resolveWorkspacePath?.(workspaceId) ?? null,
-                    loadGeminiSession: loadGeminiSessionService,
-                  })
-                : targetThreadId.startsWith("opencode:")
-                  ? createOpenCodeHistoryLoader({
-                      workspaceId,
-                      resumeThread: resumeThreadService,
-                    })
-                  : createCodexHistoryLoader({
-                      workspaceId,
-                      resumeThread: resumeThreadService,
-                      loadCodexSession: loadCodexSessionService,
-                      preferLocalHistory:
-                        options?.preferLocalCodexHistory === true,
-                    });
+          createThreadHistoryLoaderForThread({
+            targetThreadId,
+            workspaceId,
+            workspacePath:
+              workspacePathsByIdRef.current[workspaceId] ??
+              resolveWorkspacePath?.(workspaceId) ??
+              null,
+            preferLocalCodexHistory: options?.preferLocalCodexHistory === true,
+          });
         const hydrateHistorySnapshot = async (
           effectiveThreadId: string,
           snapshot: Awaited<
@@ -1328,7 +935,12 @@ export function useThreadActions({
                 }
               | undefined;
 
-            const items = parseClaudeHistoryMessages(messagesData);
+            const items = parseClaudeHistoryMessagesWithShadowRecovery({
+              messagesData,
+              workspacePath,
+              workspaceId,
+              threadId,
+            });
             if (items.length > 0) {
               dispatch({ type: "setThreadItems", threadId, items });
               onDebug?.(
@@ -2694,7 +2306,6 @@ export function useThreadActions({
       return { applied: appliedThreadListUpdate };
     },
     [
-      applySessionArchiveState,
       beginAutomaticRuntimeRecovery,
       canListWorkspaceSessions,
       dispatch,

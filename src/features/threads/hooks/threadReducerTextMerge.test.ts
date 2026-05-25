@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { MAX_ITEM_TEXT } from "../../../utils/threadItems";
 import {
   mergeAgentMessageText,
   mergeCompletedAgentText,
@@ -34,6 +35,29 @@ describe("threadReducerTextMerge", () => {
     ].join("\n\n");
 
     expect(mergeCompletedAgentText(firstPass, `${firstPass}\n\n${secondPass}`)).toBe(secondPass);
+  });
+
+  it("preserves complete merged assistant text when caller requests it", () => {
+    const completed = Array.from({ length: 5_200 }, (_, index) =>
+      `段${index.toString(36).padStart(5, "0")}`,
+    ).join("");
+    const full = `${completed}后缀`;
+    const merged = mergeCompletedAgentText("前缀", full, true);
+    const truncated = mergeCompletedAgentText("前缀", full);
+    expect(merged).toContain("前缀");
+    expect(truncated).toContain("前缀");
+    expect(merged.length).toBeGreaterThan(truncated.length);
+    expect(merged.length).toBeGreaterThan(MAX_ITEM_TEXT);
+  });
+
+  it("still truncates completed assistant text when preserve flag is not requested", () => {
+    const completed = Array.from({ length: 5_200 }, (_, index) =>
+      `段${index.toString(36).padStart(5, "0")}`,
+    ).join("");
+    const full = `${completed}后缀`;
+    const merged = mergeCompletedAgentText("前缀", full);
+    expect(merged.length).toBeLessThanOrEqual(MAX_ITEM_TEXT);
+    expect(merged).not.toBe(`前缀${full}`);
   });
 
   it("collapses repeated markdown sections when duplicate copies are only separated by a single newline", () => {

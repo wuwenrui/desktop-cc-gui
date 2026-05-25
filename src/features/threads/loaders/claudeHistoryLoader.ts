@@ -16,6 +16,8 @@ import {
   compactComparableConversationText,
 } from "../assembly/conversationNormalization";
 import { computeDiff } from "../../messages/utils/diffUtils";
+import { findLiveAssistantShadowTranscriptForRestore } from "../utils/liveAssistantShadowTranscript";
+import { noteThreadRecoverySourceObserved } from "../utils/streamLatencyDiagnostics";
 import { asString } from "./historyLoaderUtils";
 
 type ClaudeHistoryLoaderOptions = {
@@ -25,6 +27,11 @@ type ClaudeHistoryLoaderOptions = {
     workspacePath: string,
     sessionId: string,
   ) => Promise<unknown>;
+};
+
+type MessageItemWithTurn = Extract<ConversationItem, { kind: "message" }> & {
+  role: "assistant";
+  turnId?: string | null;
 };
 
 type AskUserQuestionOption = {
@@ -263,6 +270,18 @@ function sanitizeClaudeLocalControlText(text: string) {
     }
   }
   return stripAnsiEscapeSequences(cleaned).trim();
+}
+
+function extractTurnIdFromRawMessage(rawMessage: Record<string, unknown>) {
+  const turn = asRecord(rawMessage.turn);
+  return asString(
+    rawMessage.turnId ??
+      rawMessage.turn_id ??
+      turn?.id ??
+      turn?.turnId ??
+      turn?.turn_id ??
+      "",
+  ).trim();
 }
 
 function isSyntheticContinuationSummaryText(text: string) {
@@ -1467,6 +1486,7 @@ export function parseClaudeHistoryMessages(
         message.id ?? `claude-message-${items.length + 1}`,
       );
       const timestampMs = parseHistoryTimestampMs(message.timestamp);
+      const messageTurnId = extractTurnIdFromRawMessage(message);
       if (role === "user") {
         const pendingAskToolId = peekPendingAskTool();
         if (pendingAskToolId) {
@@ -1517,6 +1537,7 @@ export function parseClaudeHistoryMessages(
         kind: "message",
         role,
         text: normalizedMessageText,
+        ...(messageTurnId ? { turnId: messageTurnId } : {}),
         images: images.length > 0 ? images : undefined,
         deferredImages:
           deferredImages.length > 0 ? deferredImages : undefined,
@@ -1716,6 +1737,316 @@ function extractPendingUserInputQueueFromClaudeItems(
   return queue;
 }
 
+function findLastAssistantAfterLastUser(items: ConversationItem[]) {
+  let lastUserIndex = -1;
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index];
+    if (item?.kind === "message" && item.role === "user") {
+      lastUserIndex = index;
+    }
+  }
+  if (lastUserIndex < 0) {
+    return null;
+  }
+  for (let index = items.length - 1; index > lastUserIndex; index -= 1) {
+    const item = items[index];
+    if (item?.kind === "message" && item.role === "assistant") {
+      return { index, item };
+    }
+  }
+  return null;
+}
+
+function isLikelySameTurnForRecovery(
+  item: MessageItemWithTurn,
+  expectedTurnId: string | null,
+  shadowTurnId: string | null,
+) {
+  if (!expectedTurnId || !item.turnId || !shadowTurnId) {
+    return true;
+  }
+  return item.turnId === expectedTurnId && item.turnId === shadowTurnId;
+}
+
+function recoverClaudeAssistantFromShadowIfNeeded({
+  items,
+  shadow,
+  expectedTurnId,
+  hasExplicitFinalAfterLastUser,
+}: {
+  items: ConversationItem[];
+  shadow: {
+    id: string;
+    text: string;
+    turnId: string | null;
+    itemId: string;
+  };
+  expectedTurnId: string | null;
+  hasExplicitFinalAfterLastUser: boolean;
+}) {
+  const normalizedShadowText = shadow.text.trim();
+  if (normalizedShadowText.length === 0) {
+    return items;
+  }
+
+  const trailingAssistant = findLastAssistantAfterLastUser(items);
+  if (!trailingAssistant) {
+    return [
+      ...items,
+      {
+        id: `claude-shadow-recovered-${shadow.itemId}`,
+        kind: "message" as const,
+        role: "assistant" as const,
+        text: shadow.text,
+        ...(shadow.turnId ? { turnId: shadow.turnId } : {}),
+        isFinal: false,
+        recoveredFromLiveShadow: true,
+        recoveryStatus: "interrupted" as const,
+        recoverySourceId: shadow.id,
+        engineSource: "claude" as const,
+      },
+    ];
+  }
+
+  const latest = trailingAssistant.item as MessageItemWithTurn;
+  const normalizedLatestText = latest.text.trim();
+  if (!normalizedLatestText) {
+    const recovered = {
+      id: `claude-shadow-recovered-${shadow.itemId}`,
+      kind: "message" as const,
+      role: "assistant" as const,
+      text: shadow.text,
+      ...(shadow.turnId ? { turnId: shadow.turnId } : {}),
+      isFinal: false,
+      recoveredFromLiveShadow: true,
+      recoveryStatus: "interrupted" as const,
+      recoverySourceId: shadow.id,
+      engineSource: "claude" as const,
+    };
+    return [...items, recovered];
+  }
+
+  const sameTurn = isLikelySameTurnForRecovery(
+    latest,
+    expectedTurnId,
+    shadow.turnId,
+  );
+
+  if (latest.isFinal === true && hasExplicitFinalAfterLastUser) {
+    return items;
+  }
+
+  const isPrefixMatch = normalizedShadowText.startsWith(normalizedLatestText);
+
+  if (sameTurn && isPrefixMatch) {
+    if (normalizedShadowText.length > normalizedLatestText.length) {
+      const merged = items.slice();
+      merged[trailingAssistant.index] = {
+        ...latest,
+        text: shadow.text,
+        isFinal: false,
+        recoveredFromLiveShadow: true,
+        recoveryStatus: "interrupted" as const,
+        recoverySourceId: shadow.id,
+        engineSource: "claude" as const,
+        ...(shadow.turnId ? { turnId: shadow.turnId } : {}),
+      };
+      return merged;
+    }
+    return items;
+  }
+
+  return items;
+}
+
+function deriveLatestTurnIdFromItems(items: ConversationItem[]) {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (!item) {
+      continue;
+    }
+    const turnId = asString((item as { turnId?: string | null }).turnId).trim();
+    if (turnId) {
+      return turnId;
+    }
+  }
+  return null;
+}
+
+function deriveLatestTurnIdFromRawMessages(messagesData: unknown) {
+  const messages = Array.isArray(messagesData) ? messagesData : [];
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = asRecord(messages[index]);
+    if (!message) {
+      continue;
+    }
+    const turnId = extractTurnIdFromRawMessage(message);
+    if (turnId) {
+      return turnId;
+    }
+  }
+  return null;
+}
+
+function resolveExpectedShadowTurnId(
+  items: ConversationItem[],
+  messagesData: unknown,
+): string | null {
+  const rawTurnId = deriveLatestTurnIdFromRawMessages(messagesData);
+  if (rawTurnId) {
+    return rawTurnId;
+  }
+  return deriveLatestTurnIdFromItems(items);
+}
+
+function hasExplicitFinalAssistantAfterLastUser(messagesData: unknown) {
+  const messages = Array.isArray(messagesData) ? messagesData : [];
+  let lastUserIndex = -1;
+  for (let index = 0; index < messages.length; index += 1) {
+    const message = asRecord(messages[index]);
+    if (!message) {
+      continue;
+    }
+    const kind = asString(message.kind ?? "");
+    if (kind !== "message") {
+      continue;
+    }
+    const role = asString(message.role ?? "") === "user" ? "user" : "assistant";
+    if (role === "user") {
+      lastUserIndex = index;
+    }
+  }
+  if (lastUserIndex < 0) {
+    return false;
+  }
+
+  for (let index = lastUserIndex + 1; index < messages.length; index += 1) {
+    const message = asRecord(messages[index]);
+    if (!message) {
+      continue;
+    }
+    const kind = asString(message.kind ?? "");
+    if (kind !== "message") {
+      continue;
+    }
+    const role = asString(message.role ?? "") === "user" ? "user" : "assistant";
+    if (role !== "assistant") {
+      continue;
+    }
+    if (extractClaudeAssistantFinalFlag(message) === true) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function recoverClaudeInterruptedAssistantFromShadow({
+  items,
+  workspaceId,
+  threadId,
+  sessionId,
+  expectedTurnId,
+  hasExplicitFinalAfterLastUser,
+}: {
+  items: ConversationItem[];
+  workspaceId: string;
+  threadId: string;
+  sessionId: string;
+  expectedTurnId?: string | null;
+  hasExplicitFinalAfterLastUser?: boolean;
+}) {
+  const resolvedExpectedTurnId = expectedTurnId?.trim() || null;
+  const lookupTurnId = resolvedExpectedTurnId || deriveLatestTurnIdFromItems(items);
+  const unsettledShadow = findLiveAssistantShadowTranscriptForRestore({
+    workspaceId,
+    threadId,
+    sessionId,
+    requireUnsettled: true,
+    expectedTurnId: lookupTurnId,
+  });
+
+  const shadow =
+    unsettledShadow ??
+    findLiveAssistantShadowTranscriptForRestore({
+      workspaceId,
+      threadId,
+      sessionId,
+      requireUnsettled: false,
+      ...(lookupTurnId ? { expectedTurnId: lookupTurnId } : {}),
+    });
+
+  if (!shadow) {
+    return items;
+  }
+
+  const recoveredItems = recoverClaudeAssistantFromShadowIfNeeded({
+    items,
+    shadow: {
+      id: shadow.id,
+      text: shadow.text,
+      turnId: shadow.turnId,
+      itemId: shadow.itemId,
+    },
+    expectedTurnId: lookupTurnId,
+    hasExplicitFinalAfterLastUser: hasExplicitFinalAfterLastUser === true,
+  });
+  const recoveredAssistant = recoveredItems.find(
+    (item): item is Extract<ConversationItem, { kind: "message" }> =>
+      item.kind === "message" &&
+      item.role === "assistant" &&
+      item.recoveredFromLiveShadow === true &&
+      item.recoverySourceId === shadow.id,
+  );
+  if (recoveredAssistant) {
+    noteThreadRecoverySourceObserved(threadId, {
+      source: "live-shadow",
+      sourceId: shadow.id,
+      itemId: recoveredAssistant.id,
+      textLength: recoveredAssistant.text.length,
+    });
+  }
+  return recoveredItems;
+}
+
+function normalizeShadowRecoverySessionId(
+  threadId: string,
+  sessionId?: string | null,
+) {
+  const candidate = sessionId?.trim();
+  if (candidate) {
+    return candidate;
+  }
+  const threadPrefix = threadId.startsWith("claude:")
+    ? threadId.slice("claude:".length)
+    : threadId;
+  return threadPrefix.trim();
+}
+
+export function parseClaudeHistoryMessagesWithShadowRecovery({
+  messagesData,
+  workspaceId,
+  threadId,
+  sessionId,
+  workspacePath,
+}: {
+  messagesData: unknown;
+  workspaceId: string;
+  threadId: string;
+  sessionId?: string | null;
+  workspacePath?: string | null;
+}): ConversationItem[] {
+  const parsedItems = parseClaudeHistoryMessages(messagesData, workspacePath);
+  return recoverClaudeInterruptedAssistantFromShadow({
+    items: parsedItems,
+    workspaceId,
+    threadId,
+    sessionId: normalizeShadowRecoverySessionId(threadId, sessionId),
+    expectedTurnId: resolveExpectedShadowTurnId(parsedItems, messagesData),
+    hasExplicitFinalAfterLastUser:
+      hasExplicitFinalAssistantAfterLastUser(messagesData),
+  });
+}
+
 export function createClaudeHistoryLoader({
   workspaceId,
   workspacePath,
@@ -1746,7 +2077,13 @@ export function createClaudeHistoryLoader({
       const result = await loadClaudeSession(workspacePath, sessionId);
       const record = result as { messages?: unknown };
       const messagesData = record.messages ?? result;
-      const parsedItems = parseClaudeHistoryMessages(messagesData, workspacePath);
+      const parsedItems = parseClaudeHistoryMessagesWithShadowRecovery({
+        messagesData,
+        workspacePath,
+        workspaceId,
+        threadId,
+        sessionId,
+      });
       const userInputQueue = extractPendingUserInputQueueFromClaudeItems(
         parsedItems,
         workspaceId,

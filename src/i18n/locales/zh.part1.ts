@@ -2382,6 +2382,8 @@ const zhPart1 = {
       "检测到同会话切换模型，已自动新建后端会话以避免超时。",
     doneIn: "完成，用时 {{duration}}",
     copyMessage: "复制消息",
+    streamingPlainTextCollapsed:
+      "为保持实时渲染流畅，已折叠 {{omittedChars}} 字符。",
     runtimeReconnectTitle: "Runtime 连接已中断",
     runtimeReconnectBrokenPipe:
       "当前这条会话消息对应的 runtime pipe 已断开。你可以先重新连接 runtime，再重试发送。",

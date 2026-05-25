@@ -861,7 +861,11 @@ export function mergeReasoningSnapshotTextForThread(
   return mergeReasoningSnapshotText(existing, incoming);
 }
 
-export function mergeCompletedAgentText(existing: string, completed: string) {
+export function mergeCompletedAgentText(
+  existing: string,
+  completed: string,
+  preserveCompletedMessageLength?: boolean,
+) {
   const normalizedCompleted = normalizeCompletedAssistantText(completed);
   if (!normalizedCompleted) {
     return existing;
@@ -934,10 +938,16 @@ export function mergeCompletedAgentText(existing: string, completed: string) {
     return existing;
   }
 
-  return normalizeCompletedAssistantText(mergeAgentMessageText(existing, normalizedCompleted));
+  return normalizeCompletedAssistantText(
+    mergeAgentMessageText(existing, normalizedCompleted),
+    preserveCompletedMessageLength,
+  );
 }
 
-function normalizeCompletedAssistantText(value: string) {
+function normalizeCompletedAssistantText(
+  value: string,
+  preserveMessageTextLength?: boolean,
+) {
   const cleanedValue = collapseLeadingCompletedSnapshotEcho(
     stripClaudeApprovalResumeArtifacts(value),
   );
@@ -951,7 +961,7 @@ function normalizeCompletedAssistantText(value: string) {
     kind: "message",
     role: "assistant",
     text: cleanedValue,
-  });
+  }, { preserveMessageTextLength });
   const normalizedByItem =
     normalizedMessage.kind === "message" ? normalizedMessage.text : cleanedValue;
   if (normalizedByItem && normalizedByItem !== value) {

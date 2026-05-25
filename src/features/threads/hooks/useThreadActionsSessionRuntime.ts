@@ -15,7 +15,7 @@ import {
   startThread as startThreadService,
 } from "../../../services/tauri";
 import { previewThreadName } from "../../../utils/threadItems";
-import { parseClaudeHistoryMessages } from "../loaders/claudeHistoryLoader";
+import { parseClaudeHistoryMessagesWithShadowRecovery } from "../loaders/claudeHistoryLoader";
 import {
   applyClaudeRewindWorkspaceRestore,
   findImpactedClaudeRewindItems,
@@ -548,7 +548,12 @@ export function useThreadActionsSessionRuntime({
           historyResponse && typeof historyResponse === "object"
             ? (historyResponse as Record<string, unknown>)
             : {};
-        const historyItems = parseClaudeHistoryMessages(historyRecord.messages);
+        const historyItems = parseClaudeHistoryMessagesWithShadowRecovery({
+          messagesData: historyRecord.messages,
+          workspacePath,
+          workspaceId,
+          threadId,
+        });
         const firstHistoryMessageId = findFirstHistoryUserMessageId(historyItems);
         const latestHistoryMessageId = findLatestHistoryUserMessageId(historyItems);
         if (!latestHistoryMessageId) {

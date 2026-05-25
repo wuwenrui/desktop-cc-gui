@@ -1,7 +1,14 @@
 // @vitest-environment jsdom
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  getClientStoreSync,
+  writeClientStoreValue,
+} from "../../../services/clientStorage";
 import { buildConversationItem } from "../../../utils/threadItems";
+import {
+  buildLiveAssistantShadowTranscriptId,
+} from "../utils/liveAssistantShadowTranscript";
 import { useThreadItemEvents } from "./useThreadItemEvents";
 
 vi.mock("../../../utils/threadItems", () => ({
@@ -600,6 +607,7 @@ describe("useThreadItemEvents", () => {
 
   it("routes agentMessage snapshots into assistant streaming delta updates", () => {
     const { result, dispatch, markProcessing, safeMessageActivity } = makeOptions();
+    writeClientStoreValue("threads", "liveAssistantShadowTranscripts", {});
 
     act(() => {
       result.current.onItemUpdated("ws-1", "claude:session-1", {
@@ -626,6 +634,41 @@ describe("useThreadItemEvents", () => {
       }),
     );
     expect(safeMessageActivity).toHaveBeenCalled();
+    const shadowStore = getClientStoreSync<Record<string, { text?: string }>>(
+      "threads",
+      "liveAssistantShadowTranscripts",
+    );
+    expect(Object.values(shadowStore ?? {})[0]?.text).toBe("正在输出正文");
+  });
+
+  it("stores growing Claude agentMessage snapshots without duplicating shadow text", () => {
+    const { result } = makeOptions();
+    writeClientStoreValue("threads", "liveAssistantShadowTranscripts", {});
+
+    act(() => {
+      result.current.onItemUpdated("ws-1", "claude:session-1", {
+        type: "agentMessage",
+        id: "assistant-1",
+        text: "第一段",
+      });
+      result.current.onItemUpdated("ws-1", "claude:session-1", {
+        type: "agentMessage",
+        id: "assistant-1",
+        text: "第一段\n\n第二段",
+      });
+    });
+
+    const id = buildLiveAssistantShadowTranscriptId({
+      engine: "claude",
+      workspaceId: "ws-1",
+      threadId: "claude:session-1",
+      itemId: "assistant-1",
+    });
+    const shadowStore = getClientStoreSync<Record<string, { text?: string }>>(
+      "threads",
+      "liveAssistantShadowTranscripts",
+    );
+    expect(shadowStore?.[id]?.text).toBe("第一段\n\n第二段");
   });
 
   it("marks review/processing false when review mode exits", () => {
@@ -1199,6 +1242,34 @@ describe("useThreadItemEvents", () => {
     });
 
     nowSpy.mockRestore();
+  });
+
+  it("settles Claude shadow transcript with provider-final flag on completion", () => {
+    const { result } = makeOptions();
+    writeClientStoreValue("threads", "liveAssistantShadowTranscripts", {});
+
+    act(() => {
+      result.current.onAgentMessageCompleted({
+        workspaceId: "ws-1",
+        threadId: "claude:session-1",
+        itemId: "assistant-1",
+        turnId: "turn-1",
+        text: "结果输出",
+      });
+    });
+
+    const id = buildLiveAssistantShadowTranscriptId({
+      engine: "claude",
+      workspaceId: "ws-1",
+      threadId: "claude:session-1",
+      turnId: "turn-1",
+      itemId: "assistant-1",
+    });
+    const store = getClientStoreSync<Record<string, { providerFinalObserved?: boolean }>>(
+      "threads",
+      "liveAssistantShadowTranscripts",
+    );
+    expect(store?.[id]?.providerFinalObserved).toBe(true);
   });
 
   it("does not throw when onAgentMessageCompletedExternal is not provided", () => {

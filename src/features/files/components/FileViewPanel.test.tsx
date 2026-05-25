@@ -1,6 +1,13 @@
 /** @vitest-environment jsdom */
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  buildLocation,
+  buildWindowsLocation,
+  mermaidInitialize,
+  mermaidRender,
+  mockCodeMirrorDispatch,
+} from "./FileViewPanel.test-utils";
 import { FileViewPanel, resolveEditorAnnotationWidgetOrder } from "./FileViewPanel";
 import {
   getCodeIntelDefinition,
@@ -15,8 +22,6 @@ import {
 } from "../../../services/tauri";
 import { loadKatexAssets } from "../../markdown/markdownMath";
 import { useFilePreviewPayload } from "../hooks/useFilePreviewPayload";
-
-const mockCodeMirrorDispatch = vi.fn();
 
 describe("editor annotation widget ordering", () => {
   it("keeps draft and existing markers sorted for CodeMirror ranges", () => {
@@ -58,236 +63,6 @@ describe("editor annotation widget ordering", () => {
     ]);
   });
 });
-
-function createDoc(text: string) {
-  const lines = text.split("\n");
-  const starts: number[] = [];
-  let cursor = 0;
-  for (const line of lines) {
-    starts.push(cursor);
-    cursor += line.length + 1;
-  }
-  const lineFor = (lineNumber: number) => {
-    const safeLine = Math.min(Math.max(lineNumber, 1), lines.length);
-    const lineText = lines[safeLine - 1] ?? "";
-    const from = starts[safeLine - 1] ?? 0;
-    return {
-      number: safeLine,
-      from,
-      to: from + lineText.length,
-      length: lineText.length,
-      text: lineText,
-    };
-  };
-  const lineAt = (offset: number) => {
-    const safeOffset = Math.min(Math.max(offset, 0), text.length);
-    for (let index = lines.length - 1; index >= 0; index -= 1) {
-      if (safeOffset >= (starts[index] ?? 0)) {
-        return lineFor(index + 1);
-      }
-    }
-    return lineFor(1);
-  };
-  return {
-    length: text.length,
-    lines: lines.length,
-    line: lineFor,
-    lineAt,
-  };
-}
-
-vi.mock("@uiw/react-codemirror", async () => {
-  const React = await import("react");
-  const MockCodeMirror = React.forwardRef<
-    { view: any },
-    {
-      value?: string;
-      onChange?: (value: string) => void;
-      onCreateEditor?: (view: any, state: any) => void;
-      onUpdate?: (update: any) => void;
-      theme?: string;
-    }
-  >((props, ref) => {
-    const viewRef = React.useRef<any>({
-      state: {
-        doc: createDoc(props.value ?? ""),
-        selection: { main: { head: 0 } },
-      },
-      dispatch: mockCodeMirrorDispatch.mockImplementation((transaction: any) => {
-        const anchor = transaction?.selection?.anchor;
-        if (typeof anchor === "number") {
-          viewRef.current.state.selection.main.head = anchor;
-        }
-      }),
-      focus: vi.fn(),
-      posAtCoords: vi.fn(() => 0),
-    });
-
-    React.useEffect(() => {
-      viewRef.current.state.doc = createDoc(props.value ?? "");
-    }, [props.value]);
-
-    React.useEffect(() => {
-      props.onCreateEditor?.(viewRef.current, viewRef.current.state);
-    }, [props]);
-
-    React.useImperativeHandle(ref, () => ({ view: viewRef.current }), []);
-
-    return (
-      <textarea
-        data-testid="mock-codemirror"
-        data-editor-theme={props.theme ?? ""}
-        value={props.value ?? ""}
-        onChange={(event) => props.onChange?.(event.target.value)}
-        onSelect={(event) => {
-          const target = event.currentTarget;
-          viewRef.current.state.selection.main = {
-            from: target.selectionStart,
-            to: target.selectionEnd,
-            head: target.selectionEnd,
-          };
-          props.onUpdate?.({
-            selectionSet: true,
-            state: viewRef.current.state,
-          });
-        }}
-      />
-    );
-  });
-
-  return {
-    __esModule: true,
-    default: MockCodeMirror,
-  };
-});
-
-vi.mock("../../app/components/OpenAppMenu", () => ({
-  OpenAppMenu: () => <div data-testid="open-app-menu" />,
-}));
-
-vi.mock("./FilePdfPreview", () => ({
-  FilePdfPreview: () => <div data-testid="pdf-preview" />,
-}));
-
-vi.mock("./FileTabularPreview", () => ({
-  FileTabularPreview: () => <div data-testid="tabular-preview" />,
-}));
-
-vi.mock("./FileDocumentPreview", () => ({
-  FileDocumentPreview: () => <div data-testid="document-preview" />,
-}));
-
-vi.mock("../hooks/useFilePreviewPayload", () => ({
-  useFilePreviewPayload: vi.fn((args: { enabled: boolean; renderProfile: { extension: string | null } }) => {
-    if (!args.enabled) {
-      return {
-        payload: null,
-        isLoading: false,
-        error: null,
-      };
-    }
-    const extension = args.renderProfile.extension;
-    if (extension === "pdf") {
-      return {
-        payload: {
-          kind: "file-handle",
-          sourceKind: "file-handle",
-          absolutePath: "/repo/docs/report.pdf",
-          assetUrl: "asset://localhost/repo/docs/report.pdf",
-          extension,
-          byteLength: 4096,
-        },
-        isLoading: false,
-        error: null,
-      };
-    }
-    if (extension === "docx" || extension === "doc") {
-      return {
-        payload: extension === "doc"
-          ? {
-              kind: "unsupported",
-              sourceKind: "file-handle",
-              reason: "legacy-doc",
-            }
-          : {
-              kind: "extracted-structure",
-              sourceKind: "extracted-structure",
-              absolutePath: "/repo/docs/report.docx",
-              assetUrl: "asset://localhost/repo/docs/report.docx",
-              extension,
-              byteLength: 2048,
-              html: "<p>Converted document</p>",
-              warnings: [],
-            },
-        isLoading: false,
-        error: null,
-      };
-    }
-    return {
-      payload: {
-        kind: "inline-bytes",
-        sourceKind: "inline-bytes",
-        text: "name,value\nalpha,1",
-        extension,
-        byteLength: 18,
-        truncated: false,
-      },
-      isLoading: false,
-      error: null,
-    };
-  }),
-}));
-
-vi.mock("../../../components/FileIcon", () => ({
-  default: () => <span data-testid="file-icon" />,
-}));
-
-vi.mock("../../../services/tauri", () => ({
-  readWorkspaceFile: vi.fn(),
-  readExternalSpecFile: vi.fn(),
-  readExternalAbsoluteFile: vi.fn(),
-  readLocalImageDataUrl: vi.fn(),
-  writeWorkspaceFile: vi.fn(),
-  writeExternalSpecFile: vi.fn(),
-  getGitFileFullDiff: vi.fn(),
-  getCodeIntelDefinition: vi.fn(),
-  getCodeIntelReferences: vi.fn(),
-}));
-
-const mermaidInitialize = vi.fn();
-const mermaidRender = vi.fn(async (_id: string, source: string) => ({
-  svg: `<svg data-mermaid-source="${source.replace(/"/g, "&quot;")}"></svg>`,
-}));
-
-vi.mock("mermaid", () => ({
-  default: {
-    initialize: mermaidInitialize,
-    render: mermaidRender,
-  },
-}));
-
-function buildLocation(path: string, line: number, character: number) {
-  return {
-    uri: `file:///repo/${path}`,
-    path,
-    range: {
-      start: { line, character },
-      end: { line, character: character + 1 },
-    },
-  };
-}
-
-function buildWindowsLocation(path: string, line: number, character: number) {
-  const normalizedPath = path.replace(/\\/g, "/");
-  return {
-    uri: `file:///C:/Repo/${normalizedPath}`,
-    path: `C:\\Repo\\${path.replace(/\//g, "\\")}`,
-    range: {
-      start: { line, character },
-      end: { line, character: character + 1 },
-    },
-  };
-}
 
 describe("FileViewPanel navigation", () => {
   afterEach(() => {

@@ -26,6 +26,9 @@ import {
   isStreamLatencyTraceEnabled,
   noteThreadAppServerEventReceived,
   noteThreadDeltaReceived,
+  noteThreadLiveRowRenderMeasured,
+  noteThreadRecoverySourceObserved,
+  noteThreadReducerWorkMeasured,
   noteThreadTextIngressReceived,
   noteThreadTurnStarted,
   noteThreadVisibleTextRendered,
@@ -379,6 +382,97 @@ describe("streamLatencyDiagnostics", () => {
     );
   });
 
+  it("correlates long live row ingress, reducer, render, visible growth, and recovery source evidence", async () => {
+    await primeThreadStreamLatencyContext({
+      workspaceId: "ws-long",
+      threadId: "thread-long-row",
+      engine: "claude",
+      model: "claude-sonnet-4.5",
+    });
+
+    noteThreadTurnStarted({
+      workspaceId: "ws-long",
+      threadId: "thread-long-row",
+      turnId: "turn-long-row",
+      startedAt: 10_000,
+    });
+    noteThreadDeltaReceived("thread-long-row", 10_050, {
+      source: "delta",
+      itemId: "assistant-long-row",
+      textLength: 25_000,
+    });
+    noteThreadReducerWorkMeasured("thread-long-row", {
+      itemId: "assistant-long-row",
+      textLength: 25_000,
+      mergeCostMs: 8.4,
+      normalizationCostMs: 3.2,
+      measuredAt: 10_060,
+    });
+    noteThreadLiveRowRenderMeasured("thread-long-row", {
+      itemId: "assistant-long-row",
+      textLength: 25_000,
+      renderCostMs: 19.7,
+      renderAt: 10_080,
+    });
+    noteThreadVisibleTextRendered("thread-long-row", {
+      itemId: "assistant-long-row",
+      visibleTextLength: 25_000,
+      renderAt: 10_085,
+    });
+    noteThreadRecoverySourceObserved("thread-long-row", {
+      source: "live-shadow",
+      sourceId: "shadow-long-row",
+      itemId: "assistant-long-row",
+      textLength: 25_000,
+      observedAt: 10_100,
+    });
+
+    const snapshot = getThreadStreamLatencySnapshot("thread-long-row");
+
+    expect(snapshot).toMatchObject({
+      lastIngressSource: "delta",
+      lastIngressItemId: "assistant-long-row",
+      lastIngressTextLength: 25_000,
+      lastReducerMergeCostMs: 8.4,
+      lastNormalizationCostMs: 3.2,
+      lastRenderCostMs: 19.7,
+      lastVisibleTextItemId: "assistant-long-row",
+      lastVisibleTextLength: 25_000,
+      visibleTextGrowthCount: 1,
+      lastRecoverySource: "live-shadow",
+      lastRecoverySourceId: "shadow-long-row",
+    });
+    expect(mocks.appendRendererDiagnostic).toHaveBeenCalledWith(
+      "stream-latency/reducer-work",
+      expect.objectContaining({
+        threadId: "thread-long-row",
+        lastIngressSource: "delta",
+        lastIngressTextLength: 25_000,
+        mergeCostMs: 8.4,
+        normalizationCostMs: 3.2,
+      }),
+    );
+    expect(mocks.appendRendererDiagnostic).toHaveBeenCalledWith(
+      "stream-latency/long-live-row-render",
+      expect.objectContaining({
+        threadId: "thread-long-row",
+        lastReducerMergeCostMs: 8.4,
+        lastNormalizationCostMs: 3.2,
+        renderCostMs: 19.7,
+      }),
+    );
+    expect(mocks.appendRendererDiagnostic).toHaveBeenCalledWith(
+      "stream-latency/recovery-source",
+      expect.objectContaining({
+        threadId: "thread-long-row",
+        lastRenderCostMs: 19.7,
+        visibleTextGrowthCount: 1,
+        recoverySource: "live-shadow",
+        recoverySourceId: "shadow-long-row",
+      }),
+    );
+  });
+
   it("does not notify snapshot subscribers for ordinary visible text growth", () => {
     const previous: ThreadStreamLatencySnapshot = {
       threadId: "thread-visible-grow",
@@ -398,6 +492,11 @@ describe("streamLatencyDiagnostics", () => {
       lastIngressSource: "delta" as const,
       lastIngressItemId: "assistant-1",
       lastIngressTextLength: 120,
+      lastReducerMergeCostMs: null,
+      lastNormalizationCostMs: null,
+      lastRenderCostMs: null,
+      lastRecoverySource: null,
+      lastRecoverySourceId: null,
       pendingRenderSinceDeltaAt: null,
       deltaCount: 3,
       cadenceSamplesMs: [40, 55],

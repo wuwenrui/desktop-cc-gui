@@ -31,7 +31,7 @@ export {
   stripClaudeApprovalResumeArtifacts,
 } from "./threadItemsAssistantText";
 
-const MAX_ITEM_TEXT = 20000;
+export const MAX_ITEM_TEXT = 20000;
 const TOOL_OUTPUT_RECENT_ITEMS = 12;
 const NO_TRUNCATE_TOOL_OUTPUT_RECENT_ITEMS = 4;
 const NO_TRUNCATE_TOOL_TYPES = new Set(["fileChange", "commandExecution"]);
@@ -598,7 +598,14 @@ function extractApplyPatchDiffByPath(command: string) {
   return diffByPath;
 }
 
-export function normalizeItem(item: ConversationItem): ConversationItem {
+type NormalizeItemOptions = {
+  preserveMessageTextLength?: boolean;
+};
+
+export function normalizeItem(
+  item: ConversationItem,
+  options?: NormalizeItemOptions,
+): ConversationItem {
   if (item.kind === "message") {
     let normalizedText =
       item.role === "assistant"
@@ -609,7 +616,12 @@ export function normalizeItem(item: ConversationItem): ConversationItem {
     if (item.role === "assistant" && isAssistantNoContentPlaceholder(normalizedText)) {
       normalizedText = "";
     }
-    return { ...item, text: truncateText(normalizedText) };
+    return {
+      ...item,
+      text: options?.preserveMessageTextLength
+        ? normalizedText
+        : truncateText(normalizedText),
+    };
   }
   if (item.kind === "explore") {
     return item;
@@ -719,12 +731,23 @@ function annotateGeneratedImageAnchor(
   });
 }
 
-export function prepareThreadItems(items: ConversationItem[]) {
+type PrepareThreadItemsOptions = {
+  preserveMessageTextIds?: ReadonlySet<string>;
+};
+
+export function prepareThreadItems(
+  items: ConversationItem[],
+  options?: PrepareThreadItemsOptions,
+) {
   prepareThreadItemsCallCountForTests += 1;
   const coalesced: ConversationItem[] = [];
   const coalescedIndexByKey = new Map<string, number>();
   for (const rawItem of items) {
-    const item = normalizeItem(rawItem);
+    const item = normalizeItem(rawItem, {
+      preserveMessageTextLength:
+        rawItem.kind === "message" &&
+        options?.preserveMessageTextIds?.has(rawItem.id) === true,
+    });
     const key = `${item.kind}\u0000${item.id}`;
     const index = coalescedIndexByKey.get(key);
     if (index === undefined) {

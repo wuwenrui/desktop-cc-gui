@@ -160,6 +160,148 @@ describe("MessagesRows stream mitigation", () => {
     });
   });
 
+  it("folds very long explicit Claude plain text mitigation without losing canonical diagnostics text", () => {
+    const longText = `${"风雪夜归人。".repeat(4_000)}\n\n尾段仍需保留。`;
+    const messageItem = {
+      id: "assistant-long-plain-mitigation",
+      kind: "message" as const,
+      role: "assistant" as const,
+      text: longText,
+    };
+    const onAssistantVisibleTextRender = vi.fn();
+
+    const { container } = render(
+      <MessageRow
+        item={messageItem}
+        isStreaming
+        activeEngine="claude"
+        isCopied={false}
+        onCopy={vi.fn()}
+        streamMitigationProfile={{
+          id: "claude-markdown-stream-recovery",
+          messageStreamingThrottleMs: 120,
+          reasoningStreamingThrottleMs: 260,
+          renderPlainTextWhileStreaming: true,
+        }}
+        onAssistantVisibleTextRender={onAssistantVisibleTextRender}
+      />,
+    );
+
+    expect(screen.queryByTestId("markdown")).toBeNull();
+    const plainTextSurface = container.querySelector(".markdown-live-plain-text");
+    const visibleText = plainTextSurface?.textContent ?? "";
+    expect(visibleText.length).toBeLessThan(longText.length);
+    expect(visibleText).toContain(longText.slice(0, 24));
+    expect(visibleText).toContain(longText.slice(-24));
+    expect(onAssistantVisibleTextRender).toHaveBeenCalledWith({
+      itemId: "assistant-long-plain-mitigation",
+      visibleText: longText,
+    });
+  });
+
+  it("uses a folded lightweight Markdown surface for very long Claude streaming output", () => {
+    const longText = `${"太虚山下，云海翻涌。".repeat(2_200)}\n\n第二段仍需保留。`;
+    const messageItem = {
+      id: "assistant-claude-long",
+      kind: "message" as const,
+      role: "assistant" as const,
+      text: longText,
+    };
+    const onAssistantVisibleTextRender = vi.fn();
+
+    const { container } = render(
+      <MessageRow
+        item={messageItem}
+        isStreaming
+        activeEngine="claude"
+        isCopied={false}
+        onCopy={vi.fn()}
+        onAssistantVisibleTextRender={onAssistantVisibleTextRender}
+      />,
+    );
+
+    expect(container.querySelector(".markdown-live-plain-text")).toBeNull();
+    const markdownSurface = screen.getByTestId("markdown");
+    const visibleText = markdownSurface.textContent ?? "";
+    expect(visibleText.length).toBeLessThan(longText.length);
+    expect(visibleText).not.toBe(longText);
+    expect(visibleText).toContain(
+      longText.slice(0, 24),
+    );
+    expect(visibleText).toContain(
+      longText.slice(-32),
+    );
+    expect(visibleText).toContain("第二段仍需保留。");
+    expect(markdownSurface.getAttribute("data-live-render-mode")).toBe("lightweight");
+    expect(markdownSurface.getAttribute("data-progressive-reveal")).toBe("true");
+    expect(onAssistantVisibleTextRender).toHaveBeenCalledWith({
+      itemId: "assistant-claude-long",
+      visibleText: longText,
+    });
+  });
+
+  it("converges completed large Claude output back to final Markdown rendering", () => {
+    const longText = [
+      "# 终章",
+      "",
+      "太虚山下，云海翻涌。".repeat(2_200),
+      "",
+      "- 第一条",
+      "- 第二条",
+      "",
+      "```ts",
+      "const answer = 42;",
+      "```",
+    ].join("\n");
+    const messageItem = {
+      id: "assistant-claude-final",
+      kind: "message" as const,
+      role: "assistant" as const,
+      text: longText,
+    };
+
+    const { container, rerender } = render(
+      <MessageRow
+        item={messageItem}
+        isStreaming
+        activeEngine="claude"
+        isCopied={false}
+        onCopy={vi.fn()}
+      />,
+    );
+
+    expect(container.querySelector(".markdown-live-plain-text")).toBeNull();
+    const visibleText = screen.getByTestId("markdown").textContent ?? "";
+    expect(visibleText.length).toBeLessThan(longText.length);
+    expect(visibleText).toContain(longText.slice(0, 24));
+    expect(visibleText).toContain(longText.slice(-24));
+    expect(screen.getByTestId("markdown").getAttribute("data-live-render-mode")).toBe(
+      "lightweight",
+    );
+    expect(screen.getByTestId("markdown").getAttribute("data-progressive-reveal")).toBe(
+      "true",
+    );
+
+    rerender(
+      <MessageRow
+        item={{ ...messageItem, isFinal: true }}
+        isStreaming={false}
+        activeEngine="claude"
+        isCopied={false}
+        onCopy={vi.fn()}
+      />,
+    );
+
+    expect(container.querySelector(".markdown-live-plain-text")).toBeNull();
+    expect(screen.getByTestId("markdown").textContent).toBe(longText);
+    expect(screen.getByTestId("markdown").getAttribute("data-live-render-mode")).toBe(
+      "full",
+    );
+    expect(screen.getByTestId("markdown").getAttribute("data-progressive-reveal")).toBe(
+      "false",
+    );
+  });
+
   it("keeps Codex markdown stream recovery on lightweight Markdown after visible stall evidence", () => {
     const messageItem = {
       id: "assistant-codex-recovery",

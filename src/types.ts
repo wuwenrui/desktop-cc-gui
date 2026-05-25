@@ -106,10 +106,14 @@ export type ConversationItem =
       kind: "message";
       role: "user" | "assistant";
       text: string;
+      turnId?: string | null;
       engineSource?: EngineType;
       isFinal?: boolean;
       finalCompletedAt?: number;
       finalDurationMs?: number;
+      recoveredFromLiveShadow?: boolean;
+      recoveryStatus?: "interrupted" | "recovered";
+      recoverySourceId?: string;
       images?: string[];
       deferredImages?: ClaudeDeferredImage[];
       collaborationMode?: "plan" | "code" | null;

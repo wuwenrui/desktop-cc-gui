@@ -4,6 +4,12 @@ import {
   createClaudeHistoryLoader,
   parseClaudeHistoryMessages,
 } from "./claudeHistoryLoader";
+import { writeClientStoreValue } from "../../../services/clientStorage";
+import {
+  appendLiveAssistantShadowDelta,
+  buildLiveAssistantShadowTranscriptId,
+  settleLiveAssistantShadowTranscript,
+} from "../utils/liveAssistantShadowTranscript";
 
 type AssistantMessageItem = Extract<ConversationItem, { kind: "message" }> & {
   role: "assistant";
@@ -909,6 +915,426 @@ describe("parseClaudeHistoryMessages", () => {
     expect(reasoning[0]?.content).toBe(
       "先检查项目目录结构和入口模块，再确认核心路由并定位状态来源",
     );
+  });
+});
+
+describe("createClaudeHistoryLoader shadow recovery", () => {
+  it("recovers interrupted Claude assistant text when provider history lacks final body", async () => {
+    writeClientStoreValue("threads", "liveAssistantShadowTranscripts", {});
+    appendLiveAssistantShadowDelta({
+      engine: "claude",
+      workspaceId: "ws-shadow",
+      threadId: "claude:session-shadow",
+      turnId: "turn-shadow",
+      itemId: "assistant-shadow",
+      delta: "第一章\n\n少年踏入山门。",
+      timestamp: Date.now(),
+    });
+    const shadowId = buildLiveAssistantShadowTranscriptId({
+      engine: "claude",
+      workspaceId: "ws-shadow",
+      threadId: "claude:session-shadow",
+      turnId: "turn-shadow",
+      itemId: "assistant-shadow",
+    });
+    const loader = createClaudeHistoryLoader({
+      workspaceId: "ws-shadow",
+      workspacePath: "/tmp/ws-shadow",
+      loadClaudeSession: vi.fn().mockResolvedValue({
+        messages: [
+          {
+            kind: "message",
+            id: "user-long",
+            role: "user",
+            text: "请输出一篇50000字的修仙小说",
+          },
+          {
+            kind: "reasoning",
+            id: "assistant-thinking",
+            text: "我需要规划长篇小说。",
+          },
+        ],
+      }),
+    });
+
+    const snapshot = await loader.load("claude:session-shadow");
+    const recovered = snapshot.items.find(
+      (item): item is AssistantMessageItem =>
+        item.kind === "message" && item.role === "assistant",
+    );
+    expect(recovered).toMatchObject({
+      id: "claude-shadow-recovered-assistant-shadow",
+      text: "第一章\n\n少年踏入山门。",
+      recoveredFromLiveShadow: true,
+      recoveryStatus: "interrupted",
+      recoverySourceId: shadowId,
+      isFinal: false,
+      engineSource: "claude",
+    });
+  });
+
+  it("recovers a 50k CJK shadow transcript with paragraph breaks after simulated close", async () => {
+    writeClientStoreValue("threads", "liveAssistantShadowTranscripts", {});
+    const paragraph = "太虚山下，云海翻涌，少年执剑向前。";
+    const longShadowText = [
+      paragraph.repeat(Math.ceil(25_000 / paragraph.length)),
+      "第二段仍需保留，不能在恢复后挤成一团。",
+      paragraph.repeat(Math.ceil(25_000 / paragraph.length)),
+    ].join("\n\n");
+    expect(longShadowText.length).toBeGreaterThan(50_000);
+    appendLiveAssistantShadowDelta({
+      engine: "claude",
+      workspaceId: "ws-shadow-50k",
+      threadId: "claude:session-shadow-50k",
+      turnId: "turn-shadow-50k",
+      itemId: "assistant-shadow-50k",
+      delta: longShadowText,
+      timestamp: Date.now(),
+    });
+
+    const loader = createClaudeHistoryLoader({
+      workspaceId: "ws-shadow-50k",
+      workspacePath: "/tmp/ws-shadow-50k",
+      loadClaudeSession: vi.fn().mockResolvedValue({
+        messages: [
+          {
+            kind: "message",
+            id: "user-long-50k",
+            role: "user",
+            text: "请输出一篇50000字的修仙小说",
+            turnId: "turn-shadow-50k",
+          },
+          {
+            kind: "reasoning",
+            id: "assistant-thinking-50k",
+            text: "我需要规划长篇小说。",
+            turnId: "turn-shadow-50k",
+          },
+        ],
+      }),
+    });
+
+    const snapshot = await loader.load("claude:session-shadow-50k");
+    const recovered = snapshot.items.find(
+      (item): item is AssistantMessageItem =>
+        item.kind === "message" && item.role === "assistant",
+    );
+
+    expect(recovered).toMatchObject({
+      id: "claude-shadow-recovered-assistant-shadow-50k",
+      text: longShadowText,
+      recoveredFromLiveShadow: true,
+      recoveryStatus: "interrupted",
+      recoverySourceId: buildLiveAssistantShadowTranscriptId({
+        engine: "claude",
+        workspaceId: "ws-shadow-50k",
+        threadId: "claude:session-shadow-50k",
+        turnId: "turn-shadow-50k",
+        itemId: "assistant-shadow-50k",
+      }),
+      isFinal: false,
+      engineSource: "claude",
+    });
+    expect(recovered?.text).toContain("\n\n第二段仍需保留");
+    expect(recovered?.text).not.toContain("...");
+  });
+
+  it("replaces a non-final assistant row with recovered live shadow when shadow extends it", async () => {
+    writeClientStoreValue("threads", "liveAssistantShadowTranscripts", {});
+    appendLiveAssistantShadowDelta({
+      engine: "claude",
+      workspaceId: "ws-shadow",
+      threadId: "claude:session-shadow-prefix",
+      turnId: "turn-shadow-prefix",
+      itemId: "assistant-shadow-prefix",
+      delta: "第一章\n\n少年踏入山门。\n\n第六百一十回，风起云涌。",
+      timestamp: Date.now(),
+    });
+    const shadowId = buildLiveAssistantShadowTranscriptId({
+      engine: "claude",
+      workspaceId: "ws-shadow",
+      threadId: "claude:session-shadow-prefix",
+      turnId: "turn-shadow-prefix",
+      itemId: "assistant-shadow-prefix",
+    });
+    const loader = createClaudeHistoryLoader({
+      workspaceId: "ws-shadow",
+      workspacePath: "/tmp/ws-shadow",
+      loadClaudeSession: vi.fn().mockResolvedValue({
+        messages: [
+          {
+            kind: "message",
+            id: "user-long",
+            role: "user",
+            text: "继续续写一段",
+            turnId: "turn-shadow-prefix",
+          },
+          {
+            kind: "message",
+            id: "assistant-prefix",
+            role: "assistant",
+            text: "第一章\n\n少年踏入山门。",
+            turnId: "turn-shadow-prefix",
+          },
+        ],
+      }),
+    });
+
+    const snapshot = await loader.load("claude:session-shadow-prefix");
+    const assistant = snapshot.items.find(
+      (item): item is AssistantMessageItem =>
+        item.kind === "message" && item.role === "assistant",
+    );
+    expect(assistant).toMatchObject({
+      id: "assistant-prefix",
+      text: "第一章\n\n少年踏入山门。\n\n第六百一十回，风起云涌。",
+      recoveredFromLiveShadow: true,
+      recoveryStatus: "interrupted",
+      recoverySourceId: shadowId,
+      isFinal: false,
+      engineSource: "claude",
+    });
+  });
+
+  it("falls back to settled shadow when unsettled entries are all provider-final observed", async () => {
+    writeClientStoreValue("threads", "liveAssistantShadowTranscripts", {});
+    appendLiveAssistantShadowDelta({
+      engine: "claude",
+      workspaceId: "ws-shadow",
+      threadId: "claude:session-shadow-settled",
+      turnId: "turn-shadow",
+      itemId: "assistant-shadow",
+      delta: "长文本片段 01",
+      timestamp: Date.now(),
+    });
+    settleLiveAssistantShadowTranscript({
+      engine: "claude",
+      workspaceId: "ws-shadow",
+      threadId: "claude:session-shadow-settled",
+      itemId: "assistant-shadow",
+      text: "长文本片段 01",
+      turnId: "turn-shadow",
+      providerFinalObserved: true,
+      timestamp: Date.now(),
+    });
+
+    const shadowId = buildLiveAssistantShadowTranscriptId({
+      engine: "claude",
+      workspaceId: "ws-shadow",
+      threadId: "claude:session-shadow-settled",
+      turnId: "turn-shadow",
+      itemId: "assistant-shadow",
+    });
+
+    const loader = createClaudeHistoryLoader({
+      workspaceId: "ws-shadow",
+      workspacePath: "/tmp/ws-shadow",
+      loadClaudeSession: vi.fn().mockResolvedValue({
+        messages: [
+          {
+            kind: "message",
+            id: "user-long",
+            role: "user",
+            text: "请输出一篇50000字的修仙小说",
+            turnId: "turn-shadow",
+          },
+          {
+            kind: "reasoning",
+            id: "assistant-thinking",
+            text: "我需要分段构建长篇章节。",
+            turnId: "turn-shadow",
+          },
+        ],
+      }),
+    });
+
+    const snapshot = await loader.load("claude:session-shadow-settled");
+    const recovered = snapshot.items.find(
+      (item): item is AssistantMessageItem =>
+        item.kind === "message" &&
+        item.role === "assistant" &&
+        item.recoveredFromLiveShadow === true,
+    );
+
+    expect(recovered).toMatchObject({
+      id: "claude-shadow-recovered-assistant-shadow",
+      text: "长文本片段 01",
+      recoveredFromLiveShadow: true,
+      recoveryStatus: "interrupted",
+      recoverySourceId: shadowId,
+      isFinal: false,
+      engineSource: "claude",
+    });
+  });
+
+  it("matches shadow transcript by turn id derived from parsed conversation", async () => {
+    writeClientStoreValue("threads", "liveAssistantShadowTranscripts", {});
+    appendLiveAssistantShadowDelta({
+      engine: "claude",
+      workspaceId: "ws-shadow",
+      threadId: "claude:session-shadow-turn",
+      turnId: "turn-old",
+      itemId: "assistant-old",
+      delta: "旧内容",
+      timestamp: Date.now(),
+    });
+    appendLiveAssistantShadowDelta({
+      engine: "claude",
+      workspaceId: "ws-shadow",
+      threadId: "claude:session-shadow-turn",
+      turnId: "turn-current",
+      itemId: "assistant-current",
+      delta: "当前正文",
+      timestamp: Date.now() + 1,
+    });
+    const loader = createClaudeHistoryLoader({
+      workspaceId: "ws-shadow",
+      workspacePath: "/tmp/ws-shadow",
+      loadClaudeSession: vi.fn().mockResolvedValue({
+        messages: [
+          {
+            kind: "message",
+            id: "user-old",
+            role: "user",
+            text: "上一个问题",
+            turnId: "turn-old",
+          },
+          {
+            kind: "message",
+            id: "assistant-old",
+            role: "assistant",
+            text: "上一个回复",
+            turnId: "turn-old",
+          },
+          {
+            kind: "message",
+            id: "user-current",
+            role: "user",
+            text: "继续刚才内容",
+            turnId: "turn-current",
+          },
+          {
+            kind: "reasoning",
+            id: "assistant-thinking",
+            text: "我需要继续写作。",
+            turnId: "turn-current",
+          },
+        ],
+      }),
+    });
+
+    const snapshot = await loader.load("claude:session-shadow-turn");
+    const recovered = snapshot.items.filter(
+      (item): item is AssistantMessageItem =>
+        item.kind === "message" &&
+        item.role === "assistant" &&
+        item.recoveredFromLiveShadow === true,
+    );
+    expect(recovered).toHaveLength(1);
+    expect(recovered[0]).toMatchObject({
+      id: "claude-shadow-recovered-assistant-current",
+      text: "当前正文",
+      recoveredFromLiveShadow: true,
+      engineSource: "claude",
+      recoverySourceId: buildLiveAssistantShadowTranscriptId({
+        engine: "claude",
+        workspaceId: "ws-shadow",
+        threadId: "claude:session-shadow-turn",
+        turnId: "turn-current",
+        itemId: "assistant-current",
+      }),
+    });
+  });
+
+  it("does not duplicate shadow text when provider history has assistant final body", async () => {
+    writeClientStoreValue("threads", "liveAssistantShadowTranscripts", {});
+    appendLiveAssistantShadowDelta({
+      engine: "claude",
+      workspaceId: "ws-shadow",
+      threadId: "claude:session-shadow",
+      itemId: "assistant-shadow",
+      delta: "shadow text",
+      timestamp: Date.now(),
+    });
+    const loader = createClaudeHistoryLoader({
+      workspaceId: "ws-shadow",
+      workspacePath: "/tmp/ws-shadow",
+      loadClaudeSession: vi.fn().mockResolvedValue({
+        messages: [
+          {
+            kind: "message",
+            id: "user-long",
+            role: "user",
+            text: "继续",
+          },
+          {
+            kind: "message",
+            id: "assistant-final",
+            role: "assistant",
+            text: "provider final",
+          },
+        ],
+      }),
+    });
+
+    const snapshot = await loader.load("claude:session-shadow");
+    const assistantMessages = snapshot.items.filter(
+      (item): item is AssistantMessageItem =>
+        item.kind === "message" && item.role === "assistant",
+    );
+    expect(assistantMessages).toHaveLength(1);
+    expect(assistantMessages[0]?.text).toBe("provider final");
+    expect(assistantMessages[0]?.recoveredFromLiveShadow).toBeUndefined();
+  });
+
+  it("does not override explicit final assistant body with longer shadow payload", async () => {
+    writeClientStoreValue("threads", "liveAssistantShadowTranscripts", {});
+    appendLiveAssistantShadowDelta({
+      engine: "claude",
+      workspaceId: "ws-shadow",
+      threadId: "claude:session-shadow-explicit-final",
+      turnId: "turn-shadow",
+      itemId: "assistant-shadow",
+      delta: "provider final 额外",
+      timestamp: Date.now(),
+    });
+
+    const loader = createClaudeHistoryLoader({
+      workspaceId: "ws-shadow",
+      workspacePath: "/tmp/ws-shadow",
+      loadClaudeSession: vi.fn().mockResolvedValue({
+        messages: [
+          {
+            kind: "message",
+            id: "user-long",
+            role: "user",
+            text: "继续",
+            turnId: "turn-shadow",
+          },
+          {
+            kind: "message",
+            id: "assistant-final",
+            role: "assistant",
+            text: "provider final",
+            turnId: "turn-shadow",
+            isFinal: true,
+          },
+        ],
+      }),
+    });
+
+    const snapshot = await loader.load("claude:session-shadow-explicit-final");
+    const assistantMessages = snapshot.items.filter(
+      (item): item is AssistantMessageItem =>
+        item.kind === "message" && item.role === "assistant",
+    );
+    expect(assistantMessages).toHaveLength(1);
+    expect(assistantMessages[0]).toMatchObject({
+      id: "assistant-final",
+      text: "provider final",
+      isFinal: true,
+    });
+    expect(assistantMessages[0]?.recoveredFromLiveShadow).toBeUndefined();
   });
 });
 

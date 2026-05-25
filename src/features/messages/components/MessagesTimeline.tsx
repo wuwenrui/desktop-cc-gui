@@ -361,6 +361,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
                   activeEngine === "codex" ||
                   activeEngine === "gemini") &&
                 renderItem.role === "assistant" &&
+                renderItem.recoveredFromLiveShadow !== true &&
                 renderItem.id === liveAssistantMessageId
               }
               activeEngine={activeEngine}

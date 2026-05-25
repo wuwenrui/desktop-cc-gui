@@ -83,4 +83,44 @@ describe("threadReducer history restore", () => {
       },
     ]);
   });
+
+  it("keeps long assistant history items untruncated when restoring thread items", () => {
+    const longText = Array.from({ length: 5_200 }, (_, index) =>
+      `段${index.toString(36).padStart(5, "0")}`,
+    ).join("");
+    const base: ThreadState = {
+      ...initialState,
+      threadStatusById: {
+        "thread-long": {
+          isProcessing: false,
+          hasUnread: false,
+          isReviewing: false,
+          isContextCompacting: false,
+          processingStartedAt: null,
+          lastDurationMs: null,
+          heartbeatPulse: 0,
+        },
+      },
+    };
+
+    const next = threadReducer(base, {
+      type: "setThreadItems",
+      threadId: "thread-long",
+      items: [
+        {
+          id: "assistant-long",
+          kind: "message",
+          role: "assistant",
+          text: longText,
+        },
+      ],
+    });
+
+    const restored = next.itemsByThread["thread-long"]?.[0];
+    expect(restored?.kind).toBe("message");
+    if (restored?.kind === "message") {
+      expect(restored.text.length).toBe(longText.length);
+      expect(restored.text).not.toContain("...");
+    }
+  });
 });

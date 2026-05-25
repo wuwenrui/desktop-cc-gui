@@ -14,6 +14,12 @@ import {
   applyPendingClaudeMcpOutputNoticeToAgentCompleted,
   applyPendingClaudeMcpOutputNoticeToAgentDelta,
 } from "../utils/claudeMcpRuntimeSnapshot";
+import {
+  appendLiveAssistantShadowDelta,
+  settleLiveAssistantShadowTranscript,
+  upsertLiveAssistantShadowSnapshot,
+} from "../utils/liveAssistantShadowTranscript";
+import { noteThreadReducerWorkMeasured } from "../utils/streamLatencyDiagnostics";
 
 const CLAUDE_STREAM_DEBUG_FLAG_KEY = "ccgui.debug.claude.stream";
 
@@ -40,6 +46,10 @@ function isClaudeThread(threadId: string) {
 
 function isGeminiThread(threadId: string) {
   return threadId.startsWith("gemini:") || threadId.startsWith("gemini-pending-");
+}
+
+function readHighResolutionNowMs() {
+  return typeof performance !== "undefined" ? performance.now() : Date.now();
 }
 
 type ReasoningEngineHint = "gemini" | null;
@@ -448,6 +458,7 @@ export function useThreadItemEvents({
       }
 
       if (operation.kind === "agentDelta") {
+        const dispatchStartedAt = readHighResolutionNowMs();
         dispatch({
           type: "appendAgentDelta",
           workspaceId: operation.workspaceId,
@@ -455,6 +466,13 @@ export function useThreadItemEvents({
           itemId: operation.itemId,
           delta: operation.delta,
           hasCustomName: Boolean(getCustomName(operation.workspaceId, operation.threadId)),
+        });
+        const dispatchCostMs = readHighResolutionNowMs() - dispatchStartedAt;
+        noteThreadReducerWorkMeasured(operation.threadId, {
+          itemId: operation.itemId,
+          textLength: operation.delta.length,
+          mergeCostMs: dispatchCostMs,
+          normalizationCostMs: dispatchCostMs,
         });
         return;
       }
@@ -871,7 +889,8 @@ export function useThreadItemEvents({
         return;
       }
       flushRealtimeDeltaOps();
-      if (isRealtimeTurnTerminal(threadId, extractTurnIdFromRawItem(item))) {
+      const turnId = extractTurnIdFromRawItem(item);
+      if (isRealtimeTurnTerminal(threadId, turnId)) {
         return;
       }
       dispatch({ type: "ensureThread", workspaceId, threadId, engine: inferEngineFromThreadId(threadId) });
@@ -928,6 +947,15 @@ export function useThreadItemEvents({
 
       if (itemType === "agentMessage") {
         if (agentMessageSnapshotText) {
+          upsertLiveAssistantShadowSnapshot({
+            engine: inferEngineFromThreadId(threadId),
+            workspaceId,
+            threadId,
+            itemId,
+            text: agentMessageSnapshotText,
+            turnId,
+          });
+          const dispatchStartedAt = readHighResolutionNowMs();
           dispatch({
             type: "appendAgentDelta",
             workspaceId,
@@ -935,6 +963,13 @@ export function useThreadItemEvents({
             itemId,
             delta: agentMessageSnapshotText,
             hasCustomName: Boolean(getCustomName(workspaceId, threadId)),
+          });
+          const dispatchCostMs = readHighResolutionNowMs() - dispatchStartedAt;
+          noteThreadReducerWorkMeasured(threadId, {
+            itemId,
+            textLength: agentMessageSnapshotText.length,
+            mergeCostMs: dispatchCostMs,
+            normalizationCostMs: dispatchCostMs,
           });
           logClaudeStream("agent-snapshot-routed", {
             workspaceId,
@@ -1114,6 +1149,14 @@ export function useThreadItemEvents({
         threadId,
         delta,
       );
+      appendLiveAssistantShadowDelta({
+        engine: inferEngineFromThreadId(threadId),
+        workspaceId,
+        threadId,
+        itemId,
+        delta: resolvedDelta,
+        turnId,
+      });
       enqueueRealtimeDeltaOperation({
         kind: "agentDelta",
         workspaceId,
@@ -1159,6 +1202,15 @@ export function useThreadItemEvents({
         threadId,
         text,
       );
+      settleLiveAssistantShadowTranscript({
+        engine: inferEngineFromThreadId(threadId),
+        workspaceId,
+        threadId,
+        itemId,
+        text: resolvedText,
+        turnId,
+        providerFinalObserved: true,
+      });
       flushRealtimeDeltaOps();
       if (isRealtimeTurnTerminal(threadId, turnId)) {
         return;
