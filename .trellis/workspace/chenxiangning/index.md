@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-16.md`
-- **Total Sessions**: 582
+- **Total Sessions**: 583
 - **Last Active**: 2026-05-26
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-16.md` | ~870 | Active |
+| `journal-16.md` | ~903 | Active |
 | `journal-15.md` | ~1996 | Archived |
 | `journal-14.md` | ~1969 | Archived |
 | `journal-13.md` | ~1947 | Archived |
@@ -44,6 +44,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 583 | 2026-05-26 | 回写会话管理收口提案 | `5a8e231a` | `feature/v0.5.3` |
 | 582 | 2026-05-26 | 修复设置会话删除测试超时 | `15a4a882` | `feature/v0.5.3` |
 | 581 | 2026-05-26 | 删除会话文件夹时保留并提升会话 | `934447de` | `feature/v0.5.3` |
 | 580 | 2026-05-26 | 修正空会话文件夹树删除语义 | `3303f64e` | `feature/v0.5.3` |

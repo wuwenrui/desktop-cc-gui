@@ -868,3 +868,36 @@ CI 中 SettingsView 删除会话测试仍断言旧刷新签名；更新为包含
 ### Next Steps
 
 - None - task complete
+
+
+## Session 583: 回写会话管理收口提案
+
+**Date**: 2026-05-26
+**Task**: 回写会话管理收口提案
+**Branch**: `feature/v0.5.3`
+
+### Summary
+
+将 Settings 删除会话 CI 收口原因和 deleted tombstone 刷新契约回写到 stabilize-session-management-truth-boundaries proposal，并通过 OpenSpec strict 校验。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5a8e231a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
