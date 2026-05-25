@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-16.md`
-- **Total Sessions**: 570
-- **Last Active**: 2026-05-24
+- **Total Sessions**: 571
+- **Last Active**: 2026-05-25
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-16.md` | ~407 | Active |
+| `journal-16.md` | ~460 | Active |
 | `journal-15.md` | ~1996 | Archived |
 | `journal-14.md` | ~1969 | Archived |
 | `journal-13.md` | ~1947 | Archived |
@@ -44,6 +44,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 571 | 2026-05-25 | 优化会话移动反馈与子菜单定位 | `0f7a7350` | `feature/v0.5.3` |
 | 570 | 2026-05-24 | 收敛文件底部标注交互 | `33a84e1a` | `feature/v0.5.2` |
 | 569 | 2026-05-24 | 优化编辑态标注入口 | `4cce9d46` | `feature/v0.5.2` |
 | 568 | 2026-05-24 | 修复邮件设置密钥加载 CI 断言 | `24fd0862` | `feature/v0.5.2` |

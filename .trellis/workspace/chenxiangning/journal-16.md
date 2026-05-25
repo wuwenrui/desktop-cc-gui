@@ -405,3 +405,56 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 571: 优化会话移动反馈与子菜单定位
+
+**Date**: 2026-05-25
+**Task**: 优化会话移动反馈与子菜单定位
+**Branch**: `feature/v0.5.3`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## Summary
+
+完成 session folder move 收口：
+- 将 session subtree move 从逐个 `assignWorkspaceSessionFolder` 改为批量 `assignWorkspaceSessionFolders`，成功后只触发一次 sidebar reload。
+- 复用既有 `LoadingProgressDialog` / `runWithLoadingProgress`，点击 folder target 后立即关闭菜单/选择器并显示移动进度，失败继续走现有 error toast。
+- 将 `Move to folder` 改为右侧 submenu/flyout，large folder list 保留搜索入口，同时 worktree session row 使用对应 worktree 的 move targets。
+- 修复 Claude pending session folder intent 的 identity 迁移：通过 `nativeThreadIds` 保留 pending id 到真实 id 的显式关联，避免多 Claude session 时把 folder intent 写到旧 session。
+- 新增 OpenSpec change `fix-session-folder-intent-and-worktree-move-menu`，记录 worktree move menu 与 pending folder intent contract。
+
+## Validation
+
+- `npx vitest run src/components/ui/RendererContextMenu.test.tsx src/features/app/hooks/useSidebarMenus.test.tsx src/features/app/components/WorktreeSection.test.tsx src/features/app/components/Sidebar.session-folders.test.tsx src/features/app/components/Sidebar.test.tsx src/features/threads/hooks/useThreadsReducer.threadlist-pending.test.ts src/app-shell.startup.test.tsx` — 128 passed
+- `npm run lint` — passed
+- `openspec validate fix-session-folder-intent-and-worktree-move-menu --strict --no-interactive` — passed
+- `openspec validate --all --strict --no-interactive` — 306 passed before final commit
+- `npm run typecheck` — blocked by unrelated, unstaged long-live shadow recovery changes in `src/features/threads/loaders/claudeHistoryLoader.ts`
+
+## Notes
+
+- 本次 commit 使用 selective staging，未纳入当前工作区中未完成的 long-live assistant stream recovery 相关改动。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0f7a7350` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
