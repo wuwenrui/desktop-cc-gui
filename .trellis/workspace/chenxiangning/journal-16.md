@@ -703,3 +703,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 578: 收敛会话删除同步状态
+
+**Date**: 2026-05-25
+**Task**: 收敛会话删除同步状态
+**Branch**: `feature/v0.5.3`
+
+### Summary
+
+修复 Settings 删除 session 后 sidebar/workspace 列表和会话幕布状态不同步的问题，并回写 session-management truth-boundary 提案。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `561042d1` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
