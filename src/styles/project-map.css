@@ -200,12 +200,18 @@
   display: inline-flex;
   align-items: center;
   min-height: 26px;
+  border: 1px solid color-mix(in srgb, var(--project-map-warning) 34%, transparent);
   border-radius: 8px;
   padding: 0 10px;
   background: color-mix(in srgb, var(--project-map-warning) 14%, var(--project-map-surface));
   color: var(--project-map-warning);
   font-size: 12px;
   font-weight: 650;
+  cursor: pointer;
+}
+
+.project-map-candidate-badge:hover {
+  background: color-mix(in srgb, var(--project-map-warning) 20%, var(--project-map-surface));
 }
 
 .project-map-task-button {
@@ -836,7 +842,7 @@
   color: var(--project-map-success);
 }
 
-.project-map-zoom-controls {
+.project-map-canvas-control-group {
   position: absolute;
   left: 14px;
   top: 14px;
@@ -849,12 +855,14 @@
   box-shadow: 0 8px 20px var(--project-map-shadow);
 }
 
-.project-map-zoom-controls button {
+.project-map-canvas-control-group button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 6px;
   min-width: 32px;
   min-height: 30px;
+  padding: 0 10px;
   border: 0;
   border-right: 1px solid color-mix(in srgb, var(--project-map-border) 62%, transparent);
   background: transparent;
@@ -864,11 +872,16 @@
   cursor: pointer;
 }
 
-.project-map-zoom-controls button:last-child {
+.project-map-canvas-control-group button:first-child,
+.project-map-canvas-control-group button:last-child {
+  padding: 0 9px;
+}
+
+.project-map-canvas-control-group button:last-child {
   border-right: 0;
 }
 
-.project-map-zoom-controls svg {
+.project-map-canvas-control-group svg {
   width: 14px;
   height: 14px;
 }
@@ -878,7 +891,7 @@
   right: 18px;
   top: 16px;
   z-index: 5;
-  width: 318px;
+  width: min(478px, calc(100% - 36px));
   max-height: calc(100% - 36px);
   overflow: auto;
   border: 1px solid color-mix(in srgb, var(--project-map-border) 76%, transparent);
@@ -897,20 +910,46 @@
   background: color-mix(in srgb, var(--project-map-surface) 90%, transparent);
 }
 
+.project-map-detail-control-group {
+  display: flex;
+  align-items: stretch;
+  max-width: 100%;
+  width: fit-content;
+  overflow: visible;
+  border: 1px solid color-mix(in srgb, var(--project-map-accent) 32%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--project-map-surface) 94%, transparent);
+}
+
+.project-map-detail-control-group > button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.project-map-detail-panel.is-collapsed .project-map-detail-control-group {
+  width: 100%;
+}
+
 .project-map-detail-toggle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
   min-height: 28px;
-  width: 100%;
-  border: 1px solid color-mix(in srgb, var(--project-map-accent) 32%, transparent);
-  border-radius: 8px;
-  background: var(--project-map-surface);
+  border: 0;
+  border-right: 1px solid color-mix(in srgb, var(--project-map-border) 62%, transparent);
+  border-radius: 0;
+  padding: 0 10px;
+  background: transparent;
   color: var(--project-map-accent);
   font-size: 12px;
   font-weight: 680;
   cursor: pointer;
+}
+
+.project-map-detail-panel.is-collapsed .project-map-detail-toggle {
+  flex: 1;
+  border-right: 0;
 }
 
 .project-map-detail-toggle svg {
@@ -933,18 +972,55 @@
   white-space: nowrap;
 }
 
-.project-map-back-button {
-  margin: 12px 0 10px;
+.project-map-detail-control-group .project-map-back-button {
+  margin: 0;
+  border: 0;
+  border-right: 1px solid color-mix(in srgb, var(--project-map-border) 62%, transparent);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.project-map-detail-control-group .project-map-back-button:last-child {
+  border-right: 0;
 }
 
 .project-map-inspector-heading {
-  margin-top: 12px;
+  margin-top: 14px;
   padding-bottom: 14px;
   border-bottom: 1px solid color-mix(in srgb, var(--project-map-border) 58%, transparent);
 }
 
 .project-map-inspector-heading h3 {
   margin: 10px 0 6px;
+}
+
+.project-map-candidate-notice {
+  border: 1px solid color-mix(in srgb, var(--project-map-warning) 32%, transparent);
+  border-radius: 10px;
+  padding: 10px;
+  background: color-mix(in srgb, var(--project-map-warning) 10%, var(--project-map-surface));
+}
+
+.project-map-candidate-notice h4 {
+  color: var(--project-map-warning);
+}
+
+.project-map-candidate-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.project-map-candidate-actions button {
+  min-height: 30px;
+}
+
+.project-map-candidate-actions button.is-primary {
+  border-color: color-mix(in srgb, var(--project-map-warning) 54%, transparent);
+  background: color-mix(in srgb, var(--project-map-warning) 16%, var(--project-map-surface));
+  color: var(--project-map-warning);
 }
 
 .project-map-detail-panel p,
@@ -980,8 +1056,7 @@
 }
 
 .project-map-inspector-badges span,
-.project-map-artifact-chip,
-.project-map-source-chip {
+.project-map-trace-chip {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -993,12 +1068,59 @@
   font-weight: 620;
 }
 
-.project-map-artifact-chip svg {
+.project-map-trace-chip {
+  max-width: 100%;
+  border: 1px solid transparent;
+}
+
+button.project-map-trace-chip {
+  cursor: pointer;
+}
+
+.project-map-trace-chip.is-traceable {
+  border-color: color-mix(in srgb, var(--project-map-accent) 22%, transparent);
+  background: color-mix(in srgb, var(--project-map-accent) 9%, var(--project-map-surface));
+}
+
+.project-map-trace-chip.is-traceable:hover {
+  border-color: color-mix(in srgb, var(--project-map-accent) 44%, transparent);
+  background: color-mix(in srgb, var(--project-map-accent) 14%, var(--project-map-surface));
+}
+
+.project-map-trace-chip svg {
+  flex: none;
   width: 12px;
   height: 12px;
 }
 
+.project-map-trace-label,
+.project-map-trace-path,
+.project-map-trace-excerpt {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-map-trace-label {
+  color: var(--project-map-text-strong);
+}
+
+.project-map-trace-path {
+  max-width: 210px;
+  color: var(--project-map-text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 10px;
+}
+
+.project-map-trace-excerpt {
+  max-width: 240px;
+  color: var(--project-map-text-subtle);
+  font-weight: 520;
+}
+
 .project-map-source-type {
+  flex: none;
   color: var(--project-map-accent);
   text-transform: uppercase;
 }
@@ -1325,6 +1447,6 @@
 
   .project-map-detail-panel {
     left: auto;
-    width: min(340px, calc(100% - 36px));
+    width: min(478px, calc(100% - 36px));
   }
 }

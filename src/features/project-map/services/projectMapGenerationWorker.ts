@@ -11,6 +11,7 @@ import type { AppServerEvent } from "../../../types";
 import type { EngineType } from "../../../types";
 import type {
   ProjectMapDataset,
+  ProjectMapGenerationIntent,
   ProjectMapGenerationScope,
   ProjectMapLens,
   ProjectMapNode,
@@ -500,7 +501,11 @@ function filePriority(path: string): number {
   return 4;
 }
 
-function pickEvidencePaths(files: string[], requestSources: ProjectMapSource[]): string[] {
+function pickEvidencePaths(
+  files: string[],
+  requestSources: ProjectMapSource[],
+  requestScope: ProjectMapGenerationScope,
+): string[] {
   const requestedPaths = requestSources
     .map((source) => source.path?.trim())
     .filter((path): path is string => Boolean(path && isReadableProjectFile(path)));
@@ -510,7 +515,13 @@ function pickEvidencePaths(files: string[], requestSources: ProjectMapSource[]):
 
   const paths: string[] = [];
   const seen = new Set<string>();
-  for (const path of [...requestedPaths, ...discoveredPaths]) {
+  const fallbackPaths =
+    requestScope.kind === "node" && requestedPaths.length > 0
+      ? []
+      : requestScope.kind === "node"
+        ? discoveredPaths.filter((path) => filePriority(path) <= 1).slice(0, 8)
+        : discoveredPaths;
+  for (const path of [...requestedPaths, ...fallbackPaths]) {
     if (seen.has(path)) {
       continue;
     }
@@ -526,6 +537,7 @@ function pickEvidencePaths(files: string[], requestSources: ProjectMapSource[]):
 async function collectWorkspaceEvidence(input: {
   workspaceId: string;
   requestSources: ProjectMapSource[];
+  requestScope: ProjectMapGenerationScope;
   update: (update: ProjectMapRunUpdate) => Promise<void>;
 }): Promise<WorkspaceEvidenceSnippet[]> {
   await input.update({
@@ -534,7 +546,7 @@ async function collectWorkspaceEvidence(input: {
     log: "Scanning workspace files for bounded evidence.",
   });
   const snapshot = await getWorkspaceFiles(input.workspaceId);
-  const paths = pickEvidencePaths(snapshot.files, input.requestSources);
+  const paths = pickEvidencePaths(snapshot.files, input.requestSources, input.requestScope);
   const fileBudgetChars = allocateEvidenceFileBudget(paths.length);
   const snippets: WorkspaceEvidenceSnippet[] = [];
 
@@ -567,12 +579,127 @@ async function collectWorkspaceEvidence(input: {
   return snippets;
 }
 
+function resolveGenerationIntent(run: ProjectMapRunMetadata): ProjectMapGenerationIntent {
+  if (run.generationIntent) {
+    return run.generationIntent;
+  }
+  const requestScope = run.requestScope ?? ({ kind: run.scope } as ProjectMapGenerationScope);
+  if (run.kind === "global" || requestScope.kind === "global") {
+    return "global";
+  }
+  return requestScope.kind === "node" ? "completeNode" : "global";
+}
+
+function compactSources(sources: ProjectMapSource[]): Array<Pick<ProjectMapSource, "type" | "label" | "path" | "line">> {
+  return sources.slice(0, 6).map((source) => ({
+    type: source.type,
+    label: source.label,
+    path: source.path,
+    line: source.line,
+  }));
+}
+
+function buildNodeScopeContext(input: {
+  dataset: ProjectMapDataset;
+  scope: ProjectMapGenerationScope;
+}): string {
+  const scope = input.scope;
+  if (scope.kind !== "node") {
+    return [
+      `Project: ${input.dataset.manifest.projectName}`,
+      `Known lenses: ${input.dataset.lenses.map((lens) => `${lens.id}:${lens.status}`).join(", ") || "(none)"}`,
+      `Existing nodes: ${input.dataset.nodes.length}`,
+    ].join("\n");
+  }
+
+  const target = input.dataset.nodes.find((node) => node.id === scope.nodeId) ?? null;
+  if (!target) {
+    return [
+      `Project: ${input.dataset.manifest.projectName}`,
+      `Target node id: ${scope.nodeId}`,
+      "Target node snapshot: missing in current dataset; keep output conservative.",
+    ].join("\n");
+  }
+
+  const children = input.dataset.nodes
+    .filter((node) => node.parentId === target.id)
+    .slice(0, 10)
+    .map((node) => ({
+      id: node.id,
+      title: node.title,
+      confidence: node.confidence,
+      candidate: node.candidate,
+      stale: node.stale,
+    }));
+
+  return [
+    `Project: ${input.dataset.manifest.projectName}`,
+    `Target node: ${target.id} | ${target.title}`,
+    `Target lens: ${target.lensId}`,
+    `Target kind: ${target.nodeKind}`,
+    `Target confidence: ${target.confidence}`,
+    `Target stale/candidate: ${target.stale}/${target.candidate}`,
+    `Target summary: ${target.summary}`,
+    `Target sources: ${JSON.stringify(compactSources(target.sources))}`,
+    `Direct children (${children.length}): ${JSON.stringify(children)}`,
+    `Include descendants: ${scope.includeDescendants}`,
+  ].join("\n");
+}
+
+function buildPromptTaskLines(input: {
+  intent: ProjectMapGenerationIntent;
+  scope: ProjectMapGenerationScope;
+}): string[] {
+  if (input.intent === "calibrateNode") {
+    return [
+      "Task: Calibrate the selected Project Map node against evidence.",
+      "Focus: verify facts, correct wrong claims, remove unsupported detail, lower confidence, mark stale/candidate when evidence is weak.",
+      "Do not expand the global map. Only return the target node; include child fixes only when Include descendants is true and evidence directly contradicts them.",
+    ];
+  }
+
+  if (input.intent === "completeNode") {
+    return [
+      "Task: Complete the selected Project Map node using evidence.",
+      "Focus: fill missing facts, concise summary, key facts, key logic, risks, and source-backed child nodes when Include descendants is true.",
+      "Do not rebuild unrelated global, sibling, or lens nodes.",
+    ];
+  }
+
+  return [
+    "Task: Build a concise Project Knowledge Map framework for the current workspace.",
+    "Focus: project shape, major lenses, core modules, runtime/build/test/risk/evidence structure.",
+    "Keep the map compact; prefer fewer source-backed nodes over broad unsupported coverage.",
+  ];
+}
+
+function buildPromptOutputRules(intent: ProjectMapGenerationIntent): string[] {
+  const nodeRules =
+    intent === "global"
+      ? ["Return profile, lenses, and nodes for the compact map."]
+      : [
+          "Return nodes for the target node/subtree only. You may omit profile and lenses or return empty arrays.",
+          "Use existing node ids when correcting existing nodes; new child ids must be stable kebab-case.",
+        ];
+
+  return [
+    "Output: pure JSON only. No markdown fence. No explanation.",
+    "JSON strictness: every object property name must be double-quoted; no trailing commas; no JavaScript object literal syntax.",
+    ...nodeRules,
+    "Every confident claim needs a source whose path appears in Evidence.",
+    "If evidence is missing or truncated, use confidence low/unknown. Never guess high confidence.",
+    "Node summary <= 120 chars. Detail arrays <= 5 items each. Keep Chinese explanation with English technical terms.",
+    'Schema: {"profile": {...}, "lenses": [], "nodes": [{"id": "...", "lensId": "...", "nodeKind": "...", "title": "...", "summary": "...", "detail": {"coreDescription": "...", "keyFacts": [], "keyLogic": [], "riskSignals": [], "relatedArtifacts": []}, "parentId": null, "children": [], "sources": [], "confidence": "high|medium|low|unknown", "stale": false, "candidate": false}]}',
+  ];
+}
+
 function buildPrompt(input: {
   dataset: ProjectMapDataset;
   run: ProjectMapRunMetadata;
   evidence: WorkspaceEvidenceSnippet[];
 }): string {
   const requestScope = input.run.requestScope ?? ({ kind: input.run.scope } as ProjectMapGenerationScope);
+  const intent = resolveGenerationIntent(input.run);
   const evidenceText = input.evidence
     .map(
       (entry) =>
@@ -584,31 +711,18 @@ function buildPrompt(input: {
     .join("\n\n");
 
   return [
-    "你是当前项目的 Project Knowledge Map generator。",
-    "目标：基于真实 workspace evidence 生成当前项目的只读知识地图，不要编造。",
-    "输出必须是纯 JSON，不要 markdown fence，不要解释。",
-    "中文场景下内容尽量中英文结合：中文解释 + English technical terms。",
-    "节点 summary 必须短，细节放 detail。",
-    "每个确定性节点必须至少引用一个 source，source.path 必须来自 evidence file path。",
-    "如果证据不足，把 confidence 设为 unknown 或 low，不要写 high。",
-    "Evidence 已经过统一归一化：可能包含 PROJECT_MAP_TRUNCATED marker 和 Markdown headings digest；marker 表示输入被按段落边界压缩，不是原文内容。",
+    "You are the Project Knowledge Map generator for this workspace.",
+    `Intent: ${intent}`,
+    ...buildPromptTaskLines({ intent, scope: requestScope }),
     "",
-    "JSON schema:",
-    "{",
-    '  "profile": { "primaryLanguage": "...", "languages": [], "shapes": [], "frameworks": [], "interfaceKinds": [], "buildSystems": [] },',
-    '  "lenses": [{ "id": "overview", "title": "...", "shortTitle": "...", "description": "...", "status": "detected|candidate|notApplicable", "confidence": "high|medium|low|unknown", "evidence": [] }],',
-    '  "nodes": [{ "id": "project-core", "lensId": "overview", "nodeKind": "concept", "title": "...", "summary": "...", "detail": { "coreDescription": "...", "keyFacts": [], "keyLogic": [], "riskSignals": [], "relatedArtifacts": [] }, "parentId": null, "children": [], "sources": [], "confidence": "high|medium|low|unknown", "stale": false, "candidate": false }]',
-    "}",
+    "Output rules:",
+    ...buildPromptOutputRules(intent),
     "",
-    "Required lenses when applicable: overview, business, modules, api, data, runtime, dependencies, quality, risk, evidence.",
-    "Root node must use id project-core and lensId overview.",
-    `Run kind: ${input.run.kind}`,
-    `Scope: ${JSON.stringify(requestScope)}`,
-    `Existing profile: ${JSON.stringify(input.dataset.profile)}`,
-    `Existing lens ids: ${input.dataset.lenses.map((lens) => lens.id).join(", ") || "(none)"}`,
-    `Existing node ids: ${input.dataset.nodes.map((node) => node.id).join(", ") || "(none)"}`,
+    "Scope context:",
+    buildNodeScopeContext({ dataset: input.dataset, scope: requestScope }),
     "",
     "Evidence:",
+    "Evidence may contain PROJECT_MAP_TRUNCATED markers; markers describe compression and are not project facts.",
     evidenceText || "(no readable evidence)",
   ].join("\n");
 }
@@ -704,7 +818,261 @@ function parseJsonPayload(text: string): ProjectMapAiPayload {
   if (start < 0 || end <= start) {
     throw new Error("AI output did not contain a JSON object.");
   }
-  return JSON.parse(candidate.slice(start, end + 1)) as ProjectMapAiPayload;
+  const objectText = candidate.slice(start, end + 1);
+  try {
+    return JSON.parse(objectText) as ProjectMapAiPayload;
+  } catch (error) {
+    const repaired = repairLenientJsonObjectText(objectText);
+    if (repaired !== objectText) {
+      try {
+        return JSON.parse(repaired) as ProjectMapAiPayload;
+      } catch {
+        // Fall through to the original parse error so the run record points at the model output issue.
+      }
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`AI output did not contain valid JSON. ${message}`);
+  }
+}
+
+function repairLenientJsonObjectText(text: string): string {
+  return stripTrailingJsonCommas(quoteBareJsonStringValues(quoteBareJsonObjectKeys(convertSingleQuotedJsonStrings(text))));
+}
+
+function convertSingleQuotedJsonStrings(text: string): string {
+  let result = "";
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (char !== "'") {
+      result += char;
+      continue;
+    }
+
+    let value = "";
+    let cursor = index + 1;
+    while (cursor < text.length) {
+      const current = text[cursor];
+      if (current === "\\" && cursor + 1 < text.length) {
+        value += text[cursor + 1];
+        cursor += 2;
+        continue;
+      }
+      if (current === "'") {
+        break;
+      }
+      value += current;
+      cursor += 1;
+    }
+
+    if (cursor >= text.length || text[cursor] !== "'") {
+      result += char;
+      continue;
+    }
+
+    result += JSON.stringify(value);
+    index = cursor;
+  }
+  return result;
+}
+
+function quoteBareJsonObjectKeys(text: string): string {
+  const stack: Array<{ type: "array" | "object"; expectKey: boolean }> = [];
+  let result = "";
+  let index = 0;
+
+  while (index < text.length) {
+    const char = text[index];
+    if (char === '"') {
+      const { value, endIndex } = readJsonStringLiteral(text, index);
+      result += value;
+      index = endIndex + 1;
+      continue;
+    }
+
+    const top = stack.at(-1);
+    if (top?.type === "object" && top.expectKey && isIdentifierStart(char)) {
+      const keyStart = index;
+      let keyEnd = index + 1;
+      while (keyEnd < text.length && isIdentifierPart(text[keyEnd])) {
+        keyEnd += 1;
+      }
+      let colonIndex = keyEnd;
+      while (colonIndex < text.length && /\s/.test(text[colonIndex])) {
+        colonIndex += 1;
+      }
+      if (text[colonIndex] === ":") {
+        result += `${JSON.stringify(text.slice(keyStart, keyEnd))}${text.slice(keyEnd, colonIndex + 1)}`;
+        top.expectKey = false;
+        index = colonIndex + 1;
+        continue;
+      }
+    }
+
+    result += char;
+    if (char === "{") {
+      stack.push({ type: "object", expectKey: true });
+    } else if (char === "[") {
+      stack.push({ type: "array", expectKey: false });
+    } else if (char === "}" || char === "]") {
+      stack.pop();
+    } else if (char === "," && top?.type === "object") {
+      top.expectKey = true;
+    } else if (char === ":" && top?.type === "object") {
+      top.expectKey = false;
+    }
+    index += 1;
+  }
+
+  return result;
+}
+
+function readJsonStringLiteral(text: string, startIndex: number): { value: string; endIndex: number } {
+  let value = text[startIndex];
+  let index = startIndex + 1;
+  while (index < text.length) {
+    const char = text[index];
+    value += char;
+    if (char === "\\" && index + 1 < text.length) {
+      value += text[index + 1];
+      index += 2;
+      continue;
+    }
+    if (char === '"') {
+      return { value, endIndex: index };
+    }
+    index += 1;
+  }
+  return { value, endIndex: text.length - 1 };
+}
+
+function stripTrailingJsonCommas(text: string): string {
+  let result = "";
+  let index = 0;
+  while (index < text.length) {
+    const char = text[index];
+    if (char === '"') {
+      const { value, endIndex } = readJsonStringLiteral(text, index);
+      result += value;
+      index = endIndex + 1;
+      continue;
+    }
+    if (char === ",") {
+      let cursor = index + 1;
+      while (cursor < text.length && /\s/.test(text[cursor])) {
+        cursor += 1;
+      }
+      if (text[cursor] === "}" || text[cursor] === "]") {
+        index += 1;
+        continue;
+      }
+    }
+    result += char;
+    index += 1;
+  }
+  return result;
+}
+
+function quoteBareJsonStringValues(text: string): string {
+  let result = "";
+  let index = 0;
+  while (index < text.length) {
+    const char = text[index];
+    if (char === '"') {
+      const { value, endIndex } = readJsonStringLiteral(text, index);
+      result += value;
+      index = endIndex + 1;
+      continue;
+    }
+
+    if (char === ":" || char === "[" || char === ",") {
+      const quoted = quoteValueAfterJsonSeparator(text, index, char);
+      if (quoted) {
+        result += quoted.value;
+        index = quoted.endIndex + 1;
+        continue;
+      }
+    }
+
+    result += char;
+    index += 1;
+  }
+  return result;
+}
+
+function quoteValueAfterJsonSeparator(
+  text: string,
+  separatorIndex: number,
+  separator: string,
+): { value: string; endIndex: number } | null {
+  const prefixEnd = separatorIndex + 1;
+  let valueStart = prefixEnd;
+  while (valueStart < text.length && /\s/.test(text[valueStart])) {
+    valueStart += 1;
+  }
+
+  const firstValueChar = text[valueStart];
+  if (!firstValueChar || firstValueChar === "}" || firstValueChar === "]") {
+    return null;
+  }
+  if (!shouldQuoteBareJsonValue(text, valueStart, separator)) {
+    return null;
+  }
+
+  const valueEnd = findBareJsonValueEnd(text, valueStart);
+  const rawValue = text.slice(valueStart, valueEnd).trim();
+  if (!rawValue) {
+    return null;
+  }
+
+  return {
+    value: `${text.slice(separatorIndex, valueStart)}${JSON.stringify(rawValue)}`,
+    endIndex: valueEnd - 1,
+  };
+}
+
+function shouldQuoteBareJsonValue(text: string, valueStart: number, separator: string): boolean {
+  const char = text[valueStart];
+  if (char === '"' || char === "{" || char === "[") {
+    return false;
+  }
+  if (separator === "," && !isArrayItemSeparator(text, valueStart)) {
+    return false;
+  }
+
+  const valueEnd = findBareJsonValueEnd(text, valueStart);
+  const rawValue = text.slice(valueStart, valueEnd).trim();
+  if (!rawValue || rawValue === "true" || rawValue === "false" || rawValue === "null") {
+    return false;
+  }
+  return !/^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(rawValue);
+}
+
+function isArrayItemSeparator(text: string, valueStart: number): boolean {
+  let cursor = valueStart - 1;
+  while (cursor >= 0 && /\s/.test(text[cursor])) {
+    cursor -= 1;
+  }
+  return text[cursor] === "[" || text[cursor] === ",";
+}
+
+function findBareJsonValueEnd(text: string, valueStart: number): number {
+  let cursor = valueStart;
+  while (cursor < text.length) {
+    const char = text[cursor];
+    if (char === "," || char === "}" || char === "]" || char === "\n" || char === "\r") {
+      return cursor;
+    }
+    cursor += 1;
+  }
+  return cursor;
+}
+
+function isIdentifierStart(char: string): boolean {
+  return /[A-Za-z_$]/.test(char);
+}
+
+function isIdentifierPart(char: string): boolean {
+  return /[A-Za-z0-9_$-]/.test(char);
 }
 
 function isProjectMapSource(value: unknown): value is ProjectMapSource {
@@ -719,6 +1087,36 @@ function isProjectMapSource(value: unknown): value is ProjectMapSource {
 function normalizeSources(sources: unknown, fallback: ProjectMapSource[]): ProjectMapSource[] {
   const items = Array.isArray(sources) ? sources.filter(isProjectMapSource) : [];
   return (items.length > 0 ? items : fallback).slice(0, 12);
+}
+
+function normalizeStringArray(value: unknown, fallback: string[]): string[] {
+  const items = Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    : [];
+  return items.length > 0 ? items : fallback;
+}
+
+function normalizeProfile(
+  value: ProjectMapProfile | undefined,
+  fallback: ProjectMapProfile,
+): ProjectMapProfile {
+  const profile: Record<string, unknown> = isRecord(value) ? value : {};
+  return {
+    primaryLanguage:
+      typeof profile.primaryLanguage === "string"
+        ? (profile.primaryLanguage as ProjectMapProfile["primaryLanguage"])
+        : fallback.primaryLanguage,
+    languages: normalizeStringArray(profile.languages, fallback.languages) as ProjectMapProfile["languages"],
+    shapes: normalizeStringArray(profile.shapes, fallback.shapes) as ProjectMapProfile["shapes"],
+    frameworks: Array.isArray(profile.frameworks)
+      ? (profile.frameworks as ProjectMapProfile["frameworks"])
+      : fallback.frameworks,
+    interfaceKinds: normalizeStringArray(
+      profile.interfaceKinds,
+      fallback.interfaceKinds,
+    ) as ProjectMapProfile["interfaceKinds"],
+    buildSystems: normalizeStringArray(profile.buildSystems, fallback.buildSystems),
+  };
 }
 
 function createSourceFromEvidence(evidence: WorkspaceEvidenceSnippet): ProjectMapSource {
@@ -857,18 +1255,26 @@ function applyAiPayload(input: {
   run: ProjectMapRunMetadata;
 }): ProjectMapDataset {
   const fallbackSources = input.evidence.slice(0, 4).map(createSourceFromEvidence);
+  const scope = input.run.requestScope ?? ({ kind: input.run.scope } as ProjectMapGenerationScope);
   const rawLenses = Array.isArray(input.payload.lenses) ? input.payload.lenses : [];
   const usedLensIds = new Set<string>();
   const lensIdByRawId = new Map<string, string>();
-  const lenses = rawLenses.map((lens, index) => {
-    const rawId = String(lens.id || "").trim();
-    const safeId = uniqueProjectMapPathSegment(rawId, usedLensIds, `lens-${index + 1}`);
-    if (!lensIdByRawId.has(rawId)) {
-      lensIdByRawId.set(rawId, safeId);
-    }
-    lensIdByRawId.set(safeId, safeId);
-    return normalizeLens(lens, safeId, fallbackSources);
-  });
+  const shouldReplaceLenses = scope.kind === "global" || input.dataset.lenses.length === 0;
+  const lenses = shouldReplaceLenses
+    ? rawLenses.map((lens, index) => {
+        const rawId = String(lens.id || "").trim();
+        const safeId = uniqueProjectMapPathSegment(rawId, usedLensIds, `lens-${index + 1}`);
+        if (!lensIdByRawId.has(rawId)) {
+          lensIdByRawId.set(rawId, safeId);
+        }
+        lensIdByRawId.set(safeId, safeId);
+        return normalizeLens(lens, safeId, fallbackSources);
+      })
+    : input.dataset.lenses.map((lens) => {
+        usedLensIds.add(lens.id);
+        lensIdByRawId.set(lens.id, lens.id);
+        return lens;
+      });
   if (!lenses.some((lens) => lens.id === "overview")) {
     usedLensIds.add("overview");
     lensIdByRawId.set("overview", "overview");
@@ -896,7 +1302,6 @@ function applyAiPayload(input: {
     throw new Error("AI output did not produce any valid project-map nodes.");
   }
 
-  const scope = input.run.requestScope ?? ({ kind: input.run.scope } as ProjectMapGenerationScope);
   const nextNodes =
     scope.kind === "global"
       ? normalizedNodes
@@ -918,7 +1323,7 @@ function applyAiPayload(input: {
 
   return {
     ...input.dataset,
-    profile: input.payload.profile ?? input.dataset.profile,
+    profile: normalizeProfile(input.payload.profile, input.dataset.profile),
     lenses,
     nodes: nextNodes,
     manifest: {
@@ -976,6 +1381,7 @@ export async function runProjectMapGenerationWorker({
   const evidence = await collectWorkspaceEvidence({
     workspaceId,
     requestSources: run.readSources ?? [],
+    requestScope: run.requestScope ?? ({ kind: run.scope } as ProjectMapGenerationScope),
     update,
   });
   const prompt = buildPrompt({ dataset, run, evidence });

@@ -23,6 +23,10 @@ import {
   createRunMetadataFromRequest,
 } from "../utils/generationRequests";
 import {
+  confirmProjectMapCandidate,
+  rejectProjectMapCandidate,
+} from "../utils/candidates";
+import {
   createConversationKnowledgeCandidate,
   discoverUnprocessedProjectMemoryMessages,
   markProjectMapMessagesProcessed,
@@ -56,6 +60,8 @@ export type ProjectMapDatasetController = {
   confirmGenerationRequest: (requestOverride?: ProjectMapGenerationRequest) => Promise<void>;
   cancelGenerationRun: (runId: string) => Promise<void>;
   clearFinishedRuns: () => Promise<void>;
+  confirmCandidate: (candidateId: string) => Promise<boolean>;
+  rejectCandidate: (candidateId: string) => Promise<boolean>;
   updateDataset: (updater: (dataset: ProjectMapDataset) => ProjectMapDataset) => Promise<void>;
 };
 
@@ -723,7 +729,7 @@ export function useProjectMapDataset(
   }, [dataset, defaultWritePath, generationDefaults]);
 
   const openNodeGeneration = useCallback(
-    (_kind: "node" | "calibrate", node: ProjectMapNode) => {
+    (kind: "node" | "calibrate", node: ProjectMapNode) => {
       const defaults = resolveGenerationDefaults(dataset, generationDefaults);
       setPendingRequest(
         createProjectMapGenerationRequest({
@@ -731,7 +737,8 @@ export function useProjectMapDataset(
           kind: "node",
           engine: defaults.engine,
           model: defaults.model,
-          scope: { kind: "node", nodeId: node.id, includeDescendants: true },
+          scope: { kind: "node", nodeId: node.id, includeDescendants: kind === "node" },
+          generationIntent: kind === "calibrate" ? "calibrateNode" : "completeNode",
           storageLocation: DEFAULT_STORAGE_LOCATION,
           writePath: defaultWritePath,
           node,
@@ -791,7 +798,7 @@ export function useProjectMapDataset(
         setError(errorMessage(writeError));
       }
     },
-    [dataset, persistDataset],
+    [persistDataset],
   );
 
   const clearFinishedRuns = useCallback(async () => {
@@ -804,6 +811,53 @@ export function useProjectMapDataset(
       setError(errorMessage(writeError));
     }
   }, [dataset, persistDataset]);
+
+  const confirmCandidate = useCallback(
+    async (candidateId: string): Promise<boolean> => {
+      const confirmedAt = new Date().toISOString();
+      const result = confirmProjectMapCandidate({
+        dataset: datasetRef.current,
+        candidateId,
+        confirmedAt,
+      });
+      if (!result.ok) {
+        setError(result.errors.join("\n"));
+        return false;
+      }
+
+      setError(null);
+      try {
+        await persistDataset(result.dataset);
+        datasetRef.current = result.dataset;
+        return true;
+      } catch (writeError) {
+        setError(errorMessage(writeError));
+        return false;
+      }
+    },
+    [persistDataset],
+  );
+
+  const rejectCandidate = useCallback(
+    async (candidateId: string): Promise<boolean> => {
+      const rejectedAt = new Date().toISOString();
+      const nextDataset = rejectProjectMapCandidate({
+        dataset: datasetRef.current,
+        candidateId,
+        rejectedAt,
+      });
+      setError(null);
+      try {
+        await persistDataset(nextDataset);
+        datasetRef.current = nextDataset;
+        return true;
+      } catch (writeError) {
+        setError(errorMessage(writeError));
+        return false;
+      }
+    },
+    [persistDataset],
+  );
 
   const updateDataset = useCallback(
     async (updater: (dataset: ProjectMapDataset) => ProjectMapDataset) => {
@@ -828,6 +882,8 @@ export function useProjectMapDataset(
     confirmGenerationRequest,
     cancelGenerationRun,
     clearFinishedRuns,
+    confirmCandidate,
+    rejectCandidate,
     updateDataset,
   };
 }

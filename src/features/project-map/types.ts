@@ -179,6 +179,7 @@ export type ProjectMapRunMetadata = {
   completedAt: string | null;
   scope: string;
   requestScope?: ProjectMapGenerationScope;
+  generationIntent?: ProjectMapGenerationIntent;
   readSources?: ProjectMapSource[];
   storageLocation?: ProjectMapStorageLocation;
   writePath?: string;
@@ -193,6 +194,8 @@ export type ProjectMapRunLog = {
 
 export type ProjectMapStorageLocation = "global" | "project";
 
+export type ProjectMapGenerationIntent = "global" | "completeNode" | "calibrateNode";
+
 export type ProjectMapGenerationScope =
   | { kind: "global"; lensIds: ProjectMapLensId[] }
   | { kind: "node"; nodeId: string; includeDescendants: boolean }
@@ -205,6 +208,7 @@ export type ProjectMapGenerationRequest = {
   engine: string;
   model: string;
   scope: ProjectMapGenerationScope;
+  generationIntent: ProjectMapGenerationIntent;
   readSources: ProjectMapSource[];
   storageLocation: ProjectMapStorageLocation;
   writePath: string;

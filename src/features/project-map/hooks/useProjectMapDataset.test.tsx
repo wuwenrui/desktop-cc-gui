@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkspaceInfo } from "../../../types";
 import { deriveProjectMapStorageKey } from "../utils/storageKey";
 import type { ProjectMapReadResponse } from "../services/projectMapPersistence";
+import type { ProjectMapCandidate, ProjectMapDataset } from "../types";
 import {
   createEmptyProjectMapDataset,
   readProjectMapDataset,
@@ -54,6 +55,134 @@ function emptyReadResponse(storageKey: string, storageDir: string): ProjectMapRe
 
 function strictModeWrapper({ children }: { children: ReactNode }) {
   return <StrictMode>{children}</StrictMode>;
+}
+
+function datasetWithPromptNodes(input: {
+  workspace: WorkspaceInfo;
+  storageKey: string;
+}): ProjectMapDataset {
+  const dataset = createEmptyProjectMapDataset({
+    identity: {
+      projectName: input.workspace.name,
+      workspacePath: input.workspace.path,
+      workspaceId: input.workspace.id,
+    },
+    storageKey: input.storageKey,
+  });
+  const generatedBy = {
+    engine: "codex",
+    model: "gpt-5.3-codex-spark",
+    runId: "seed",
+  };
+  return {
+    ...dataset,
+    lenses: [
+      {
+        id: "overview",
+        title: "Overview",
+        shortTitle: "Overview",
+        description: "Project overview",
+        status: "detected",
+        confidence: "medium",
+        evidence: [{ type: "file", label: "README", path: "README.md" }],
+      },
+    ],
+    nodes: [
+      {
+        id: "project-core",
+        lensId: "overview",
+        nodeKind: "concept",
+        title: "Project Core",
+        summary: "Root node",
+        detail: {
+          coreDescription: "Root node",
+          keyFacts: [],
+          keyLogic: [],
+          riskSignals: [],
+          relatedArtifacts: [],
+        },
+        children: ["runtime-node"],
+        sources: [{ type: "file", label: "README", path: "README.md" }],
+        confidence: "medium",
+        stale: false,
+        candidate: false,
+        lastGeneratedAt: "2026-05-26T01:00:00.000Z",
+        generatedBy,
+      },
+      {
+        id: "runtime-node",
+        lensId: "overview",
+        nodeKind: "runtime",
+        title: "Runtime Node",
+        summary: "Runtime facts",
+        detail: {
+          coreDescription: "Runtime facts",
+          keyFacts: [],
+          keyLogic: [],
+          riskSignals: [],
+          relatedArtifacts: [{ type: "file", label: "Vite config", path: "vite.config.ts" }],
+        },
+        parentId: "project-core",
+        children: [],
+        sources: [{ type: "file", label: "package.json", path: "package.json" }],
+        confidence: "low",
+        stale: false,
+        candidate: true,
+        lastGeneratedAt: "2026-05-26T01:00:00.000Z",
+        generatedBy,
+      },
+      {
+        id: "unrelated-node",
+        lensId: "overview",
+        nodeKind: "quality",
+        title: "Unrelated Node",
+        summary: "Should not feed node prompts",
+        detail: {
+          coreDescription: "Unrelated",
+          keyFacts: [],
+          keyLogic: [],
+          riskSignals: [],
+          relatedArtifacts: [],
+        },
+        children: [],
+        sources: [{ type: "file", label: "unrelated", path: "src/unrelated.ts" }],
+        confidence: "medium",
+        stale: false,
+        candidate: false,
+        lastGeneratedAt: "2026-05-26T01:00:00.000Z",
+        generatedBy,
+      },
+    ],
+  };
+}
+
+function reviewCandidate(overrides: Partial<ProjectMapCandidate> = {}): ProjectMapCandidate {
+  return {
+    id: "candidate-runtime",
+    status: "pending",
+    createdAt: "2026-05-26T01:00:00.000Z",
+    updatedAt: "2026-05-26T01:00:00.000Z",
+    source: "conversation",
+    targetLensId: "overview",
+    targetNodeId: "runtime-node",
+    patch: {
+      nodeId: "runtime-node",
+      summary: "Confirmed runtime facts",
+      confidence: "medium",
+      candidate: false,
+      sources: [{ type: "file", label: "package", path: "package.json" }],
+    },
+    evidence: [
+      {
+        id: "evidence-runtime",
+        priority: "code",
+        observedAt: "2026-05-26T01:00:00.000Z",
+        observedHash: "hash-runtime",
+        source: { type: "file", label: "package", path: "package.json" },
+      },
+    ],
+    ...overrides,
+  };
 }
 
 describe("useProjectMapDataset", () => {
@@ -196,9 +325,202 @@ describe("useProjectMapDataset", () => {
     expect(result.current.pendingRequest).toMatchObject({
       engine: "claude",
       model: "mimo-v2.5-pro[1M]",
+      generationIntent: "global",
       storageLocation: "global",
       writePath: `/home/user/.ccgui/project-map/${springKey}`,
     });
+  });
+
+  it("creates action-specific node requests from the selected node instead of global evidence", async () => {
+    const spring = workspace({
+      id: "ws-spring",
+      name: "springboot-demo",
+      path: "/repo/springboot-demo",
+    });
+    const springKey = deriveProjectMapStorageKey({
+      projectName: spring.name,
+      workspacePath: spring.path,
+      workspaceId: spring.id,
+    });
+    const dataset = datasetWithPromptNodes({ workspace: spring, storageKey: springKey });
+    vi.mocked(readProjectMapDataset).mockResolvedValue({
+      dataset,
+      response: {
+        ...emptyReadResponse(springKey, `/home/user/.ccgui/project-map/${springKey}`),
+        exists: true,
+      },
+    });
+
+    const { result } = renderHook(() => useProjectMapDataset(spring));
+
+    await waitFor(() => expect(result.current.status).toBe("persisted"));
+
+    const runtimeNode = dataset.nodes.find((node) => node.id === "runtime-node");
+    expect(runtimeNode).toBeTruthy();
+
+    act(() => {
+      result.current.openNodeGeneration("node", runtimeNode!);
+    });
+
+    expect(result.current.pendingRequest).toMatchObject({
+      kind: "node",
+      generationIntent: "completeNode",
+      scope: { kind: "node", nodeId: "runtime-node", includeDescendants: true },
+    });
+    expect(result.current.pendingRequest?.readSources.map((source) => source.path)).toEqual([
+      "package.json",
+      "vite.config.ts",
+    ]);
+
+    act(() => {
+      result.current.openNodeGeneration("calibrate", runtimeNode!);
+    });
+
+    expect(result.current.pendingRequest).toMatchObject({
+      kind: "node",
+      generationIntent: "calibrateNode",
+      scope: { kind: "node", nodeId: "runtime-node", includeDescendants: false },
+    });
+    expect(result.current.pendingRequest?.readSources.map((source) => source.path)).not.toContain(
+      "src/unrelated.ts",
+    );
+  });
+
+  it("confirms a pending candidate through the evidence gate and persists the patched dataset", async () => {
+    const spring = workspace({
+      id: "ws-spring",
+      name: "springboot-demo",
+      path: "/repo/springboot-demo",
+    });
+    const springKey = deriveProjectMapStorageKey({
+      projectName: spring.name,
+      workspacePath: spring.path,
+      workspaceId: spring.id,
+    });
+    const dataset = {
+      ...datasetWithPromptNodes({ workspace: spring, storageKey: springKey }),
+      candidates: [reviewCandidate()],
+      evidenceRecords: [],
+    };
+    vi.mocked(readProjectMapDataset).mockResolvedValue({
+      dataset,
+      response: {
+        ...emptyReadResponse(springKey, `/home/user/.ccgui/project-map/${springKey}`),
+        exists: true,
+      },
+    });
+    vi.mocked(writeProjectMapDataset).mockResolvedValue(undefined);
+
+    const { result } = renderHook(() => useProjectMapDataset(spring));
+
+    await waitFor(() => expect(result.current.status).toBe("persisted"));
+
+    await act(async () => {
+      await result.current.confirmCandidate("candidate-runtime");
+    });
+
+    expect(result.current.error).toBeNull();
+    expect(result.current.dataset.nodes.find((node) => node.id === "runtime-node")).toMatchObject({
+      summary: "Confirmed runtime facts",
+      confidence: "medium",
+      candidate: false,
+    });
+    expect(result.current.dataset.candidates?.[0]).toMatchObject({ status: "confirmed" });
+    expect(result.current.dataset.evidenceRecords).toHaveLength(1);
+    expect(writeProjectMapDataset).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dataset: expect.objectContaining({
+          candidates: [expect.objectContaining({ status: "confirmed" })],
+        }),
+      }),
+    );
+  });
+
+  it("keeps the active node unchanged and shows an error when candidate confirmation fails", async () => {
+    const spring = workspace({
+      id: "ws-spring",
+      name: "springboot-demo",
+      path: "/repo/springboot-demo",
+    });
+    const springKey = deriveProjectMapStorageKey({
+      projectName: spring.name,
+      workspacePath: spring.path,
+      workspaceId: spring.id,
+    });
+    const dataset = {
+      ...datasetWithPromptNodes({ workspace: spring, storageKey: springKey }),
+      candidates: [
+        reviewCandidate({
+          patch: {
+            nodeId: "runtime-node",
+            confidence: "high",
+            sources: [],
+          },
+        }),
+      ],
+    };
+    vi.mocked(readProjectMapDataset).mockResolvedValue({
+      dataset,
+      response: {
+        ...emptyReadResponse(springKey, `/home/user/.ccgui/project-map/${springKey}`),
+        exists: true,
+      },
+    });
+
+    const { result } = renderHook(() => useProjectMapDataset(spring));
+
+    await waitFor(() => expect(result.current.status).toBe("persisted"));
+
+    await act(async () => {
+      await result.current.confirmCandidate("candidate-runtime");
+    });
+
+    expect(result.current.error).toContain(
+      "Confirmed project-map node claims require at least one source.",
+    );
+    expect(result.current.dataset.nodes.find((node) => node.id === "runtime-node")?.summary).toBe(
+      "Runtime facts",
+    );
+    expect(result.current.dataset.candidates?.[0]).toMatchObject({ status: "pending" });
+    expect(writeProjectMapDataset).not.toHaveBeenCalled();
+  });
+
+  it("rejects a pending candidate without changing the active node", async () => {
+    const spring = workspace({
+      id: "ws-spring",
+      name: "springboot-demo",
+      path: "/repo/springboot-demo",
+    });
+    const springKey = deriveProjectMapStorageKey({
+      projectName: spring.name,
+      workspacePath: spring.path,
+      workspaceId: spring.id,
+    });
+    const dataset = {
+      ...datasetWithPromptNodes({ workspace: spring, storageKey: springKey }),
+      candidates: [reviewCandidate()],
+    };
+    vi.mocked(readProjectMapDataset).mockResolvedValue({
+      dataset,
+      response: {
+        ...emptyReadResponse(springKey, `/home/user/.ccgui/project-map/${springKey}`),
+        exists: true,
+      },
+    });
+    vi.mocked(writeProjectMapDataset).mockResolvedValue(undefined);
+
+    const { result } = renderHook(() => useProjectMapDataset(spring));
+
+    await waitFor(() => expect(result.current.status).toBe("persisted"));
+
+    await act(async () => {
+      await result.current.rejectCandidate("candidate-runtime");
+    });
+
+    expect(result.current.dataset.candidates?.[0]).toMatchObject({ status: "rejected" });
+    expect(result.current.dataset.nodes.find((node) => node.id === "runtime-node")?.summary).toBe(
+      "Runtime facts",
+    );
   });
 
   it("switches the panel read location without changing the global write default", async () => {

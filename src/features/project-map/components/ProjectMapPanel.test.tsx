@@ -57,6 +57,33 @@ function expectGraphNodesNotToOverlap(container: HTMLElement) {
   }
 }
 
+function getGraphNodeCenter(nodeElement: Element): { x: number; y: number } {
+  const element = nodeElement as HTMLElement;
+  return {
+    x: Number.parseFloat(element.style.left),
+    y: Number.parseFloat(element.style.top),
+  };
+}
+
+function getMaxGraphDistanceFromSelectedNode(container: HTMLElement): number {
+  const selectedNode = container.querySelector(".project-map-graph-viewport > .project-map-node.is-selected");
+  const nodeElements = Array.from(container.querySelectorAll(".project-map-graph-viewport > .project-map-node"));
+  if (!selectedNode) {
+    return 0;
+  }
+
+  const selectedCenter = getGraphNodeCenter(selectedNode);
+  return Math.max(
+    0,
+    ...nodeElements
+      .filter((nodeElement) => nodeElement !== selectedNode)
+      .map((nodeElement) => {
+        const center = getGraphNodeCenter(nodeElement);
+        return Math.hypot(center.x - selectedCenter.x, center.y - selectedCenter.y);
+      }),
+  );
+}
+
 function createCrowdedProjectMapDataset(): ProjectMapDataset {
   const rootNode = mockProjectMapData.nodes.find((node) => node.id === "project-core")!;
   const riskHub = mockProjectMapData.nodes.find((node) => node.id === "hub-risk")!;
@@ -126,7 +153,7 @@ describe("ProjectMapPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /projectMap\.expandLenses|展开 Lens|Expand lenses/ }));
     expect(screen.getByLabelText("projectMap.domainStrip")).toBeTruthy();
     expect(view.container.querySelectorAll(".project-map-node")).toHaveLength(10);
-    expect(screen.getByLabelText("projectMap.zoomControls")).toBeTruthy();
+    expect(screen.getByLabelText("projectMap.canvasControls")).toBeTruthy();
     expect(view.container.querySelector("textarea, [contenteditable='true']")).toBeNull();
   });
 
@@ -143,7 +170,7 @@ describe("ProjectMapPanel", () => {
   });
 
   it("selects first, then drills into a detected lens node and returns to overview", () => {
-    renderMockProjectMapPanel();
+    const view = renderMockProjectMapPanel();
 
     fireEvent.click(screen.getByLabelText(/接口表面 API Surface/i));
 
@@ -155,6 +182,20 @@ describe("ProjectMapPanel", () => {
 
     expect(screen.getByRole("button", { name: /HTTP \/ RPC Endpoints/i })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /分类漂移 Taxonomy Drift/i })).toBeNull();
+    expect(screen.getAllByRole("button", { name: "projectMap.backToPrevious" }).length).toBeGreaterThan(0);
+    const detailNavigationGroup = within(detailPanel).getByRole("group", { name: "projectMap.viewNavigation" });
+    expect(within(detailNavigationGroup).getByRole("button", { name: "projectMap.collapseDetail" })).toBeTruthy();
+    expect(within(detailNavigationGroup).getByRole("button", { name: "projectMap.backToPrevious" })).toBeTruthy();
+    expect(within(detailNavigationGroup).getByRole("button", { name: "projectMap.backToOverview" })).toBeTruthy();
+    expectGraphNodesNotToOverlap(view.container);
+    expect(getMaxGraphDistanceFromSelectedNode(view.container)).toBeLessThan(540);
+
+    fireEvent.click(screen.getAllByRole("button", { name: "projectMap.backToPrevious" })[0]!);
+
+    expect(screen.queryByRole("button", { name: /HTTP \/ RPC Endpoints/i })).toBeNull();
+    expect(screen.getAllByRole("button", { name: /风险 Risk/i }).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "projectMap.drillIn" }));
 
     fireEvent.click(screen.getByRole("button", { name: /projectMap\.backToOverview/i }));
 
@@ -227,6 +268,20 @@ describe("ProjectMapPanel", () => {
     expect(screen.getAllByText("项目画像 Project Profile").length).toBeGreaterThan(0);
   });
 
+  it("renders a safe profile summary when persisted profile data is incomplete", () => {
+    const malformedProfileDataset = {
+      ...mockProjectMapData,
+      profile: {
+        primaryLanguage: "typescript",
+      },
+    } as ProjectMapDataset;
+
+    render(<ProjectMapPanel workspaceName="mossx" dataset={malformedProfileDataset} />);
+
+    expect(screen.getByLabelText("projectMap.panelTitle")).toBeTruthy();
+    expect(screen.getAllByText("项目画像 Project Profile").length).toBeGreaterThan(0);
+  });
+
   it("collapses the floating detail panel and reopens it when a node is selected", () => {
     renderMockProjectMapPanel();
 
@@ -262,6 +317,110 @@ describe("ProjectMapPanel", () => {
     const detailPanel = screen.getByLabelText("projectMap.detailPanel");
     expect(within(detailPanel).getByText("projectMap.detail.coreDescription")).toBeTruthy();
     expect(within(detailPanel).getByText("projectMap.evidenceTitle")).toBeTruthy();
+    expect(within(detailPanel).getByText("projectMap.candidateNotice.title")).toBeTruthy();
+  });
+
+  it("uses candidate badge as a review entry and removes redundant refresh controls", () => {
+    renderMockProjectMapPanel();
+
+    expect(screen.queryByRole("button", { name: "projectMap.refreshEvidence" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /projectMap\.candidateBadge|候选|candidates/i }));
+
+    const detailPanel = screen.getByLabelText("projectMap.detailPanel");
+    expect(within(detailPanel).getByText("projectMap.candidateNotice.title")).toBeTruthy();
+    expect(within(detailPanel).getByRole("button", { name: "projectMap.backToParent" })).toBeTruthy();
+    expect(within(detailPanel).queryByRole("button", { name: "projectMap.refreshEvidence" })).toBeNull();
+
+    fireEvent.click(within(detailPanel).getByRole("button", { name: "projectMap.backToParent" }));
+
+    expect(screen.queryByRole("button", { name: /分类漂移 Taxonomy Drift/i })).toBeNull();
+    expect(screen.getAllByRole("button", { name: /风险 Risk/i }).length).toBeGreaterThan(0);
+  });
+
+  it("shows confirm and reject actions when a selected node has a pending candidate record", () => {
+    const reviewDataset: ProjectMapDataset = {
+      ...mockProjectMapData,
+      candidates: [
+        {
+          id: "candidate-risk-taxonomy-drift",
+          status: "pending",
+          createdAt: "2026-05-26T01:00:00.000Z",
+          updatedAt: "2026-05-26T01:00:00.000Z",
+          source: "conversation",
+          targetLensId: "risk",
+          targetNodeId: "risk-taxonomy-drift",
+          patch: {
+            nodeId: "risk-taxonomy-drift",
+            summary: "Confirmed taxonomy drift risk.",
+            confidence: "medium",
+            candidate: false,
+            sources: [
+              {
+                type: "spec",
+                label: "design",
+                path: "openspec/changes/add-project-xray-panel/design.md",
+              },
+            ],
+          },
+          evidence: [],
+        },
+      ],
+    };
+    render(<ProjectMapPanel workspaceName="mossx" dataset={reviewDataset} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /projectMap\.expandLenses|展开 Lens|Expand lenses/ }));
+    const domainStrip = screen.getByLabelText("projectMap.domainStrip");
+    fireEvent.click(within(domainStrip).getByRole("button", { name: /风险 Risk/i }));
+    fireEvent.click(screen.getByRole("button", { name: /分类漂移 Taxonomy Drift/i }));
+
+    const detailPanel = screen.getByLabelText("projectMap.detailPanel");
+    expect(within(detailPanel).getByRole("button", { name: "projectMap.candidateNotice.confirm" })).toBeTruthy();
+    expect(within(detailPanel).getByRole("button", { name: "projectMap.candidateNotice.reject" })).toBeTruthy();
+  });
+
+  it("renders traceable artifact and evidence source controls without faking missing links", () => {
+    const rootNode = mockProjectMapData.nodes[0]!;
+    const traceDataset: ProjectMapDataset = {
+      ...mockProjectMapData,
+      nodes: mockProjectMapData.nodes.map((node) =>
+        node.id === "project-core"
+          ? {
+              ...node,
+              detail: {
+                ...node.detail,
+                relatedArtifacts: [
+                  { type: "file", label: "Panel", path: "src/features/project-map/components/ProjectMapPanel.tsx", line: 42 },
+                  { type: "conversation", label: "Design chat" },
+                ],
+              },
+              sources: [
+                {
+                  type: "spec",
+                  label: "UX spec",
+                  path: "openspec/changes/improve-project-map-inspector-evidence-ux/specs/project-xray-panel/spec.md",
+                  line: 12,
+                  excerpt: "Candidate badge navigates to candidate node.",
+                },
+                {
+                  type: "conversation",
+                  label: "Unlinked note",
+                },
+              ],
+            }
+          : node,
+      ),
+    };
+
+    render(<ProjectMapPanel workspaceName="mossx" dataset={traceDataset} />);
+
+    const detailPanel = screen.getByLabelText("projectMap.detailPanel");
+    expect(within(detailPanel).getByRole("button", { name: /ProjectMapPanel\.tsx:42/i })).toBeTruthy();
+    expect(within(detailPanel).getByRole("button", { name: /project-xray-panel\/spec\.md:12/i })).toBeTruthy();
+    expect(within(detailPanel).getByText("Candidate badge navigates to candidate node.")).toBeTruthy();
+    expect(within(detailPanel).getByText("Design chat").tagName.toLowerCase()).toBe("span");
+    expect(within(detailPanel).getByText("Unlinked note").tagName.toLowerCase()).toBe("span");
+    expect(rootNode.id).toBe("project-core");
   });
 
   it("opens generation confirmation from global and node-level actions", async () => {
@@ -323,7 +482,7 @@ describe("ProjectMapPanel", () => {
 
     const detailPanel = screen.getByLabelText("projectMap.detailPanel");
     expect(within(detailPanel).getAllByText("Record").length).toBeGreaterThan(0);
-    expect(within(detailPanel).getByText("FILE")).toBeTruthy();
+    expect(within(detailPanel).getAllByText("FILE").length).toBeGreaterThan(0);
     expect(screen.queryByText("projectMap.nodeKind.record")).toBeNull();
     expect(screen.queryByText("projectMap.sourceType.file")).toBeNull();
   });

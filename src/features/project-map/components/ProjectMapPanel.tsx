@@ -11,7 +11,7 @@ import ChevronLeft from "lucide-react/dist/esm/icons/chevron-left";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
 import ChevronUp from "lucide-react/dist/esm/icons/chevron-up";
 import Crosshair from "lucide-react/dist/esm/icons/crosshair";
-import GitBranch from "lucide-react/dist/esm/icons/git-branch";
+import LinkIcon from "lucide-react/dist/esm/icons/link";
 import ListChecks from "lucide-react/dist/esm/icons/list-checks";
 import RefreshCcw from "lucide-react/dist/esm/icons/refresh-ccw";
 import Network from "lucide-react/dist/esm/icons/network";
@@ -32,9 +32,12 @@ import {
 import type {
   ProjectMapDataset,
   ProjectMapGenerationRequest,
+  ProjectMapCandidate,
   ProjectMapLens,
   ProjectMapNode,
   ProjectMapNodeKind,
+  ProjectMapProfile,
+  ProjectMapRelatedArtifact,
   ProjectMapRunMetadata,
   ProjectMapStorageLocation,
   ProjectMapSource,
@@ -76,13 +79,18 @@ type GraphBounds = {
   bottom: number;
 };
 
+type GraphViewSnapshot = {
+  focusNodeId: string | null;
+  selectedNodeId: string | null;
+};
+
 const GRAPH_WIDTH = 2400;
 const GRAPH_HEIGHT = 1600;
 const DEFAULT_OVERVIEW_ZOOM = 0.52;
 const DEFAULT_FOCUS_ZOOM = 0.56;
-const GRAPH_NODE_GAP = 42;
+const GRAPH_NODE_GAP = 26;
 const GRAPH_NODE_CANVAS_PADDING = 110;
-const GRAPH_FIT_PADDING = 72;
+const GRAPH_FIT_PADDING = 56;
 const GRAPH_NODE_FOOTPRINT = {
   default: { width: 176, height: 106 },
   hub: { width: 188, height: 112 },
@@ -424,8 +432,8 @@ function resolveGraphNodeCollisions(
 
 function buildExpandedGraphSlots(count: number): Array<{ x: number; y: number }> {
   const centerX = GRAPH_WIDTH / 2;
-  const columnOffsets = [760, 460, 1040];
-  const rowY = [170, 365, 560, 755, 950, 1145, 1340, 1500];
+  const columnOffsets = [540, 330, 760];
+  const rowY = [220, 380, 540, 700, 860, 1020, 1180, 1340];
   const slots: Array<{ x: number; y: number }> = [];
 
   for (const offset of columnOffsets) {
@@ -507,8 +515,8 @@ function buildOverviewPositions(
     );
   }
 
-  const hubRadiusX = 720;
-  const hubRadiusY = 470;
+  const hubRadiusX = 560;
+  const hubRadiusY = 360;
   const shouldUseUniformHubAngles = directChildren.length > visibleLenses.length + 1;
   const childCountByLensId = new Map<string, number>();
   const placedCountByLensId = new Map<string, number>();
@@ -561,13 +569,13 @@ function buildFocusPositions(
     }
 
     const angle = toRadians(index * (360 / Math.max(contextNodes.length, 1)) - 90);
-    const childRadius = 650;
-    const contextRadius = 440;
+    const childRadius = 430;
+    const contextRadius = 305;
     const radius = node.parentId === focusNode.id ? childRadius : contextRadius;
     positions.push({
       id: node.id,
       x: center.x + Math.cos(angle) * radius,
-      y: center.y + Math.sin(angle) * (radius * 0.78),
+      y: center.y + Math.sin(angle) * (radius * 0.72),
     });
   });
 
@@ -692,6 +700,32 @@ function translateSourceType(
   });
 }
 
+function getTraceLabel(
+  item: Pick<ProjectMapRelatedArtifact, "path" | "line" | "ref"> & {
+    hash?: string;
+  },
+): string | null {
+  if (item.path) {
+    return item.line ? `${item.path}:${item.line}` : item.path;
+  }
+  return item.ref ?? item.hash ?? null;
+}
+
+function getProfileSummary(profile: Partial<ProjectMapProfile> | null | undefined): {
+  language: string;
+  shapes: string;
+} {
+  const language =
+    typeof profile?.primaryLanguage === "string" && profile.primaryLanguage
+      ? profile.primaryLanguage
+      : "unknown";
+  const shapes =
+    Array.isArray(profile?.shapes) && profile.shapes.length > 0
+      ? profile.shapes.join(" / ")
+      : "unknown";
+  return { language, shapes };
+}
+
 function getGenerationQueue(runs: ProjectMapRunMetadata[]): ProjectMapRunMetadata[] {
   return runs
     .filter((run) => ACTIVE_RUN_STATUSES.has(run.status))
@@ -709,12 +743,69 @@ function getRecentRuns(runs: ProjectMapRunMetadata[]): ProjectMapRunMetadata[] {
 
 function SourceChip({ source }: { source: ProjectMapSource }) {
   const { t } = useTranslation();
+  const traceLabel = getTraceLabel(source);
 
   return (
-    <span className="project-map-source-chip" title={source.path ?? source.label}>
-      <span className="project-map-source-type">{translateSourceType(t, source.type)}</span>
-      {source.label}
-    </span>
+    <TraceChip
+      label={source.label}
+      typeLabel={translateSourceType(t, source.type)}
+      traceLabel={traceLabel}
+      excerpt={source.excerpt}
+    />
+  );
+}
+
+function ArtifactChip({ artifact }: { artifact: ProjectMapRelatedArtifact }) {
+  const { t } = useTranslation();
+
+  return (
+    <TraceChip
+      label={artifact.label}
+      typeLabel={translateSourceType(t, artifact.type)}
+      traceLabel={getTraceLabel(artifact)}
+    />
+  );
+}
+
+function TraceChip({
+  label,
+  typeLabel,
+  traceLabel,
+  excerpt,
+}: {
+  label: string;
+  typeLabel: string;
+  traceLabel: string | null;
+  excerpt?: string;
+}) {
+  const { t } = useTranslation();
+  const body = (
+    <>
+      <span className="project-map-source-type">{typeLabel}</span>
+      <span className="project-map-trace-label">{label}</span>
+      {traceLabel ? <span className="project-map-trace-path">{traceLabel}</span> : null}
+      {excerpt ? <span className="project-map-trace-excerpt">{excerpt}</span> : null}
+    </>
+  );
+
+  if (!traceLabel) {
+    return (
+      <span className="project-map-trace-chip" title={label}>
+        {body}
+      </span>
+    );
+  }
+
+  return (
+    <button
+      className="project-map-trace-chip is-traceable"
+      type="button"
+      title={traceLabel}
+      aria-label={`${t("projectMap.trace.openTrace", { label, trace: traceLabel })}: ${label} ${traceLabel}`}
+    >
+      <LinkIcon aria-hidden />
+      {body}
+    </button>
   );
 }
 
@@ -751,6 +842,7 @@ export function ProjectMapPanel({
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(
     () => rootNode?.id ?? null,
   );
+  const [viewHistory, setViewHistory] = useState<GraphViewSnapshot[]>([]);
   const [hoverNodeId, setHoverNodeId] = useState<string | null>(null);
   const [isLensStripCollapsed, setIsLensStripCollapsed] = useState(true);
   const [isDetailCollapsed, setIsDetailCollapsed] = useState(false);
@@ -786,6 +878,23 @@ export function ProjectMapPanel({
   );
   const projectName = workspaceName?.trim() || dataset.manifest.projectName;
   const candidateCount = dataset.nodes.filter((node) => node.candidate).length;
+  const firstCandidateNode = useMemo(
+    () => dataset.nodes.find((node) => node.candidate) ?? null,
+    [dataset.nodes],
+  );
+  const pendingCandidateByNodeId = useMemo(() => {
+    const entries = new Map<string, ProjectMapCandidate>();
+    for (const candidate of dataset.candidates ?? []) {
+      if (candidate.status !== "pending") {
+        continue;
+      }
+      const targetNodeId = candidate.targetNodeId ?? candidate.patch.nodeId;
+      if (!entries.has(targetNodeId)) {
+        entries.set(targetNodeId, candidate);
+      }
+    }
+    return entries;
+  }, [dataset.candidates]);
   const staleCount = dataset.nodes.filter((node) => node.stale).length;
   const generationQueue = useMemo(() => getGenerationQueue(dataset.runs), [dataset.runs]);
   const recentRuns = useMemo(() => getRecentRuns(dataset.runs), [dataset.runs]);
@@ -797,6 +906,12 @@ export function ProjectMapPanel({
   const candidateLensCount = visibleLenses.filter((lens) => lens.status === "candidate").length;
   const activeLens = selectedNode ? lensIndex.get(selectedNode.lensId) ?? null : null;
   const isPersistenceBacked = Boolean(activeWorkspace?.id) && !controlledDataset;
+  const profileSummary = getProfileSummary(dataset.profile);
+  const previousViewSnapshot = viewHistory.at(-1) ?? null;
+  const hasBackToParentFallback = Boolean(focusNodeId);
+  const backToPreviousLabel = previousViewSnapshot
+    ? t("projectMap.backToPrevious")
+    : t("projectMap.backToParent");
   const fitGraphToViewport = useCallback(() => {
     const rootNodeId = (focusNodeId ? nodeIndex.get(focusNodeId)?.id : rootNode?.id) ?? rootNode?.id;
     if (!rootNodeId) {
@@ -834,10 +949,28 @@ export function ProjectMapPanel({
     setIsDetailCollapsed(false);
   };
 
+  const rememberCurrentView = () => {
+    const snapshot: GraphViewSnapshot = {
+      focusNodeId,
+      selectedNodeId,
+    };
+    setViewHistory((current) => {
+      const lastSnapshot = current.at(-1);
+      if (
+        lastSnapshot?.focusNodeId === snapshot.focusNodeId &&
+        lastSnapshot.selectedNodeId === snapshot.selectedNodeId
+      ) {
+        return current;
+      }
+      return [...current.slice(-7), snapshot];
+    });
+  };
+
   const handleDrillIn = (node: ProjectMapNode | null) => {
-    if (!node || node.children.length === 0 || node.id === rootNode?.id) {
+    if (!node || node.children.length === 0 || node.id === rootNode?.id || focusNodeId === node.id) {
       return;
     }
+    rememberCurrentView();
     setHoverNodeId(null);
     setSelectedNodeId(node.id);
     setFocusNodeId(node.id);
@@ -858,6 +991,38 @@ export function ProjectMapPanel({
     setFocusNodeId(null);
     setSelectedNodeId(rootNode?.id ?? null);
     setHoverNodeId(null);
+    setViewHistory([]);
+  };
+
+  const handleBackToPreviousView = () => {
+    if (previousViewSnapshot) {
+      setFocusNodeId(previousViewSnapshot.focusNodeId);
+      setSelectedNodeId(previousViewSnapshot.selectedNodeId ?? rootNode?.id ?? null);
+      setHoverNodeId(null);
+      setViewHistory((current) => current.slice(0, -1));
+      return;
+    }
+
+    if (!focusNodeId) {
+      return;
+    }
+
+    handleDrillUp(nodeIndex.get(focusNodeId) ?? null);
+  };
+
+  const handleCandidateReviewClick = () => {
+    if (!firstCandidateNode) {
+      return;
+    }
+
+    setHoverNodeId(null);
+    setSelectedNodeId(firstCandidateNode.id);
+    setFocusNodeId(
+      firstCandidateNode.parentId && firstCandidateNode.parentId !== rootNode?.id
+        ? firstCandidateNode.parentId
+        : null,
+    );
+    setIsDetailCollapsed(false);
   };
 
   const updateZoom = (nextZoom: number) => {
@@ -986,8 +1151,8 @@ export function ProjectMapPanel({
             </span>
             <span>
               {t("projectMap.profileSummary", {
-                language: dataset.profile.primaryLanguage,
-                shapes: dataset.profile.shapes.join(" / "),
+                language: profileSummary.language,
+                shapes: profileSummary.shapes,
               })}
             </span>
           </div>
@@ -1019,18 +1184,15 @@ export function ProjectMapPanel({
             </div>
           ) : null}
           {candidateCount > 0 ? (
-            <span className="project-map-candidate-badge">
+            <button
+              className="project-map-candidate-badge"
+              type="button"
+              onClick={handleCandidateReviewClick}
+              title={t("projectMap.candidateBadgeHint")}
+            >
               {t("projectMap.candidateBadge", { count: candidateCount })}
-            </span>
+            </button>
           ) : null}
-          <button
-            className="project-map-icon-button"
-            type="button"
-            onClick={() => datasetController.openRefreshEvidence(selectedNode)}
-          >
-            <RefreshCw aria-hidden />
-            {t("projectMap.refreshEvidence")}
-          </button>
           <button
             className={cn("project-map-task-button", generationQueue.length > 0 && "has-active-task")}
             type="button"
@@ -1153,7 +1315,11 @@ export function ProjectMapPanel({
             onPointerCancel={handleCanvasPointerEnd}
             onWheel={handleCanvasWheel}
           >
-            <div className="project-map-zoom-controls" aria-label={t("projectMap.zoomControls")}>
+            <div
+              className="project-map-canvas-control-group"
+              role="group"
+              aria-label={t("projectMap.canvasControls")}
+            >
               <button
                 type="button"
                 onClick={() => updateZoom(viewport.zoom - ZOOM_STEP)}
@@ -1174,6 +1340,15 @@ export function ProjectMapPanel({
               >
                 <ZoomIn aria-hidden />
               </button>
+              {previousViewSnapshot || hasBackToParentFallback ? (
+                <button
+                  type="button"
+                  onClick={handleBackToPreviousView}
+                >
+                  <ArrowLeft aria-hidden />
+                  {backToPreviousLabel}
+                </button>
+              ) : null}
             </div>
             <div
               className="project-map-graph-viewport"
@@ -1287,16 +1462,26 @@ export function ProjectMapPanel({
             <DetailPanel
               node={selectedNode}
               dataset={dataset}
+              pendingCandidate={
+                selectedNode ? pendingCandidateByNodeId.get(selectedNode.id) ?? null : null
+              }
               lens={selectedNode ? lensIndex.get(selectedNode.lensId) ?? null : null}
               staleCount={staleCount}
               canDrill={Boolean(selectedNode?.children.length && selectedNode.id !== rootNode?.id)}
               collapsed={isDetailCollapsed}
               onCollapsedChange={setIsDetailCollapsed}
               onBack={focusNodeId ? handleBackToOverview : null}
+              onBackToPrevious={previousViewSnapshot || hasBackToParentFallback ? handleBackToPreviousView : null}
+              backToPreviousLabel={backToPreviousLabel}
               onDrill={() => handleDrillIn(selectedNode)}
               onCompleteNode={() => selectedNode ? datasetController.openNodeGeneration("node", selectedNode) : undefined}
               onCalibrateNode={() => selectedNode ? datasetController.openNodeGeneration("calibrate", selectedNode) : undefined}
-              onRefreshEvidence={() => datasetController.openRefreshEvidence(selectedNode)}
+              onConfirmCandidate={(candidateId) => {
+                void datasetController.confirmCandidate(candidateId);
+              }}
+              onRejectCandidate={(candidateId) => {
+                void datasetController.rejectCandidate(candidateId);
+              }}
             />
           </div>
         )}
@@ -1550,29 +1735,37 @@ function ProjectMapRunCard({
 function DetailPanel({
   node,
   dataset,
+  pendingCandidate,
   lens,
   staleCount,
   canDrill,
   collapsed,
   onCollapsedChange,
   onBack,
+  onBackToPrevious,
+  backToPreviousLabel,
   onDrill,
   onCompleteNode,
   onCalibrateNode,
-  onRefreshEvidence,
+  onConfirmCandidate,
+  onRejectCandidate,
 }: {
   node: ProjectMapNode | null;
   dataset: ProjectMapDataset;
+  pendingCandidate: ProjectMapCandidate | null;
   lens: ProjectMapLens | null;
   staleCount: number;
   canDrill: boolean;
   collapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
   onBack: (() => void) | null;
+  onBackToPrevious: (() => void) | null;
+  backToPreviousLabel: string;
   onDrill: () => void;
   onCompleteNode: () => void;
   onCalibrateNode: () => void;
-  onRefreshEvidence: () => void;
+  onConfirmCandidate: (candidateId: string) => void;
+  onRejectCandidate: (candidateId: string) => void;
 }) {
   const { t } = useTranslation();
 
@@ -1581,19 +1774,41 @@ function DetailPanel({
       className={cn("project-map-detail-panel", collapsed && "is-collapsed")}
       aria-label={t("projectMap.detailPanel")}
     >
-      <button
-        className="project-map-detail-toggle"
-        type="button"
-        aria-expanded={!collapsed}
-        onClick={() => onCollapsedChange(!collapsed)}
+      <div
+        className="project-map-detail-control-group"
+        role="group"
+        aria-label={t("projectMap.viewNavigation")}
       >
-        {collapsed ? <ChevronLeft aria-hidden /> : <ChevronRight aria-hidden />}
-        <span>
-          {collapsed
-            ? t("projectMap.expandDetail")
-            : t("projectMap.collapseDetail")}
-        </span>
-      </button>
+        <button
+          className="project-map-detail-toggle"
+          type="button"
+          aria-expanded={!collapsed}
+          onClick={() => onCollapsedChange(!collapsed)}
+        >
+          {collapsed ? <ChevronLeft aria-hidden /> : <ChevronRight aria-hidden />}
+          <span>
+            {collapsed
+              ? t("projectMap.expandDetail")
+              : t("projectMap.collapseDetail")}
+          </span>
+        </button>
+        {!collapsed && onBackToPrevious ? (
+          <button
+            className="project-map-back-button is-previous"
+            type="button"
+            onClick={onBackToPrevious}
+          >
+            <ArrowLeft aria-hidden />
+            {backToPreviousLabel}
+          </button>
+        ) : null}
+        {!collapsed && onBack ? (
+          <button className="project-map-back-button" type="button" onClick={onBack}>
+            <ArrowLeft aria-hidden />
+            {t("projectMap.backToOverview")}
+          </button>
+        ) : null}
+      </div>
       {collapsed ? (
         <div className="project-map-detail-peek">
           <span className="project-map-node-kind">
@@ -1604,14 +1819,8 @@ function DetailPanel({
       ) : null}
       {!collapsed ? (
         <>
-      {onBack ? (
-        <button className="project-map-back-button" type="button" onClick={onBack}>
-          <ArrowLeft aria-hidden />
-          {t("projectMap.backToOverview")}
-        </button>
-      ) : null}
-      {node ? (
-        <>
+          {node ? (
+            <>
           <div className="project-map-inspector-heading">
             <span className="project-map-node-kind">{translateNodeKind(t, node.nodeKind)}</span>
             <h3>{node.title}</h3>
@@ -1626,6 +1835,29 @@ function DetailPanel({
               {node.candidate ? <span>{t("projectMap.status.candidate")}</span> : null}
             </div>
           </div>
+          {node.candidate ? (
+            <section className="project-map-candidate-notice">
+              <h4>{t("projectMap.candidateNotice.title")}</h4>
+              <p>{t("projectMap.candidateNotice.body")}</p>
+              {pendingCandidate ? (
+                <div className="project-map-candidate-actions">
+                  <button
+                    type="button"
+                    className="is-primary"
+                    onClick={() => onConfirmCandidate(pendingCandidate.id)}
+                  >
+                    {t("projectMap.candidateNotice.confirm")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onRejectCandidate(pendingCandidate.id)}
+                  >
+                    {t("projectMap.candidateNotice.reject")}
+                  </button>
+                </div>
+              ) : null}
+            </section>
+          ) : null}
 
           <section>
             <h4>{t("projectMap.detail.coreDescription")}</h4>
@@ -1648,14 +1880,10 @@ function DetailPanel({
             <h4>{t("projectMap.detail.relatedArtifacts")}</h4>
             <div className="project-map-artifact-list">
               {node.detail.relatedArtifacts.map((artifact) => (
-                <span
+                <ArtifactChip
                   key={`${artifact.type}-${artifact.label}-${artifact.path ?? artifact.ref ?? ""}`}
-                  className="project-map-artifact-chip"
-                  title={artifact.path ?? artifact.ref ?? artifact.label}
-                >
-                  <GitBranch aria-hidden />
-                  {artifact.label}
-                </span>
+                  artifact={artifact}
+                />
               ))}
             </div>
           </section>
@@ -1702,7 +1930,6 @@ function DetailPanel({
             ) : null}
             <button type="button" onClick={onCompleteNode}>{t("projectMap.completeNode")}</button>
             <button type="button" onClick={onCalibrateNode}>{t("projectMap.calibrateNode")}</button>
-            <button type="button" onClick={onRefreshEvidence}>{t("projectMap.refreshEvidence")}</button>
           </div>
         </>
       ) : (

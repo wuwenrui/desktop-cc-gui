@@ -12,7 +12,7 @@ import { subscribeAppServerEvents } from "../../../services/events";
 import type { EngineType } from "../../../types";
 import { createEmptyProjectMapDataset } from "./projectMapPersistence";
 import { runProjectMapGenerationWorker } from "./projectMapGenerationWorker";
-import type { ProjectMapRunMetadata } from "../types";
+import type { ProjectMapDataset, ProjectMapRunMetadata, ProjectMapSource } from "../types";
 
 vi.mock("../../../services/events", () => ({
   subscribeAppServerEvents: vi.fn(() => () => {}),
@@ -45,6 +45,108 @@ function baseRun(overrides: Partial<ProjectMapRunMetadata> = {}): ProjectMapRunM
     error: null,
     ...overrides,
   };
+}
+
+function datasetWithRuntimeNode(): ProjectMapDataset {
+  const dataset = createEmptyProjectMapDataset({
+    identity: {
+      projectName: "demo",
+      workspacePath: "/repo/demo",
+      workspaceId: "ws-1",
+    },
+  });
+  const generatedBy = {
+    engine: "claude",
+    model: "claude-sonnet",
+    runId: "seed",
+  };
+  return {
+    ...dataset,
+    lenses: [
+      {
+        id: "overview",
+        title: "Overview",
+        shortTitle: "Overview",
+        description: "Project overview",
+        status: "detected",
+        confidence: "medium",
+        evidence: [{ type: "file", label: "README", path: "README.md" }],
+      },
+      {
+        id: "runtime",
+        title: "Runtime",
+        shortTitle: "Runtime",
+        description: "Runtime and build",
+        status: "detected",
+        confidence: "medium",
+        evidence: [{ type: "file", label: "package", path: "package.json" }],
+      },
+    ],
+    nodes: [
+      {
+        id: "project-core",
+        lensId: "overview",
+        nodeKind: "concept",
+        title: "Project Core",
+        summary: "Root node",
+        detail: {
+          coreDescription: "Root node",
+          keyFacts: [],
+          keyLogic: [],
+          riskSignals: [],
+          relatedArtifacts: [],
+        },
+        children: ["runtime-node"],
+        sources: [{ type: "file", label: "README", path: "README.md" }],
+        confidence: "medium",
+        stale: false,
+        candidate: false,
+        lastGeneratedAt: "2026-05-26T01:00:00.000Z",
+        generatedBy,
+      },
+      {
+        id: "runtime-node",
+        lensId: "runtime",
+        nodeKind: "runtime",
+        title: "Runtime Node",
+        summary: "Needs calibration",
+        detail: {
+          coreDescription: "Needs calibration",
+          keyFacts: [],
+          keyLogic: [],
+          riskSignals: [],
+          relatedArtifacts: [],
+        },
+        parentId: "project-core",
+        children: [],
+        sources: [{ type: "file", label: "package", path: "package.json" }],
+        confidence: "low",
+        stale: false,
+        candidate: true,
+        lastGeneratedAt: "2026-05-26T01:00:00.000Z",
+        generatedBy,
+      },
+    ],
+  };
+}
+
+function nodeRun(input: {
+  generationIntent: NonNullable<ProjectMapRunMetadata["generationIntent"]>;
+  includeDescendants: boolean;
+  readSources: ProjectMapSource[];
+}): ProjectMapRunMetadata {
+  return baseRun({
+    id: `${input.generationIntent}_run`,
+    kind: "node",
+    scope: "node",
+    requestScope: {
+      kind: "node",
+      nodeId: "runtime-node",
+      includeDescendants: input.includeDescendants,
+    },
+    generationIntent: input.generationIntent,
+    readSources: input.readSources,
+  });
 }
 
 describe("runProjectMapGenerationWorker", () => {
@@ -183,6 +285,264 @@ describe("runProjectMapGenerationWorker", () => {
         onRunUpdate: async () => {},
       }),
     ).rejects.toThrow("AI output did not contain a JSON object.");
+  });
+
+  it("repairs AI object output with unquoted property names", async () => {
+    const dataset = createEmptyProjectMapDataset({
+      identity: {
+        projectName: "demo",
+        workspacePath: "/repo/demo",
+        workspaceId: "ws-1",
+      },
+    });
+    vi.mocked(getWorkspaceFiles).mockResolvedValue({
+      files: ["package.json"],
+      directories: [],
+      gitignored_files: [],
+      gitignored_directories: [],
+    });
+    vi.mocked(readWorkspaceFile).mockResolvedValue({ content: "{}", truncated: false });
+    vi.mocked(engineSendMessageSync).mockResolvedValue({
+      engine: "claude",
+      text: `{
+        profile: {
+          primaryLanguage: typescript,
+          shapes: [web],
+          languages: [typescript],
+          interfaceKinds: [desktop],
+          buildSystems: [vite],
+        },
+        lenses: [],
+        nodes: [
+          {
+            id: project-core,
+            lensId: overview,
+            nodeKind: concept,
+            title: 登录认证,
+            summary: 登录补全节点,
+            detail: {
+              coreDescription: 登录流程依赖 Spring Security,
+              keyFacts: [登录入口来自 Controller],
+              keyLogic: [],
+              riskSignals: [],
+              relatedArtifacts: [],
+            },
+            children: [],
+            sources: [],
+            confidence: "medium",
+            stale: false,
+            candidate: false,
+          },
+        ],
+      }`,
+    });
+
+    const result = await runProjectMapGenerationWorker({
+      workspaceId: "ws-1",
+      dataset,
+      run: baseRun(),
+      onRunUpdate: async () => {},
+    });
+
+    expect(result.profile.shapes).toEqual(["web"]);
+    expect(result.nodes[0]).toMatchObject({
+      id: "project-core",
+      title: "登录认证",
+      detail: expect.objectContaining({
+        coreDescription: "登录流程依赖 Spring Security",
+        keyFacts: ["登录入口来自 Controller"],
+      }),
+    });
+  });
+
+  it("normalizes incomplete AI profile payloads before returning runtime dataset", async () => {
+    const dataset = createEmptyProjectMapDataset({
+      identity: {
+        projectName: "demo",
+        workspacePath: "/repo/demo",
+        workspaceId: "ws-1",
+      },
+    });
+    vi.mocked(getWorkspaceFiles).mockResolvedValue({
+      files: ["package.json"],
+      directories: [],
+      gitignored_files: [],
+      gitignored_directories: [],
+    });
+    vi.mocked(readWorkspaceFile).mockResolvedValue({ content: "{}", truncated: false });
+    vi.mocked(engineSendMessageSync).mockResolvedValue({
+      engine: "claude",
+      text: JSON.stringify({
+        profile: {
+          primaryLanguage: "typescript",
+        },
+        nodes: [
+          {
+            id: "project-core",
+            lensId: "overview",
+            nodeKind: "concept",
+            title: "Project Core",
+            summary: "Core",
+            detail: {
+              coreDescription: "Core",
+              keyFacts: [],
+              keyLogic: [],
+              riskSignals: [],
+              relatedArtifacts: [],
+            },
+            children: [],
+            sources: [],
+            confidence: "medium",
+            stale: false,
+            candidate: false,
+          },
+        ],
+      }),
+    });
+
+    const result = await runProjectMapGenerationWorker({
+      workspaceId: "ws-1",
+      dataset,
+      run: baseRun(),
+      onRunUpdate: async () => {},
+    });
+
+    expect(result.profile.primaryLanguage).toBe("typescript");
+    expect(result.profile.shapes).toEqual(["unknown"]);
+    expect(result.profile.languages).toEqual(["unknown"]);
+    expect(result.profile.interfaceKinds).toEqual(["unknown"]);
+    expect(result.profile.buildSystems).toEqual([]);
+  });
+
+  it("uses a concise node-completion prompt scoped to the selected node", async () => {
+    const dataset = datasetWithRuntimeNode();
+    vi.mocked(getWorkspaceFiles).mockResolvedValue({
+      files: ["package.json", "vite.config.ts", "src/unrelated.ts"],
+      directories: [],
+      gitignored_files: [],
+      gitignored_directories: [],
+    });
+    vi.mocked(readWorkspaceFile).mockImplementation(async (_workspaceId, path) => ({
+      content: path === "package.json" ? '{"scripts":{"dev":"vite"}}' : "export default {};",
+      truncated: false,
+    }));
+    vi.mocked(engineSendMessageSync).mockResolvedValue({
+      engine: "claude",
+      text: JSON.stringify({
+        nodes: [
+          {
+            id: "runtime-node",
+            lensId: "runtime",
+            nodeKind: "runtime",
+            title: "Runtime Node",
+            summary: "Vite runtime scripts.",
+            detail: {
+              coreDescription: "package.json exposes Vite runtime scripts.",
+              keyFacts: ["dev script uses Vite"],
+              keyLogic: [],
+              riskSignals: [],
+              relatedArtifacts: [{ type: "file", label: "package", path: "package.json" }],
+            },
+            parentId: "project-core",
+            children: [],
+            sources: [{ type: "file", label: "package", path: "package.json" }],
+            confidence: "medium",
+            stale: false,
+            candidate: false,
+          },
+        ],
+      }),
+    });
+
+    const result = await runProjectMapGenerationWorker({
+      workspaceId: "ws-1",
+      dataset,
+      run: nodeRun({
+        generationIntent: "completeNode",
+        includeDescendants: true,
+        readSources: [
+          { type: "file", label: "package", path: "package.json" },
+          { type: "file", label: "vite", path: "vite.config.ts" },
+        ],
+      }),
+      onRunUpdate: async () => {},
+    });
+
+    const prompt = vi.mocked(engineSendMessageSync).mock.calls[0]?.[1]?.text ?? "";
+    expect(prompt).toContain("Intent: completeNode");
+    expect(prompt).toContain("Task: Complete the selected Project Map node using evidence.");
+    expect(prompt).toContain("Target node: runtime-node | Runtime Node");
+    expect(prompt).toContain("Include descendants: true");
+    expect(prompt).toContain("Return nodes for the target node/subtree only.");
+    expect(prompt).not.toContain("Existing profile:");
+    expect(prompt).not.toContain("Existing node ids:");
+    expect(readWorkspaceFile).toHaveBeenCalledWith("ws-1", "package.json");
+    expect(readWorkspaceFile).toHaveBeenCalledWith("ws-1", "vite.config.ts");
+    expect(readWorkspaceFile).not.toHaveBeenCalledWith("ws-1", "src/unrelated.ts");
+    expect(result.lenses.map((lens) => lens.id)).toEqual(["overview", "runtime"]);
+    expect(result.nodes.find((node) => node.id === "runtime-node")).toMatchObject({
+      summary: "Vite runtime scripts.",
+      candidate: false,
+    });
+  });
+
+  it("uses a calibration prompt that verifies the node instead of completing it", async () => {
+    const dataset = datasetWithRuntimeNode();
+    vi.mocked(getWorkspaceFiles).mockResolvedValue({
+      files: ["package.json", "README.md", "src/unrelated.ts"],
+      directories: [],
+      gitignored_files: [],
+      gitignored_directories: [],
+    });
+    vi.mocked(readWorkspaceFile).mockResolvedValue({
+      content: '{"scripts":{"dev":"vite --host 0.0.0.0"}}',
+      truncated: false,
+    });
+    vi.mocked(engineSendMessageSync).mockResolvedValue({
+      engine: "claude",
+      text: JSON.stringify({
+        nodes: [
+          {
+            id: "runtime-node",
+            lensId: "runtime",
+            nodeKind: "runtime",
+            title: "Runtime Node",
+            summary: "Vite dev script requires review.",
+            detail: {
+              coreDescription: "Evidence confirms a Vite dev script.",
+              keyFacts: ["dev script exists"],
+              keyLogic: [],
+              riskSignals: ["Host binding should be reviewed"],
+              relatedArtifacts: [{ type: "file", label: "package", path: "package.json" }],
+            },
+            parentId: "project-core",
+            children: [],
+            sources: [{ type: "file", label: "package", path: "package.json" }],
+            confidence: "medium",
+            stale: false,
+            candidate: false,
+          },
+        ],
+      }),
+    });
+
+    await runProjectMapGenerationWorker({
+      workspaceId: "ws-1",
+      dataset,
+      run: nodeRun({
+        generationIntent: "calibrateNode",
+        includeDescendants: false,
+        readSources: [{ type: "file", label: "package", path: "package.json" }],
+      }),
+      onRunUpdate: async () => {},
+    });
+
+    const prompt = vi.mocked(engineSendMessageSync).mock.calls[0]?.[1]?.text ?? "";
+    expect(prompt).toContain("Intent: calibrateNode");
+    expect(prompt).toContain("Task: Calibrate the selected Project Map node against evidence.");
+    expect(prompt).toContain("verify facts, correct wrong claims");
+    expect(prompt).toContain("Include descendants: false");
+    expect(prompt).not.toContain("Task: Complete the selected Project Map node using evidence.");
   });
 
   it("normalizes AI lens ids before they become persisted path segments", async () => {
