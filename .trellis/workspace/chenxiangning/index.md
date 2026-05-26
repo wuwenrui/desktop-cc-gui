@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-16.md`
-- **Total Sessions**: 587
+- **Total Sessions**: 588
 - **Last Active**: 2026-05-27
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-16.md` | ~1099 | Active |
+| `journal-16.md` | ~1146 | Active |
 | `journal-15.md` | ~1996 | Archived |
 | `journal-14.md` | ~1969 | Archived |
 | `journal-13.md` | ~1947 | Archived |
@@ -44,6 +44,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 588 | 2026-05-27 | 稳定知识地图节点选择视口 | `cf34960b` | `feature/v0.5.3` |
 | 587 | 2026-05-27 | Project Map 增量生成与交互图谱收口 | `7c855a90` | `feature/v0.5.3` |
 | 586 | 2026-05-26 | 稳定知识地图增量生成与证据链交互 | `05e9cb9d` | `feature/v0.5.3` |
 | 585 | 2026-05-26 | Project Map 知识地图生成与交互批量收口 | `869520f8` | `feature/v0.5.3` |

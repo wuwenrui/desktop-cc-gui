@@ -1097,3 +1097,50 @@ CI 中 SettingsView 删除会话测试仍断言旧刷新签名；更新为包含
 ### Next Steps
 
 - None - task complete
+
+
+## Session 588: 稳定知识地图节点选择视口
+
+**Date**: 2026-05-27
+**Task**: 稳定知识地图节点选择视口
+**Branch**: `feature/v0.5.3`
+
+### Summary
+
+收窄 Project Knowledge Map 自动 fit 触发边界，普通节点选择不再重置 viewport，并回写 OpenSpec 提案与主 spec。
+
+### Main Changes
+
+本次收口内容：
+- 修复 ProjectMapPanel 自动 fit effect：新增结构签名 gate，仅在项目、focus drill、可见节点集合、layout preset、详情栏折叠状态变化时重新 fit。
+- 保留 Reset view 作为显式视口命令；普通节点选择、hover、详情切换、drag preview 清理不再重置 pan/zoom。
+- 新增 ProjectMapPanel 回归测试：详情面板打开后选择另一个节点，viewport transform 保持不变。
+- 回写 OpenSpec proposal/design/tasks/delta spec，并同步主 spec `project-xray-panel` 的 viewport stability requirement。
+
+验证：
+- `npm exec vitest -- run src/features/project-map/components/ProjectMapPanel.test.tsx src/features/project-map/services/projectMapPersistence.test.ts src/features/project-map/utils/interactiveLayout.test.ts src/features/project-map/utils/incrementalGeneration.test.ts --maxWorkers 1 --minWorkers 1`：42 tests passed。
+- `npm run typecheck`：passed。
+- `npm run lint`：passed with existing warning in `src/features/threads/hooks/useThreadActionsResumeThread.ts:1108`。
+- `npm run check:large-files`：found=0。
+- `git diff --check`：passed。
+- `openspec validate improve-project-map-interactive-layout --strict`：passed。
+- `openspec validate --specs`：272 passed, 0 failed。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `cf34960b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
