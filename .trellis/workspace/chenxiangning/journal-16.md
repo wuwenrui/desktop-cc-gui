@@ -1385,3 +1385,54 @@ CI 中 SettingsView 删除会话测试仍断言旧刷新签名；更新为包含
 ### Next Steps
 
 - None - task complete
+
+
+## Session 594: Project Map 画布工具折叠态
+
+**Date**: 2026-05-27
+**Task**: Project Map 画布工具折叠态
+**Branch**: `feature/v0.5.3`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| 项目 | 内容 |
+|------|------|
+| Project Map UI | 将画布左上布局工具组改为默认折叠，只保留紧凑布局入口。 |
+| Preference | 新增 `ccgui.projectMap.canvasControlsCollapsed` 本地偏好，用户展开/收起后可跨 remount/reload 回显。 |
+| Isolation | 缩放、重置视图、自动整理、重置布局、切换 layout preset 等图动作不会覆盖工具组折叠态。 |
+| OpenSpec | 回写 `wire-project-map-auto-ingestion` proposal/design/spec/tasks，固化 canvas controls collapsed preference 契约。 |
+| Verification | `openspec validate wire-project-map-auto-ingestion --strict`; focused ProjectMapPanel/CSS Vitest 28 tests; `npm run typecheck`; `npm run lint` exit 0 with one existing warning outside touched files; `git diff --check`. |
+
+**Updated Files**:
+- `src/features/project-map/components/ProjectMapPanel.tsx`
+- `src/features/project-map/components/ProjectMapPanel.test.tsx`
+- `src/styles/project-map.css`
+- `src/i18n/locales/zh.part5.ts`
+- `src/i18n/locales/en.part5.ts`
+- `openspec/changes/wire-project-map-auto-ingestion/proposal.md`
+- `openspec/changes/wire-project-map-auto-ingestion/design.md`
+- `openspec/changes/wire-project-map-auto-ingestion/specs/project-xray-panel/spec.md`
+- `openspec/changes/wire-project-map-auto-ingestion/tasks.md`
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0e4dc68f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
