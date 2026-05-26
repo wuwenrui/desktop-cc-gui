@@ -11,6 +11,7 @@ import type {
   ProjectMapNode,
   ProjectMapProfile,
   ProjectMapRunMetadata,
+  ProjectMapSource,
   ProjectMapStorageLocation,
 } from "../types";
 import { deriveProjectMapStorageKey } from "../utils/storageKey";
@@ -185,8 +186,55 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function asTrimmedString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function isProjectMapSource(value: unknown): value is ProjectMapSource {
+  return isRecord(value) && typeof value.type === "string" && typeof value.label === "string";
+}
+
+function sanitizeFrameworkConfidence(value: unknown): ProjectMapProfile["frameworks"][number]["confidence"] {
+  return value === "high" || value === "medium" || value === "low" || value === "unknown"
+    ? value
+    : "unknown";
+}
+
+function sanitizeFrameworks(value: unknown): ProjectMapProfile["frameworks"] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const frameworks: ProjectMapProfile["frameworks"] = [];
+  for (const rawFramework of value) {
+    const legacyName = asTrimmedString(rawFramework);
+    if (legacyName) {
+      frameworks.push({ name: legacyName, confidence: "unknown", evidence: [] });
+      continue;
+    }
+    if (!isRecord(rawFramework)) {
+      continue;
+    }
+
+    const name = asTrimmedString(rawFramework.name);
+    if (!name) {
+      continue;
+    }
+    const evidence = Array.isArray(rawFramework.evidence)
+      ? rawFramework.evidence.filter(isProjectMapSource)
+      : [];
+    frameworks.push({
+      name,
+      confidence: sanitizeFrameworkConfidence(rawFramework.confidence),
+      evidence,
+    });
+  }
+
+  return frameworks;
 }
 
 function safeArray<T>(value: unknown, guard: (item: unknown) => item is T): T[] {
@@ -261,9 +309,7 @@ function sanitizeProfile(value: unknown): ProjectMapProfile | null {
       ? (value.languages as ProjectMapProfile["languages"])
       : ["unknown"],
     shapes: isStringArray(value.shapes) ? (value.shapes as ProjectMapProfile["shapes"]) : ["unknown"],
-    frameworks: Array.isArray(value.frameworks)
-      ? (value.frameworks as ProjectMapProfile["frameworks"])
-      : [],
+    frameworks: sanitizeFrameworks(value.frameworks),
     interfaceKinds: isStringArray(value.interfaceKinds)
       ? (value.interfaceKinds as ProjectMapProfile["interfaceKinds"])
       : ["unknown"],

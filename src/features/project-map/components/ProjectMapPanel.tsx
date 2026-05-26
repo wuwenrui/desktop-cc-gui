@@ -22,6 +22,14 @@ import X from "lucide-react/dist/esm/icons/x";
 import ZoomIn from "lucide-react/dist/esm/icons/zoom-in";
 import ZoomOut from "lucide-react/dist/esm/icons/zoom-out";
 
+import {
+  AlertDialog,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogPopup,
+  AlertDialogTitle,
+} from "../../../components/ui/alert-dialog";
 import { cn } from "../../../lib/utils";
 import type { EngineType, ModelOption, WorkspaceInfo } from "../../../types";
 import { useProjectMapDataset } from "../hooks/useProjectMapDataset";
@@ -50,6 +58,7 @@ type ProjectMapPanelProps = {
   selectedModelId?: string | null;
   models?: ModelOption[];
   dataset?: ProjectMapDataset;
+  onOpenEvidenceFile?: (path: string, location?: { line: number; column: number }) => void;
 };
 
 type GraphNodePosition = {
@@ -82,6 +91,11 @@ type GraphBounds = {
 type GraphViewSnapshot = {
   focusNodeId: string | null;
   selectedNodeId: string | null;
+};
+
+type ProjectMapTraceTarget = {
+  path: string;
+  line?: number;
 };
 
 const GRAPH_WIDTH = 2400;
@@ -700,6 +714,120 @@ function translateSourceType(
   });
 }
 
+function getRunActionLabel(t: TFunction, run: ProjectMapRunMetadata): string {
+  const intent =
+    run.generationIntent ??
+    (run.requestScope?.kind === "node" ? "completeNode" : "global");
+  return t(`projectMap.tasks.action.${intent}`, {
+    defaultValue: formatFallbackLabel(intent),
+  });
+}
+
+function getRunTargetLabel(
+  t: TFunction,
+  run: ProjectMapRunMetadata,
+  nodeIndex: Map<string, ProjectMapNode>,
+): string {
+  const scope = run.requestScope;
+  if (!scope || scope.kind === "global") {
+    return t("projectMap.tasks.targetGlobal");
+  }
+  if (scope.kind !== "node") {
+    return t("projectMap.tasks.targetUnknown", { target: scope.kind });
+  }
+  const node = nodeIndex.get(scope.nodeId);
+  if (!node) {
+    return t("projectMap.tasks.targetDeleted", { nodeId: scope.nodeId });
+  }
+  return `${node.title} · ${scope.nodeId}`;
+}
+
+function asTrimmedString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function getPathBasename(path: string): string {
+  return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+}
+
+function looksLikeWorkspaceFilePath(value: string): boolean {
+  const candidate = value.trim();
+  if (!candidate || /^[a-z][a-z0-9+.-]*:\/\//i.test(candidate)) {
+    return false;
+  }
+  if (candidate.includes("/") || candidate.includes("\\")) {
+    return true;
+  }
+  return /\.(?:c|cc|conf|cpp|cs|css|go|gradle|h|hpp|html|java|js|json|jsx|kt|md|mdx|properties|py|rb|rs|sql|toml|ts|tsx|txt|xml|yaml|yml)$/i.test(candidate);
+}
+
+function inferArtifactTracePath(input: {
+  label: string;
+  path: string;
+  ref: string;
+}): string {
+  if (input.path) {
+    return input.path;
+  }
+  if (looksLikeWorkspaceFilePath(input.label)) {
+    return input.label;
+  }
+  if (looksLikeWorkspaceFilePath(input.ref)) {
+    return input.ref;
+  }
+  return "";
+}
+
+function normalizeTraceSourceType(value: unknown): ProjectMapRelatedArtifact["type"] {
+  const sourceType = asTrimmedString(value);
+  return ["file", "symbol", "spec", "commit", "test", "conversation"].includes(sourceType)
+    ? (sourceType as ProjectMapRelatedArtifact["type"])
+    : "file";
+}
+
+function normalizeArtifactForDisplay(value: unknown): ProjectMapRelatedArtifact | null {
+  const legacyLabel = asTrimmedString(value);
+  if (legacyLabel) {
+    const inferredPath = inferArtifactTracePath({
+      label: legacyLabel,
+      path: "",
+      ref: "",
+    });
+    return {
+      type: "symbol",
+      label: legacyLabel,
+      ...(inferredPath ? { path: inferredPath } : {}),
+    };
+  }
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const type = normalizeTraceSourceType(value.type);
+  const label = asTrimmedString(value.label);
+  const path = asTrimmedString(value.path);
+  const ref = asTrimmedString(value.ref);
+  const inferredPath = inferArtifactTracePath({ label, path, ref });
+  const rawLine = typeof value.line === "number" ? value.line : Number(asTrimmedString(value.line));
+  const line = Number.isFinite(rawLine) && rawLine > 0 ? Math.floor(rawLine) : undefined;
+  const normalizedLabel = label || (inferredPath ? getPathBasename(inferredPath) : "") || ref || type;
+  if (!normalizedLabel) {
+    return null;
+  }
+
+  return {
+    type,
+    label: normalizedLabel,
+    ...(inferredPath ? { path: inferredPath } : {}),
+    ...(line ? { line } : {}),
+    ...(ref ? { ref } : {}),
+  };
+}
+
 function getTraceLabel(
   item: Pick<ProjectMapRelatedArtifact, "path" | "line" | "ref"> & {
     hash?: string;
@@ -709,6 +837,12 @@ function getTraceLabel(
     return item.line ? `${item.path}:${item.line}` : item.path;
   }
   return item.ref ?? item.hash ?? null;
+}
+
+function getTraceTarget(
+  item: Pick<ProjectMapRelatedArtifact, "path" | "line">,
+): ProjectMapTraceTarget | null {
+  return item.path ? { path: item.path, line: item.line } : null;
 }
 
 function getProfileSummary(profile: Partial<ProjectMapProfile> | null | undefined): {
@@ -741,7 +875,13 @@ function getRecentRuns(runs: ProjectMapRunMetadata[]): ProjectMapRunMetadata[] {
     .sort((left, right) => new Date(right.startedAt).getTime() - new Date(left.startedAt).getTime());
 }
 
-function SourceChip({ source }: { source: ProjectMapSource }) {
+function SourceChip({
+  source,
+  onOpenTrace,
+}: {
+  source: ProjectMapSource;
+  onOpenTrace?: (target: ProjectMapTraceTarget) => void;
+}) {
   const { t } = useTranslation();
   const traceLabel = getTraceLabel(source);
 
@@ -750,12 +890,20 @@ function SourceChip({ source }: { source: ProjectMapSource }) {
       label={source.label}
       typeLabel={translateSourceType(t, source.type)}
       traceLabel={traceLabel}
+      target={getTraceTarget(source)}
       excerpt={source.excerpt}
+      onOpenTrace={onOpenTrace}
     />
   );
 }
 
-function ArtifactChip({ artifact }: { artifact: ProjectMapRelatedArtifact }) {
+function ArtifactChip({
+  artifact,
+  onOpenTrace,
+}: {
+  artifact: ProjectMapRelatedArtifact;
+  onOpenTrace?: (target: ProjectMapTraceTarget) => void;
+}) {
   const { t } = useTranslation();
 
   return (
@@ -763,6 +911,8 @@ function ArtifactChip({ artifact }: { artifact: ProjectMapRelatedArtifact }) {
       label={artifact.label}
       typeLabel={translateSourceType(t, artifact.type)}
       traceLabel={getTraceLabel(artifact)}
+      target={getTraceTarget(artifact)}
+      onOpenTrace={onOpenTrace}
     />
   );
 }
@@ -771,12 +921,16 @@ function TraceChip({
   label,
   typeLabel,
   traceLabel,
+  target,
   excerpt,
+  onOpenTrace,
 }: {
   label: string;
   typeLabel: string;
   traceLabel: string | null;
+  target: ProjectMapTraceTarget | null;
   excerpt?: string;
+  onOpenTrace?: (target: ProjectMapTraceTarget) => void;
 }) {
   const { t } = useTranslation();
   const body = (
@@ -788,9 +942,10 @@ function TraceChip({
     </>
   );
 
-  if (!traceLabel) {
+  if (!traceLabel || !target || !onOpenTrace) {
     return (
       <span className="project-map-trace-chip" title={label}>
+        {traceLabel && target ? <LinkIcon aria-hidden /> : null}
         {body}
       </span>
     );
@@ -802,6 +957,7 @@ function TraceChip({
       type="button"
       title={traceLabel}
       aria-label={`${t("projectMap.trace.openTrace", { label, trace: traceLabel })}: ${label} ${traceLabel}`}
+      onClick={() => onOpenTrace(target)}
     >
       <LinkIcon aria-hidden />
       {body}
@@ -816,6 +972,7 @@ export function ProjectMapPanel({
   selectedModelId = null,
   models,
   dataset: controlledDataset,
+  onOpenEvidenceFile,
 }: ProjectMapPanelProps) {
   const { t } = useTranslation();
   const selectedGenerationModel = useMemo(
@@ -842,6 +999,7 @@ export function ProjectMapPanel({
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(
     () => rootNode?.id ?? null,
   );
+  const [deleteConfirmNodeId, setDeleteConfirmNodeId] = useState<string | null>(null);
   const [viewHistory, setViewHistory] = useState<GraphViewSnapshot[]>([]);
   const [hoverNodeId, setHoverNodeId] = useState<string | null>(null);
   const [isLensStripCollapsed, setIsLensStripCollapsed] = useState(true);
@@ -868,6 +1026,7 @@ export function ProjectMapPanel({
     (focusNodeId ? nodeIndex.get(focusNodeId) : rootNode) ??
     visibleNodes[0] ??
     null;
+  const deleteConfirmNode = deleteConfirmNodeId ? nodeIndex.get(deleteConfirmNodeId) ?? null : null;
   const graphLayout = useMemo(
     () => buildGraphLayout(visibleNodes, dataset, focusNodeId),
     [dataset, focusNodeId, visibleNodes],
@@ -1025,6 +1184,43 @@ export function ProjectMapPanel({
     setIsDetailCollapsed(false);
   };
 
+  const handleRequestDeleteSelectedNode = () => {
+    if (!selectedNode) {
+      return;
+    }
+    setDeleteConfirmNodeId(selectedNode.id);
+  };
+
+  const handleConfirmDeleteNode = async () => {
+    if (!deleteConfirmNode) {
+      setDeleteConfirmNodeId(null);
+      return;
+    }
+
+    const parentId = deleteConfirmNode.parentId ?? null;
+    const deleted = await datasetController.deleteNode(deleteConfirmNode.id);
+    if (!deleted) {
+      return;
+    }
+    setHoverNodeId(null);
+    setSelectedNodeId(parentId);
+    setFocusNodeId(parentId && parentId !== rootNode?.id ? parentId : null);
+    if (!parentId) {
+      setViewHistory([]);
+    }
+    setDeleteConfirmNodeId(null);
+  };
+
+  const handleOpenTraceTarget = useCallback(
+    (target: ProjectMapTraceTarget) => {
+      onOpenEvidenceFile?.(
+        target.path,
+        target.line ? { line: target.line, column: 1 } : undefined,
+      );
+    },
+    [onOpenEvidenceFile],
+  );
+
   const updateZoom = (nextZoom: number) => {
     setViewport((current) => ({
       ...current,
@@ -1141,15 +1337,15 @@ export function ProjectMapPanel({
             <h2>{t("projectMap.title", { projectName })}</h2>
           </div>
           <div className="project-map-meta-row">
-            <span>
+            <span className="project-map-meta-pill is-primary">
               {t("projectMap.lastGenerated", {
                 value: formatDateTime(dataset.manifest.updatedAt),
               })}
             </span>
-            <span>
+            <span className="project-map-meta-pill">
               {t("projectMap.storageKey", { value: dataset.manifest.storageKey })}
             </span>
-            <span>
+            <span className="project-map-meta-pill is-profile">
               {t("projectMap.profileSummary", {
                 language: profileSummary.language,
                 shapes: profileSummary.shapes,
@@ -1482,6 +1678,8 @@ export function ProjectMapPanel({
               onRejectCandidate={(candidateId) => {
                 void datasetController.rejectCandidate(candidateId);
               }}
+              onDeleteNode={selectedNode ? handleRequestDeleteSelectedNode : null}
+              onOpenTrace={onOpenEvidenceFile ? handleOpenTraceTarget : undefined}
             />
           </div>
         )}
@@ -1498,11 +1696,19 @@ export function ProjectMapPanel({
         onCancel={datasetController.closeGenerationRequest}
         onConfirm={datasetController.confirmGenerationRequest}
       />
+      <DeleteNodeConfirmDialog
+        node={deleteConfirmNode}
+        onCancel={() => setDeleteConfirmNodeId(null)}
+        onConfirm={() => {
+          void handleConfirmDeleteNode();
+        }}
+      />
       {isTaskDrawerOpen ? (
         <GenerationTaskDrawer
           activeRun={activeGenerationRun}
           queuedRuns={queuedGenerationRuns}
           recentRuns={recentRuns}
+          nodeIndex={nodeIndex}
           onCancelRun={datasetController.cancelGenerationRun}
           onClearFinished={datasetController.clearFinishedRuns}
           onClose={() => setIsTaskDrawerOpen(false)}
@@ -1547,6 +1753,7 @@ function GenerationTaskDrawer({
   activeRun,
   queuedRuns,
   recentRuns,
+  nodeIndex,
   onCancelRun,
   onClearFinished,
   onClose,
@@ -1554,6 +1761,7 @@ function GenerationTaskDrawer({
   activeRun: ProjectMapRunMetadata | null;
   queuedRuns: ProjectMapRunMetadata[];
   recentRuns: ProjectMapRunMetadata[];
+  nodeIndex: Map<string, ProjectMapNode>;
   onCancelRun: (runId: string) => Promise<void>;
   onClearFinished: () => Promise<void>;
   onClose: () => void;
@@ -1584,6 +1792,7 @@ function GenerationTaskDrawer({
             run={activeRun}
             badge={t("projectMap.tasks.activeBadge")}
             mode="active"
+            nodeIndex={nodeIndex}
             onCancel={() => void onCancelRun(activeRun.id)}
           />
         ) : (
@@ -1600,6 +1809,7 @@ function GenerationTaskDrawer({
                 run={run}
                 badge={t("projectMap.tasks.queueBadge", { index: index + 1 })}
                 mode="queue"
+                nodeIndex={nodeIndex}
                 onCancel={() => void onCancelRun(run.id)}
               />
             ))}
@@ -1630,6 +1840,7 @@ function GenerationTaskDrawer({
                 run={run}
                 badge={t(`projectMap.tasks.status.${run.status}`)}
                 mode="recent"
+                nodeIndex={nodeIndex}
               />
             ))}
           </div>
@@ -1648,11 +1859,13 @@ function ProjectMapRunCard({
   run,
   badge,
   mode = "recent",
+  nodeIndex,
   onCancel,
 }: {
   run: ProjectMapRunMetadata;
   badge: string;
   mode?: "active" | "queue" | "recent";
+  nodeIndex: Map<string, ProjectMapNode>;
   onCancel?: () => void;
 }) {
   const { t } = useTranslation();
@@ -1669,12 +1882,15 @@ function ProjectMapRunCard({
   const phase = run.phase ?? (run.status === "running" ? "askingAi" : "queued");
   const progress = typeof run.progress === "number" ? run.progress : run.status === "running" ? 45 : 8;
   const latestLog = run.logs?.[run.logs.length - 1] ?? null;
+  const actionLabel = getRunActionLabel(t, run);
+  const targetLabel = getRunTargetLabel(t, run, nodeIndex);
 
   return (
     <article className={cn("project-map-task-card", `status-${run.status}`, `mode-${mode}`)}>
       <div className="project-map-task-card-head">
         <span>{badge}</span>
-        <strong>{run.id}</strong>
+        <strong className="project-map-task-action">{actionLabel}</strong>
+        <code className="project-map-task-run-id">{run.id}</code>
         {showCancelButton ? (
           <button
             className="project-map-task-cancel"
@@ -1686,6 +1902,10 @@ function ProjectMapRunCard({
             <CircleX aria-hidden />
           </button>
         ) : null}
+      </div>
+      <div className="project-map-task-target">
+        <span>{t("projectMap.tasks.target")}</span>
+        <strong title={targetLabel}>{targetLabel}</strong>
       </div>
       {showProgress ? (
         <div className="project-map-task-progress" aria-label={t("projectMap.tasks.progressAria")}>
@@ -1704,12 +1924,8 @@ function ProjectMapRunCard({
       ) : null}
       <dl>
         <div>
-          <dt>{t("projectMap.confirmation.engine")}</dt>
-          <dd>{run.engine}</dd>
-        </div>
-        <div>
-          <dt>{t("projectMap.confirmation.model")}</dt>
-          <dd>{run.model}</dd>
+          <dt>{t("projectMap.tasks.engineModel")}</dt>
+          <dd>{run.engine} / {run.model}</dd>
         </div>
         <div>
           <dt>{t("projectMap.confirmation.scope")}</dt>
@@ -1749,6 +1965,8 @@ function DetailPanel({
   onCalibrateNode,
   onConfirmCandidate,
   onRejectCandidate,
+  onDeleteNode,
+  onOpenTrace,
 }: {
   node: ProjectMapNode | null;
   dataset: ProjectMapDataset;
@@ -1766,6 +1984,8 @@ function DetailPanel({
   onCalibrateNode: () => void;
   onConfirmCandidate: (candidateId: string) => void;
   onRejectCandidate: (candidateId: string) => void;
+  onDeleteNode: (() => void) | null;
+  onOpenTrace?: (target: ProjectMapTraceTarget) => void;
 }) {
   const { t } = useTranslation();
 
@@ -1879,12 +2099,16 @@ function DetailPanel({
           <section>
             <h4>{t("projectMap.detail.relatedArtifacts")}</h4>
             <div className="project-map-artifact-list">
-              {node.detail.relatedArtifacts.map((artifact) => (
-                <ArtifactChip
-                  key={`${artifact.type}-${artifact.label}-${artifact.path ?? artifact.ref ?? ""}`}
-                  artifact={artifact}
-                />
-              ))}
+              {node.detail.relatedArtifacts
+                .map(normalizeArtifactForDisplay)
+                .filter((artifact): artifact is ProjectMapRelatedArtifact => Boolean(artifact))
+                .map((artifact) => (
+                  <ArtifactChip
+                    key={`${artifact.type}-${artifact.label}-${artifact.path ?? artifact.ref ?? ""}`}
+                    artifact={artifact}
+                    onOpenTrace={onOpenTrace}
+                  />
+                ))}
             </div>
           </section>
           <section>
@@ -1894,6 +2118,7 @@ function DetailPanel({
                 <SourceChip
                   key={`${source.type}-${source.label}-${source.path ?? source.hash ?? ""}`}
                   source={source}
+                  onOpenTrace={onOpenTrace}
                 />
               ))}
             </div>
@@ -1930,6 +2155,12 @@ function DetailPanel({
             ) : null}
             <button type="button" onClick={onCompleteNode}>{t("projectMap.completeNode")}</button>
             <button type="button" onClick={onCalibrateNode}>{t("projectMap.calibrateNode")}</button>
+            {onDeleteNode ? (
+              <button className="is-danger" type="button" onClick={onDeleteNode}>
+                <Trash2 aria-hidden />
+                {t("projectMap.deleteNode")}
+              </button>
+            ) : null}
           </div>
         </>
       ) : (
@@ -2046,6 +2277,51 @@ function ProjectMapSettingsPanel({
         </select>
       </label>
     </section>
+  );
+}
+
+function DeleteNodeConfirmDialog({
+  node,
+  onCancel,
+  onConfirm,
+}: {
+  node: ProjectMapNode | null;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const { t } = useTranslation();
+  const isOpen = Boolean(node);
+
+  return (
+    <AlertDialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) {
+          onCancel();
+        }
+      }}
+    >
+      <AlertDialogPopup className="project-map-delete-dialog" bottomStickOnMobile={false}>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{t("projectMap.confirmDeleteNodeTitle")}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {t("projectMap.confirmDeleteNode", { title: node?.title ?? "" })}
+          </AlertDialogDescription>
+          <p className="project-map-delete-dialog-warning">
+            {t("projectMap.confirmDeleteNodeWarning")}
+          </p>
+        </AlertDialogHeader>
+        <AlertDialogFooter className="project-map-delete-dialog-footer">
+          <button className="project-map-delete-dialog-secondary" type="button" onClick={onCancel}>
+            {t("projectMap.confirmDeleteNodeCancel")}
+          </button>
+          <button className="project-map-delete-dialog-danger" type="button" onClick={onConfirm}>
+            <Trash2 aria-hidden />
+            {t("projectMap.confirmDeleteNodeConfirm")}
+          </button>
+        </AlertDialogFooter>
+      </AlertDialogPopup>
+    </AlertDialog>
   );
 }
 

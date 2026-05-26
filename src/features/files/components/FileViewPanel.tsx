@@ -1597,7 +1597,7 @@ export function FileViewPanel({
         ".content-layer--editor",
       ) as HTMLElement | null;
       const chatLayer = splitRoot.querySelector(
-        ".content-layer--chat",
+        ".content-layer--editor-companion",
       ) as HTMLElement | null;
       if (!editorLayer || !chatLayer) {
         return;

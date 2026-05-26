@@ -26,6 +26,7 @@ import {
   confirmProjectMapCandidate,
   rejectProjectMapCandidate,
 } from "../utils/candidates";
+import { pruneProjectMapNode } from "../utils/incrementalGeneration";
 import {
   createConversationKnowledgeCandidate,
   discoverUnprocessedProjectMemoryMessages,
@@ -62,6 +63,7 @@ export type ProjectMapDatasetController = {
   clearFinishedRuns: () => Promise<void>;
   confirmCandidate: (candidateId: string) => Promise<boolean>;
   rejectCandidate: (candidateId: string) => Promise<boolean>;
+  deleteNode: (nodeId: string) => Promise<boolean>;
   updateDataset: (updater: (dataset: ProjectMapDataset) => ProjectMapDataset) => Promise<void>;
 };
 
@@ -859,6 +861,32 @@ export function useProjectMapDataset(
     [persistDataset],
   );
 
+  const deleteNode = useCallback(
+    async (nodeId: string): Promise<boolean> => {
+      const prunedAt = new Date().toISOString();
+      const result = pruneProjectMapNode({
+        dataset: datasetRef.current,
+        nodeId,
+        prunedAt,
+      });
+      if (!result.ok) {
+        setError(result.error);
+        return false;
+      }
+
+      setError(null);
+      try {
+        await persistDataset(result.dataset);
+        datasetRef.current = result.dataset;
+        return true;
+      } catch (writeError) {
+        setError(errorMessage(writeError));
+        return false;
+      }
+    },
+    [persistDataset],
+  );
+
   const updateDataset = useCallback(
     async (updater: (dataset: ProjectMapDataset) => ProjectMapDataset) => {
       await persistDataset(updater(dataset));
@@ -884,6 +912,7 @@ export function useProjectMapDataset(
     clearFinishedRuns,
     confirmCandidate,
     rejectCandidate,
+    deleteNode,
     updateDataset,
   };
 }

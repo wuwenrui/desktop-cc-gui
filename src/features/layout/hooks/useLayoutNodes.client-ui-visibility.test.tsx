@@ -213,7 +213,19 @@ vi.mock("../../debug/components/DebugPanel", () => ({
 }));
 
 vi.mock("../components/PanelTabs", () => ({
-  PanelTabs: () => <div data-testid="panel-tabs" />,
+  PanelTabs: ({
+    active,
+    onSelect,
+  }: {
+    active: string;
+    onSelect: (id: string) => void;
+  }) => (
+    <div data-testid="panel-tabs" data-active={active}>
+      <button type="button" onClick={() => onSelect("projectMap")}>
+        projectMap
+      </button>
+    </div>
+  ),
 }));
 
 vi.mock("../../app/components/TabBar", () => ({
@@ -425,6 +437,9 @@ function createLayoutOptions(
     onLaunchScriptDraftChange: noop,
     onSaveLaunchScript: noop,
     centerMode: "chat",
+    setCenterMode: noop,
+    editorSplitCompanion: "chat",
+    setEditorSplitCompanion: noop,
     editorSplitLayout: "vertical",
     onToggleEditorSplitLayout: noop,
     isEditorFileMaximized: false,
@@ -446,6 +461,7 @@ function createLayoutOptions(
     gitPanelMode: "diff",
     onGitPanelModeChange: noop,
     onOpenGitHistoryPanel: noop,
+    onOpenProjectMap: noop,
     gitDiffViewStyle: "split",
     gitDiffListView: "flat",
     onGitDiffListViewChange: noop,
@@ -774,6 +790,118 @@ describe("useLayoutNodes client UI visibility", () => {
     fireEvent.click(screen.getByRole("button", { name: "open file reference" }));
 
     expect(onOpenFile).toHaveBeenCalledWith("src/App.tsx");
+  });
+
+  it("toggles the Project Map toolbar icon off from full Project Map mode", () => {
+    clientUiVisibilityMock.visiblePanels.add("rightActivityToolbar");
+    const setCenterMode = vi.fn();
+    const { result } = renderHook(() =>
+      useLayoutNodes(
+        createLayoutOptions({
+          centerMode: "projectMap",
+          setCenterMode,
+        }),
+      ),
+    );
+
+    render(<>{result.current.rightPanelToolbarNode}</>);
+    expect(screen.getByTestId("panel-tabs").dataset.active).toBe("projectMap");
+
+    fireEvent.click(screen.getByRole("button", { name: "projectMap" }));
+
+    expect(setCenterMode).toHaveBeenCalledWith("chat");
+  });
+
+  it("opens the Project Map toolbar icon from chat mode", () => {
+    clientUiVisibilityMock.visiblePanels.add("rightActivityToolbar");
+    const onOpenProjectMap = vi.fn();
+    const { result } = renderHook(() =>
+      useLayoutNodes(
+        createLayoutOptions({
+          centerMode: "chat",
+          onOpenProjectMap,
+        }),
+      ),
+    );
+
+    render(<>{result.current.rightPanelToolbarNode}</>);
+    expect(screen.getByTestId("panel-tabs").dataset.active).toBe("files");
+
+    fireEvent.click(screen.getByRole("button", { name: "projectMap" }));
+
+    expect(onOpenProjectMap).toHaveBeenCalledTimes(1);
+  });
+
+  it("toggles the Project Map toolbar icon off from editor companion mode", () => {
+    clientUiVisibilityMock.visiblePanels.add("rightActivityToolbar");
+    const setEditorSplitCompanion = vi.fn();
+    const { result } = renderHook(() =>
+      useLayoutNodes(
+        createLayoutOptions({
+          centerMode: "editor",
+          editorSplitCompanion: "projectMap",
+          setEditorSplitCompanion,
+        }),
+      ),
+    );
+
+    render(<>{result.current.rightPanelToolbarNode}</>);
+    expect(screen.getByTestId("panel-tabs").dataset.active).toBe("projectMap");
+
+    fireEvent.click(screen.getByRole("button", { name: "projectMap" }));
+
+    expect(setEditorSplitCompanion).toHaveBeenCalledWith("chat");
+  });
+
+  it("opens the Project Map toolbar icon as an editor companion without closing the editor", () => {
+    clientUiVisibilityMock.visiblePanels.add("rightActivityToolbar");
+    const onOpenProjectMap = vi.fn();
+    const setCenterMode = vi.fn();
+    const setEditorSplitCompanion = vi.fn();
+    const { result } = renderHook(() =>
+      useLayoutNodes(
+        createLayoutOptions({
+          centerMode: "editor",
+          editorSplitCompanion: "chat",
+          onOpenProjectMap,
+          setCenterMode,
+          setEditorSplitCompanion,
+        }),
+      ),
+    );
+
+    render(<>{result.current.rightPanelToolbarNode}</>);
+    expect(screen.getByTestId("panel-tabs").dataset.active).toBe("files");
+
+    fireEvent.click(screen.getByRole("button", { name: "projectMap" }));
+
+    expect(setEditorSplitCompanion).toHaveBeenCalledWith("projectMap");
+    expect(onOpenProjectMap).not.toHaveBeenCalled();
+    expect(setCenterMode).not.toHaveBeenCalled();
+  });
+
+  it("restores a maximized editor when the Project Map toolbar icon opens as companion", () => {
+    clientUiVisibilityMock.visiblePanels.add("rightActivityToolbar");
+    const setEditorSplitCompanion = vi.fn();
+    const onToggleEditorFileMaximized = vi.fn();
+    const { result } = renderHook(() =>
+      useLayoutNodes(
+        createLayoutOptions({
+          centerMode: "editor",
+          editorSplitCompanion: "chat",
+          setEditorSplitCompanion,
+          isEditorFileMaximized: true,
+          onToggleEditorFileMaximized,
+        }),
+      ),
+    );
+
+    render(<>{result.current.rightPanelToolbarNode}</>);
+
+    fireEvent.click(screen.getByRole("button", { name: "projectMap" }));
+
+    expect(setEditorSplitCompanion).toHaveBeenCalledWith("projectMap");
+    expect(onToggleEditorFileMaximized).toHaveBeenCalledTimes(1);
   });
 
   it("keeps the bottom status dock mounted when baseline tabs are visible and collapsed", () => {

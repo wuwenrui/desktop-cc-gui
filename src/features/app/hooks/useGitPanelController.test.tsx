@@ -249,6 +249,7 @@ describe("useGitPanelController editor tabs", () => {
     expect(result.current.openFileTabs).toEqual(["src/App.tsx", "src/main.tsx"]);
     expect(result.current.activeEditorFilePath).toBe("src/main.tsx");
     expect(result.current.centerMode).toBe("editor");
+    expect(result.current.editorSplitCompanion).toBe("chat");
   });
 
   it("requests the desktop editor layout when opening a file", () => {
@@ -333,6 +334,46 @@ describe("useGitPanelController editor tabs", () => {
     expect(result.current.centerMode).toBe("chat");
   });
 
+  it("returns to Project Map after closing the last Project Map evidence file", () => {
+    const { result } = renderHook(() => useGitPanelController(makeProps()));
+
+    act(() => {
+      result.current.handleOpenFile("docs/readme.md", { line: 5, column: 1 }, {
+        editorSplitCompanion: "projectMap",
+      });
+    });
+
+    act(() => {
+      result.current.handleCloseFileTab("docs/readme.md");
+    });
+
+    expect(result.current.openFileTabs).toEqual([]);
+    expect(result.current.activeEditorFilePath).toBeNull();
+    expect(result.current.centerMode).toBe("projectMap");
+    expect(result.current.editorSplitCompanion).toBe("chat");
+  });
+
+  it("returns to Project Map after closing all Project Map evidence files", () => {
+    const { result } = renderHook(() => useGitPanelController(makeProps()));
+
+    act(() => {
+      result.current.handleOpenFile("docs/readme.md", undefined, {
+        editorSplitCompanion: "projectMap",
+      });
+      result.current.handleOpenFile("docs/spec.md", undefined, {
+        editorSplitCompanion: "projectMap",
+      });
+    });
+
+    act(() => {
+      result.current.handleCloseAllFileTabs();
+    });
+
+    expect(result.current.openFileTabs).toEqual([]);
+    expect(result.current.activeEditorFilePath).toBeNull();
+    expect(result.current.centerMode).toBe("projectMap");
+  });
+
   it("stores temporary change highlights when opening a file from activity", () => {
     const { result } = renderHook(() => useGitPanelController(makeProps()));
 
@@ -362,6 +403,25 @@ describe("useGitPanelController editor tabs", () => {
         modified: [14, 15],
       },
     });
+  });
+
+  it("tracks Project Map as the editor companion for evidence file navigation", () => {
+    const { result } = renderHook(() => useGitPanelController(makeProps()));
+
+    act(() => {
+      result.current.handleOpenFile("docs/readme.md", { line: 3, column: 1 }, {
+        editorSplitCompanion: "projectMap",
+      });
+    });
+
+    expect(result.current.centerMode).toBe("editor");
+    expect(result.current.editorSplitCompanion).toBe("projectMap");
+
+    act(() => {
+      result.current.handleOpenFile("src/App.tsx");
+    });
+
+    expect(result.current.editorSplitCompanion).toBe("chat");
   });
 
   it("normalizes absolute workspace file paths when opening from activity", () => {

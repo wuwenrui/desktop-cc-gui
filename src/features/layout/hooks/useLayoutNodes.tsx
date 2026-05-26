@@ -440,6 +440,9 @@ type LayoutNodesOptions = {
   launchScriptsState?: WorkspaceLaunchScriptsState;
   mainHeaderActionsNode?: ReactNode;
   centerMode: "chat" | "diff" | "editor" | "memory" | "projectMap";
+  setCenterMode: (mode: "chat" | "diff" | "editor" | "memory" | "projectMap") => void;
+  editorSplitCompanion: "chat" | "projectMap";
+  setEditorSplitCompanion: (companion: "chat" | "projectMap") => void;
   editorSplitLayout: "vertical" | "horizontal";
   onToggleEditorSplitLayout: () => void;
   isEditorFileMaximized: boolean;
@@ -1065,6 +1068,15 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     ) => {
       onOpenFile(path, location, highlightOptions);
       if (!isEditorFileMaximized) {
+        onToggleEditorFileMaximized();
+      }
+    },
+    [isEditorFileMaximized, onOpenFile, onToggleEditorFileMaximized],
+  );
+  const handleOpenProjectMapEvidenceFile = useCallback(
+    (path: string, location?: EditorNavigationLocation) => {
+      onOpenFile(path, location, { editorSplitCompanion: "projectMap" });
+      if (isEditorFileMaximized) {
         onToggleEditorFileMaximized();
       }
     },
@@ -2032,23 +2044,54 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     options.centerMode === "diff" ? options.selectedDiffPath : null;
   const onFilePanelModeChange = options.onFilePanelModeChange;
   const onOpenProjectMap = options.onOpenProjectMap;
+  const centerMode = options.centerMode;
+  const setCenterMode = options.setCenterMode;
+  const editorSplitCompanion = options.editorSplitCompanion;
+  const setEditorSplitCompanion = options.setEditorSplitCompanion;
+  const isProjectMapSurfaceActive =
+    centerMode === "projectMap" ||
+    (centerMode === "editor" && editorSplitCompanion === "projectMap");
 
   const handleRightPanelTabSelect = useCallback(
     (tabId: RightPanelTabSelection) => {
       if (tabId === "projectMap") {
+        if (isProjectMapSurfaceActive) {
+          if (centerMode === "editor") {
+            setEditorSplitCompanion("chat");
+            return;
+          }
+          setCenterMode("chat");
+          return;
+        }
+        if (centerMode === "editor") {
+          setEditorSplitCompanion("projectMap");
+          if (isEditorFileMaximized) {
+            onToggleEditorFileMaximized();
+          }
+          return;
+        }
         onOpenProjectMap();
         return;
       }
       onFilePanelModeChange(tabId);
     },
-    [onFilePanelModeChange, onOpenProjectMap],
+    [
+      isProjectMapSurfaceActive,
+      centerMode,
+      onFilePanelModeChange,
+      onOpenProjectMap,
+      isEditorFileMaximized,
+      onToggleEditorFileMaximized,
+      setCenterMode,
+      setEditorSplitCompanion,
+    ],
   );
 
   const rightPanelToolbarNode =
     showRightActivityToolbar && hasVisibleRightToolbarControl ? (
     <div className="right-panel-toolbar">
       <PanelTabs
-        active={options.centerMode === "projectMap" ? "projectMap" : options.filePanelMode}
+        active={isProjectMapSurfaceActive ? "projectMap" : options.filePanelMode}
         onSelect={handleRightPanelTabSelect}
         liveStates={{
           activity: workspaceActivity.isProcessing,
@@ -2345,6 +2388,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       selectedEngine={options.selectedEngine ?? null}
       selectedModelId={options.selectedModelId}
       models={options.models}
+      onOpenEvidenceFile={handleOpenProjectMapEvidenceFile}
     />
   );
 

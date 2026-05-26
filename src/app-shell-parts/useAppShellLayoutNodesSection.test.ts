@@ -1,9 +1,14 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   getThreadSelectDiffCleanupAction,
   shouldCollapseRightPanelOnThreadSelect,
   shouldPreserveEditorOnThreadSelect,
 } from "./threadEditorPreservation";
+
+const currentDir = dirname(fileURLToPath(import.meta.url));
 
 describe("shouldPreserveEditorOnThreadSelect", () => {
   it("preserves desktop editor when selecting another thread in the same workspace", () => {
@@ -81,5 +86,23 @@ describe("shouldCollapseRightPanelOnThreadSelect", () => {
         requestedCollapse: true,
       }),
     ).toBe(true);
+  });
+});
+
+describe("useAppShellLayoutNodesSection adapter contract", () => {
+  it("forwards Project Map toggle state into useLayoutNodes despite ts-nocheck", () => {
+    const source = readFileSync(
+      join(currentDir, "useAppShellLayoutNodesSection.tsx"),
+      "utf8",
+    );
+    const layoutNodesOptions = source.slice(
+      source.indexOf("} = useLayoutNodes({"),
+      source.indexOf("  const runSelectedPath", source.indexOf("} = useLayoutNodes({")),
+    );
+
+    expect(layoutNodesOptions).toContain("centerMode,");
+    expect(layoutNodesOptions).toContain("setCenterMode,");
+    expect(layoutNodesOptions).toContain("editorSplitCompanion,");
+    expect(layoutNodesOptions).toContain("setEditorSplitCompanion,");
   });
 });

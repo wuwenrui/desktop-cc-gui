@@ -58,7 +58,18 @@ describe("project map persistence mapper", () => {
       storageDir: "/repo/.ccgui/project-map/mossx-abcd",
       exists: true,
       manifest: mockProjectMapData.manifest,
-      profile: mockProjectMapData.profile,
+      profile: {
+        ...mockProjectMapData.profile,
+        frameworks: [
+          {},
+          "Spring Cloud Gateway",
+          {
+            name: "Nacos",
+            confidence: "high",
+            evidence: [{ type: "file", label: "pom.xml", path: "pom.xml" }],
+          },
+        ],
+      },
       lenses: { items: mockProjectMapData.lenses },
       lensNodes: {
         overview: { items: mockProjectMapData.nodes.filter((node) => node.lensId === "overview") },
@@ -91,6 +102,14 @@ describe("project map persistence mapper", () => {
     expect(dataset?.autoIngestionSettings.newSessionThreshold).toBe(1);
     expect(dataset?.autoIngestionSettings.checkIntervalMinutes).toBe(5);
     expect(dataset?.memoryCursor.processedMessages).toHaveLength(1);
+    expect(dataset?.profile.frameworks).toEqual([
+      { name: "Spring Cloud Gateway", confidence: "unknown", evidence: [] },
+      {
+        name: "Nacos",
+        confidence: "high",
+        evidence: [{ type: "file", label: "pom.xml", path: "pom.xml" }],
+      },
+    ]);
     expect(dataset?.nodes.length).toBeGreaterThan(0);
   });
 

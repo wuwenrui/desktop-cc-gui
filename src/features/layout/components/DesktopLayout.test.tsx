@@ -26,6 +26,7 @@ function renderDesktopLayout(overrides: Partial<ComponentProps<typeof DesktopLay
       topbarLeftNode={<div>topbar-left</div>}
       centerMode="chat"
       editorSplitLayout="vertical"
+      editorSplitCompanion="chat"
       isEditorFileMaximized={false}
       messagesNode={<div>messages</div>}
       gitDiffViewerNode={<div>git-diff-viewer</div>}
@@ -118,6 +119,31 @@ describe("DesktopLayout", () => {
     expect(chatLayer?.contains(composer)).toBe(true);
     expect(editorLayer?.contains(getByText("file-viewer"))).toBe(true);
     expect(composer.parentElement).toBe(chatLayer);
+  });
+
+  it("uses Project Map as the editor split companion for evidence file navigation", () => {
+    cleanup();
+    const { container, getByText } = renderDesktopLayout({
+      centerMode: "editor",
+      editorSplitLayout: "horizontal",
+      editorSplitCompanion: "projectMap",
+      projectMapPanelNode: <div>project-map</div>,
+    });
+
+    const content = container.querySelector(".content.is-editor-split-horizontal");
+    const projectMapLayer = container.querySelector(".content-layer--project-map");
+    const chatLayer = container.querySelector(".content-layer--chat");
+    const editorLayer = container.querySelector(".content-layer--editor");
+
+    expect(content).toBeTruthy();
+    expect(content?.className).not.toContain("is-editor-file-maximized");
+    expect(projectMapLayer?.className).toContain("is-active");
+    expect(projectMapLayer?.className).toContain("content-layer--editor-companion");
+    expect(projectMapLayer?.getAttribute("aria-hidden")).toBe("false");
+    expect(chatLayer?.className).toContain("is-hidden");
+    expect(editorLayer?.contains(getByText("file-viewer"))).toBe(true);
+    expect(projectMapLayer?.contains(getByText("project-map"))).toBe(true);
+    expect(container.querySelector(".composer")).toBeNull();
   });
 
   it("keeps composer outside the chat layer in normal chat mode", () => {

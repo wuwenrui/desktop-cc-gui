@@ -2220,9 +2220,13 @@ export function useAppShellSections(ctx: any) {
   });
 
   const handleOpenWorkspaceFile = useCallback(
-    (path: string, location?: { line: number; column: number }) => {
+    (
+      path: string,
+      location?: { line: number; column: number },
+      options?: { editorSplitCompanion?: "chat" | "projectMap" },
+    ) => {
       markLiveEditPreviewManualNavigation();
-      handleOpenFile(path, location);
+      handleOpenFile(path, location, options);
     },
     [handleOpenFile, markLiveEditPreviewManualNavigation],
   );

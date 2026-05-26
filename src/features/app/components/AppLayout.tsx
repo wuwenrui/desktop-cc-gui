@@ -18,6 +18,7 @@ type AppLayoutProps = {
   tabletTab: "codex" | "spec" | "git" | "log";
   centerMode: "chat" | "diff" | "editor" | "memory" | "projectMap";
   editorSplitLayout: "vertical" | "horizontal";
+  editorSplitCompanion: "chat" | "projectMap";
   isEditorFileMaximized: boolean;
   hasActivePlan: boolean;
   activeWorkspace: boolean;
@@ -70,6 +71,7 @@ export const AppLayout = memo(function AppLayout({
   tabletTab,
   centerMode,
   editorSplitLayout,
+  editorSplitCompanion,
   isEditorFileMaximized,
   hasActivePlan,
   activeWorkspace,
@@ -185,6 +187,7 @@ export const AppLayout = memo(function AppLayout({
       topbarLeftNode={desktopTopbarLeftNode}
       centerMode={centerMode}
       editorSplitLayout={editorSplitLayout}
+      editorSplitCompanion={editorSplitCompanion}
       isEditorFileMaximized={isEditorFileMaximized}
       messagesNode={messagesNode}
       gitDiffViewerNode={gitDiffViewerNode}

@@ -342,7 +342,27 @@ describe("useProjectMapDataset", () => {
       workspacePath: spring.path,
       workspaceId: spring.id,
     });
-    const dataset = datasetWithPromptNodes({ workspace: spring, storageKey: springKey });
+    const baseDataset = datasetWithPromptNodes({ workspace: spring, storageKey: springKey });
+    const artifactWithoutLabel = JSON.parse(
+      '{"type":"file","path":"vite.config.ts","line":"7"}',
+    ) as ProjectMapDataset["nodes"][number]["detail"]["relatedArtifacts"][number];
+    const legacyStringArtifact = JSON.parse(
+      '"org.springframework.cloud:spring-cloud-starter-gateway"',
+    ) as ProjectMapDataset["nodes"][number]["detail"]["relatedArtifacts"][number];
+    const dataset: ProjectMapDataset = {
+      ...baseDataset,
+      nodes: baseDataset.nodes.map((node) =>
+        node.id === "runtime-node"
+          ? {
+              ...node,
+              detail: {
+                ...node.detail,
+                relatedArtifacts: [artifactWithoutLabel, legacyStringArtifact],
+              },
+            }
+          : node,
+      ),
+    };
     vi.mocked(readProjectMapDataset).mockResolvedValue({
       dataset,
       response: {
@@ -370,7 +390,22 @@ describe("useProjectMapDataset", () => {
     expect(result.current.pendingRequest?.readSources.map((source) => source.path)).toEqual([
       "package.json",
       "vite.config.ts",
+      undefined,
     ]);
+    expect(
+      result.current.pendingRequest?.readSources.find((source) => source.path === "vite.config.ts"),
+    ).toMatchObject({
+      label: "vite.config.ts",
+      line: 7,
+    });
+    expect(
+      result.current.pendingRequest?.readSources.find((source) =>
+        source.label.includes("spring-cloud-starter-gateway"),
+      ),
+    ).toMatchObject({
+      type: "symbol",
+      label: "org.springframework.cloud:spring-cloud-starter-gateway",
+    });
 
     act(() => {
       result.current.openNodeGeneration("calibrate", runtimeNode!);
@@ -520,6 +555,92 @@ describe("useProjectMapDataset", () => {
     expect(result.current.dataset.candidates?.[0]).toMatchObject({ status: "rejected" });
     expect(result.current.dataset.nodes.find((node) => node.id === "runtime-node")?.summary).toBe(
       "Runtime facts",
+    );
+  });
+
+  it("deletes a non-root node through manual pruning and persists the dataset", async () => {
+    const spring = workspace({
+      id: "ws-spring",
+      name: "springboot-demo",
+      path: "/repo/springboot-demo",
+    });
+    const springKey = deriveProjectMapStorageKey({
+      projectName: spring.name,
+      workspacePath: spring.path,
+      workspaceId: spring.id,
+    });
+    const dataset = {
+      ...datasetWithPromptNodes({ workspace: spring, storageKey: springKey }),
+      candidates: [reviewCandidate()],
+    };
+    vi.mocked(readProjectMapDataset).mockResolvedValue({
+      dataset,
+      response: {
+        ...emptyReadResponse(springKey, `/home/user/.ccgui/project-map/${springKey}`),
+        exists: true,
+      },
+    });
+    vi.mocked(writeProjectMapDataset).mockResolvedValue(undefined);
+
+    const { result } = renderHook(() => useProjectMapDataset(spring));
+
+    await waitFor(() => expect(result.current.status).toBe("persisted"));
+
+    await act(async () => {
+      await result.current.deleteNode("runtime-node");
+    });
+
+    expect(result.current.dataset.nodes.some((node) => node.id === "runtime-node")).toBe(false);
+    expect(result.current.dataset.nodes.find((node) => node.id === "project-core")?.children).not.toContain(
+      "runtime-node",
+    );
+    expect(result.current.dataset.candidates?.[0]).toMatchObject({ status: "rejected" });
+    expect(writeProjectMapDataset).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dataset: expect.objectContaining({
+          nodes: expect.not.arrayContaining([expect.objectContaining({ id: "runtime-node" })]),
+        }),
+      }),
+    );
+  });
+
+  it("physically deletes the root node subtree through manual pruning", async () => {
+    const spring = workspace({
+      id: "ws-spring",
+      name: "springboot-demo",
+      path: "/repo/springboot-demo",
+    });
+    const springKey = deriveProjectMapStorageKey({
+      projectName: spring.name,
+      workspacePath: spring.path,
+      workspaceId: spring.id,
+    });
+    const dataset = datasetWithPromptNodes({ workspace: spring, storageKey: springKey });
+    vi.mocked(readProjectMapDataset).mockResolvedValue({
+      dataset,
+      response: {
+        ...emptyReadResponse(springKey, `/home/user/.ccgui/project-map/${springKey}`),
+        exists: true,
+      },
+    });
+    vi.mocked(writeProjectMapDataset).mockResolvedValue(undefined);
+
+    const { result } = renderHook(() => useProjectMapDataset(spring));
+
+    await waitFor(() => expect(result.current.status).toBe("persisted"));
+
+    await act(async () => {
+      await result.current.deleteNode("project-core");
+    });
+
+    expect(result.current.dataset.nodes).toHaveLength(0);
+    expect(result.current.dataset.manifest.lensStats.every((stats) => stats.nodeCount === 0)).toBe(true);
+    expect(writeProjectMapDataset).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dataset: expect.objectContaining({
+          nodes: [],
+        }),
+      }),
     );
   });
 

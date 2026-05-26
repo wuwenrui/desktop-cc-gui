@@ -1,13 +1,16 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import type { ComponentProps } from "react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
 import { mockProjectMapData } from "../mockProjectMapData";
 import type { ProjectMapDataset, ProjectMapNode } from "../types";
 import { ProjectMapPanel } from "./ProjectMapPanel";
 
-function renderMockProjectMapPanel() {
-  return render(<ProjectMapPanel workspaceName="mossx" dataset={mockProjectMapData} />);
+function renderMockProjectMapPanel(
+  props: Partial<ComponentProps<typeof ProjectMapPanel>> = {},
+) {
+  return render(<ProjectMapPanel workspaceName="mossx" dataset={mockProjectMapData} {...props} />);
 }
 
 function getGraphNodeBounds(nodeElement: Element): {
@@ -139,6 +142,9 @@ describe("ProjectMapPanel", () => {
     const view = renderMockProjectMapPanel();
 
     expect(screen.getByLabelText("projectMap.panelTitle")).toBeTruthy();
+    expect(view.container.querySelector(".project-map-topbar")).toBeTruthy();
+    expect(view.container.querySelectorAll(".project-map-meta-pill")).toHaveLength(3);
+    expect(view.container.querySelector(".project-map-meta-pill.is-profile")).toBeTruthy();
     expect(screen.getAllByText("项目画像 Project Profile").length).toBeGreaterThan(0);
     expect(screen.getAllByText("接口表面 API Surface").length).toBeGreaterThan(0);
     expect(screen.getAllByText("业务能力 Business Capabilities").length).toBeGreaterThan(0);
@@ -154,6 +160,11 @@ describe("ProjectMapPanel", () => {
     expect(screen.getByLabelText("projectMap.domainStrip")).toBeTruthy();
     expect(view.container.querySelectorAll(".project-map-node")).toHaveLength(10);
     expect(screen.getByLabelText("projectMap.canvasControls")).toBeTruthy();
+    expect(
+      within(screen.getByLabelText("projectMap.detailPanel")).getByRole("button", {
+        name: "projectMap.deleteNode",
+      }),
+    ).toBeTruthy();
     expect(view.container.querySelector("textarea, [contenteditable='true']")).toBeNull();
   });
 
@@ -176,6 +187,7 @@ describe("ProjectMapPanel", () => {
 
     const detailPanel = screen.getByLabelText("projectMap.detailPanel");
     expect(within(detailPanel).getAllByText("接口表面 API Surface").length).toBeGreaterThan(0);
+    expect(within(detailPanel).getByRole("button", { name: "projectMap.deleteNode" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /HTTP \/ RPC Endpoints/i })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "projectMap.drillIn" }));
@@ -202,6 +214,24 @@ describe("ProjectMapPanel", () => {
     expect(screen.queryByRole("button", { name: /分类漂移 Taxonomy Drift/i })).toBeNull();
     expect(screen.getAllByRole("button", { name: /风险 Risk/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByText("项目画像 Project Profile").length).toBeGreaterThan(0);
+  });
+
+  it("opens the unified delete confirmation dialog for any selected node", async () => {
+    renderMockProjectMapPanel();
+
+    const detailPanel = screen.getByLabelText("projectMap.detailPanel");
+    fireEvent.click(within(detailPanel).getByRole("button", { name: "projectMap.deleteNode" }));
+
+    expect(screen.getByText("projectMap.confirmDeleteNodeTitle")).toBeTruthy();
+    expect(screen.getByText("projectMap.confirmDeleteNode")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "projectMap.confirmDeleteNodeConfirm" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "projectMap.confirmDeleteNodeCancel" }));
+
+    await waitFor(() => {
+      expect(screen.queryByText("projectMap.confirmDeleteNodeTitle")).toBeNull();
+    });
+    expect(within(detailPanel).getAllByText("项目画像 Project Profile").length).toBeGreaterThan(0);
   });
 
   it("keeps canvas panning from swallowing node selection", () => {
@@ -381,6 +411,7 @@ describe("ProjectMapPanel", () => {
 
   it("renders traceable artifact and evidence source controls without faking missing links", () => {
     const rootNode = mockProjectMapData.nodes[0]!;
+    const openEvidenceFile = vi.fn();
     const traceDataset: ProjectMapDataset = {
       ...mockProjectMapData,
       nodes: mockProjectMapData.nodes.map((node) =>
@@ -391,6 +422,8 @@ describe("ProjectMapPanel", () => {
                 ...node.detail,
                 relatedArtifacts: [
                   { type: "file", label: "Panel", path: "src/features/project-map/components/ProjectMapPanel.tsx", line: 42 },
+                  JSON.parse('"src/main/resources/application.yml"') as ProjectMapNode["detail"]["relatedArtifacts"][number],
+                  { type: "symbol", label: "README.md" },
                   { type: "conversation", label: "Design chat" },
                 ],
               },
@@ -412,11 +445,32 @@ describe("ProjectMapPanel", () => {
       ),
     };
 
-    render(<ProjectMapPanel workspaceName="mossx" dataset={traceDataset} />);
+    render(
+      <ProjectMapPanel
+        workspaceName="mossx"
+        dataset={traceDataset}
+        onOpenEvidenceFile={openEvidenceFile}
+      />,
+    );
 
     const detailPanel = screen.getByLabelText("projectMap.detailPanel");
-    expect(within(detailPanel).getByRole("button", { name: /ProjectMapPanel\.tsx:42/i })).toBeTruthy();
-    expect(within(detailPanel).getByRole("button", { name: /project-xray-panel\/spec\.md:12/i })).toBeTruthy();
+    fireEvent.click(within(detailPanel).getByRole("button", { name: /ProjectMapPanel\.tsx:42/i }));
+    expect(openEvidenceFile).toHaveBeenCalledWith(
+      "src/features/project-map/components/ProjectMapPanel.tsx",
+      { line: 42, column: 1 },
+    );
+    fireEvent.click(within(detailPanel).getByRole("button", { name: /application\.yml/i }));
+    expect(openEvidenceFile).toHaveBeenCalledWith(
+      "src/main/resources/application.yml",
+      undefined,
+    );
+    fireEvent.click(within(detailPanel).getByRole("button", { name: /README\.md/i }));
+    expect(openEvidenceFile).toHaveBeenCalledWith("README.md", undefined);
+    fireEvent.click(within(detailPanel).getByRole("button", { name: /project-xray-panel\/spec\.md:12/i }));
+    expect(openEvidenceFile).toHaveBeenCalledWith(
+      "openspec/changes/improve-project-map-inspector-evidence-ux/specs/project-xray-panel/spec.md",
+      { line: 12, column: 1 },
+    );
     expect(within(detailPanel).getByText("Candidate badge navigates to candidate node.")).toBeTruthy();
     expect(within(detailPanel).getByText("Design chat").tagName.toLowerCase()).toBe("span");
     expect(within(detailPanel).getByText("Unlinked note").tagName.toLowerCase()).toBe("span");
@@ -424,7 +478,24 @@ describe("ProjectMapPanel", () => {
   });
 
   it("opens generation confirmation from global and node-level actions", async () => {
-    renderMockProjectMapPanel();
+    const legacyStringArtifact = JSON.parse(
+      '"org.springframework.cloud:spring-cloud-starter-gateway"',
+    ) as ProjectMapNode["detail"]["relatedArtifacts"][number];
+    const datasetWithLegacyArtifact: ProjectMapDataset = {
+      ...mockProjectMapData,
+      nodes: mockProjectMapData.nodes.map((node, index) =>
+        index === 0
+          ? {
+              ...node,
+              detail: {
+                ...node.detail,
+                relatedArtifacts: [legacyStringArtifact],
+              },
+            }
+          : node,
+      ),
+    };
+    renderMockProjectMapPanel({ dataset: datasetWithLegacyArtifact });
 
     fireEvent.click(screen.getByRole("button", { name: /projectMap\.collectFramework|收集|Collect/ }));
 
@@ -441,9 +512,16 @@ describe("ProjectMapPanel", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "projectMap.confirmation.cancel" }));
 
-    fireEvent.click(screen.getByLabelText(/接口表面 API Surface/i));
     const detailPanel = screen.getByLabelText("projectMap.detailPanel");
+    expect(within(detailPanel).getByText("org.springframework.cloud:spring-cloud-starter-gateway")).toBeTruthy();
+    expect(within(detailPanel).queryByText("UNDEFINED")).toBeNull();
     fireEvent.click(within(detailPanel).getByRole("button", { name: "projectMap.completeNode" }));
+
+    expect(screen.getByRole("dialog", { name: "projectMap.confirmation.title" })).toBeTruthy();
+    expect(screen.getByText("node")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "projectMap.confirmation.cancel" }));
+
+    fireEvent.click(within(detailPanel).getByRole("button", { name: "projectMap.calibrateNode" }));
 
     expect(screen.getByRole("dialog", { name: "projectMap.confirmation.title" })).toBeTruthy();
     expect(screen.getByText("node")).toBeTruthy();
@@ -504,13 +582,15 @@ describe("ProjectMapPanel", () => {
         },
         {
           id: "global_run_2",
-          kind: "global" as const,
+          kind: "node" as const,
           status: "pending" as const,
           engine: "codex",
           model: "gpt-5.4",
           startedAt: "2026-05-26T01:41:00.000Z",
           completedAt: null,
-          scope: "global",
+          scope: "node",
+          requestScope: { kind: "node" as const, nodeId: "project-core", includeDescendants: true },
+          generationIntent: "completeNode" as const,
           writePath: ".ccgui/project-map/springboot-demo-8e13fe53",
         },
         {
@@ -538,6 +618,8 @@ describe("ProjectMapPanel", () => {
     expect(within(drawer).getAllByText("global_run_1")).toHaveLength(1);
     expect(within(drawer).getByText("global_run_2")).toBeTruthy();
     expect(within(drawer).getByText("global_run_done")).toBeTruthy();
+    expect(within(drawer).getByText("Complete Node")).toBeTruthy();
+    expect(within(drawer).getByText(/项目画像 Project Profile · project-core/)).toBeTruthy();
     expect(within(drawer).getByText("projectMap.tasks.phase.queued")).toBeTruthy();
     expect(within(drawer).getByLabelText("projectMap.tasks.progressAria")).toBeTruthy();
     expect(within(drawer).getByLabelText("projectMap.tasks.stopRun")).toBeTruthy();

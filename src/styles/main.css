@@ -1514,14 +1514,14 @@ body[data-panel-resizing="true"] .main {
 }
 
 .content.is-editor-split .content-layer--editor,
-.content.is-editor-split .content-layer--chat {
+.content.is-editor-split .content-layer--editor-companion {
   position: relative;
   inset: auto;
   top: auto;
   min-height: 0;
 }
 
-.content.is-editor-split .content-layer--chat {
+.content.is-editor-split .content-layer--editor-companion {
   display: flex;
   flex-direction: column;
 }
@@ -1535,7 +1535,7 @@ body[data-panel-resizing="true"] .main {
   min-height: 220px;
 }
 
-.content.is-editor-split-vertical .content-layer--chat {
+.content.is-editor-split-vertical .content-layer--editor-companion {
   flex: 1 1 auto;
   border-top: 1px solid var(--border-subtle);
   background: var(--surface-messages);
@@ -1546,7 +1546,7 @@ body[data-panel-resizing="true"] .main {
 }
 
 .content.is-editor-split-horizontal .content-layer--editor,
-.content.is-editor-split-horizontal .content-layer--chat {
+.content.is-editor-split-horizontal .content-layer--editor-companion {
   width: auto;
   height: 100%;
 }
@@ -1557,7 +1557,7 @@ body[data-panel-resizing="true"] .main {
   min-width: 360px;
 }
 
-.content.is-editor-split-horizontal .content-layer--chat {
+.content.is-editor-split-horizontal .content-layer--editor-companion {
   order: 1;
   flex: 1 1 auto;
   min-width: 280px;
@@ -1599,7 +1599,7 @@ body[data-panel-resizing="true"] .main {
   height: 100%;
 }
 
-.content.is-editor-file-maximized .content-layer--chat,
+.content.is-editor-file-maximized .content-layer--editor-companion,
 .content.is-editor-file-maximized .content-editor-split-divider {
   display: none;
 }

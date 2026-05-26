@@ -28,29 +28,33 @@
   grid-template-rows: auto minmax(0, 1fr) auto;
   min-height: 0;
   overflow: hidden;
+  container-type: inline-size;
   background: var(--project-map-bg);
   color: var(--project-map-text);
 }
 
 .project-map-topbar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(180px, 1fr) minmax(0, auto);
   align-items: center;
-  gap: 16px;
-  min-height: 58px;
-  padding: 8px 24px;
+  align-content: start;
+  gap: 8px 12px;
+  min-height: 0;
+  padding: 7px 12px;
   border-bottom: 1px solid color-mix(in srgb, var(--project-map-border) 70%, transparent);
   background: color-mix(in srgb, var(--project-map-surface) 96%, transparent);
 }
 
 .project-map-header-copy {
+  display: grid;
+  gap: 4px;
   min-width: 0;
 }
 
 .project-map-title-line {
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -74,54 +78,73 @@
 .project-map-topbar h2 {
   min-width: 0;
   overflow: hidden;
-  font-size: 17px;
-  line-height: 1.15;
+  font-size: 15px;
+  line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .project-map-meta-row {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 6px;
+  flex-wrap: nowrap;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
   color: var(--project-map-text-muted);
-  font-size: 11px;
+  font-size: 10px;
 }
 
-.project-map-meta-row span {
+.project-map-meta-pill {
   display: inline-flex;
   align-items: center;
-  min-height: 20px;
+  min-width: 0;
+  max-width: min(320px, 36vw);
+  min-height: 18px;
+  overflow: hidden;
   border-radius: 999px;
-  padding: 0 8px;
+  padding: 0 7px;
   background: var(--project-map-control);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-map-meta-pill.is-primary {
+  flex: 0 0 auto;
+}
+
+.project-map-meta-pill.is-profile {
+  max-width: min(360px, 42vw);
 }
 
 .project-map-actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
+  min-width: 0;
 }
 
 .project-map-storage-switch {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  min-height: 30px;
+  gap: 2px;
+  min-width: 0;
+  min-height: 28px;
   border: 1px solid color-mix(in srgb, var(--project-map-border-strong) 70%, transparent);
   border-radius: 8px;
-  padding: 3px;
+  padding: 2px;
   background: var(--project-map-surface-muted);
   color: var(--project-map-text-muted);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 650;
 }
 
 .project-map-storage-switch span {
-  padding: 0 6px;
+  overflow: hidden;
+  max-width: 130px;
+  padding: 0 5px;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -129,7 +152,7 @@
   min-height: 22px;
   border: 0;
   border-radius: 6px;
-  padding: 0 8px;
+  padding: 0 7px;
   background: transparent;
   color: var(--project-map-text-subtle);
   font: inherit;
@@ -153,14 +176,15 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  min-height: 30px;
+  gap: 5px;
+  min-height: 28px;
   border: 1px solid color-mix(in srgb, var(--project-map-accent) 38%, transparent);
   border-radius: 8px;
-  padding: 0 10px;
-  font-size: 12px;
+  padding: 0 9px;
+  font-size: 11px;
   font-weight: 650;
   letter-spacing: 0;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -199,14 +223,15 @@
 .project-map-candidate-badge {
   display: inline-flex;
   align-items: center;
-  min-height: 26px;
+  min-height: 24px;
   border: 1px solid color-mix(in srgb, var(--project-map-warning) 34%, transparent);
   border-radius: 8px;
-  padding: 0 10px;
+  padding: 0 8px;
   background: color-mix(in srgb, var(--project-map-warning) 14%, var(--project-map-surface));
   color: var(--project-map-warning);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 650;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -537,6 +562,55 @@
 .project-map-dialog footer .project-map-primary-button {
   background: var(--project-map-accent);
   color: var(--project-map-accent-text);
+}
+
+.project-map-delete-dialog {
+  border-color: color-mix(in srgb, #dc2626 30%, var(--project-map-border));
+  background: var(--project-map-surface);
+  color: var(--project-map-text-strong);
+}
+
+.project-map-delete-dialog-warning {
+  margin: 8px 0 0;
+  color: #b91c1c;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.project-map-delete-dialog-footer {
+  gap: 8px;
+}
+
+.project-map-delete-dialog-secondary,
+.project-map-delete-dialog-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 32px;
+  border-radius: 8px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+
+.project-map-delete-dialog-secondary {
+  border: 1px solid color-mix(in srgb, var(--project-map-accent) 28%, transparent);
+  background: var(--project-map-surface);
+  color: var(--project-map-accent);
+}
+
+.project-map-delete-dialog-danger {
+  border: 1px solid color-mix(in srgb, #dc2626 44%, transparent);
+  background: #dc2626;
+  color: #ffffff;
+}
+
+.project-map-delete-dialog-danger svg {
+  width: 15px;
+  height: 15px;
 }
 
 .project-map-dialog-control {
@@ -1153,6 +1227,16 @@ button.project-map-trace-chip {
   margin-top: 14px;
 }
 
+.project-map-node-actions button.is-danger {
+  border-color: color-mix(in srgb, #dc2626 38%, transparent);
+  background: color-mix(in srgb, #dc2626 8%, var(--project-map-surface));
+  color: #b91c1c;
+}
+
+.project-map-node-actions button.is-danger:hover {
+  background: color-mix(in srgb, #dc2626 13%, var(--project-map-surface));
+}
+
 .project-map-empty-state {
   grid-row: 3;
   display: flex;
@@ -1183,26 +1267,26 @@ button.project-map-trace-chip {
 
 .project-map-task-drawer {
   position: absolute;
-  top: 70px;
-  right: 18px;
+  top: 60px;
+  right: 12px;
   z-index: 18;
   display: grid;
-  gap: 10px;
-  width: min(390px, calc(100% - 36px));
-  max-height: calc(100% - 96px);
+  gap: 7px;
+  width: min(360px, calc(100% - 24px));
+  max-height: calc(100% - 76px);
   overflow: auto;
   border: 1px solid color-mix(in srgb, var(--project-map-accent) 32%, transparent);
-  border-radius: 12px;
-  padding: 12px;
+  border-radius: 10px;
+  padding: 9px;
   background: color-mix(in srgb, var(--project-map-surface) 97%, transparent);
   box-shadow: 0 24px 70px var(--project-map-shadow);
 }
 
 .project-map-task-drawer header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
 }
 
 .project-map-task-drawer h3,
@@ -1212,23 +1296,22 @@ button.project-map-trace-chip {
 }
 
 .project-map-task-drawer h3 {
-  margin-top: 3px;
   color: var(--project-map-text-strong);
-  font-size: 14px;
-  line-height: 1.25;
+  font-size: 13px;
+  line-height: 1.15;
 }
 
 .project-map-task-drawer h4 {
   color: var(--project-map-text-strong);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .project-map-task-drawer header button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   border: 1px solid color-mix(in srgb, var(--project-map-border) 72%, transparent);
   border-radius: 7px;
   background: var(--project-map-surface);
@@ -1243,7 +1326,7 @@ button.project-map-trace-chip {
 
 .project-map-task-drawer section {
   display: grid;
-  gap: 6px;
+  gap: 5px;
 }
 
 .project-map-task-drawer section > p,
@@ -1255,16 +1338,16 @@ button.project-map-trace-chip {
 
 .project-map-task-list {
   display: grid;
-  gap: 6px;
+  gap: 5px;
 }
 
 .project-map-task-card {
   display: grid;
-  gap: 6px;
+  gap: 5px;
   border: 1px solid color-mix(in srgb, var(--project-map-border) 68%, transparent);
-  border-left: 4px solid var(--project-map-text-muted);
-  border-radius: 9px;
-  padding: 9px 10px;
+  border-left: 3px solid var(--project-map-text-muted);
+  border-radius: 8px;
+  padding: 7px 8px;
   background: var(--project-map-surface);
 }
 
@@ -1300,21 +1383,46 @@ button.project-map-trace-chip {
 .project-map-task-card-head span {
   flex: none;
   border-radius: 999px;
-  padding: 3px 7px;
+  padding: 2px 6px;
   background: var(--project-map-control);
   color: var(--project-map-text);
   font-size: 10px;
   font-weight: 740;
 }
 
-.project-map-task-card strong {
+.project-map-task-action,
+.project-map-task-target strong {
   overflow: hidden;
-  flex: 1;
   color: var(--project-map-text-strong);
-  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.project-map-task-action {
+  flex: 1;
+  font-size: 12px;
+}
+
+.project-map-task-run-id {
+  flex: none;
+  width: 96px;
+  color: var(--project-map-text-muted);
   text-align: right;
+}
+
+.project-map-task-target {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+  color: var(--project-map-text-muted);
+  font-size: 10px;
+}
+
+.project-map-task-target strong {
+  color: var(--project-map-text);
+  font-size: 11px;
 }
 
 .project-map-task-cancel,
@@ -1351,8 +1459,8 @@ button.project-map-trace-chip {
 
 .project-map-task-card dl {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 5px 10px;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.75fr);
+  gap: 4px 8px;
   margin: 0;
 }
 
@@ -1362,14 +1470,14 @@ button.project-map-trace-chip {
 
 .project-map-task-card dt {
   color: var(--project-map-text-muted);
-  font-size: 10px;
+  font-size: 9px;
 }
 
 .project-map-task-card dd {
   overflow: hidden;
-  margin: 2px 0 0;
+  margin: 1px 0 0;
   color: var(--project-map-text);
-  font-size: 11px;
+  font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1378,7 +1486,7 @@ button.project-map-trace-chip {
   display: block;
   overflow: hidden;
   max-width: 100%;
-  font-size: 10px;
+  font-size: 9px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1386,7 +1494,7 @@ button.project-map-trace-chip {
 .project-map-task-progress {
   position: relative;
   overflow: hidden;
-  height: 5px;
+  height: 4px;
   border-radius: 999px;
   background: var(--project-map-control);
 }
@@ -1403,8 +1511,8 @@ button.project-map-trace-chip {
 .project-map-task-phase,
 .project-map-task-log,
 .project-map-task-error {
-  font-size: 11px;
-  line-height: 1.4;
+  font-size: 10px;
+  line-height: 1.32;
 }
 
 .project-map-task-phase {
@@ -1430,23 +1538,64 @@ button.project-map-trace-chip {
 }
 
 @media (max-width: 1180px) {
-  .project-map-topbar,
   .project-map-stage-toolbar {
     align-items: flex-start;
     flex-direction: column;
   }
 
   .project-map-topbar {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(160px, 1fr) auto;
+    padding: 6px 10px;
   }
 
-  .project-map-actions,
   .project-map-stage-stats {
     justify-content: flex-start;
+  }
+
+  .project-map-actions {
+    justify-content: flex-end;
+  }
+
+  .project-map-storage-switch span {
+    display: none;
+  }
+
+  .project-map-meta-pill.is-profile {
+    display: none;
   }
 
   .project-map-detail-panel {
     left: auto;
     width: min(478px, calc(100% - 36px));
+  }
+}
+
+@media (max-width: 860px) {
+  .project-map-topbar {
+    grid-template-columns: 1fr;
+    align-items: flex-start;
+  }
+
+  .project-map-actions {
+    justify-content: flex-start;
+  }
+
+  .project-map-meta-pill:not(.is-primary) {
+    display: none;
+  }
+}
+
+@container (max-width: 760px) {
+  .project-map-topbar {
+    grid-template-columns: 1fr;
+    align-items: flex-start;
+  }
+
+  .project-map-actions {
+    justify-content: flex-start;
+  }
+
+  .project-map-meta-pill:not(.is-primary) {
+    display: none;
   }
 }
