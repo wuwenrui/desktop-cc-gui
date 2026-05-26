@@ -343,6 +343,7 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     gitDiffPanelNode,
     gitDiffViewerNode,
     fileViewPanelNode,
+    projectMapPanelNode,
     planPanelNode,
     debugPanelNode,
     debugPanelFullNode,
@@ -759,6 +760,12 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     onOpenGitHistoryPanel: () => {
       setAppMode((current) => (current === "gitHistory" ? "chat" : "gitHistory"));
     },
+    onOpenProjectMap: () => {
+      closeSettings();
+      setAppMode("chat");
+      setCenterMode("projectMap");
+      expandRightPanel();
+    },
     gitDiffViewStyle,
     gitDiffListView,
     onGitDiffListViewChange: setGitDiffListView,
@@ -1106,7 +1113,7 @@ export function useAppShellLayoutNodesSection(ctx: any) {
 
   return {
     sidebarNode, messagesNode, composerNode, approvalToastsNode, updateToastNode, errorToastsNode, globalRuntimeNoticeDockNode, homeNode, mainHeaderNode,
-    desktopTopbarLeftNode, tabletNavNode, tabBarNode, rightPanelToolbarNode, gitDiffPanelNode, gitDiffViewerNode, fileViewPanelNode, planPanelNode,
+    desktopTopbarLeftNode, tabletNavNode, tabBarNode, rightPanelToolbarNode, gitDiffPanelNode, gitDiffViewerNode, fileViewPanelNode, projectMapPanelNode, planPanelNode,
     debugPanelNode, debugPanelFullNode, terminalDockNode, compactEmptyCodexNode, compactEmptySpecNode, compactEmptyGitNode, compactGitBackNode,
     codeAnnotationBridgeProps,
     workspaceAliasPromptNode,

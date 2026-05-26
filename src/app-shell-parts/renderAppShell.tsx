@@ -42,7 +42,7 @@ export function renderAppShell(ctx: any) {
     dropOverlayText, editorHighlightTarget, editorNavigationTarget, editorSplitLayout, effectiveModels, effectiveReasoningSupported, effectiveRuntimeMode, effectiveSelectedModel,
     effectiveSelectedModelId, effectiveUiMode, engineModelsAsOptions, engineSelectedModelIdByType, engineSelection, engineStatuses, ensureLaunchTerminal, ensureTerminalWithTitle,
     ensureWorkspaceThreadListLoaded, entry, errorToasts, errorToastsNode, existing, exitDiffView, expandRightPanel, expandSidebar,
-    filePanelMode, filePassword, fileReferenceMode, fileStatus, fileViewPanelNode, files, finishedByAgentUpdate, finishedByDuration,
+    filePanelMode, filePassword, fileReferenceMode, fileStatus, fileViewPanelNode, projectMapPanelNode, files, finishedByAgentUpdate, finishedByDuration,
     firstAnswer, flushDraggedHeight, force, forkThreadForWorkspace, getGlobalPromptsDir, getPinTimestamp, getThreadRows, getWorkspaceGroupName,
     getWorkspacePromptsDir, gitCommitDiffs, gitDiffListView, gitDiffPanelNode, gitDiffViewStyle, gitDiffViewerNode, gitHistoryPanelHeight, gitHistoryPanelHeightRef,
     gitIssues, gitIssuesError, gitIssuesLoading, gitIssuesTotal, gitLogAhead, gitLogAheadEntries, gitLogBehind, gitLogBehindEntries,
@@ -369,6 +369,7 @@ export function renderAppShell(ctx: any) {
         gitDiffPanelNode={gitDiffPanelNode}
         gitDiffViewerNode={gitDiffViewerNode}
         fileViewPanelNode={fileViewPanelNode}
+        projectMapPanelNode={projectMapPanelNode}
         planPanelNode={planPanelNode}
         runtimeConsoleDockNode={runtimeConsoleDockNode}
         debugPanelNode={debugPanelNode}

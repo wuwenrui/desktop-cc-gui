@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PanelTabId } from "../components/PanelTabs";
 
-type CenterMode = "chat" | "diff" | "editor" | "memory";
+type CenterMode = "chat" | "diff" | "editor" | "memory" | "projectMap";
 type AppTab = "projects" | "codex" | "spec" | "git" | "log";
-type FilePanelMode = PanelTabId | "prompts" | "memory";
+type FilePanelMode = PanelTabId;
 
 type SoloLayoutSnapshot = {
   activeTab: AppTab;

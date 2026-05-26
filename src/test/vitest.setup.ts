@@ -32,7 +32,7 @@ vi.mock("react-i18next", () => ({
     init: vi.fn(),
   },
   useTranslation: () => ({
-    t: (key: string, params?: Record<string, string>) => {
+    t: (key: string, params?: Record<string, unknown>) => {
       // Map keys to Chinese text for tests (matching default language)
       const translations: Record<string, string> = {
         "update.title": "Update",
@@ -898,15 +898,19 @@ vi.mock("react-i18next", () => ({
         "files.markdownFrontmatterLabel": "Metadata",
         "threads.untitledThread": "未命名对话",
         "messages.middleStepsCollapsedHint": "已折叠 {{count}} 条中间步骤（实时中）",
+        "chat.claudeContextFreshness.pending": "chat.claudeContextFreshness.pending",
+        "chat.claudeContextFreshness.live": "chat.claudeContextFreshness.live",
+        "chat.claudeContextFreshness.estimated": "chat.claudeContextFreshness.estimated",
+        "chat.claudeContextFreshness.unknown": "chat.claudeContextFreshness.unknown",
         "workspace.homeHeroTitle": "构建任何东西",
         "workspace.homeBranchLabelMain": "主分支",
         "workspace.homeBranchLabelWorktree": "工作树",
       };
       // Simple interpolation for test environment
-      let template = translations[key] ?? key;
+      let template = translations[key] ?? String(params?.defaultValue ?? key);
       if (params && typeof template === "string") {
         Object.entries(params).forEach(([paramKey, value]) => {
-          template = template.replace(new RegExp(`{{${paramKey}}}`, "g"), value);
+          template = template.replace(new RegExp(`{{${paramKey}}}`, "g"), String(value));
         });
       }
       return template;

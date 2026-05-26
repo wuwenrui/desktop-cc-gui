@@ -20,6 +20,7 @@ import {
 import { WorkspaceSearchPanel } from "../../search/components/WorkspaceSearchPanel";
 import { PromptPanel } from "../../prompts/components/PromptPanel";
 import { ProjectMemoryPanel } from "../../project-memory/components/ProjectMemoryPanel";
+import { ProjectMapPanel } from "../../project-map";
 import { WorkspaceNoteCardPanel } from "../../note-cards/components/WorkspaceNoteCardPanel";
 import { WorkspaceSessionActivityPanel } from "../../session-activity/components/WorkspaceSessionActivityPanel";
 import { WorkspaceSessionRadarPanel } from "../../session-activity/components/WorkspaceSessionRadarPanel";
@@ -438,7 +439,7 @@ type LayoutNodesOptions = {
   onSaveLaunchScript: () => void;
   launchScriptsState?: WorkspaceLaunchScriptsState;
   mainHeaderActionsNode?: ReactNode;
-  centerMode: "chat" | "diff" | "editor" | "memory";
+  centerMode: "chat" | "diff" | "editor" | "memory" | "projectMap";
   editorSplitLayout: "vertical" | "horizontal";
   onToggleEditorSplitLayout: () => void;
   isEditorFileMaximized: boolean;
@@ -470,6 +471,7 @@ type LayoutNodesOptions = {
   gitPanelMode: "diff" | "log" | "issues" | "prs";
   onGitPanelModeChange: (mode: "diff" | "log" | "issues" | "prs") => void;
   onOpenGitHistoryPanel: () => void;
+  onOpenProjectMap: () => void;
   gitDiffViewStyle: "split" | "unified";
   gitDiffListView: GitDiffListView;
   onGitDiffListViewChange: (view: "flat" | "tree") => void;
@@ -785,6 +787,7 @@ type LayoutNodesResult = {
   gitDiffPanelNode: ReactNode;
   gitDiffViewerNode: ReactNode;
   fileViewPanelNode: ReactNode;
+  projectMapPanelNode: ReactNode;
   planPanelNode: ReactNode;
   debugPanelNode: ReactNode;
   debugPanelFullNode: ReactNode;
@@ -794,6 +797,8 @@ type LayoutNodesResult = {
   compactEmptyGitNode: ReactNode;
   compactGitBackNode: ReactNode;
 };
+
+type RightPanelTabSelection = LayoutNodesOptions["filePanelMode"] | "projectMap";
 
 const EMPTY_COMMANDS: CustomCommandOption[] = [];
 
@@ -904,6 +909,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     clientUiVisibility.isPanelVisible("rightActivityToolbar");
   const rightToolbarVisibleTabs = {
     activity: clientUiVisibility.isControlVisible("rightToolbar.activity"),
+    projectMap: true,
     radar: clientUiVisibility.isControlVisible("rightToolbar.radar"),
     git: clientUiVisibility.isControlVisible("rightToolbar.git"),
     files: clientUiVisibility.isControlVisible("rightToolbar.files"),
@@ -2024,13 +2030,26 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
 
   const sidebarSelectedDiffPath =
     options.centerMode === "diff" ? options.selectedDiffPath : null;
+  const onFilePanelModeChange = options.onFilePanelModeChange;
+  const onOpenProjectMap = options.onOpenProjectMap;
+
+  const handleRightPanelTabSelect = useCallback(
+    (tabId: RightPanelTabSelection) => {
+      if (tabId === "projectMap") {
+        onOpenProjectMap();
+        return;
+      }
+      onFilePanelModeChange(tabId);
+    },
+    [onFilePanelModeChange, onOpenProjectMap],
+  );
 
   const rightPanelToolbarNode =
     showRightActivityToolbar && hasVisibleRightToolbarControl ? (
     <div className="right-panel-toolbar">
       <PanelTabs
-        active={options.filePanelMode}
-        onSelect={options.onFilePanelModeChange}
+        active={options.centerMode === "projectMap" ? "projectMap" : options.filePanelMode}
+        onSelect={handleRightPanelTabSelect}
         liveStates={{
           activity: workspaceActivity.isProcessing,
           radar: options.sessionRadarRunningSessions.length > 0,
@@ -2318,6 +2337,17 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       </Suspense>
     ) : null;
 
+  const projectMapPanelNode = (
+    <ProjectMapPanel
+      key={options.activeWorkspace?.id ?? "no-workspace"}
+      activeWorkspace={options.activeWorkspace ?? null}
+      workspaceName={options.activeWorkspace?.name ?? null}
+      selectedEngine={options.selectedEngine ?? null}
+      selectedModelId={options.selectedModelId}
+      models={options.models}
+    />
+  );
+
   const planPanelNode = shouldMountBottomStatusPanel ? (
     <StatusPanel
       workspaceId={options.activeWorkspace?.id ?? null}
@@ -2466,6 +2496,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     gitDiffPanelNode,
     gitDiffViewerNode,
     fileViewPanelNode,
+    projectMapPanelNode,
     planPanelNode,
     debugPanelNode,
     debugPanelFullNode,

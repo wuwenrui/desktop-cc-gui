@@ -4,7 +4,7 @@ import type { SessionActivityEvent } from "../../session-activity/types";
 const DEFAULT_MANUAL_PAUSE_MS = 4_000;
 const DEFAULT_THROTTLE_MS = 900;
 
-type CenterMode = "chat" | "diff" | "editor" | "memory";
+type CenterMode = "chat" | "diff" | "editor" | "memory" | "projectMap";
 
 type UseLiveEditPreviewOptions = {
   enabled: boolean;

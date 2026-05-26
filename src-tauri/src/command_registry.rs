@@ -261,6 +261,8 @@ pub(crate) fn invoke_handler(
         crate::project_memory::commands::project_memory_diagnostics,
         crate::project_memory::commands::project_memory_reconcile,
         crate::project_memory::commands::project_memory_capture_auto,
+        crate::project_map::project_map_read,
+        crate::project_map::project_map_write_snapshot,
         // Terminal
         crate::terminal::terminal_open,
         crate::terminal::terminal_write,

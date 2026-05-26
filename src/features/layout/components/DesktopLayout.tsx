@@ -28,12 +28,13 @@ type DesktopLayoutProps = {
   settingsOpen: boolean;
   settingsNode: ReactNode;
   topbarLeftNode: ReactNode;
-  centerMode: "chat" | "diff" | "editor" | "memory";
+  centerMode: "chat" | "diff" | "editor" | "memory" | "projectMap";
   editorSplitLayout: "vertical" | "horizontal";
   isEditorFileMaximized: boolean;
   messagesNode: ReactNode;
   gitDiffViewerNode: ReactNode;
   fileViewPanelNode: ReactNode;
+  projectMapPanelNode?: ReactNode;
   rightPanelToolbarNode: ReactNode;
   gitDiffPanelNode: ReactNode;
   planPanelNode: ReactNode;
@@ -72,6 +73,7 @@ export function DesktopLayout({
   messagesNode,
   gitDiffViewerNode,
   fileViewPanelNode,
+  projectMapPanelNode = null,
   rightPanelToolbarNode,
   gitDiffPanelNode,
   planPanelNode,
@@ -88,6 +90,7 @@ export function DesktopLayout({
   const diffLayerRef = useRef<HTMLDivElement | null>(null);
   const chatLayerRef = useRef<HTMLDivElement | null>(null);
   const editorLayerRef = useRef<HTMLDivElement | null>(null);
+  const projectMapLayerRef = useRef<HTMLDivElement | null>(null);
   const memoryLayerRef = useRef<HTMLDivElement | null>(null);
   const splitResizeCleanupRef = useRef<(() => void) | null>(null);
   const isEditorSplitMode = centerMode === "editor";
@@ -96,16 +99,20 @@ export function DesktopLayout({
   const isEditorSplitChatVisible = isEditorSplitMode && !isEditorFileMaximized;
   const shouldPlaceComposerInChatColumn = isEditorSplitChatVisible;
   const hasBottomPanel = Boolean(planPanelNode);
+  const shouldShowComposerBelowContent =
+    centerMode !== "projectMap" && !shouldPlaceComposerInChatColumn;
 
   useEffect(() => {
     const diffLayer = diffLayerRef.current;
     const chatLayer = chatLayerRef.current;
     const editorLayer = editorLayerRef.current;
+    const projectMapLayer = projectMapLayerRef.current;
 
     const layers = [
       { ref: diffLayer, mode: "diff" as const },
       { ref: chatLayer, mode: "chat" as const },
       { ref: editorLayer, mode: "editor" as const },
+      { ref: projectMapLayer, mode: "projectMap" as const },
     ];
 
     for (const { ref, mode } of layers) {
@@ -314,6 +321,15 @@ export function DesktopLayout({
                     />
                   ) : null}
                   <div
+                    className={`content-layer content-layer--project-map ${
+                      centerMode === "projectMap" ? "is-active" : "is-hidden"
+                    }`}
+                    aria-hidden={centerMode !== "projectMap"}
+                    ref={projectMapLayerRef}
+                  >
+                    {projectMapPanelNode}
+                  </div>
+                  <div
                     className={`content-layer content-layer--chat ${
                       centerMode === "chat" || isEditorSplitChatVisible
                         ? "is-active"
@@ -358,7 +374,7 @@ export function DesktopLayout({
                     </div>
                   </>
                 )}
-                {shouldPlaceComposerInChatColumn ? null : composerNode}
+                {shouldShowComposerBelowContent ? composerNode : null}
                 {runtimeConsoleDockNode}
                 {terminalDockNode}
                 {debugPanelNode}

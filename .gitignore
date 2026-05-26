@@ -43,6 +43,7 @@ CLAUDE.md
 .trellis/*.tmp
 .trellis/*.new
 .trellis/.backup-*/
+.ccgui/
 .omx/
 
 .specstory/

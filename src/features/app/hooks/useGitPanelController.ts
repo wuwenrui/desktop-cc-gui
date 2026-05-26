@@ -139,7 +139,9 @@ export function useGitPanelController({
   prDiffsError: string | null;
   onOpenEditorLayoutRequest?: () => void;
 }) {
-  const [centerMode, setCenterMode] = useState<"chat" | "diff" | "editor" | "memory">("chat");
+  const [centerMode, setCenterMode] = useState<
+    "chat" | "diff" | "editor" | "memory" | "projectMap"
+  >("chat");
   const [openFileTabs, setOpenFileTabs] = useState<string[]>([]);
   const [activeEditorFilePath, setActiveEditorFilePath] = useState<string | null>(null);
   const [editorNavigationTarget, setEditorNavigationTarget] =

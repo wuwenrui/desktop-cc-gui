@@ -50,7 +50,7 @@ export type WorkspaceShellBoundary = {
   closeTerminalPanel: () => void;
   collapseRightPanel: () => void;
   connectWorkspace: (workspace: WorkspaceInfo) => Promise<void>;
-  centerMode: "chat" | "diff" | "editor" | "memory";
+  centerMode: "chat" | "diff" | "editor" | "memory" | "projectMap";
   exitDiffView: () => void;
   handleToggleTerminal: () => void;
   isCompact: boolean;

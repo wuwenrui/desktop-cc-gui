@@ -1,0 +1,161 @@
+// @vitest-environment jsdom
+import { renderHook, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import type { EngineStatus, WorkspaceInfo } from "../../../types";
+import { detectEngines, getConfigModel, getEngineModels, getModelList } from "../../../services/tauri";
+import { useProjectMapGenerationOptions } from "./useProjectMapGenerationOptions";
+
+vi.mock("../../../services/tauri", () => ({
+  detectEngines: vi.fn(),
+  getConfigModel: vi.fn(),
+  getEngineModels: vi.fn(),
+  getModelList: vi.fn(),
+}));
+
+const workspace: WorkspaceInfo = {
+  id: "workspace-1",
+  name: "springboot-demo",
+  path: "/repo/springboot-demo",
+  connected: true,
+  settings: { sidebarCollapsed: false },
+};
+
+const engineStatuses: EngineStatus[] = [
+  {
+    engineType: "codex",
+    installed: true,
+    version: "1.0.0",
+    binPath: "/bin/codex",
+    features: {
+      streaming: true,
+      reasoning: true,
+      toolUse: true,
+      imageInput: true,
+      sessionContinuation: true,
+    },
+    models: [],
+    error: null,
+  },
+  {
+    engineType: "claude",
+    installed: true,
+    version: "1.0.0",
+    binPath: "/bin/claude",
+    features: {
+      streaming: true,
+      reasoning: true,
+      toolUse: true,
+      imageInput: true,
+      sessionContinuation: true,
+    },
+    models: [],
+    error: null,
+  },
+  {
+    engineType: "gemini",
+    installed: false,
+    version: null,
+    binPath: null,
+    features: {
+      streaming: false,
+      reasoning: false,
+      toolUse: false,
+      imageInput: false,
+      sessionContinuation: false,
+    },
+    models: [],
+    error: "missing",
+  },
+  {
+    engineType: "opencode",
+    installed: false,
+    version: null,
+    binPath: null,
+    features: {
+      streaming: false,
+      reasoning: false,
+      toolUse: false,
+      imageInput: false,
+      sessionContinuation: false,
+    },
+    models: [],
+    error: "missing",
+  },
+];
+
+describe("useProjectMapGenerationOptions", () => {
+  beforeEach(() => {
+    vi.mocked(detectEngines).mockResolvedValue(engineStatuses);
+    vi.mocked(getEngineModels).mockReset();
+    vi.mocked(getModelList).mockReset();
+    vi.mocked(getConfigModel).mockReset();
+  });
+
+  it("loads Codex models from the workspace model catalog and config model", async () => {
+    vi.mocked(getEngineModels).mockResolvedValueOnce([]);
+    vi.mocked(getModelList).mockResolvedValueOnce({
+      result: {
+        data: [
+          {
+            id: "gpt-5.4",
+            model: "gpt-5.4",
+            displayName: "GPT-5.4",
+            isDefault: false,
+          },
+        ],
+      },
+    });
+    vi.mocked(getConfigModel).mockResolvedValueOnce("gpt-5.5");
+
+    const { result } = renderHook(() =>
+      useProjectMapGenerationOptions({
+        workspace,
+        selectedEngine: "codex",
+      }),
+    );
+
+    await waitFor(() => expect(result.current.modelsLoading).toBe(false));
+
+    expect(getModelList).toHaveBeenCalledWith("workspace-1");
+    expect(result.current.models.map((model) => model.model)).toContain("gpt-5.5");
+    expect(result.current.models.map((model) => model.model)).toContain("gpt-5.4");
+    expect(result.current.installedEngines.map((engine) => engine.id)).toEqual(["codex", "claude"]);
+  });
+
+  it("reloads model options when the selected engine changes", async () => {
+    vi.mocked(getEngineModels)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: "claude-sonnet-4-5",
+          model: "claude-sonnet-4-5",
+          displayName: "Claude Sonnet 4.5",
+          description: "",
+          source: "engine",
+          isDefault: true,
+        },
+      ]);
+    vi.mocked(getModelList).mockResolvedValueOnce({ result: { data: [] } });
+    vi.mocked(getConfigModel).mockResolvedValueOnce(null);
+
+    const { result, rerender } = renderHook(
+      ({ selectedEngine }: { selectedEngine: "codex" | "claude" }) =>
+        useProjectMapGenerationOptions({
+          workspace,
+          selectedEngine,
+        }),
+      { initialProps: { selectedEngine: "codex" } },
+    );
+
+    await waitFor(() => expect(result.current.modelsLoading).toBe(false));
+
+    rerender({ selectedEngine: "claude" });
+
+    await waitFor(() =>
+      expect(result.current.models.some((model) => model.model === "claude-sonnet-4-5")).toBe(true),
+    );
+
+    expect(getEngineModels).toHaveBeenLastCalledWith("claude");
+  });
+});

@@ -16,12 +16,12 @@ type UsePullRequestComposerOptions = {
   gitPullRequestDiffs: GitHubPullRequestDiff[];
   filePanelMode: "git" | "files" | "search" | "notes" | "prompts" | "memory" | "activity" | "radar";
   gitPanelMode: "diff" | "log" | "issues" | "prs";
-  centerMode: "chat" | "diff" | "editor" | "memory";
+  centerMode: "chat" | "diff" | "editor" | "memory" | "projectMap";
   isCompact: boolean;
   setSelectedPullRequest: (pullRequest: GitHubPullRequest | null) => void;
   setDiffSource: (source: "local" | "pr" | "commit") => void;
   setSelectedDiffPath: (path: string | null) => void;
-  setCenterMode: (mode: "chat" | "diff" | "editor" | "memory") => void;
+  setCenterMode: (mode: "chat" | "diff" | "editor" | "memory" | "projectMap") => void;
   setGitPanelMode: (mode: "diff" | "log" | "issues" | "prs") => void;
   setPrefillDraft: (draft: { id: string; text: string; createdAt: number }) => void;
   setActiveTab: (tab: "projects" | "codex" | "spec" | "git" | "log") => void;

@@ -25,6 +25,7 @@ import "./styles/file-view-panel.css";
 import "./styles/file-view-panel.footer.css";
 import "./styles/detached-file-explorer.css";
 import "./styles/panel-tabs.css";
+import "./styles/project-map.css";
 import "./styles/session-activity.css";
 import "./styles/prompts.css";
 import "./styles/note-cards.css";

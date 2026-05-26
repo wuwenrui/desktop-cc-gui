@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import Folder from "lucide-react/dist/esm/icons/folder";
 import GitBranch from "lucide-react/dist/esm/icons/git-branch";
+import Globe2 from "lucide-react/dist/esm/icons/globe-2";
 import ScrollText from "lucide-react/dist/esm/icons/scroll-text";
 import Brain from "lucide-react/dist/esm/icons/brain";
 import Search from "lucide-react/dist/esm/icons/search";
@@ -20,18 +21,20 @@ export type PanelTabId =
   | "memory"
   | "activity";
 
+export type PanelToolbarTabId = PanelTabId | "projectMap";
+
 type PanelTab = {
-  id: PanelTabId;
+  id: PanelToolbarTabId;
   label: string;
   icon: ReactNode;
 };
 
 type PanelTabsProps = {
-  active: PanelTabId;
-  onSelect: (id: PanelTabId) => void;
+  active: PanelToolbarTabId;
+  onSelect: (id: PanelToolbarTabId) => void;
   tabs?: PanelTab[];
-  liveStates?: Partial<Record<PanelTabId, boolean>>;
-  visibleTabs?: Partial<Record<PanelTabId, boolean>>;
+  liveStates?: Partial<Record<PanelToolbarTabId, boolean>>;
+  visibleTabs?: Partial<Record<PanelToolbarTabId, boolean>>;
 };
 
 // Toggle to show/hide prompts tab (set to true to re-enable)
@@ -39,30 +42,41 @@ const SHOW_PROMPTS_TAB = false;
 // Toggle to show/hide git tab
 const SHOW_GIT_TAB = true;
 
-const tabIds: PanelTabId[] = (["activity", "radar", "git", "files", "search", "notes", "prompts"] as const).filter(
+const tabIds: PanelToolbarTabId[] = ([
+  "activity",
+  "projectMap",
+  "radar",
+  "git",
+  "files",
+  "search",
+  "notes",
+  "prompts",
+] as const).filter(
   (id) =>
     (id !== "prompts" || SHOW_PROMPTS_TAB) &&
     (id !== "git" || SHOW_GIT_TAB)
 );
 
-const tabIcons: Record<PanelTabId, ReactNode> = {
+const tabIcons: Record<PanelToolbarTabId, ReactNode> = {
   radar: <LayoutList aria-hidden />,
   git: <GitBranch aria-hidden />,
   files: <Folder aria-hidden />,
   search: <Search aria-hidden />,
   notes: <NotebookPen aria-hidden />,
   memory: <Brain aria-hidden />,
+  projectMap: <Globe2 aria-hidden />,
   activity: <Activity aria-hidden />,
   prompts: <ScrollText aria-hidden />,
 };
 
-const tabI18nKeys: Record<PanelTabId, string> = {
+const tabI18nKeys: Record<PanelToolbarTabId, string> = {
   radar: "panels.radar",
   git: "panels.git",
   files: "panels.files",
   search: "panels.search",
   notes: "panels.notes",
   memory: "panels.memory",
+  projectMap: "panels.projectMap",
   activity: "panels.activity",
   prompts: "panels.prompts",
 };
