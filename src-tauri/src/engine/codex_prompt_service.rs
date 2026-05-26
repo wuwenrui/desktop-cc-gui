@@ -46,6 +46,178 @@ impl BackgroundCallbackGuard {
     }
 }
 
+fn string_field(value: &Value, keys: &[&str]) -> Option<String> {
+    for key in keys {
+        if let Some(text) = value.get(*key).and_then(|candidate| candidate.as_str()) {
+            return Some(text.to_string());
+        }
+    }
+    None
+}
+
+fn text_from_content_value(value: &Value) -> Option<String> {
+    if let Some(text) = value.as_str() {
+        return Some(text.to_string()).filter(|candidate| !candidate.trim().is_empty());
+    }
+
+    if let Some(items) = value.as_array() {
+        let text = items
+            .iter()
+            .filter_map(text_from_content_value)
+            .collect::<Vec<_>>()
+            .join("");
+        return Some(text).filter(|candidate| !candidate.trim().is_empty());
+    }
+
+    let item = value.as_object()?;
+    string_field(
+        value,
+        &[
+            "delta",
+            "text",
+            "output_text",
+            "outputText",
+            "content",
+            "summary",
+        ],
+    )
+    .or_else(|| item.get("content").and_then(text_from_content_value))
+    .or_else(|| item.get("parts").and_then(text_from_content_value))
+    .or_else(|| item.get("output").and_then(text_from_content_value))
+    .filter(|candidate| !candidate.trim().is_empty())
+}
+
+fn collect_agent_message_texts(value: &Value, output: &mut Vec<String>) {
+    match value {
+        Value::Array(items) => {
+            for item in items {
+                collect_agent_message_texts(item, output);
+            }
+        }
+        Value::Object(item) => {
+            if is_agent_message_item(value) {
+                if let Some(text) = text_from_content_value(value) {
+                    output.push(text);
+                }
+                return;
+            }
+
+            for key in [
+                "item", "message", "turn", "result", "output", "items", "messages",
+            ] {
+                if let Some(next) = item.get(key) {
+                    collect_agent_message_texts(next, output);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+fn extract_agent_message_collection_text(value: &Value) -> Option<String> {
+    let mut chunks = Vec::new();
+    collect_agent_message_texts(value, &mut chunks);
+    let text = chunks
+        .into_iter()
+        .map(|chunk| chunk.trim().to_string())
+        .filter(|chunk| !chunk.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n");
+    Some(text).filter(|candidate| !candidate.trim().is_empty())
+}
+
+fn extract_codex_text_delta(event: &Value) -> Option<String> {
+    let method = event.get("method").and_then(|value| value.as_str())?;
+    let is_agent_delta = matches!(
+        method,
+        "item/agentMessage/delta"
+            | "item/agentMessage/textDelta"
+            | "item/agentMessage/text/delta"
+            | "text:delta"
+            | "text/delta"
+    );
+    if !is_agent_delta {
+        return None;
+    }
+
+    let params = event.get("params")?;
+    string_field(
+        params,
+        &["delta", "text", "output_text", "outputText", "content"],
+    )
+    .or_else(|| params.get("part").and_then(text_from_content_value))
+    .or_else(|| params.get("item").and_then(text_from_content_value))
+    .or_else(|| params.get("message").and_then(text_from_content_value))
+    .or_else(|| params.get("content").and_then(text_from_content_value))
+}
+
+fn is_agent_message_item(item: &Value) -> bool {
+    let item_type = item
+        .get("type")
+        .and_then(|value| value.as_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if matches!(
+        item_type.as_str(),
+        "agentmessage" | "agent_message" | "assistantmessage" | "assistant_message"
+    ) {
+        return true;
+    }
+
+    let role = item
+        .get("role")
+        .and_then(|value| value.as_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    role == "assistant" && (item_type.is_empty() || item_type == "message")
+}
+
+fn extract_agent_message_snapshot_text(event: &Value) -> Option<String> {
+    let method = event.get("method").and_then(|value| value.as_str())?;
+    if !matches!(method, "item/updated" | "item/completed") {
+        return None;
+    }
+
+    let item = event.get("params").and_then(|params| params.get("item"))?;
+    if !is_agent_message_item(item) {
+        return None;
+    }
+    text_from_content_value(item)
+}
+
+fn extract_turn_completed_text(event: &Value) -> Option<String> {
+    let method = event.get("method").and_then(|value| value.as_str())?;
+    if method != "turn/completed" {
+        return None;
+    }
+
+    let params = event.get("params")?;
+    string_field(
+        params,
+        &["text", "summary", "output_text", "outputText", "content"],
+    )
+    .or_else(|| extract_agent_message_collection_text(params))
+    .or_else(|| params.get("result").and_then(text_from_content_value))
+    .or_else(|| {
+        params
+            .get("turn")
+            .and_then(extract_agent_message_collection_text)
+    })
+    .or_else(|| {
+        params
+            .get("result")
+            .and_then(extract_agent_message_collection_text)
+    })
+    .or_else(|| {
+        params
+            .get("items")
+            .and_then(extract_agent_message_collection_text)
+    })
+    .or_else(|| params.get("output").and_then(text_from_content_value))
+    .or_else(|| params.get("content").and_then(text_from_content_value))
+    .filter(|text| !text.trim().is_empty())
+}
+
 pub(crate) async fn run_codex_prompt_sync(
     workspace_id: &str,
     text: &str,
@@ -186,17 +358,24 @@ pub(crate) async fn run_codex_prompt_sync(
     let collect_result = timeout(Duration::from_secs(600), async {
         while let Some(event) = rx.recv().await {
             let method = event.get("method").and_then(|m| m.as_str()).unwrap_or("");
+            if let Some(delta) = extract_codex_text_delta(&event) {
+                response_text.push_str(&delta);
+                continue;
+            }
             match method {
-                "item/agentMessage/delta" => {
-                    if let Some(delta) = event
-                        .get("params")
-                        .and_then(|p| p.get("delta"))
-                        .and_then(|d| d.as_str())
-                    {
-                        response_text.push_str(delta);
+                "item/updated" | "item/completed" => {
+                    if let Some(snapshot_text) = extract_agent_message_snapshot_text(&event) {
+                        response_text = snapshot_text;
                     }
                 }
-                "turn/completed" => break,
+                "turn/completed" => {
+                    if response_text.trim().is_empty() {
+                        if let Some(result_text) = extract_turn_completed_text(&event) {
+                            response_text = result_text;
+                        }
+                    }
+                    break;
+                }
                 "turn/error" => {
                     return Err(extract_error_message(
                         event.get("params").and_then(|params| params.get("error")),
@@ -227,4 +406,241 @@ pub(crate) async fn run_codex_prompt_sync(
         return Err("Codex returned empty response".to_string());
     }
     Ok(trimmed)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        extract_agent_message_snapshot_text, extract_codex_text_delta, extract_turn_completed_text,
+    };
+    use serde_json::json;
+
+    #[test]
+    fn extracts_codex_agent_message_delta_aliases() {
+        for method in [
+            "item/agentMessage/delta",
+            "item/agentMessage/textDelta",
+            "item/agentMessage/text/delta",
+        ] {
+            let event = json!({
+                "method": method,
+                "params": {
+                    "threadId": "thread-1",
+                    "delta": "hello"
+                }
+            });
+            assert_eq!(extract_codex_text_delta(&event), Some("hello".to_string()));
+        }
+
+        let nested = json!({
+            "method": "item/agentMessage/textDelta",
+            "params": {
+                "threadId": "thread-1",
+                "item": {
+                    "text": "nested text"
+                }
+            }
+        });
+        assert_eq!(
+            extract_codex_text_delta(&nested),
+            Some("nested text".to_string())
+        );
+    }
+
+    #[test]
+    fn extracts_completed_agent_message_snapshot_text() {
+        let event = json!({
+            "method": "item/completed",
+            "params": {
+                "threadId": "thread-1",
+                "item": {
+                    "id": "item-1",
+                    "type": "agentMessage",
+                    "text": "{\"nodes\":[]}"
+                }
+            }
+        });
+
+        assert_eq!(
+            extract_agent_message_snapshot_text(&event),
+            Some("{\"nodes\":[]}".to_string())
+        );
+    }
+
+    #[test]
+    fn extracts_updated_agent_message_content_array_text() {
+        let event = json!({
+            "method": "item/updated",
+            "params": {
+                "threadId": "thread-1",
+                "item": {
+                    "id": "item-1",
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [
+                        { "type": "output_text", "text": "{\"profile\":" },
+                        { "type": "output_text", "text": "{}}" }
+                    ]
+                }
+            }
+        });
+
+        assert_eq!(
+            extract_agent_message_snapshot_text(&event),
+            Some("{\"profile\":{}}".to_string())
+        );
+    }
+
+    #[test]
+    fn extracts_completed_assistant_message_snapshot_text_aliases() {
+        let event = json!({
+            "method": "item/completed",
+            "params": {
+                "threadId": "thread-1",
+                "item": {
+                    "id": "item-1",
+                    "type": "assistantMessage",
+                    "content": [{ "type": "output_text", "text": "assistant snapshot" }]
+                }
+            }
+        });
+
+        assert_eq!(
+            extract_agent_message_snapshot_text(&event),
+            Some("assistant snapshot".to_string())
+        );
+    }
+
+    #[test]
+    fn ignores_completed_tool_snapshots_as_assistant_text() {
+        let event = json!({
+            "method": "item/completed",
+            "params": {
+                "threadId": "thread-1",
+                "item": {
+                    "id": "tool-1",
+                    "type": "toolCall",
+                    "text": "not assistant text"
+                }
+            }
+        });
+
+        assert_eq!(extract_agent_message_snapshot_text(&event), None);
+    }
+
+    #[test]
+    fn extracts_turn_completed_result_text_as_last_resort() {
+        let event = json!({
+            "method": "turn/completed",
+            "params": {
+                "threadId": "thread-1",
+                "result": {
+                    "summary": "final summary"
+                }
+            }
+        });
+
+        assert_eq!(
+            extract_turn_completed_text(&event),
+            Some("final summary".to_string())
+        );
+    }
+
+    #[test]
+    fn extracts_turn_completed_output_array_text_as_last_resort() {
+        let event = json!({
+            "method": "turn/completed",
+            "params": {
+                "threadId": "thread-1",
+                "output": [
+                    {
+                        "type": "message",
+                        "role": "assistant",
+                        "content": [
+                            { "type": "output_text", "text": "{\"nodes\":" },
+                            { "type": "output_text", "text": "[]}" }
+                        ]
+                    }
+                ]
+            }
+        });
+
+        assert_eq!(
+            extract_turn_completed_text(&event),
+            Some("{\"nodes\":[]}".to_string())
+        );
+    }
+
+    #[test]
+    fn extracts_turn_completed_turn_items_agent_message_text() {
+        let event = json!({
+            "method": "turn/completed",
+            "params": {
+                "threadId": "thread-1",
+                "turn": {
+                    "id": "turn-1",
+                    "status": "completed",
+                    "items": [
+                        { "type": "userMessage", "text": "do not use this prompt" },
+                        {
+                            "type": "agentMessage",
+                            "text": "{\"nodes\":[{\"id\":\"project-core\"}]}"
+                        }
+                    ]
+                }
+            }
+        });
+
+        assert_eq!(
+            extract_turn_completed_text(&event),
+            Some("{\"nodes\":[{\"id\":\"project-core\"}]}".to_string())
+        );
+    }
+
+    #[test]
+    fn extracts_turn_completed_result_turn_assistant_content_text() {
+        let event = json!({
+            "method": "turn/completed",
+            "params": {
+                "threadId": "thread-1",
+                "result": {
+                    "turn": {
+                        "items": [
+                            {
+                                "role": "assistant",
+                                "type": "message",
+                                "content": [
+                                    { "type": "output_text", "text": "{\"profile\":" },
+                                    { "type": "output_text", "text": "{}}" }
+                                ]
+                            }
+                        ]
+                    }
+                }
+            }
+        });
+
+        assert_eq!(
+            extract_turn_completed_text(&event),
+            Some("{\"profile\":{}}".to_string())
+        );
+    }
+
+    #[test]
+    fn turn_completed_items_do_not_treat_user_text_as_assistant_output() {
+        let event = json!({
+            "method": "turn/completed",
+            "params": {
+                "threadId": "thread-1",
+                "turn": {
+                    "items": [
+                        { "type": "userMessage", "text": "user prompt" },
+                        { "type": "toolCall", "output": "tool output" }
+                    ]
+                }
+            }
+        });
+
+        assert_eq!(extract_turn_completed_text(&event), None);
+    }
 }
