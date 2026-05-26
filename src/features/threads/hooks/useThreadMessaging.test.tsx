@@ -21,6 +21,9 @@ import { pushErrorToast } from "../../../services/toasts";
 import { getGlobalRuntimeNoticesSnapshot } from "../../../services/globalRuntimeNotices";
 import { sendSharedSessionTurn } from "../../shared-session/runtime/sendSharedSessionTurn";
 
+const CLAUDE_PENDING_NATIVE_SESSION_WAIT_MESSAGE =
+  "Claude session is still initializing. Wait for the session to finish binding, then send again.";
+
 describe("useThreadMessaging", () => {
   beforeEach(() => {
     resetThreadMessagingTestMocks();
@@ -623,7 +626,7 @@ describe("useThreadMessaging", () => {
     expect(engineSendMessage).toHaveBeenCalledTimes(1);
     expect(pushThreadErrorMessage).toHaveBeenCalledWith(
       "claude-pending-abc",
-      "threads.claudePendingNativeSessionWait",
+      CLAUDE_PENDING_NATIVE_SESSION_WAIT_MESSAGE,
     );
   });
 
@@ -696,7 +699,7 @@ describe("useThreadMessaging", () => {
     );
     expect(pushThreadErrorMessage).not.toHaveBeenCalledWith(
       "claude-pending-abc",
-      "threads.claudePendingNativeSessionWait",
+      CLAUDE_PENDING_NATIVE_SESSION_WAIT_MESSAGE,
     );
   });
 
@@ -746,7 +749,7 @@ describe("useThreadMessaging", () => {
     expect(engineSendMessage).toHaveBeenCalledTimes(1);
     expect(pushThreadErrorMessage).toHaveBeenCalledWith(
       "claude-pending-user-only",
-      "threads.claudePendingNativeSessionWait",
+      CLAUDE_PENDING_NATIVE_SESSION_WAIT_MESSAGE,
     );
   });
 
@@ -777,7 +780,7 @@ describe("useThreadMessaging", () => {
     expect(engineSendMessage).not.toHaveBeenCalled();
     expect(pushThreadErrorMessage).toHaveBeenCalledWith(
       "claude-pending-restored",
-      "threads.claudePendingNativeSessionWait",
+      CLAUDE_PENDING_NATIVE_SESSION_WAIT_MESSAGE,
     );
   });
 
@@ -847,7 +850,7 @@ describe("useThreadMessaging", () => {
     expect(engineSendMessage).toHaveBeenCalledTimes(1);
     expect(pushThreadErrorMessage).toHaveBeenCalledWith(
       "claude-pending-snake",
-      "threads.claudePendingNativeSessionWait",
+      CLAUDE_PENDING_NATIVE_SESSION_WAIT_MESSAGE,
     );
   });
 
@@ -1016,7 +1019,7 @@ describe("useThreadMessaging", () => {
     expect(engineSendMessage).toHaveBeenCalledTimes(1);
     expect(pushThreadErrorMessage).toHaveBeenCalledWith(
       "claude-pending-def",
-      "threads.claudePendingNativeSessionWait",
+      CLAUDE_PENDING_NATIVE_SESSION_WAIT_MESSAGE,
     );
   });
 

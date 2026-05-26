@@ -40,6 +40,35 @@ export function useThreadRows(threadParentById: Record<string, string>) {
         }
       });
 
+      const subtreeUpdatedAtCache = new Map<string, number>();
+      const getSubtreeUpdatedAt = (thread: ThreadSummary): number => {
+        const cached = subtreeUpdatedAtCache.get(thread.id);
+        if (cached != null) {
+          return cached;
+        }
+        const children = childrenByParent.get(thread.id) ?? [];
+        const updatedAt = children.reduce(
+          (maxUpdatedAt, child) =>
+            Math.max(maxUpdatedAt, getSubtreeUpdatedAt(child)),
+          Number.isFinite(thread.updatedAt) ? thread.updatedAt : 0,
+        );
+        subtreeUpdatedAtCache.set(thread.id, updatedAt);
+        return updatedAt;
+      };
+      const compareThreadRows = (left: ThreadSummary, right: ThreadSummary) => {
+        const leftUpdatedAt = getSubtreeUpdatedAt(left);
+        const rightUpdatedAt = getSubtreeUpdatedAt(right);
+        if (rightUpdatedAt !== leftUpdatedAt) {
+          return rightUpdatedAt - leftUpdatedAt;
+        }
+        return left.id.localeCompare(right.id);
+      };
+
+      childrenByParent.forEach((children) => {
+        children.sort(compareThreadRows);
+      });
+      roots.sort(compareThreadRows);
+
       const pinnedRoots: ThreadSummary[] = [];
       const unpinnedRoots: ThreadSummary[] = [];
 
@@ -55,7 +84,10 @@ export function useThreadRows(threadParentById: Record<string, string>) {
       pinnedRoots.sort((a, b) => {
         const aTime = getPinTimestamp(workspaceId, a.id) ?? 0;
         const bTime = getPinTimestamp(workspaceId, b.id) ?? 0;
-        return aTime - bTime;
+        if (aTime !== bTime) {
+          return aTime - bTime;
+        }
+        return compareThreadRows(a, b);
       });
 
       const visibleRootCount = isExpanded

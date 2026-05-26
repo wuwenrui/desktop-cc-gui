@@ -82,6 +82,9 @@ const workspace: WorkspaceInfo = {
   settings: { sidebarCollapsed: false },
 };
 
+const mapThreadIds = (rows: { thread: { id: string } }[]) =>
+  rows.map((entry) => entry.thread.id);
+
 describe("useThreads pin integration", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -95,6 +98,7 @@ describe("useThreads pin integration", () => {
         onWorkspaceConnected: vi.fn(),
       }),
     );
+    await act(async () => {});
     const rowsHook = renderHook(() => useThreadRows(result.current.threadParentById));
 
     const threads = [
@@ -109,9 +113,9 @@ describe("useThreads pin integration", () => {
       result.current.getPinTimestamp,
     );
     expect(initialRows.pinnedRows).toHaveLength(0);
-    expect(initialRows.unpinnedRows.map((entry) => entry.thread.id)).toEqual([
-      "thread-a",
+    expect(mapThreadIds(initialRows.unpinnedRows)).toEqual([
       "thread-b",
+      "thread-a",
     ]);
 
     const initialVersion = result.current.pinnedThreadsVersion;
@@ -130,8 +134,8 @@ describe("useThreads pin integration", () => {
       workspace.id,
       result.current.getPinTimestamp,
     );
-    expect(pinnedRows.pinnedRows.map((entry) => entry.thread.id)).toEqual(["thread-a"]);
-    expect(pinnedRows.unpinnedRows.map((entry) => entry.thread.id)).toEqual(["thread-b"]);
+    expect(mapThreadIds(pinnedRows.pinnedRows)).toEqual(["thread-a"]);
+    expect(mapThreadIds(pinnedRows.unpinnedRows)).toEqual(["thread-b"]);
 
     await act(async () => {
       result.current.unpinThread(workspace.id, "thread-a");
@@ -147,9 +151,9 @@ describe("useThreads pin integration", () => {
       result.current.getPinTimestamp,
     );
     expect(unpinnedRowsAgain.pinnedRows).toHaveLength(0);
-    expect(unpinnedRowsAgain.unpinnedRows.map((entry) => entry.thread.id)).toEqual([
-      "thread-a",
+    expect(mapThreadIds(unpinnedRowsAgain.unpinnedRows)).toEqual([
       "thread-b",
+      "thread-a",
     ]);
   });
 });

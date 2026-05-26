@@ -65,7 +65,7 @@ describe("ButtonArea custom model storage refresh", () => {
     expect(screen.getByTestId("reasoning-select")).toBeTruthy();
     expect(screen.getByTestId("reasoning-value").textContent).toBe("");
     expect(screen.getByTestId("reasoning-options").textContent).toBe("low,medium,high,xhigh,max");
-    expect(screen.getByTestId("reasoning-default").textContent).toBe("reasoning.claudeDefault");
+    expect(screen.getByTestId("reasoning-default").textContent).toBe("Claude 默认");
   });
 
   it("does not render reasoning selector for Gemini", () => {
