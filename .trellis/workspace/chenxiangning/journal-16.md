@@ -1244,3 +1244,54 @@ CI 中 SettingsView 删除会话测试仍断言旧刷新签名；更新为包含
 ### Next Steps
 
 - None - task complete
+
+
+## Session 591: 修复 Codex 流式空白恢复诊断
+
+**Date**: 2026-05-27
+**Task**: 修复 Codex 流式空白恢复诊断
+**Branch**: `feature/v0.5.3`
+
+### Summary
+
+为 Codex visible-output stall 接入 readable-window recovery，新增 renderer blank-screen watchdog 与 stream surface diagnostics。
+
+### Main Changes
+
+## 变更摘要
+
+- 将 Codex/Gemini/Claude 的 visible-output stall 纳入 streaming readable window recovery 判断，修复 Codex 已有 delta 但可见输出长期不增长时 recovery 条件缺口。
+- 在 bootstrap render committed 后启动 renderer blank-screen watchdog，连续检测 root 空白/隐藏/无尺寸时写入 `renderer/blank-screen-suspected`。
+- 在 Messages streaming stall/recovery 期间写入 `messages/stream-surface-diagnostic`，记录 rendered/presentation/timeline/source item count、live assistant text length、preserved readable window 状态。
+- 为 renderer diagnostics 增加 blank-screen watchdog 正反向测试。
+
+## 验证
+
+- `npx vitest run src/services/rendererDiagnostics.test.ts` 通过。
+- `npx vitest run src/features/threads/utils/streamLatencyDiagnostics.test.ts` 通过。
+- `npx eslint src/services/rendererDiagnostics.ts src/services/rendererDiagnostics.test.ts src/bootstrapApp.tsx src/features/messages/components/Messages.tsx` 通过。
+- `git diff --check` 通过。
+- `npm run typecheck` 未通过，失败点在既有未提交 project-map 改动：`src/features/project-map/components/ProjectMapPanel.test.tsx(196,93): Property 'toBeChecked' does not exist on type 'Assertion<HTMLElement>'`，不属于本次 renderer 提交范围。
+
+## 备注
+
+工作区仍保留用户/其他任务的 project-map 与 OpenSpec 未提交改动，本次提交只包含 renderer 黑屏诊断与恢复相关 4 个文件。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b0ff1cbe` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
