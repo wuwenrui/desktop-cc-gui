@@ -126,3 +126,25 @@ The Project Knowledge Map SHALL render generation configuration dialogs with com
 - **WHEN** the model refresh action is visible
 - **THEN** the refresh action SHALL share the model control row on desktop
 - **AND** the layout SHALL avoid a dedicated blank row for the refresh action
+
+### Requirement: Project Map canvas controls collapsed preference
+
+The Project Knowledge Map SHALL keep canvas layout controls compact by default while preserving the user's explicit expanded/collapsed preference.
+
+#### Scenario: Canvas controls default collapsed
+- **GIVEN** no canvas controls preference has been stored
+- **WHEN** the Project Map graph canvas is rendered
+- **THEN** the canvas controls SHALL render as a compact collapsed entry
+- **AND** zoom, reset, auto layout, reset layout, and layout preset controls SHALL remain hidden until the user expands the control group
+
+#### Scenario: User preference is restored
+- **GIVEN** the user explicitly expands or collapses the canvas controls
+- **WHEN** the Project Map panel remounts or reloads
+- **THEN** the controls SHALL restore the user's last explicit collapsed/expanded preference
+- **AND** that preference SHALL be stored as local UI chrome state rather than Project Map dataset content
+
+#### Scenario: Graph actions do not mutate toolbar preference
+- **GIVEN** the user has expanded the canvas controls
+- **WHEN** the user zooms, resets the view, runs auto layout, resets layout, changes layout preset, drills into a node, returns to previous view, or returns to overview
+- **THEN** the canvas controls SHALL remain expanded
+- **AND** those graph actions SHALL NOT overwrite the stored collapsed/expanded preference

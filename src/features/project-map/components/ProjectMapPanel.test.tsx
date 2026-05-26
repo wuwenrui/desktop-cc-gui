@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { ComponentProps } from "react";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { mockProjectMapData } from "../mockProjectMapData";
 import type { ProjectMapDataset, ProjectMapNode, ProjectMapRunMetadata } from "../types";
@@ -12,6 +12,14 @@ function renderMockProjectMapPanel(
 ) {
   return render(<ProjectMapPanel workspaceName="mossx" dataset={mockProjectMapData} {...props} />);
 }
+
+function expandCanvasControls() {
+  fireEvent.click(screen.getByRole("button", { name: "projectMap.expandCanvasControls" }));
+}
+
+beforeEach(() => {
+  window.localStorage.clear();
+});
 
 function getGraphNodeBounds(nodeElement: Element): {
   left: number;
@@ -311,6 +319,7 @@ describe("ProjectMapPanel", () => {
 
   it("clears drag preview state when switching the layout preset", () => {
     const view = renderMockProjectMapPanel();
+    expandCanvasControls();
     const canvas = view.container.querySelector(".project-map-graph-canvas") as HTMLElement;
     const apiNode = screen.getByRole("button", { name: /接口表面 API Surface/i });
     const initialApiCenter = getGraphNodeCenter(apiNode);
@@ -331,6 +340,9 @@ describe("ProjectMapPanel", () => {
     const viewport = view.container.querySelector(".project-map-graph-viewport") as HTMLElement;
     const beforeTransform = viewport.style.transform;
 
+    expect(screen.getByRole("button", { name: "projectMap.expandCanvasControls" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "projectMap.autoLayout" })).toBeNull();
+    expandCanvasControls();
     expect(screen.getByRole("button", { name: "projectMap.autoLayout" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "projectMap.resetLayout" })).toBeTruthy();
     expect(screen.getByLabelText("projectMap.layoutPreset")).toBeTruthy();
@@ -354,6 +366,28 @@ describe("ProjectMapPanel", () => {
     fireEvent.click(miniMap, { clientX: 40, clientY: 24 });
 
     expect(viewport.style.transform).not.toBe(beforeTransform);
+  });
+
+  it("persists the canvas controls collapsed state without layout actions changing it", () => {
+    const view = renderMockProjectMapPanel();
+
+    expandCanvasControls();
+    expect(window.localStorage.getItem("ccgui.projectMap.canvasControlsCollapsed")).toBe("false");
+    fireEvent.click(screen.getByRole("button", { name: "projectMap.resetView" }));
+    fireEvent.click(screen.getByRole("button", { name: "projectMap.autoLayout" }));
+    fireEvent.click(screen.getByRole("button", { name: "projectMap.resetLayout" }));
+    fireEvent.change(screen.getByLabelText("projectMap.layoutPreset"), {
+      target: { value: "tree" },
+    });
+    expect(screen.getByRole("button", { name: "projectMap.collapseCanvasControls" })).toBeTruthy();
+    expect(window.localStorage.getItem("ccgui.projectMap.canvasControlsCollapsed")).toBe("false");
+
+    view.unmount();
+    renderMockProjectMapPanel();
+    expect(screen.getByRole("button", { name: "projectMap.collapseCanvasControls" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "projectMap.collapseCanvasControls" }));
+    expect(window.localStorage.getItem("ccgui.projectMap.canvasControlsCollapsed")).toBe("true");
   });
 
   it("fits the initial graph left of the open detail panel", () => {
@@ -384,6 +418,7 @@ describe("ProjectMapPanel", () => {
       toJSON: () => ({}),
     });
 
+    expandCanvasControls();
     fireEvent.click(screen.getByRole("button", { name: "projectMap.resetView" }));
 
     const viewport = view.container.querySelector(".project-map-graph-viewport") as HTMLElement;
@@ -418,6 +453,7 @@ describe("ProjectMapPanel", () => {
       toJSON: () => ({}),
     });
 
+    expandCanvasControls();
     fireEvent.click(screen.getByRole("button", { name: "projectMap.resetView" }));
     fireEvent.click(within(detailPanel).getByRole("button", { name: "projectMap.collapseDetail" }));
     fireEvent.click(screen.getByRole("button", { name: /接口表面 API Surface/i }));

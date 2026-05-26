@@ -88,6 +88,19 @@ Layout rules:
 - long paths and source chips wrap or truncate inside the dialog instead of clipping the left labels
 - narrow screens fall back to a single-column layout
 
+## Decision 9: Canvas controls have an independent persisted collapsed state
+
+The Project Map canvas controls are useful, but the full zoom/layout toolbar competes with the graph. The toolbar should therefore default to a compact collapsed entry. The expanded/collapsed state is a local UI preference, not Project Map knowledge, so it must not be written into the Project Map dataset or persisted snapshot.
+
+The state boundary is deliberately narrow:
+
+- default is collapsed when no user preference exists
+- only the canvas controls toggle writes the preference
+- zoom, reset view, auto layout, reset layout, layout preset changes, drilldown, and overview navigation do not mutate the preference
+- the preference is feature-scoped local UI state and is restored on remount/reload
+
+This keeps the toolbar predictable without letting unrelated map actions fight the user's chosen chrome density.
+
 ## Risks
 
 - [Risk] Auto runs could repeatedly enqueue under StrictMode. Mitigation: detect existing pending/running auto runs and persist `lastCheckedAt` before leaving the scan cycle.
@@ -97,6 +110,7 @@ Layout rules:
 - [Risk] Enabling Auto Ingestion can start a background run with an unsupported placeholder model. Mitigation: require engine/model confirmation before `enabled=true` is persisted.
 - [Risk] A model may answer with prose instead of JSON and fail otherwise valid collection work. Mitigation: perform one bounded JSON-only repair retry, then keep strict failure semantics if repair still does not validate.
 - [Risk] A fixed compact dialog width can clip labels or make source chips create awkward horizontal overflow. Mitigation: use compact width as the minimum, allow content-driven expansion, and keep viewport/mobile bounds explicit.
+- [Risk] Persisting the canvas toolbar state into the dataset would leak personal UI chrome into shared Project Map artifacts. Mitigation: store only a feature-scoped local UI preference and never include it in Project Map snapshot data.
 
 ## Rollback
 

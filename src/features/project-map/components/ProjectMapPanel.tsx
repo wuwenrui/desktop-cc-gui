@@ -112,7 +112,33 @@ const ZOOM_STEP = 0.1;
 const MINI_MAP_SIZE = { width: 180, height: 118 };
 const DETAIL_PANEL_FOCUS_OFFSET_MIN = 160;
 const DETAIL_PANEL_FOCUS_OFFSET_MAX = 240;
+const CANVAS_CONTROLS_COLLAPSED_STORAGE_KEY = "ccgui.projectMap.canvasControlsCollapsed";
 const ACTIVE_RUN_STATUSES = new Set<ProjectMapRunMetadata["status"]>(["pending", "running"]);
+
+function readCanvasControlsCollapsedPreference(): boolean {
+  if (typeof window === "undefined" || !window.localStorage) {
+    return true;
+  }
+
+  try {
+    const storedValue = window.localStorage.getItem(CANVAS_CONTROLS_COLLAPSED_STORAGE_KEY);
+    return storedValue === null ? true : storedValue === "true";
+  } catch {
+    return true;
+  }
+}
+
+function writeCanvasControlsCollapsedPreference(collapsed: boolean): void {
+  if (typeof window === "undefined" || !window.localStorage) {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(CANVAS_CONTROLS_COLLAPSED_STORAGE_KEY, String(collapsed));
+  } catch {
+    // UI preference persistence is best-effort.
+  }
+}
 
 function normalizePathForComparing(value: string): string {
   return value.replace(/[\\/]+$/g, "").replace(/\\/g, "/");
@@ -582,6 +608,9 @@ export function ProjectMapPanel({
   const [hoverNodeId, setHoverNodeId] = useState<string | null>(null);
   const [isLensStripCollapsed, setIsLensStripCollapsed] = useState(true);
   const [isProjectMapChromeCollapsed, setIsProjectMapChromeCollapsed] = useState(false);
+  const [isCanvasControlsCollapsed, setIsCanvasControlsCollapsed] = useState(
+    readCanvasControlsCollapsedPreference,
+  );
   const [isDetailCollapsed, setIsDetailCollapsed] = useState(false);
   const [isTaskDrawerOpen, setIsTaskDrawerOpen] = useState(false);
   const [selectedGraphNodeIds, setSelectedGraphNodeIds] = useState<Set<string>>(new Set());
@@ -800,6 +829,14 @@ export function ProjectMapPanel({
     panStartRef.current = null;
     suppressNextNodeClickRef.current = false;
     setDragPreviewPositions({});
+  }, []);
+
+  const handleCanvasControlsToggle = useCallback(() => {
+    setIsCanvasControlsCollapsed((current) => {
+      const nextCollapsed = !current;
+      writeCanvasControlsCollapsedPreference(nextCollapsed);
+      return nextCollapsed;
+    });
   }, []);
 
   const handleAutoLayout = useCallback(() => {
@@ -1500,64 +1537,85 @@ export function ProjectMapPanel({
             onWheel={handleCanvasWheel}
           >
             <div
-              className="project-map-canvas-control-group"
+              className={cn(
+                "project-map-canvas-control-group",
+                isCanvasControlsCollapsed && "is-collapsed",
+              )}
               role="group"
               aria-label={t("projectMap.canvasControls")}
             >
               <button
                 type="button"
-                onClick={() => updateZoom(viewport.zoom - ZOOM_STEP)}
-                aria-label={t("projectMap.zoomOut")}
+                className="project-map-canvas-controls-toggle"
+                onClick={handleCanvasControlsToggle}
+                aria-expanded={!isCanvasControlsCollapsed}
+                aria-label={
+                  isCanvasControlsCollapsed
+                    ? t("projectMap.expandCanvasControls")
+                    : t("projectMap.collapseCanvasControls")
+                }
               >
-                <ZoomOut aria-hidden />
-              </button>
-              <button
-                type="button"
-                onClick={fitGraphToViewport}
-              >
-                {t("projectMap.resetView")}
-              </button>
-              <button
-                type="button"
-                onClick={handleAutoLayout}
-              >
-                {t("projectMap.autoLayout")}
-              </button>
-              <button
-                type="button"
-                onClick={handleResetLayout}
-              >
-                {t("projectMap.resetLayout")}
-              </button>
-              <label className="project-map-layout-preset">
+                {isCanvasControlsCollapsed ? <ChevronRight aria-hidden /> : <ChevronDown aria-hidden />}
                 <span>{t("projectMap.layoutPreset")}</span>
-                <select
-                  value={dataset.viewState?.layoutPreset ?? "radial"}
-                  aria-label={t("projectMap.layoutPreset")}
-                  onChange={(event) =>
-                    handleLayoutPresetChange(event.currentTarget.value as ProjectMapLayoutPreset)
-                  }
-                >
-                  <option value="radial">{t("projectMap.layoutPresetRadial")}</option>
-                  <option value="tree">{t("projectMap.layoutPresetTree")}</option>
-                  <option value="force">{t("projectMap.layoutPresetForce")}</option>
-                </select>
-              </label>
-              <button
-                type="button"
-                onClick={() => updateZoom(viewport.zoom + ZOOM_STEP)}
-                aria-label={t("projectMap.zoomIn")}
-              >
-                <ZoomIn aria-hidden />
               </button>
-              {previousViewSnapshot || hasBackToParentFallback ? (
-                <button
-                  type="button"
-                  onClick={handleBackToPreviousView}
-                >
-                  <ArrowLeft aria-hidden />
-                  {backToPreviousLabel}
-                </button>
+              {!isCanvasControlsCollapsed ? (
+                <div className="project-map-canvas-controls-content">
+                  <button
+                    type="button"
+                    onClick={() => updateZoom(viewport.zoom - ZOOM_STEP)}
+                    aria-label={t("projectMap.zoomOut")}
+                  >
+                    <ZoomOut aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={fitGraphToViewport}
+                  >
+                    {t("projectMap.resetView")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAutoLayout}
+                  >
+                    {t("projectMap.autoLayout")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleResetLayout}
+                  >
+                    {t("projectMap.resetLayout")}
+                  </button>
+                  <label className="project-map-layout-preset">
+                    <span>{t("projectMap.layoutPreset")}</span>
+                    <select
+                      value={dataset.viewState?.layoutPreset ?? "radial"}
+                      aria-label={t("projectMap.layoutPreset")}
+                      onChange={(event) =>
+                        handleLayoutPresetChange(event.currentTarget.value as ProjectMapLayoutPreset)
+                      }
+                    >
+                      <option value="radial">{t("projectMap.layoutPresetRadial")}</option>
+                      <option value="tree">{t("projectMap.layoutPresetTree")}</option>
+                      <option value="force">{t("projectMap.layoutPresetForce")}</option>
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => updateZoom(viewport.zoom + ZOOM_STEP)}
+                    aria-label={t("projectMap.zoomIn")}
+                  >
+                    <ZoomIn aria-hidden />
+                  </button>
+                  {previousViewSnapshot || hasBackToParentFallback ? (
+                    <button
+                      type="button"
+                      onClick={handleBackToPreviousView}
+                    >
+                      <ArrowLeft aria-hidden />
+                      {backToPreviousLabel}
+                    </button>
+                  ) : null}
+                </div>
               ) : null}
             </div>
             <div
@@ -2094,13 +2152,13 @@ function DetailPanel({
             onClick={onBackToPrevious}
           >
             <ArrowLeft aria-hidden />
-            {backToPreviousLabel}
+            <span>{backToPreviousLabel}</span>
           </button>
         ) : null}
         {!collapsed && onBack ? (
           <button className="project-map-back-button" type="button" onClick={onBack}>
-            <ArrowLeft aria-hidden />
-            {t("projectMap.backToOverview")}
+            <Network aria-hidden />
+            <span>{t("projectMap.backToOverview")}</span>
           </button>
         ) : null}
       </div>

@@ -1361,12 +1361,22 @@
   top: 14px;
   z-index: 4;
   display: inline-flex;
+  align-items: stretch;
   max-width: calc(100% - 560px);
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--project-map-border) 72%, transparent);
   border-radius: 8px;
   background: color-mix(in srgb, var(--project-map-surface) 92%, transparent);
   box-shadow: 0 8px 20px var(--project-map-shadow);
+}
+
+.project-map-canvas-control-group.is-collapsed {
+  max-width: min(132px, calc(100% - 28px));
+}
+
+.project-map-canvas-controls-content {
+  display: inline-flex;
+  min-width: 0;
 }
 
 .project-map-canvas-control-group button {
@@ -1386,12 +1396,17 @@
   cursor: pointer;
 }
 
+.project-map-canvas-controls-toggle {
+  font-weight: 720;
+}
+
 .project-map-canvas-control-group button:first-child,
-.project-map-canvas-control-group button:last-child {
+.project-map-canvas-controls-content button:last-child {
   padding: 0 9px;
 }
 
-.project-map-canvas-control-group button:last-child {
+.project-map-canvas-control-group.is-collapsed .project-map-canvas-controls-toggle,
+.project-map-canvas-controls-content > :last-child {
   border-right: 0;
 }
 
@@ -1487,7 +1502,7 @@
 
 .project-map-detail-control-group {
   display: flex;
-  align-items: stretch;
+  align-items: center;
   max-width: 100%;
   width: fit-content;
   overflow: visible;
@@ -1510,15 +1525,16 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-height: 28px;
+  min-height: 32px;
   border: 0;
   border-right: 1px solid color-mix(in srgb, var(--project-map-border) 62%, transparent);
   border-radius: 0;
-  padding: 0 10px;
+  padding: 0 11px;
   background: transparent;
   color: var(--project-map-accent);
   font-size: 12px;
   font-weight: 680;
+  line-height: 1;
   cursor: pointer;
 }
 
@@ -1530,6 +1546,13 @@
 .project-map-detail-toggle svg {
   width: 14px;
   height: 14px;
+  flex: 0 0 auto;
+}
+
+.project-map-detail-control-group button span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1em;
 }
 
 .project-map-detail-peek {
@@ -1549,11 +1572,15 @@
 
 .project-map-detail-control-group .project-map-back-button {
   margin: 0;
+  min-height: 32px;
   border: 0;
   border-right: 1px solid color-mix(in srgb, var(--project-map-border) 62%, transparent);
   border-radius: 0;
+  padding: 0 11px;
   background: transparent;
   box-shadow: none;
+  font-size: 12px;
+  font-weight: 680;
 }
 
 .project-map-detail-control-group .project-map-back-button:last-child {

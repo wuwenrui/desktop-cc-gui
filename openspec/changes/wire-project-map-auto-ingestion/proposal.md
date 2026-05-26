@@ -28,6 +28,7 @@ This creates a misleading product surface. Users see a scheduler-like control, b
 - Enabling Auto Ingestion will require an explicit engine/model confirmation before `enabled=true` is persisted, preventing hidden fallback runs such as `codex/default`.
 - Worker validation will perform one JSON-only repair turn when the first AI response is natural language or malformed JSON, then keep the run failed if the repaired response is still invalid.
 - Generation and Auto Ingestion configuration dialogs will use content-adaptive width: the current compact dialog width is the minimum desktop width, while longer paths/source chips may expand the dialog up to the viewport-safe maximum instead of clipping labels or forcing awkward horizontal overflow.
+- Project Map canvas layout controls will default to a collapsed compact entry and remember the user's explicit collapsed/expanded preference without letting zoom, reset, auto-layout, drilldown, or overview navigation mutate that preference.
 - `autoApplyEvidenceBacked` remains visible as an advanced option only if it has an explicit path; otherwise it must not silently disable ingestion.
 
 ## 技术方案对比
@@ -89,3 +90,4 @@ Use Option B. It is the least surprising architecture: Auto Ingestion becomes an
 - Clicking enable shows engine/model selection first; cancelling keeps Auto Ingestion disabled, and confirming persists the chosen engine/model.
 - If the first AI response does not contain a valid Project Map JSON payload, the worker requests one JSON-only repair response and succeeds only when that repaired payload validates.
 - Configuration dialogs keep their compact baseline width for normal content, expand when read sources or write paths need more room, and still collapse to a single-column viewport-safe layout on narrow screens.
+- Canvas layout controls default to collapsed, can be expanded by the user, and preserve that user preference across remounts/reloads independently from graph actions.
