@@ -8,6 +8,14 @@ import type {
   ProjectMapProcessedMemoryMessage,
   ProjectMapRunMetadata,
 } from "../types";
+import { extractProjectMapWorkspaceEvidencePaths } from "./evidencePaths";
+
+function clampInteger(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) {
+    return min;
+  }
+  return Math.max(min, Math.min(max, Math.floor(value)));
+}
 
 function hashText(value: string): string {
   let hash = 0x811c9dc5;
@@ -77,7 +85,7 @@ export function shouldEvaluateProjectMapAutoIngestion(input: {
     return true;
   }
 
-  const intervalMs = Math.max(5, input.settings.checkIntervalMinutes) * 60_000;
+  const intervalMs = clampInteger(input.settings.checkIntervalMinutes, 5, 1440) * 60_000;
   return nowMs - lastCheckedAt >= intervalMs;
 }
 
@@ -97,7 +105,7 @@ export function shouldTriggerProjectMapAutoIngestion(input: {
 }): boolean {
   return (
     input.settings.enabled &&
-    input.unprocessedMessages.length >= input.settings.newSessionThreshold
+    input.unprocessedMessages.length >= clampInteger(input.settings.newSessionThreshold, 1, 50)
   );
 }
 
@@ -170,12 +178,8 @@ export function extractProjectMapMemoryEvidencePaths(
     ]
       .filter(Boolean)
       .join("\n");
-    const matches = evidenceText.matchAll(
-      /((?:src|app|server|packages|crates|cmd|internal|openspec|tests?)\/[^\s`'")]+)/g,
-    );
-    for (const match of matches) {
-      const path = match[1];
-      if (!path || seen.has(path)) {
+    for (const path of extractProjectMapWorkspaceEvidencePaths(evidenceText)) {
+      if (seen.has(path)) {
         continue;
       }
       seen.add(path);
@@ -201,10 +205,8 @@ export function createConversationKnowledgeCandidate(input: {
     .filter(Boolean)
     .join("\n");
 
-  const evidenceMatch = evidenceText.match(
-    /((?:src|app|server|packages|crates|cmd|internal|openspec|tests?)\/[^\s`'")]+)/,
-  );
-  if (!evidenceMatch) {
+  const evidencePath = extractProjectMapWorkspaceEvidencePaths(evidenceText)[0];
+  if (!evidencePath) {
     return null;
   }
 
@@ -215,7 +217,6 @@ export function createConversationKnowledgeCandidate(input: {
     return null;
   }
 
-  const evidencePath = evidenceMatch[1];
   return {
     id: `candidate_${input.memory.id}_${messageHash(input.memory)}`,
     status: "pending",

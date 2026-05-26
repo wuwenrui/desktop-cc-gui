@@ -121,7 +121,7 @@ Rollback: revert this change; no storage migration is required because existing 
 - Candidate calibration now reads path-like source labels/refs as workspace evidence through the same generic readable-file filter as explicit paths. This fixes legacy request data without introducing repository-specific allowlists.
 - Codex thread extraction now handles final assistant JSON from `last_agent_message` and nested terminal event fields, which prevents valid terminal output from being misreported as missing JSON.
 - Calibrated nodes that remain `candidate=true` now get explicit unresolved-candidate copy and node-level confirm/reject actions even when there is no separate candidate review record.
-- Known follow-up: splitting `ProjectMapPanel.tsx` into smaller inspector/graph/task-drawer components would reduce future UI risk, but it is outside this change's behavioral scope.
+- Follow-up status: the stability review split trace chips, task-drawer UI, and display helpers out of `ProjectMapPanel.tsx`, reducing the panel below the large-file near-threshold watchlist without changing behavioral scope.
 
 ## Open Questions
 

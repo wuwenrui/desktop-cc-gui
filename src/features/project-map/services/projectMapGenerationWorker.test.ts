@@ -460,11 +460,11 @@ describe("runProjectMapGenerationWorker", () => {
     });
   });
 
-  it("reads path-like source labels as generic workspace evidence for node calibration", async () => {
+  it("normalizes Windows-style source labels before reading workspace evidence", async () => {
     const dataset = datasetWithRuntimeNode();
     const prompts: string[] = [];
     vi.mocked(getWorkspaceFiles).mockResolvedValue({
-      files: ["package.json", "src/types.ts"],
+      files: ["package.json", String.raw`src\types.ts`, String.raw`node_modules\pkg\index.ts`],
       directories: [],
       gitignored_files: [],
       gitignored_directories: [],
@@ -510,11 +510,12 @@ describe("runProjectMapGenerationWorker", () => {
       run: nodeRun({
         generationIntent: "calibrateNode",
         includeDescendants: false,
-        readSources: [{ type: "symbol", label: "src/types.ts" }],
+        readSources: [{ type: "symbol", label: String.raw`src\types.ts` }],
       }),
       onRunUpdate: async () => {},
     });
 
+    expect(readWorkspaceFile).toHaveBeenCalledTimes(1);
     expect(readWorkspaceFile).toHaveBeenCalledWith("ws-1", "src/types.ts");
     expect(prompts[0]).toContain("--- FILE src/types.ts");
     expect(result.nodes.find((node) => node.id === "runtime-node")).toMatchObject({

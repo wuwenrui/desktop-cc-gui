@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent, MouseEvent, PointerEvent, WheelEvent } from "react";
-import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left";
 import ArrowDownRightFromCircle from "lucide-react/dist/esm/icons/arrow-down-right-from-circle";
 import ArrowUpLeftFromCircle from "lucide-react/dist/esm/icons/arrow-up-left-from-circle";
-import CircleX from "lucide-react/dist/esm/icons/circle-x";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import ChevronLeft from "lucide-react/dist/esm/icons/chevron-left";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
@@ -14,14 +12,12 @@ import Crosshair from "lucide-react/dist/esm/icons/crosshair";
 import Folder from "lucide-react/dist/esm/icons/folder";
 import Globe2 from "lucide-react/dist/esm/icons/globe-2";
 import HardDrive from "lucide-react/dist/esm/icons/hard-drive";
-import LinkIcon from "lucide-react/dist/esm/icons/link";
 import ListChecks from "lucide-react/dist/esm/icons/list-checks";
 import RefreshCcw from "lucide-react/dist/esm/icons/refresh-ccw";
 import Network from "lucide-react/dist/esm/icons/network";
 import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
 import Sparkles from "lucide-react/dist/esm/icons/sparkles";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2";
-import X from "lucide-react/dist/esm/icons/x";
 import ZoomIn from "lucide-react/dist/esm/icons/zoom-in";
 import ZoomOut from "lucide-react/dist/esm/icons/zoom-out";
 
@@ -60,20 +56,33 @@ import {
   type ProjectMapGraphNodePosition,
   type ProjectMapGraphViewport,
 } from "../utils/interactiveLayout";
+import {
+  formatProjectMapDateTime,
+  getProjectMapGenerationQueue,
+  getProjectMapRecentRuns,
+  translateProjectMapNodeKind,
+} from "../utils/display";
+import {
+  ProjectMapArtifactChip,
+  ProjectMapDiagramChip,
+  ProjectMapSourceChip,
+  normalizeProjectMapArtifactForDisplay,
+  type ProjectMapTraceTarget,
+} from "./ProjectMapTraceChips";
+import {
+  ProjectMapGenerationQueueBanner,
+  ProjectMapGenerationTaskDrawer,
+} from "./ProjectMapTaskDrawer";
 import type {
   ProjectMapDataset,
   ProjectMapGenerationRequest,
   ProjectMapCandidate,
-  ProjectMapDiagramArtifact,
   ProjectMapLens,
   ProjectMapLayoutPreset,
   ProjectMapNode,
-  ProjectMapNodeKind,
   ProjectMapProfile,
   ProjectMapRelatedArtifact,
-  ProjectMapRunMetadata,
   ProjectMapStorageLocation,
-  ProjectMapSource,
 } from "../types";
 
 type ProjectMapPanelProps = {
@@ -103,17 +112,11 @@ type GraphNodeDragState = {
   didMove: boolean;
 };
 
-type ProjectMapTraceTarget = {
-  path: string;
-  line?: number;
-};
-
 const ZOOM_STEP = 0.1;
 const MINI_MAP_SIZE = { width: 180, height: 118 };
 const DETAIL_PANEL_FOCUS_OFFSET_MIN = 160;
 const DETAIL_PANEL_FOCUS_OFFSET_MAX = 240;
 const CANVAS_CONTROLS_COLLAPSED_STORAGE_KEY = "ccgui.projectMap.canvasControlsCollapsed";
-const ACTIVE_RUN_STATUSES = new Set<ProjectMapRunMetadata["status"]>(["pending", "running"]);
 
 function readCanvasControlsCollapsedPreference(): boolean {
   if (typeof window === "undefined" || !window.localStorage) {
@@ -246,174 +249,6 @@ function getDescendantStats(
   };
 }
 
-function formatDateTime(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
-}
-
-function formatFallbackLabel(value: string): string {
-  return value
-    .replace(/[_-]+/g, " ")
-    .replace(/([a-z])([A-Z])/g, "$1 $2")
-    .trim()
-    .replace(/\b\w/g, (character) => character.toUpperCase()) || value;
-}
-
-function translateNodeKind(
-  t: TFunction,
-  nodeKind: ProjectMapNodeKind | string,
-): string {
-  return t(`projectMap.nodeKind.${nodeKind}`, {
-    defaultValue: formatFallbackLabel(String(nodeKind)),
-  });
-}
-
-function translateSourceType(
-  t: TFunction,
-  sourceType: ProjectMapSource["type"] | string,
-): string {
-  return t(`projectMap.sourceType.${sourceType}`, {
-    defaultValue: String(sourceType).toUpperCase(),
-  });
-}
-
-function getRunActionLabel(t: TFunction, run: ProjectMapRunMetadata): string {
-  const intent =
-    run.generationIntent ??
-    (run.requestScope?.kind === "node" ? "completeNode" : "global");
-  return t(`projectMap.tasks.action.${intent}`, {
-    defaultValue: formatFallbackLabel(intent),
-  });
-}
-
-function getRunTargetLabel(
-  t: TFunction,
-  run: ProjectMapRunMetadata,
-  nodeIndex: Map<string, ProjectMapNode>,
-): string {
-  const scope = run.requestScope;
-  if (!scope || scope.kind === "global") {
-    return t("projectMap.tasks.targetGlobal");
-  }
-  if (scope.kind !== "node") {
-    return t("projectMap.tasks.targetUnknown", { target: scope.kind });
-  }
-  const node = nodeIndex.get(scope.nodeId);
-  if (!node) {
-    return t("projectMap.tasks.targetDeleted", { nodeId: scope.nodeId });
-  }
-  return `${node.title} · ${scope.nodeId}`;
-}
-
-function asTrimmedString(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === "object" && !Array.isArray(value));
-}
-
-function getPathBasename(path: string): string {
-  return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
-}
-
-function looksLikeWorkspaceFilePath(value: string): boolean {
-  const candidate = value.trim();
-  if (!candidate || /^[a-z][a-z0-9+.-]*:\/\//i.test(candidate)) {
-    return false;
-  }
-  if (candidate.includes("/") || candidate.includes("\\")) {
-    return true;
-  }
-  return /\.(?:c|cc|conf|cpp|cs|css|go|gradle|h|hpp|html|java|js|json|jsx|kt|md|mdx|properties|py|rb|rs|sql|toml|ts|tsx|txt|xml|yaml|yml)$/i.test(candidate);
-}
-
-function inferArtifactTracePath(input: {
-  label: string;
-  path: string;
-  ref: string;
-}): string {
-  if (input.path) {
-    return input.path;
-  }
-  if (looksLikeWorkspaceFilePath(input.label)) {
-    return input.label;
-  }
-  if (looksLikeWorkspaceFilePath(input.ref)) {
-    return input.ref;
-  }
-  return "";
-}
-
-function normalizeTraceSourceType(value: unknown): ProjectMapRelatedArtifact["type"] {
-  const sourceType = asTrimmedString(value);
-  return ["file", "symbol", "spec", "commit", "test", "conversation"].includes(sourceType)
-    ? (sourceType as ProjectMapRelatedArtifact["type"])
-    : "file";
-}
-
-function normalizeArtifactForDisplay(value: unknown): ProjectMapRelatedArtifact | null {
-  const legacyLabel = asTrimmedString(value);
-  if (legacyLabel) {
-    const inferredPath = inferArtifactTracePath({
-      label: legacyLabel,
-      path: "",
-      ref: "",
-    });
-    return {
-      type: "symbol",
-      label: legacyLabel,
-      ...(inferredPath ? { path: inferredPath } : {}),
-    };
-  }
-  if (!isRecord(value)) {
-    return null;
-  }
-
-  const type = normalizeTraceSourceType(value.type);
-  const label = asTrimmedString(value.label);
-  const path = asTrimmedString(value.path);
-  const ref = asTrimmedString(value.ref);
-  const inferredPath = inferArtifactTracePath({ label, path, ref });
-  const rawLine = typeof value.line === "number" ? value.line : Number(asTrimmedString(value.line));
-  const line = Number.isFinite(rawLine) && rawLine > 0 ? Math.floor(rawLine) : undefined;
-  const normalizedLabel = label || (inferredPath ? getPathBasename(inferredPath) : "") || ref || type;
-  if (!normalizedLabel) {
-    return null;
-  }
-
-  return {
-    type,
-    label: normalizedLabel,
-    ...(inferredPath ? { path: inferredPath } : {}),
-    ...(line ? { line } : {}),
-    ...(ref ? { ref } : {}),
-  };
-}
-
-function getTraceLabel(
-  item: Pick<ProjectMapRelatedArtifact, "path" | "line" | "ref"> & {
-    hash?: string;
-  },
-): string | null {
-  if (item.path) {
-    return item.line ? `${item.path}:${item.line}` : item.path;
-  }
-  return item.ref ?? item.hash ?? null;
-}
-
-function getTraceTarget(
-  item: Pick<ProjectMapRelatedArtifact, "path" | "line">,
-): ProjectMapTraceTarget | null {
-  return item.path ? { path: item.path, line: item.line } : null;
-}
-
 function getProfileSummary(profile: Partial<ProjectMapProfile> | null | undefined): {
   language: string;
   shapes: string;
@@ -429,21 +264,6 @@ function getProfileSummary(profile: Partial<ProjectMapProfile> | null | undefine
   return { language, shapes };
 }
 
-function getGenerationQueue(runs: ProjectMapRunMetadata[]): ProjectMapRunMetadata[] {
-  return runs
-    .filter((run) => ACTIVE_RUN_STATUSES.has(run.status))
-    .sort((left, right) => {
-      const statusDelta = Number(right.status === "running") - Number(left.status === "running");
-      return statusDelta || new Date(left.startedAt).getTime() - new Date(right.startedAt).getTime();
-    });
-}
-
-function getRecentRuns(runs: ProjectMapRunMetadata[]): ProjectMapRunMetadata[] {
-  return runs
-    .filter((run) => !ACTIVE_RUN_STATUSES.has(run.status))
-    .sort((left, right) => new Date(right.startedAt).getTime() - new Date(left.startedAt).getTime());
-}
-
 function isCandidateAfterCompletedCalibration(
   dataset: ProjectMapDataset,
   node: ProjectMapNode,
@@ -455,117 +275,6 @@ function isCandidateAfterCompletedCalibration(
       generatedRun.generationIntent === "calibrateNode" &&
       generatedRun.requestScope?.kind === "node" &&
       generatedRun.requestScope.nodeId === node.id,
-  );
-}
-
-function SourceChip({
-  source,
-  onOpenTrace,
-}: {
-  source: ProjectMapSource;
-  onOpenTrace?: (target: ProjectMapTraceTarget) => void;
-}) {
-  const { t } = useTranslation();
-  const traceLabel = getTraceLabel(source);
-
-  return (
-    <TraceChip
-      label={source.label}
-      typeLabel={translateSourceType(t, source.type)}
-      traceLabel={traceLabel}
-      target={getTraceTarget(source)}
-      excerpt={source.excerpt}
-      onOpenTrace={onOpenTrace}
-    />
-  );
-}
-
-function ArtifactChip({
-  artifact,
-  onOpenTrace,
-}: {
-  artifact: ProjectMapRelatedArtifact;
-  onOpenTrace?: (target: ProjectMapTraceTarget) => void;
-}) {
-  const { t } = useTranslation();
-
-  return (
-    <TraceChip
-      label={artifact.label}
-      typeLabel={translateSourceType(t, artifact.type)}
-      traceLabel={getTraceLabel(artifact)}
-      target={getTraceTarget(artifact)}
-      onOpenTrace={onOpenTrace}
-    />
-  );
-}
-
-function DiagramChip({
-  diagram,
-  onOpenTrace,
-}: {
-  diagram: ProjectMapDiagramArtifact;
-  onOpenTrace?: (target: ProjectMapTraceTarget) => void;
-}) {
-  const { t } = useTranslation();
-
-  return (
-    <TraceChip
-      label={diagram.label}
-      typeLabel={t("projectMap.detail.diagramArtifact")}
-      traceLabel={diagram.path}
-      target={{ path: diagram.path }}
-      excerpt={diagram.summary}
-      onOpenTrace={onOpenTrace}
-    />
-  );
-}
-
-function TraceChip({
-  label,
-  typeLabel,
-  traceLabel,
-  target,
-  excerpt,
-  onOpenTrace,
-}: {
-  label: string;
-  typeLabel: string;
-  traceLabel: string | null;
-  target: ProjectMapTraceTarget | null;
-  excerpt?: string;
-  onOpenTrace?: (target: ProjectMapTraceTarget) => void;
-}) {
-  const { t } = useTranslation();
-  const body = (
-    <>
-      <span className="project-map-source-type">{typeLabel}</span>
-      <span className="project-map-trace-label">{label}</span>
-      {traceLabel ? <span className="project-map-trace-path">{traceLabel}</span> : null}
-      {excerpt ? <span className="project-map-trace-excerpt">{excerpt}</span> : null}
-    </>
-  );
-
-  if (!traceLabel || !target || !onOpenTrace) {
-    return (
-      <span className="project-map-trace-chip" title={label}>
-        {traceLabel && target ? <LinkIcon aria-hidden /> : null}
-        {body}
-      </span>
-    );
-  }
-
-  return (
-    <button
-      className="project-map-trace-chip is-traceable"
-      type="button"
-      title={traceLabel}
-      aria-label={`${t("projectMap.trace.openTrace", { label, trace: traceLabel })}: ${label} ${traceLabel}`}
-      onClick={() => onOpenTrace(target)}
-    >
-      <LinkIcon aria-hidden />
-      {body}
-    </button>
   );
 }
 
@@ -732,8 +441,8 @@ export function ProjectMapPanel({
     return entries;
   }, [dataset.candidates]);
   const staleCount = dataset.nodes.filter((node) => node.stale).length;
-  const generationQueue = useMemo(() => getGenerationQueue(dataset.runs), [dataset.runs]);
-  const recentRuns = useMemo(() => getRecentRuns(dataset.runs), [dataset.runs]);
+  const generationQueue = useMemo(() => getProjectMapGenerationQueue(dataset.runs), [dataset.runs]);
+  const recentRuns = useMemo(() => getProjectMapRecentRuns(dataset.runs), [dataset.runs]);
   const activeGenerationRun = generationQueue[0] ?? null;
   const queuedGenerationRuns = generationQueue.slice(1);
   const previousGenerationQueueCountRef = useRef(generationQueue.length);
@@ -1343,7 +1052,7 @@ export function ProjectMapPanel({
               <div className="project-map-meta-row">
                 <span className="project-map-meta-pill is-primary">
                   {t("projectMap.lastGenerated", {
-                    value: formatDateTime(dataset.manifest.updatedAt),
+                    value: formatProjectMapDateTime(dataset.manifest.updatedAt),
                   })}
                 </span>
                 <span className="project-map-meta-pill">
@@ -1435,7 +1144,7 @@ export function ProjectMapPanel({
 
       <main className="project-map-stage" aria-label={t("projectMap.stageAria")}>
         {activeGenerationRun ? (
-          <GenerationQueueBanner
+          <ProjectMapGenerationQueueBanner
             activeRun={activeGenerationRun}
             queuedCount={queuedGenerationRuns.length}
           />
@@ -1683,7 +1392,7 @@ export function ProjectMapPanel({
                     aria-label={`${t("projectMap.nodeAria", { title: node.title })}: ${node.title}`}
                   >
                     <span className="project-map-node-kind">
-                      {translateNodeKind(t, node.nodeKind)}
+                      {translateProjectMapNodeKind(t, node.nodeKind)}
                     </span>
                     <strong>{node.title}</strong>
                     <span>{lensIndex.get(node.lensId)?.shortTitle ?? node.lensId}</span>
@@ -1830,7 +1539,7 @@ export function ProjectMapPanel({
         }}
       />
       {isTaskDrawerOpen ? (
-        <GenerationTaskDrawer
+        <ProjectMapGenerationTaskDrawer
           activeRun={activeGenerationRun}
           queuedRuns={queuedGenerationRuns}
           recentRuns={recentRuns}
@@ -1841,236 +1550,6 @@ export function ProjectMapPanel({
         />
       ) : null}
     </section>
-  );
-}
-
-function GenerationQueueBanner({
-  activeRun,
-  queuedCount,
-}: {
-  activeRun: ProjectMapRunMetadata;
-  queuedCount: number;
-}) {
-  const { t } = useTranslation();
-
-  return (
-    <section className="project-map-task-banner" aria-label={t("projectMap.tasks.bannerAria")}>
-      <div>
-        <span className="project-map-task-state">
-          {activeRun.status === "running"
-            ? t("projectMap.tasks.running")
-            : t("projectMap.tasks.activeSlot")}
-        </span>
-        <strong>{t("projectMap.tasks.bannerTitle")}</strong>
-        <p>
-          {t("projectMap.tasks.bannerBody", {
-            engine: activeRun.engine,
-            model: activeRun.model,
-            queued: queuedCount,
-          })}
-        </p>
-      </div>
-      <code>{activeRun.writePath ?? "-"}</code>
-    </section>
-  );
-}
-
-function GenerationTaskDrawer({
-  activeRun,
-  queuedRuns,
-  recentRuns,
-  nodeIndex,
-  onCancelRun,
-  onClearFinished,
-  onClose,
-}: {
-  activeRun: ProjectMapRunMetadata | null;
-  queuedRuns: ProjectMapRunMetadata[];
-  recentRuns: ProjectMapRunMetadata[];
-  nodeIndex: Map<string, ProjectMapNode>;
-  onCancelRun: (runId: string) => Promise<void>;
-  onClearFinished: () => Promise<void>;
-  onClose: () => void;
-}) {
-  const { t } = useTranslation();
-  const hasClearableRuns = recentRuns.length > 0;
-
-  return (
-    <aside
-      className="project-map-task-drawer"
-      role="dialog"
-      aria-modal="false"
-      aria-label={t("projectMap.tasks.drawerTitle")}
-    >
-      <header>
-        <div>
-          <span className="project-map-eyebrow">{t("projectMap.tasks.eyebrow")}</span>
-          <h3>{t("projectMap.tasks.drawerTitle")}</h3>
-        </div>
-        <button type="button" onClick={onClose} aria-label={t("projectMap.tasks.close")}>
-          <X aria-hidden />
-        </button>
-      </header>
-      <section className="project-map-task-active-card">
-        <h4>{t("projectMap.tasks.activeTitle")}</h4>
-        {activeRun ? (
-          <ProjectMapRunCard
-            run={activeRun}
-            badge={t("projectMap.tasks.activeBadge")}
-            mode="active"
-            nodeIndex={nodeIndex}
-            onCancel={() => void onCancelRun(activeRun.id)}
-          />
-        ) : (
-          <p>{t("projectMap.tasks.emptyActive")}</p>
-        )}
-      </section>
-      <section>
-        <h4>{t("projectMap.tasks.queueTitle", { count: queuedRuns.length })}</h4>
-        {queuedRuns.length > 0 ? (
-          <div className="project-map-task-list">
-            {queuedRuns.map((run, index) => (
-              <ProjectMapRunCard
-                key={run.id}
-                run={run}
-                badge={t("projectMap.tasks.queueBadge", { index: index + 1 })}
-                mode="queue"
-                nodeIndex={nodeIndex}
-                onCancel={() => void onCancelRun(run.id)}
-              />
-            ))}
-          </div>
-        ) : (
-          <p>{t("projectMap.tasks.emptyQueue")}</p>
-        )}
-      </section>
-      <section>
-        <div className="project-map-task-section-heading">
-          <h4>{t("projectMap.tasks.recentTitle")}</h4>
-          {hasClearableRuns ? (
-            <button
-              className="project-map-task-clear"
-              type="button"
-              onClick={() => void onClearFinished()}
-            >
-              <Trash2 aria-hidden />
-              {t("projectMap.tasks.clearDone")}
-            </button>
-          ) : null}
-        </div>
-        {recentRuns.length > 0 ? (
-          <div className="project-map-task-list">
-            {recentRuns.slice(0, 6).map((run) => (
-              <ProjectMapRunCard
-                key={`${run.id}-recent`}
-                run={run}
-                badge={t(`projectMap.tasks.status.${run.status}`)}
-                mode="recent"
-                nodeIndex={nodeIndex}
-              />
-            ))}
-          </div>
-        ) : (
-          <p>{t("projectMap.tasks.emptyRecent")}</p>
-        )}
-      </section>
-      <footer>
-        <p>{t("projectMap.tasks.closeHint")}</p>
-      </footer>
-    </aside>
-  );
-}
-
-function ProjectMapRunCard({
-  run,
-  badge,
-  mode = "recent",
-  nodeIndex,
-  onCancel,
-}: {
-  run: ProjectMapRunMetadata;
-  badge: string;
-  mode?: "active" | "queue" | "recent";
-  nodeIndex: Map<string, ProjectMapNode>;
-  onCancel?: () => void;
-}) {
-  const { t } = useTranslation();
-  const showProgress = mode === "active" && ACTIVE_RUN_STATUSES.has(run.status);
-  const showCancelButton = Boolean(onCancel) && ACTIVE_RUN_STATUSES.has(run.status);
-  const cancelTitle =
-    mode === "active"
-      ? t("projectMap.tasks.stop")
-      : t("projectMap.tasks.cancel");
-  const cancelAriaLabel =
-    mode === "active"
-      ? t("projectMap.tasks.stopRun", { runId: run.id })
-      : t("projectMap.tasks.cancelRun", { runId: run.id });
-  const phase = run.phase ?? (run.status === "running" ? "askingAi" : "queued");
-  const progress = typeof run.progress === "number" ? run.progress : run.status === "running" ? 45 : 8;
-  const latestLog = run.logs?.[run.logs.length - 1] ?? null;
-  const actionLabel = getRunActionLabel(t, run);
-  const targetLabel = getRunTargetLabel(t, run, nodeIndex);
-
-  return (
-    <article className={cn("project-map-task-card", `status-${run.status}`, `mode-${mode}`)}>
-      <div className="project-map-task-card-head">
-        <span>{badge}</span>
-        <strong className="project-map-task-action">{actionLabel}</strong>
-        <code className="project-map-task-run-id">{run.id}</code>
-        {showCancelButton ? (
-          <button
-            className="project-map-task-cancel"
-            type="button"
-            onClick={onCancel}
-            aria-label={cancelAriaLabel}
-            title={cancelTitle}
-          >
-            <CircleX aria-hidden />
-          </button>
-        ) : null}
-      </div>
-      <div className="project-map-task-target">
-        <span>{t("projectMap.tasks.target")}</span>
-        <strong title={targetLabel}>{targetLabel}</strong>
-      </div>
-      {showProgress ? (
-        <div className="project-map-task-progress" aria-label={t("projectMap.tasks.progressAria")}>
-          <span style={{ width: `${Math.max(8, Math.min(100, progress))}%` }} />
-        </div>
-      ) : null}
-      {mode === "active" ? (
-        <p className="project-map-task-phase">
-          {t(`projectMap.tasks.phase.${phase}`)}
-        </p>
-      ) : null}
-      {latestLog ? (
-        <p className="project-map-task-log">
-          {formatDateTime(latestLog.at)} · {latestLog.message}
-        </p>
-      ) : null}
-      <dl>
-        <div>
-          <dt>{t("projectMap.tasks.engineModel")}</dt>
-          <dd>{run.engine} / {run.model}</dd>
-        </div>
-        <div>
-          <dt>{t("projectMap.confirmation.scope")}</dt>
-          <dd>{run.scope}</dd>
-        </div>
-        <div>
-          <dt>{t("projectMap.tasks.startedAt")}</dt>
-          <dd>{formatDateTime(run.startedAt)}</dd>
-        </div>
-        {run.threadId ? (
-          <div>
-            <dt>{t("projectMap.tasks.threadId")}</dt>
-            <dd>{run.threadId}</dd>
-          </div>
-        ) : null}
-      </dl>
-      <code>{run.writePath ?? "-"}</code>
-      {run.error ? <p className="project-map-task-error">{run.error}</p> : null}
-    </article>
   );
 }
 
@@ -2165,7 +1644,7 @@ function DetailPanel({
       {collapsed ? (
         <div className="project-map-detail-peek">
           <span className="project-map-node-kind">
-            {node ? translateNodeKind(t, node.nodeKind) : t("projectMap.inspector")}
+            {node ? translateProjectMapNodeKind(t, node.nodeKind) : t("projectMap.inspector")}
           </span>
           <strong>{node?.title ?? t("projectMap.emptyInspector")}</strong>
         </div>
@@ -2175,7 +1654,7 @@ function DetailPanel({
           {node ? (
             <>
           <div className="project-map-inspector-heading">
-            <span className="project-map-node-kind">{translateNodeKind(t, node.nodeKind)}</span>
+            <span className="project-map-node-kind">{translateProjectMapNodeKind(t, node.nodeKind)}</span>
             <h3>{node.title}</h3>
             <p>{node.summary}</p>
             <div className="project-map-inspector-badges">
@@ -2252,7 +1731,7 @@ function DetailPanel({
               <h4>{t("projectMap.detail.diagrams")}</h4>
               <div className="project-map-artifact-list">
                 {(node.detail.diagramArtifacts ?? []).map((diagram) => (
-                  <DiagramChip
+                  <ProjectMapDiagramChip
                     key={`${diagram.id}-${diagram.path}`}
                     diagram={diagram}
                     onOpenTrace={onOpenTrace}
@@ -2265,10 +1744,10 @@ function DetailPanel({
             <h4>{t("projectMap.detail.relatedArtifacts")}</h4>
             <div className="project-map-artifact-list">
               {node.detail.relatedArtifacts
-                .map(normalizeArtifactForDisplay)
+                .map(normalizeProjectMapArtifactForDisplay)
                 .filter((artifact): artifact is ProjectMapRelatedArtifact => Boolean(artifact))
                 .map((artifact) => (
-                  <ArtifactChip
+                  <ProjectMapArtifactChip
                     key={`${artifact.type}-${artifact.label}-${artifact.path ?? artifact.ref ?? ""}`}
                     artifact={artifact}
                     onOpenTrace={onOpenTrace}
@@ -2280,7 +1759,7 @@ function DetailPanel({
             <h4>{t("projectMap.evidenceTitle")}</h4>
             <div className="project-map-source-list">
               {node.sources.map((source) => (
-                <SourceChip
+                <ProjectMapSourceChip
                   key={`${source.type}-${source.label}-${source.path ?? source.hash ?? ""}`}
                   source={source}
                   onOpenTrace={onOpenTrace}
@@ -2293,7 +1772,7 @@ function DetailPanel({
             <dl className="project-map-definition-grid">
               <div>
                 <dt>{t("projectMap.detail.lastGeneratedAt")}</dt>
-                <dd>{formatDateTime(node.lastGeneratedAt)}</dd>
+                <dd>{formatProjectMapDateTime(node.lastGeneratedAt)}</dd>
               </div>
               <div>
                 <dt>{t("projectMap.detail.generatedBy")}</dt>
@@ -2889,7 +2368,7 @@ function GenerationConfirmationDialog({
           <h4>{t("projectMap.confirmation.readSources")}</h4>
           <div className="project-map-source-list">
             {request.readSources.slice(0, 8).map((source) => (
-              <SourceChip
+              <ProjectMapSourceChip
                 key={`${source.type}-${source.label}-${source.path ?? source.hash ?? ""}`}
                 source={source}
               />

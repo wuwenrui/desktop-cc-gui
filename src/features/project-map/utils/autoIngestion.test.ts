@@ -6,6 +6,7 @@ import { mockProjectMapData } from "../mockProjectMapData";
 import {
   createConversationKnowledgeCandidate,
   discoverUnprocessedProjectMemoryMessages,
+  extractProjectMapMemoryEvidencePaths,
   hasActiveProjectMapAutoIngestionRun,
   markProjectMapMessagesProcessed,
   shouldEvaluateProjectMapAutoIngestion,
@@ -81,6 +82,38 @@ describe("project map auto ingestion", () => {
     ).toBe(true);
   });
 
+  it("clamps invalid ingestion thresholds before trigger checks", () => {
+    expect(
+      shouldTriggerProjectMapAutoIngestion({
+        settings: {
+          enabled: true,
+          engine: "codex",
+          model: "default",
+          newSessionThreshold: Number.NaN,
+          checkIntervalMinutes: 30,
+          applyMode: "createCandidate",
+        },
+        unprocessedMessages: [{ sessionId: "s1", messageHash: "h1" }],
+      }),
+    ).toBe(true);
+    expect(
+      shouldTriggerProjectMapAutoIngestion({
+        settings: {
+          enabled: true,
+          engine: "codex",
+          model: "default",
+          newSessionThreshold: 100,
+          checkIntervalMinutes: 30,
+          applyMode: "createCandidate",
+        },
+        unprocessedMessages: Array.from({ length: 49 }, (_, index) => ({
+          sessionId: `s${index}`,
+          messageHash: `h${index}`,
+        })),
+      }),
+    ).toBe(false);
+  });
+
   it("evaluates auto ingestion only after the configured interval and without active auto runs", () => {
     const settings = {
       enabled: true,
@@ -110,6 +143,39 @@ describe("project map auto ingestion", () => {
         cursor,
         runs: [],
         now: "2026-05-26T00:31:00.000Z",
+      }),
+    ).toBe(true);
+  });
+
+  it("clamps invalid check intervals before evaluation", () => {
+    const settings = {
+      enabled: true,
+      engine: "codex",
+      model: "default",
+      newSessionThreshold: 1,
+      checkIntervalMinutes: 0,
+      applyMode: "createCandidate" as const,
+    };
+    const cursor = {
+      lastCheckedAt: "2026-05-26T00:00:00.000Z",
+      processedMessages: [],
+      pendingMessages: [],
+    };
+
+    expect(
+      shouldEvaluateProjectMapAutoIngestion({
+        settings,
+        cursor,
+        runs: [],
+        now: "2026-05-26T00:04:00.000Z",
+      }),
+    ).toBe(false);
+    expect(
+      shouldEvaluateProjectMapAutoIngestion({
+        settings,
+        cursor,
+        runs: [],
+        now: "2026-05-26T00:05:00.000Z",
       }),
     ).toBe(true);
   });
@@ -158,5 +224,16 @@ describe("project map auto ingestion", () => {
     expect(candidate?.status).toBe("pending");
     expect(candidate?.source).toBe("conversation");
     expect(missingEvidenceCandidate).toBeNull();
+  });
+
+  it("extracts Windows-style evidence paths from memory text", () => {
+    expect(
+      extractProjectMapMemoryEvidencePaths([
+        memory({
+          cleanText: String.raw`Updated src\features\project-map\types.ts:42 and ignored C:\repo\mossx\secret.ts`,
+          summary: "Project map path extraction",
+        }),
+      ]),
+    ).toEqual(["src/features/project-map/types.ts"]);
   });
 });

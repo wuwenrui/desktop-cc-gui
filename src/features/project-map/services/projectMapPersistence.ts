@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   ProjectMapAutoIngestionSettings,
   ProjectMapCandidate,
+  ProjectMapDiagramArtifact,
   ProjectMapDiagramDocument,
   ProjectMapDataset,
   ProjectMapEvidenceRecord,
@@ -10,18 +11,27 @@ import type {
   ProjectMapManifest,
   ProjectMapMemoryIngestionCursor,
   ProjectMapNode,
+  ProjectMapNodeDetail,
   ProjectMapProfile,
+  ProjectMapRelatedArtifact,
   ProjectMapRunMetadata,
   ProjectMapSource,
+  ProjectMapSourceType,
   ProjectMapStorageLocation,
   ProjectMapViewState,
 } from "../types";
 import { normalizeProjectMapNodeTopology } from "../utils/incrementalGeneration";
 import { deriveProjectMapStorageKey } from "../utils/storageKey";
+import {
+  getProjectMapPathBasename,
+  inferProjectMapWorkspaceFilePath,
+  isProjectMapDiagramRelativePath,
+  normalizeWorkspaceEvidencePath,
+  uniqueProjectMapPathSegment,
+} from "../utils/evidencePaths";
 
 export const PROJECT_MAP_SCHEMA_VERSION = 2;
 const PROJECT_MAP_WRITE_TIMEOUT_MS = 20_000;
-const MAX_SAFE_PATH_SEGMENT_LENGTH = 64;
 
 export type ProjectMapReadResponse = {
   storageKey: string;
@@ -95,56 +105,6 @@ const DEFAULT_MEMORY_CURSOR: ProjectMapMemoryIngestionCursor = {
   pendingMessages: [],
 };
 
-const WINDOWS_RESERVED_PATH_SEGMENTS = new Set([
-  "con",
-  "prn",
-  "aux",
-  "nul",
-  "com1",
-  "com2",
-  "com3",
-  "com4",
-  "com5",
-  "com6",
-  "com7",
-  "com8",
-  "com9",
-  "lpt1",
-  "lpt2",
-  "lpt3",
-  "lpt4",
-  "lpt5",
-  "lpt6",
-  "lpt7",
-  "lpt8",
-  "lpt9",
-]);
-
-function normalizePathSegment(value: string, fallback: string): string {
-  const normalized = value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9._-]+/g, "-")
-    .replace(/^[._-]+|[._-]+$/g, "")
-    .slice(0, MAX_SAFE_PATH_SEGMENT_LENGTH)
-    .replace(/[._-]+$/g, "");
-  const candidate = normalized || fallback;
-  return WINDOWS_RESERVED_PATH_SEGMENTS.has(candidate) ? `lens-${candidate}` : candidate;
-}
-
-function uniquePathSegment(value: string, used: Set<string>, fallback: string): string {
-  const base = normalizePathSegment(value, fallback);
-  let candidate = base;
-  let index = 2;
-  while (used.has(candidate)) {
-    const suffix = `-${index}`;
-    candidate = `${base.slice(0, MAX_SAFE_PATH_SEGMENT_LENGTH - suffix.length)}${suffix}`;
-    index += 1;
-  }
-  used.add(candidate);
-  return candidate;
-}
-
 export function createEmptyProjectMapDataset(input: {
   identity: ProjectMapStorageIdentity;
   storageKey?: string;
@@ -205,8 +165,89 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
-function isProjectMapSource(value: unknown): value is ProjectMapSource {
-  return isRecord(value) && typeof value.type === "string" && typeof value.label === "string";
+const SUPPORTED_SOURCE_TYPES = new Set<ProjectMapSourceType>([
+  "file",
+  "symbol",
+  "spec",
+  "commit",
+  "test",
+  "conversation",
+]);
+
+function normalizeOptionalPositiveLine(value: unknown): number | undefined {
+  const line = typeof value === "number" ? value : Number(asTrimmedString(value));
+  return Number.isFinite(line) && line > 0 ? Math.floor(line) : undefined;
+}
+
+function clampProjectMapInteger(
+  value: unknown,
+  min: number,
+  max: number,
+  fallback: number,
+): number {
+  const numericValue = typeof value === "number" ? value : Number(asTrimmedString(value));
+  if (!Number.isFinite(numericValue)) {
+    return fallback;
+  }
+  return Math.max(min, Math.min(max, Math.floor(numericValue)));
+}
+
+function normalizeSourceType(value: unknown): ProjectMapSourceType {
+  const sourceType = asTrimmedString(value);
+  return SUPPORTED_SOURCE_TYPES.has(sourceType as ProjectMapSourceType)
+    ? (sourceType as ProjectMapSourceType)
+    : "file";
+}
+
+function sanitizeStringArray(value: unknown, limit: number): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map(asTrimmedString)
+    .filter(Boolean)
+    .slice(0, limit);
+}
+
+function sanitizeProjectMapSource(value: unknown): ProjectMapSource | null {
+  const legacyLabel = asTrimmedString(value);
+  if (legacyLabel) {
+    const path = normalizeWorkspaceEvidencePath(legacyLabel);
+    return {
+      type: path ? "file" : "symbol",
+      label: legacyLabel,
+      ...(path ? { path } : {}),
+    };
+  }
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const rawLabel = asTrimmedString(value.label);
+  const rawPath = asTrimmedString(value.path);
+  const rawRef = asTrimmedString(value.ref);
+  const hash = asTrimmedString(value.hash);
+  const excerpt = asTrimmedString(value.excerpt);
+  const path = inferProjectMapWorkspaceFilePath({
+    label: rawLabel,
+    path: rawPath,
+    ref: rawRef,
+  });
+  const type = normalizeSourceType(value.type);
+  const label = rawLabel || (path ? getProjectMapPathBasename(path) : "") || hash || type;
+  if (!label && !path && !hash && !excerpt) {
+    return null;
+  }
+  const line = normalizeOptionalPositiveLine(value.line);
+
+  return {
+    type,
+    label,
+    ...(path ? { path } : {}),
+    ...(line ? { line } : {}),
+    ...(hash ? { hash } : {}),
+    ...(excerpt ? { excerpt } : {}),
+  };
 }
 
 function sanitizeFrameworkConfidence(value: unknown): ProjectMapProfile["frameworks"][number]["confidence"] {
@@ -236,7 +277,9 @@ function sanitizeFrameworks(value: unknown): ProjectMapProfile["frameworks"] {
       continue;
     }
     const evidence = Array.isArray(rawFramework.evidence)
-      ? rawFramework.evidence.filter(isProjectMapSource)
+      ? rawFramework.evidence
+          .map(sanitizeProjectMapSource)
+          .filter((source): source is ProjectMapSource => Boolean(source))
       : [];
     frameworks.push({
       name,
@@ -256,15 +299,137 @@ function isProjectMapLens(value: unknown): value is ProjectMapLens {
   return isRecord(value) && typeof value.id === "string" && typeof value.title === "string";
 }
 
-function isProjectMapNode(value: unknown): value is ProjectMapNode {
-  return (
-    isRecord(value) &&
-    typeof value.id === "string" &&
-    typeof value.lensId === "string" &&
-    typeof value.title === "string" &&
-    typeof value.summary === "string" &&
-    Array.isArray(value.children)
-  );
+function sanitizeProjectMapConfidence(value: unknown): ProjectMapNode["confidence"] {
+  return value === "high" || value === "medium" || value === "low" || value === "unknown"
+    ? value
+    : "unknown";
+}
+
+function sanitizeRelatedArtifact(value: unknown): ProjectMapRelatedArtifact | null {
+  const legacyLabel = asTrimmedString(value);
+  if (legacyLabel) {
+    const path = normalizeWorkspaceEvidencePath(legacyLabel);
+    return {
+      type: path ? "file" : "symbol",
+      label: legacyLabel,
+      ...(path ? { path } : {}),
+    };
+  }
+  if (!isRecord(value)) {
+    return null;
+  }
+  const rawLabel = asTrimmedString(value.label);
+  const rawPath = asTrimmedString(value.path);
+  const ref = asTrimmedString(value.ref);
+  const path = inferProjectMapWorkspaceFilePath({ label: rawLabel, path: rawPath, ref });
+  const type = normalizeSourceType(value.type);
+  const label = rawLabel || (path ? getProjectMapPathBasename(path) : "") || ref || type;
+  if (!label) {
+    return null;
+  }
+  const line = normalizeOptionalPositiveLine(value.line);
+  return {
+    type,
+    label,
+    ...(path ? { path } : {}),
+    ...(line ? { line } : {}),
+    ...(ref ? { ref } : {}),
+  };
+}
+
+function sanitizeDiagramArtifact(value: unknown): ProjectMapDiagramArtifact | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const id = asTrimmedString(value.id);
+  const label = asTrimmedString(value.label);
+  const path = asTrimmedString(value.path);
+  if (!id || !label || !path) {
+    return null;
+  }
+  return {
+    id,
+    label,
+    path,
+    kind: asTrimmedString(value.kind) || undefined,
+    summary: asTrimmedString(value.summary) || undefined,
+    sourceRefs: sanitizeStringArray(value.sourceRefs, 12),
+  };
+}
+
+function sanitizeProjectMapNodeDetail(value: unknown, fallbackSummary: string): ProjectMapNodeDetail {
+  const detail = isRecord(value) ? value : {};
+  return {
+    coreDescription: asTrimmedString(detail.coreDescription) || fallbackSummary,
+    keyFacts: sanitizeStringArray(detail.keyFacts, 12),
+    keyLogic: sanitizeStringArray(detail.keyLogic, 12),
+    riskSignals: sanitizeStringArray(detail.riskSignals, 12),
+    diagramArtifacts: Array.isArray(detail.diagramArtifacts)
+      ? detail.diagramArtifacts
+          .map(sanitizeDiagramArtifact)
+          .filter((artifact): artifact is ProjectMapDiagramArtifact => Boolean(artifact))
+      : [],
+    relatedArtifacts: Array.isArray(detail.relatedArtifacts)
+      ? detail.relatedArtifacts
+          .map(sanitizeRelatedArtifact)
+          .filter((artifact): artifact is ProjectMapRelatedArtifact => Boolean(artifact))
+      : [],
+  };
+}
+
+function sanitizeProjectMapNode(value: unknown): ProjectMapNode | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const id = asTrimmedString(value.id);
+  const lensId = asTrimmedString(value.lensId);
+  const title = asTrimmedString(value.title);
+  if (!id || !lensId || !title) {
+    return null;
+  }
+  const summary = asTrimmedString(value.summary) || title;
+  const sources = Array.isArray(value.sources)
+    ? value.sources
+        .map(sanitizeProjectMapSource)
+        .filter((source): source is ProjectMapSource => Boolean(source))
+    : [];
+
+  return {
+    id,
+    lensId,
+    nodeKind: asTrimmedString(value.nodeKind) || "concept",
+    title,
+    summary,
+    detail: sanitizeProjectMapNodeDetail(value.detail, summary),
+    parentId: asTrimmedString(value.parentId) || undefined,
+    children: sanitizeStringArray(value.children, 200),
+    sources,
+    confidence: sanitizeProjectMapConfidence(value.confidence),
+    stale: value.stale === true,
+    candidate: value.candidate === true,
+    lastGeneratedAt: asTrimmedString(value.lastGeneratedAt) || new Date(0).toISOString(),
+    generatedBy: isRecord(value.generatedBy)
+      ? {
+          engine: asTrimmedString(value.generatedBy.engine) || "unknown",
+          model: asTrimmedString(value.generatedBy.model) || "unknown",
+          runId: asTrimmedString(value.generatedBy.runId) || "unknown",
+        }
+      : {
+          engine: "unknown",
+          model: "unknown",
+          runId: "unknown",
+        },
+  };
+}
+
+function sanitizeProjectMapNodesPayload(value: unknown): ProjectMapNode[] {
+  const rawItems = isRecord(value) ? value.items : value;
+  if (!Array.isArray(rawItems)) {
+    return [];
+  }
+  return rawItems
+    .map(sanitizeProjectMapNode)
+    .filter((node): node is ProjectMapNode => Boolean(node));
 }
 
 function isProjectMapRun(value: unknown): value is ProjectMapRunMetadata {
@@ -279,15 +444,41 @@ function isProjectMapEvidenceRecord(value: unknown): value is ProjectMapEvidence
   return isRecord(value) && typeof value.id === "string" && isRecord(value.source);
 }
 
-function isProjectMapDiagramDocument(value: unknown): value is ProjectMapDiagramDocument {
-  return (
-    isRecord(value) &&
-    typeof value.id === "string" &&
-    typeof value.nodeId === "string" &&
-    typeof value.title === "string" &&
-    typeof value.relativePath === "string" &&
-    typeof value.path === "string"
-  );
+function sanitizeProjectMapDiagramDocument(value: unknown): ProjectMapDiagramDocument | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const id = asTrimmedString(value.id);
+  const nodeId = asTrimmedString(value.nodeId);
+  const title = asTrimmedString(value.title);
+  const relativePath = asTrimmedString(value.relativePath);
+  const path = asTrimmedString(value.path);
+  if (!id || !nodeId || !title || !path || !isProjectMapDiagramRelativePath(relativePath)) {
+    return null;
+  }
+  return {
+    id,
+    nodeId,
+    title,
+    kind: asTrimmedString(value.kind) || "other",
+    summary: asTrimmedString(value.summary),
+    sourceRefs: sanitizeStringArray(value.sourceRefs, 12),
+    relativePath,
+    path,
+    content: typeof value.content === "string" ? value.content : "",
+    createdAt: asTrimmedString(value.createdAt) || new Date(0).toISOString(),
+    updatedAt: asTrimmedString(value.updatedAt) || undefined,
+  };
+}
+
+function sanitizeProjectMapDiagramDocumentsPayload(value: unknown): ProjectMapDiagramDocument[] {
+  const rawItems = isRecord(value) ? value.items : value;
+  if (!Array.isArray(rawItems)) {
+    return [];
+  }
+  return rawItems
+    .map(sanitizeProjectMapDiagramDocument)
+    .filter((diagram): diagram is ProjectMapDiagramDocument => Boolean(diagram));
 }
 
 function sanitizeManifest(
@@ -347,14 +538,18 @@ function sanitizeSettings(value: unknown): ProjectMapAutoIngestionSettings {
     enabled: value.enabled === true,
     engine: typeof value.engine === "string" ? value.engine : DEFAULT_AUTO_INGESTION_SETTINGS.engine,
     model: typeof value.model === "string" ? value.model : DEFAULT_AUTO_INGESTION_SETTINGS.model,
-    newSessionThreshold:
-      typeof value.newSessionThreshold === "number"
-        ? Math.max(1, Math.min(50, Math.floor(value.newSessionThreshold)))
-        : DEFAULT_AUTO_INGESTION_SETTINGS.newSessionThreshold,
-    checkIntervalMinutes:
-      typeof value.checkIntervalMinutes === "number"
-        ? Math.max(5, Math.min(1440, Math.floor(value.checkIntervalMinutes)))
-        : DEFAULT_AUTO_INGESTION_SETTINGS.checkIntervalMinutes,
+    newSessionThreshold: clampProjectMapInteger(
+      value.newSessionThreshold,
+      1,
+      50,
+      DEFAULT_AUTO_INGESTION_SETTINGS.newSessionThreshold,
+    ),
+    checkIntervalMinutes: clampProjectMapInteger(
+      value.checkIntervalMinutes,
+      5,
+      1440,
+      DEFAULT_AUTO_INGESTION_SETTINGS.checkIntervalMinutes,
+    ),
     applyMode:
       value.applyMode === "autoApplyEvidenceBacked" ? "autoApplyEvidenceBacked" : "createCandidate",
   };
@@ -426,9 +621,7 @@ export function buildDatasetFromProjectMapRead(
     isProjectMapLens,
   );
   const nodes = normalizeProjectMapNodeTopology(
-    Object.values(response.lensNodes).flatMap((value) =>
-      safeArray(isRecord(value) ? value.items : value, isProjectMapNode),
-    ),
+    Object.values(response.lensNodes).flatMap(sanitizeProjectMapNodesPayload),
     { attachOrphansToRoot: true },
   );
 
@@ -451,10 +644,7 @@ export function buildDatasetFromProjectMapRead(
     evidenceRecords: Object.values(response.evidence).flatMap((value) =>
       safeArray(isRecord(value) ? value.items : [value], isProjectMapEvidenceRecord),
     ),
-    diagramDocuments: safeArray(
-      isRecord(response.diagrams) ? response.diagrams.items : response.diagrams,
-      isProjectMapDiagramDocument,
-    ),
+    diagramDocuments: sanitizeProjectMapDiagramDocumentsPayload(response.diagrams),
     autoIngestionSettings: sanitizeSettings(response.settings),
     memoryCursor: sanitizeCursor(response.cursor),
   };
@@ -466,7 +656,7 @@ export function serializeProjectMapDataset(dataset: ProjectMapDataset): ProjectM
   const lensPathSegmentById = new Map(
     [...lensIds].map((lensId, index) => [
       lensId,
-      uniquePathSegment(lensId, usedLensPathSegments, `lens-${index + 1}`),
+      uniqueProjectMapPathSegment(lensId, usedLensPathSegments, `lens-${index + 1}`, "lens"),
     ]),
   );
   const files: ProjectMapWriteFile[] = [

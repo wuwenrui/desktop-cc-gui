@@ -106,8 +106,9 @@ fn project_map_root_for_mode(
 }
 
 fn is_windows_reserved_path_segment(value: &str) -> bool {
+    let stem = value.split('.').next().unwrap_or(value);
     matches!(
-        value,
+        stem,
         "con"
             | "prn"
             | "aux"
@@ -217,15 +218,25 @@ fn atomic_write(path: &Path, content: &str) -> Result<(), String> {
     let nonce = PROJECT_MAP_ATOMIC_WRITE_COUNTER.fetch_add(1, Ordering::Relaxed);
     let temp_path = path.with_extension(format!("tmp-{}-{nonce}", std::process::id()));
     {
-        let mut file = fs::File::create(&temp_path)
+        let mut file = fs::OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&temp_path)
             .map_err(|err| format!("Failed to create temp project map file: {err}"))?;
         file.write_all(content.as_bytes())
             .map_err(|err| format!("Failed to write temp project map file: {err}"))?;
         file.sync_all()
             .map_err(|err| format!("Failed to sync temp project map file: {err}"))?;
     }
-    fs::rename(&temp_path, path)
-        .map_err(|err| format!("Failed to commit project map file: {err}"))?;
+    #[cfg(target_os = "windows")]
+    if path.exists() {
+        fs::remove_file(path)
+            .map_err(|err| format!("Failed to replace existing project map file: {err}"))?;
+    }
+    if let Err(err) = fs::rename(&temp_path, path) {
+        let _ = fs::remove_file(&temp_path);
+        return Err(format!("Failed to commit project map file: {err}"));
+    }
     Ok(())
 }
 
@@ -424,11 +435,28 @@ mod tests {
         assert!(validate_relative_project_map_path("lenses/api/domain/nodes.json").is_err());
         assert!(validate_relative_project_map_path("lenses/API/nodes.json").is_err());
         assert!(validate_relative_project_map_path("lenses/con/nodes.json").is_err());
+        assert!(validate_relative_project_map_path("lenses/con.audit/nodes.json").is_err());
         assert!(validate_relative_project_map_path("runs/archive/latest.json").is_err());
+        assert!(validate_relative_project_map_path("runs/con.json").is_err());
         assert!(validate_relative_project_map_path("diagrams/auth/service.md").is_err());
         assert!(validate_relative_project_map_path("diagrams/auth-service-flow.json").is_err());
         assert!(validate_relative_project_map_path("diagrams/CON.md").is_err());
+        assert!(validate_relative_project_map_path("diagrams/nul.flow.md").is_err());
         assert!(validate_relative_project_map_path("random.json").is_err());
+    }
+
+    #[test]
+    fn atomic_write_replaces_existing_file() {
+        let root = std::env::temp_dir().join(format!("project-map-replace-{}", Uuid::new_v4()));
+        let target = root.join("runs").join("latest.json");
+
+        atomic_write(&target, "first").expect("initial write should commit");
+        atomic_write(&target, "second").expect("replacement write should commit");
+
+        let content = std::fs::read_to_string(&target).expect("read committed content");
+        assert_eq!(content, "second");
+
+        std::fs::remove_dir_all(root).expect("cleanup root");
     }
 
     #[test]

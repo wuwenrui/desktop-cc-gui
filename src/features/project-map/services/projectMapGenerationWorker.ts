@@ -23,6 +23,14 @@ import type {
   ProjectMapSource,
 } from "../types";
 import { mergeProjectMapGenerationResult } from "../utils/incrementalGeneration";
+import {
+  getProjectMapPathBasename,
+  getProjectMapPathExtension,
+  inferProjectMapWorkspaceFilePath,
+  isProjectMapReadableWorkspacePath,
+  normalizeWorkspaceEvidencePath,
+  uniqueProjectMapPathSegment,
+} from "../utils/evidencePaths";
 
 export type ProjectMapRunUpdate = Partial<
   Pick<ProjectMapRunMetadata, "status" | "phase" | "progress" | "threadId" | "error">
@@ -73,7 +81,6 @@ const MAX_EVIDENCE_FILE_CHARS = 5_000;
 const MAX_INVALID_OUTPUT_REPAIR_CHARS = 12_000;
 const MIN_EVIDENCE_FILE_CHARS = 900;
 const FILE_HEADER_PROMPT_OVERHEAD = 140;
-const MAX_SAFE_ID_LENGTH = 64;
 const SUPPORTED_ENGINES: EngineType[] = ["codex", "claude", "gemini", "opencode"];
 const SUPPORTED_SOURCE_TYPES = new Set<ProjectMapSource["type"]>([
   "file",
@@ -85,91 +92,6 @@ const SUPPORTED_SOURCE_TYPES = new Set<ProjectMapSource["type"]>([
 ]);
 const PROJECT_MAP_JSON_SCHEMA_EXAMPLE =
   '{"profile": {"primaryLanguage": "unknown", "languages": [], "shapes": [], "frameworks": [], "interfaceKinds": [], "buildSystems": []}, "lenses": [], "nodes": [{"id": "...", "lensId": "...", "nodeKind": "...", "title": "...", "summary": "...", "detail": {"coreDescription": "...", "keyFacts": [], "keyLogic": [], "riskSignals": [], "diagramArtifacts": [], "relatedArtifacts": []}, "parentId": null, "children": [], "sources": [], "confidence": "high|medium|low|unknown", "stale": false, "candidate": false}], "diagrams": [{"id": "...", "nodeId": "...", "title": "...", "kind": "flowchart|sequence|state|class|er|timeline|mindmap|other", "summary": "...", "sourceRefs": ["path"], "mermaid": "graph TD\\nA-->B"}]}';
-
-const IMPORTANT_FILE_NAMES = new Set([
-  "package.json",
-  "pnpm-workspace.yaml",
-  "vite.config.ts",
-  "tsconfig.json",
-  "pyproject.toml",
-  "requirements.txt",
-  "go.mod",
-  "Cargo.toml",
-  "pom.xml",
-  "build.gradle",
-  "settings.gradle",
-  "CMakeLists.txt",
-  "Makefile",
-  "README.md",
-  "AGENTS.md",
-]);
-
-const TEXT_EXTENSIONS = new Set([
-  ".ts",
-  ".tsx",
-  ".js",
-  ".jsx",
-  ".mjs",
-  ".cjs",
-  ".json",
-  ".md",
-  ".toml",
-  ".yaml",
-  ".yml",
-  ".py",
-  ".go",
-  ".rs",
-  ".java",
-  ".kt",
-  ".c",
-  ".h",
-  ".cpp",
-  ".hpp",
-  ".cs",
-  ".swift",
-  ".sql",
-]);
-
-const EXCLUDED_PATH_SEGMENTS = new Set([
-  ".git",
-  "node_modules",
-  "dist",
-  "build",
-  "target",
-  ".next",
-  ".nuxt",
-  "coverage",
-  ".ccgui",
-  ".venv",
-  "venv",
-  "__pycache__",
-  ".idea",
-]);
-
-const WINDOWS_RESERVED_PATH_SEGMENTS = new Set([
-  "con",
-  "prn",
-  "aux",
-  "nul",
-  "com1",
-  "com2",
-  "com3",
-  "com4",
-  "com5",
-  "com6",
-  "com7",
-  "com8",
-  "com9",
-  "lpt1",
-  "lpt2",
-  "lpt3",
-  "lpt4",
-  "lpt5",
-  "lpt6",
-  "lpt7",
-  "lpt8",
-  "lpt9",
-]);
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -443,67 +365,14 @@ function hashText(value: string): string {
   return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
-function normalizeProjectMapPathSegment(value: unknown, fallback: string): string {
-  const normalized = String(value ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9._-]+/g, "-")
-    .replace(/^[._-]+|[._-]+$/g, "")
-    .slice(0, MAX_SAFE_ID_LENGTH)
-    .replace(/[._-]+$/g, "");
-  const candidate = normalized || fallback;
-  return WINDOWS_RESERVED_PATH_SEGMENTS.has(candidate) ? `lens-${candidate}` : candidate;
-}
-
-function uniqueProjectMapPathSegment(value: unknown, used: Set<string>, fallback: string): string {
-  const base = normalizeProjectMapPathSegment(value, fallback);
-  let candidate = base;
-  let index = 2;
-  while (used.has(candidate)) {
-    const suffix = `-${index}`;
-    candidate = `${base.slice(0, MAX_SAFE_ID_LENGTH - suffix.length)}${suffix}`;
-    index += 1;
-  }
-  used.add(candidate);
-  return candidate;
-}
-
-function getPathExtension(path: string): string {
-  const fileName = path.split("/").pop() ?? path;
-  const dotIndex = fileName.lastIndexOf(".");
-  return dotIndex >= 0 ? fileName.slice(dotIndex).toLowerCase() : "";
-}
-
-function getPathBasename(path: string): string {
-  return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
-}
-
-function looksLikeWorkspaceFilePath(value: string): boolean {
-  const candidate = value.trim();
-  if (!candidate || /^[a-z][a-z0-9+.-]*:\/\//i.test(candidate)) {
-    return false;
-  }
-  if (candidate.includes(":") && !/^[a-zA-Z]:[\\/]/.test(candidate)) {
-    return false;
-  }
-  const fileName = getPathBasename(candidate);
-  if (IMPORTANT_FILE_NAMES.has(fileName)) {
-    return true;
-  }
-  return TEXT_EXTENSIONS.has(getPathExtension(candidate));
-}
-
 function inferSourceEvidencePath(source: ProjectMapSource): string {
   const legacyRef =
     "ref" in source && typeof source.ref === "string" ? source.ref : "";
-  const candidates = [source.path, source.label, legacyRef];
-  for (const candidate of candidates) {
-    const path = candidate?.trim() ?? "";
-    if (path && looksLikeWorkspaceFilePath(path) && isReadableProjectFile(path)) {
-      return path;
-    }
-  }
-  return "";
+  return inferProjectMapWorkspaceFilePath({
+    path: source.path,
+    label: source.label,
+    ref: legacyRef,
+  });
 }
 
 function clampNumber(value: number, min: number, max: number): number {
@@ -577,7 +446,7 @@ function normalizeEvidenceContent(input: {
 
   const marker = `[PROJECT_MAP_TRUNCATED path=${input.path} originalChars=${originalChars} keptChars<=${input.budgetChars}]`;
   const headingDigest =
-    getPathExtension(input.path) === ".md"
+    getProjectMapPathExtension(input.path) === ".md"
       ? extractMarkdownHeadingDigest(normalized, Math.min(1_400, Math.floor(input.budgetChars * 0.4)))
       : "";
   const markerBudget = marker.length + 2;
@@ -592,23 +461,25 @@ function normalizeEvidenceContent(input: {
   };
 }
 
-function isExcludedPath(path: string): boolean {
-  return path
-    .split("/")
-    .some((segment) => EXCLUDED_PATH_SEGMENTS.has(segment));
-}
-
-function isReadableProjectFile(path: string): boolean {
-  if (isExcludedPath(path)) {
-    return false;
-  }
-  const fileName = path.split("/").pop() ?? path;
-  return IMPORTANT_FILE_NAMES.has(fileName) || TEXT_EXTENSIONS.has(getPathExtension(path));
-}
-
 function filePriority(path: string): number {
-  const fileName = path.split("/").pop() ?? path;
-  if (IMPORTANT_FILE_NAMES.has(fileName)) {
+  const fileName = getProjectMapPathBasename(path);
+  if (
+    fileName === "package.json" ||
+    fileName === "pnpm-workspace.yaml" ||
+    fileName === "vite.config.ts" ||
+    fileName === "tsconfig.json" ||
+    fileName === "pyproject.toml" ||
+    fileName === "requirements.txt" ||
+    fileName === "go.mod" ||
+    fileName === "Cargo.toml" ||
+    fileName === "pom.xml" ||
+    fileName === "build.gradle" ||
+    fileName === "settings.gradle" ||
+    fileName === "CMakeLists.txt" ||
+    fileName === "Makefile" ||
+    fileName === "README.md" ||
+    fileName === "AGENTS.md"
+  ) {
     return 0;
   }
   if (path.startsWith("openspec/") || path.startsWith(".trellis/spec/")) {
@@ -630,9 +501,10 @@ function pickEvidencePaths(
 ): string[] {
   const requestedPaths = requestSources
     .map(inferSourceEvidencePath)
-    .filter((path): path is string => Boolean(path && isReadableProjectFile(path)));
+    .filter((path): path is string => Boolean(path && isProjectMapReadableWorkspacePath(path)));
   const discoveredPaths = files
-    .filter(isReadableProjectFile)
+    .map(normalizeWorkspaceEvidencePath)
+    .filter((path): path is string => Boolean(path && isProjectMapReadableWorkspacePath(path)))
     .sort((left, right) => filePriority(left) - filePriority(right) || left.localeCompare(right));
 
   const paths: string[] = [];
@@ -1441,10 +1313,6 @@ function normalizeSourceType(value: unknown): ProjectMapSource["type"] {
     : "file";
 }
 
-function getProjectMapPathBasename(path: string): string {
-  return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
-}
-
 function normalizeOptionalPositiveLine(value: unknown): number | undefined {
   const line = typeof value === "number" ? value : Number(asTrimmedString(value));
   return Number.isFinite(line) && line > 0 ? Math.floor(line) : undefined;
@@ -1612,6 +1480,7 @@ function normalizeDiagramPayloads(input: {
       asTrimmedString(rawDiagram.id) || `${nodeId}-${title}`,
       usedIds,
       `${nodeId}-diagram`,
+      "diagram",
     );
     const kind = normalizeDiagramKind(rawDiagram.kind);
     const summary = asTrimmedString(rawDiagram.summary) || `Mermaid diagram for ${node.title}.`;
@@ -1721,7 +1590,7 @@ function normalizeProfile(
 function createSourceFromEvidence(evidence: WorkspaceEvidenceSnippet): ProjectMapSource {
   return {
     type: "file",
-    label: evidence.path.split("/").pop() ?? evidence.path,
+    label: getProjectMapPathBasename(evidence.path),
     path: evidence.path,
     hash: evidence.hash,
     excerpt: evidence.content.slice(0, 320),
@@ -1881,7 +1750,7 @@ function applyAiPayload(input: {
   const lenses = shouldReplaceLenses
     ? rawLenses.map((lens, index) => {
         const rawId = String(lens.id || "").trim();
-        const safeId = uniqueProjectMapPathSegment(rawId, usedLensIds, `lens-${index + 1}`);
+        const safeId = uniqueProjectMapPathSegment(rawId, usedLensIds, `lens-${index + 1}`, "lens");
         if (!lensIdByRawId.has(rawId)) {
           lensIdByRawId.set(rawId, safeId);
         }

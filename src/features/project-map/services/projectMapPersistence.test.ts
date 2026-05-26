@@ -71,6 +71,27 @@ describe("project map persistence mapper", () => {
     expect(files.map((file) => file.relativePath)).not.toContain("lenses/API/Domain/nodes.json");
   });
 
+  it("prefixes Windows reserved lens ids before writing node files", () => {
+    const files = serializeProjectMapDataset({
+      ...mockProjectMapData,
+      lenses: [
+        {
+          ...mockProjectMapData.lenses[0]!,
+          id: "con.audit",
+        },
+      ],
+      nodes: [
+        {
+          ...mockProjectMapData.nodes[0]!,
+          lensId: "con.audit",
+        },
+      ],
+    });
+
+    expect(files.map((file) => file.relativePath)).toContain("lenses/lens-con.audit/nodes.json");
+    expect(files.map((file) => file.relativePath)).not.toContain("lenses/con.audit/nodes.json");
+  });
+
   it("builds a dataset from persisted read payloads and sanitizes settings/cursor", () => {
     const response: ProjectMapReadResponse = {
       storageKey: "mossx-abcd",
@@ -178,6 +199,35 @@ describe("project map persistence mapper", () => {
     });
   });
 
+  it("falls back when persisted auto ingestion settings contain non-finite numbers", () => {
+    const dataset = buildDatasetFromProjectMapRead(
+      {
+        storageKey: "mossx-abcd",
+        storageDir: "/repo/.ccgui/project-map/mossx-abcd",
+        exists: true,
+        manifest: mockProjectMapData.manifest,
+        profile: mockProjectMapData.profile,
+        lenses: { items: mockProjectMapData.lenses },
+        lensNodes: {},
+        settings: {
+          enabled: true,
+          engine: "codex",
+          model: "default",
+          newSessionThreshold: Number.NaN,
+          checkIntervalMinutes: Number.POSITIVE_INFINITY,
+          applyMode: "createCandidate",
+        },
+        candidates: {},
+        evidence: {},
+        runs: {},
+      },
+      { projectName: "mossx", workspacePath: "/repo", workspaceId: "ws-1" },
+    );
+
+    expect(dataset?.autoIngestionSettings.newSessionThreshold).toBe(5);
+    expect(dataset?.autoIngestionSettings.checkIntervalMinutes).toBe(30);
+  });
+
   it("loads old snapshots without view-state and ignores malformed layout payloads", () => {
     const oldSnapshot = buildDatasetFromProjectMapRead(
       {
@@ -234,6 +284,92 @@ describe("project map persistence mapper", () => {
       },
       updatedAt: undefined,
     });
+  });
+
+  it("sanitizes malformed persisted nodes before they reach the UI dataset", () => {
+    const dataset = buildDatasetFromProjectMapRead(
+      {
+        storageKey: "mossx-abcd",
+        storageDir: "/repo/.ccgui/project-map/mossx-abcd",
+        exists: true,
+        manifest: mockProjectMapData.manifest,
+        profile: mockProjectMapData.profile,
+        lenses: { items: mockProjectMapData.lenses },
+        lensNodes: {
+          overview: {
+            items: [
+              {
+                id: "project-core",
+                lensId: "overview",
+                nodeKind: "",
+                title: "Project Core",
+                summary: "",
+                detail: null,
+                children: ["runtime-node", 42, ""],
+                sources: [
+                  { type: "unexpected", label: String.raw`src\features\project-map\types.ts:7` },
+                  { type: "file", label: "absolute", path: String.raw`C:\repo\mossx\secret.ts` },
+                  "README.md",
+                ],
+                confidence: "certain",
+                stale: "yes",
+                candidate: true,
+                generatedBy: {},
+              },
+              {
+                id: "missing-title",
+                lensId: "overview",
+                summary: "This malformed node should be dropped.",
+              },
+            ],
+          },
+        },
+        candidates: {},
+        evidence: {},
+        runs: {},
+      },
+      { projectName: "mossx", workspacePath: "/repo", workspaceId: "ws-1" },
+    );
+
+    const node = dataset?.nodes.find((candidate) => candidate.id === "project-core");
+
+    expect(dataset?.nodes.some((candidate) => candidate.id === "missing-title")).toBe(false);
+    expect(node).toMatchObject({
+      nodeKind: "concept",
+      summary: "Project Core",
+      detail: {
+        coreDescription: "Project Core",
+        keyFacts: [],
+        keyLogic: [],
+        riskSignals: [],
+        relatedArtifacts: [],
+      },
+      children: [],
+      confidence: "unknown",
+      stale: false,
+      candidate: true,
+      generatedBy: {
+        engine: "unknown",
+        model: "unknown",
+        runId: "unknown",
+      },
+    });
+    expect(node?.sources).toEqual([
+      {
+        type: "file",
+        label: String.raw`src\features\project-map\types.ts:7`,
+        path: "src/features/project-map/types.ts",
+      },
+      {
+        type: "file",
+        label: "absolute",
+      },
+      {
+        type: "file",
+        label: "README.md",
+        path: "README.md",
+      },
+    ]);
   });
 
   it("repairs persisted orphan roots so loaded maps remain reachable from the project root", () => {

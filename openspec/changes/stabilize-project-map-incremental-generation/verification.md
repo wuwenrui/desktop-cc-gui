@@ -60,6 +60,21 @@
 - Path-like labels and refs can be normalized into readable workspace evidence.
 - Codex final assistant fields such as `last_agent_message` are parsed before declaring JSON failure.
 
+### Stability Review Evidence
+
+- Cross-platform path normalization now covers Windows separators, wrapped file tokens, line suffixes, absolute-path rejection, traversal rejection, excluded directories, unsupported extensions, and Windows reserved device-name stems.
+- Persisted Project Map node payloads are sanitized before UI hydration: malformed nodes are dropped, partial details/sources are normalized, and absolute paths are removed from evidence fields.
+- Native Project Map writes replace existing files on Windows and clean temp files after failed commits.
+- Focused validation in this stability review:
+  - `npm exec vitest run src/features/project-map/utils/evidencePaths.test.ts src/features/project-map/utils/autoIngestion.test.ts src/features/project-map/services/projectMapPersistence.test.ts src/features/project-map/services/projectMapGenerationWorker.test.ts` passed with 48 tests.
+  - `cargo test --manifest-path src-tauri/Cargo.toml project_map` passed with 7 tests.
+  - `npm run typecheck` passed.
+  - `node --test scripts/check-large-files.test.mjs` passed with 8 tests.
+- `npm run check:large-files:near-threshold` exited successfully with 10 watchlist warnings and no fail result; `ProjectMapPanel.tsx` is 2398 lines and no longer listed.
+  - `npm run check:large-files:gate` passed with `found=0`.
+  - `node --test scripts/check-heavy-test-noise.test.mjs scripts/test-batched.test.mjs` passed with 16 tests.
+  - `npm run check:heavy-test-noise` completed all 550 Vitest files with 0 act warnings, 0 stdout payload lines, and 0 stderr payload lines.
+
 ### Archive Decision
 
 Ready for archive preparation. The change has a synced main spec and no open critical issues in the recorded verification evidence.

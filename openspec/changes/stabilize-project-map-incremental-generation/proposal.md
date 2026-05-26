@@ -112,3 +112,21 @@ This is unacceptable for a knowledge map: generation must behave like incrementa
   - `npm run build` passed with existing Vite chunk warnings.
   - `git diff --check` passed.
   - `openspec validate stabilize-project-map-incremental-generation --strict` passed.
+
+## Stability Review Writeback
+
+- Cross-platform evidence-path handling has been centralized in `src/features/project-map/utils/evidencePaths.ts`. Worker source selection, generation requests, Project Map evidence navigation, auto-ingestion memory parsing, and persistence sanitization now share the same rules for `/` and `\` separators, line suffixes, wrapping punctuation, repo-relative paths, excluded directories, and readable text-file extensions.
+- Windows reserved device names are blocked consistently by stem, not only exact file name. `con.audit`, `nul.flow`, `runs/con.json`, and `diagrams/nul.flow.md` are now rejected or prefixed before write, matching Windows filesystem behavior.
+- Project Map persistence no longer trusts persisted JSON shape. Malformed nodes are dropped, partial nodes are normalized, node details/sources/related artifacts/diagram artifacts are sanitized, absolute workspace paths are stripped, non-finite settings fall back to defaults, and loaded topology still attaches reachable orphan nodes to the root.
+- Project Map storage writes now replace existing files on Windows instead of failing on `rename`, create temp files with `create_new`, sync before commit, and clean temp files on commit failure.
+- The Project Map right-toolbar visibility control is now documented in the client documentation control matrix so the heavy-test-noise gate no longer fails on `rightToolbar.projectMap` coverage.
+- Large-file governance was respected during this repair and follow-up optimization: shared path logic moved into a focused utility module, trace chips moved into `ProjectMapTraceChips.tsx`, task queue UI moved into `ProjectMapTaskDrawer.tsx`, display helpers moved into `utils/display.ts`, and `ProjectMapPanel.tsx` dropped to 2398 lines so it is no longer in the near-threshold watchlist.
+- Validation after this stability review:
+  - Focused Project Map Vitest suite passed: 48 tests across `evidencePaths`, `autoIngestion`, `projectMapPersistence`, and `projectMapGenerationWorker`.
+  - Rust Project Map tests passed: 7 tests for storage key normalization, path constraints, reserved names, and atomic write behavior.
+  - `npm run typecheck` passed.
+  - `node --test scripts/check-large-files.test.mjs` passed.
+  - `npm run check:large-files:near-threshold` passed with 10 existing watchlist warnings and no fail result; `ProjectMapPanel.tsx` is no longer listed.
+  - `npm run check:large-files:gate` passed with `found=0`.
+  - `node --test scripts/check-heavy-test-noise.test.mjs scripts/test-batched.test.mjs` passed.
+  - `npm run check:heavy-test-noise` passed all 550 Vitest files with 0 act warnings, 0 stdout payload lines, and 0 stderr payload lines.

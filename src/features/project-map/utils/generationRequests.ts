@@ -11,6 +11,10 @@ import type {
   ProjectMapStorageLocation,
 } from "../types";
 import { validateProjectMapNodePatch } from "./evidenceGate";
+import {
+  getProjectMapPathBasename,
+  inferProjectMapWorkspaceFilePath,
+} from "./evidencePaths";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -29,57 +33,6 @@ const SUPPORTED_SOURCE_TYPES = new Set<ProjectMapSource["type"]>([
   "conversation",
 ]);
 
-const IMPORTANT_WORKSPACE_FILE_NAMES = new Set([
-  "package.json",
-  "pnpm-workspace.yaml",
-  "vite.config.ts",
-  "tsconfig.json",
-  "pyproject.toml",
-  "requirements.txt",
-  "go.mod",
-  "Cargo.toml",
-  "pom.xml",
-  "build.gradle",
-  "settings.gradle",
-  "CMakeLists.txt",
-  "Makefile",
-  "README.md",
-  "AGENTS.md",
-]);
-
-const WORKSPACE_TEXT_EXTENSIONS = new Set([
-  ".c",
-  ".cc",
-  ".conf",
-  ".cpp",
-  ".cs",
-  ".css",
-  ".go",
-  ".gradle",
-  ".h",
-  ".hpp",
-  ".html",
-  ".java",
-  ".js",
-  ".json",
-  ".jsx",
-  ".kt",
-  ".md",
-  ".mdx",
-  ".properties",
-  ".py",
-  ".rb",
-  ".rs",
-  ".sql",
-  ".toml",
-  ".ts",
-  ".tsx",
-  ".txt",
-  ".xml",
-  ".yaml",
-  ".yml",
-]);
-
 function asTrimmedString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -95,49 +48,12 @@ function normalizeSourceType(value: unknown): ProjectMapSource["type"] {
     : "file";
 }
 
-function basename(path: string): string {
-  return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
-}
-
-function getPathExtension(path: string): string {
-  const fileName = basename(path);
-  const dotIndex = fileName.lastIndexOf(".");
-  return dotIndex >= 0 ? fileName.slice(dotIndex).toLowerCase() : "";
-}
-
-function looksLikeWorkspaceFilePath(value: string): boolean {
-  const candidate = value.trim();
-  if (!candidate || /^[a-z][a-z0-9+.-]*:\/\//i.test(candidate)) {
-    return false;
-  }
-  if (candidate.includes(":") && !/^[a-zA-Z]:[\\/]/.test(candidate)) {
-    return false;
-  }
-  const fileName = basename(candidate);
-  if (IMPORTANT_WORKSPACE_FILE_NAMES.has(fileName)) {
-    return true;
-  }
-  if (candidate.includes("/") || candidate.includes("\\")) {
-    return WORKSPACE_TEXT_EXTENSIONS.has(getPathExtension(candidate));
-  }
-  return WORKSPACE_TEXT_EXTENSIONS.has(getPathExtension(candidate));
-}
-
 function inferWorkspaceFilePath(input: {
   label: string;
   path: string;
   ref: string;
 }): string {
-  if (input.path) {
-    return input.path;
-  }
-  if (looksLikeWorkspaceFilePath(input.label)) {
-    return input.label;
-  }
-  if (looksLikeWorkspaceFilePath(input.ref)) {
-    return input.ref;
-  }
-  return "";
+  return inferProjectMapWorkspaceFilePath(input);
 }
 
 function normalizeOptionalLine(value: unknown): number | undefined {
@@ -169,7 +85,7 @@ function normalizeProjectMapSource(source: unknown): ProjectMapSource | null {
   if (!label && !path && !hash && !ref) {
     return null;
   }
-  const normalizedLabel = label || (inferredPath ? basename(inferredPath) : "") || ref || hash || type;
+  const normalizedLabel = label || (inferredPath ? getProjectMapPathBasename(inferredPath) : "") || ref || hash || type;
   const line = normalizeOptionalLine(source.line);
   return {
     type,

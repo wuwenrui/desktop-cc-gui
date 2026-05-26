@@ -91,3 +91,15 @@ Use Option B. It is the least surprising architecture: Auto Ingestion becomes an
 - If the first AI response does not contain a valid Project Map JSON payload, the worker requests one JSON-only repair response and succeeds only when that repaired payload validates.
 - Configuration dialogs keep their compact baseline width for normal content, expand when read sources or write paths need more room, and still collapse to a single-column viewport-safe layout on narrow screens.
 - Canvas layout controls default to collapsed, can be expanded by the user, and preserve that user preference across remounts/reloads independently from graph actions.
+
+## Stability Review Writeback
+
+- Auto Ingestion memory evidence extraction now uses the shared Project Map evidence-path normalizer, so Windows-style paths such as `src\features\project-map\types.ts:42` are normalized to repo-relative slash paths before they enter candidates or worker read requests.
+- Auto Ingestion no longer lets invalid numeric settings distort scheduling. Runtime trigger checks clamp `newSessionThreshold` to `1..50`, clamp `checkIntervalMinutes` to `5..1440`, and treat non-finite persisted values as defaults during dataset load.
+- Worker source selection rejects absolute Windows paths, URL-like strings, parent traversal, `.git`, `node_modules`, build outputs, and unsupported binary extensions before calling `readWorkspaceFile`.
+- Conversation candidates now derive their first evidence path through the same shared extraction logic, avoiding divergent regex behavior between candidate creation and worker evidence reads.
+- Validation after this stability review:
+  - Focused Project Map Vitest suite passed: 48 tests across `evidencePaths`, `autoIngestion`, `projectMapPersistence`, and `projectMapGenerationWorker`.
+  - `npm run typecheck` passed.
+  - `npm run check:large-files:gate` passed with `found=0`.
+  - `npm run check:heavy-test-noise` passed all 550 Vitest files with 0 act warnings, 0 stdout payload lines, and 0 stderr payload lines.

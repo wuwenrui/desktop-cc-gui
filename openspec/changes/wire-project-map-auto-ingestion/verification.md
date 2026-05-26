@@ -54,6 +54,18 @@
 - Enable dialog keeps model refresh inline with the model control row.
 - Canvas controls default collapsed, persist user preference in local UI state, and graph actions do not overwrite that preference.
 
+### Stability Review Evidence
+
+- Auto Ingestion now uses shared evidence-path extraction for Windows-style memory paths, wrapped path tokens, line suffixes, and duplicate path elimination.
+- Runtime scheduling clamps invalid threshold and interval values before trigger/evaluation checks.
+- Persisted auto-ingestion settings sanitize non-finite numbers back to defaults instead of leaking `NaN` or `Infinity` into runtime state.
+- Worker read-source selection rejects absolute Windows paths, ignored folders, traversal, URLs, and unsupported extensions before invoking workspace file reads.
+- Focused validation in this stability review:
+  - `npm exec vitest run src/features/project-map/utils/evidencePaths.test.ts src/features/project-map/utils/autoIngestion.test.ts src/features/project-map/services/projectMapPersistence.test.ts src/features/project-map/services/projectMapGenerationWorker.test.ts` passed with 48 tests.
+  - `npm run typecheck` passed.
+  - `npm run check:large-files:gate` passed with `found=0`.
+  - `npm run check:heavy-test-noise` completed all 550 Vitest files with 0 act warnings, 0 stdout payload lines, and 0 stderr payload lines.
+
 ### Archive Decision
 
 Ready for archive preparation. The behavior is synced into `project-xray-panel`, and strict validation passes.
