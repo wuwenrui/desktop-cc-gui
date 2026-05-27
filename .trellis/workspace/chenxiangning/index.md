@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-16.md`
-- **Total Sessions**: 605
+- **Total Sessions**: 606
 - **Last Active**: 2026-05-27
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-16.md` | ~1946 | Active |
+| `journal-16.md` | ~1985 | Active |
 | `journal-15.md` | ~1996 | Archived |
 | `journal-14.md` | ~1969 | Archived |
 | `journal-13.md` | ~1947 | Archived |
@@ -44,6 +44,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 606 | 2026-05-27 | 增强引擎任务输出查看 | `f94ec7d5` | `feature/v0.5.3` |
 | 605 | 2026-05-27 | Project Map 中文主体生成提示 | `da9cd8dd` | `feature/v0.5.3` |
 | 604 | 2026-05-27 | 收紧思考强度选择器兼容性 | `6bdc546d` | `feature/v0.5.3` |
 | 603 | 2026-05-27 | 修复 slash 补全白屏 | `f09f63dd` | `feature/v0.5.3` |

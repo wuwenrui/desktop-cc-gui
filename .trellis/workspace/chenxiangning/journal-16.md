@@ -1944,3 +1944,42 @@ CI 中 SettingsView 删除会话测试仍断言旧刷新签名；更新为包含
 ### Next Steps
 
 - None - task complete
+
+
+## Session 606: 增强引擎任务输出查看
+
+**Date**: 2026-05-27
+**Task**: 增强引擎任务输出查看
+**Branch**: `feature/v0.5.3`
+
+### Summary
+
+实现并验证 Claude/Codex task output inspector 的只读旁路查看能力，包含 inspector 内 artifact tail 刷新、Tauri/daemon 受限读取、StatusPanel 与消息卡片入口。
+
+### Main Changes
+
+- 完成 OpenSpec change `add-engine-task-output-inspector`，任务 12/12 全部完成。
+- 新增 `EngineTaskOutputInspector`、snapshot projection、inspector-scoped refresh hook；仅在 inspector 打开且存在 outputFilePath 时读取 artifact tail。
+- 新增 `engine_task_output_read_artifact` Tauri/daemon command；限制 absolute path、file-only、workspace/temp roots，最多读取 16KB tail。
+- StatusPanel subagent 与 message task notification 共用 inspector；Codex 仅映射自身 thread/collab 信息，不伪造 Claude task id。
+- Review 重点：正常对话链路不被 hook 接管，message streaming/final result rendering 未改；project-map 未纳入本次提交。
+- 验证：openspec validate --strict；focused Vitest 203 tests；Rust task_output tests 4 passed；cargo check daemon；npm typecheck；npm lint；runtime contracts；large-file check；doctor:strict；git diff --cached --check。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f94ec7d5` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
