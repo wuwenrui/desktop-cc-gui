@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { CodexCustomModel } from "../types";
-import { validateCodexCustomModels } from "../types";
+import { STORAGE_KEYS, validateCodexCustomModels } from "../types";
+import { normalizeClaudeCustomModels } from "../../models/claudeCustomModels";
 
 const LEGACY_STORAGE_KEY_ALIASES: Record<string, string[]> = {
   "claude-custom-models": [
@@ -17,12 +18,20 @@ const LEGACY_STORAGE_KEY_ALIASES: Record<string, string[]> = {
   ],
 };
 
-function parseModels(value: string | null): CodexCustomModel[] {
+function parseModels(storageKey: string, value: string | null): CodexCustomModel[] {
   if (!value) {
     return [];
   }
   try {
-    return validateCodexCustomModels(JSON.parse(value));
+    const parsed = JSON.parse(value);
+    if (storageKey === STORAGE_KEYS.CLAUDE_CUSTOM_MODELS) {
+      return normalizeClaudeCustomModels(parsed).map((model) => ({
+        id: model.id,
+        label: model.label,
+        description: model.description,
+      }));
+    }
+    return validateCodexCustomModels(parsed);
   } catch {
     return [];
   }
@@ -33,14 +42,14 @@ function readPluginModels(storageKey: string): CodexCustomModel[] {
     return [];
   }
   const canonicalRaw = window.localStorage.getItem(storageKey);
-  const canonical = parseModels(canonicalRaw);
+  const canonical = parseModels(storageKey, canonicalRaw);
   if (canonicalRaw !== null) {
     return canonical;
   }
 
   const legacyKeys = LEGACY_STORAGE_KEY_ALIASES[storageKey] ?? [];
   for (const legacyKey of legacyKeys) {
-    const legacyModels = parseModels(window.localStorage.getItem(legacyKey));
+    const legacyModels = parseModels(storageKey, window.localStorage.getItem(legacyKey));
     if (legacyModels.length === 0) {
       continue;
     }

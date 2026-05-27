@@ -106,3 +106,54 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 609: 收口 Claude 自定义模型事实源归一化
+
+**Date**: 2026-05-27
+**Task**: 收口 Claude 自定义模型事实源归一化
+**Branch**: `feature/v0.5.3`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## Summary
+
+- 新增 `normalizeClaudeCustomModels` / `readClaudeCustomModelsFromStorage`，将 Claude custom model 读取统一为 shape-only normalization。
+- 替换 composer selector、engine controller、vendor settings hook 的 Claude custom model 读取路径，避免 user-entered model id 被 generic regex allowlist 过滤。
+- CustomModelDialog 对 Claude 使用 `shape-only` 校验，Codex/Gemini 等非 Claude 路径继续保留 `model-id` 校验。
+- 新增 OpenSpec change `fix-claude-custom-model-fact-source-normalization` 并补齐 proposal/design/tasks/spec delta。
+
+## Verification
+
+- `git diff --check`
+- `npm exec vitest run src/features/composer/components/ChatInputBox/modelOptions.test.ts src/features/engine/hooks/useEngineController.test.tsx src/features/vendors/components/CustomModelDialog.test.tsx src/features/vendors/hooks/usePluginModels.test.tsx`
+- `npm run typecheck`
+- `openspec validate --all --strict --no-interactive`
+- `npm run lint`
+
+## Commit
+
+- `0c981fc9 fix(claude-model): 保留自定义模型事实源`
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0c981fc9` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

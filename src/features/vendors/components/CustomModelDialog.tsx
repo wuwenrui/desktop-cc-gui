@@ -11,19 +11,16 @@ interface CustomModelDialogProps {
   onModelsChange: (models: CodexCustomModel[]) => void;
   onClose: () => void;
   initialAddMode?: boolean;
+  modelValidation?: "model-id" | "shape-only";
 }
 
-function sanitizeInput(value: string): string {
-  const filtered = Array.from(value)
+function stripControlCharacters(value: string): string {
+  return Array.from(value)
     .filter((char) => {
       const code = char.charCodeAt(0);
-      if (code === 9 || code === 10 || code === 13) {
-        return true;
-      }
       return code >= 32 && code !== 127;
     })
     .join("");
-  return filtered.replace(/\s+/g, " ");
 }
 
 export function CustomModelDialog({
@@ -32,6 +29,7 @@ export function CustomModelDialog({
   onModelsChange,
   onClose,
   initialAddMode = false,
+  modelValidation = "model-id",
 }: CustomModelDialogProps) {
   const { t } = useTranslation();
   const [isAdding, setIsAdding] = useState(false);
@@ -86,7 +84,7 @@ export function CustomModelDialog({
       if (!normalized) {
         return t("settings.vendor.modelManager.modelIdRequired");
       }
-      if (!isValidModelId(normalized)) {
+      if (modelValidation === "model-id" && !isValidModelId(normalized)) {
         return t("settings.vendor.modelManager.modelIdInvalid");
       }
 
@@ -98,7 +96,7 @@ export function CustomModelDialog({
       }
       return null;
     },
-    [editingModel, modelIds, t],
+    [editingModel, modelIds, modelValidation, t],
   );
 
   const resetEditor = useCallback(() => {
@@ -142,9 +140,10 @@ export function CustomModelDialog({
       return;
     }
 
-    const normalizedId = sanitizeInput(modelId).trim();
-    const normalizedLabel = sanitizeInput(modelLabel).trim() || normalizedId;
-    const normalizedDescription = sanitizeInput(modelDescription).trim();
+    const normalizedId = stripControlCharacters(modelId).trim();
+    const normalizedLabel =
+      stripControlCharacters(modelLabel).trim() || normalizedId;
+    const normalizedDescription = stripControlCharacters(modelDescription).trim();
 
     const nextModel: CodexCustomModel = {
       id: normalizedId,

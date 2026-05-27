@@ -741,6 +741,7 @@ export function VendorSettingsPanel({
         onModelsChange={handleDialogModelsChange}
         onClose={closeModelDialog}
         initialAddMode={modelDialogAddMode}
+        modelValidation={dialogTarget === "claude" ? "shape-only" : "model-id"}
       />
     </div>
   );

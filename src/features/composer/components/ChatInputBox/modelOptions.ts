@@ -1,7 +1,7 @@
 import type { ModelInfo, ProviderId } from './types';
 import { AVAILABLE_PROVIDERS, CODEX_MODELS } from './types';
-import { isValidModelId, STORAGE_KEYS, validateCodexCustomModels } from '../../types/provider';
-import type { CodexCustomModel } from '../../types/provider';
+import { STORAGE_KEYS, validateCodexCustomModels } from '../../types/provider';
+import { readClaudeCustomModelsFromStorage } from '../../../models/claudeCustomModels';
 
 export const RELEVANT_MODEL_STORAGE_KEYS = new Set<string>([
   STORAGE_KEYS.CODEX_CUSTOM_MODELS,
@@ -23,12 +23,6 @@ export type ProviderModelGroup = {
   models: ModelInfo[];
   enabled: boolean;
 };
-
-const CLAUDE_GROUP_MODELS: ModelInfo[] = [
-  { id: 'claude-opus-4-6', label: 'Opus 4.6' },
-  { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
-  { id: 'claude-haiku-4-5', label: 'Haiku 4.5' },
-];
 
 const GEMINI_GROUP_MODELS: ModelInfo[] = [
   { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
@@ -120,30 +114,13 @@ function getCustomCodexModels(): ModelInfo[] {
 }
 
 function getCustomClaudeModels(): ModelInfo[] {
-  if (typeof window === 'undefined' || !window.localStorage) {
-    return [];
-  }
-  try {
-    const stored = window.localStorage.getItem(STORAGE_KEYS.CLAUDE_CUSTOM_MODELS);
-    if (!stored) {
-      return [];
-    }
-    const parsed = JSON.parse(stored) as CodexCustomModel[];
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-    return parsed
-      .filter((m): m is CodexCustomModel => !!m && typeof m === 'object' && typeof m.id === 'string' && isValidModelId(m.id))
-      .map(m => ({
-        id: m.id.trim(),
-        model: m.id.trim(),
-        label: typeof m.label === 'string' && m.label.trim().length > 0 ? m.label.trim() : m.id.trim(),
-        description: m.description,
-        source: 'custom',
-      }));
-  } catch {
-    return [];
-  }
+  return readClaudeCustomModelsFromStorage(STORAGE_KEYS.CLAUDE_CUSTOM_MODELS).map((model) => ({
+    id: model.id,
+    model: model.model,
+    label: model.label,
+    description: model.description,
+    source: model.source,
+  }));
 }
 
 function getCustomGeminiModels(): ModelInfo[] {
@@ -271,7 +248,7 @@ function resolveProviderModels({
   if (resolvedModels.length > 0) {
     return resolvedModels;
   }
-  return CLAUDE_GROUP_MODELS;
+  return [];
 }
 
 export function resolveProviderModelGroups({

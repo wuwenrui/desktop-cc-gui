@@ -21,9 +21,9 @@ import {
 import { pushGlobalRuntimeNotice } from "../../../services/globalRuntimeNotices";
 import {
   STORAGE_KEYS as PROVIDER_STORAGE_KEYS,
-  isValidModelId,
   validateCodexCustomModels,
 } from "../../composer/types/provider";
+import { readClaudeCustomModelsFromStorage } from "../../models/claudeCustomModels";
 import { startupOrchestrator } from "../../startup-orchestration/utils/startupOrchestrator";
 
 type UseEngineControllerOptions = {
@@ -236,54 +236,16 @@ function readCustomGeminiModels(): EngineModelInfo[] {
 }
 
 function readCustomClaudeModels(): EngineModelInfo[] {
-  if (typeof window === "undefined" || !window.localStorage) {
-    return [];
-  }
-  try {
-    const raw = window.localStorage.getItem(PROVIDER_STORAGE_KEYS.CLAUDE_CUSTOM_MODELS);
-    if (!raw) {
-      return [];
-    }
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-    const seenIds = new Set<string>();
-    const models: EngineModelInfo[] = [];
-    for (const entry of parsed) {
-      if (!entry || typeof entry !== "object") {
-        continue;
-      }
-      const idValue = (entry as { id?: unknown }).id;
-      if (typeof idValue !== "string") {
-        continue;
-      }
-      const id = idValue.trim();
-      if (!isValidModelId(id) || seenIds.has(id)) {
-        continue;
-      }
-      const labelValue = (entry as { label?: unknown }).label;
-      const descriptionValue = (entry as { description?: unknown }).description;
-      models.push({
-        id,
-        model: id,
-        displayName:
-          typeof labelValue === "string" && labelValue.trim().length > 0
-            ? labelValue.trim()
-            : id,
-        description:
-          typeof descriptionValue === "string"
-            ? descriptionValue.trim()
-            : "",
-        source: CUSTOM_MODEL_SOURCE,
-        isDefault: false,
-      });
-      seenIds.add(id);
-    }
-    return models;
-  } catch {
-    return [];
-  }
+  return readClaudeCustomModelsFromStorage(
+    PROVIDER_STORAGE_KEYS.CLAUDE_CUSTOM_MODELS,
+  ).map((model) => ({
+    id: model.id,
+    model: model.model,
+    displayName: model.label,
+    description: model.description ?? "",
+    source: CUSTOM_MODEL_SOURCE,
+    isDefault: false,
+  }));
 }
 
 function mergeClaudeModelsPreserveDefault(

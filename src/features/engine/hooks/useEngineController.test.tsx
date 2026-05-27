@@ -379,7 +379,7 @@ describe("useEngineController", () => {
     expect(legacyModel?.displayName).toBe("GLM-5.1");
   });
 
-  it("filters invalid/duplicate claude custom models while keeping valid legacy entries", async () => {
+  it("keeps user-entered claude custom model ids while filtering only malformed entries", async () => {
     const claudeModels: EngineStatus["models"] = [
       {
         id: "claude-sonnet-4-6",
@@ -413,7 +413,10 @@ describe("useEngineController", () => {
         { id: "GLM-5.1", label: "GLM", description: "ok" },
         { id: "GLM-5.1", label: "GLM duplicated", description: "dup" },
         { id: "provider/model:202603[beta]" },
-        { id: "bad model with spaces", label: "invalid" },
+        { id: "Haiku 4.5", label: "Haiku 4.5" },
+        { id: "bad model with spaces", label: "Bad" },
+        { id: "\u6a21\u578b 666", label: "\u6a21\u578b 666" },
+        { id: "   ", label: "Blank" },
         null,
         { foo: "bar" },
       ]),
@@ -440,10 +443,30 @@ describe("useEngineController", () => {
     expect(bracketModel).toBeDefined();
     expect(bracketModel?.displayName).toBe("provider/model:202603[beta]");
 
-    const invalidModel = result.current.engineModelsAsOptions.find(
+    const spacedModel = result.current.engineModelsAsOptions.find(
+      (model) => model.id === "Haiku 4.5",
+    );
+    expect(spacedModel).toBeDefined();
+    expect(spacedModel?.model).toBe("Haiku 4.5");
+    expect(spacedModel?.displayName).toBe("Haiku 4.5");
+
+    const arbitrarySpacedModel = result.current.engineModelsAsOptions.find(
       (model) => model.id === "bad model with spaces",
     );
-    expect(invalidModel).toBeUndefined();
+    expect(arbitrarySpacedModel).toBeDefined();
+    expect(arbitrarySpacedModel?.model).toBe("bad model with spaces");
+    expect(arbitrarySpacedModel?.displayName).toBe("Bad");
+
+    const unicodeModel = result.current.engineModelsAsOptions.find(
+      (model) => model.id === "\u6a21\u578b 666",
+    );
+    expect(unicodeModel).toBeDefined();
+    expect(unicodeModel?.model).toBe("\u6a21\u578b 666");
+
+    const blankModel = result.current.engineModelsAsOptions.find(
+      (model) => model.displayName === "Blank",
+    );
+    expect(blankModel).toBeUndefined();
   });
 
   it("marks every engine as loading before detection finishes", () => {

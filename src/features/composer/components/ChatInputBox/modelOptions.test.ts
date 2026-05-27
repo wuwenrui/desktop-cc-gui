@@ -36,12 +36,16 @@ describe('ChatInputBox model options', () => {
     }))).toContain('claude-custom-alpha');
   });
 
-  it('filters invalid Claude custom model ids', () => {
+  it('preserves user-entered Claude custom model ids without regex filtering', () => {
     window.localStorage.setItem(
       STORAGE_KEYS.CLAUDE_CUSTOM_MODELS,
       JSON.stringify([
+        { id: 'Haiku 4.5', label: 'Haiku 4.5' },
         { id: 'bad model with spaces', label: 'Bad' },
+        { id: '\u6a21\u578b 666', label: '\u6a21\u578b 666' },
         { id: 'Cxn[1m]', label: 'Cxn[1m]' },
+        { id: '   ', label: 'Blank' },
+        { label: 'Missing id' },
       ]),
     );
 
@@ -52,8 +56,12 @@ describe('ChatInputBox model options', () => {
       modelStorageSnapshot: readModelStorageSnapshot(),
     }));
 
+    expect(modelList).toContain('Haiku 4.5:Haiku 4.5:custom:Haiku 4.5');
+    expect(modelList).toContain('bad model with spaces:bad model with spaces:custom:Bad');
+    expect(modelList).toContain('\u6a21\u578b 666:\u6a21\u578b 666:custom:\u6a21\u578b 666');
     expect(modelList).toContain('Cxn[1m]:Cxn[1m]:custom:Cxn[1m]');
-    expect(modelList).not.toContain('bad model with spaces');
+    expect(modelList).not.toContain('Blank');
+    expect(modelList).not.toContain('Missing id');
   });
 
   it('does not render Claude alias fallback when config and custom models are empty', () => {
@@ -169,11 +177,23 @@ describe('ChatInputBox model options', () => {
       resolveProviderLabel: (_providerId, fallbackLabel) => fallbackLabel,
     });
 
-    expect(groups.map((group) => group.providerId)).toEqual(['claude', 'codex']);
-    expect(groups.find((group) => group.providerId === 'claude')?.models.map((model) => model.id)).toContain('claude-sonnet-4-6');
+    expect(groups.map((group) => group.providerId)).toEqual(['codex']);
     expect(groups.find((group) => group.providerId === 'codex')?.models).toEqual([
       { id: 'gpt-5.4', label: 'GPT-5.4 runtime' },
     ]);
+  });
+
+  it('does not synthesize Claude provider group when settings and custom models are empty', () => {
+    const groups = resolveProviderModelGroups({
+      currentProvider: 'codex',
+      models: [{ id: 'gpt-5.4', label: 'GPT-5.4 runtime' }],
+      selectedModel: 'gpt-5.4',
+      modelStorageSnapshot: readModelStorageSnapshot(),
+      providerAvailability: { claude: true, codex: true, gemini: false, opencode: true },
+      resolveProviderLabel: (_providerId, fallbackLabel) => fallbackLabel,
+    });
+
+    expect(groups.find((group) => group.providerId === 'claude')).toBeUndefined();
   });
 
   it('includes detected Gemini with fallback models when runtime models are unavailable', () => {
@@ -188,7 +208,7 @@ describe('ChatInputBox model options', () => {
 
     const geminiGroup = groups.find((group) => group.providerId === 'gemini');
 
-    expect(groups.map((group) => group.providerId)).toEqual(['claude', 'codex', 'gemini']);
+    expect(groups.map((group) => group.providerId)).toEqual(['codex', 'gemini']);
     expect(geminiGroup?.models.map((model) => model.id)).toEqual([
       'gemini-2.5-pro',
       'gemini-2.5-flash',
