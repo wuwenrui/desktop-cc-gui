@@ -30,3 +30,34 @@ The composer MUST isolate inline file-tag rendering failures so a `contenteditab
 - **WHEN** inline file-tag rendering degrades after a failure
 - **THEN** the raw file-reference text MUST remain editable in the composer
 - **AND** subsequent normal typing MUST continue to update composer content
+
+### Requirement: Composer slash command completion MUST normalize runtime sources
+
+The composer slash command completion provider MUST ignore malformed project custom commands and SDK/bridge slash command payload entries before rendering dropdown items.
+
+#### Scenario: malformed project custom commands are skipped
+- **WHEN** project custom command entries contain missing, blank, or non-string `name` values
+- **THEN** the slash command completion provider MUST skip those malformed entries
+- **AND** valid commands MUST remain searchable and selectable
+- **AND** the composer MUST NOT crash on macOS, Windows, or Linux
+
+#### Scenario: malformed SDK slash commands are skipped
+- **WHEN** the SDK/bridge slash command callback receives a mixed payload containing malformed entries
+- **THEN** malformed entries MUST be skipped
+- **AND** valid SDK slash commands and local slash commands MUST remain available
+- **AND** duplicate command labels MUST be collapsed before dropdown rendering
+
+### Requirement: Shared completion dropdown mapping MUST fail per item
+
+The shared composer completion dropdown MUST isolate failures while mapping provider results into dropdown items.
+
+#### Scenario: malformed dropdown item does not drop valid items
+- **WHEN** a completion provider returns multiple results and mapping one result to a dropdown item fails
+- **THEN** that result MUST be skipped and logged
+- **AND** valid mapped results MUST remain visible
+- **AND** selecting a visible item MUST pass the matching raw provider item to the completion selection handler
+
+#### Scenario: non-array provider result is treated as empty
+- **WHEN** a completion provider unexpectedly resolves to a non-array value
+- **THEN** the dropdown MUST log the invalid provider result
+- **AND** it MUST show an empty completion list rather than crashing the composer

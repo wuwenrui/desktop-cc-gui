@@ -137,7 +137,28 @@ export function useCompletionDropdown<T>({
       // Check if aborted
       if (controller.signal.aborted) return;
 
-      const items = results.map(toDropdownItem);
+      if (!Array.isArray(results)) {
+        debugError('[useCompletionDropdown] Provider returned non-array results:', results);
+        setState(prev => ({
+          ...prev,
+          items: [],
+          rawItems: [],
+          loading: false,
+          activeIndex: 0,
+        }));
+        return;
+      }
+
+      const items: DropdownItemData[] = [];
+      const rawItems: unknown[] = [];
+      results.forEach((result) => {
+        try {
+          items.push(toDropdownItem(result));
+          rawItems.push(result);
+        } catch (error) {
+          debugError('[useCompletionDropdown] Failed to map completion item:', error);
+        }
+      });
       const endedAt = performance.now?.() ?? Date.now();
       const durationMs = (endedAt - startedAt).toFixed(1);
       debugLog('[useCompletionDropdown] search done:', { query, resultsCount: results.length, durationMs });
@@ -145,7 +166,7 @@ export function useCompletionDropdown<T>({
       setState(prev => ({
         ...prev,
         items,
-        rawItems: results as unknown[],
+        rawItems,
         loading: false,
         activeIndex: 0,
       }));

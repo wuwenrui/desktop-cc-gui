@@ -527,6 +527,41 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
     );
   });
 
+  it('skips malformed project custom slash command entries', async () => {
+    renderAdapter({
+      commands: [
+        {
+          name: 'next',
+          path: '/repo/.claude/commands/next.md',
+          description: 'continue with next step',
+          content: 'next',
+        },
+        { name: 42, description: 'bad name' },
+        { description: 'missing name' },
+        null,
+      ],
+    } as Partial<ComponentProps<typeof ChatInputBoxAdapter>>);
+
+    await waitFor(() => expect(mockState.latestProps).toBeTruthy());
+
+    const latest = mockState.latestProps as {
+      commandCompletionProvider?: (
+        query: string,
+        signal: AbortSignal,
+      ) => Promise<Array<{ id: string; label: string; category?: string }>>;
+    };
+
+    const results = await latest.commandCompletionProvider?.('next', new AbortController().signal);
+
+    expect(results).toEqual([
+      expect.objectContaining({
+        id: 'next',
+        label: '/next',
+        category: 'custom',
+      }),
+    ]);
+  });
+
   it('uses external thinking callback when supplied', async () => {
     const onToggleThinking = vi.fn();
     renderAdapter({

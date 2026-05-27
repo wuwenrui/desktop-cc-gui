@@ -697,6 +697,18 @@ function extensionFromFileName(fileName: string): string {
   return fileName.slice(idx + 1).toLowerCase();
 }
 
+function normalizeSlashCommandName(name: unknown): string | null {
+  if (typeof name !== 'string') {
+    return null;
+  }
+  const cleanName = name.trim().replace(/^\//, '');
+  return cleanName.length > 0 ? cleanName : null;
+}
+
+function normalizeOptionalString(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
 type SkillPayloadRecord = Record<string, unknown>;
 type RawSkillEntry = SkillPayloadRecord & {
   name?: unknown;
@@ -1439,17 +1451,20 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
     }, [selectedEngine, t]);
 
     const completionCommands = useMemo<CommandItem[]>(() => {
-      const customCommands: CommandItem[] = (commands ?? [])
-        .filter((entry) => entry.name.trim().length > 0)
-        .map((entry) => {
-          const cleanName = entry.name.trim().replace(/^\//, '');
-          return {
-            id: cleanName,
-            label: `/${cleanName}`,
-            description: entry.description || '',
-            category: 'custom',
-          };
+      const commandSource = Array.isArray(commands) ? commands : [];
+      const customCommands = commandSource.reduce<CommandItem[]>((acc, entry) => {
+        const cleanName = normalizeSlashCommandName(entry?.name);
+        if (!cleanName) {
+          return acc;
+        }
+        acc.push({
+          id: cleanName,
+          label: `/${cleanName}`,
+          description: normalizeOptionalString(entry.description),
+          category: 'custom',
         });
+        return acc;
+      }, []);
 
       const seen = new Set<string>();
       const merged = [...builtinSlashCommands, ...customCommands].filter((entry) => {

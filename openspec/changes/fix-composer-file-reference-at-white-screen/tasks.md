@@ -17,3 +17,10 @@
 
 - [x] 4.1 Run focused Vitest suites for `ChatInputBoxAdapter`, `useFileTags`, and related trigger detection; input: implemented frontend changes; output: passing regression evidence; validation: `npx vitest run src/features/composer/components/ChatInputBox/hooks/useTriggerDetection.test.tsx src/features/composer/components/ChatInputBox/hooks/useFileTags.test.tsx src/features/composer/components/ChatInputBox/ChatInputBoxAdapter.test.tsx`; dependencies: 2.1, 2.2, 2.3, 3.1; priority: P0.
 - [x] 4.2 Run strict OpenSpec validation for the change; input: completed artifacts; output: change validates strictly; validation: `openspec validate fix-composer-file-reference-at-white-screen --strict --no-interactive`; dependencies: 4.1; priority: P0.
+
+## 5. Slash Completion Follow-up
+
+- [x] 5.1 Normalize project custom slash commands in `ChatInputBoxAdapter`; input: `commands` props from project/runtime command discovery; output: malformed command entries skipped before calling `.trim()`/filtering; validation: focused adapter test for `/` provider with invalid entries; dependencies: 4.2; priority: P0.
+- [x] 5.2 Normalize SDK/bridge slash command payloads in `slashCommandProvider`; input: mixed callback payloads from `window.updateSlashCommands`; output: invalid entries skipped, duplicates collapsed, local slash commands preserved; validation: focused provider tests; dependencies: 5.1; priority: P0.
+- [x] 5.3 Isolate shared completion dropdown item mapping failures; input: provider result arrays and dropdown mapper callbacks; output: single bad item does not crash dropdown and raw item selection remains aligned; validation: focused hook test; dependencies: 5.2; priority: P0.
+- [x] 5.4 Run cross-platform-safe focused validation; input: implemented slash hardening; output: passing Vitest/typecheck/OpenSpec evidence with no platform-specific key handling changes; validation: focused Vitest plus `npm run typecheck` and `openspec validate fix-composer-file-reference-at-white-screen --strict --no-interactive`; dependencies: 5.1, 5.2, 5.3; priority: P0.

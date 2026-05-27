@@ -60,8 +60,68 @@ export function resetSlashCommandsState() {
 }
 
 interface SDKSlashCommand {
-  name: string;
-  description?: string;
+  name?: unknown;
+  description?: unknown;
+}
+
+function normalizeSlashCommandLabel(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const commandName = value.trim();
+  if (!commandName) {
+    return null;
+  }
+  return commandName.startsWith('/') ? commandName : `/${commandName}`;
+}
+
+function commandItemFromRuntimePayload(
+  rawName: unknown,
+  rawDescription: unknown,
+): CommandItem | null {
+  const label = normalizeSlashCommandLabel(rawName);
+  if (!label) {
+    return null;
+  }
+  const id = label.replace(/^\//, '').trim();
+  if (!id) {
+    return null;
+  }
+  return {
+    id,
+    label,
+    description: typeof rawDescription === 'string' ? rawDescription : '',
+    category: getCategoryFromCommand(label),
+  };
+}
+
+function normalizeSlashCommandPayload(parsed: unknown[]): CommandItem[] {
+  const commands: CommandItem[] = [];
+  const seenLabels = new Set<string>();
+
+  parsed.forEach((entry) => {
+    const command =
+      typeof entry === 'string'
+        ? commandItemFromRuntimePayload(entry, '')
+        : entry && typeof entry === 'object'
+          ? commandItemFromRuntimePayload(
+              (entry as SDKSlashCommand).name,
+              (entry as SDKSlashCommand).description,
+            )
+          : null;
+
+    if (!command) {
+      return;
+    }
+    const key = command.label.toLowerCase();
+    if (seenLabels.has(key)) {
+      return;
+    }
+    seenLabels.add(key);
+    commands.push(command);
+  });
+
+  return commands;
 }
 
 export function setupSlashCommandsCallback() {
@@ -76,25 +136,7 @@ export function setupSlashCommandsCallback() {
       let commands: CommandItem[] = [];
 
       if (Array.isArray(parsed)) {
-        if (parsed.length > 0) {
-          if (typeof parsed[0] === 'object' && parsed[0] !== null && 'name' in parsed[0]) {
-            const sdkCommands: SDKSlashCommand[] = parsed;
-            commands = sdkCommands.map(cmd => ({
-              id: cmd.name.replace(/^\//, ''),
-              label: cmd.name.startsWith('/') ? cmd.name : `/${cmd.name}`,
-              description: cmd.description || '',
-              category: getCategoryFromCommand(cmd.name),
-            }));
-          } else if (typeof parsed[0] === 'string') {
-            const commandNames: string[] = parsed;
-            commands = commandNames.map(name => ({
-              id: name.replace(/^\//, ''),
-              label: name.startsWith('/') ? name : `/${name}`,
-              description: '',
-              category: getCategoryFromCommand(name),
-            }));
-          }
-        }
+        commands = normalizeSlashCommandPayload(parsed);
 
         cachedSdkCommands = commands;
         loadingState = 'success';
@@ -235,7 +277,15 @@ function getCategoryFromCommand(name: string): string {
 function filterCommands(commands: CommandItem[], query: string): CommandItem[] {
   const visibleCommands = commands.filter(cmd => !isHiddenCommand(cmd.label));
   const localCommands = getLocalNewSessionCommands();
-  const merged = [...localCommands, ...visibleCommands];
+  const seenLabels = new Set<string>();
+  const merged = [...localCommands, ...visibleCommands].filter((command) => {
+    const key = command.label.toLowerCase();
+    if (seenLabels.has(key)) {
+      return false;
+    }
+    seenLabels.add(key);
+    return true;
+  });
 
   if (!query) return merged;
 
