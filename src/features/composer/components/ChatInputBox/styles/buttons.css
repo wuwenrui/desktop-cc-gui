@@ -38,17 +38,21 @@
    Send/Stop Button
    ============================================================ */
 .submit-button {
+  --composer-submit-button-bg: color-mix(in srgb, var(--input-focus-border, #2563eb) 88%, white 12%);
+  --composer-submit-button-bg-hover: color-mix(in srgb, var(--input-focus-border, #2563eb) 94%, white 6%);
+  --composer-submit-button-shadow: color-mix(in srgb, var(--input-focus-border, #2563eb) 28%, transparent);
+  --composer-submit-button-shadow-hover: color-mix(in srgb, var(--input-focus-border, #2563eb) 36%, transparent);
   display: flex;
   align-items: center;
   justify-content: center;
   width: 24px;
   height: 24px;
-  background: color-mix(in srgb, var(--input-focus-border, #2563eb) 88%, white 12%);
+  background: var(--composer-submit-button-bg);
   border: none;
   border-radius: 8px;
   color: #ffffff;
   cursor: pointer;
-  box-shadow: 0 8px 22px color-mix(in srgb, var(--input-focus-border, #2563eb) 28%, transparent);
+  box-shadow: 0 8px 22px var(--composer-submit-button-shadow);
   transition:
     background 0.2s,
     box-shadow 0.2s,
@@ -57,8 +61,8 @@
 }
 
 .submit-button:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--input-focus-border, #2563eb) 94%, white 6%);
-  box-shadow: 0 10px 26px color-mix(in srgb, var(--input-focus-border, #2563eb) 36%, transparent);
+  background: var(--composer-submit-button-bg-hover);
+  box-shadow: 0 10px 26px var(--composer-submit-button-shadow-hover);
   opacity: 1;
   transform: translateY(-1px);
 }

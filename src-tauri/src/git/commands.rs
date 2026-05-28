@@ -9,8 +9,18 @@ pub(crate) use commands_branch::*;
 #[tauri::command]
 pub(crate) async fn get_git_status(
     workspace_id: String,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote(
+            &state,
+            &app,
+            "get_git_status",
+            json!({ "workspaceId": workspace_id.clone() }),
+        )
+        .await;
+    }
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces
         .get(&workspace_id)
@@ -164,8 +174,18 @@ fn empty_git_status_snapshot(is_git_repository: bool) -> serde_json::Value {
 pub(crate) async fn stage_git_file(
     workspace_id: String,
     path: String,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote_unit(
+            &state,
+            &app,
+            "stage_git_file",
+            json!({ "workspaceId": workspace_id.clone(), "path": path.clone() }),
+        )
+        .await;
+    }
     let entry = {
         let workspaces = state.workspaces.lock().await;
         workspaces
@@ -186,8 +206,18 @@ pub(crate) async fn stage_git_file(
 #[tauri::command]
 pub(crate) async fn stage_git_all(
     workspace_id: String,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote_unit(
+            &state,
+            &app,
+            "stage_git_all",
+            json!({ "workspaceId": workspace_id.clone() }),
+        )
+        .await;
+    }
     let entry = {
         let workspaces = state.workspaces.lock().await;
         workspaces
@@ -204,8 +234,18 @@ pub(crate) async fn stage_git_all(
 pub(crate) async fn unstage_git_file(
     workspace_id: String,
     path: String,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote_unit(
+            &state,
+            &app,
+            "unstage_git_file",
+            json!({ "workspaceId": workspace_id.clone(), "path": path.clone() }),
+        )
+        .await;
+    }
     let entry = {
         let workspaces = state.workspaces.lock().await;
         workspaces
@@ -225,8 +265,18 @@ pub(crate) async fn unstage_git_file(
 pub(crate) async fn revert_git_file(
     workspace_id: String,
     path: String,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote_unit(
+            &state,
+            &app,
+            "revert_git_file",
+            json!({ "workspaceId": workspace_id.clone(), "path": path.clone() }),
+        )
+        .await;
+    }
     let entry = {
         let workspaces = state.workspaces.lock().await;
         workspaces
@@ -254,8 +304,18 @@ pub(crate) async fn revert_git_file(
 #[tauri::command]
 pub(crate) async fn revert_git_all(
     workspace_id: String,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote_unit(
+            &state,
+            &app,
+            "revert_git_all",
+            json!({ "workspaceId": workspace_id.clone() }),
+        )
+        .await;
+    }
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces.get(&workspace_id).ok_or("workspace not found")?;
     let repo_root = resolve_git_root(entry)?;
@@ -271,8 +331,18 @@ pub(crate) async fn revert_git_all(
 pub(crate) async fn commit_git(
     workspace_id: String,
     message: String,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote_unit(
+            &state,
+            &app,
+            "commit_git",
+            json!({ "workspaceId": workspace_id.clone(), "message": message.clone() }),
+        )
+        .await;
+    }
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces
         .get(&workspace_id)
@@ -295,8 +365,12 @@ pub(crate) async fn push_git(
     topic: Option<String>,
     reviewers: Option<String>,
     cc: Option<String>,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote_unit(&state, &app, "push_git", json!({ "workspaceId": workspace_id.clone(), "remote": remote.clone(), "branch": branch.clone(), "forceWithLease": force_with_lease, "pushTags": push_tags, "runHooks": run_hooks, "pushToGerrit": push_to_gerrit, "topic": topic.clone(), "reviewers": reviewers.clone(), "cc": cc.clone() })).await;
+    }
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces
         .get(&workspace_id)
@@ -325,8 +399,12 @@ pub(crate) async fn get_git_push_preview(
     remote: String,
     branch: String,
     limit: Option<usize>,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<GitPushPreviewResponse, String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote(&state, &app, "get_git_push_preview", json!({ "workspaceId": workspace_id.clone(), "remote": remote.clone(), "branch": branch.clone(), "limit": limit })).await;
+    }
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces
         .get(&workspace_id)
@@ -411,8 +489,12 @@ pub(crate) async fn pull_git(
     strategy: Option<String>,
     no_commit: Option<bool>,
     no_verify: Option<bool>,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote_unit(&state, &app, "pull_git", json!({ "workspaceId": workspace_id.clone(), "remote": remote.clone(), "branch": branch.clone(), "strategy": strategy.clone(), "noCommit": no_commit, "noVerify": no_verify })).await;
+    }
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces
         .get(&workspace_id)
@@ -450,8 +532,18 @@ pub(crate) async fn pull_git(
 #[tauri::command]
 pub(crate) async fn sync_git(
     workspace_id: String,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote_unit(
+            &state,
+            &app,
+            "sync_git",
+            json!({ "workspaceId": workspace_id.clone() }),
+        )
+        .await;
+    }
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces
         .get(&workspace_id)
@@ -468,16 +560,36 @@ pub(crate) async fn sync_git(
 #[tauri::command]
 pub(crate) async fn git_pull(
     workspace_id: String,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    pull_git(workspace_id, None, None, None, None, None, state).await
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote_unit(
+            &state,
+            &app,
+            "git_pull",
+            json!({ "workspaceId": workspace_id.clone() }),
+        )
+        .await;
+    }
+    pull_git(workspace_id, None, None, None, None, None, app, state).await
 }
 
 #[tauri::command]
 pub(crate) async fn git_push(
     workspace_id: String,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote_unit(
+            &state,
+            &app,
+            "git_push",
+            json!({ "workspaceId": workspace_id.clone() }),
+        )
+        .await;
+    }
     push_git(
         workspace_id,
         None,
@@ -489,6 +601,7 @@ pub(crate) async fn git_push(
         None,
         None,
         None,
+        app,
         state,
     )
     .await
@@ -497,17 +610,37 @@ pub(crate) async fn git_push(
 #[tauri::command]
 pub(crate) async fn git_sync(
     workspace_id: String,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    sync_git(workspace_id, state).await
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote_unit(
+            &state,
+            &app,
+            "git_sync",
+            json!({ "workspaceId": workspace_id.clone() }),
+        )
+        .await;
+    }
+    sync_git(workspace_id, app, state).await
 }
 
 #[tauri::command]
 pub(crate) async fn git_fetch(
     workspace_id: String,
     remote: Option<String>,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote_unit(
+            &state,
+            &app,
+            "git_fetch",
+            json!({ "workspaceId": workspace_id.clone(), "remote": remote.clone() }),
+        )
+        .await;
+    }
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces
         .get(&workspace_id)
@@ -530,8 +663,18 @@ pub(crate) async fn git_fetch(
 pub(crate) async fn cherry_pick_commit(
     workspace_id: String,
     commit_hash: String,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote_unit(
+            &state,
+            &app,
+            "cherry_pick_commit",
+            json!({ "workspaceId": workspace_id.clone(), "commitHash": commit_hash.clone() }),
+        )
+        .await;
+    }
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces
         .get(&workspace_id)
@@ -546,8 +689,18 @@ pub(crate) async fn cherry_pick_commit(
 pub(crate) async fn revert_commit(
     workspace_id: String,
     commit_hash: String,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote_unit(
+            &state,
+            &app,
+            "revert_commit",
+            json!({ "workspaceId": workspace_id.clone(), "commitHash": commit_hash.clone() }),
+        )
+        .await;
+    }
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces
         .get(&workspace_id)
@@ -563,8 +716,12 @@ pub(crate) async fn reset_git_commit(
     workspace_id: String,
     commit_hash: String,
     mode: String,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote_unit(&state, &app, "reset_git_commit", json!({ "workspaceId": workspace_id.clone(), "commitHash": commit_hash.clone(), "mode": mode.clone() })).await;
+    }
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces
         .get(&workspace_id)
@@ -592,8 +749,18 @@ pub(crate) async fn reset_git_commit(
 pub(crate) async fn list_git_roots(
     workspace_id: String,
     depth: Option<usize>,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<Vec<String>, String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote(
+            &state,
+            &app,
+            "list_git_roots",
+            json!({ "workspaceId": workspace_id.clone(), "depth": depth }),
+        )
+        .await;
+    }
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces
         .get(&workspace_id)
@@ -644,8 +811,18 @@ pub(crate) async fn get_workspace_diff_for_commit_scope(
 #[tauri::command]
 pub(crate) async fn get_git_diffs(
     workspace_id: String,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<Vec<GitFileDiff>, String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote(
+            &state,
+            &app,
+            "get_git_diffs",
+            json!({ "workspaceId": workspace_id.clone() }),
+        )
+        .await;
+    }
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces
         .get(&workspace_id)
@@ -803,8 +980,18 @@ pub(crate) async fn get_git_diffs(
 pub(crate) async fn get_git_file_full_diff(
     workspace_id: String,
     path: String,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote(
+            &state,
+            &app,
+            "get_git_file_full_diff",
+            json!({ "workspaceId": workspace_id.clone(), "path": path.clone() }),
+        )
+        .await;
+    }
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces
         .get(&workspace_id)
@@ -888,8 +1075,18 @@ pub(crate) async fn get_git_file_full_diff(
 pub(crate) async fn get_git_log(
     workspace_id: String,
     limit: Option<usize>,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<GitLogResponse, String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote(
+            &state,
+            &app,
+            "get_git_log",
+            json!({ "workspaceId": workspace_id.clone(), "limit": limit }),
+        )
+        .await;
+    }
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces
         .get(&workspace_id)
@@ -994,8 +1191,12 @@ pub(crate) async fn get_git_commit_history(
     snapshot_id: Option<String>,
     offset: Option<usize>,
     limit: Option<usize>,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<GitHistoryResponse, String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote(&state, &app, "get_git_commit_history", json!({ "workspaceId": workspace_id.clone(), "branch": branch.clone(), "query": query.clone(), "author": author.clone(), "dateFrom": date_from, "dateTo": date_to, "snapshotId": snapshot_id.clone(), "offset": offset, "limit": limit })).await;
+    }
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces
         .get(&workspace_id)
@@ -1152,8 +1353,18 @@ pub(crate) async fn get_git_commit_history(
 pub(crate) async fn resolve_git_commit_ref(
     workspace_id: String,
     target: String,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote(
+            &state,
+            &app,
+            "resolve_git_commit_ref",
+            json!({ "workspaceId": workspace_id.clone(), "target": target.clone() }),
+        )
+        .await;
+    }
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces
         .get(&workspace_id)
@@ -1182,8 +1393,12 @@ pub(crate) async fn get_git_commit_details(
     workspace_id: String,
     commit_hash: String,
     max_diff_lines: Option<usize>,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<GitCommitDetails, String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote(&state, &app, "get_git_commit_details", json!({ "workspaceId": workspace_id.clone(), "commitHash": commit_hash.clone(), "maxDiffLines": max_diff_lines })).await;
+    }
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces
         .get(&workspace_id)
@@ -1320,8 +1535,12 @@ pub(crate) async fn get_git_commit_diff(
     sha: String,
     path: Option<String>,
     context_lines: Option<usize>,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<Vec<GitCommitDiff>, String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote(&state, &app, "get_git_commit_diff", json!({ "workspaceId": workspace_id.clone(), "sha": sha.clone(), "path": path.clone(), "contextLines": context_lines })).await;
+    }
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces
         .get(&workspace_id)
@@ -1434,8 +1653,18 @@ pub(crate) async fn get_git_commit_diff(
 #[tauri::command]
 pub(crate) async fn get_git_remote(
     workspace_id: String,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<Option<String>, String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote(
+            &state,
+            &app,
+            "get_git_remote",
+            json!({ "workspaceId": workspace_id.clone() }),
+        )
+        .await;
+    }
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces
         .get(&workspace_id)
@@ -1460,8 +1689,18 @@ pub(crate) async fn get_git_remote(
 #[tauri::command]
 pub(crate) async fn get_git_pr_workflow_defaults(
     workspace_id: String,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<GitPrWorkflowDefaults, String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote(
+            &state,
+            &app,
+            "get_git_pr_workflow_defaults",
+            json!({ "workspaceId": workspace_id.clone() }),
+        )
+        .await;
+    }
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces
         .get(&workspace_id)
@@ -1550,8 +1789,12 @@ pub(crate) async fn create_git_pr_workflow(
     body: Option<String>,
     comment_after_create: Option<bool>,
     comment_body: Option<String>,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<GitPrWorkflowResult, String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote(&state, &app, "create_git_pr_workflow", json!({ "workspaceId": workspace_id.clone(), "upstreamRepo": upstream_repo.clone(), "baseBranch": base_branch.clone(), "headOwner": head_owner.clone(), "headBranch": head_branch.clone(), "title": title.clone(), "body": body.clone(), "commentAfterCreate": comment_after_create, "commentBody": comment_body.clone() })).await;
+    }
     commands_pr_workflow::create_git_pr_workflow_impl(
         workspace_id,
         upstream_repo,
@@ -1570,8 +1813,18 @@ pub(crate) async fn create_git_pr_workflow(
 #[tauri::command]
 pub(crate) async fn get_github_issues(
     workspace_id: String,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<GitHubIssuesResponse, String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote(
+            &state,
+            &app,
+            "get_github_issues",
+            json!({ "workspaceId": workspace_id.clone() }),
+        )
+        .await;
+    }
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces
         .get(&workspace_id)
@@ -1640,8 +1893,18 @@ pub(crate) async fn get_github_issues(
 #[tauri::command]
 pub(crate) async fn get_github_pull_requests(
     workspace_id: String,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<GitHubPullRequestsResponse, String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote(
+            &state,
+            &app,
+            "get_github_pull_requests",
+            json!({ "workspaceId": workspace_id.clone() }),
+        )
+        .await;
+    }
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces
         .get(&workspace_id)
@@ -1716,8 +1979,18 @@ pub(crate) async fn get_github_pull_requests(
 pub(crate) async fn get_github_pull_request_diff(
     workspace_id: String,
     pr_number: u64,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<Vec<GitHubPullRequestDiff>, String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote(
+            &state,
+            &app,
+            "get_github_pull_request_diff",
+            json!({ "workspaceId": workspace_id.clone(), "prNumber": pr_number }),
+        )
+        .await;
+    }
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces
         .get(&workspace_id)
@@ -1764,8 +2037,18 @@ pub(crate) async fn get_github_pull_request_diff(
 pub(crate) async fn get_github_pull_request_comments(
     workspace_id: String,
     pr_number: u64,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<Vec<GitHubPullRequestComment>, String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote(
+            &state,
+            &app,
+            "get_github_pull_request_comments",
+            json!({ "workspaceId": workspace_id.clone(), "prNumber": pr_number }),
+        )
+        .await;
+    }
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces
         .get(&workspace_id)

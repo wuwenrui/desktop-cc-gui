@@ -60,4 +60,20 @@ describe("HomeChat styles", () => {
     expect(triggerRule).toContain("line-height: 1.2;");
     expect(triggerRule).toContain("padding-block: 2px;");
   });
+
+  it("keeps the homepage composer send button blue across themes", () => {
+    const cssPath = resolve(process.cwd(), "src/styles/home-chat.css");
+    const css = readFileSync(cssPath, "utf8");
+    const submitRule =
+      css.match(/\.home-chat-composer-host \.submit-button\s*\{([\s\S]*?)\n\}/)?.[1] ?? "";
+    const lightSubmitRule =
+      css.match(/\[data-theme="light"\] \.home-chat \.home-chat-composer-host \.submit-button\s*\{([\s\S]*?)\n\}/)?.[1] ?? "";
+    const systemLightSubmitRule =
+      css.match(/:root:not\(\[data-theme\]\) \.home-chat \.home-chat-composer-host \.submit-button\s*\{([\s\S]*?)\n\s*\}/)?.[1] ?? "";
+
+    expect(submitRule).toContain("--composer-submit-button-bg: #2563eb;");
+    expect(submitRule).toContain("background: var(--composer-submit-button-bg);");
+    expect(lightSubmitRule).toContain("background: var(--composer-submit-button-bg);");
+    expect(systemLightSubmitRule).toContain("background: var(--composer-submit-button-bg);");
+  });
 });

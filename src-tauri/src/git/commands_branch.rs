@@ -3,8 +3,18 @@ use super::*;
 #[tauri::command]
 pub(crate) async fn list_git_branches(
     workspace_id: String,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote(
+            &state,
+            &app,
+            "list_git_branches",
+            json!({ "workspaceId": workspace_id.clone() }),
+        )
+        .await;
+    }
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces
         .get(&workspace_id)
@@ -431,6 +441,24 @@ async fn update_non_current_local_branch(
 pub(crate) async fn update_git_branch(
     workspace_id: String,
     branch_name: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<GitBranchUpdateResult, String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote(
+            &state,
+            &app,
+            "update_git_branch",
+            json!({ "workspaceId": workspace_id.clone(), "branchName": branch_name.clone() }),
+        )
+        .await;
+    }
+    update_git_branch_local(workspace_id, branch_name, state).await
+}
+
+async fn update_git_branch_local(
+    workspace_id: String,
+    branch_name: String,
     state: State<'_, AppState>,
 ) -> Result<GitBranchUpdateResult, String> {
     let workspaces = state.workspaces.lock().await;
@@ -453,7 +481,7 @@ pub(crate) async fn update_git_branch(
         ));
     }
     if branch_state.is_current {
-        pull_git(workspace_id, None, None, None, None, None, state).await?;
+        run_git_command(&repo_root, &["pull"]).await?;
         return Ok(branch_update_result(
             branch_state.branch_name.as_str(),
             BRANCH_UPDATE_STATUS_SUCCESS,
@@ -534,8 +562,18 @@ async fn checkout_remote_branch_with_tracking(
 pub(crate) async fn checkout_git_branch(
     workspace_id: String,
     name: String,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote_unit(
+            &state,
+            &app,
+            "checkout_git_branch",
+            json!({ "workspaceId": workspace_id.clone(), "name": name.clone() }),
+        )
+        .await;
+    }
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces
         .get(&workspace_id)
@@ -609,8 +647,18 @@ pub(crate) async fn checkout_git_branch(
 pub(crate) async fn create_git_branch(
     workspace_id: String,
     name: String,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote_unit(
+            &state,
+            &app,
+            "create_git_branch",
+            json!({ "workspaceId": workspace_id.clone(), "name": name.clone() }),
+        )
+        .await;
+    }
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces
         .get(&workspace_id)
@@ -631,8 +679,12 @@ pub(crate) async fn create_git_branch_from_branch(
     workspace_id: String,
     name: String,
     source_branch: String,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote_unit(&state, &app, "create_git_branch_from_branch", json!({ "workspaceId": workspace_id.clone(), "name": name.clone(), "sourceBranch": source_branch.clone() })).await;
+    }
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces
         .get(&workspace_id)
@@ -675,8 +727,12 @@ pub(crate) async fn create_git_branch_from_commit(
     workspace_id: String,
     name: String,
     commit_hash: String,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote_unit(&state, &app, "create_git_branch_from_commit", json!({ "workspaceId": workspace_id.clone(), "name": name.clone(), "commitHash": commit_hash.clone() })).await;
+    }
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces
         .get(&workspace_id)
@@ -698,8 +754,18 @@ pub(crate) async fn delete_git_branch(
     name: String,
     force: Option<bool>,
     remove_occupied_worktree: Option<bool>,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote_unit(
+            &state,
+            &app,
+            "delete_git_branch",
+            json!({ "workspaceId": workspace_id.clone(), "name": name.clone(), "force": force }),
+        )
+        .await;
+    }
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces
         .get(&workspace_id)
@@ -760,8 +826,12 @@ pub(crate) async fn rename_git_branch(
     workspace_id: String,
     old_name: String,
     new_name: String,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote_unit(&state, &app, "rename_git_branch", json!({ "workspaceId": workspace_id.clone(), "oldName": old_name.clone(), "newName": new_name.clone() })).await;
+    }
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces
         .get(&workspace_id)
@@ -780,8 +850,18 @@ pub(crate) async fn rename_git_branch(
 pub(crate) async fn merge_git_branch(
     workspace_id: String,
     name: String,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote_unit(
+            &state,
+            &app,
+            "merge_git_branch",
+            json!({ "workspaceId": workspace_id.clone(), "name": name.clone() }),
+        )
+        .await;
+    }
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces
         .get(&workspace_id)
@@ -799,8 +879,18 @@ pub(crate) async fn merge_git_branch(
 pub(crate) async fn rebase_git_branch(
     workspace_id: String,
     onto_branch: String,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote_unit(
+            &state,
+            &app,
+            "rebase_git_branch",
+            json!({ "workspaceId": workspace_id.clone(), "ontoBranch": onto_branch.clone() }),
+        )
+        .await;
+    }
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces
         .get(&workspace_id)
@@ -820,8 +910,12 @@ pub(crate) async fn get_git_branch_compare_commits(
     target_branch: String,
     current_branch: String,
     limit: Option<usize>,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<GitBranchCompareCommitSets, String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote(&state, &app, "get_git_branch_compare_commits", json!({ "workspaceId": workspace_id.clone(), "targetBranch": target_branch.clone(), "currentBranch": current_branch.clone(), "limit": limit })).await;
+    }
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces
         .get(&workspace_id)
@@ -877,8 +971,12 @@ pub(crate) async fn get_git_branch_diff_between_branches(
     workspace_id: String,
     from_branch: String,
     to_branch: String,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<Vec<GitCommitDiff>, String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote(&state, &app, "get_git_branch_diff_between_branches", json!({ "workspaceId": workspace_id.clone(), "fromBranch": from_branch.clone(), "toBranch": to_branch.clone() })).await;
+    }
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces
         .get(&workspace_id)
@@ -973,8 +1071,12 @@ pub(crate) async fn get_git_branch_file_diff_between_branches(
     from_branch: String,
     to_branch: String,
     path: String,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<GitCommitDiff, String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote(&state, &app, "get_git_branch_file_diff_between_branches", json!({ "workspaceId": workspace_id.clone(), "fromBranch": from_branch.clone(), "toBranch": to_branch.clone(), "path": path.clone() })).await;
+    }
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces
         .get(&workspace_id)
@@ -1357,7 +1459,7 @@ mod tests {
         let expected_remote_main = rev_parse(writer_root.as_path(), "refs/heads/main");
         let app_state = build_test_app_state("ws-current-branch", local_root.as_path());
 
-        let result = update_git_branch(
+        let result = update_git_branch_local(
             "ws-current-branch".to_string(),
             "main".to_string(),
             tauri_state(&app_state),
@@ -1403,7 +1505,7 @@ mod tests {
         git_commit(local_root.as_path(), "local only branch");
 
         let app_state = build_test_app_state("ws-no-upstream", local_root.as_path());
-        let result = update_git_branch(
+        let result = update_git_branch_local(
             "ws-no-upstream".to_string(),
             "local-only".to_string(),
             tauri_state(&app_state),
@@ -1461,8 +1563,18 @@ mod tests {
 pub(crate) async fn get_git_worktree_diff_against_branch(
     workspace_id: String,
     branch: String,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<Vec<GitCommitDiff>, String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote(
+            &state,
+            &app,
+            "get_git_worktree_diff_against_branch",
+            json!({ "workspaceId": workspace_id.clone(), "branch": branch.clone() }),
+        )
+        .await;
+    }
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces
         .get(&workspace_id)
@@ -1548,8 +1660,12 @@ pub(crate) async fn get_git_worktree_file_diff_against_branch(
     workspace_id: String,
     branch: String,
     path: String,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<GitCommitDiff, String> {
+    if should_forward_git_remote(&state).await {
+        return forward_git_remote(&state, &app, "get_git_worktree_file_diff_against_branch", json!({ "workspaceId": workspace_id.clone(), "branch": branch.clone(), "path": path.clone() })).await;
+    }
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces
         .get(&workspace_id)

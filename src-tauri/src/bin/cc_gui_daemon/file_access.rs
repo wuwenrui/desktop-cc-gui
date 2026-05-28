@@ -117,10 +117,10 @@ impl DaemonState {
         &self,
         workspace_id: String,
     ) -> Result<WorkspaceFilesResponse, String> {
-        workspaces_core::list_workspace_files_core(&self.workspaces, &workspace_id, |root| {
-            list_workspace_files_inner(root, 12_000)
-        })
-        .await
+        let root = workspaces_core::resolve_workspace_root(&self.workspaces, &workspace_id).await?;
+        tokio::task::spawn_blocking(move || list_workspace_files_inner(&root, 12_000))
+            .await
+            .map_err(|err| format!("failed to join workspace file scan task: {err}"))
     }
 
     pub(crate) async fn list_workspace_directory_children(
@@ -128,13 +128,12 @@ impl DaemonState {
         workspace_id: String,
         path: String,
     ) -> Result<WorkspaceFilesResponse, String> {
-        workspaces_core::read_workspace_file_core(
-            &self.workspaces,
-            &workspace_id,
-            &path,
-            |root, rel_path| list_workspace_directory_children_inner(root, rel_path, 2_000),
-        )
+        let root = workspaces_core::resolve_workspace_root(&self.workspaces, &workspace_id).await?;
+        tokio::task::spawn_blocking(move || {
+            list_workspace_directory_children_inner(&root, &path, 2_000)
+        })
         .await
+        .map_err(|err| format!("failed to join workspace directory scan task: {err}"))?
     }
 
     pub(crate) async fn list_external_absolute_directory_children(

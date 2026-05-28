@@ -892,14 +892,20 @@
 }
 
 .home-chat-composer-host .submit-button {
+  --composer-submit-button-bg: #2563eb;
+  --composer-submit-button-bg-hover: #1d4ed8;
+  --composer-submit-button-shadow: rgba(37, 99, 235, 0.28);
+  --composer-submit-button-shadow-hover: rgba(37, 99, 235, 0.36);
   width: 26px;
   height: 26px;
-  background: rgba(255, 255, 255, 0.76);
-  color: #171717;
+  background: var(--composer-submit-button-bg);
+  color: #ffffff;
+  box-shadow: 0 8px 22px var(--composer-submit-button-shadow);
 }
 
 .home-chat-composer-host .submit-button:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.88);
+  background: var(--composer-submit-button-bg-hover);
+  box-shadow: 0 10px 26px var(--composer-submit-button-shadow-hover);
 }
 
 .home-chat-composer-host .submit-button:disabled {
@@ -909,12 +915,12 @@
 }
 
 [data-theme="light"] .home-chat .home-chat-composer-host .submit-button {
-  background: rgba(15, 23, 42, 0.84);
-  color: rgba(255, 255, 255, 0.96);
+  background: var(--composer-submit-button-bg);
+  color: #ffffff;
 }
 
 [data-theme="light"] .home-chat .home-chat-composer-host .submit-button:hover:not(:disabled) {
-  background: rgba(15, 23, 42, 0.92);
+  background: var(--composer-submit-button-bg-hover);
 }
 
 [data-theme="light"] .home-chat .home-chat-composer-host .submit-button:disabled {
@@ -935,12 +941,12 @@
 
 @media (prefers-color-scheme: light) {
   :root:not([data-theme]) .home-chat .home-chat-composer-host .submit-button {
-    background: rgba(15, 23, 42, 0.84);
-    color: rgba(255, 255, 255, 0.96);
+    background: var(--composer-submit-button-bg);
+    color: #ffffff;
   }
 
   :root:not([data-theme]) .home-chat .home-chat-composer-host .submit-button:hover:not(:disabled) {
-    background: rgba(15, 23, 42, 0.92);
+    background: var(--composer-submit-button-bg-hover);
   }
 
   :root:not([data-theme]) .home-chat .home-chat-composer-host .submit-button:disabled {

@@ -2,12 +2,15 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use tauri::State;
+use serde::de::DeserializeOwned;
+use serde_json::json;
+use tauri::{AppHandle, State};
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 
 use crate::engine;
 use crate::local_usage;
+use crate::remote_backend;
 use crate::shared::codex_core;
 use crate::state::AppState;
 use crate::storage::{read_json_file, with_storage_lock, write_string_atomically};
@@ -32,6 +35,27 @@ pub(crate) use session_management_related::{
     force_codex_related_query, list_project_related_sessions_core,
 };
 pub(crate) use session_management_types::*;
+
+async fn forward_session_management_remote<T: DeserializeOwned>(
+    state: &State<'_, AppState>,
+    app: AppHandle,
+    method: &str,
+    params: serde_json::Value,
+) -> Result<T, String> {
+    let response = remote_backend::call_remote(&*state, app, method, params).await?;
+    serde_json::from_value(response).map_err(|err| err.to_string())
+}
+
+async fn forward_session_management_remote_unit(
+    state: &State<'_, AppState>,
+    app: AppHandle,
+    method: &str,
+    params: serde_json::Value,
+) -> Result<(), String> {
+    let _: serde_json::Value =
+        forward_session_management_remote(state, app, method, params).await?;
+    Ok(())
+}
 
 #[cfg(test)]
 use session_management_catalog_helpers::entry_matches_keyword;
@@ -209,7 +233,18 @@ pub(crate) async fn delete_workspace_sessions(
 pub(crate) async fn list_workspace_session_folders(
     workspace_id: String,
     state: State<'_, AppState>,
+    app: AppHandle,
 ) -> Result<WorkspaceSessionFolderTree, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return forward_session_management_remote(
+            &state,
+            app,
+            "list_workspace_session_folders",
+            json!({ "workspaceId": workspace_id }),
+        )
+        .await;
+    }
+
     list_workspace_session_folders_core(
         &state.workspaces,
         state.storage_path.as_path(),
@@ -224,7 +259,18 @@ pub(crate) async fn create_workspace_session_folder(
     name: String,
     parent_id: Option<String>,
     state: State<'_, AppState>,
+    app: AppHandle,
 ) -> Result<WorkspaceSessionFolderMutation, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return forward_session_management_remote(
+            &state,
+            app,
+            "create_workspace_session_folder",
+            json!({ "workspaceId": workspace_id, "name": name, "parentId": parent_id }),
+        )
+        .await;
+    }
+
     create_workspace_session_folder_core(
         &state.workspaces,
         state.storage_path.as_path(),
@@ -241,7 +287,18 @@ pub(crate) async fn rename_workspace_session_folder(
     folder_id: String,
     name: String,
     state: State<'_, AppState>,
+    app: AppHandle,
 ) -> Result<WorkspaceSessionFolderMutation, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return forward_session_management_remote(
+            &state,
+            app,
+            "rename_workspace_session_folder",
+            json!({ "workspaceId": workspace_id, "folderId": folder_id, "name": name }),
+        )
+        .await;
+    }
+
     rename_workspace_session_folder_core(
         &state.workspaces,
         state.storage_path.as_path(),
@@ -258,7 +315,18 @@ pub(crate) async fn move_workspace_session_folder(
     folder_id: String,
     parent_id: Option<String>,
     state: State<'_, AppState>,
+    app: AppHandle,
 ) -> Result<WorkspaceSessionFolderMutation, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return forward_session_management_remote(
+            &state,
+            app,
+            "move_workspace_session_folder",
+            json!({ "workspaceId": workspace_id, "folderId": folder_id, "parentId": parent_id }),
+        )
+        .await;
+    }
+
     move_workspace_session_folder_core(
         &state.workspaces,
         state.storage_path.as_path(),
@@ -274,7 +342,18 @@ pub(crate) async fn delete_workspace_session_folder(
     workspace_id: String,
     folder_id: String,
     state: State<'_, AppState>,
+    app: AppHandle,
 ) -> Result<(), String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return forward_session_management_remote_unit(
+            &state,
+            app,
+            "delete_workspace_session_folder",
+            json!({ "workspaceId": workspace_id, "folderId": folder_id }),
+        )
+        .await;
+    }
+
     delete_workspace_session_folder_core(
         &state.workspaces,
         &state.engine_manager,
@@ -291,7 +370,18 @@ pub(crate) async fn assign_workspace_session_folder(
     session_id: String,
     folder_id: Option<String>,
     state: State<'_, AppState>,
+    app: AppHandle,
 ) -> Result<WorkspaceSessionAssignmentResponse, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return forward_session_management_remote(
+            &state,
+            app,
+            "assign_workspace_session_folder",
+            json!({ "workspaceId": workspace_id, "sessionId": session_id, "folderId": folder_id }),
+        )
+        .await;
+    }
+
     assign_workspace_session_folder_core(
         &state.workspaces,
         &state.engine_manager,
@@ -309,7 +399,18 @@ pub(crate) async fn assign_workspace_session_folders(
     session_ids: Vec<String>,
     folder_id: Option<String>,
     state: State<'_, AppState>,
+    app: AppHandle,
 ) -> Result<WorkspaceSessionBatchMutationResponse, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return forward_session_management_remote(
+            &state,
+            app,
+            "assign_workspace_session_folders",
+            json!({ "workspaceId": workspace_id, "sessionIds": session_ids, "folderId": folder_id }),
+        )
+        .await;
+    }
+
     assign_workspace_session_folders_core(
         &state.workspaces,
         &state.engine_manager,

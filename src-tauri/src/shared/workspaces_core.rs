@@ -181,7 +181,7 @@ where
     Ok(())
 }
 
-async fn resolve_workspace_root(
+pub(crate) async fn resolve_workspace_root(
     workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
     workspace_id: &str,
 ) -> Result<PathBuf, String> {
