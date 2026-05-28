@@ -198,6 +198,20 @@ export type ProjectMapManifest = {
   lensStats: ProjectMapLensStats[];
 };
 
+export type ProjectMapRunFailureCategory =
+  | "output_parse_failed"
+  | "ownership_mismatch"
+  | "evidence_read_failed"
+  | "persistence_failed"
+  | "cancelled";
+
+export type ProjectMapRunOwnership = {
+  workspaceId: string | null;
+  workspacePath: string;
+  storageKey: string;
+  storageLocation: ProjectMapStorageLocation;
+};
+
 export type ProjectMapRunMetadata = {
   id: string;
   kind: "global" | "node" | "auto" | "conversation";
@@ -224,9 +238,11 @@ export type ProjectMapRunMetadata = {
   preferredLanguage?: ProjectMapPreferredLanguage;
   readSources?: ProjectMapSource[];
   storageLocation?: ProjectMapStorageLocation;
+  ownership?: ProjectMapRunOwnership;
   writePath?: string;
   autoIngestion?: ProjectMapAutoIngestionRunContext;
   error?: string | null;
+  failureCategory?: ProjectMapRunFailureCategory | null;
 };
 
 export type ProjectMapRunLog = {
@@ -259,6 +275,7 @@ export type ProjectMapGenerationRequest = {
   preferredLanguage: ProjectMapPreferredLanguage;
   readSources: ProjectMapSource[];
   storageLocation: ProjectMapStorageLocation;
+  ownership?: ProjectMapRunOwnership;
   writePath: string;
   createdAt: string;
   autoIngestion?: ProjectMapAutoIngestionRunContext;

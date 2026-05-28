@@ -1,8 +1,6 @@
 use std::collections::HashMap;
 use std::fs;
-use std::io::Write;
 use std::path::{Component, Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -10,9 +8,8 @@ use tauri::State;
 
 use crate::app_paths;
 use crate::state::AppState;
+use crate::storage::{with_storage_lock, write_string_atomically};
 use crate::types::WorkspaceEntry;
-
-static PROJECT_MAP_ATOMIC_WRITE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -215,11 +212,13 @@ fn validate_project_map_snapshot_ownership(
     storage_key: &str,
     files: &[ProjectMapWriteFile],
 ) -> Result<(), String> {
+    let mut found_manifest = false;
     for file in files {
         let relative = validate_relative_project_map_path(&file.relative_path)?;
         if relative != PathBuf::from("manifest.json") {
             continue;
         }
+        found_manifest = true;
         let manifest: Value = serde_json::from_str(&file.content)
             .map_err(|err| format!("Failed to parse project map manifest: {err}"))?;
         let manifest_storage_key = manifest
@@ -234,36 +233,45 @@ fn validate_project_map_snapshot_ownership(
             ));
         }
     }
+    if !found_manifest {
+        return Err("Project map snapshot is missing manifest.json.".to_string());
+    }
     Ok(())
 }
 
 fn atomic_write(path: &Path, content: &str) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|err| format!("Failed to create directory: {err}"))?;
-    }
-    let nonce = PROJECT_MAP_ATOMIC_WRITE_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let temp_path = path.with_extension(format!("tmp-{}-{nonce}", std::process::id()));
-    {
-        let mut file = fs::OpenOptions::new()
-            .create_new(true)
-            .write(true)
-            .open(&temp_path)
-            .map_err(|err| format!("Failed to create temp project map file: {err}"))?;
-        file.write_all(content.as_bytes())
-            .map_err(|err| format!("Failed to write temp project map file: {err}"))?;
-        file.sync_all()
-            .map_err(|err| format!("Failed to sync temp project map file: {err}"))?;
-    }
-    #[cfg(target_os = "windows")]
-    if path.exists() {
-        fs::remove_file(path)
-            .map_err(|err| format!("Failed to replace existing project map file: {err}"))?;
-    }
-    if let Err(err) = fs::rename(&temp_path, path) {
-        let _ = fs::remove_file(&temp_path);
-        return Err(format!("Failed to commit project map file: {err}"));
-    }
-    Ok(())
+    with_storage_lock(path, || {
+        write_string_atomically(path, content)
+            .map_err(|err| format!("Failed to commit project map file: {err}"))
+    })
+}
+
+fn write_project_map_snapshot_files(
+    root: &Path,
+    storage_key: &str,
+    files: Vec<ProjectMapWriteFile>,
+    create_backup_snapshot: bool,
+) -> Result<(), String> {
+    validate_project_map_snapshot_ownership(storage_key, &files)?;
+    with_storage_lock(root, || {
+        fs::create_dir_all(root)
+            .map_err(|err| format!("Failed to create project map root: {err}"))?;
+
+        if create_backup_snapshot {
+            self::create_backup(root)?;
+        }
+
+        for file in files {
+            let relative = validate_relative_project_map_path(&file.relative_path)?;
+            let target = root.join(relative);
+            if !target.starts_with(root) {
+                return Err("Project map write escaped the storage root.".to_string());
+            }
+            atomic_write(&target, &file.content)?;
+        }
+
+        Ok(())
+    })
 }
 
 fn read_json(path: &Path) -> Option<Value> {
@@ -385,23 +393,7 @@ pub(crate) async fn project_map_write_snapshot(
 ) -> Result<(), String> {
     let entry = workspace_entry(&state, &workspace_id).await?;
     let (key, root) = project_map_root_for_mode(&entry, storage_mode.as_deref())?;
-    validate_project_map_snapshot_ownership(&key, &files)?;
-    fs::create_dir_all(&root).map_err(|err| format!("Failed to create project map root: {err}"))?;
-
-    if create_backup.unwrap_or(false) {
-        self::create_backup(&root)?;
-    }
-
-    for file in files {
-        let relative = validate_relative_project_map_path(&file.relative_path)?;
-        let target = root.join(relative);
-        if !target.starts_with(&root) {
-            return Err("Project map write escaped the storage root.".to_string());
-        }
-        atomic_write(&target, &file.content)?;
-    }
-
-    Ok(())
+    write_project_map_snapshot_files(&root, &key, files, create_backup.unwrap_or(false))
 }
 
 #[cfg(test)]
@@ -409,10 +401,13 @@ mod tests {
     use super::{
         atomic_write, hash_workspace_identity, sanitize_project_name, storage_key,
         validate_project_map_snapshot_ownership, validate_relative_project_map_path,
-        ProjectMapWriteFile,
+        write_project_map_snapshot_files, ProjectMapWriteFile,
     };
+    use crate::storage::with_storage_lock;
     use crate::types::{WorkspaceEntry, WorkspaceKind, WorkspaceSettings};
+    use std::sync::mpsc;
     use std::thread;
+    use std::time::Duration;
     use uuid::Uuid;
 
     #[test]
@@ -499,6 +494,28 @@ mod tests {
     }
 
     #[test]
+    fn project_map_snapshot_ownership_rejects_missing_or_malformed_manifest() {
+        let missing_manifest = vec![ProjectMapWriteFile {
+            relative_path: "runs/latest.json".to_string(),
+            content: r#"{"items":[]}"#.to_string(),
+        }];
+        let malformed_manifest = vec![ProjectMapWriteFile {
+            relative_path: "manifest.json".to_string(),
+            content: r#"{"schemaVersion":2,"storageKey":"#.to_string(),
+        }];
+
+        let missing_error =
+            validate_project_map_snapshot_ownership("knowledge-map-39335814", &missing_manifest)
+                .expect_err("snapshot without manifest must be rejected");
+        let malformed_error =
+            validate_project_map_snapshot_ownership("knowledge-map-39335814", &malformed_manifest)
+                .expect_err("malformed manifest must be rejected");
+
+        assert!(missing_error.contains("missing manifest.json"));
+        assert!(malformed_error.contains("Failed to parse project map manifest"));
+    }
+
+    #[test]
     fn atomic_write_replaces_existing_file() {
         let root = std::env::temp_dir().join(format!("project-map-replace-{}", Uuid::new_v4()));
         let target = root.join("runs").join("latest.json");
@@ -533,6 +550,66 @@ mod tests {
 
         let content = std::fs::read_to_string(&target).expect("read committed content");
         assert!(content.starts_with("content-"));
+
+        std::fs::remove_dir_all(root).expect("cleanup root");
+    }
+
+    fn snapshot_files(storage_key: &str, marker: &str) -> Vec<ProjectMapWriteFile> {
+        vec![
+            ProjectMapWriteFile {
+                relative_path: "manifest.json".to_string(),
+                content: format!(
+                    r#"{{"schemaVersion":2,"storageKey":"{storage_key}","marker":"{marker}"}}"#
+                ),
+            },
+            ProjectMapWriteFile {
+                relative_path: "profile.json".to_string(),
+                content: format!(r#"{{"primaryLanguage":"typescript","marker":"{marker}"}}"#),
+            },
+            ProjectMapWriteFile {
+                relative_path: "runs/latest.json".to_string(),
+                content: format!(r#"{{"items":[{{"id":"run-{marker}"}}]}}"#),
+            },
+        ]
+    }
+
+    #[test]
+    fn project_map_snapshot_write_waits_for_root_lock() {
+        let root =
+            std::env::temp_dir().join(format!("project-map-snapshot-lock-{}", Uuid::new_v4()));
+        let storage_key = "knowledge-map-39335814";
+        let (sender, receiver) = mpsc::channel();
+        let worker_root = root.clone();
+        let worker_key = storage_key.to_string();
+
+        with_storage_lock(&root, || {
+            let handle = thread::spawn(move || {
+                let result = write_project_map_snapshot_files(
+                    &worker_root,
+                    &worker_key,
+                    snapshot_files(&worker_key, "blocked"),
+                    false,
+                );
+                sender.send(result).expect("send write result");
+            });
+
+            assert!(
+                receiver.recv_timeout(Duration::from_millis(100)).is_err(),
+                "snapshot writer should wait for the root-level project-map lock",
+            );
+            Ok(handle)
+        })
+        .expect("root lock should be held")
+        .join()
+        .expect("writer thread should finish");
+
+        receiver
+            .recv_timeout(Duration::from_secs(2))
+            .expect("write result should arrive after root lock release")
+            .expect("snapshot write should succeed");
+        let runs = std::fs::read_to_string(root.join("runs").join("latest.json"))
+            .expect("read committed runs");
+        assert!(runs.contains("run-blocked"));
 
         std::fs::remove_dir_all(root).expect("cleanup root");
     }

@@ -24,6 +24,7 @@ import type {
   ProjectMapSource,
 } from "../types";
 import { mergeProjectMapGenerationResult } from "../utils/incrementalGeneration";
+import { validateProjectMapNodePatch } from "../utils/evidenceGate";
 import {
   getProjectMapPathBasename,
   getProjectMapPathExtension,
@@ -1733,6 +1734,38 @@ function isMemoryOnlyGeneratedNode(node: ProjectMapNode): boolean {
   return node.sources.length > 0 && node.sources.every((source) => source.type === "conversation");
 }
 
+function hasNonMemoryGeneratedSource(node: ProjectMapNode): boolean {
+  return node.sources.some((source) => source.type !== "conversation");
+}
+
+function keepGeneratedNodeAsCandidate(node: ProjectMapNode): ProjectMapNode {
+  return {
+    ...node,
+    candidate: true,
+    confidence: node.confidence === "high" ? "medium" : node.confidence,
+  };
+}
+
+function canAutoApplyEvidenceBackedGeneratedNode(node: ProjectMapNode): boolean {
+  if (node.candidate || node.stale || !hasNonMemoryGeneratedSource(node)) {
+    return false;
+  }
+  if (node.confidence !== "high" && node.confidence !== "medium") {
+    return false;
+  }
+
+  const gate = validateProjectMapNodePatch(node, {
+    nodeId: node.id,
+    summary: node.summary,
+    detail: node.detail,
+    sources: node.sources,
+    confidence: node.confidence,
+    stale: node.stale,
+    candidate: node.candidate,
+  });
+  return gate.ok;
+}
+
 function applyAutoIngestionCandidateSafety(
   nodes: ProjectMapNode[],
   run: ProjectMapRunMetadata,
@@ -1744,19 +1777,14 @@ function applyAutoIngestionCandidateSafety(
   const applyMode = run.autoIngestion?.applyMode ?? "createCandidate";
   return nodes.map((node) => {
     if (applyMode === "createCandidate") {
-      return {
-        ...node,
-        candidate: true,
-        confidence: node.confidence === "high" ? "medium" : node.confidence,
-      };
+      return keepGeneratedNodeAsCandidate(node);
     }
 
-    if (isMemoryOnlyGeneratedNode(node)) {
-      return {
-        ...node,
-        candidate: true,
-        confidence: node.confidence === "high" ? "medium" : node.confidence,
-      };
+    if (
+      isMemoryOnlyGeneratedNode(node) ||
+      !canAutoApplyEvidenceBackedGeneratedNode(node)
+    ) {
+      return keepGeneratedNodeAsCandidate(node);
     }
 
     return node;

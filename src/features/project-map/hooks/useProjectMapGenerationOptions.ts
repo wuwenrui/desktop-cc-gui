@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { CODEX_MODEL_CATALOG } from "../../models/codexModelCatalog";
 import { detectEngines, getConfigModel, getEngineModels, getModelList } from "../../../services/tauri";
 import type { EngineModelInfo, EngineStatus, EngineType, WorkspaceInfo } from "../../../types";
 
@@ -41,6 +42,17 @@ const NO_WORKSPACE_MODEL: ProjectMapGenerationModelOption = {
   source: "local",
   isDefault: true,
 };
+
+const CODEX_FALLBACK_MODELS: ProjectMapGenerationModelOption[] = CODEX_MODEL_CATALOG.map(
+  (model, index) => ({
+    id: model.id,
+    model: model.id,
+    displayName: model.label,
+    description: model.description,
+    source: "codex-fallback",
+    isDefault: index === 0,
+  }),
+);
 
 function normalizeEngineType(value: string | null | undefined): EngineType {
   return KNOWN_ENGINES.includes(value as EngineType) ? (value as EngineType) : "codex";
@@ -104,6 +116,13 @@ function mergeModelOptions(
   return merged.sort((left, right) => Number(right.isDefault) - Number(left.isDefault));
 }
 
+function resolveCodexModelOptions(
+  modelGroups: Array<Array<ProjectMapGenerationModelOption | null>>,
+): ProjectMapGenerationModelOption[] {
+  const dynamicModels = mergeModelOptions(modelGroups);
+  return dynamicModels.length > 0 ? dynamicModels : CODEX_FALLBACK_MODELS;
+}
+
 function buildEngineOptions(statuses: EngineStatus[]): ProjectMapGenerationEngineOption[] {
   return KNOWN_ENGINES.map((engine) => {
     const status = statuses.find((entry) => entry.engineType === engine);
@@ -149,7 +168,7 @@ async function loadCodexModels(workspaceId: string): Promise<ProjectMapGeneratio
           isDefault: true,
         }
       : null;
-  return mergeModelOptions([engineModels, [configModel], catalogModels]);
+  return resolveCodexModelOptions([engineModels, [configModel], catalogModels]);
 }
 
 async function loadEngineModelOptions(

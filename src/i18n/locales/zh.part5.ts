@@ -690,6 +690,14 @@ const zhPart5 = {
         failed: "失败 Failed：请查看错误信息。",
         cancelled: "已取消 Cancelled。",
       },
+      failureCategory: {
+        label: "失败类别",
+        output_parse_failed: "结构化输出解析失败",
+        ownership_mismatch: "存储归属不匹配",
+        evidence_read_failed: "证据读取失败",
+        persistence_failed: "持久化失败",
+        cancelled: "已取消",
+      },
       closeHint:
         "你可以关闭这个面板或切换页面；已确认的 request 会保存在所选 project-map 目录。当前 app 会继续推进 active slot，退出应用后不会作为 daemon 继续运行。",
       startedAt: "开始 Started",

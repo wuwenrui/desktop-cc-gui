@@ -225,6 +225,12 @@ function ProjectMapRunCard({
           <dt>{t("projectMap.confirmation.scope")}</dt>
           <dd>{run.scope}</dd>
         </div>
+        {run.failureCategory ? (
+          <div>
+            <dt>{t("projectMap.tasks.failureCategory.label")}</dt>
+            <dd>{t(`projectMap.tasks.failureCategory.${run.failureCategory}`)}</dd>
+          </div>
+        ) : null}
         <div>
           <dt>{t("projectMap.tasks.startedAt")}</dt>
           <dd>{formatProjectMapDateTime(run.startedAt)}</dd>

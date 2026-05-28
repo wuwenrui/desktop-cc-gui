@@ -5,6 +5,7 @@ import type {
   ProjectMapNode,
   ProjectMapViewState,
 } from "../types";
+import { normalizeProjectMapNodeTopology } from "./incrementalGeneration";
 
 export type ProjectMapGraphNodePosition = {
   id: string;
@@ -81,13 +82,21 @@ export function buildProjectMapNodeIndex(nodes: ProjectMapNode[]): Map<string, P
   return new Map(nodes.map((node) => [node.id, node]));
 }
 
-export function getProjectMapCoreNode(dataset: ProjectMapDataset): ProjectMapNode | null {
+export function normalizeProjectMapProjectionNodes(nodes: ProjectMapNode[]): ProjectMapNode[] {
+  return normalizeProjectMapNodeTopology(nodes, { attachOrphansToRoot: true });
+}
+
+function getProjectMapCoreNodeFromNodes(nodes: ProjectMapNode[]): ProjectMapNode | null {
   return (
-    dataset.nodes.find((node) => node.id === PROJECT_CORE_NODE_ID) ??
-    dataset.nodes.find((node) => !node.parentId) ??
-    dataset.nodes[0] ??
+    nodes.find((node) => node.id === PROJECT_CORE_NODE_ID) ??
+    nodes.find((node) => !node.parentId) ??
+    nodes[0] ??
     null
   );
+}
+
+export function getProjectMapCoreNode(dataset: ProjectMapDataset): ProjectMapNode | null {
+  return getProjectMapCoreNodeFromNodes(normalizeProjectMapProjectionNodes(dataset.nodes));
 }
 
 export function compareProjectMapNodes(left: ProjectMapNode, right: ProjectMapNode): number {
@@ -121,32 +130,33 @@ export function resolveVisibleProjectMapNodes(
   dataset: ProjectMapDataset,
   focusNodeId: string | null,
 ): ProjectMapNode[] {
-  const rootNode = getProjectMapCoreNode(dataset);
+  const nodes = normalizeProjectMapProjectionNodes(dataset.nodes);
+  const rootNode = getProjectMapCoreNodeFromNodes(nodes);
   if (!focusNodeId && rootNode) {
-    const nodeIndex = buildProjectMapNodeIndex(dataset.nodes);
+    const nodeIndex = buildProjectMapNodeIndex(nodes);
     return [rootNode, ...getSortedProjectMapChildren(rootNode, nodeIndex)];
   }
 
   if (!focusNodeId) {
-    return dataset.nodes;
+    return nodes;
   }
 
-  const nodeIndex = buildProjectMapNodeIndex(dataset.nodes);
+  const nodeIndex = buildProjectMapNodeIndex(nodes);
   const focusNode = nodeIndex.get(focusNodeId);
   if (!focusNode) {
-    return dataset.nodes;
+    return nodes;
   }
 
   const visibleIds = new Set<string>([
     focusNode.id,
     focusNode.parentId ?? "",
     ...focusNode.children,
-    ...dataset.nodes
+    ...nodes
       .filter((node) => node.children.includes(focusNode.id))
       .map((node) => node.id),
   ].filter(Boolean));
 
-  return dataset.nodes
+  return nodes
     .filter((node) => visibleIds.has(node.id))
     .sort((left, right) => {
       if (left.id === focusNode.id) {
@@ -243,36 +253,39 @@ export function buildInteractiveProjectMapLayout(input: {
   preset?: ProjectMapLayoutPreset;
   settle?: boolean;
 }): ProjectMapInteractiveLayout {
-  const nodeIndex = buildProjectMapNodeIndex(input.dataset.nodes);
-  const visibleIds = new Set(input.visibleNodes.map((node) => node.id));
-  const rootNode = getProjectMapCoreNode(input.dataset);
+  const projectionNodes = normalizeProjectMapProjectionNodes(input.dataset.nodes);
+  const requestedVisibleIds = new Set(input.visibleNodes.map((node) => node.id));
+  const visibleNodes = projectionNodes.filter((node) => requestedVisibleIds.has(node.id));
+  const nodeIndex = buildProjectMapNodeIndex(projectionNodes);
+  const visibleIds = new Set(visibleNodes.map((node) => node.id));
+  const rootNode = getProjectMapCoreNodeFromNodes(projectionNodes);
   const focusNode = input.focusNodeId ? nodeIndex.get(input.focusNodeId) ?? null : null;
   const visibleLenses = getVisibleProjectMapLenses(input.dataset);
   const preset = input.preset ?? input.dataset.viewState?.layoutPreset ?? "radial";
   const rootNodeId = (focusNode && visibleIds.has(focusNode.id) ? focusNode.id : rootNode?.id) ?? null;
   const generatedPositions =
     focusNode && visibleIds.has(focusNode.id)
-      ? buildFocusPositions(input.visibleNodes, focusNode, preset)
+      ? buildFocusPositions(visibleNodes, focusNode, preset)
       : rootNode
-        ? buildOverviewPositions(input.visibleNodes, rootNode, nodeIndex, visibleLenses, preset)
+        ? buildOverviewPositions(visibleNodes, rootNode, nodeIndex, visibleLenses, preset)
         : [];
   const positionsWithPinned = applyPersistedPositions(
     generatedPositions,
     input.dataset.viewState,
-    new Set(input.visibleNodes.map((node) => node.id)),
+    new Set(visibleNodes.map((node) => node.id)),
     input.dataset.viewState?.layoutPreset === preset,
   );
   const positions =
     rootNodeId && input.settle !== false
       ? settleProjectMapLayout({
           positions: positionsWithPinned,
-          nodes: input.visibleNodes,
+          nodes: visibleNodes,
           rootNodeId,
           preservePinned: true,
         })
       : positionsWithPinned;
   const positionById = new Map(positions.map((position) => [position.id, position]));
-  const edges = input.visibleNodes.flatMap((node) => {
+  const edges = visibleNodes.flatMap((node) => {
     const source = positionById.get(node.id);
     if (!source) {
       return [];
@@ -286,7 +299,7 @@ export function buildInteractiveProjectMapLayout(input: {
     });
   });
   const bounds = rootNodeId
-    ? buildProjectMapGraphBounds(positions, input.visibleNodes, rootNodeId)
+    ? buildProjectMapGraphBounds(positions, visibleNodes, rootNodeId)
     : null;
 
   return { positions, edges, bounds, rootNodeId };

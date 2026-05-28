@@ -123,6 +123,25 @@ describe("useProjectMapGenerationOptions", () => {
     expect(result.current.installedEngines.map((engine) => engine.id)).toEqual(["codex", "claude"]);
   });
 
+  it("keeps Codex model selection available when runtime catalogs are empty", async () => {
+    vi.mocked(getEngineModels).mockRejectedValueOnce(new Error("engine model RPC unavailable"));
+    vi.mocked(getModelList).mockResolvedValueOnce({ result: { data: [] } });
+    vi.mocked(getConfigModel).mockResolvedValueOnce(null);
+
+    const { result } = renderHook(() =>
+      useProjectMapGenerationOptions({
+        workspace,
+        selectedEngine: "codex",
+      }),
+    );
+
+    await waitFor(() => expect(result.current.modelsLoading).toBe(false));
+
+    expect(result.current.modelsError).toBeNull();
+    expect(result.current.models.map((model) => model.model)).toContain("gpt-5.3-codex");
+    expect(result.current.models.length).toBeGreaterThan(1);
+  });
+
   it("reloads model options when the selected engine changes", async () => {
     vi.mocked(getEngineModels)
       .mockResolvedValueOnce([])

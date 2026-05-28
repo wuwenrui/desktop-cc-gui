@@ -51,6 +51,7 @@ import {
   getProjectMapCoreNode,
   getSortedProjectMapChildren,
   getVisibleProjectMapLenses,
+  normalizeProjectMapProjectionNodes,
   resetProjectMapViewState,
   resolveVisibleProjectMapNodes,
   settleProjectMapLayout,
@@ -318,7 +319,11 @@ export function ProjectMapPanel({
   );
   const datasetController = providedDatasetController ?? internalDatasetController;
   const dataset = controlledDataset ?? datasetController.dataset;
-  const nodeIndex = useMemo(() => buildProjectMapNodeIndex(dataset.nodes), [dataset.nodes]);
+  const projectionNodes = useMemo(
+    () => normalizeProjectMapProjectionNodes(dataset.nodes),
+    [dataset.nodes],
+  );
+  const nodeIndex = useMemo(() => buildProjectMapNodeIndex(projectionNodes), [projectionNodes]);
   const visibleLenses = useMemo(() => getVisibleProjectMapLenses(dataset), [dataset]);
   const lensIndex = useMemo(() => buildLensIndex(dataset.lenses), [dataset.lenses]);
   const rootNode = getProjectMapCoreNode(dataset);

@@ -692,6 +692,14 @@ const enPart5 = {
         failed: "Failed. Inspect the error message.",
         cancelled: "Cancelled.",
       },
+      failureCategory: {
+        label: "Failure category",
+        output_parse_failed: "Structured output parse failed",
+        ownership_mismatch: "Storage ownership mismatch",
+        evidence_read_failed: "Evidence read failed",
+        persistence_failed: "Persistence failed",
+        cancelled: "Cancelled",
+      },
       closeHint:
         "You can close this panel or switch pages; confirmed requests are saved under your selected project-map directory. The current app session keeps advancing the active slot, but this is not a daemon after app quit.",
       startedAt: "Started",

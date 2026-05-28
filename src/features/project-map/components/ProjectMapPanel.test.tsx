@@ -176,6 +176,25 @@ describe("ProjectMapPanel", () => {
     expect(screen.queryByText("项目画像 Project Profile")).toBeNull();
   });
 
+  it("surfaces storage ownership mismatch without rendering trusted graph data", () => {
+    const datasetController = createDatasetControllerMock({
+      dataset: {
+        ...mockProjectMapData,
+        nodes: [],
+        lenses: [],
+      },
+      status: "error",
+      error: "Project map storage key mismatch: expected mossx-abcd, received springboot-demo-8e13fe53.",
+    });
+
+    render(<ProjectMapPanel workspaceName="mossx" datasetController={datasetController} />);
+
+    expect(screen.getByText("projectMap.loadErrorTitle")).toBeTruthy();
+    expect(screen.getByText(/storage key mismatch/i)).toBeTruthy();
+    expect(screen.queryByText("项目画像 Project Profile")).toBeNull();
+    expect(screen.queryByRole("button", { name: /接口表面 API Surface/i })).toBeNull();
+  });
+
   it("renders the spider overview with bilingual project knowledge content", () => {
     const view = renderMockProjectMapPanel();
 
@@ -204,6 +223,41 @@ describe("ProjectMapPanel", () => {
       }),
     ).toBeTruthy();
     expect(view.container.querySelector("textarea, [contenteditable='true']")).toBeNull();
+  });
+
+  it("uses the normalized node projection for graph selection and inspector details", () => {
+    const canonicalApiNode = mockProjectMapData.nodes.find((node) => node.id === "hub-api");
+    expect(canonicalApiNode).toBeTruthy();
+    const duplicateApiNode: ProjectMapNode = {
+      ...canonicalApiNode!,
+      summary: "Duplicate API surface summary from a later lens pass.",
+      detail: {
+        ...canonicalApiNode!.detail,
+        coreDescription: "Duplicate API surface summary from a later lens pass.",
+        keyFacts: ["Duplicate node contributed an extra API evidence fact."],
+        keyLogic: [],
+        riskSignals: [],
+        relatedArtifacts: [
+          { type: "file", label: "duplicate-api", path: "src/duplicate/api.ts" },
+        ],
+      },
+      children: [],
+      sources: [{ type: "file", label: "duplicate-api", path: "src/duplicate/api.ts" }],
+      confidence: "medium",
+      lastGeneratedAt: "2026-05-26T03:00:00.000Z",
+    };
+    const datasetWithDuplicateNode: ProjectMapDataset = {
+      ...mockProjectMapData,
+      nodes: [...mockProjectMapData.nodes, duplicateApiNode],
+    };
+
+    render(<ProjectMapPanel workspaceName="mossx" dataset={datasetWithDuplicateNode} />);
+    fireEvent.click(screen.getByRole("button", { name: /接口表面 API Surface/i }));
+
+    const detailPanel = screen.getByLabelText("projectMap.detailPanel");
+    expect(within(detailPanel).getByText("该视角来自 Project Profile 和 evidence scan，不是 UI 固定枚举。")).toBeTruthy();
+    expect(within(detailPanel).getByText("Duplicate node contributed an extra API evidence fact.")).toBeTruthy();
+    expect(within(detailPanel).getAllByText("src/duplicate/api.ts").length).toBeGreaterThan(0);
   });
 
   it("uses a provided dataset controller for Project Map actions", () => {
@@ -977,5 +1031,36 @@ describe("ProjectMapPanel", () => {
     expect(within(drawer).getByLabelText("projectMap.tasks.cancelRun")).toBeTruthy();
     expect(within(drawer).getByText("projectMap.tasks.clearDone")).toBeTruthy();
     expect(within(drawer).getByText("projectMap.tasks.closeHint")).toBeTruthy();
+  });
+
+  it("shows failed run categories and diagnostics in the task drawer", () => {
+    const failedDataset: ProjectMapDataset = {
+      ...mockProjectMapData,
+      runs: [
+        {
+          id: "global_run_failed",
+          kind: "global",
+          status: "failed",
+          phase: "failed",
+          engine: "codex",
+          model: "gpt-5.4",
+          startedAt: "2026-05-26T01:20:00.000Z",
+          completedAt: "2026-05-26T01:21:00.000Z",
+          scope: "global",
+          failureCategory: "output_parse_failed",
+          error: "AI output did not contain a JSON object.",
+        },
+      ],
+    };
+
+    render(<ProjectMapPanel workspaceName="mossx" dataset={failedDataset} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /projectMap\.tasks\.button|Tasks|任务/ }));
+
+    const drawer = screen.getByRole("dialog", { name: "projectMap.tasks.drawerTitle" });
+    expect(within(drawer).getByText("global_run_failed")).toBeTruthy();
+    expect(within(drawer).getByText("projectMap.tasks.failureCategory.label")).toBeTruthy();
+    expect(within(drawer).getByText("projectMap.tasks.failureCategory.output_parse_failed")).toBeTruthy();
+    expect(within(drawer).getByText("AI output did not contain a JSON object.")).toBeTruthy();
   });
 });
