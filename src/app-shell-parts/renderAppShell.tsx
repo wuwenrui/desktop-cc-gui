@@ -410,6 +410,7 @@ export function renderAppShell(ctx: any) {
                 onRunCodexDoctor={doctor}
                 onRunClaudeDoctor={claudeDoctor}
                 activeWorkspace={activeWorkspace}
+                activeThreadId={activeThreadId}
                 activeEngine={activeEngine}
                 onUpdateWorkspaceCodexBin={async (id, codexBin) => {
                   await updateWorkspaceCodexBin(id, codexBin);

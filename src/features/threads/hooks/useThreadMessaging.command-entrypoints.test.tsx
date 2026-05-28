@@ -199,6 +199,62 @@ describe("useThreadMessaging command entrypoints", () => {
     expect(getOpenCodeMcpStatus).toHaveBeenCalledWith("ws-1");
   });
 
+  it("passes /mcp through to Claude instead of reading Codex MCP status", async () => {
+    const { result } = makeHook("claude", {
+      activeThreadId: "claude:session-1",
+      ensuredThreadId: "claude:session-1",
+      threadEngineById: {
+        "claude:session-1": "claude",
+      },
+    });
+
+    await act(async () => {
+      await result.current.startMcp("/mcp");
+    });
+
+    expect(engineSendMessage).toHaveBeenCalledWith(
+      "ws-1",
+      expect.objectContaining({
+        engine: "claude",
+        threadId: "claude:session-1",
+        text: "/mcp",
+      }),
+    );
+    expect(listMcpServerStatus).not.toHaveBeenCalled();
+    expect(getOpenCodeMcpStatus).not.toHaveBeenCalled();
+  });
+
+  it("passes /status through to Claude instead of rendering Codex status", async () => {
+    const dispatch = vi.fn();
+    const { result } = makeHook("claude", {
+      activeThreadId: "claude:session-1",
+      ensuredThreadId: "claude:session-1",
+      dispatch,
+      threadEngineById: {
+        "claude:session-1": "claude",
+      },
+    });
+
+    await act(async () => {
+      await result.current.startStatus("/status");
+    });
+
+    expect(engineSendMessage).toHaveBeenCalledWith(
+      "ws-1",
+      expect.objectContaining({
+        engine: "claude",
+        threadId: "claude:session-1",
+        text: "/status",
+      }),
+    );
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "addAssistantMessage",
+        text: expect.stringContaining("OpenAI Codex"),
+      }),
+    );
+  });
+
   it("opens review preset and supports base-branch/commit third-level steps", async () => {
     const { result } = makeHook("codex");
 

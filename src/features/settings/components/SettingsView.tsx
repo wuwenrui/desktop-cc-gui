@@ -31,6 +31,7 @@ import type {
   CodexDoctorResult,
   DictationModelStatus,
   ThemePresetId,
+  ThreadSummary,
   WorkspaceSettings,
   OpenAppTarget,
   WorkspaceGroup,
@@ -106,7 +107,11 @@ import { BasicAppearanceSection } from "./settings-view/sections/BasicAppearance
 import { CodexSection } from "./settings-view/sections/CodexSection";
 import { OtherSection } from "./settings-view/sections/OtherSection";
 import { SessionManagementSection } from "./settings-view/sections/SessionManagementSection";
-import { RuntimePoolSection } from "./settings-view/sections/RuntimePoolSection";
+import {
+  RuntimePoolSection,
+  type RuntimeSessionEngine,
+  type RuntimeSessionEngineCount,
+} from "./settings-view/sections/RuntimePoolSection";
 import { DetachedExternalChangeToggles } from "./settings-view/sections/DetachedExternalChangeToggles";
 import { WebServiceSettings } from "./settings-view/sections/WebServiceSettings";
 import { EmailSenderSettings } from "./settings-view/sections/EmailSenderSettings";
@@ -184,7 +189,9 @@ export type SettingsViewProps = {
     codexArgs: string | null,
   ) => Promise<CodexDoctorResult>;
   activeWorkspace: WorkspaceInfo | null;
+  activeThreadId?: string | null;
   activeEngine: string | null;
+  workspaceThreadsById?: Record<string, ThreadSummary[]>;
   onUpdateWorkspaceCodexBin: (
     id: string,
     codexBin: string | null,
@@ -224,6 +231,92 @@ export type SettingsViewProps = {
 };
 const TEMPORARILY_DISABLED_SIDEBAR_SECTIONS: ReadonlySet<SettingsViewSection> =
   BASE_DISABLED_SIDEBAR_SECTIONS as ReadonlySet<SettingsViewSection>;
+
+function normalizeRuntimeSessionEngine(
+  engine: string | null | undefined,
+): RuntimeSessionEngine | null {
+  switch ((engine ?? "").trim().toLowerCase()) {
+    case "claude":
+      return "claude";
+    case "gemini":
+      return "gemini";
+    case "opencode":
+      return "opencode";
+    case "codex":
+      return "codex";
+    default:
+      return null;
+  }
+}
+
+function inferRuntimeSessionEngineFromThreadId(
+  threadId: string,
+): RuntimeSessionEngine {
+  if (threadId.startsWith("claude:") || threadId.startsWith("claude-pending-")) {
+    return "claude";
+  }
+  if (threadId.startsWith("gemini:") || threadId.startsWith("gemini-pending-")) {
+    return "gemini";
+  }
+  if (threadId.startsWith("opencode:") || threadId.startsWith("opencode-pending-")) {
+    return "opencode";
+  }
+  return "codex";
+}
+
+function resolveRuntimeSessionEngine(thread: ThreadSummary): RuntimeSessionEngine {
+  return (
+    normalizeRuntimeSessionEngine(thread.engineSource) ??
+    normalizeRuntimeSessionEngine(thread.selectedEngine) ??
+    inferRuntimeSessionEngineFromThreadId(thread.id)
+  );
+}
+
+function buildRuntimeSessionEngineCounts(params: {
+  workspaceThreadsById?: Record<string, ThreadSummary[]>;
+  workspaces: WorkspaceInfo[];
+  activeWorkspaceId: string | null;
+  activeThreadId: string | null;
+  activeEngine: string | null;
+}): RuntimeSessionEngineCount[] {
+  const counts: Record<RuntimeSessionEngine, RuntimeSessionEngineCount> = {
+    claude: { engine: "claude", count: 0, activeCount: 0 },
+    codex: { engine: "codex", count: 0, activeCount: 0 },
+    gemini: { engine: "gemini", count: 0, activeCount: 0 },
+    opencode: { engine: "opencode", count: 0, activeCount: 0 },
+  };
+  const knownWorkspaceIds =
+    params.workspaces.length > 0
+      ? params.workspaces.map((workspace) => workspace.id)
+      : Object.keys(params.workspaceThreadsById ?? {});
+  const seenThreadKeys = new Set<string>();
+  let activeEngine = normalizeRuntimeSessionEngine(params.activeEngine);
+
+  for (const workspaceId of knownWorkspaceIds) {
+    const threads = params.workspaceThreadsById?.[workspaceId] ?? [];
+    for (const thread of threads) {
+      const threadKey = `${workspaceId}:${thread.id}`;
+      if (seenThreadKeys.has(threadKey)) {
+        continue;
+      }
+      seenThreadKeys.add(threadKey);
+      const engine = resolveRuntimeSessionEngine(thread);
+      counts[engine].count += 1;
+      if (
+        params.activeThreadId === thread.id &&
+        (!params.activeWorkspaceId || params.activeWorkspaceId === workspaceId)
+      ) {
+        activeEngine = engine;
+      }
+    }
+  }
+
+  if (activeEngine) {
+    counts[activeEngine].activeCount = 1;
+  }
+
+  return [counts.claude, counts.codex, counts.gemini, counts.opencode];
+}
 export function SettingsView({
   workspaceGroups,
   groupedWorkspaces,
@@ -247,7 +340,9 @@ export function SettingsView({
   onRunClaudeDoctor,
   onRunDoctor,
   activeWorkspace,
+  activeThreadId = null,
   activeEngine,
+  workspaceThreadsById,
   onUpdateWorkspaceCodexBin,
   onUpdateWorkspaceSettings,
   sessionRadarRecentCompletedSessions = [],
@@ -352,6 +447,23 @@ export function SettingsView({
         ? allWorkspaces
         : groupedWorkspaces.flatMap((group) => group.workspaces),
     [allWorkspaces, groupedWorkspaces],
+  );
+  const runtimeSessionEngineCounts = useMemo(
+    () =>
+      buildRuntimeSessionEngineCounts({
+        workspaceThreadsById,
+        workspaces: runtimePanelWorkspaces,
+        activeWorkspaceId: activeWorkspace?.id ?? null,
+        activeThreadId,
+        activeEngine,
+      }),
+    [
+      activeEngine,
+      activeThreadId,
+      activeWorkspace?.id,
+      runtimePanelWorkspaces,
+      workspaceThreadsById,
+    ],
   );
   const handleHistoryCompletionToggle = useCallback(() => {
     const next = !historyCompletionEnabled;
@@ -2222,6 +2334,7 @@ export function SettingsView({
                   t={t}
                   appSettings={appSettings}
                   workspaces={runtimePanelWorkspaces}
+                  sessionEngineCounts={runtimeSessionEngineCounts}
                   onUpdateAppSettings={onUpdateAppSettings}
                 />
               )}

@@ -283,7 +283,7 @@ describe('AskUserQuestionDialog', () => {
 
     fireEvent.click(
       screen
-        .getAllByRole('button', { name: 'approval.dismissUserInputRequest' })[0],
+        .getAllByRole('button', { name: 'askUserQuestion.cancel' })[0],
     );
 
     expect(onSubmit).toHaveBeenCalledWith(

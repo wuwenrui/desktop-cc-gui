@@ -34,6 +34,21 @@ const RUNTIME_PANEL_BOOTSTRAP_SOURCE = "runtime-panel-bootstrap";
 const RUNTIME_POOL_FALLBACK_REFRESH_DELAY_MS = 400;
 const RUNTIME_POOL_FALLBACK_REFRESH_ATTEMPTS = 5;
 const EMPTY_RUNTIME_WORKSPACES: WorkspaceInfo[] = [];
+const EMPTY_SESSION_ENGINE_COUNTS: RuntimeSessionEngineCount[] = [];
+const SESSION_ENGINE_ORDER: RuntimeSessionEngine[] = [
+  "claude",
+  "codex",
+  "gemini",
+  "opencode",
+];
+
+export type RuntimeSessionEngine = "claude" | "codex" | "gemini" | "opencode";
+
+export type RuntimeSessionEngineCount = {
+  engine: RuntimeSessionEngine;
+  count: number;
+  activeCount?: number;
+};
 
 type RuntimeLoadPhase =
   | "idle"
@@ -51,6 +66,7 @@ type RuntimePoolSectionProps = {
   t: (key: string, options?: Record<string, unknown>) => string;
   appSettings: AppSettings;
   workspaces?: WorkspaceInfo[];
+  sessionEngineCounts?: RuntimeSessionEngineCount[];
   onUpdateAppSettings: (next: AppSettings) => Promise<void>;
 };
 
@@ -203,10 +219,27 @@ function buildRuntimeBootstrapWorkspaces(
   return eligibleWorkspaces;
 }
 
+function getRuntimeEngineLabel(
+  t: (key: string, options?: Record<string, unknown>) => string,
+  engine: string,
+) {
+  switch (engine.trim().toLowerCase()) {
+    case "claude":
+      return t("settings.runtimeEngineClaude");
+    case "gemini":
+      return t("settings.runtimeEngineGemini");
+    case "opencode":
+      return t("settings.runtimeEngineOpenCode");
+    default:
+      return t("settings.runtimeEngineCodex");
+  }
+}
+
 export function RuntimePoolSection({
   t,
   appSettings,
   workspaces = EMPTY_RUNTIME_WORKSPACES,
+  sessionEngineCounts = EMPTY_SESSION_ENGINE_COUNTS,
   onUpdateAppSettings,
 }: RuntimePoolSectionProps) {
   const [runtimeSnapshot, setRuntimeSnapshot] = useState<RuntimePoolSnapshot | null>(null);
@@ -416,15 +449,28 @@ export function RuntimePoolSection({
     ];
   }, [isRuntimeTransientEmpty, runtimeSnapshot?.summary, t]);
 
+  const sessionEngineCards = useMemo(() => {
+    const countByEngine = new Map<RuntimeSessionEngine, RuntimeSessionEngineCount>();
+    for (const item of sessionEngineCounts) {
+      countByEngine.set(item.engine, item);
+    }
+    return SESSION_ENGINE_ORDER.map((engine) => {
+      const item = countByEngine.get(engine);
+      return {
+        engine,
+        label: getRuntimeEngineLabel(t, engine),
+        count: Math.max(0, item?.count ?? 0),
+        activeCount: Math.max(0, item?.activeCount ?? 0),
+      };
+    });
+  }, [sessionEngineCounts, t]);
+
   const engineObservabilityCards = useMemo(() => {
     const backendCards = runtimeSnapshot?.engineObservability;
     if (backendCards?.length) {
       return backendCards.map((item) => ({
         ...item,
-        label:
-          item.engine.trim().toLowerCase() === "claude"
-            ? t("settings.runtimeEngineClaude")
-            : t("settings.runtimeEngineCodex"),
+        label: getRuntimeEngineLabel(t, item.engine),
       }));
     }
     const rows = runtimeSnapshot?.rows ?? [];
@@ -574,6 +620,37 @@ export function RuntimePoolSection({
         </CardContent>
       </Card>
 
+      <Card className="mt-3 border-slate-200/80 bg-white/95 shadow-sm dark:border-slate-800/90 dark:bg-slate-950/95 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+        <CardHeader className="space-y-1 px-4 py-4 md:px-5">
+          <CardTitle className="text-[15px] dark:text-slate-50">
+            {t("settings.runtimeSessionEngineTitle")}
+          </CardTitle>
+          <CardDescription className="text-[12px] leading-5 dark:text-slate-400/90">
+            {t("settings.runtimeSessionEngineDescription")}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-2 px-4 pb-4 pt-0 md:px-5">
+          <div className="grid gap-2 md:grid-cols-4">
+            {sessionEngineCards.map((item) => (
+              <div
+                key={item.engine}
+                className="rounded-2xl border border-slate-200/80 bg-slate-50/75 px-3.5 py-3 dark:border-white/10 dark:bg-white/[0.035]"
+              >
+                <div className="text-[13px] font-semibold text-slate-900 dark:text-slate-100">
+                  {item.label}
+                </div>
+                <div className="mt-2 text-[1.2rem] font-semibold leading-none text-slate-900 dark:text-slate-50">
+                  {item.count}
+                </div>
+                <div className="mt-2 text-[11px] leading-4 text-slate-500 dark:text-slate-400/90">
+                  {t("settings.runtimeSessionEngineActiveLabel")} {item.activeCount}
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="mt-3 grid gap-3 xl:grid-cols-[1.05fr_0.95fr]">
         <Card className="border-slate-200/80 bg-white/95 shadow-sm dark:border-slate-800/90 dark:bg-slate-950/95 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
           <CardHeader className="space-y-1 px-4 py-4 md:px-5">
@@ -585,6 +662,9 @@ export function RuntimePoolSection({
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-2 px-4 pb-4 pt-0 md:px-5">
+            <div className="rounded-2xl border border-blue-200/75 bg-blue-50/70 px-3.5 py-2.5 text-[12px] leading-5 text-blue-800 dark:border-blue-400/20 dark:bg-blue-500/10 dark:text-blue-100">
+              {t("settings.runtimeEngineObservationScopeNote")}
+            </div>
             <div className="grid gap-2 md:grid-cols-2">
               {engineObservabilityCards.map((item) => (
                 <div

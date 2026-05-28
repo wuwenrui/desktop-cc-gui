@@ -34,12 +34,21 @@
 
 - **WHEN** 待回答卡片可见
 - **THEN** 卡片 header MUST 提供收起按钮
-- **AND** 收起操作 MUST 只隐藏本地卡片
+- **AND** 收起操作 MUST 将完整卡片折叠为 compact actionable surface
 - **AND** 收起操作 MUST NOT 调用 runtime response channel
+- **AND** collapsed surface MUST 提供展开与 skip/dismiss settlement 入口
 - **AND** action 区 MUST 提供明确的 skip/dismiss settlement 按钮
 - **AND** skip/dismiss settlement 操作 MUST 使用标准响应通道提交空 answers
 - **AND** 成功 settlement 后 MUST 从本地可见队列移除该卡片
 - **AND** skip/dismiss settlement 操作 MUST NOT 构造带用户选择内容的正常答案提交
+
+#### Scenario: timeout settlement failure remains retryable
+
+- **WHEN** 待回答卡片 timeout 后触发自动 skip/dismiss settlement
+- **AND** runtime 返回非 stale/unknown/disconnected 的失败
+- **THEN** 客户端 MUST 保留或恢复可见请求 surface
+- **AND** 客户端 MUST 显示可重试错误
+- **AND** 客户端 MUST NOT 产生 unhandled async rejection
 
 #### Scenario: stale pending question card skip removes local residue
 

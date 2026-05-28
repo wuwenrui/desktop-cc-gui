@@ -232,6 +232,12 @@ export function useThreadMessagingSessionTooling({
         return;
       }
       const resolvedThreadEngine = resolveThreadEngine(activeWorkspace.id, threadId);
+      if (resolvedThreadEngine === "claude") {
+        await sendMessageToThread(activeWorkspace, threadId, text.trim() || "/status", [], {
+          skipPromptExpansion: true,
+        });
+        return;
+      }
       if (resolvedThreadEngine === "opencode") {
         try {
           const match = text.trim().match(/^\/status(?:\s+(\d+))?/i);
@@ -366,6 +372,7 @@ export function useThreadMessagingSessionTooling({
       resolveComposerSelection,
       resolveThreadEngine,
       safeMessageActivity,
+      sendMessageToThread,
     ],
   );
 
@@ -959,6 +966,12 @@ export function useThreadMessagingSessionTooling({
 
       try {
         const resolvedThreadEngine = resolveThreadEngine(activeWorkspace.id, threadId);
+        if (resolvedThreadEngine === "claude") {
+          await sendMessageToThread(activeWorkspace, threadId, _text.trim() || "/mcp", [], {
+            skipPromptExpansion: true,
+          });
+          return;
+        }
         if (resolvedThreadEngine === "opencode") {
           const response = await getOpenCodeMcpStatusService(activeWorkspace.id);
           const text = (response.text ?? "").trim();
@@ -1064,6 +1077,7 @@ export function useThreadMessagingSessionTooling({
       recordThreadActivity,
       resolveThreadEngine,
       safeMessageActivity,
+      sendMessageToThread,
     ],
   );
 

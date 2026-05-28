@@ -2,7 +2,7 @@
 
 The chat canvas renders live `RequestUserInput` cards through `RequestUserInputMessage`. The UX needs two separate actions:
 
-- X/收起: presentation-only local collapse.
+- X/收起: presentation-only local collapse into a compact actionable bar.
 - 跳过并继续: runtime-visible empty-answer settlement through `respond_to_server_request`.
 
 Claude already supports an empty-answer response: `format_ask_user_answer` turns an empty answer payload into a user-readable dismissed message and resumes the turn. The missing piece is that the production live-card close button does not call that path.
@@ -12,7 +12,9 @@ Claude already supports an empty-answer response: `format_ask_user_answer` turns
 **Goals:**
 
 - Make the explicit skip action on an actionable live user-input card settle the request through the existing response IPC.
-- Keep X/收起 as a local hide affordance.
+- Keep X/收起 as a local collapse affordance.
+- Keep collapsed pending requests visible enough to expand or skip.
+- Keep timeout settlement failures visible and retryable.
 - Keep stale timeout/disconnected cleanup non-fatal.
 - Keep normal answer submission and submitted audit items unchanged.
 - Keep the implementation narrowly scoped to the production live-card path and its hook.
@@ -41,13 +43,23 @@ Alternative considered: add a new explicit `cancel_user_input_request` command. 
 
 ### Decision: Keep X/收起 local
 
-The top-right X remains a local collapse/hide action. It clears local draft and countdown state for the current card, but does not call the runtime.
+The top-right X remains a local collapse action. It does not call the runtime and does not settle request facts.
 
 Rationale:
 
 - X buttons are widely understood as presentation dismissal, not durable runtime answers.
-- Users can temporarily get the card out of the way without accidentally resuming the agent.
+- Users can reduce visual weight without accidentally resuming the agent.
 - The explicit skip button carries the destructive/resumptive semantics.
+
+### Decision: Collapsed pending requests stay actionable
+
+Collapsed requests render a compact bar with the request title, countdown, “展开”, and “跳过并继续”.
+
+Rationale:
+
+- A pending runtime request is still a blocker until settled.
+- Hiding the only action surface would turn an explicit blocker into an invisible blocker.
+- Keeping skip available preserves liveness without forcing the full card to stay open.
 
 ### Decision: Do not add submitted audit item for empty skip
 
@@ -63,7 +75,7 @@ Alternative considered: always write a local “dismissed” audit item. This im
 
 ### Decision: Preserve stale fallback behavior
 
-If the runtime says the request is unknown, timed out, or disconnected, the frontend removes the request locally and does not fail the UI.
+If the runtime says the request is unknown, timed out, or disconnected, the frontend removes the request locally and does not fail the UI. If auto-timeout settlement fails for a non-stale reason, the card remains visible or is restored so the user can retry.
 
 Rationale:
 
@@ -73,7 +85,7 @@ Rationale:
 
 ## Risks / Trade-offs
 
-- [Risk] Locally collapsed cards still represent pending runtime requests. → Mitigation: the explicit “跳过并继续” action is visible before collapse and remains available on new request events; timeout cleanup still settles stale cards.
+- [Risk] Locally collapsed cards still represent pending runtime requests. → Mitigation: collapsed state renders a compact bar with “展开” and “跳过并继续”; timeout cleanup still settles stale cards.
 - [Risk] Empty-answer settlement can resume the agent rather than fully stop it. → Mitigation: this matches existing backend semantics and fixes the current mismatch; full turn cancellation remains a separate product decision.
 - [Risk] Remote backend may interpret empty answers differently. → Mitigation: use the existing response contract and keep tests focused on frontend behavior; remote parity can be validated separately if needed.
 
@@ -81,9 +93,10 @@ Rationale:
 
 1. Update frontend dismiss hook to settle via empty-answer response.
 2. Split card UI into local collapse and explicit skip actions.
-3. Update card tests to assert collapse is local and skip is settlement.
-4. Update hook tests to cover empty-answer dismiss success and stale fallback.
-4. Run focused Vitest suites and OpenSpec validation.
+3. Add compact collapsed request surface with expand and skip controls.
+4. Update card tests to assert collapse is local, collapsed requests remain actionable, and skip is settlement.
+5. Update hook/tests to cover empty-answer dismiss success, stale fallback, and timeout settlement failure.
+6. Run focused Vitest suites and OpenSpec validation.
 
 Rollback: revert the hook/component test changes and this OpenSpec change. No persisted schema or dependency migration is introduced.
 

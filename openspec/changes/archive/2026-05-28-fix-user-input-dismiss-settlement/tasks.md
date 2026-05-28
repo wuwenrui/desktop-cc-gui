@@ -20,3 +20,9 @@
 - [x] 4.1 [P0][depends:2.1][I: UX feedback that X should not imply exit][O: split close/skip semantics][V: X collapses locally; skip calls runtime settlement] Split “收起” from “跳过并继续”.
 - [x] 4.2 [P0][depends:4.1][I: updated component tests][O: regression coverage][V: `npm exec vitest run src/features/app/components/RequestUserInputMessage.test.tsx src/features/messages/components/chatCanvasSmoke.test.tsx src/features/threads/hooks/useThreadUserInput.test.tsx`] Run focused tests after UX refinement.
 - [x] 4.3 [P1][depends:4.2][I: touched TS/i18n files][O: static validation][V: `npm run typecheck && npm run lint`] Run static validation.
+
+## 5. Review Fixes
+
+- [x] 5.1 [P0][depends:4.1][I: code review finding that collapse removed the only action path][O: compact collapsed request bar][V: collapsed request exposes expand and skip controls] Keep locally collapsed pending requests actionable.
+- [x] 5.2 [P0][depends:4.1][I: code review finding unhandled timeout settlement rejection][O: retryable timeout failure state][V: timeout settlement failure keeps request visible and shows submit error] Handle auto-timeout settlement failure explicitly.
+- [x] 5.3 [P1][depends:5.1][I: ask dialog label review finding][O: dialog-specific cancel accessible label][V: `AskUserQuestionDialog.test.tsx` close test uses `askUserQuestion.cancel`] Use dialog-specific cancel label for AskUserQuestion close/cancel.

@@ -32,7 +32,8 @@
 #### Scenario: local collapse does not settle request facts
 
 - **WHEN** the user only collapses or hides an actionable request card
-- **THEN** the request MAY be hidden from the current local surface
+- **THEN** the request MAY be collapsed from the full card surface
+- **AND** the UI MUST keep an actionable surface available to expand or settle the request
 - **AND** the request MUST remain pending from the runtime fact perspective
 - **AND** the local collapse MUST NOT be represented as submitted, dismissed, or cancelled
 

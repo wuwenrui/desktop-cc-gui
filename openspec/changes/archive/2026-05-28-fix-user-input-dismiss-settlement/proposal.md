@@ -2,12 +2,14 @@
 
 `RequestUserInput` live card previously used a single “关闭” affordance for two different user intents: visually hiding the card and skipping the pending runtime question. A prior fix made that close path settle the runtime request, which repairs liveness but makes the X button too destructive for users who only want to get the card out of the way.
 
-The refined UX contract must expose both intents explicitly: X/收起 is local presentation, while “跳过并继续” is the runtime-visible empty-answer settlement.
+The refined UX contract must expose both intents explicitly: X/收起 is local presentation, while “跳过并继续” is the runtime-visible empty-answer settlement. A collapsed pending request must still keep a visible compact handling surface so the user can expand it or skip it later.
 
 ## 目标与边界
 
 - Goal: make the explicit skip path for live user-input cards produce an explicit settled lifecycle, so the request stops blocking current and future interaction.
-- Goal: keep the card X/close affordance as local collapse only, so users can hide the card without sending a runtime answer.
+- Goal: keep the card X/close affordance as local collapse only, so users can reduce visual weight without sending a runtime answer.
+- Goal: keep collapsed pending requests actionable through a compact bar with expand and skip controls.
+- Goal: keep timeout auto-settlement failure retryable and avoid unhandled async errors.
 - Goal: keep submit behavior unchanged for normal answers.
 - Goal: prevent dismissed/cancelled request cards from being reintroduced by local history hydration when the user already settled them.
 - Boundary: this change targets the live `RequestUserInput` / Claude `AskUserQuestion` card path in the chat canvas.
@@ -17,7 +19,8 @@ The refined UX contract must expose both intents explicitly: X/收起 is local p
 
 - Treat the live card’s explicit “跳过并继续” action as a settlement action, not a presentation-only hide.
 - Treat the live card’s X affordance as “收起” / local collapse only.
-- Send an empty-answer response through the existing `respond_to_server_request` contract when a still-actionable request is closed, matching the backend’s existing “dismissed without selecting” resume behavior.
+- Render collapsed pending requests as a compact bar that keeps “展开” and “跳过并继续” available.
+- Send an empty-answer response through the existing `respond_to_server_request` contract when the user explicitly chooses “跳过并继续”, matching the backend’s existing “dismissed without selecting” resume behavior.
 - Keep stale/unknown request fallback behavior tolerant: if runtime already timed out or disconnected, remove the request locally without throwing.
 - Preserve local dismissal cleanup and draft cleanup after settlement.
 - Update tests so the production card close path no longer asserts “without submitting”.
@@ -31,7 +34,7 @@ The refined UX contract must expose both intents explicitly: X/收起 is local p
 
 ### Modified Capabilities
 
-- `codex-chat-canvas-user-input-elicitation`: pending request card close semantics become a settled skip/dismiss response instead of a UI-only queue removal.
+- `codex-chat-canvas-user-input-elicitation`: pending request card close semantics split into local collapse and explicit skip/dismiss response.
 - `conversation-fact-contract`: dismissed user-input requests must stop blocking and must not rehydrate as actionable after settlement.
 
 ## 技术方案选项与取舍
@@ -55,8 +58,10 @@ Chosen: Option B after refinement. Option C repaired the runtime bug but made a 
 ## 验收标准
 
 - Given a pending live `RequestUserInput` card, when the user clicks X/收起, the frontend must hide the card locally without calling `respond_to_server_request`.
+- Given that card is locally collapsed, the frontend must still render a compact visible request surface with expand and skip controls.
 - Given a pending live `RequestUserInput` card, when the user clicks “跳过并继续”, the frontend must call `respond_to_server_request` with `{ answers: {} }` and the associated `threadId/turnId`.
 - Given that response succeeds, the frontend must remove the pending request from `userInputRequests`.
+- Given that response fails, the frontend must keep or restore a visible retryable request surface.
 - Given the runtime reports the request is already stale or disconnected, the frontend must remove the card locally without surfacing a fatal error.
 - Given a normal submit with answers, existing submitted audit item behavior must remain unchanged.
 - Given focused component and hook tests, close settlement and submit behavior must both pass.

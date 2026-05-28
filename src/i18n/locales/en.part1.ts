@@ -1832,20 +1832,28 @@ const enPart1 = {
       "Total {{total}} · Acquired {{acquired}} · Streaming {{streaming}} · Idle {{idle}} · Evictable {{evictable}} · Pinned {{pinned}}",
     runtimeDiagnosticsLine:
       "Orphan cleaned {{cleaned}} · Orphan failed {{failed}} · Forced kill {{forced}} · Lease blocked {{blocked}} · Coordinator aborted {{aborted}}",
+    runtimeSessionEngineTitle: "Current session engine distribution",
+    runtimeSessionEngineDescription:
+      "Counts loaded chat threads by their actual session engine. Use this to answer whether the current conversation is Claude or Codex, separately from managed runtime instances below.",
+    runtimeSessionEngineActiveLabel: "Currently open:",
     runtimeRowsTitle: "Active runtimes",
     runtimeRowsDescription:
       "Each row is one managed runtime with its workspace, state, process details, and last activity.",
     runtimeRowDetailsSummary: "Show details",
     runtimeEngineObservationTitle:
-      "Active engine sessions / process observability",
+      "Managed runtimes / process observability",
     runtimeEngineObservationDescription:
-      "Split observability by engine and show Codex / Claude separately to pinpoint where background processes come from.",
+      "Split managed runtimes and process trees by engine to pinpoint where background processes come from.",
+    runtimeEngineObservationScopeNote:
+      "These metrics count ccgui-managed runtime instances and process trees, not the engine selected in the current chat tab. Claude /status and /mcp commands are passed to the Claude CLI; Codex counts usually represent the GUI background app-server/runtime.",
     runtimeEngineCodex: "Codex",
     runtimeEngineClaude: "Claude",
+    runtimeEngineGemini: "Gemini",
+    runtimeEngineOpenCode: "OpenCode",
     runtimeBudgetHotBadge: "Hot inst {{count}}",
     runtimeBudgetWarmBadge: "Warm inst {{count}}",
     runtimeBudgetTtlBadge: "Warm {{count}}s",
-    runtimeSessionCountLabel: "Sessions:",
+    runtimeSessionCountLabel: "Managed instances:",
     runtimeRootProcessCountLabel: "Root processes:",
     runtimeProcessTreeCountLabel: "Process tree total:",
     runtimeNodeProcessCountLabel: "Node processes:",

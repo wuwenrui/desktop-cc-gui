@@ -1831,19 +1831,27 @@ const zhPart1 = {
       "总数 {{total}} · 已占用 {{acquired}} · 流式中 {{streaming}} · 空闲保温 {{idle}} · 可回收 {{evictable}} · 已固定 {{pinned}}",
     runtimeDiagnosticsLine:
       "Orphan 已清理 {{cleaned}} · Orphan 失败 {{failed}} · 强制 kill {{forced}} · lease 阻塞 {{blocked}} · 协调器放弃 {{aborted}}",
+    runtimeSessionEngineTitle: "当前会话引擎分布",
+    runtimeSessionEngineDescription:
+      "按已加载聊天线程统计真实会话归属。这里回答“当前会话是 Claude 还是 Codex”，和下面的受管 runtime 实例数分开看。",
+    runtimeSessionEngineActiveLabel: "当前打开：",
     runtimeRowsTitle: "活跃实例",
     runtimeRowsDescription:
       "每一行就是一个受管 runtime。你可以看到它属于哪个工作区、当前热度、进程信息和最近使用情况。",
     runtimeRowDetailsSummary: "展开详情",
-    runtimeEngineObservationTitle: "活跃引擎会话 / 进程观测",
+    runtimeEngineObservationTitle: "受管 runtime / 进程观测",
     runtimeEngineObservationDescription:
-      "按引擎拆分观测活跃会话与进程树，单独展示 Codex / Claude，便于定位进程膨胀来源。",
+      "按引擎拆分观测受管 runtime 与进程树，单独展示 Codex / Claude，便于定位后台进程来源。",
+    runtimeEngineObservationScopeNote:
+      "这里统计 ccgui 托管的 runtime 实例和进程树，不等同于当前聊天 tab 选择的引擎。Claude 会话里的 /status 与 /mcp 会交给 Claude CLI 执行；Codex 计数通常代表 GUI 后台 app-server/runtime。",
     runtimeEngineCodex: "Codex",
     runtimeEngineClaude: "Claude",
+    runtimeEngineGemini: "Gemini",
+    runtimeEngineOpenCode: "OpenCode",
     runtimeBudgetHotBadge: "Hot 实例 {{count}}",
     runtimeBudgetWarmBadge: "Warm 实例 {{count}}",
     runtimeBudgetTtlBadge: "保温 {{count}}s",
-    runtimeSessionCountLabel: "会话数：",
+    runtimeSessionCountLabel: "受管实例数：",
     runtimeRootProcessCountLabel: "根进程数：",
     runtimeProcessTreeCountLabel: "进程树总数：",
     runtimeNodeProcessCountLabel: "Node 进程数：",

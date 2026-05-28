@@ -118,11 +118,11 @@ export function UserInputQuestionCard({
       : "request-user-input-close";
   const closeLabel =
     flavor === "ask"
-      ? t("approval.dismissUserInputRequest")
+      ? t("askUserQuestion.cancel")
       : t("approval.collapseUserInputRequest");
   const dismissLabel =
     flavor === "ask"
-      ? t("approval.dismissUserInputRequest")
+      ? t("askUserQuestion.cancel")
       : t("approval.skipUserInputRequest");
 
   const dataProps = Object.fromEntries(

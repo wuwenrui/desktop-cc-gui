@@ -202,6 +202,11 @@ describe("RuntimePoolSection", () => {
     );
 
     expect(await screen.findByText("Runtime Workspace")).toBeTruthy();
+    expect(screen.getByText("settings.runtimeSessionEngineTitle")).toBeTruthy();
+    expect(screen.getByText("settings.runtimeSessionEngineDescription")).toBeTruthy();
+    expect(screen.getAllByText(/settings\.runtimeSessionEngineActiveLabel 0/).length).toBe(4);
+    expect(screen.getByText("settings.runtimeEngineObservationScopeNote")).toBeTruthy();
+    expect(screen.getAllByText(/settings\.runtimeSessionCountLabel/).length).toBeGreaterThan(0);
     expect(screen.getByText("settings.runtimeStoppingPredecessorLabel")).toBeTruthy();
     expect(screen.getByText(/settings\.runtimeStartupStateQuarantined/)).toBeTruthy();
     expect(
@@ -238,6 +243,27 @@ describe("RuntimePoolSection", () => {
     expect(
       screen.getByText(/settings\.runtimeForegroundStateLabel settings\.runtimeProtectionStartupPending/),
     ).toBeTruthy();
+  });
+
+  it("renders chat session engine counts separately from managed runtime counts", async () => {
+    render(
+      <RuntimePoolSection
+        t={renderTranslation}
+        appSettings={baseSettings}
+        sessionEngineCounts={[
+          { engine: "claude", count: 1, activeCount: 1 },
+          { engine: "codex", count: 0, activeCount: 0 },
+          { engine: "gemini", count: 0, activeCount: 0 },
+          { engine: "opencode", count: 0, activeCount: 0 },
+        ]}
+        onUpdateAppSettings={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    expect(await screen.findByText("Runtime Workspace")).toBeTruthy();
+    expect(screen.getAllByText("settings.runtimeEngineClaude").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/settings\.runtimeSessionEngineActiveLabel 1/).length).toBe(1);
+    expect(screen.getAllByText(/settings\.runtimeSessionCountLabel/).length).toBeGreaterThan(0);
   });
 
   it("renders a non-empty initial snapshot without runtime-panel bootstrap", async () => {
