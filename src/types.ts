@@ -1181,6 +1181,7 @@ export type RequestUserInputAnswer = {
 
 export type RequestUserInputResponse = {
   answers: Record<string, RequestUserInputAnswer>;
+  skippedQuestionIds?: string[];
 };
 
 export type GitFileStatus = {

@@ -1994,6 +1994,327 @@ go lang`,
     }
   });
 
+  it("normalizes skipped AskUserQuestion echo without preserving stale question text", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "ask-tool-skip-1",
+        kind: "tool",
+        toolType: "askuserquestion",
+        title: "Tool: askuserquestion",
+        detail: JSON.stringify({
+          questions: [
+            {
+              id: "q-0",
+              header: "协作期望",
+              question: "你最需要我在哪些方面发力？",
+            },
+          ],
+        }),
+        status: "started",
+      },
+      {
+        id: "user-skip-1",
+        kind: "message",
+        role: "user",
+        text: "The user skipped this AskUserQuestion without selecting an option. Do not ask the same question again; continue the original task using the available context and reasonable assumptions.",
+      },
+    ];
+
+    const prepared = prepareThreadItems(items);
+    expect(prepared).toHaveLength(2);
+    expect(prepared[0]).toMatchObject({
+      id: "ask-tool-skip-1",
+      kind: "tool",
+      status: "completed",
+    });
+    expect(prepared[1]).toMatchObject({
+      id: "request-user-input-submitted-ask-tool-skip-1",
+      kind: "tool",
+      toolType: "requestUserInputSubmitted",
+      status: "completed",
+    });
+    if (prepared[1]?.kind === "tool") {
+      const payload = JSON.parse(prepared[1].detail);
+      expect(payload.questions[0].selectedOptions).toEqual([]);
+      expect(payload.questions[0].note).toBe("");
+      expect(prepared[1].output).not.toContain("你最需要我在哪些方面发力");
+    }
+  });
+
+  it("normalizes partial AskUserQuestion answer with skipped remaining questions", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "ask-tool-partial-skip-1",
+        kind: "tool",
+        toolType: "askuserquestion",
+        title: "Tool: askuserquestion",
+        detail: JSON.stringify({
+          questions: [
+            {
+              id: "q-0",
+              header: "交互风格",
+              question: "你希望我以什么风格和你协作？",
+              options: [
+                { label: "直接给方案", description: "少废话，直接上代码和结论" },
+                { label: "先讨论再动手", description: "先聊清楚思路，确认后再写代码" },
+              ],
+            },
+            {
+              id: "q-1",
+              header: "语言偏好",
+              question: "你希望我用什么语言表达？",
+              options: [
+                { label: "中英混合", description: "中文解释，保留技术术语" },
+                { label: "纯中文", description: "尽量全部中文表达" },
+              ],
+            },
+            {
+              id: "q-2",
+              header: "关注点",
+              question: "你最关注什么？",
+            },
+          ],
+        }),
+        status: "started",
+      },
+      {
+        id: "user-partial-skip-1",
+        kind: "message",
+        role: "user",
+        text: "The user answered the AskUserQuestion: 直接给方案; 中英混合. The user skipped 1 remaining question(s) without selecting an option. Do not ask the skipped question(s) again; continue the original task using the available context and reasonable assumptions.",
+      },
+    ];
+
+    const prepared = prepareThreadItems(items);
+    expect(prepared).toHaveLength(2);
+    expect(prepared[0]).toMatchObject({
+      id: "ask-tool-partial-skip-1",
+      kind: "tool",
+      status: "completed",
+      output: "直接给方案; 中英混合",
+    });
+    expect(prepared[1]).toMatchObject({
+      id: "request-user-input-submitted-ask-tool-partial-skip-1",
+      kind: "tool",
+      toolType: "requestUserInputSubmitted",
+      status: "completed",
+      output: "直接给方案; 中英混合",
+    });
+    if (prepared[1]?.kind === "tool") {
+      const payload = JSON.parse(prepared[1].detail);
+      expect(payload.questions[0].selectedOptions).toEqual(["直接给方案"]);
+      expect(payload.questions[1].selectedOptions).toEqual(["中英混合"]);
+      expect(payload.questions[2].selectedOptions).toEqual([]);
+    }
+  });
+
+  it("maps keyed partial AskUserQuestion answers to their original question ids", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "ask-tool-keyed-partial-skip-1",
+        kind: "tool",
+        toolType: "askuserquestion",
+        title: "Tool: askuserquestion",
+        detail: JSON.stringify({
+          questions: [
+            {
+              id: "language",
+              header: "语言偏好",
+              question: "你平时主要用什么语言写后端？",
+              options: [
+                { label: "Java", description: "Spring Boot / Spring Cloud 生态" },
+                { label: "Go", description: "Gin / gRPC / 云原生方向" },
+              ],
+            },
+            {
+              id: "style",
+              header: "协作风格",
+              question: "你希望我以什么风格和你协作？",
+              options: [
+                { label: "直接给方案", description: "少废话，直接上代码和结论" },
+                { label: "先讨论再动手", description: "先聊清楚思路，确认后再写代码" },
+              ],
+            },
+            {
+              id: "focus",
+              header: "关注点",
+              question: "你最关注什么？",
+            },
+          ],
+        }),
+        status: "started",
+      },
+      {
+        id: "user-keyed-partial-skip-1",
+        kind: "message",
+        role: "user",
+        text: "The user answered the AskUserQuestion: style=直接给方案. The user skipped 1 remaining question(s) without selecting an option. Do not ask the skipped question(s) again; continue the original task using the available context and reasonable assumptions.",
+      },
+    ];
+
+    const prepared = prepareThreadItems(items);
+    expect(prepared).toHaveLength(2);
+    if (prepared[1]?.kind !== "tool") {
+      throw new Error("expected submitted AskUserQuestion history card");
+    }
+    const payload = JSON.parse(prepared[1].detail);
+    expect(payload.questions[0].selectedOptions).toEqual([]);
+    expect(payload.questions[1].selectedOptions).toEqual(["直接给方案"]);
+    expect(payload.questions[2].selectedOptions).toEqual([]);
+    expect(prepared[1].output).toBe("直接给方案");
+  });
+
+  it("keeps equals signs in free-text AskUserQuestion answers as normal text", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "ask-tool-free-text-equals",
+        kind: "tool",
+        toolType: "askuserquestion",
+        title: "Tool: askuserquestion",
+        detail: JSON.stringify({
+          questions: [
+            {
+              id: "note",
+              header: "备注",
+              question: "补充说明？",
+            },
+          ],
+        }),
+        status: "started",
+      },
+      {
+        id: "user-free-text-equals",
+        kind: "message",
+        role: "user",
+        text: "The user answered the AskUserQuestion: version=1.0. Please continue based on this selection.",
+      },
+    ];
+
+    const prepared = prepareThreadItems(items);
+    if (prepared[1]?.kind !== "tool") {
+      throw new Error("expected submitted AskUserQuestion history card");
+    }
+    const payload = JSON.parse(prepared[1].detail);
+    expect(payload.questions[0].selectedOptions).toEqual(["version=1.0"]);
+    expect(prepared[1].output).toBe("version=1.0");
+  });
+
+  it("prefers structured AskUserQuestion result markers over text splitting", () => {
+    const marker =
+      "eyJhbnN3ZXJzIjp7InN0eWxlIjpbIuebtOaOpee7meaWueahiDsga2V5PXZhbHVlIl0sImxhbmd1YWdlIjpbIkphdmEiXX0sInNraXBwZWRRdWVzdGlvbklkcyI6WyJmb2N1cyJdfQ==";
+    const items: ConversationItem[] = [
+      {
+        id: "ask-tool-structured-marker",
+        kind: "tool",
+        toolType: "askuserquestion",
+        title: "Tool: askuserquestion",
+        detail: JSON.stringify({
+          questions: [
+            {
+              id: "style",
+              header: "协作风格",
+              question: "你希望我以什么风格和你协作？",
+              options: [{ label: "直接给方案; key=value", description: "" }],
+            },
+            {
+              id: "language",
+              header: "语言偏好",
+              question: "你平时主要用什么语言写后端？",
+              options: [{ label: "Java", description: "" }],
+            },
+            {
+              id: "focus",
+              header: "关注点",
+              question: "你最关注什么？",
+            },
+          ],
+        }),
+        status: "started",
+      },
+      {
+        id: "user-structured-marker",
+        kind: "message",
+        role: "user",
+        text: `The user answered the AskUserQuestion: style=直接给方案; key=value; language=Java. The user skipped 1 remaining question(s) without selecting an option. AskUserQuestionResultBase64:${marker}`,
+      },
+    ];
+
+    const prepared = prepareThreadItems(items);
+    if (prepared[1]?.kind !== "tool") {
+      throw new Error("expected submitted AskUserQuestion history card");
+    }
+    const payload = JSON.parse(prepared[1].detail);
+    expect(payload.questions[0].selectedOptions).toEqual(["直接给方案; key=value"]);
+    expect(payload.questions[1].selectedOptions).toEqual(["Java"]);
+    expect(payload.questions[2].selectedOptions).toEqual([]);
+    expect(prepared[1].output).toBe("直接给方案; key=value; Java");
+  });
+
+  it("keeps previous AskUserQuestion answers attached to the original tool only", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "ask-tool-old",
+        kind: "tool",
+        toolType: "askuserquestion",
+        title: "Tool: askuserquestion",
+        detail: JSON.stringify({
+          questions: [
+            {
+              id: "style",
+              header: "协作风格",
+              question: "你希望我以什么风格和你协作？",
+              options: [{ label: "直接给方案", description: "" }],
+            },
+          ],
+        }),
+        status: "started",
+      },
+      {
+        id: "user-answer-old",
+        kind: "message",
+        role: "user",
+        text: "The user answered the AskUserQuestion: style=直接给方案. Please continue based on this selection.",
+      },
+      {
+        id: "ask-tool-new",
+        kind: "tool",
+        toolType: "askuserquestion",
+        title: "Tool: askuserquestion",
+        detail: JSON.stringify({
+          questions: [
+            {
+              id: "language",
+              header: "语言偏好",
+              question: "你平时主要用什么语言写后端？",
+              options: [{ label: "Java", description: "" }],
+            },
+          ],
+        }),
+        status: "started",
+      },
+    ];
+
+    const prepared = prepareThreadItems(items);
+    expect(prepared.map((item) => item.id)).toEqual([
+      "ask-tool-old",
+      "request-user-input-submitted-ask-tool-old",
+      "ask-tool-new",
+    ]);
+    expect(prepared[2]).toMatchObject({
+      id: "ask-tool-new",
+      kind: "tool",
+      status: "started",
+    });
+    if (prepared[1]?.kind !== "tool" || prepared[2]?.kind !== "tool") {
+      throw new Error("expected AskUserQuestion tool history items");
+    }
+    const payload = JSON.parse(prepared[1].detail);
+    expect(payload.questions[0].id).toBe("style");
+    expect(payload.questions[0].selectedOptions).toEqual(["直接给方案"]);
+    expect(prepared[2].detail).toContain("language");
+    expect(prepared[2].detail).not.toContain("直接给方案");
+  });
+
   it("normalizes mcp askuserquestion answer echo into submitted history card", () => {
     const items: ConversationItem[] = [
       {

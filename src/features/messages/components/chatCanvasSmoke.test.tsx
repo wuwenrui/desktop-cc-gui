@@ -317,7 +317,7 @@ describe("chat canvas smoke", () => {
     );
 
     expect(screen.getByText("This stale request should disappear")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Collapse this input request card" }));
+    fireEvent.click(screen.getByRole("button", { name: "Collapse this question card without skipping" }));
 
     expect(onDismiss).not.toHaveBeenCalled();
     expect(onSubmit).not.toHaveBeenCalled();

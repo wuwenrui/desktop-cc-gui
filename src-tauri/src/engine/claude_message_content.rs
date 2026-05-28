@@ -8,24 +8,67 @@ use super::SendMessageParams;
 /// that can be sent as a follow-up via `--resume`.
 pub(super) fn format_ask_user_answer(result: &Value) -> String {
     let mut parts = Vec::new();
+    let mut structured_answers = serde_json::Map::new();
+    let skipped_question_count = result
+        .get("skippedQuestionIds")
+        .or_else(|| result.get("skipped_question_ids"))
+        .and_then(|value| value.as_array())
+        .map(|items| items.len())
+        .unwrap_or(0);
+    let skipped_question_ids: Vec<String> = result
+        .get("skippedQuestionIds")
+        .or_else(|| result.get("skipped_question_ids"))
+        .and_then(|value| value.as_array())
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|value| value.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default();
 
     if let Some(answers_obj) = result.get("answers").and_then(|a| a.as_object()) {
-        for (_key, entry) in answers_obj {
+        for (question_id, entry) in answers_obj {
             if let Some(arr) = entry.get("answers").and_then(|a| a.as_array()) {
-                let texts: Vec<&str> = arr.iter().filter_map(|v| v.as_str()).collect();
+                let texts: Vec<String> = arr
+                    .iter()
+                    .filter_map(|v| v.as_str().map(str::to_string))
+                    .collect();
                 if !texts.is_empty() {
-                    parts.push(texts.join(", "));
+                    structured_answers.insert(question_id.clone(), json!(texts));
+                    parts.push(format!("{}={}", question_id, texts.join(", ")));
                 }
             }
         }
     }
+    let structured_marker = if structured_answers.is_empty() && skipped_question_ids.is_empty() {
+        None
+    } else {
+        let payload = json!({
+            "answers": structured_answers,
+            "skippedQuestionIds": skipped_question_ids,
+        });
+        Some(STANDARD.encode(payload.to_string().as_bytes()))
+    };
 
     if parts.is_empty() {
-        "The user dismissed the question without selecting an option.".to_string()
+        "The user skipped this AskUserQuestion without selecting an option. Do not ask the same question again; continue the original task using the available context and reasonable assumptions.".to_string()
+    } else if skipped_question_count > 0 {
+        format!(
+            "The user answered the AskUserQuestion: {}. The user skipped {} remaining question(s) without selecting an option. Do not ask the skipped question(s) again; continue the original task using the available context and reasonable assumptions.{}",
+            parts.join("; "),
+            skipped_question_count,
+            structured_marker
+                .map(|marker| format!(" AskUserQuestionResultBase64:{}", marker))
+                .unwrap_or_default()
+        )
     } else {
         format!(
-            "The user answered the AskUserQuestion: {}. Please continue based on this selection.",
-            parts.join("; ")
+            "The user answered the AskUserQuestion: {}. Please continue based on this selection.{}",
+            parts.join("; "),
+            structured_marker
+                .map(|marker| format!(" AskUserQuestionResultBase64:{}", marker))
+                .unwrap_or_default()
         )
     }
 }

@@ -184,15 +184,23 @@ export function useThreadUserInput({
           timestamp: Date.now(),
         });
       }
+      const responseOptions: {
+        threadId: string | null | undefined;
+        turnId: string | null | undefined;
+        skippedQuestionIds?: string[];
+      } = {
+        threadId: runtimeThreadId,
+        turnId: request.params.turn_id,
+      };
+      if (response.skippedQuestionIds?.length) {
+        responseOptions.skippedQuestionIds = response.skippedQuestionIds;
+      }
       try {
         await respondToUserInputRequest(
           request.workspace_id,
           request.request_id,
           response.answers,
-          {
-            threadId: runtimeThreadId,
-            turnId: request.params.turn_id,
-          },
+          responseOptions,
         );
       } catch (error) {
         if (stateThreadId) {
@@ -212,6 +220,25 @@ export function useThreadUserInput({
           return;
         }
         throw error;
+      }
+      if (stateThreadId) {
+        const payload = buildSubmittedPayload(request, response);
+        const fallbackOutput = buildSubmittedFallbackOutput(payload);
+        dispatch({
+          type: "upsertItem",
+          workspaceId: request.workspace_id,
+          threadId: stateThreadId,
+          item: {
+            id: request.params.item_id,
+            kind: "tool",
+            toolType: "askuserquestion",
+            title: "Tool: askuserquestion",
+            detail: "",
+            status: "completed",
+            output: fallbackOutput,
+          },
+          hasCustomName: true,
+        });
       }
       if (stateThreadId && recordSubmittedItem) {
         const payload = buildSubmittedPayload(request, response);

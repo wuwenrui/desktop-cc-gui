@@ -12,6 +12,9 @@ The refined UX contract must expose both intents explicitly: X/收起 is local p
 - Goal: keep timeout auto-settlement failure retryable and avoid unhandled async errors.
 - Goal: keep submit behavior unchanged for normal answers.
 - Goal: prevent dismissed/cancelled request cards from being reintroduced by local history hydration when the user already settled them.
+- Goal: preserve partial answers when the user answers earlier AskUserQuestion steps and skips later steps.
+- Goal: bind submitted AskUserQuestion answers to the originating tool id and question id, so prior answers never drift into a later AskUserQuestion card.
+- Goal: keep answer echo normalization compatible with free-text answers containing `=` or `;` and avoid parser-induced card mis-highlighting.
 - Boundary: this change targets the live `RequestUserInput` / Claude `AskUserQuestion` card path in the chat canvas.
 - Boundary: do not redesign approval dialogs, plan-mode policy, or the entire conversation history loader.
 
@@ -23,6 +26,11 @@ The refined UX contract must expose both intents explicitly: X/收起 is local p
 - Send an empty-answer response through the existing `respond_to_server_request` contract when the user explicitly chooses “跳过并继续”, matching the backend’s existing “dismissed without selecting” resume behavior.
 - Keep stale/unknown request fallback behavior tolerant: if runtime already timed out or disconnected, remove the request locally without throwing.
 - Preserve local dismissal cleanup and draft cleanup after settlement.
+- Preserve already-entered answers when the user skips a later question; only the active and remaining questions are marked skipped.
+- Locally complete the originating `askuserquestion` tool row after settlement so the timeline does not remain stuck on a running tool.
+- Normalize Claude AskUserQuestion echo messages into `requestUserInputSubmitted` cards instead of rendering raw resume-control text as ordinary chat bubbles.
+- Prefer a structured `AskUserQuestionResultBase64` marker for new AskUserQuestion answer echoes; fall back to legacy text parsing for existing history.
+- Treat `key=value` as keyed answer data only when `key` matches a question id from the originating AskUserQuestion template; otherwise preserve it as normal free text.
 - Update tests so the production card close path no longer asserts “without submitting”.
 - No breaking API changes and no new dependency.
 
@@ -64,6 +72,11 @@ Chosen: Option B after refinement. Option C repaired the runtime bug but made a 
 - Given that response fails, the frontend must keep or restore a visible retryable request surface.
 - Given the runtime reports the request is already stale or disconnected, the frontend must remove the card locally without surfacing a fatal error.
 - Given a normal submit with answers, existing submitted audit item behavior must remain unchanged.
+- Given a multi-question AskUserQuestion where the user answers one question and skips a later question, the submitted history card must keep the answered question selected and leave skipped questions empty.
+- Given a later AskUserQuestion appears after an earlier one was answered, the earlier submitted answers must remain attached to the earlier tool id only and must not prefill or render inside the later card.
+- Given a free-text answer such as `version=1.0`, the submitted history card must preserve that text as the answer instead of interpreting `version` as a question id.
+- Given a structured AskUserQuestion result marker with answers containing `;` or `=`, normalization must use the structured payload and avoid delimiter-based corruption.
+- Given history produced before the structured marker existed, legacy answer and skip strings must still normalize into submitted cards.
 - Given focused component and hook tests, close settlement and submit behavior must both pass.
 
 ## Impact
@@ -71,9 +84,12 @@ Chosen: Option B after refinement. Option C repaired the runtime bug but made a 
 - Frontend:
   - `src/features/app/components/RequestUserInputMessage.tsx`
   - `src/features/threads/hooks/useThreadUserInput.ts`
+  - `src/features/threads/loaders/claudeHistoryLoader.ts`
+  - `src/utils/threadItemsAskUserQuestion.ts`
   - related Vitest suites
 - Backend:
   - Reuses existing `respond_to_server_request` / Claude `respond_to_user_input` behavior.
+  - Formats Claude AskUserQuestion resume text with a human-readable summary plus structured base64 JSON marker for robust UI normalization.
 - Specs:
   - `openspec/specs/codex-chat-canvas-user-input-elicitation/spec.md`
   - `openspec/specs/conversation-fact-contract/spec.md`

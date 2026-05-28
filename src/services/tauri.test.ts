@@ -1808,6 +1808,35 @@ describe("tauri invoke wrappers", () => {
     });
   });
 
+  it("passes skipped question ids with user input responses", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({});
+
+    await respondToUserInputRequest(
+      "ws-9",
+      404,
+      {
+        first: { answers: ["Docs"] },
+        second: { answers: [] },
+      },
+      { skippedQuestionIds: ["second"] },
+    );
+
+    expect(invokeMock).toHaveBeenCalledWith("respond_to_server_request", {
+      workspaceId: "ws-9",
+      requestId: 404,
+      result: {
+        answers: {
+          first: { answers: ["Docs"] },
+          second: { answers: [] },
+        },
+        skippedQuestionIds: ["second"],
+      },
+      threadId: null,
+      turnId: null,
+    });
+  });
+
   it("lists thread titles for a workspace", async () => {
     const invokeMock = vi.mocked(invoke);
     invokeMock.mockResolvedValueOnce({ "thread-1": "Fix login flow" });

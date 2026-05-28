@@ -109,10 +109,10 @@ describe("RequestUserInputMessage", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Collapse this input request card" }));
+    fireEvent.click(screen.getByRole("button", { name: "Collapse this question card without skipping" }));
 
     expect(screen.queryByText("Provide input")).toBeNull();
-    expect(screen.getByRole("group", { name: "Collapsed input request card" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Collapsed question card" })).toBeTruthy();
     expect(onDismiss).not.toHaveBeenCalled();
     expect(onSubmit).not.toHaveBeenCalled();
 
@@ -133,7 +133,7 @@ describe("RequestUserInputMessage", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Skip this request and continue the conversation" }));
+    fireEvent.click(screen.getByRole("button", { name: "Skip this question and continue" }));
 
     await waitFor(() => {
       expect(onDismiss).toHaveBeenCalledWith(baseRequest);
@@ -155,12 +155,12 @@ describe("RequestUserInputMessage", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Collapse this input request card" }));
-    fireEvent.click(screen.getByRole("button", { name: "Skip this request and continue the conversation" }));
+    fireEvent.click(screen.getByRole("button", { name: "Collapse this question card without skipping" }));
+    fireEvent.click(screen.getByRole("button", { name: "Skip this question and continue" }));
 
     await waitFor(() => {
       expect(onDismiss).toHaveBeenCalledWith(baseRequest);
-      expect(screen.queryByRole("group", { name: "Collapsed input request card" })).toBeNull();
+      expect(screen.queryByRole("group", { name: "Collapsed question card" })).toBeNull();
     });
     expect(onSubmit).not.toHaveBeenCalled();
   });
@@ -178,7 +178,7 @@ describe("RequestUserInputMessage", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Skip this request and continue the conversation" }));
+    fireEvent.click(screen.getByRole("button", { name: "Skip this question and continue" }));
 
     await waitFor(() => {
       expect(screen.getByText("Submit failed. Please retry.")).toBeTruthy();
@@ -199,7 +199,7 @@ describe("RequestUserInputMessage", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Collapse this input request card" }));
+    fireEvent.click(screen.getByRole("button", { name: "Collapse this question card without skipping" }));
 
     expect(onSubmit).not.toHaveBeenCalled();
     expect(screen.queryByText("Provide input")).toBeNull();
@@ -583,6 +583,56 @@ describe("RequestUserInputMessage", () => {
         },
       });
     });
+  });
+
+  it("preserves previous answers when skipping a later question", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const onDismiss = vi.fn().mockResolvedValue(undefined);
+    const request: RequestUserInputRequest = {
+      ...baseRequest,
+      params: {
+        ...baseRequest.params,
+        questions: [
+          {
+            id: "q-1",
+            header: "Project",
+            question: "Choose project type",
+            options: [{ label: "Docs", description: "" }],
+          },
+          {
+            id: "q-2",
+            header: "Output",
+            question: "Choose output",
+            options: [{ label: "Report", description: "" }],
+          },
+        ],
+      },
+    };
+
+    render(
+      <RequestUserInputMessage
+        requests={[request]}
+        activeThreadId="thread-1"
+        activeWorkspaceId="ws-1"
+        onSubmit={onSubmit}
+        onDismiss={onDismiss}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Docs" }));
+    fireEvent.click(screen.getByRole("button", { name: "askUserQuestion.next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Skip this question and continue" }));
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith(request, {
+        answers: {
+          "q-1": { answers: ["Docs"] },
+          "q-2": { answers: [] },
+        },
+        skippedQuestionIds: ["q-2"],
+      });
+    });
+    expect(onDismiss).not.toHaveBeenCalled();
   });
 
   it("allows deselecting a selected option by clicking it again", () => {

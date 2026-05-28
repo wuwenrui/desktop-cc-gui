@@ -56,7 +56,17 @@ type AskUserQuestionAnswer = {
 type AskUserQuestionAnswerParseResult = {
   rawSelectionText: string;
   answers: AskUserQuestionAnswer[];
+  answersByQuestionId: Record<string, AskUserQuestionAnswer>;
 };
+
+const ASK_USER_QUESTION_DISMISSED_TEXT_REGEX =
+  /^The user dismissed the question without selecting an option\.?$/i;
+const ASK_USER_QUESTION_SKIPPED_TEXT_REGEX =
+  /^The user skipped this AskUserQuestion without selecting an option\.\s*Do not ask the same question again;\s*continue the original task using the available context and reasonable assumptions\.?$/i;
+const ASK_USER_QUESTION_PARTIAL_SKIP_TEXT_REGEX =
+  /^The user answered the AskUserQuestion[:：]\s*([\s\S]*?)[。.]?\s*The user skipped \d+ remaining question\(s\) without selecting an option\.\s*Do not ask the skipped question\(s\) again;\s*continue the original task using the available context and reasonable assumptions\.?$/i;
+const ASK_USER_QUESTION_RESULT_BASE64_REGEX =
+  /\bAskUserQuestionResultBase64:([A-Za-z0-9+/=]+)/;
 
 type RequestUserInputSubmittedPayload = {
   schema: "requestUserInputSubmitted/v1";
@@ -100,6 +110,19 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     return null;
   }
   return value as Record<string, unknown>;
+}
+
+function parseJsonRecordFromText(value: string): Record<string, unknown> | null {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(trimmed);
+    return asRecord(parsed);
+  } catch {
+    return null;
+  }
 }
 
 function recordContainsKey(value: unknown, targetKey: string): boolean {
@@ -826,30 +849,131 @@ function parseAskUserAnswerParts(raw: string): AskUserQuestionAnswer {
   return { selectedOptions, note };
 }
 
+function decodeBase64JsonRecord(base64Value: string): Record<string, unknown> | null {
+  try {
+    const binary = globalThis.atob(base64Value);
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    const jsonText = new TextDecoder().decode(bytes);
+    return parseJsonRecordFromText(jsonText);
+  } catch {
+    return null;
+  }
+}
+
+function parseStructuredAnswerResult(
+  text: string,
+  templates: AskUserQuestionTemplate[],
+): AskUserQuestionAnswerParseResult | null {
+  const markerMatch = text.match(ASK_USER_QUESTION_RESULT_BASE64_REGEX);
+  if (!markerMatch) {
+    return null;
+  }
+  const payload = decodeBase64JsonRecord(asString(markerMatch[1]));
+  const answersRecord = asRecord(payload?.answers);
+  if (!answersRecord) {
+    return null;
+  }
+  const templateIds = new Set(templates.map((template) => template.id));
+  const answersByQuestionId: Record<string, AskUserQuestionAnswer> = {};
+  const displayParts: string[] = [];
+  Object.entries(answersRecord).forEach(([questionId, rawAnswers]) => {
+    if (!templateIds.has(questionId) || !Array.isArray(rawAnswers)) {
+      return;
+    }
+    const answerValues = rawAnswers
+      .map((value) => asString(value).trim())
+      .filter(Boolean);
+    if (answerValues.length === 0) {
+      return;
+    }
+    const answerText = answerValues.join(", ");
+    answersByQuestionId[questionId] = parseAskUserAnswerParts(answerText);
+    displayParts.push(answerText);
+  });
+  if (Object.keys(answersByQuestionId).length === 0) {
+    return null;
+  }
+  return {
+    rawSelectionText: displayParts.join("; "),
+    answers: [],
+    answersByQuestionId,
+  };
+}
+
+function parseAskUserAnswerSegments(
+  rawSelectionText: string,
+  templates: AskUserQuestionTemplate[],
+) {
+  const templateIds = new Set(templates.map((template) => template.id));
+  const baseSegments = rawSelectionText
+    .split(/[;；]/)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  const answersByQuestionId: Record<string, AskUserQuestionAnswer> = {};
+  const positionalAnswerSegments: string[] = [];
+  for (const segment of baseSegments) {
+    const keyedMatch = segment.match(/^([A-Za-z0-9_.:-]+)\s*=\s*([\s\S]*)$/);
+    if (keyedMatch) {
+      const questionId = asString(keyedMatch[1]).trim();
+      const answerText = asString(keyedMatch[2]).trim();
+      if (templateIds.has(questionId)) {
+        answersByQuestionId[questionId] = parseAskUserAnswerParts(answerText);
+        continue;
+      }
+    }
+    positionalAnswerSegments.push(segment);
+  }
+  return {
+    answersByQuestionId,
+    positionalAnswerSegments,
+    displaySelectionText: baseSegments
+      .map((segment) => {
+        const keyedMatch = segment.match(/^([A-Za-z0-9_.:-]+)\s*=\s*([\s\S]*)$/);
+        if (!keyedMatch) {
+          return segment;
+        }
+        const questionId = asString(keyedMatch[1]).trim();
+        return templateIds.has(questionId) ? asString(keyedMatch[2]).trim() : segment;
+      })
+      .filter(Boolean)
+      .join("; "),
+  };
+}
+
 function parseAskUserQuestionAnswerText(
   text: string,
-  questionCount: number,
+  templates: AskUserQuestionTemplate[],
 ): AskUserQuestionAnswerParseResult | null {
   const trimmed = text.trim();
+  const questionCount = templates.length;
   if (!trimmed) {
     return null;
   }
 
-  const dismissedRegex =
-    /^The user dismissed the question without selecting an option\.?$/i;
-  if (dismissedRegex.test(trimmed)) {
+  if (
+    ASK_USER_QUESTION_DISMISSED_TEXT_REGEX.test(trimmed) ||
+    ASK_USER_QUESTION_SKIPPED_TEXT_REGEX.test(trimmed)
+  ) {
     return {
       rawSelectionText: "",
       answers: Array.from({ length: Math.max(questionCount, 1) }, () => ({
         selectedOptions: [],
         note: "",
       })),
+      answersByQuestionId: {},
     };
   }
 
-  const answeredMatch = trimmed.match(
-    /^The user answered the AskUserQuestion:\s*([\s\S]*?)(?:[。.]?\s*Please continue based on this selection\.?)$/i,
-  );
+  const structuredResult = parseStructuredAnswerResult(trimmed, templates);
+  if (structuredResult) {
+    return structuredResult;
+  }
+
+  const answeredMatch =
+    trimmed.match(ASK_USER_QUESTION_PARTIAL_SKIP_TEXT_REGEX) ??
+    trimmed.match(
+      /^The user answered the AskUserQuestion:\s*([\s\S]*?)(?:[。.]?\s*Please continue based on this selection\.?)$/i,
+    );
   if (!answeredMatch) {
     return null;
   }
@@ -858,21 +982,33 @@ function parseAskUserQuestionAnswerText(
     return null;
   }
 
-  const baseSegments = rawSelectionText
-    .split(/[;；]/)
-    .map((segment) => segment.trim())
-    .filter(Boolean);
-  if (baseSegments.length === 0) {
+  const {
+    answersByQuestionId,
+    positionalAnswerSegments,
+    displaySelectionText,
+  } = parseAskUserAnswerSegments(rawSelectionText, templates);
+  if (
+    positionalAnswerSegments.length === 0 &&
+    Object.keys(answersByQuestionId).length === 0
+  ) {
     return null;
+  }
+  if (Object.keys(answersByQuestionId).length > 0) {
+    return {
+      rawSelectionText: displaySelectionText,
+      answers: [],
+      answersByQuestionId,
+    };
   }
   if (questionCount <= 1) {
     return {
       rawSelectionText,
       answers: [parseAskUserAnswerParts(rawSelectionText)],
+      answersByQuestionId,
     };
   }
 
-  const normalizedSegments = [...baseSegments];
+  const normalizedSegments = [...positionalAnswerSegments];
   if (normalizedSegments.length > questionCount) {
     const remaining = normalizedSegments
       .splice(questionCount - 1)
@@ -889,12 +1025,13 @@ function parseAskUserQuestionAnswerText(
     answers: normalizedSegments.map((segment) =>
       parseAskUserAnswerParts(segment),
     ),
+    answersByQuestionId,
   };
 }
 
 function buildRequestUserInputSubmittedPayload(
   templates: AskUserQuestionTemplate[],
-  answers: AskUserQuestionAnswer[],
+  parseResult: AskUserQuestionAnswerParseResult,
 ): RequestUserInputSubmittedPayload {
   return {
     schema: "requestUserInputSubmitted/v1",
@@ -904,8 +1041,14 @@ function buildRequestUserInputSubmittedPayload(
       header: template.header,
       question: template.question,
       options: template.options,
-      selectedOptions: answers[index]?.selectedOptions ?? [],
-      note: answers[index]?.note ?? "",
+      selectedOptions:
+        parseResult.answersByQuestionId[template.id]?.selectedOptions ??
+        parseResult.answers[index]?.selectedOptions ??
+        [],
+      note:
+        parseResult.answersByQuestionId[template.id]?.note ??
+        parseResult.answers[index]?.note ??
+        "",
     })),
   };
 }
@@ -1389,7 +1532,7 @@ export function parseClaudeHistoryMessages(
       return;
     }
     const detail = JSON.stringify(
-      buildRequestUserInputSubmittedPayload(templates, parseResult.answers),
+      buildRequestUserInputSubmittedPayload(templates, parseResult),
     );
     const submittedItemId = `request-user-input-submitted-${toolId}`;
     if (items.some((item) => item.id === submittedItemId)) {
@@ -1493,7 +1636,7 @@ export function parseClaudeHistoryMessages(
           const templates = askTemplatesByToolId.get(pendingAskToolId) ?? [];
           const parsedAnswer = parseAskUserQuestionAnswerText(
             text,
-            templates.length,
+            templates,
           );
           if (parsedAnswer) {
             pendingAskToolIds.shift();
@@ -1591,7 +1734,7 @@ export function parseClaudeHistoryMessages(
             const templates = askTemplatesByToolId.get(existing.id) ?? [];
             const parsedAnswer = parseAskUserQuestionAnswerText(
               outputText,
-              templates.length,
+              templates,
             );
             if (parsedAnswer) {
               appendSubmittedAskUserInput(existing.id, parsedAnswer);

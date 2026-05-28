@@ -317,6 +317,29 @@ export function RequestUserInputMessage({
     return answers;
   };
 
+  const hasAnswerForQuestion = (
+    answers: RequestUserInputResponse["answers"],
+    questionId: string,
+  ) => {
+    const values = answers[questionId]?.answers ?? [];
+    return values.some((value) => String(value ?? "").trim().length > 0);
+  };
+
+  const buildSkippedQuestionIds = () => {
+    return questions
+      .slice(safeActiveQuestionIndex)
+      .map((question) => question.id)
+      .filter((questionId) => questionId.trim().length > 0);
+  };
+
+  const shouldPreservePartialAnswersOnSkip = (
+    answers: RequestUserInputResponse["answers"],
+  ) => {
+    return questions
+      .slice(0, safeActiveQuestionIndex)
+      .some((question) => hasAnswerForQuestion(answers, question.id));
+  };
+
   const handleOptionToggle = (
     questionId: string,
     optionKey: string,
@@ -517,6 +540,18 @@ export function RequestUserInputMessage({
     setSubmitError(null);
     setIsSubmitting(true);
     try {
+      const answers = buildAnswers();
+      if (
+        targetRequest === activeRequest &&
+        shouldPreservePartialAnswersOnSkip(answers)
+      ) {
+        await onSubmit(targetRequest, {
+          answers,
+          skippedQuestionIds: buildSkippedQuestionIds(),
+        });
+        settleRequestLocally(targetRequestKey);
+        return;
+      }
       await settleSkippedRequest(targetRequest, targetRequestKey);
     } catch {
       setSubmitError(t("approval.submitFailed"));

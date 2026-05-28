@@ -375,6 +375,31 @@ fn build_resume_command_uses_stream_json_for_multiline_answer() {
     assert!(args.iter().all(|arg| arg != "line1\r\nline2"));
 }
 
+#[test]
+fn empty_ask_user_question_answer_skips_question_without_reasking() {
+    let answer = format_ask_user_answer(&json!({ "answers": {} }));
+
+    assert!(answer.contains("skipped this AskUserQuestion"));
+    assert!(answer.contains("Do not ask the same question again"));
+    assert!(answer.contains("continue the original task"));
+}
+
+#[test]
+fn partial_ask_user_question_answer_preserves_answers_and_skips_remaining_questions() {
+    let answer = format_ask_user_answer(&json!({
+        "answers": {
+            "q-1": { "answers": ["Docs"] },
+            "q-2": { "answers": [] }
+        },
+        "skippedQuestionIds": ["q-2"]
+    }));
+
+    assert!(answer.contains("q-1=Docs"));
+    assert!(answer.contains("AskUserQuestionResultBase64:"));
+    assert!(answer.contains("skipped 1 remaining question"));
+    assert!(answer.contains("Do not ask the skipped question"));
+}
+
 #[tokio::test]
 async fn send_message_batches_windows_text_deltas_without_delaying_other_platforms() {
     let stream_lines = [

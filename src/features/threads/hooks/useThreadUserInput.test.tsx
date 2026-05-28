@@ -85,6 +85,20 @@ describe("useThreadUserInput", () => {
         workspaceId: "ws-1",
         threadId: "thread-1",
         item: expect.objectContaining({
+          id: "item-1",
+          kind: "tool",
+          toolType: "askuserquestion",
+          status: "completed",
+        }),
+      }),
+    );
+    expect(dispatch).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        type: "upsertItem",
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        item: expect.objectContaining({
           id: "user-input-answer-req-1",
           kind: "tool",
           toolType: "requestUserInputSubmitted",
@@ -94,7 +108,7 @@ describe("useThreadUserInput", () => {
         hasCustomName: true,
       }),
     );
-    const upsertAction = dispatch.mock.calls[1]?.[0];
+    const upsertAction = dispatch.mock.calls[2]?.[0];
     expect(typeof upsertAction.item.detail).toBe("string");
     const payload = JSON.parse(upsertAction.item.detail);
     expect(payload.schema).toBe("requestUserInputSubmitted/v1");
@@ -112,7 +126,7 @@ describe("useThreadUserInput", () => {
       },
     ]);
     expect(upsertAction.item.output).toContain("[User input submitted]");
-    expect(dispatch).toHaveBeenNthCalledWith(3, {
+    expect(dispatch).toHaveBeenNthCalledWith(4, {
       type: "removeUserInputRequest",
       requestId: "req-1",
       workspaceId: "ws-1",
@@ -178,13 +192,30 @@ describe("useThreadUserInput", () => {
       isProcessing: true,
       timestamp: expect.any(Number),
     });
-    expect(dispatch).toHaveBeenNthCalledWith(2, {
+    expect(dispatch).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        type: "upsertItem",
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        item: expect.objectContaining({
+          id: "item-1",
+          kind: "tool",
+          toolType: "askuserquestion",
+          status: "completed",
+        }),
+      }),
+    );
+    expect(dispatch).toHaveBeenNthCalledWith(3, {
       type: "removeUserInputRequest",
       requestId: "req-1",
       workspaceId: "ws-1",
     });
     expect(dispatch).not.toHaveBeenCalledWith(
-      expect.objectContaining({ type: "upsertItem" }),
+      expect.objectContaining({
+        type: "upsertItem",
+        item: expect.objectContaining({ toolType: "requestUserInputSubmitted" }),
+      }),
     );
   });
 

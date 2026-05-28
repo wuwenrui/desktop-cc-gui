@@ -481,6 +481,30 @@ export function useComposerAutocompleteState({
   const slashCommandItems = useMemo<AutocompleteItem[]>(() => {
     const commands: AutocompleteItem[] = [
       {
+        id: "code",
+        label: "code",
+        description: "switch Codex to code mode",
+        insertText: "code",
+      },
+      {
+        id: "compact",
+        label: "compact",
+        description: "compact current Claude conversation context",
+        insertText: "compact",
+      },
+      {
+        id: "context",
+        label: "context",
+        description: "show current context usage",
+        insertText: "context",
+      },
+      {
+        id: "default",
+        label: "default",
+        description: "switch Codex to default code mode",
+        insertText: "default",
+      },
+      {
         id: "fork",
         label: "fork",
         description: "branch into a new thread",
@@ -493,10 +517,22 @@ export function useComposerAutocompleteState({
         insertText: "mcp",
       },
       {
+        id: "mode",
+        label: "mode",
+        description: "show current Codex collaboration mode",
+        insertText: "mode",
+      },
+      {
         id: "new",
         label: "new",
         description: "start a new chat",
         insertText: "new",
+      },
+      {
+        id: "plan",
+        label: "plan",
+        description: "switch Codex to plan mode",
+        insertText: "plan",
       },
       {
         id: "review",
@@ -539,6 +575,12 @@ export function useComposerAutocompleteState({
         label: "share",
         description: "share current session and return link",
         insertText: "share",
+      },
+      {
+        id: "spec-root",
+        label: "spec-root",
+        description: "inspect or repair OpenSpec root binding",
+        insertText: "spec-root",
       },
     ];
     return commands.sort((a, b) => a.label.localeCompare(b.label));

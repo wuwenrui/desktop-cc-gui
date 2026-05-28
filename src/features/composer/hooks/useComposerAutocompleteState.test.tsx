@@ -629,16 +629,16 @@ describe("useComposerAutocompleteState", () => {
 
     const labels = result.current.autocompleteMatches.map((item) => item.label);
     expect(labels.slice(0, 10)).toEqual([
+      "code",
+      "compact",
+      "context",
+      "default",
       "export",
       "fork",
       "import",
       "lsp",
       "mcp",
-      "new",
-      "resume",
-      "review",
-      "share",
-      "status",
+      "mode",
     ]);
   });
 });

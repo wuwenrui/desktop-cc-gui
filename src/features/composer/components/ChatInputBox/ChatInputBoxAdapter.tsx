@@ -1441,14 +1441,50 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
         { id: 'export', label: '/export', description: t('chat.commands.export'), category: 'session' },
         { id: 'import', label: '/import', description: t('chat.commands.import'), category: 'session' },
         { id: 'lsp', label: '/lsp', description: t('chat.commands.lsp'), category: 'tooling' },
+        { id: 'share', label: '/share', description: t('chat.commands.share'), category: 'session' },
+        { id: 'spec-root', label: '/spec-root', description: t('chat.commands.specRoot'), category: 'tooling' },
       ];
-      if (selectedEngine === 'codex') {
+      if (selectedEngine === 'claude') {
         commands.push({
-          id: 'fast',
-          label: '/fast',
-          description: t('chat.commands.fast'),
-          category: 'workflow',
+          id: 'compact',
+          label: '/compact',
+          description: t('chat.commands.compact'),
+          category: 'session',
         });
+      }
+      if (selectedEngine === 'codex') {
+        commands.push(
+          {
+            id: 'fast',
+            label: '/fast',
+            description: t('chat.commands.fast'),
+            category: 'workflow',
+          },
+          {
+            id: 'plan',
+            label: '/plan',
+            description: t('chat.commands.plan'),
+            category: 'workflow',
+          },
+          {
+            id: 'default',
+            label: '/default',
+            description: t('chat.commands.defaultMode'),
+            category: 'workflow',
+          },
+          {
+            id: 'code',
+            label: '/code',
+            description: t('chat.commands.code'),
+            category: 'workflow',
+          },
+          {
+            id: 'mode',
+            label: '/mode',
+            description: t('chat.commands.mode'),
+            category: 'workflow',
+          },
+        );
       }
       return commands;
     }, [selectedEngine, t]);

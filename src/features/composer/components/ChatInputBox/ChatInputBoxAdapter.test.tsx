@@ -562,6 +562,63 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
     ]);
   });
 
+  it('surfaces all locally handled slash commands in the command popup', async () => {
+    renderAdapter();
+
+    await waitFor(() => expect(mockState.latestProps).toBeTruthy());
+
+    const latest = mockState.latestProps as {
+      commandCompletionProvider?: (
+        query: string,
+        signal: AbortSignal,
+      ) => Promise<Array<{ id: string; label: string; category?: string }>>;
+    };
+
+    const claudeResults = await latest.commandCompletionProvider?.('', new AbortController().signal);
+    const claudeLabels = new Set((claudeResults ?? []).map((entry) => entry.label));
+
+    expect([...claudeLabels]).toEqual(
+      expect.arrayContaining([
+        '/compact',
+        '/context',
+        '/export',
+        '/import',
+        '/lsp',
+        '/share',
+        '/spec-root',
+      ]),
+    );
+    expect(claudeLabels.has('/plan')).toBe(false);
+    expect(claudeLabels.has('/mode')).toBe(false);
+  });
+
+  it('surfaces Codex-only mode commands in the command popup', async () => {
+    renderAdapter({ selectedEngine: 'codex' });
+
+    await waitFor(() => expect(mockState.latestProps).toBeTruthy());
+
+    const latest = mockState.latestProps as {
+      commandCompletionProvider?: (
+        query: string,
+        signal: AbortSignal,
+      ) => Promise<Array<{ id: string; label: string; category?: string }>>;
+    };
+
+    const codexResults = await latest.commandCompletionProvider?.('', new AbortController().signal);
+    const codexLabels = new Set((codexResults ?? []).map((entry) => entry.label));
+
+    expect([...codexLabels]).toEqual(
+      expect.arrayContaining([
+        '/code',
+        '/default',
+        '/fast',
+        '/mode',
+        '/plan',
+      ]),
+    );
+    expect(codexLabels.has('/compact')).toBe(false);
+  });
+
   it('uses external thinking callback when supplied', async () => {
     const onToggleThinking = vi.fn();
     renderAdapter({

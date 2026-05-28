@@ -17,6 +17,9 @@ Claude already supports an empty-answer response: `format_ask_user_answer` turns
 - Keep timeout settlement failures visible and retryable.
 - Keep stale timeout/disconnected cleanup non-fatal.
 - Keep normal answer submission and submitted audit items unchanged.
+- Preserve partial answers when the user skips later questions.
+- Keep submitted history cards bound to the originating AskUserQuestion tool id and question id.
+- Keep old transcript compatibility while avoiding delimiter parsing failures for new data.
 - Keep the implementation narrowly scoped to the production live-card path and its hook.
 
 **Non-Goals:**
@@ -73,6 +76,38 @@ Rationale:
 
 Alternative considered: always write a local “dismissed” audit item. This improves local visibility but risks duplicate/noisy records during history replay.
 
+### Decision: Preserve partial answers on later-question skip
+
+When the user skips from a later step, the live card submits the collected previous answers plus `skippedQuestionIds` for the active and remaining questions.
+
+Rationale:
+
+- A skip action should only affect the current AskUserQuestion interaction, not erase earlier choices in the same card.
+- Claude receives enough context to continue without asking the skipped questions again.
+- The UI can render a submitted card that shows answered questions as selected and skipped questions as empty.
+
+### Decision: Bind submitted cards by tool id and question id
+
+AskUserQuestion normalization first pairs an answer echo with the pending originating AskUserQuestion tool id, then maps each answer by question id when structured/keyed data is available. Positional fallback remains only for older transcript strings.
+
+Rationale:
+
+- Multiple AskUserQuestion prompts may appear in one thread, and prior answers must not drift into a later prompt.
+- Question order can be ambiguous when the user skips earlier or later questions.
+- Tool-id and question-id binding makes the submitted card deterministic and keeps unrelated future prompts clean.
+
+### Decision: Add structured result marker for new Claude answer echoes
+
+Claude resume text remains human-readable, but new answer echoes append `AskUserQuestionResultBase64:<json>` containing the answer map and skipped ids. Frontend normalizers prefer the structured marker and fall back to legacy English text parsing only when the marker is absent.
+
+Rationale:
+
+- Delimiter text such as `style=...; language=...` is not robust when answers themselves contain `=` or `;`.
+- Base64 JSON keeps the marker compact and avoids escaping collisions in the surrounding user-readable text.
+- Existing history stays readable and compatible through the legacy fallback.
+
+Rejected alternative: continue extending the text parser with more separator heuristics. This would keep accumulating edge cases and can still misparse free text like `version=1.0`.
+
 ### Decision: Preserve stale fallback behavior
 
 If the runtime says the request is unknown, timed out, or disconnected, the frontend removes the request locally and does not fail the UI. If auto-timeout settlement fails for a non-stale reason, the card remains visible or is restored so the user can retry.
@@ -88,6 +123,8 @@ Rationale:
 - [Risk] Locally collapsed cards still represent pending runtime requests. → Mitigation: collapsed state renders a compact bar with “展开” and “跳过并继续”; timeout cleanup still settles stale cards.
 - [Risk] Empty-answer settlement can resume the agent rather than fully stop it. → Mitigation: this matches existing backend semantics and fixes the current mismatch; full turn cancellation remains a separate product decision.
 - [Risk] Remote backend may interpret empty answers differently. → Mitigation: use the existing response contract and keep tests focused on frontend behavior; remote parity can be validated separately if needed.
+- [Risk] Raw answer text may contain parser delimiters. → Mitigation: new echoes include the structured result marker; legacy parser only treats `key=value` as keyed when `key` matches the originating question id.
+- [Risk] History normalization may become expensive on long threads. → Mitigation: parsing stays linear in conversation items and answer text length, runs during history/echo normalization, and does not add React render-time full-history scans.
 
 ## Migration Plan
 
@@ -96,7 +133,10 @@ Rationale:
 3. Add compact collapsed request surface with expand and skip controls.
 4. Update card tests to assert collapse is local, collapsed requests remain actionable, and skip is settlement.
 5. Update hook/tests to cover empty-answer dismiss success, stale fallback, and timeout settlement failure.
-6. Run focused Vitest suites and OpenSpec validation.
+6. Add partial-answer + skip support with `skippedQuestionIds`.
+7. Complete the originating `askuserquestion` tool row locally after settlement so the UI does not remain stuck in running state.
+8. Add structured AskUserQuestion result marker parsing, keyed question-id mapping, and legacy fallback tests for free-text `=` / `;`.
+9. Run focused Vitest suites, Rust AskUserQuestion tests, lint, typecheck, and OpenSpec validation.
 
 Rollback: revert the hook/component test changes and this OpenSpec change. No persisted schema or dependency migration is introduced.
 

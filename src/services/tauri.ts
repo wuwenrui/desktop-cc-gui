@@ -480,12 +480,20 @@ export async function respondToUserInputRequest(
   workspaceId: string,
   requestId: number | string,
   answers: Record<string, { answers: string[] }>,
-  options?: { threadId?: string | null; turnId?: string | null },
+  options?: {
+    threadId?: string | null;
+    turnId?: string | null;
+    skippedQuestionIds?: string[];
+  },
 ) {
+  const result: Record<string, unknown> = { answers };
+  if (options?.skippedQuestionIds?.length) {
+    result.skippedQuestionIds = options.skippedQuestionIds;
+  }
   return invoke("respond_to_server_request", {
     workspaceId,
     requestId,
-    result: { answers },
+    result,
     threadId: options?.threadId ?? null,
     turnId: options?.turnId ?? null,
   });
