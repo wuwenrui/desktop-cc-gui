@@ -320,3 +320,41 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 613: 归档已完成 OpenSpec 提案
+
+**Date**: 2026-05-28
+**Task**: 归档已完成 OpenSpec 提案
+**Branch**: `feature/v0.5.4`
+
+### Summary
+
+将 20 个已验证 OpenSpec change 移入 2026-05-28 archive，并同步主 specs 与 workspace 治理快照。
+
+### Main Changes
+
+- Archived 20 completed OpenSpec changes under `openspec/changes/archive/2026-05-28-*`.
+- Synced main specs for harness governance, performance gates, file rendering scheduler, composer control surface, reasoning effort, workspace session catalog, runtime evidence gates, and related Project Map capabilities.
+- Updated `openspec/project.md` with the 2026-05-28 archive closure snapshot.
+- Commit scope intentionally excluded unrelated `src/**` edits and the two new active changes under `openspec/changes/fix-*`.
+- Validation note: `openspec validate --all --strict --no-interactive` reported 316 passed / 1 failed; the single failure was unrelated active change `fix-user-input-dismiss-settlement`, which currently has no delta specs and was not included in commit `6716a06d`.
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6716a06d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

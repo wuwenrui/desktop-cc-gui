@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-17.md`
-- **Total Sessions**: 612
+- **Total Sessions**: 613
 - **Last Active**: 2026-05-28
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-17.md` | ~322 | Active |
+| `journal-17.md` | ~360 | Active |
 | `journal-16.md` | ~1985 | Archived |
 | `journal-15.md` | ~1996 | Archived |
 | `journal-14.md` | ~1969 | Archived |
@@ -45,6 +45,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 613 | 2026-05-28 | 归档已完成 OpenSpec 提案 | `6716a06d` | `feature/v0.5.4` |
 | 612 | 2026-05-28 | 稳定 Markdown 文件预览 | `2f2f18a9` | `feature/v0.5.4` |
 | 611 | 2026-05-28 | Project Map v0.5.4 稳定性收口 | `020ebee8` | `feature/v0.5.4` |
 | 610 | 2026-05-28 | 收口 Codex 启动配置预览 | `5ec3c7cc` | `feature/v0.5.4` |
