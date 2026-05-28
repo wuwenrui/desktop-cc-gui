@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-17.md`
-- **Total Sessions**: 619
+- **Total Sessions**: 620
 - **Last Active**: 2026-05-29
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-17.md` | ~614 | Active |
+| `journal-17.md` | ~672 | Active |
 | `journal-16.md` | ~1985 | Archived |
 | `journal-15.md` | ~1996 | Archived |
 | `journal-14.md` | ~1969 | Archived |
@@ -45,6 +45,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 620 | 2026-05-29 | 收口远程工作区与首页发送按钮修复 | `bb510fc7` | `feature/v0.5.4` |
 | 619 | 2026-05-29 | 校准用户输入跳过与历史回显 | `571687cd` | `feature/v0.5.4` |
 | 618 | 2026-05-28 | 修复大文件门禁运行产物噪声 | `85010546` | `feature/v0.5.4` |
 | 617 | 2026-05-28 | 精修请求输入收起与跳过交互 | `50283b5d` | `feature/v0.5.4` |
