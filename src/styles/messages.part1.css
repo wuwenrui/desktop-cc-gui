@@ -71,31 +71,97 @@
   position: relative;
 }
 
-.message-copy-button {
+.message-action-bar {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 1px;
+  padding: 0;
+  color: var(--text-muted);
+}
+
+.message-action-bar-overlay {
   position: absolute;
   right: 6px;
-  bottom: 0px;
-  padding: 4px;
-  border-radius: 999px;
-  background: var(--surface-card-strong);
-  border: 1px solid var(--border-strong);
+  bottom: 0;
   opacity: 0;
   transform: translateY(4px);
   transition: opacity 160ms ease, transform 160ms ease;
 }
 
-.message:hover .message-copy-button {
+.message:hover .message-action-bar-overlay,
+.message-action-bar-overlay:focus-within {
   opacity: 1;
   transform: translateY(0);
 }
 
+.message-tail-action-row {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 10px 4px;
+}
+
+.message-action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 2px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+  transition: color 160ms ease, opacity 160ms ease;
+}
+
+.message-action-button:hover,
+.message-action-button:focus-visible {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  color: var(--text-primary);
+}
+
+.message-action-button .codicon {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.message-fork-confirm-dialog {
+  max-width: 440px;
+}
+
+.message-fork-confirm-body {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.message-fork-confirm-body p,
+.message-fork-confirm-error {
+  margin: 0;
+}
+
+.message-fork-confirm-error {
+  margin-top: 10px;
+  color: var(--danger, #ef4444);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.message-fork-confirm-button {
+  min-width: 88px;
+}
+
 .message-copy-icon {
   position: relative;
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   display: inline-flex;
   align-items: center;
   justify-content: center;

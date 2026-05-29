@@ -1023,6 +1023,7 @@ export const MessageRow = memo(function MessageRow({
     && imageItems.length === 0
     && deferredImageItems.length === 0
   );
+  const shouldRenderMessageActions = !hideCopyButton && item.role !== "assistant";
   const useCodexCanvasMarkdown = presentationProfile
     ? presentationProfile.codexCanvasMarkdown
     : activeEngine === "codex";
@@ -1339,19 +1340,24 @@ export const MessageRow = memo(function MessageRow({
           onClose={() => setLightboxIndex(null)}
         />
       )}
-      {!hideCopyButton && (
-        <button
-          type="button"
-          className={`ghost message-copy-button${isCopied ? " is-copied" : ""}`}
-          onClick={() => onCopy(item, displayText || item.text)}
-          aria-label={t("messages.copyMessage")}
-          title={t("messages.copyMessage")}
+      {shouldRenderMessageActions && (
+        <div
+          className="message-action-bar message-action-bar-overlay"
+          aria-label={t("messages.messageActions")}
         >
-          <span className="message-copy-icon" aria-hidden>
-            <Copy className="message-copy-icon-copy" size={14} />
-            <Check className="message-copy-icon-check" size={14} />
-          </span>
-        </button>
+          <button
+            type="button"
+            className={`ghost message-action-button message-copy-button${isCopied ? " is-copied" : ""}`}
+            onClick={() => onCopy(item, displayText || item.text)}
+            aria-label={t("messages.copyMessage")}
+            title={t("messages.copyMessage")}
+          >
+            <span className="message-copy-icon" aria-hidden>
+              <Copy className="message-copy-icon-copy" size={12} />
+              <Check className="message-copy-icon-check" size={12} />
+            </span>
+          </button>
+        </div>
       )}
     </div>
   );
@@ -1374,7 +1380,7 @@ export const MessageRow = memo(function MessageRow({
     || deferredImageItems.length > 0
     || (Boolean(runtimeReconnectHint) && showRuntimeReconnectCard)
     || hasText
-    || !hideCopyButton;
+    || shouldRenderMessageActions;
   const memoryPayloadDialogNode =
     memoryPayloadDialogOpen && memorySummaryRawPayload && typeof document !== "undefined"
       ? createPortal(

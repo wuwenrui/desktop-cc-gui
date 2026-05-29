@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, renderHook, screen } from "@testing-library/react";
+import { fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import type { ConversationItem, WorkspaceInfo } from "../../../types";
@@ -81,10 +81,12 @@ vi.mock("../../messages/components/Messages", () => ({
     showStickyUserBubble,
     conversationState,
     activeEngine,
+    onForkFromMessage,
   }: {
     showMessageAnchors: boolean;
     showStickyUserBubble: boolean;
     activeEngine?: string;
+    onForkFromMessage?: (messageId: string) => void;
     conversationState?: {
       meta?: {
         engine?: string;
@@ -101,7 +103,16 @@ vi.mock("../../messages/components/Messages", () => ({
       data-history-restored-at={String(
         conversationState?.meta?.historyRestoredAtMs ?? "",
       )}
-    />
+    >
+      {onForkFromMessage ? (
+        <button
+          type="button"
+          onClick={() => onForkFromMessage("user-fork-anchor")}
+        >
+          open fork confirm
+        </button>
+      ) : null}
+    </section>
   ),
 }));
 
@@ -685,6 +696,15 @@ function createLayoutOptions(
   } as Parameters<typeof useLayoutNodes>[0];
 }
 
+function LayoutNodesHarness({
+  options,
+}: {
+  options: Parameters<typeof useLayoutNodes>[0];
+}) {
+  const nodes = useLayoutNodes(options);
+  return <>{nodes.messagesNode}</>;
+}
+
 describe("useLayoutNodes client UI visibility", () => {
   afterEach(() => {
     clientUiVisibilityMock.visiblePanels.clear();
@@ -739,6 +759,30 @@ describe("useLayoutNodes client UI visibility", () => {
     render(<>{result.current.messagesNode}</>);
 
     expect(screen.getByTestId("messages").dataset.historyRestoredAt).toBe("1234");
+  });
+
+  it("confirms message-tail fork before running the fork callback", async () => {
+    const onForkFromMessage = vi.fn(async () => {});
+
+    render(
+      <LayoutNodesHarness
+        options={createLayoutOptions({ onForkFromMessage })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "open fork confirm" }));
+
+    expect(onForkFromMessage).not.toHaveBeenCalled();
+    expect(screen.getByText("messages.forkConfirmTitle")).toBeTruthy();
+    expect(screen.getByText("messages.forkConfirmDescription")).toBeTruthy();
+    expect(screen.getByText("messages.forkConfirmPurpose")).toBeTruthy();
+    expect(screen.getByText("messages.forkConfirmUsage")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "messages.forkConfirmAction" }));
+
+    await waitFor(() => {
+      expect(onForkFromMessage).toHaveBeenCalledWith("user-fork-anchor");
+    });
   });
 
   it("uses the active thread engine when restoring a Claude session while Codex is selected globally", () => {

@@ -71,6 +71,7 @@ import {
 } from "../../code-annotations/utils/codeAnnotations";
 import {
   buildLatestRewindPreview,
+  buildRewindPreviewForMessage,
   extractInlineFileReferenceTokens,
   normalizeInlineFileReferenceTokens,
   normalizeRewindExportPath,
@@ -116,6 +117,11 @@ import type {
 
 type RewindExecutionOptions = {
   mode?: RewindMode;
+};
+
+export type ComposerRewindDialogRequest = {
+  requestId: number;
+  userMessageId: string;
 };
 
 function keepArrayWhenEmpty<T>(current: T[]): T[] {
@@ -319,6 +325,8 @@ type ComposerProps = {
     userMessageId: string,
     options?: RewindExecutionOptions,
   ) => void | Promise<void>;
+  rewindDialogRequest?: ComposerRewindDialogRequest | null;
+  onRewindDialogRequestConsumed?: (requestId: number) => void;
   showStatusPanelToggleOverride?: boolean;
   statusPanelExpandedOverride?: boolean;
   onToggleStatusPanelOverride?: () => void;
@@ -550,6 +558,8 @@ export const Composer = memo(function Composer({
   isPlanMode = false,
   onOpenDiffPath,
   onRewind,
+  rewindDialogRequest = null,
+  onRewindDialogRequestConsumed,
   showStatusPanelToggleOverride,
   statusPanelExpandedOverride,
   onToggleStatusPanelOverride,
@@ -638,6 +648,7 @@ export const Composer = memo(function Composer({
   const [rewindPreviewState, setRewindPreviewState] = useState<ClaudeRewindPreviewState | null>(null);
   const [rewindMode, setRewindMode] = useState<RewindMode>("messages-and-files");
   const rewindInFlightRef = useRef(false);
+  const handledRewindDialogRequestIdRef = useRef<number | null>(null);
   const lastExpandedHeightRef = useRef(Math.max(textareaHeight, COMPOSER_EXPAND_HEIGHT));
   const composerInputInteractionTimerRef = useRef<number | null>(null);
   const [isComposerInputInteractionActive, setIsComposerInputInteractionActive] = useState(false);
@@ -1089,6 +1100,45 @@ export const Composer = memo(function Composer({
     setRewindMode("messages-and-files");
   }, [rewindInFlight]);
 
+  const openRewindDialogForMessage = useCallback(
+    (userMessageId: string) => {
+      if (rewindInFlightRef.current || rewindInFlight) {
+        return;
+      }
+      if (!canRewindSession || !onRewind) {
+        pushErrorToast({
+          title: t("rewind.title"),
+          message: t("rewind.notAvailable"),
+        });
+        return;
+      }
+      const preview = buildRewindPreviewForMessage(
+        items,
+        userMessageId,
+        activeThreadId,
+        selectedEngine,
+      );
+      if (!preview) {
+        pushErrorToast({
+          title: t("rewind.title"),
+          message: t("rewind.noEligibleMessage"),
+        });
+        return;
+      }
+      setRewindMode("messages-and-files");
+      setRewindPreviewState(preview);
+    },
+    [
+      activeThreadId,
+      canRewindSession,
+      items,
+      onRewind,
+      rewindInFlight,
+      selectedEngine,
+      t,
+    ],
+  );
+
   const handleRewind = useCallback(() => {
     if (rewindInFlightRef.current || rewindInFlight) {
       return;
@@ -1122,6 +1172,22 @@ export const Composer = memo(function Composer({
     rewindInFlight,
     selectedEngine,
     t,
+  ]);
+
+  useEffect(() => {
+    if (!rewindDialogRequest) {
+      return;
+    }
+    if (handledRewindDialogRequestIdRef.current === rewindDialogRequest.requestId) {
+      return;
+    }
+    handledRewindDialogRequestIdRef.current = rewindDialogRequest.requestId;
+    openRewindDialogForMessage(rewindDialogRequest.userMessageId);
+    onRewindDialogRequestConsumed?.(rewindDialogRequest.requestId);
+  }, [
+    onRewindDialogRequestConsumed,
+    openRewindDialogForMessage,
+    rewindDialogRequest,
   ]);
 
   const handleConfirmRewind = useCallback(async () => {

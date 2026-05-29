@@ -2433,7 +2433,20 @@ const zhPart1 = {
     opencodeModelSwitchMessage:
       "检测到同会话切换模型，已自动新建后端会话以避免超时。",
     doneIn: "完成，用时 {{duration}}",
+    messageActions: "消息操作",
     copyMessage: "复制消息",
+    forkMessage: "Fork 消息",
+    rewindMessage: "回溯到此消息",
+    forkConfirmTitle: "确认 Fork",
+    forkConfirmDescription:
+      "Fork 会基于这条消息创建一个新线程，当前线程会保持不变。",
+    forkConfirmPurpose:
+      "当你想保留现有对话，同时从这个位置探索另一条思路时，可以使用 Fork。",
+    forkConfirmUsage:
+      "确认后会打开从该消息锚点派生的新线程。后续实验会在新线程里继续，不会改写原对话。",
+    forkConfirmAction: "确认 Fork",
+    forkConfirmBusy: "正在 Fork...",
+    forkConfirmFailed: "Fork 这条消息失败：{{reason}}",
     streamingPlainTextCollapsed:
       "为保持实时渲染流畅，已折叠 {{omittedChars}} 字符。",
     runtimeReconnectTitle: "Runtime 连接已中断",

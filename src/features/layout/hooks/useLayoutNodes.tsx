@@ -6,10 +6,14 @@ import { HomeChat } from "../../home/components/HomeChat";
 import { MainHeader } from "../../app/components/MainHeader";
 import { TopbarSessionTabs } from "../../app/components/TopbarSessionTabs";
 import { Messages } from "../../messages/components/Messages";
+import { MessageForkConfirmDialog } from "../../messages/components/MessageForkConfirmDialog";
 import { UpdateToast } from "../../update/components/UpdateToast";
 import { ErrorToasts } from "../../notifications/components/ErrorToasts";
 import { GlobalRuntimeNoticeDock } from "../../notifications/components/GlobalRuntimeNoticeDock";
-import { Composer } from "../../composer/components/Composer";
+import {
+  Composer,
+  type ComposerRewindDialogRequest,
+} from "../../composer/components/Composer";
 import { GitDiffViewer } from "../../git/components/GitDiffViewer";
 import { FileTreePanel } from "../../files/components/FileTreePanel";
 import {
@@ -619,6 +623,7 @@ type LayoutNodesOptions = {
     userMessageId: string,
     options?: { mode?: "messages-and-files" | "messages-only" | "files-only" },
   ) => void | Promise<void>;
+  onForkFromMessage?: (userMessageId: string) => void | Promise<void>;
   canStop: boolean;
   isReviewing: boolean;
   isProcessing: boolean;
@@ -882,6 +887,11 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     tab: TabType;
     requestKey: number;
   } | null>(null);
+  const [rewindDialogRequest, setRewindDialogRequest] =
+    useState<ComposerRewindDialogRequest | null>(null);
+  const [forkConfirmUserMessageId, setForkConfirmUserMessageId] =
+    useState<string | null>(null);
+  const rewindDialogRequestSerialRef = useRef(0);
   const activeThreadStatus = options.activeThreadId
     ? options.threadStatusById[options.activeThreadId] ?? null
     : null;
@@ -1564,51 +1574,98 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     setLocalClaudeThinkingVisible((previous) => (previous === enabled ? previous : enabled));
     onResolvedClaudeThinkingVisibleChange?.(enabled);
   }, [onResolvedClaudeThinkingVisibleChange]);
+  const onForkFromMessage = options.onForkFromMessage;
+  const handleOpenForkConfirmFromMessage = useCallback((messageId: string) => {
+    const normalizedMessageId = messageId.trim();
+    if (!normalizedMessageId) {
+      return;
+    }
+    setForkConfirmUserMessageId(normalizedMessageId);
+  }, []);
+  const handleCancelForkConfirm = useCallback(() => {
+    setForkConfirmUserMessageId(null);
+  }, []);
+  const handleConfirmForkFromMessage = useCallback(
+    async (messageId: string) => {
+      await onForkFromMessage?.(messageId);
+    },
+    [onForkFromMessage],
+  );
+  const handleOpenRewindDialogFromMessage = useCallback((messageId: string) => {
+    const normalizedMessageId = messageId.trim();
+    if (!normalizedMessageId) {
+      return;
+    }
+    const nextRequestId = rewindDialogRequestSerialRef.current + 1;
+    rewindDialogRequestSerialRef.current = nextRequestId;
+    setRewindDialogRequest({
+      requestId: nextRequestId,
+      userMessageId: normalizedMessageId,
+    });
+  }, []);
+  const handleRewindDialogRequestConsumed = useCallback((requestId: number) => {
+    setRewindDialogRequest((current) =>
+      current?.requestId === requestId ? null : current,
+    );
+  }, []);
 
   const messagesNode = useMemo(() => (
-    <Messages
-      items={options.activeItems}
-      threadId={options.activeThreadId ?? null}
-      workspaceId={options.activeWorkspace?.id ?? null}
-      workspacePath={options.activeWorkspace?.path ?? null}
-      openTargets={options.openAppTargets}
-      selectedOpenAppId={options.selectedOpenAppId}
-      showMessageAnchors={showMessageAnchors}
-      showStickyUserBubble={showStickyUserBubble}
-      codeBlockCopyUseModifier={options.codeBlockCopyUseModifier}
-      userInputRequests={options.userInputRequests}
-      approvals={options.approvals}
-      workspaces={options.workspaces}
-      onUserInputSubmit={options.handleUserInputSubmit}
-      onUserInputDismiss={options.handleUserInputDismiss}
-      onRecoverThreadRuntime={options.onRecoverThreadRuntime}
-      onRecoverThreadRuntimeAndResend={options.onRecoverThreadRuntimeAndResend}
-      onApprovalDecision={options.handleApprovalDecision}
-      onApprovalBatchAccept={options.handleApprovalBatchAccept}
-      onApprovalRemember={options.handleApprovalRemember}
-      conversationState={conversationState}
-      presentationProfile={presentationProfile}
-      activeEngine={conversationEngine}
-      claudeThinkingVisible={claudeThinkingVisible}
-      activeCollaborationModeId={options.selectedCollaborationModeId}
-      plan={options.plan}
-      isPlanMode={options.isPlanMode}
-      isPlanProcessing={options.isProcessing}
-      onOpenDiffPath={handleOpenDiffPath}
-      onOpenPlanPanel={options.onOpenPlanPanel}
-      onExitPlanModeExecute={options.handleExitPlanModeExecute}
-      onOpenWorkspaceFile={options.onOpenFile}
-      agentTaskScrollRequest={options.agentTaskScrollRequest}
-      isThinking={isThreadThinking}
-      isHistoryLoading={activeThreadHistoryLoading}
-      isContextCompacting={activeThreadStatus?.isContextCompacting ?? false}
-      proxyEnabled={options.systemProxyEnabled}
-      proxyUrl={options.systemProxyUrl}
-      processingStartedAt={activeThreadStatus?.processingStartedAt ?? null}
-      lastDurationMs={activeThreadStatus?.lastDurationMs ?? null}
-      heartbeatPulse={heartbeatPulseRef.current ?? 0}
-      codexSilentSuspectedAt={activeThreadStatus?.codexSilentSuspectedAt ?? null}
-    />
+    <>
+      <Messages
+        items={options.activeItems}
+        threadId={options.activeThreadId ?? null}
+        workspaceId={options.activeWorkspace?.id ?? null}
+        workspacePath={options.activeWorkspace?.path ?? null}
+        openTargets={options.openAppTargets}
+        selectedOpenAppId={options.selectedOpenAppId}
+        showMessageAnchors={showMessageAnchors}
+        showStickyUserBubble={showStickyUserBubble}
+        codeBlockCopyUseModifier={options.codeBlockCopyUseModifier}
+        userInputRequests={options.userInputRequests}
+        approvals={options.approvals}
+        workspaces={options.workspaces}
+        onUserInputSubmit={options.handleUserInputSubmit}
+        onUserInputDismiss={options.handleUserInputDismiss}
+        onRecoverThreadRuntime={options.onRecoverThreadRuntime}
+        onRecoverThreadRuntimeAndResend={options.onRecoverThreadRuntimeAndResend}
+        onForkFromMessage={
+          onForkFromMessage ? handleOpenForkConfirmFromMessage : undefined
+        }
+        onRewindFromMessage={
+          options.onRewind ? handleOpenRewindDialogFromMessage : undefined
+        }
+        onApprovalDecision={options.handleApprovalDecision}
+        onApprovalBatchAccept={options.handleApprovalBatchAccept}
+        onApprovalRemember={options.handleApprovalRemember}
+        conversationState={conversationState}
+        presentationProfile={presentationProfile}
+        activeEngine={conversationEngine}
+        claudeThinkingVisible={claudeThinkingVisible}
+        activeCollaborationModeId={options.selectedCollaborationModeId}
+        plan={options.plan}
+        isPlanMode={options.isPlanMode}
+        isPlanProcessing={options.isProcessing}
+        onOpenDiffPath={handleOpenDiffPath}
+        onOpenPlanPanel={options.onOpenPlanPanel}
+        onExitPlanModeExecute={options.handleExitPlanModeExecute}
+        onOpenWorkspaceFile={options.onOpenFile}
+        agentTaskScrollRequest={options.agentTaskScrollRequest}
+        isThinking={isThreadThinking}
+        isHistoryLoading={activeThreadHistoryLoading}
+        isContextCompacting={activeThreadStatus?.isContextCompacting ?? false}
+        proxyEnabled={options.systemProxyEnabled}
+        proxyUrl={options.systemProxyUrl}
+        processingStartedAt={activeThreadStatus?.processingStartedAt ?? null}
+        lastDurationMs={activeThreadStatus?.lastDurationMs ?? null}
+        heartbeatPulse={heartbeatPulseRef.current ?? 0}
+        codexSilentSuspectedAt={activeThreadStatus?.codexSilentSuspectedAt ?? null}
+      />
+      <MessageForkConfirmDialog
+        userMessageId={forkConfirmUserMessageId}
+        onCancel={handleCancelForkConfirm}
+        onConfirm={handleConfirmForkFromMessage}
+      />
+    </>
   ), [
     options.activeItems,
     options.activeThreadId,
@@ -1628,6 +1685,13 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     options.handleUserInputDismiss,
     options.onRecoverThreadRuntime,
     options.onRecoverThreadRuntimeAndResend,
+    onForkFromMessage,
+    handleOpenForkConfirmFromMessage,
+    forkConfirmUserMessageId,
+    handleCancelForkConfirm,
+    handleConfirmForkFromMessage,
+    options.onRewind,
+    handleOpenRewindDialogFromMessage,
     options.handleApprovalDecision,
     options.handleApprovalBatchAccept,
     options.handleApprovalRemember,
@@ -1747,6 +1811,8 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         completionEmailDisabled={options.completionEmailDisabled}
         onToggleCompletionEmail={options.onToggleCompletionEmail}
         onRewind={options.onRewind}
+        rewindDialogRequest={rewindDialogRequest}
+        onRewindDialogRequestConsumed={handleRewindDialogRequestConsumed}
         canStop={options.canStop}
         disabled={options.isReviewing}
         contextUsage={deferredComposerLiveInputs.tokenUsage}

@@ -552,11 +552,45 @@ export function buildLatestRewindPreview(
   fallbackEngine?: EngineType | null,
 ): ClaudeRewindPreviewState | null {
   const latestCandidate = collectRewindCandidates(items)[0];
-  if (!latestCandidate) {
+  return buildRewindPreviewFromCandidate(
+    items,
+    latestCandidate,
+    activeThreadId,
+    fallbackEngine,
+  );
+}
+
+export function buildRewindPreviewForMessage(
+  items: ConversationItem[],
+  targetMessageId: string,
+  activeThreadId?: string | null,
+  fallbackEngine?: EngineType | null,
+): ClaudeRewindPreviewState | null {
+  const normalizedTargetMessageId = targetMessageId.trim();
+  if (!normalizedTargetMessageId) {
     return null;
   }
+  const targetCandidate = collectRewindCandidates(items).find(
+    (candidate) => candidate.id === normalizedTargetMessageId,
+  );
+  return buildRewindPreviewFromCandidate(
+    items,
+    targetCandidate,
+    activeThreadId,
+    fallbackEngine,
+  );
+}
 
-  const impactedItems = items.slice(latestCandidate.index);
+function buildRewindPreviewFromCandidate(
+  items: ConversationItem[],
+  candidate: RewindCandidate | undefined,
+  activeThreadId?: string | null,
+  fallbackEngine?: EngineType | null,
+): ClaudeRewindPreviewState | null {
+  if (!candidate) {
+    return null;
+  }
+  const impactedItems = items.slice(candidate.index);
   const affectedFilesFromTools = extractMutationAffectedFilesFromTools(
     impactedItems,
   );
@@ -571,11 +605,11 @@ export function buildLatestRewindPreview(
   const threadContext = resolveRewindThreadContext(
     activeThreadId,
     fallbackEngine,
-    latestCandidate.preview,
+    candidate.preview,
   );
   return {
-    targetMessageId: latestCandidate.id,
-    preview: latestCandidate.preview,
+    targetMessageId: candidate.id,
+    preview: candidate.preview,
     engine: threadContext.engine,
     sessionId: threadContext.sessionId,
     conversationLabel: threadContext.conversationLabel,

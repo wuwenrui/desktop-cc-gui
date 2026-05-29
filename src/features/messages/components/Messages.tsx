@@ -166,6 +166,8 @@ type MessagesProps = {
     threadId: string,
     message: Pick<QueuedMessage, "text" | "images">,
   ) => Promise<RuntimeReconnectRecoveryCallbackResult> | RuntimeReconnectRecoveryCallbackResult;
+  onForkFromMessage?: (messageId: string) => void;
+  onRewindFromMessage?: (messageId: string) => void;
 };
 
 type HistoryExpansionScrollSnapshot = {
@@ -293,6 +295,8 @@ export const Messages = memo(function Messages({
   agentTaskScrollRequest = null,
   onRecoverThreadRuntime,
   onRecoverThreadRuntimeAndResend,
+  onForkFromMessage,
+  onRewindFromMessage,
 }: MessagesProps) {
   const { t } = useTranslation();
   const isWindowsDesktop = useMemo(() => isWindowsPlatform(), []);
@@ -467,6 +471,33 @@ export const Messages = memo(function Messages({
       : items;
     return dedupeExitPlanItemsKeepFirst(baseItems);
   }, [isSelectionFrozen, items]);
+  const messageActionTargets = useMemo(() => {
+    const targetByAssistantId = new Map<string, string>();
+    let latestUserMessageId: string | null = null;
+    let latestFinalAssistantMessageId: string | null = null;
+    for (const item of effectiveItems) {
+      if (item.kind !== "message") {
+        continue;
+      }
+      if (item.role === "user") {
+        latestUserMessageId = item.id;
+        continue;
+      }
+      if (item.role !== "assistant") {
+        continue;
+      }
+      if (latestUserMessageId) {
+        targetByAssistantId.set(item.id, latestUserMessageId);
+      }
+      if (item.isFinal === true) {
+        latestFinalAssistantMessageId = item.id;
+      }
+    }
+    return {
+      targetByAssistantId,
+      latestFinalAssistantMessageId,
+    };
+  }, [effectiveItems]);
   const liveTailWorkingSet = useMemo(
     () =>
       buildLiveTailWorkingSet(effectiveItems, {
@@ -2237,6 +2268,10 @@ export const Messages = memo(function Messages({
           liveAssistantItem={liveAssistantItem}
           liveReasoningItem={liveReasoningItem}
           handleCopyMessage={handleCopyMessage}
+          messageActionTargetByAssistantId={messageActionTargets.targetByAssistantId}
+          latestFinalAssistantMessageId={messageActionTargets.latestFinalAssistantMessageId}
+          onForkFromMessage={onForkFromMessage}
+          onRewindFromMessage={onRewindFromMessage}
           handleExitPlanModeExecuteForItem={handleExitPlanModeExecuteForItem}
           heartbeatPulse={heartbeatPulse}
           hiddenClaudeReasoningOnly={hiddenClaudeReasoningOnly}

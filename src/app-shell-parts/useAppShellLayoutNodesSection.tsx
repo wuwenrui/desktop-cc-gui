@@ -909,6 +909,9 @@ export function useAppShellLayoutNodesSection(ctx: any) {
       }
     },
     onRewind: handleRewindFromMessage,
+    onForkFromMessage: async () => {
+      await startFork("/fork");
+    },
     canStop: canInterrupt,
     isReviewing,
     isProcessing,

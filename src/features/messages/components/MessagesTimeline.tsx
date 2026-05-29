@@ -11,8 +11,10 @@ import {
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useTranslation } from "react-i18next";
 import Bell from "lucide-react/dist/esm/icons/bell";
+import Check from "lucide-react/dist/esm/icons/check";
 import ChevronLeft from "lucide-react/dist/esm/icons/chevron-left";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
+import Copy from "lucide-react/dist/esm/icons/copy";
 import Flag from "lucide-react/dist/esm/icons/flag";
 import MessageSquareText from "lucide-react/dist/esm/icons/message-square-text";
 import type {
@@ -86,6 +88,10 @@ type MessagesTimelineProps = {
     item: Extract<ConversationItem, { kind: "message" }>,
     copyText?: string,
   ) => void;
+  messageActionTargetByAssistantId: Map<string, string>;
+  latestFinalAssistantMessageId: string | null;
+  onForkFromMessage?: (messageId: string) => void;
+  onRewindFromMessage?: (messageId: string) => void;
   handleExitPlanModeExecuteForItem: (
     itemId: string,
     mode: Extract<AccessMode, "default" | "full-access">,
@@ -188,6 +194,10 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   liveAssistantItem,
   liveReasoningItem,
   handleCopyMessage,
+  messageActionTargetByAssistantId,
+  latestFinalAssistantMessageId,
+  onForkFromMessage,
+  onRewindFromMessage,
   handleExitPlanModeExecuteForItem,
   heartbeatPulse,
   hiddenClaudeReasoningOnly,
@@ -309,6 +319,68 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         finalMetaParts.push(formatCompletedTimeMs(renderItem.finalCompletedAt));
       }
       const finalMetaText = finalMetaParts.join(" · ");
+      const actionTargetUserMessageId =
+        renderItem.role === "assistant"
+          ? messageActionTargetByAssistantId.get(renderItem.id) ?? null
+          : null;
+      const isLatestFinalAssistant =
+        renderItem.id === latestFinalAssistantMessageId;
+      const shouldRenderAssistantActions =
+        renderItem.role === "assistant";
+      const shouldRenderForkAction =
+        isLatestFinalAssistant &&
+        Boolean(actionTargetUserMessageId) &&
+        typeof onForkFromMessage === "function";
+      const shouldRenderRewindAction =
+        isLatestFinalAssistant &&
+        Boolean(actionTargetUserMessageId) &&
+        typeof onRewindFromMessage === "function";
+      const renderAssistantActions = () => {
+        if (!shouldRenderAssistantActions) {
+          return null;
+        }
+        return (
+          <div
+            className="message-action-bar message-action-bar-row"
+            aria-label={t("messages.messageActions")}
+          >
+            <button
+              type="button"
+              className={`ghost message-action-button message-copy-button${isCopied ? " is-copied" : ""}`}
+              onClick={() => handleCopyMessage(renderItem, renderItem.text)}
+              aria-label={t("messages.copyMessage")}
+              title={t("messages.copyMessage")}
+            >
+              <span className="message-copy-icon" aria-hidden>
+                <Copy className="message-copy-icon-copy" size={12} />
+                <Check className="message-copy-icon-check" size={12} />
+              </span>
+            </button>
+            {shouldRenderForkAction && actionTargetUserMessageId ? (
+              <button
+                type="button"
+                className="ghost message-action-button"
+                onClick={() => onForkFromMessage(actionTargetUserMessageId)}
+                aria-label={t("messages.forkMessage")}
+                title={t("messages.forkMessage")}
+              >
+                <span className="codicon codicon-git-branch-create" aria-hidden />
+              </button>
+            ) : null}
+            {shouldRenderRewindAction && actionTargetUserMessageId ? (
+              <button
+                type="button"
+                className="ghost message-action-button"
+                onClick={() => onRewindFromMessage(actionTargetUserMessageId)}
+                aria-label={t("messages.rewindMessage")}
+                title={t("messages.rewindMessage")}
+              >
+                <span className="codicon codicon-history" aria-hidden />
+              </button>
+            ) : null}
+          </div>
+        );
+      };
       const bindMessageNode = (node: HTMLDivElement | null) => {
         if (renderItem.role === "user" && node) {
           messageNodeByIdRef.current.set(renderItem.id, node);
@@ -400,6 +472,11 @@ export const MessagesTimeline = memo(function MessagesTimeline({
               )}
             </div>
           )}
+          {shouldRenderAssistantActions ? (
+            <div className="message-tail-action-row">
+              {renderAssistantActions()}
+            </div>
+          ) : null}
         </Fragment>
       );
     }

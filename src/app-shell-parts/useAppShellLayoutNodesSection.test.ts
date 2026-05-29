@@ -122,4 +122,19 @@ describe("useAppShellLayoutNodesSection adapter contract", () => {
       projectMapHandler.indexOf('setCenterMode("projectMap");'),
     );
   });
+
+  it("routes message-tail fork through the shared composer fork action", () => {
+    const source = readFileSync(
+      join(currentDir, "useAppShellLayoutNodesSection.tsx"),
+      "utf8",
+    );
+    const forkHandler = source.slice(
+      source.indexOf("onForkFromMessage: async () => {"),
+      source.indexOf("canStop: canInterrupt,", source.indexOf("onForkFromMessage: async () => {")),
+    );
+
+    expect(forkHandler).toContain('await startFork("/fork");');
+    expect(forkHandler).not.toContain("forkSessionFromMessageForWorkspace");
+    expect(forkHandler).not.toContain("forkClaudeSessionFromMessageForWorkspace");
+  });
 });

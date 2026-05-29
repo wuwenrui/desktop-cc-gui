@@ -2489,7 +2489,20 @@ const enPart1 = {
     opencodeModelSwitchMessage:
       "Model switch detected in the same session. A new backend session has been created to avoid timeouts.",
     doneIn: "Done in {{duration}}",
+    messageActions: "Message actions",
     copyMessage: "Copy message",
+    forkMessage: "Fork from message",
+    rewindMessage: "Rewind to this message",
+    forkConfirmTitle: "Confirm fork",
+    forkConfirmDescription:
+      "Fork creates a new thread from this message and keeps the current thread unchanged.",
+    forkConfirmPurpose:
+      "Use it when you want to preserve the existing conversation while exploring another direction from this point.",
+    forkConfirmUsage:
+      "After confirmation, the new thread opens from the selected message anchor. Continue experimenting there without rewriting the original thread.",
+    forkConfirmAction: "Confirm fork",
+    forkConfirmBusy: "Forking...",
+    forkConfirmFailed: "Failed to fork this message: {{reason}}",
     streamingPlainTextCollapsed:
       "{{omittedChars}} chars omitted to keep live rendering smooth.",
     runtimeReconnectTitle: "Runtime connection lost",

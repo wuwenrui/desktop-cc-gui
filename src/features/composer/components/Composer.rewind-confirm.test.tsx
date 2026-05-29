@@ -764,6 +764,11 @@ type ComposerHarnessProps = {
     userMessageId: string,
     options?: { mode?: "messages-and-files" | "messages-only" | "files-only" },
   ) => void | Promise<void>;
+  rewindDialogRequest?: {
+    requestId: number;
+    userMessageId: string;
+  } | null;
+  onRewindDialogRequestConsumed?: (requestId: number) => void;
   onOpenDiffPath?: (path: string) => void;
   activeThreadId?: string | null;
   selectedEngine?: "claude" | "codex" | "gemini";
@@ -776,6 +781,8 @@ type ComposerHarnessProps = {
 function ComposerHarness({
   items = REWIND_ITEMS,
   onRewind = async () => {},
+  rewindDialogRequest = null,
+  onRewindDialogRequestConsumed,
   onOpenDiffPath,
   activeThreadId = "claude:session-1",
   selectedEngine = "claude",
@@ -818,6 +825,8 @@ function ComposerHarness({
       activeThreadId={activeThreadId}
       onOpenDiffPath={onOpenDiffPath}
       onRewind={onRewind}
+      rewindDialogRequest={rewindDialogRequest}
+      onRewindDialogRequestConsumed={onRewindDialogRequestConsumed}
     />
   );
 }
@@ -845,6 +854,35 @@ describe("Composer Claude rewind confirmation", () => {
     expect(screen.getByTestId("claude-rewind-dialog")).not.toBeNull();
     expect(screen.getByTestId("claude-rewind-file-Button.tsx")).not.toBeNull();
     expect(onRewind).not.toHaveBeenCalled();
+  });
+
+  it("opens the confirmation dialog from an external message-tail request", async () => {
+    const onRewind = vi.fn(async () => {});
+    const onConsumed = vi.fn();
+
+    render(
+      <ComposerHarness
+        onRewind={onRewind}
+        rewindDialogRequest={{
+          requestId: 7,
+          userMessageId: "user-1",
+        }}
+        onRewindDialogRequestConsumed={onConsumed}
+      />,
+    );
+
+    expect(screen.getByTestId("claude-rewind-dialog")).not.toBeNull();
+    expect(onConsumed).toHaveBeenCalledWith(7);
+    expect(onRewind).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId("claude-rewind-confirm-button"));
+
+    await waitFor(() => {
+      expect(onRewind).toHaveBeenCalledTimes(1);
+    });
+    expect(onRewind).toHaveBeenCalledWith("user-1", {
+      mode: "messages-and-files",
+    });
   });
 
   it("closes the dialog on cancel without rewinding", () => {

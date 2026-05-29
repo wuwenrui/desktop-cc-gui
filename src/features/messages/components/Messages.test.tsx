@@ -109,6 +109,73 @@ describe("Messages", () => {
     ).toBeTruthy();
   });
 
+  it("renders assistant tail copy actions with fork and rewind only on the latest final reply", () => {
+    const handleForkFromMessage = vi.fn();
+    const handleRewindFromMessage = vi.fn();
+    const items: ConversationItem[] = [
+      {
+        id: "user-tail-actions-1",
+        kind: "message",
+        role: "user",
+        text: "first request",
+      },
+      {
+        id: "assistant-tail-actions-1",
+        kind: "message",
+        role: "assistant",
+        text: "first answer",
+        isFinal: true,
+      },
+      {
+        id: "user-tail-actions-2",
+        kind: "message",
+        role: "user",
+        text: "second request",
+      },
+      {
+        id: "assistant-tail-actions-2",
+        kind: "message",
+        role: "assistant",
+        text: "second answer",
+        isFinal: true,
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="codex:tail-actions"
+        workspaceId="ws-1"
+        isThinking={false}
+        activeEngine="codex"
+        openTargets={[]}
+        selectedOpenAppId=""
+        onForkFromMessage={handleForkFromMessage}
+        onRewindFromMessage={handleRewindFromMessage}
+      />,
+    );
+
+    expect(container.querySelector(".messages-final-boundary .message-action-bar")).toBeNull();
+    expect(
+      container.querySelectorAll(".message-tail-action-row .message-action-bar-row"),
+    ).toHaveLength(2);
+    const tailActionRows = container.querySelectorAll(".message-tail-action-row");
+    expect(tailActionRows[0].querySelectorAll("button")).toHaveLength(1);
+    expect(tailActionRows[1].querySelectorAll("button")).toHaveLength(3);
+    expect(screen.getAllByRole("button", { name: "messages.copyMessage" })).toHaveLength(4);
+    const forkButtons = screen.getAllByRole("button", { name: "messages.forkMessage" });
+    expect(forkButtons).toHaveLength(1);
+    expect(forkButtons[0].querySelector(".codicon-git-branch-create")).toBeTruthy();
+    fireEvent.click(forkButtons[0]);
+    expect(handleForkFromMessage).toHaveBeenCalledWith("user-tail-actions-2");
+
+    const rewindButtons = screen.getAllByRole("button", { name: "messages.rewindMessage" });
+    expect(rewindButtons).toHaveLength(1);
+    expect(rewindButtons[0].querySelector(".codicon-history")).toBeTruthy();
+    fireEvent.click(rewindButtons[0]);
+    expect(handleRewindFromMessage).toHaveBeenCalledWith("user-tail-actions-2");
+  });
+
   it("does not backfill historical user message badge from active mode", () => {
     const items: ConversationItem[] = [
       {
