@@ -993,6 +993,46 @@ export type RuntimePoolSnapshot = {
   engineObservability: RuntimeEngineObservability[];
 };
 
+export type TurnReconciliationRuntimeStatus =
+  | "completed"
+  | "running"
+  | "failed"
+  | "stalled"
+  | "runtime-ended"
+  | "unknown"
+  | "query-failed";
+
+export type TurnReconciliationStatusSource =
+  | "runtime"
+  | "runtime-end-context"
+  | "backend-cache"
+  | "session-summary"
+  | "recovery-state";
+
+export type TurnReconciliationStatusRequest = {
+  workspaceId: string;
+  engine: "claude" | "codex" | "gemini" | "opencode";
+  threadId: string;
+  turnId: string | null;
+  runtimeSessionId: string | null;
+  runtimeLeaseId: string | null;
+  requestSource: "three-evidence-reconciliation";
+  requestedAtMs: number;
+};
+
+export type TurnReconciliationStatusResponse = {
+  workspaceId: string;
+  engine: "claude" | "codex" | "gemini" | "opencode";
+  threadId: string;
+  turnId: string | null;
+  runtimeSessionId: string | null;
+  runtimeLeaseId: string | null;
+  status: TurnReconciliationRuntimeStatus;
+  statusSource: TurnReconciliationStatusSource;
+  observedAtMs: number | null;
+  boundedReason: string;
+};
+
 export type DiagnosticsBundleExportResult = {
   filePath: string;
   generatedAt: string;

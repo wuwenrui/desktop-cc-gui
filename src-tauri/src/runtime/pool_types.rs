@@ -273,3 +273,52 @@ pub(crate) struct RuntimeEndedRecord {
     pub(crate) exit_signal: Option<String>,
     pub(crate) pending_request_count: u32,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum TurnReconciliationRuntimeStatus {
+    Completed,
+    Running,
+    Failed,
+    Stalled,
+    RuntimeEnded,
+    Unknown,
+    QueryFailed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum TurnReconciliationStatusSource {
+    Runtime,
+    RuntimeEndContext,
+    BackendCache,
+    SessionSummary,
+    RecoveryState,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct TurnReconciliationStatusQuery {
+    pub(crate) workspace_id: String,
+    pub(crate) engine: String,
+    pub(crate) thread_id: String,
+    pub(crate) turn_id: Option<String>,
+    pub(crate) runtime_session_id: Option<String>,
+    pub(crate) runtime_lease_id: Option<String>,
+    pub(crate) request_source: String,
+    pub(crate) requested_at_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TurnReconciliationStatusResponse {
+    pub(crate) workspace_id: String,
+    pub(crate) engine: String,
+    pub(crate) thread_id: String,
+    pub(crate) turn_id: Option<String>,
+    pub(crate) runtime_session_id: Option<String>,
+    pub(crate) runtime_lease_id: Option<String>,
+    pub(crate) status: TurnReconciliationRuntimeStatus,
+    pub(crate) status_source: TurnReconciliationStatusSource,
+    pub(crate) observed_at_ms: Option<u64>,
+    pub(crate) bounded_reason: String,
+}

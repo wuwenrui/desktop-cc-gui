@@ -42,6 +42,7 @@ const turnHookFactory = vi.hoisted(() => {
 
 const streamLatencyMocks = vi.hoisted(() => ({
   getCurrentClaudeConfig: vi.fn(),
+  queryTurnReconciliationStatus: vi.fn(),
   appendRendererDiagnostic: vi.fn(),
   isWindowsPlatform: vi.fn(),
   isMacPlatform: vi.fn(),
@@ -97,6 +98,7 @@ vi.mock("../utils/realtimePerfFlags", () => ({
 
 vi.mock("../../../services/tauri", () => ({
   getCurrentClaudeConfig: streamLatencyMocks.getCurrentClaudeConfig,
+  queryTurnReconciliationStatus: streamLatencyMocks.queryTurnReconciliationStatus,
 }));
 
 vi.mock("../../../services/rendererDiagnostics", () => ({
@@ -256,6 +258,19 @@ describe("useThreadEventHandlers diagnostics", () => {
     itemHookFactory.reset();
     window.localStorage.removeItem("ccgui.debug.turnDiagnosticsVerbose");
     streamLatencyMocks.getCurrentClaudeConfig.mockReset();
+    streamLatencyMocks.queryTurnReconciliationStatus.mockReset();
+    streamLatencyMocks.queryTurnReconciliationStatus.mockResolvedValue({
+      workspaceId: "ws-1",
+      engine: "codex",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      runtimeSessionId: null,
+      runtimeLeaseId: null,
+      status: "unknown",
+      statusSource: "runtime",
+      observedAtMs: Date.now(),
+      boundedReason: "test default unknown",
+    });
     streamLatencyMocks.appendRendererDiagnostic.mockReset();
     streamLatencyMocks.isWindowsPlatform.mockReset();
     streamLatencyMocks.isMacPlatform.mockReset();
@@ -555,6 +570,75 @@ describe("useThreadEventHandlers diagnostics", () => {
         decisionReason: "needs-authoritative-status",
         isProcessing: true,
         activeTurnId: "turn-1",
+      }),
+    );
+  });
+
+  it("queries scoped backend status after reconciliation-needed dry run without clearing busy state", async () => {
+    const onDebug = vi.fn();
+    const options = makeOptions(onDebug);
+    streamLatencyMocks.queryTurnReconciliationStatus.mockResolvedValueOnce({
+      workspaceId: "ws-1",
+      engine: "codex",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      runtimeSessionId: null,
+      runtimeLeaseId: null,
+      status: "runtime-ended",
+      statusSource: "runtime-end-context",
+      observedAtMs: Date.now(),
+      boundedReason: "runtime ended with affected work matching requested scope",
+    });
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-1");
+      vi.advanceTimersByTime(CODEX_TURN_NO_PROGRESS_STALL_MS);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(streamLatencyMocks.queryTurnReconciliationStatus).toHaveBeenCalledWith({
+      workspaceId: "ws-1",
+      engine: "codex",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      runtimeSessionId: null,
+      runtimeLeaseId: null,
+      requestSource: "three-evidence-reconciliation",
+      requestedAtMs: Date.now(),
+    });
+    expect(options.markProcessing).not.toHaveBeenCalledWith("thread-1", false);
+    expect(options.setActiveTurnId).not.toHaveBeenCalledWith("thread-1", null);
+    const requestedEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) =>
+        entry.label ===
+        "thread/session:turn-diagnostic:three-evidence-reconciliation-query-requested",
+    );
+    const resolvedEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) =>
+        entry.label ===
+        "thread/session:turn-diagnostic:three-evidence-reconciliation-query-resolved",
+    );
+    expect(requestedEntry?.payload).toEqual(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        turnId: "turn-1",
+        diagnosticCategory: "three-evidence-reconciliation",
+        decisionAction: "request-reconciliation",
+      }),
+    );
+    expect(resolvedEntry?.payload).toEqual(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        turnId: "turn-1",
+        diagnosticCategory: "three-evidence-reconciliation",
+        status: "runtime-ended",
+        statusSource: "runtime-end-context",
+        decisionAction: "cleanup-residue",
       }),
     );
   });

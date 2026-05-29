@@ -40,6 +40,38 @@ describe("clientErrorLog", () => {
     expect(
       shouldPersistClientErrorLogEntry(
         debugEntry({
+          label:
+            "thread/session:turn-diagnostic:three-evidence-reconciliation-query-failed",
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      shouldPersistClientErrorLogEntry(
+        debugEntry({
+          label:
+            "thread/session:turn-diagnostic:three-evidence-reconciliation-query-resolved",
+          payload: {
+            status: "runtime-ended",
+            decisionAction: "cleanup-residue",
+          },
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      shouldPersistClientErrorLogEntry(
+        debugEntry({
+          label:
+            "thread/session:turn-diagnostic:three-evidence-reconciliation-query-resolved",
+          payload: {
+            status: "running",
+            decisionAction: "keep-running",
+          },
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      shouldPersistClientErrorLogEntry(
+        debugEntry({
           label: "thread/session:turn-diagnostic:three-evidence-dry-run",
           payload: { dryRunDecision: "wouldCleanupResidue" },
         }),

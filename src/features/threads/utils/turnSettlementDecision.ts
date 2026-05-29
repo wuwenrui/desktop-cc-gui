@@ -76,7 +76,15 @@ export type TurnSettlementEvidence = {
   };
   reconciliation?: {
     attempted: boolean;
-    status: "not-needed" | "completed" | "running" | "failed" | "unknown" | "query-failed";
+    status:
+      | "not-needed"
+      | "completed"
+      | "running"
+      | "failed"
+      | "stalled"
+      | "runtime-ended"
+      | "unknown"
+      | "query-failed";
     replayRequested: boolean;
   };
 };

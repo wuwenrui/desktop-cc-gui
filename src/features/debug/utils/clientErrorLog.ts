@@ -47,7 +47,34 @@ export function shouldPersistClientErrorLogEntry(entry: DebugEntry): boolean {
 
   return (
     label.includes("terminal-settlement-rejected") ||
-    label.includes("terminal-settlement-busy-residue")
+    label.includes("terminal-settlement-busy-residue") ||
+    isThreeEvidenceReconciliationResolvedAnomaly(label, entry.payload) ||
+    label.includes("three-evidence-reconciliation-query-rejected") ||
+    label.includes("three-evidence-reconciliation-query-failed")
+  );
+}
+
+function isThreeEvidenceReconciliationResolvedAnomaly(
+  label: string,
+  payload: unknown,
+): boolean {
+  if (!label.includes("three-evidence-reconciliation-query-resolved")) {
+    return false;
+  }
+  if (!payload || typeof payload !== "object") {
+    return false;
+  }
+
+  const payloadRecord = payload as Record<string, unknown>;
+  if (payloadRecord.decisionAction === "cleanup-residue") {
+    return true;
+  }
+
+  return (
+    payloadRecord.status === "runtime-ended" ||
+    payloadRecord.status === "completed" ||
+    payloadRecord.status === "failed" ||
+    payloadRecord.status === "stalled"
   );
 }
 

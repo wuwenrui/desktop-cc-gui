@@ -7,7 +7,10 @@ use crate::types::AppSettings;
 
 use super::process_diagnostics::{current_host_untracked_engine_roots, terminate_pid_tree};
 use super::session_lifecycle::{close_runtime, evict_runtime};
-use super::{normalize_engine, RuntimePoolSnapshot};
+use super::{
+    normalize_engine, RuntimePoolSnapshot, TurnReconciliationStatusQuery,
+    TurnReconciliationStatusResponse,
+};
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase", tag = "action")]
@@ -212,4 +215,44 @@ pub(crate) async fn mutate_runtime_pool(
     let settings = state.app_settings.lock().await.clone();
     run_reconcile_cycle(&state, &settings).await;
     Ok(state.runtime_manager.snapshot(&settings).await)
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct QueryTurnReconciliationStatusRequest {
+    #[serde(alias = "workspace_id")]
+    workspace_id: String,
+    engine: String,
+    #[serde(alias = "thread_id")]
+    thread_id: String,
+    #[serde(default, alias = "turn_id")]
+    turn_id: Option<String>,
+    #[serde(default, alias = "runtime_session_id")]
+    runtime_session_id: Option<String>,
+    #[serde(default, alias = "runtime_lease_id")]
+    runtime_lease_id: Option<String>,
+    #[serde(alias = "request_source")]
+    request_source: String,
+    #[serde(alias = "requested_at_ms")]
+    requested_at_ms: u64,
+}
+
+#[tauri::command]
+pub(crate) async fn query_turn_reconciliation_status(
+    request: QueryTurnReconciliationStatusRequest,
+    state: State<'_, AppState>,
+) -> Result<TurnReconciliationStatusResponse, String> {
+    Ok(state
+        .runtime_manager
+        .query_turn_reconciliation_status(TurnReconciliationStatusQuery {
+            workspace_id: request.workspace_id,
+            engine: request.engine,
+            thread_id: request.thread_id,
+            turn_id: request.turn_id,
+            runtime_session_id: request.runtime_session_id,
+            runtime_lease_id: request.runtime_lease_id,
+            request_source: request.request_source,
+            requested_at_ms: request.requested_at_ms,
+        })
+        .await)
 }

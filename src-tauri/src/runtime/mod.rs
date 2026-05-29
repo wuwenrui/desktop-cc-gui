@@ -17,7 +17,9 @@ pub(crate) use self::pool_types::{
     runtime_pool_summary_from_rows, RuntimeEndedRecord, RuntimeEngineObservability,
     RuntimeForegroundWorkState, RuntimeLifecycleState, RuntimePoolBudgetSnapshot,
     RuntimePoolDiagnostics, RuntimePoolRow, RuntimePoolSnapshot, RuntimeProcessDiagnostics,
-    RuntimeStartupState, RuntimeState,
+    RuntimeStartupState, RuntimeState, TurnReconciliationRuntimeStatus,
+    TurnReconciliationStatusQuery, TurnReconciliationStatusResponse,
+    TurnReconciliationStatusSource,
 };
 use self::process_diagnostics::{
     build_engine_observability, current_host_untracked_engine_roots, merge_process_diagnostics,
@@ -129,6 +131,15 @@ struct RuntimeRecoveryEntry {
     last_failure_at_ms: Option<u64>,
     quarantined_until_ms: Option<u64>,
     last_error: Option<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct RecentRuntimeEndContext {
+    affected_thread_ids: BTreeSet<String>,
+    affected_turn_ids: BTreeSet<String>,
+    affected_active_turns: BTreeSet<(String, String)>,
+    observed_at_ms: u64,
+    reason_code: String,
 }
 
 impl RuntimeEntry {
@@ -372,6 +383,39 @@ impl RuntimeEntry {
         }
         true
     }
+
+    fn matches_reconciliation_query(&self, thread_id: &str, turn_id: Option<&str>) -> bool {
+        if self.matches_foreground_work_identity(Some(thread_id), turn_id) {
+            return true;
+        }
+
+        let Some(turn_id) = turn_id.map(str::trim).filter(|value| !value.is_empty()) else {
+            return false;
+        };
+        let turn_source = format!("turn:{turn_id}");
+        let stream_source = format!("stream:{turn_id}");
+        self.turn_leases.contains(&turn_source) || self.stream_leases.contains(&stream_source)
+    }
+}
+
+impl RecentRuntimeEndContext {
+    fn matches_reconciliation_query(&self, thread_id: &str, turn_id: Option<&str>) -> bool {
+        let thread_id = thread_id.trim();
+        if thread_id.is_empty() {
+            return false;
+        }
+        if let Some(turn_id) = turn_id.map(str::trim).filter(|value| !value.is_empty()) {
+            if self
+                .affected_active_turns
+                .contains(&(thread_id.to_string(), turn_id.to_string()))
+            {
+                return true;
+            }
+            return self.affected_thread_ids.contains(thread_id)
+                && self.affected_turn_ids.contains(turn_id);
+        }
+        self.affected_thread_ids.contains(thread_id)
+    }
 }
 
 #[derive(Debug)]
@@ -379,6 +423,7 @@ pub(crate) struct RuntimeManager {
     pub(super) entries: Mutex<HashMap<String, RuntimeEntry>>,
     pub(super) diagnostics: Mutex<RuntimePoolDiagnostics>,
     recovery: Mutex<HashMap<String, RuntimeRecoveryEntry>>,
+    recent_runtime_end_contexts: Mutex<HashMap<String, RecentRuntimeEndContext>>,
     startup_gates: Mutex<HashMap<String, RuntimeAcquireGateEntry>>,
     replacement_gates: Mutex<HashMap<String, RuntimeReplacementGateEntry>>,
     pinned_keys: Mutex<BTreeSet<String>>,
@@ -488,6 +533,7 @@ impl RuntimeManager {
             entries: Mutex::new(HashMap::new()),
             diagnostics: Mutex::new(RuntimePoolDiagnostics::default()),
             recovery: Mutex::new(HashMap::new()),
+            recent_runtime_end_contexts: Mutex::new(HashMap::new()),
             startup_gates: Mutex::new(HashMap::new()),
             replacement_gates: Mutex::new(HashMap::new()),
             pinned_keys: Mutex::new(BTreeSet::new()),
@@ -1562,6 +1608,133 @@ impl RuntimeManager {
         drop(entries);
         let _ = self.persist_ledger().await;
         recorded_for_current_row
+    }
+
+    pub(crate) async fn record_runtime_end_context(
+        &self,
+        engine: &str,
+        workspace_id: &str,
+        affected_thread_ids: Vec<String>,
+        affected_turn_ids: Vec<String>,
+        affected_active_turns: Vec<(String, String)>,
+        reason_code: &str,
+    ) {
+        let context = RecentRuntimeEndContext {
+            affected_thread_ids: affected_thread_ids
+                .into_iter()
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+                .collect(),
+            affected_turn_ids: affected_turn_ids
+                .into_iter()
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+                .collect(),
+            affected_active_turns: affected_active_turns
+                .into_iter()
+                .map(|(thread_id, turn_id)| {
+                    (thread_id.trim().to_string(), turn_id.trim().to_string())
+                })
+                .filter(|(thread_id, turn_id)| !thread_id.is_empty() && !turn_id.is_empty())
+                .collect(),
+            observed_at_ms: now_millis(),
+            reason_code: reason_code.to_string(),
+        };
+        self.recent_runtime_end_contexts
+            .lock()
+            .await
+            .insert(runtime_key(engine, workspace_id), context);
+    }
+
+    pub(crate) async fn query_turn_reconciliation_status(
+        &self,
+        query: TurnReconciliationStatusQuery,
+    ) -> TurnReconciliationStatusResponse {
+        let engine = normalize_engine(&query.engine);
+        let workspace_id = query.workspace_id.trim().to_string();
+        let thread_id = query.thread_id.trim().to_string();
+        let turn_id = query
+            .turn_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToString::to_string);
+
+        if workspace_id.is_empty() || engine.is_empty() || thread_id.is_empty() {
+            return TurnReconciliationStatusResponse {
+                workspace_id,
+                engine,
+                thread_id,
+                turn_id,
+                runtime_session_id: query.runtime_session_id,
+                runtime_lease_id: query.runtime_lease_id,
+                status: TurnReconciliationRuntimeStatus::QueryFailed,
+                status_source: TurnReconciliationStatusSource::Runtime,
+                observed_at_ms: Some(now_millis()),
+                bounded_reason: "status query is missing required conversation scope".to_string(),
+            };
+        }
+
+        let key = runtime_key(&engine, &workspace_id);
+        let runtime_match = {
+            let entries = self.entries.lock().await;
+            entries
+                .get(&key)
+                .map(|entry| entry.matches_reconciliation_query(&thread_id, turn_id.as_deref()))
+        };
+        if matches!(runtime_match, Some(true)) {
+            return TurnReconciliationStatusResponse {
+                workspace_id,
+                engine,
+                thread_id,
+                turn_id,
+                runtime_session_id: query.runtime_session_id,
+                runtime_lease_id: query.runtime_lease_id,
+                status: TurnReconciliationRuntimeStatus::Running,
+                status_source: TurnReconciliationStatusSource::Runtime,
+                observed_at_ms: Some(now_millis()),
+                bounded_reason: "runtime has active work matching the requested turn scope"
+                    .to_string(),
+            };
+        }
+
+        let end_context = {
+            let contexts = self.recent_runtime_end_contexts.lock().await;
+            contexts.get(&key).cloned()
+        };
+        if let Some(context) = end_context {
+            if context.matches_reconciliation_query(&thread_id, turn_id.as_deref()) {
+                return TurnReconciliationStatusResponse {
+                    workspace_id,
+                    engine,
+                    thread_id,
+                    turn_id,
+                    runtime_session_id: query.runtime_session_id,
+                    runtime_lease_id: query.runtime_lease_id,
+                    status: TurnReconciliationRuntimeStatus::RuntimeEnded,
+                    status_source: TurnReconciliationStatusSource::RuntimeEndContext,
+                    observed_at_ms: Some(context.observed_at_ms),
+                    bounded_reason: format!(
+                        "runtime ended with affected work matching requested scope ({})",
+                        context.reason_code
+                    ),
+                };
+            }
+        }
+
+        TurnReconciliationStatusResponse {
+            workspace_id,
+            engine,
+            thread_id,
+            turn_id,
+            runtime_session_id: query.runtime_session_id,
+            runtime_lease_id: query.runtime_lease_id,
+            status: TurnReconciliationRuntimeStatus::Unknown,
+            status_source: TurnReconciliationStatusSource::Runtime,
+            observed_at_ms: Some(now_millis()),
+            bounded_reason: "runtime status is not scoped enough to settle the requested turn"
+                .to_string(),
+        }
     }
 
     pub(crate) async fn note_foreground_turn_start_pending(

@@ -156,6 +156,16 @@ impl WorkspaceSession {
 
         if let Some(runtime_manager) = self.runtime_manager() {
             runtime_manager
+                .record_runtime_end_context(
+                    "codex",
+                    &self.entry.id,
+                    runtime_end_context.affected_thread_ids.clone(),
+                    runtime_end_context.affected_turn_ids.clone(),
+                    runtime_end_context.affected_active_turns.clone(),
+                    reason_code,
+                )
+                .await;
+            runtime_manager
                 .record_runtime_ended_for_session(
                     "codex",
                     &self.entry.id,

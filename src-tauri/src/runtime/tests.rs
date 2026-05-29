@@ -8,7 +8,8 @@ use super::{
     replace_workspace_session_with_terminator, terminate_replaced_workspace_session,
     write_json_atomically, RuntimeAcquireDisposition, RuntimeEndedRecord,
     RuntimeEngineObservability, RuntimeLifecycleState, RuntimeManager, RuntimeProcessDiagnostics,
-    RuntimeState,
+    RuntimeState, TurnReconciliationRuntimeStatus, TurnReconciliationStatusQuery,
+    TurnReconciliationStatusSource,
 };
 use crate::backend::app_server::{
     dispose_test_workspace_session, make_test_workspace_session, RuntimeShutdownSource,
@@ -36,6 +37,23 @@ fn workspace_entry(id: &str) -> WorkspaceEntry {
         parent_id: None,
         worktree: None,
         settings,
+    }
+}
+
+fn reconciliation_query(
+    workspace_id: &str,
+    thread_id: &str,
+    turn_id: Option<&str>,
+) -> TurnReconciliationStatusQuery {
+    TurnReconciliationStatusQuery {
+        workspace_id: workspace_id.to_string(),
+        engine: "codex".to_string(),
+        thread_id: thread_id.to_string(),
+        turn_id: turn_id.map(ToString::to_string),
+        runtime_session_id: None,
+        runtime_lease_id: None,
+        request_source: "three-evidence-reconciliation".to_string(),
+        requested_at_ms: 1,
     }
 }
 
@@ -324,6 +342,95 @@ async fn reconcile_never_marks_leased_runtime_evictable() {
     let snapshot = manager.snapshot(&settings).await;
     assert!(matches!(snapshot.rows[0].state, RuntimeState::Acquired));
     assert!(snapshot.rows[0].active_work_protected);
+}
+
+#[tokio::test]
+async fn turn_reconciliation_status_reports_running_for_matching_active_turn_lease() {
+    let manager = RuntimeManager::new(&std::env::temp_dir());
+    let entry = workspace_entry("reconcile-running");
+    manager.record_starting(&entry, "codex", "test").await;
+    manager
+        .acquire_turn_lease(&entry, "codex", "turn:turn-1")
+        .await;
+
+    let response = manager
+        .query_turn_reconciliation_status(reconciliation_query(
+            "reconcile-running",
+            "thread-1",
+            Some("turn-1"),
+        ))
+        .await;
+
+    assert_eq!(response.status, TurnReconciliationRuntimeStatus::Running);
+    assert_eq!(
+        response.status_source,
+        TurnReconciliationStatusSource::Runtime
+    );
+    assert_eq!(response.workspace_id, "reconcile-running");
+    assert_eq!(response.thread_id, "thread-1");
+    assert_eq!(response.turn_id.as_deref(), Some("turn-1"));
+}
+
+#[tokio::test]
+async fn turn_reconciliation_status_reports_runtime_ended_only_for_matching_end_context() {
+    let manager = RuntimeManager::new(&std::env::temp_dir());
+    manager
+        .record_runtime_end_context(
+            "codex",
+            "reconcile-ended",
+            vec!["thread-1".to_string()],
+            vec!["turn-1".to_string()],
+            vec![("thread-1".to_string(), "turn-1".to_string())],
+            "stdout_eof",
+        )
+        .await;
+
+    let matched = manager
+        .query_turn_reconciliation_status(reconciliation_query(
+            "reconcile-ended",
+            "thread-1",
+            Some("turn-1"),
+        ))
+        .await;
+    let stale = manager
+        .query_turn_reconciliation_status(reconciliation_query(
+            "reconcile-ended",
+            "thread-2",
+            Some("turn-1"),
+        ))
+        .await;
+
+    assert_eq!(
+        matched.status,
+        TurnReconciliationRuntimeStatus::RuntimeEnded
+    );
+    assert_eq!(
+        matched.status_source,
+        TurnReconciliationStatusSource::RuntimeEndContext,
+    );
+    assert_eq!(stale.status, TurnReconciliationRuntimeStatus::Unknown);
+}
+
+#[tokio::test]
+async fn turn_reconciliation_status_rejects_missing_required_scope_without_completion() {
+    let manager = RuntimeManager::new(&std::env::temp_dir());
+    let response = manager
+        .query_turn_reconciliation_status(TurnReconciliationStatusQuery {
+            workspace_id: "".to_string(),
+            engine: "codex".to_string(),
+            thread_id: "thread-1".to_string(),
+            turn_id: Some("turn-1".to_string()),
+            runtime_session_id: None,
+            runtime_lease_id: None,
+            request_source: "three-evidence-reconciliation".to_string(),
+            requested_at_ms: 1,
+        })
+        .await;
+
+    assert_eq!(
+        response.status,
+        TurnReconciliationRuntimeStatus::QueryFailed
+    );
 }
 
 #[tokio::test]

@@ -3,6 +3,8 @@ import type {
   DiagnosticsBundleExportResult,
   DebugEntry,
   RuntimePoolSnapshot,
+  TurnReconciliationStatusRequest,
+  TurnReconciliationStatusResponse,
   WorkspaceInfo,
   WorkspaceSettings,
 } from "../../types";
@@ -175,6 +177,12 @@ export async function noteWebServiceReconnected(
   workspaceId: string,
 ): Promise<RuntimePoolSnapshot> {
   return invoke("note_web_service_reconnected", { workspaceId });
+}
+
+export async function queryTurnReconciliationStatus(
+  request: TurnReconciliationStatusRequest,
+): Promise<TurnReconciliationStatusResponse> {
+  return invoke("query_turn_reconciliation_status", { request });
 }
 
 export async function exportDiagnosticsBundle(): Promise<DiagnosticsBundleExportResult> {

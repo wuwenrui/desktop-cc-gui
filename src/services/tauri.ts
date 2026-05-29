@@ -241,6 +241,7 @@ export {
   noteWebServiceReconnected,
   openNewWindow,
   openWorkspaceIn,
+  queryTurnReconciliationStatus,
   readPanelLockPasswordFile,
   removeWorkspace,
   removeWorktree,
