@@ -1345,3 +1345,44 @@ Validation:
 ### Next Steps
 
 - None - task complete
+
+
+## Session 636: 接通 Web 添加工作区远端路径输入
+
+**Date**: 2026-05-30
+**Task**: 接通 Web 添加工作区远端路径输入
+**Branch**: `feature/v0.5.4`
+
+### Summary
+
+修复 Web service runtime 下添加工作区无法获取远端路径的问题，补充 OpenSpec change、frontend 分支、i18n 与 focused tests。
+
+### Main Changes
+
+| Area | Details |
+|------|---------|
+| OpenSpec | Created `fix-web-service-add-workspace-path-entry` with proposal, design, delta spec, and implementation tasks. |
+| Frontend | Added Web service runtime branch in `useWorkspaceActions.handleAddWorkspace` to collect a manual daemon-machine absolute path before reusing `handleAddWorkspaceFromPath`. |
+| i18n | Added zh/en prompt copy for daemon-machine absolute path entry. |
+| Tests | Added focused coverage for Web service manual path, blank input, cancel input, and preserved desktop picker path. |
+| Validation | `openspec validate --all --strict --no-interactive` passed with 307 passed / 0 failed; `npx vitest run src/features/app/hooks/useWorkspaceActions.test.tsx` passed with 14 tests. `npm run typecheck` remains blocked by pre-existing `SettingsView.test.tsx` fixture field `closeCurrentSessionShortcut`, outside this change. |
+| Boundary | Did not change daemon RPC, Web shim dialog behavior, remote file browsing, path mapping, storage schema, or engine runtime payload. |
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d16da027` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

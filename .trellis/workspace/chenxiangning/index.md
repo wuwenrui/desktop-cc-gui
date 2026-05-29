@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-17.md`
-- **Total Sessions**: 635
+- **Total Sessions**: 636
 - **Last Active**: 2026-05-30
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-17.md` | ~1347 | Active |
+| `journal-17.md` | ~1388 | Active |
 | `journal-16.md` | ~1985 | Archived |
 | `journal-15.md` | ~1996 | Archived |
 | `journal-14.md` | ~1969 | Archived |
@@ -45,6 +45,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 636 | 2026-05-30 | 接通 Web 添加工作区远端路径输入 | `d16da027` | `feature/v0.5.4` |
 | 635 | 2026-05-30 | 持久化三证对账早期信号 | `ceafd660` | `feature/v0.5.4` |
 | 634 | 2026-05-30 | 支持关闭当前会话快捷键 | `2192844c` | `feature/v0.5.4` |
 | 633 | 2026-05-30 | 清理启动诊断与环境恢复噪声 | `ebb5966f` | `feature/v0.5.4` |
