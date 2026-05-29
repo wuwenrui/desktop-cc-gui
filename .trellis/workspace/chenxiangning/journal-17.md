@@ -1452,3 +1452,36 @@ Validation:
 ### Next Steps
 
 - None - task complete
+
+
+## Session 639: 修复命令补全快捷发送
+
+**Date**: 2026-05-30
+**Task**: 修复命令补全快捷发送
+**Branch**: `feature/v0.5.4`
+
+### Summary
+
+清理 Composer 工作区变更，仅保留命令补全打开时 Cmd/Ctrl+Enter 仍可按配置发送的修复，并补齐 Composer 发送回调的 selectedEngine 依赖。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c2ac6c00` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

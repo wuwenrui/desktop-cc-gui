@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-17.md`
-- **Total Sessions**: 638
+- **Total Sessions**: 639
 - **Last Active**: 2026-05-30
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-17.md` | ~1454 | Active |
+| `journal-17.md` | ~1487 | Active |
 | `journal-16.md` | ~1985 | Archived |
 | `journal-15.md` | ~1996 | Archived |
 | `journal-14.md` | ~1969 | Archived |
@@ -45,6 +45,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 639 | 2026-05-30 | 修复命令补全快捷发送 | `c2ac6c00` | `feature/v0.5.4` |
 | 638 | 2026-05-30 | 标记 Codex goal 手工验证完成 | `e7061617` | `feature/v0.5.4` |
 | 637 | 2026-05-30 | 接入 Codex goal 命令面板入口 | `46de74db` | `feature/v0.5.4` |
 | 636 | 2026-05-30 | 接通 Web 添加工作区远端路径输入 | `d16da027` | `feature/v0.5.4` |
