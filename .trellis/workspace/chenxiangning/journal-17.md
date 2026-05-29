@@ -1386,3 +1386,36 @@ Validation:
 ### Next Steps
 
 - None - task complete
+
+
+## Session 637: 接入 Codex goal 命令面板入口
+
+**Date**: 2026-05-30
+**Task**: 接入 Codex goal 命令面板入口
+**Branch**: `feature/v0.5.4`
+
+### Summary
+
+收敛 /goal UX 方案：保留普通发送语义，仅在 Codex 命令面板展示 /goal、/goal pause、/goal resume、/goal clear，并回写 OpenSpec proposal/design/spec/tasks。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `46de74db` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
