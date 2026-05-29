@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-17.md`
-- **Total Sessions**: 632
+- **Total Sessions**: 633
 - **Last Active**: 2026-05-30
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-17.md` | ~1224 | Active |
+| `journal-17.md` | ~1272 | Active |
 | `journal-16.md` | ~1985 | Archived |
 | `journal-15.md` | ~1996 | Archived |
 | `journal-14.md` | ~1969 | Archived |
@@ -45,6 +45,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 633 | 2026-05-30 | 清理启动诊断与环境恢复噪声 | `ebb5966f` | `feature/v0.5.4` |
 | 632 | 2026-05-30 | v0.5.4 收口提交 | `e75b243d`, `3fb684e2` | `feature/v0.5.4` |
 | 631 | 2026-05-30 | 消息尾部操作图标接线 | `5a50bda2` | `feature/v0.5.4` |
 | 630 | 2026-05-30 | 优化 Codex 会话恢复卡片 | `0b677057` | `feature/v0.5.4` |
