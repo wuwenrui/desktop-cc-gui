@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-17.md`
-- **Total Sessions**: 626
+- **Total Sessions**: 627
 - **Last Active**: 2026-05-29
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-17.md` | ~996 | Active |
+| `journal-17.md` | ~1029 | Active |
 | `journal-16.md` | ~1985 | Archived |
 | `journal-15.md` | ~1996 | Archived |
 | `journal-14.md` | ~1969 | Archived |
@@ -45,6 +45,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 627 | 2026-05-29 | 收紧 Composer 输入框与折叠入口 | `79517e75` | `feature/v0.5.4` |
 | 626 | 2026-05-29 | 三证结算 Phase 2a 状态查询提案 | `2aba361d` | `feature/v0.5.4` |
 | 625 | 2026-05-29 | 三证结算干跑判断 | `2e6a8113` | `feature/v0.5.4` |
 | 624 | 2026-05-29 | 持久化核心错误日志 | `df8c3b3d` | `feature/v0.5.4` |
