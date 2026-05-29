@@ -541,6 +541,22 @@ describe("useThreadEventHandlers diagnostics", () => {
     expect(suspectedEntry?.payload.source).toBe("frontend-no-progress-suspected");
     expect(suspectedEntry?.payload.terminal).toBe(false);
     expect(suspectedEntry?.payload.quarantine).toBe(false);
+    const dryRunEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) => entry.label === "thread/session:turn-diagnostic:three-evidence-dry-run",
+    );
+    expect(dryRunEntry?.payload).toEqual(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        turnId: "turn-1",
+        diagnosticCategory: "three-evidence-settlement-dry-run",
+        dryRunDecision: "wouldRequestReconciliation",
+        decisionAction: "request-reconciliation",
+        decisionReason: "needs-authoritative-status",
+        isProcessing: true,
+        activeTurnId: "turn-1",
+      }),
+    );
   });
 
   it("records terminal event receipt before settlement routing", () => {
@@ -1355,6 +1371,24 @@ describe("useThreadEventHandlers diagnostics", () => {
         activeTurnId: "turn-1",
         diagnosticCategory: "foreground-terminal-settlement",
         reason: "terminal-event-handled-but-foreground-state-remains-busy",
+      }),
+    );
+    const dryRunEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) => entry.label === "thread/session:turn-diagnostic:three-evidence-dry-run",
+    );
+    expect(dryRunEntry?.payload).toEqual(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        turnId: "turn-1",
+        diagnosticCategory: "three-evidence-settlement-dry-run",
+        dryRunDecision: "wouldCleanupResidue",
+        decisionAction: "cleanup-residue",
+        decisionReason: "busy-residue",
+        handled: false,
+        fallbackApplied: false,
+        isProcessing: true,
+        activeTurnId: "turn-1",
       }),
     );
   });

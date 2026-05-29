@@ -39,6 +39,22 @@ describe("clientErrorLog", () => {
     ).toBe(true);
     expect(
       shouldPersistClientErrorLogEntry(
+        debugEntry({
+          label: "thread/session:turn-diagnostic:three-evidence-dry-run",
+          payload: { dryRunDecision: "wouldCleanupResidue" },
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      shouldPersistClientErrorLogEntry(
+        debugEntry({
+          label: "thread/session:turn-diagnostic:three-evidence-dry-run",
+          payload: { dryRunDecision: "wouldSettle" },
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      shouldPersistClientErrorLogEntry(
         debugEntry({ label: "thread/session:turn-diagnostic:first-token-delay" }),
       ),
     ).toBe(false);

@@ -32,6 +32,12 @@ import {
   buildCodexLivenessDiagnostic,
 } from "../utils/codexConversationLiveness";
 import {
+  DEFAULT_TURN_SETTLEMENT_POLICY,
+  evaluateTurnSettlement,
+  toDryRunSettlementDecisionLabel,
+  type TurnSettlementTerminalKind,
+} from "../utils/turnSettlementDecision";
+import {
   domainEventFactories,
   type DomainEventRuntimeController,
 } from "../domain-events";
@@ -299,6 +305,100 @@ export function useThreadEventHandlers({
     [emitTurnDiagnostic],
   );
 
+  const emitThreeEvidenceDryRunDiagnostic = useCallback(
+    (input: {
+      workspaceId: string;
+      threadId: string;
+      turnId: string;
+      terminalKind: TurnSettlementTerminalKind | null;
+      sourceMethod: string | null;
+      lifecycle: ThreadLifecycleSnapshot;
+      diagnostic: TurnDiagnosticState | undefined;
+      handled: boolean;
+      fallbackApplied: boolean;
+    }) => {
+      if (activeThreadId !== null && activeThreadId !== input.threadId) {
+        return;
+      }
+      const now = Date.now();
+      const progressFreshWindowMs = input.diagnostic
+        ? getCodexNoProgressTimeoutMs(input.diagnostic)
+        : DEFAULT_TURN_SETTLEMENT_POLICY.progressFreshWindowMs;
+      const lastProgressAgeMs = input.diagnostic
+        ? Math.max(0, now - input.diagnostic.lastProgressAt)
+        : null;
+      const decision = evaluateTurnSettlement(
+        {
+          workspaceId: input.workspaceId,
+          engine: inferThreadEngine(input.threadId),
+          threadId: input.threadId,
+          turnId: input.turnId || null,
+          runtimeSessionId: null,
+          runtimeLeaseId: null,
+          source: "event",
+          scope: {
+            foreground: true,
+            currentWorkspaceId: input.workspaceId,
+            currentEngine: inferThreadEngine(input.threadId),
+            currentThreadId: input.threadId,
+            currentTurnId: input.lifecycle.activeTurnId,
+            currentRuntimeLeaseId: null,
+          },
+          terminal: {
+            kind: input.terminalKind,
+            sourceMethod: input.sourceMethod,
+            receivedAtMs: input.terminalKind ? now : null,
+          },
+          state: {
+            isProcessing: input.lifecycle.isProcessing,
+            activeTurnId: input.lifecycle.activeTurnId,
+            aliasTurnId: null,
+            blockers: [],
+          },
+          progress: {
+            lastSource: input.diagnostic?.lastProgressSource ?? null,
+            lastAtMs: input.diagnostic?.lastProgressAt ?? null,
+            ageMs: lastProgressAgeMs,
+            sequence: input.diagnostic?.progressSequence ?? 0,
+            fresh:
+              lastProgressAgeMs !== null &&
+              lastProgressAgeMs < progressFreshWindowMs,
+          },
+        },
+        {
+          ...DEFAULT_TURN_SETTLEMENT_POLICY,
+          progressFreshWindowMs,
+        },
+        now,
+      );
+      emitTurnDiagnostic("three-evidence-dry-run", {
+        workspaceId: input.workspaceId,
+        threadId: input.threadId,
+        turnId: input.turnId,
+        diagnosticCategory: "three-evidence-settlement-dry-run",
+        dryRunDecision: toDryRunSettlementDecisionLabel(decision.action),
+        decisionAction: decision.action,
+        decisionReason: decision.reason,
+        scopeMatch: decision.scopeMatch,
+        acceptedEvidence: decision.acceptedEvidence,
+        boundedReason: decision.diagnostics.boundedReason,
+        missingScope: decision.diagnostics.missingScope ?? [],
+        staleEvidence: Boolean(decision.diagnostics.staleEvidence),
+        residue: Boolean(decision.diagnostics.residue),
+        handled: input.handled,
+        fallbackApplied: input.fallbackApplied,
+        isProcessing: input.lifecycle.isProcessing,
+        activeTurnId: input.lifecycle.activeTurnId,
+        lastProgressSource: input.diagnostic?.lastProgressSource ?? null,
+        lastProgressAgeMs,
+        progressSequence: input.diagnostic?.progressSequence ?? null,
+        activeThreadId,
+        ...buildThreadStreamCorrelationDimensions(input.threadId),
+      }, { force: decision.action !== "settle" });
+    },
+    [activeThreadId, emitTurnDiagnostic],
+  );
+
   const clearFirstDeltaTimer = useCallback((threadId: string) => {
     const timerId = turnFirstDeltaTimerRef.current.get(threadId);
     if (timerId === undefined) {
@@ -369,8 +469,19 @@ export function useThreadEventHandlers({
         quarantine: false,
         ...buildThreadStreamCorrelationDimensions(threadId),
       }, { force: true });
+      emitThreeEvidenceDryRunDiagnostic({
+        workspaceId: diagnostic.workspaceId,
+        threadId,
+        turnId: diagnostic.turnId,
+        terminalKind: null,
+        sourceMethod: "frontend-no-progress-suspected",
+        lifecycle,
+        diagnostic,
+        handled: false,
+        fallbackApplied: false,
+      });
     },
-    [dispatch, emitTurnDiagnostic, getThreadLifecycleSnapshot],
+    [dispatch, emitThreeEvidenceDryRunDiagnostic, emitTurnDiagnostic, getThreadLifecycleSnapshot],
   );
 
   const scheduleCodexNoProgressTimer = useCallback(
@@ -1814,6 +1925,17 @@ export function useThreadEventHandlers({
         }
       }
       const postSettlementLifecycle = getThreadLifecycleSnapshot(threadId);
+      emitThreeEvidenceDryRunDiagnostic({
+        workspaceId,
+        threadId,
+        turnId: normalizedTurnId,
+        terminalKind: "completed",
+        sourceMethod: "turn/completed",
+        lifecycle: postSettlementLifecycle,
+        diagnostic: diagnostic ?? undefined,
+        handled,
+        fallbackApplied,
+      });
       if (
         postSettlementLifecycle.isProcessing ||
         (
@@ -1857,6 +1979,7 @@ export function useThreadEventHandlers({
     },
     [
       dispatch,
+      emitThreeEvidenceDryRunDiagnostic,
       emitTurnDiagnostic,
       emitForegroundSettlementDiagnostic,
       emitTurnDomainEvent,

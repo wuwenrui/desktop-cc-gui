@@ -31,6 +31,20 @@ export function shouldPersistClientErrorLogEntry(entry: DebugEntry): boolean {
     return false;
   }
 
+  if (label.includes("three-evidence-dry-run")) {
+    const payload = entry.payload;
+    if (!payload || typeof payload !== "object") {
+      return false;
+    }
+    const dryRunDecision = (payload as Record<string, unknown>).dryRunDecision;
+    return (
+      dryRunDecision === "wouldReject" ||
+      dryRunDecision === "wouldDefer" ||
+      dryRunDecision === "wouldRequestReconciliation" ||
+      dryRunDecision === "wouldCleanupResidue"
+    );
+  }
+
   return (
     label.includes("terminal-settlement-rejected") ||
     label.includes("terminal-settlement-busy-residue")
