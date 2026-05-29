@@ -63,3 +63,23 @@ Labels:
 - `thread/session:turn-diagnostic:three-evidence-reconciliation-query-failed`
 
 Payloads contain ids, status enum, scope booleans, timestamps, stale progress age, bounded reason, and decision action. They exclude prompt/output/stderr/file diff content.
+
+## PHASE2B_HANDOFF_MARKER
+
+Start Phase 2b only after a real post-Phase2a reproduction writes all of these signals for the same scoped turn in `~/.ccgui/error-log/YYYY-MM-DD.jsonl`:
+
+- `label = "thread/session:turn-diagnostic:three-evidence-reconciliation-query-resolved"`
+- `payload.scopeMatch.matched = true`
+- `payload.status` is one of `runtime-ended`, `failed`, `stalled`, or `completed`
+- `payload.decisionAction = "cleanup-residue"`
+
+Do not start Phase 2b from any of these signals alone:
+
+- `three-evidence-dry-run` with `decisionAction = "request-reconciliation"`
+- `payload.status = "running"`
+- `payload.status = "unknown"`
+- `payload.status = "query-failed"`
+- `three-evidence-reconciliation-query-rejected`
+- any response whose `scopeMatch.matched` is not `true`
+
+Phase 2b should implement scoped guarded cleanup only. Its cleanup may clear frontend loading residue such as `isProcessing` and the matching `activeTurnId`, but only after the pure helper accepts the authoritative status-query evidence for the current workspace/engine/thread/turn. Phase 2b must not infer completion from elapsed time, visible/history text, or stale progress alone, and must continue to protect normal long-running turns.
