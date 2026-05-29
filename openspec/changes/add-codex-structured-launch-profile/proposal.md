@@ -24,6 +24,7 @@
   - worktree 自身未配置 args 时应先显示 parent workspace args，再回退 global/default。
   - 同一 global 配置下 Preview 与 Run Doctor 的 resolved executable / wrapper kind 语义应一致。
 - **Next action**: 执行 3.2 人工桌面矩阵；通过后可进入 OpenSpec verify / archive。
+- **Release qualifier / deferred closeout**: 3.2 仍是 release qualifier，不纳入当前自动化收口。当前变更不得被标记为 fully closed 或归档，直到真实桌面环境完成人工矩阵并回写结果；若 v0.5.4 先发布，本项作为明确延期验证项跟随下一轮 release QA。
 
 ## 2026-05-23 Proposal Refresh
 

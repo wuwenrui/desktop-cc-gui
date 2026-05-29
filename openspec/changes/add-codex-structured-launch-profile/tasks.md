@@ -15,3 +15,4 @@
 - [ ] 3.2 [P1][depends:3.1][I: desktop app manual matrix][O: 手测结果][V: 未修改设置时行为不变、保存不打断当前连接、workspace inherit 正常、preview/doctor 一致] 执行最小人工验证矩阵，确认不影响正常功能。
 
   - 2026-05-28: AI 已提供人工回测矩阵并完成自动化收口验证；该项保持未勾选，等待真实桌面环境人工确认后再归档。
+  - 2026-05-29: 明确标记为 release qualifier / deferred closeout。当前自动化验证不能替代真实桌面人工矩阵；若 v0.5.4 先发布，本项必须作为延期 QA 跟踪，完成前不得归档该 OpenSpec change。

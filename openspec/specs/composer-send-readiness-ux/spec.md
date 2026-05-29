@@ -3,7 +3,6 @@
 ## Purpose
 
 Defines the composer-send-readiness-ux behavior contract, covering Composer MUST Derive Send Readiness Through A View Model.
-
 ## Requirements
 ### Requirement: Composer MUST Derive Send Readiness Through A View Model
 
@@ -20,6 +19,13 @@ Composer MUST derive user-visible send readiness through a dedicated view model 
 - **WHEN** runtime recovery, modeBlocked, request_user_input, or queue state affects sending
 - **THEN** Composer readiness MUST consume the already-classified state from runtime, conversation, or queue layers
 - **AND** it MUST NOT independently parse provider payload, settle request_user_input, or initiate stale-thread recovery
+
+#### Scenario: plain text input enables primary send action
+
+- **WHEN** the editable composer contains non-empty plain text
+- **AND** no runtime, mode, or configuration blocker is active
+- **THEN** the primary send button MUST become enabled immediately after the input event is observed
+- **AND** the component MUST NOT wait for an unrelated blur, submit, or theme update before reflecting readiness
 
 #### Scenario: unknown state degrades conservatively
 
