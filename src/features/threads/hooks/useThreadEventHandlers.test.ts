@@ -709,6 +709,59 @@ describe("useThreadEventHandlers diagnostics", () => {
     );
   });
 
+  it("records a failed reconciliation outcome when the scoped backend status query hangs", async () => {
+    const onDebug = vi.fn();
+    const options = makeOptions(onDebug);
+    streamLatencyMocks.queryTurnReconciliationStatus.mockReturnValueOnce(new Promise(() => {}));
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-1");
+      vi.advanceTimersByTime(CODEX_TURN_NO_PROGRESS_STALL_MS);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(streamLatencyMocks.queryTurnReconciliationStatus).toHaveBeenCalledTimes(1);
+    expect(
+      collectDiagnosticCalls(onDebug).some(
+        (entry) =>
+          entry.label ===
+          "thread/session:turn-diagnostic:three-evidence-reconciliation-query-requested",
+      ),
+    ).toBe(true);
+
+    act(() => {
+      vi.advanceTimersByTime(15_000);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(options.markProcessing).not.toHaveBeenCalledWith("thread-1", false);
+    expect(options.setActiveTurnId).not.toHaveBeenCalledWith("thread-1", null);
+    const failedEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) =>
+        entry.label ===
+        "thread/session:turn-diagnostic:three-evidence-reconciliation-query-failed",
+    );
+    expect(failedEntry?.payload).toEqual(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        turnId: "turn-1",
+        diagnosticCategory: "three-evidence-reconciliation",
+        status: "query-failed",
+        isProcessing: true,
+        activeTurnId: "turn-1",
+      }),
+    );
+    expect(String(failedEntry?.payload.boundedReason)).toContain(
+      "three-evidence reconciliation status query timed out",
+    );
+  });
+
   it("records terminal event receipt before settlement routing", () => {
     const onDebug = vi.fn();
     const { result } = renderHook(() => useThreadEventHandlers(makeOptions(onDebug)));

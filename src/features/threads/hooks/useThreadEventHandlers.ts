@@ -5,6 +5,8 @@ import type {
   CollaborationModeResolvedRequest,
   RequestUserInputRequest,
   TurnReconciliationRuntimeStatus,
+  TurnReconciliationStatusRequest,
+  TurnReconciliationStatusResponse,
 } from "../../../types";
 import { queryTurnReconciliationStatus } from "../../../services/tauri";
 import { useThreadApprovalEvents } from "./useThreadApprovalEvents";
@@ -78,6 +80,32 @@ export {
   CODEX_EXECUTION_ACTIVE_NO_PROGRESS_STALL_MS,
   CODEX_TURN_NO_PROGRESS_STALL_MS,
 } from "./threadEventDiagnostics";
+
+const THREE_EVIDENCE_RECONCILIATION_QUERY_TIMEOUT_MS = 15_000;
+
+function queryTurnReconciliationStatusWithTimeout(
+  request: TurnReconciliationStatusRequest,
+): Promise<TurnReconciliationStatusResponse> {
+  let timeoutId: number | null = null;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => {
+      reject(
+        new Error(
+          `three-evidence reconciliation status query timed out after ${THREE_EVIDENCE_RECONCILIATION_QUERY_TIMEOUT_MS}ms`,
+        ),
+      );
+    }, THREE_EVIDENCE_RECONCILIATION_QUERY_TIMEOUT_MS);
+  });
+
+  return Promise.race([
+    queryTurnReconciliationStatus(request),
+    timeoutPromise,
+  ]).finally(() => {
+    if (timeoutId !== null) {
+      window.clearTimeout(timeoutId);
+    }
+  });
+}
 
 export function useThreadEventHandlers({
   activeThreadId,
@@ -343,7 +371,7 @@ export function useThreadEventHandlers({
         activeThreadId,
       }, { force: true });
 
-      void queryTurnReconciliationStatus(request)
+      void queryTurnReconciliationStatusWithTimeout(request)
         .then((response) => {
           const latestLifecycle = getThreadLifecycleSnapshot(input.threadId);
           const latestDiagnostic = turnDiagnosticsRef.current.get(input.threadId);

@@ -317,3 +317,8 @@ Status-query reconciliation diagnostics MUST be distinguishable from normal prov
 - **THEN** the diagnostic SHOULD be eligible for global error-log persistence
 - **AND** it MUST exclude prompts, assistant text, command output, stdout, stderr, file diffs, auth data, and secrets
 
+#### Scenario: hanging query receives bounded failed outcome
+
+- **WHEN** a reconciliation status query does not return within the diagnostic timeout window
+- **THEN** the frontend MUST emit a bounded `query-failed` diagnostic for the same workspace, engine, thread, turn, and query scope
+- **AND** timeout failure MUST NOT clear processing state, active turn id, messages, blockers, runtime leases, or history
