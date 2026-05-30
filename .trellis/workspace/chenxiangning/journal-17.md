@@ -1590,3 +1590,53 @@ Review 后修正 Codex no-progress watchdog 生命周期观测的全局日志范
 ### Next Steps
 
 - None - task complete
+
+
+## Session 643: 收口 0.5.4 OpenSpec 归档状态
+
+**Date**: 2026-05-30
+**Task**: 收口 0.5.4 OpenSpec 归档状态
+**Branch**: `feature/v0.5.4`
+
+### Summary
+
+归档 0.5.4 已完成 OpenSpec changes，刷新主 specs、project snapshot 与 changelog；保留 launch profile 手测项和 0.5.5 orchestration center 规划项。
+
+### Main Changes
+
+## 本次工作
+
+- 归档 13 个已完成的 0.5.4 OpenSpec changes，并同步 delta specs 到主 specs。
+- 刷新 `openspec/project.md`：active=2、archive=391、specs=299。
+- 补充 `CHANGELOG.md` 中 0.5.4 的 close-current-session shortcut、Codex goal command discovery、runtime diagnostics/environment recovery、Web workspace path entry、filetree fallback 等条目。
+- 新增并保留 `add-agent-task-orchestration-center` 作为 0.5.5 规划/执行 change，不纳入 0.5.4 release gate。
+- 保留 `add-codex-structured-launch-profile` active，等待真实 desktop manual matrix 后再归档。
+
+## 验证
+
+- `npm run typecheck` passed。
+- `git diff --check` passed。
+- `openspec validate --all --strict --no-interactive` passed：301 passed, 0 failed。
+
+## Commit
+
+- `b4453658 docs(openspec): 收口 0.5.4 归档状态`
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b4453658` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
