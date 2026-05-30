@@ -58,12 +58,14 @@ import {
   type ProjectMapGraphNodePosition,
   type ProjectMapGraphViewport,
 } from "../utils/interactiveLayout";
+import { PROJECT_MAP_UNASSIGNED_DISCOVERIES_NODE_ID } from "../utils/incrementalGeneration";
 import {
   formatProjectMapDateTime,
   getProjectMapGenerationQueue,
   getProjectMapRecentRuns,
   translateProjectMapNodeKind,
 } from "../utils/display";
+import { getProjectMapUnassignedDiscoveryChildren } from "../services/projectMapNodeOrganizer";
 import {
   ProjectMapArtifactChip,
   ProjectMapDiagramChip,
@@ -341,6 +343,8 @@ export function ProjectMapPanel({
   );
   const [isDetailCollapsed, setIsDetailCollapsed] = useState(false);
   const [isTaskDrawerOpen, setIsTaskDrawerOpen] = useState(false);
+  const [candidateBatchMessage, setCandidateBatchMessage] = useState<string | null>(null);
+  const [isConfirmingAllCandidates, setIsConfirmingAllCandidates] = useState(false);
   const [selectedGraphNodeIds, setSelectedGraphNodeIds] = useState<Set<string>>(new Set());
   const [dragPreviewPositions, setDragPreviewPositions] = useState<
     Record<string, ProjectMapGraphNodePosition>
@@ -441,10 +445,20 @@ export function ProjectMapPanel({
     [focusNodeId, hoverNodeId, selectedNode?.id, visibleNodes],
   );
   const projectName = workspaceName?.trim() || dataset.manifest.projectName;
-  const candidateCount = dataset.nodes.filter((node) => node.candidate).length;
+  const candidateCount =
+    dataset.nodes.filter((node) => node.candidate).length +
+    (dataset.candidates ?? []).filter((candidate) => candidate.status === "pending").length;
+  const unassignedDiscoveryCount = useMemo(
+    () => getProjectMapUnassignedDiscoveryChildren(dataset).length,
+    [dataset],
+  );
   const firstCandidateNode = useMemo(
     () => dataset.nodes.find((node) => node.candidate) ?? null,
     [dataset.nodes],
+  );
+  const firstPendingReviewCandidate = useMemo(
+    () => (dataset.candidates ?? []).find((candidate) => candidate.status === "pending") ?? null,
+    [dataset.candidates],
   );
   const pendingCandidateByNodeId = useMemo(() => {
     const entries = new Map<string, ProjectMapCandidate>();
@@ -736,18 +750,43 @@ export function ProjectMapPanel({
   };
 
   const handleCandidateReviewClick = () => {
-    if (!firstCandidateNode) {
+    const targetNodeId =
+      firstPendingReviewCandidate?.targetNodeId ??
+      firstPendingReviewCandidate?.patch.nodeId ??
+      firstCandidateNode?.id ??
+      null;
+    if (!targetNodeId) {
+      return;
+    }
+    const targetNode = nodeIndex.get(targetNodeId) ?? null;
+    if (!targetNode) {
       return;
     }
 
     setHoverNodeId(null);
-    setSelectedNodeId(firstCandidateNode.id);
+    setSelectedNodeId(targetNode.id);
     setFocusNodeId(
-      firstCandidateNode.parentId && firstCandidateNode.parentId !== rootNode?.id
-        ? firstCandidateNode.parentId
+      targetNode.parentId && targetNode.parentId !== rootNode?.id
+        ? targetNode.parentId
         : null,
     );
     setIsDetailCollapsed(false);
+  };
+
+  const handleConfirmAllCandidatesClick = async () => {
+    setIsConfirmingAllCandidates(true);
+    setCandidateBatchMessage(null);
+    try {
+      const result = await datasetController.confirmAllCandidates();
+      setCandidateBatchMessage(
+        t("projectMap.confirmAllCandidatesResult", {
+          confirmed: result.confirmed,
+          skipped: result.skipped,
+        }),
+      );
+    } finally {
+      setIsConfirmingAllCandidates(false);
+    }
   };
 
   const handleRequestDeleteSelectedNode = () => {
@@ -1156,14 +1195,29 @@ export function ProjectMapPanel({
                 </div>
               ) : null}
               {candidateCount > 0 ? (
-                <button
-                  className="project-map-candidate-badge"
-                  type="button"
-                  onClick={handleCandidateReviewClick}
-                  title={t("projectMap.candidateBadgeHint")}
-                >
-                  {t("projectMap.candidateBadge", { count: candidateCount })}
-                </button>
+                <>
+                  <button
+                    className="project-map-candidate-badge"
+                    type="button"
+                    onClick={handleCandidateReviewClick}
+                    title={t("projectMap.candidateBadgeHint")}
+                  >
+                    {t("projectMap.candidateBadge", { count: candidateCount })}
+                  </button>
+                  <button
+                    className="project-map-confirm-all-candidates"
+                    type="button"
+                    onClick={() => {
+                      void handleConfirmAllCandidatesClick();
+                    }}
+                    disabled={isConfirmingAllCandidates}
+                    title={t("projectMap.confirmAllCandidatesHint")}
+                  >
+                    {isConfirmingAllCandidates
+                      ? t("projectMap.confirmingAllCandidates")
+                      : t("projectMap.confirmAllCandidates")}
+                  </button>
+                </>
               ) : null}
               <button
                 className={cn(
@@ -1186,6 +1240,18 @@ export function ProjectMapPanel({
                 <Sparkles aria-hidden />
                 {t("projectMap.collectFramework")}
               </button>
+              {unassignedDiscoveryCount > 0 ? (
+                <button
+                  className="project-map-toolbar-action project-map-profile-action"
+                  type="button"
+                  onClick={() => {
+                    datasetController.openUnassignedOrganizer();
+                  }}
+                >
+                  <Sparkles aria-hidden />
+                  {t("projectMap.organizeUnassigned", { count: unassignedDiscoveryCount })}
+                </button>
+              ) : null}
             </div>
           </>
         )}
@@ -1257,6 +1323,12 @@ export function ProjectMapPanel({
                 ))}
               </div>
             ) : null}
+          </div>
+        ) : null}
+
+        {candidateBatchMessage ? (
+          <div className="project-map-inline-status" role="status">
+            {candidateBatchMessage}
           </div>
         ) : null}
 
@@ -1543,6 +1615,8 @@ export function ProjectMapPanel({
               }
               lens={selectedNode ? lensIndex.get(selectedNode.lensId) ?? null : null}
               staleCount={staleCount}
+              unassignedDiscoveryCount={unassignedDiscoveryCount}
+              pendingReviewCandidateCount={(dataset.candidates ?? []).filter((candidate) => candidate.status === "pending").length}
               canDrill={Boolean(selectedNode?.children.length && selectedNode.id !== rootNode?.id)}
               collapsed={isDetailCollapsed}
               onCollapsedChange={setIsDetailCollapsed}
@@ -1552,6 +1626,7 @@ export function ProjectMapPanel({
               onDrill={() => handleDrillIn(selectedNode)}
               onCompleteNode={() => selectedNode ? datasetController.openNodeGeneration("node", selectedNode) : undefined}
               onCalibrateNode={() => selectedNode ? datasetController.openNodeGeneration("calibrate", selectedNode) : undefined}
+              onOrganizeUnassigned={datasetController.openUnassignedOrganizer}
               onConfirmCandidate={(candidateId) => {
                 void datasetController.confirmCandidate(candidateId);
               }}
@@ -1611,6 +1686,8 @@ function DetailPanel({
   pendingCandidate,
   lens,
   staleCount,
+  unassignedDiscoveryCount,
+  pendingReviewCandidateCount,
   canDrill,
   collapsed,
   onCollapsedChange,
@@ -1620,6 +1697,7 @@ function DetailPanel({
   onDrill,
   onCompleteNode,
   onCalibrateNode,
+  onOrganizeUnassigned,
   onConfirmCandidate,
   onRejectCandidate,
   onConfirmNodeCandidate,
@@ -1632,6 +1710,8 @@ function DetailPanel({
   pendingCandidate: ProjectMapCandidate | null;
   lens: ProjectMapLens | null;
   staleCount: number;
+  unassignedDiscoveryCount: number;
+  pendingReviewCandidateCount: number;
   canDrill: boolean;
   collapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
@@ -1641,6 +1721,7 @@ function DetailPanel({
   onDrill: () => void;
   onCompleteNode: () => void;
   onCalibrateNode: () => void;
+  onOrganizeUnassigned: () => void;
   onConfirmCandidate: (candidateId: string) => void;
   onRejectCandidate: (candidateId: string) => void;
   onConfirmNodeCandidate: (nodeId: string) => void;
@@ -1652,6 +1733,10 @@ function DetailPanel({
   const isCalibratedCandidate = node
     ? isCandidateAfterCompletedCalibration(dataset, node)
     : false;
+  const moveSuggestedParent = pendingCandidate?.move?.suggestedParentId
+    ? dataset.nodes.find((candidateNode) => candidateNode.id === pendingCandidate.move?.suggestedParentId) ?? null
+    : null;
+  const isUnassignedDiscoveriesNode = node?.id === PROJECT_MAP_UNASSIGNED_DISCOVERIES_NODE_ID;
 
   return (
     <aside
@@ -1719,7 +1804,7 @@ function DetailPanel({
               {node.candidate ? <span>{t("projectMap.status.candidate")}</span> : null}
             </div>
           </div>
-          {node.candidate ? (
+          {node.candidate || pendingCandidate ? (
             <section className="project-map-candidate-notice">
               <h4>
                 {t(
@@ -1729,11 +1814,16 @@ function DetailPanel({
                 )}
               </h4>
               <p>
-                {t(
-                  isCalibratedCandidate
-                    ? "projectMap.candidateNotice.calibratedBody"
-                    : "projectMap.candidateNotice.body",
-                )}
+                {pendingCandidate?.kind === "parentMove" && moveSuggestedParent
+                  ? t("projectMap.candidateNotice.parentMoveBody", {
+                      parent: moveSuggestedParent.title,
+                      reason: pendingCandidate.move?.reason ?? "-",
+                    })
+                  : t(
+                      isCalibratedCandidate
+                        ? "projectMap.candidateNotice.calibratedBody"
+                        : "projectMap.candidateNotice.body",
+                    )}
               </p>
               <div className="project-map-candidate-actions">
                 <button
@@ -1756,6 +1846,27 @@ function DetailPanel({
                   }
                 >
                   {t("projectMap.candidateNotice.reject")}
+                </button>
+              </div>
+            </section>
+          ) : null}
+          {isUnassignedDiscoveriesNode ? (
+            <section className="project-map-candidate-notice">
+              <h4>{t("projectMap.unassignedOrganizer.title")}</h4>
+              <p>
+                {t("projectMap.unassignedOrganizer.body", {
+                  count: unassignedDiscoveryCount,
+                  candidates: pendingReviewCandidateCount,
+                })}
+              </p>
+              <div className="project-map-candidate-actions">
+                <button
+                  type="button"
+                  className="is-primary"
+                  disabled={unassignedDiscoveryCount === 0}
+                  onClick={onOrganizeUnassigned}
+                >
+                  {t("projectMap.unassignedOrganizer.organize")}
                 </button>
               </div>
             </section>
@@ -2248,6 +2359,7 @@ function GenerationConfirmationDialog({
     workspace: activeWorkspace,
     selectedEngine,
   });
+  const isOrganizerRequest = request?.generationIntent === "organizeUnassigned";
 
   useEffect(() => {
     if (!request) {
@@ -2316,8 +2428,20 @@ function GenerationConfirmationDialog({
         aria-label={t("projectMap.confirmation.title")}
       >
         <header>
-          <h3>{t("projectMap.confirmation.title")}</h3>
-          <p>{t("projectMap.confirmation.subtitle")}</p>
+          <h3>
+            {t(
+              isOrganizerRequest
+                ? "projectMap.confirmation.organizerTitle"
+                : "projectMap.confirmation.title",
+            )}
+          </h3>
+          <p>
+            {t(
+              isOrganizerRequest
+                ? "projectMap.confirmation.organizerSubtitle"
+                : "projectMap.confirmation.subtitle",
+            )}
+          </p>
         </header>
         <dl className="project-map-definition-grid project-map-confirmation-grid">
           <div className="project-map-confirmation-row">
@@ -2382,7 +2506,13 @@ function GenerationConfirmationDialog({
           </div>
           <div className="project-map-confirmation-row">
             <dt>{t("projectMap.confirmation.scope")}</dt>
-            <dd>{request.scope.kind}</dd>
+            <dd>
+              {request.scope.kind === "organizer"
+                ? t("projectMap.confirmation.organizerScope", {
+                    count: request.scope.unassignedCount,
+                  })
+                : request.scope.kind}
+            </dd>
           </div>
           <div className="project-map-confirmation-row">
             <dt>{t("projectMap.confirmation.storageLocation")}</dt>
@@ -2425,6 +2555,11 @@ function GenerationConfirmationDialog({
                 source={source}
               />
             ))}
+            {request.readSources.length === 0 ? (
+              <span className="project-map-dialog-hint">
+                {t("projectMap.confirmation.noReadSources")}
+              </span>
+            ) : null}
           </div>
         </section>
         <footer>
@@ -2441,7 +2576,17 @@ function GenerationConfirmationDialog({
             }}
           >
             <Sparkles aria-hidden />
-            {isConfirming ? t("projectMap.confirmation.confirming") : t("projectMap.confirmation.confirm")}
+            {isConfirming
+              ? t(
+                  isOrganizerRequest
+                    ? "projectMap.confirmation.organizerConfirming"
+                    : "projectMap.confirmation.confirming",
+                )
+              : t(
+                  isOrganizerRequest
+                    ? "projectMap.confirmation.organizerConfirm"
+                    : "projectMap.confirmation.confirm",
+                )}
           </button>
         </footer>
       </section>

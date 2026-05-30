@@ -33,6 +33,91 @@ const CONFIDENCE_RANK = {
   high: 3,
 } as const;
 const PROJECT_CORE_NODE_ID = "project-core";
+export const PROJECT_MAP_UNASSIGNED_DISCOVERIES_NODE_ID = "unassigned-discoveries";
+
+export type ProjectMapDerivedNodeRole =
+  | "root"
+  | "structural"
+  | "capability"
+  | "task"
+  | "risk"
+  | "artifact"
+  | "evidence"
+  | "workflow";
+
+const STRUCTURAL_NODE_KINDS = new Set([
+  "api",
+  "application",
+  "app",
+  "backend",
+  "build",
+  "cross-cutting",
+  "data",
+  "dependency",
+  "engine",
+  "frontend",
+  "governance",
+  "interface",
+  "layer",
+  "module",
+  "package",
+  "platform",
+  "project",
+  "runtime",
+  "subsystem",
+  "system",
+  "tech-stack",
+  "workspace",
+]);
+const CAPABILITY_NODE_KINDS = new Set(["capability", "concept", "flow"]);
+const NON_STRUCTURAL_NODE_KINDS = new Map<string, ProjectMapDerivedNodeRole>([
+  ["artifact", "artifact"],
+  ["boot strap", "workflow"],
+  ["bootstrap", "workflow"],
+  ["bug", "task"],
+  ["bugfix", "task"],
+  ["ci", "workflow"],
+  ["config", "artifact"],
+  ["configuration", "artifact"],
+  ["controller", "artifact"],
+  ["dto", "artifact"],
+  ["decision", "evidence"],
+  ["diagnostic", "evidence"],
+  ["diagnostic subsystem", "evidence"],
+  ["domain", "artifact"],
+  ["entity", "artifact"],
+  ["infra", "artifact"],
+  ["infrastructure", "artifact"],
+  ["repository", "artifact"],
+  ["risk", "risk"],
+  ["security", "artifact"],
+  ["service", "artifact"],
+  ["style", "artifact"],
+  ["test", "task"],
+  ["test module", "task"],
+  ["util", "artifact"],
+  ["utility", "artifact"],
+  ["workflow", "workflow"],
+  ["仓储", "artifact"],
+  ["仓库", "artifact"],
+  ["测试", "task"],
+  ["单元测试", "task"],
+  ["集成测试", "task"],
+  ["服务", "artifact"],
+  ["实体", "artifact"],
+  ["控制器", "artifact"],
+  ["配置", "artifact"],
+]);
+const ROLE_TEXT_PATTERNS: Array<{
+  role: ProjectMapDerivedNodeRole;
+  pattern: RegExp;
+}> = [
+  { role: "task", pattern: /\b(bugfix|fix|task|todo|parser test|test module|sentry|unit test|integration test|单元测试|集成测试)\b/i },
+  { role: "risk", pattern: /\b(risk|stale|regression|failure|noise)\b/i },
+  { role: "artifact", pattern: /\b(artifact|document|markdown|changelog|report|spec|controller|service|repository|entity|dto|config|configuration|util|utility)\b/i },
+  { role: "workflow", pattern: /\b(workflow|pipeline|release|governance|ci|bootstrap)\b/i },
+];
+const MODULE_STRUCTURAL_PATTERNS = /\b(app|application|architecture|backend|bounded context|build|capability group|domain|engine|frontend|governance|layer|package|platform|project|runtime|security domain|subsystem|sub system|system|workspace|api surface|应用|后端|前端|子系统|分层|架构|模块域|能力域|治理|平台|项目|工作区)\b/i;
 
 function dedupeBy<T>(items: T[], getKey: (item: T) => string): T[] {
   const seen = new Set<string>();
@@ -54,6 +139,82 @@ function safeKeyText(value: unknown): string {
 
 function asTrimmedString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeRoleText(value: string): string {
+  return value.trim().replace(/[_-]+/g, " ").replace(/\s+/g, " ").toLowerCase();
+}
+
+function splitRoleTokens(value: string): string[] {
+  return normalizeRoleText(value).split(/\s+/).filter(Boolean);
+}
+
+function getNodeRoleSearchText(node: ProjectMapNode): string {
+  return [
+    node.nodeKind,
+    node.title,
+    node.summary,
+    node.detail.coreDescription,
+    ...node.detail.riskSignals,
+  ].join(" ");
+}
+
+function getModuleStructureSearchText(node: ProjectMapNode): string {
+  return [node.nodeKind, node.title, node.summary].join(" ");
+}
+
+function isConcreteModuleNode(node: ProjectMapNode): boolean {
+  const text = getNodeRoleSearchText(node);
+  return ROLE_TEXT_PATTERNS.some(({ role, pattern }) => role !== "workflow" && pattern.test(text));
+}
+
+export function deriveProjectMapNodeRole(node: ProjectMapNode): ProjectMapDerivedNodeRole {
+  if (node.id === PROJECT_CORE_NODE_ID) {
+    return "root";
+  }
+  if (node.id === PROJECT_MAP_UNASSIGNED_DISCOVERIES_NODE_ID || node.id.startsWith("hub-")) {
+    return "structural";
+  }
+
+  const normalizedKind = normalizeRoleText(node.nodeKind);
+  const explicitRole = NON_STRUCTURAL_NODE_KINDS.get(normalizedKind);
+  if (explicitRole) {
+    return explicitRole;
+  }
+  const kindTokens = splitRoleTokens(node.nodeKind);
+  const tokenRole = kindTokens
+    .map((token) => NON_STRUCTURAL_NODE_KINDS.get(token))
+    .find((role): role is ProjectMapDerivedNodeRole => Boolean(role));
+  if (tokenRole) {
+    return tokenRole;
+  }
+  if (normalizedKind === "project" || normalizedKind === "workspace") {
+    return "root";
+  }
+  if (normalizedKind.includes("module")) {
+    if (isConcreteModuleNode(node)) {
+      return "artifact";
+    }
+    if (MODULE_STRUCTURAL_PATTERNS.test(getModuleStructureSearchText(node))) {
+      return "structural";
+    }
+    return node.children.length > 0 ? "structural" : "artifact";
+  }
+  if (STRUCTURAL_NODE_KINDS.has(normalizedKind)) {
+    return "structural";
+  }
+  if (CAPABILITY_NODE_KINDS.has(normalizedKind)) {
+    return "capability";
+  }
+
+  const searchText = getNodeRoleSearchText(node);
+  const matchedPattern = ROLE_TEXT_PATTERNS.find(({ pattern }) => pattern.test(searchText));
+  return matchedPattern?.role ?? "capability";
+}
+
+export function canProjectMapNodeAttachToRoot(node: ProjectMapNode): boolean {
+  const role = deriveProjectMapNodeRole(node);
+  return role === "root" || role === "structural" || role === "capability";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -448,6 +609,67 @@ function getProjectMapMergeRoot(nodes: ProjectMapNode[]): ProjectMapNode | null 
   );
 }
 
+function createUnassignedDiscoveriesNode(input: {
+  rootNodeId: string;
+  now: string;
+  generatedBy: ProjectMapNode["generatedBy"];
+  lensId: ProjectMapNode["lensId"];
+}): ProjectMapNode {
+  return {
+    id: PROJECT_MAP_UNASSIGNED_DISCOVERIES_NODE_ID,
+    lensId: input.lensId,
+    nodeKind: "cross-cutting",
+    title: "待整理发现 Unassigned Discoveries",
+    summary: "尚未可靠归属到具体模块或能力的 Project Map 发现项。",
+    detail: {
+      coreDescription: "用于临时承载缺少可靠父节点的任务、风险、产物、测试或 workflow 发现。",
+      keyFacts: [],
+      keyLogic: [],
+      riskSignals: [],
+      relatedArtifacts: [],
+    },
+    parentId: input.rootNodeId,
+    children: [],
+    sources: [],
+    confidence: "unknown",
+    stale: false,
+    candidate: true,
+    lastGeneratedAt: input.now,
+    generatedBy: input.generatedBy,
+  };
+}
+
+function ensureUnassignedDiscoveriesNode(input: {
+  nodes: ProjectMapNode[];
+  rootNode: ProjectMapNode;
+  required: boolean;
+}): ProjectMapNode[] {
+  if (!input.required) {
+    return input.nodes;
+  }
+  const existingNode = input.nodes.find((node) => node.id === PROJECT_MAP_UNASSIGNED_DISCOVERIES_NODE_ID);
+  if (existingNode) {
+    return input.nodes.map((node) =>
+      node.id === existingNode.id
+        ? {
+            ...node,
+            parentId: input.rootNode.id,
+          }
+        : node,
+    );
+  }
+
+  return [
+    ...input.nodes,
+    createUnassignedDiscoveriesNode({
+      rootNodeId: input.rootNode.id,
+      now: input.rootNode.lastGeneratedAt,
+      generatedBy: input.rootNode.generatedBy,
+      lensId: input.rootNode.lensId,
+    }),
+  ];
+}
+
 export function normalizeProjectMapNodeTopology(
   nodes: ProjectMapNode[],
   options: { attachOrphansToRoot?: boolean } = {},
@@ -456,24 +678,39 @@ export function normalizeProjectMapNodeTopology(
   const nodeIds = new Set(uniqueNodes.map((node) => node.id));
   const rootNode = getProjectMapMergeRoot(uniqueNodes);
   const rootNodeId = rootNode?.id ?? null;
+  let needsUnassignedDiscoveries = false;
   const normalizedParents = uniqueNodes.map((node) => {
-    const parentId =
+    let parentId =
       node.parentId && node.parentId !== node.id && nodeIds.has(node.parentId)
         ? node.parentId
         : undefined;
-    if (options.attachOrphansToRoot && rootNodeId && node.id !== rootNodeId && !parentId) {
-      return {
-        ...node,
-        parentId: rootNodeId,
-      };
+
+    if (rootNodeId && node.id !== rootNodeId) {
+      const canAttachToRoot = canProjectMapNodeAttachToRoot(node);
+      if (parentId === rootNodeId && !canAttachToRoot) {
+        parentId = PROJECT_MAP_UNASSIGNED_DISCOVERIES_NODE_ID;
+        needsUnassignedDiscoveries = true;
+      } else if (options.attachOrphansToRoot && !parentId) {
+        parentId = canAttachToRoot ? rootNodeId : PROJECT_MAP_UNASSIGNED_DISCOVERIES_NODE_ID;
+        needsUnassignedDiscoveries = needsUnassignedDiscoveries || !canAttachToRoot;
+      }
     }
+
     return {
       ...node,
       parentId,
     };
   });
+  const parentsWithTriage = rootNode
+    ? ensureUnassignedDiscoveriesNode({
+        nodes: normalizedParents,
+        rootNode,
+        required: needsUnassignedDiscoveries,
+      })
+    : normalizedParents;
+  const normalizedNodeIds = new Set(parentsWithTriage.map((node) => node.id));
   const childIdsByParent = new Map<string, string[]>();
-  for (const node of normalizedParents) {
+  for (const node of parentsWithTriage) {
     if (!node.parentId) {
       continue;
     }
@@ -481,13 +718,22 @@ export function normalizeProjectMapNodeTopology(
     children.push(node.id);
     childIdsByParent.set(node.parentId, children);
   }
+  const parentIdByNodeId = new Map(
+    parentsWithTriage
+      .filter((node) => node.parentId)
+      .map((node) => [node.id, node.parentId as string]),
+  );
 
-  return normalizedParents.map((node) => ({
+  return parentsWithTriage.map((node) => ({
     ...node,
     children: dedupeBy(
-      [...node.children, ...(childIdsByParent.get(node.id) ?? [])].filter(
-        (childId) => childId !== node.id && nodeIds.has(childId),
-      ),
+      [
+        ...node.children.filter((childId) => {
+          const childParentId = parentIdByNodeId.get(childId);
+          return !childParentId || childParentId === node.id;
+        }),
+        ...(childIdsByParent.get(node.id) ?? []),
+      ].filter((childId) => childId !== node.id && normalizedNodeIds.has(childId)),
       (childId) => childId,
     ),
   }));

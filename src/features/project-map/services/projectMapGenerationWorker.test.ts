@@ -130,6 +130,65 @@ function datasetWithRuntimeNode(): ProjectMapDataset {
   };
 }
 
+function datasetWithUnassignedDiscovery(): ProjectMapDataset {
+  const dataset = datasetWithRuntimeNode();
+  const generatedBy = {
+    engine: "claude",
+    model: "claude-sonnet",
+    runId: "seed",
+  };
+  return {
+    ...dataset,
+    nodes: [
+      ...dataset.nodes,
+      {
+        id: "unassigned-discoveries",
+        lensId: "overview",
+        nodeKind: "cross-cutting",
+        title: "Unassigned Discoveries",
+        summary: "Needs triage",
+        detail: {
+          coreDescription: "Needs triage",
+          keyFacts: [],
+          keyLogic: [],
+          riskSignals: [],
+          relatedArtifacts: [],
+        },
+        parentId: "project-core",
+        children: ["risk-taxonomy-drift"],
+        sources: [],
+        confidence: "unknown",
+        stale: false,
+        candidate: false,
+        lastGeneratedAt: "2026-05-26T01:00:00.000Z",
+        generatedBy,
+      },
+      {
+        id: "risk-taxonomy-drift",
+        lensId: "overview",
+        nodeKind: "risk",
+        title: "Risk taxonomy drift",
+        summary: "Risk node needs a structural parent",
+        detail: {
+          coreDescription: "Risk node needs a structural parent",
+          keyFacts: [],
+          keyLogic: [],
+          riskSignals: [],
+          relatedArtifacts: [],
+        },
+        parentId: "unassigned-discoveries",
+        children: [],
+        sources: [{ type: "file", label: "risk", path: "src/risk.ts" }],
+        confidence: "low",
+        stale: false,
+        candidate: false,
+        lastGeneratedAt: "2026-05-26T01:00:00.000Z",
+        generatedBy,
+      },
+    ],
+  };
+}
+
 function nodeRun(input: {
   generationIntent: NonNullable<ProjectMapRunMetadata["generationIntent"]>;
   includeDescendants: boolean;
@@ -278,7 +337,7 @@ describe("runProjectMapGenerationWorker", () => {
           {
             id: "auto-memory-node",
             lensId: "runtime",
-            nodeKind: "concept",
+            nodeKind: "workflow",
             title: "Auto Memory Node",
             summary: "Memory-backed project-map update.",
             detail: {
@@ -345,14 +404,19 @@ describe("runProjectMapGenerationWorker", () => {
     expect(request?.text).toContain("BEGIN_PROJECT_MEMORY_EVIDENCE");
     expect(request?.text).toContain("Project Map references src/features/project-map/types.ts");
     expect(request?.text).toContain("Root node: project-core | Project Core");
-    expect(request?.text).toContain("New top-level concepts must set parentId to the existing Root node id");
+    expect(request?.text).not.toContain("New top-level concepts must set parentId to the existing Root node id");
+    expect(request?.text).toContain("nearest existing structural parent");
+    expect(request?.text).toContain("unassigned-discoveries");
     expect(readWorkspaceFile).toHaveBeenCalledWith("ws-1", "src/features/project-map/types.ts");
     expect(result.nodes.find((node) => node.id === "auto-memory-node")).toMatchObject({
-      parentId: "project-core",
+      parentId: "unassigned-discoveries",
       candidate: true,
       confidence: "medium",
     });
-    expect(result.nodes.find((node) => node.id === "project-core")?.children).toContain(
+    expect(result.nodes.find((node) => node.id === "project-core")?.children).not.toContain(
+      "auto-memory-node",
+    );
+    expect(result.nodes.find((node) => node.id === "unassigned-discoveries")?.children).toContain(
       "auto-memory-node",
     );
   });
@@ -1445,6 +1509,161 @@ describe("runProjectMapGenerationWorker", () => {
         engine: "codex",
         model: "gpt-5.3-codex-spark",
       },
+    });
+  });
+
+  it("runs AI organizer tasks through the Project Map worker queue", async () => {
+    const seedCreatedAt = "2026-05-30T08:00:00.000Z";
+    const dataset = {
+      ...datasetWithUnassignedDiscovery(),
+      candidates: [
+        {
+          id: "old_duplicate",
+          status: "pending" as const,
+          createdAt: seedCreatedAt,
+          updatedAt: seedCreatedAt,
+          source: "organizer" as const,
+          kind: "parentMove" as const,
+          targetLensId: "overview",
+          targetNodeId: "risk-taxonomy-drift",
+          patch: { nodeId: "risk-taxonomy-drift" },
+          move: {
+            nodeId: "risk-taxonomy-drift",
+            fromParentId: "unassigned-discoveries",
+            suggestedParentId: "runtime-node",
+            confidence: "low" as const,
+            reason: "Old duplicate.",
+          },
+          evidence: [],
+        },
+      ],
+    };
+    vi.mocked(engineSendMessageSync).mockResolvedValue({
+      engine: "claude",
+      text: JSON.stringify({
+        moves: [
+          {
+            nodeId: "risk-taxonomy-drift",
+            suggestedParentId: "runtime-node",
+            confidence: "medium",
+            reason: "Runtime owns this risk.",
+          },
+        ],
+        skips: [],
+      }),
+    });
+
+    const updates: Array<{ phase?: string; progress?: number; log?: string }> = [];
+    const result = await runProjectMapGenerationWorker({
+      workspaceId: "ws-1",
+      dataset,
+      run: baseRun({
+        id: "organizer_run",
+        kind: "organizer",
+        scope: "organizer",
+        requestScope: { kind: "organizer", unassignedCount: 1 },
+        generationIntent: "organizeUnassigned",
+        engine: "claude",
+        model: "claude-sonnet",
+      }),
+      onRunUpdate: async (update) => {
+        updates.push(update);
+      },
+    });
+
+    expect(engineSendMessageSync).toHaveBeenCalledWith(
+      "ws-1",
+      expect.objectContaining({
+        engine: "claude",
+        model: "claude-sonnet",
+        accessMode: "read-only",
+        continueSession: false,
+      }),
+    );
+    expect(getWorkspaceFiles).not.toHaveBeenCalled();
+    const resultCandidates = result.candidates ?? [];
+    expect(resultCandidates).toContainEqual(
+      expect.objectContaining({
+        source: "organizer",
+        kind: "parentMove",
+        targetNodeId: "risk-taxonomy-drift",
+      }),
+    );
+    expect(resultCandidates.filter((candidate) => candidate.source === "organizer")).toHaveLength(1);
+    expect(result.runs.find((run) => run.id === "organizer_run")?.organizerResult).toEqual({
+      unassignedCount: 1,
+      candidateCount: 1,
+      skippedCount: 0,
+      unsafeCount: 0,
+      skips: [],
+      unsafe: [],
+    });
+    expect(updates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ phase: "preparingSources" }),
+        expect.objectContaining({
+          phase: "writingMap",
+          log: expect.stringContaining("1 safe candidate"),
+        }),
+      ]),
+    );
+  });
+
+  it("persists AI organizer skip and unsafe details when no candidate is safe", async () => {
+    const dataset = datasetWithUnassignedDiscovery();
+    vi.mocked(engineSendMessageSync).mockResolvedValue({
+      engine: "claude",
+      text: JSON.stringify({
+        moves: [
+          {
+            nodeId: "risk-taxonomy-drift",
+            suggestedParentId: "project-core",
+            confidence: "medium",
+            reason: "Unsafe root parent.",
+          },
+        ],
+        skips: [
+          {
+            nodeId: "missing-ai-decision",
+            reason: "No reliable parent.",
+          },
+        ],
+      }),
+    });
+
+    const result = await runProjectMapGenerationWorker({
+      workspaceId: "ws-1",
+      dataset,
+      run: baseRun({
+        id: "organizer_empty_run",
+        kind: "organizer",
+        scope: "organizer",
+        requestScope: { kind: "organizer", unassignedCount: 1 },
+        generationIntent: "organizeUnassigned",
+        engine: "claude",
+        model: "claude-sonnet",
+      }),
+      onRunUpdate: async () => undefined,
+    });
+
+    expect(result.candidates ?? []).toEqual([]);
+    expect(result.runs.find((run) => run.id === "organizer_empty_run")?.organizerResult).toMatchObject({
+      unassignedCount: 1,
+      candidateCount: 0,
+      skippedCount: 1,
+      unsafeCount: 1,
+      skips: [
+        expect.objectContaining({
+          nodeId: "missing-ai-decision",
+          reason: "No reliable parent.",
+        }),
+      ],
+      unsafe: [
+        expect.objectContaining({
+          nodeId: "risk-taxonomy-drift",
+          reason: expect.stringContaining("project root"),
+        }),
+      ],
     });
   });
 

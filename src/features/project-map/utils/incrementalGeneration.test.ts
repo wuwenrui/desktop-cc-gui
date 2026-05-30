@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import { mockProjectMapData } from "../mockProjectMapData";
 import type { ProjectMapDataset, ProjectMapNode, ProjectMapProfile, ProjectMapRunMetadata } from "../types";
 import {
+  deriveProjectMapNodeRole,
   mergeProjectMapGenerationResult,
+  PROJECT_MAP_UNASSIGNED_DISCOVERIES_NODE_ID,
   pruneProjectMapNode,
 } from "./incrementalGeneration";
 
@@ -41,6 +43,63 @@ function nodePatch(node: ProjectMapNode, patch: Partial<ProjectMapNode>): Projec
 }
 
 describe("project map incremental generation", () => {
+  it("derives structural roles from generic project architecture language", () => {
+    const baseNode = mockProjectMapData.nodes[0]!;
+    const cases: Array<[Partial<ProjectMapNode>, ReturnType<typeof deriveProjectMapNodeRole>]> = [
+      [
+        {
+          id: "workspace-overview",
+          nodeKind: "project",
+          title: "Inventory Service",
+          summary: "Backend API service workspace overview.",
+        },
+        "root",
+      ],
+      [
+        {
+          id: "frontend-app",
+          nodeKind: "module",
+          title: "Frontend Application Layer",
+          summary: "React app module that owns user-facing features.",
+          children: ["messages-module"],
+        },
+        "structural",
+      ],
+      [
+        {
+          id: "engine-system",
+          nodeKind: "module",
+          title: "AI Engine System",
+          summary: "Provider orchestration subsystem.",
+          children: ["provider-adapter"],
+        },
+        "structural",
+      ],
+      [
+        {
+          id: "login-controller",
+          nodeKind: "controller module",
+          title: "LoginController",
+          summary: "Concrete Spring controller class.",
+        },
+        "artifact",
+      ],
+      [
+        {
+          id: "parser-test",
+          nodeKind: "test module",
+          title: "Parser Unit Tests",
+          summary: "Unit test coverage for parser edge cases.",
+        },
+        "task",
+      ],
+    ];
+
+    for (const [patch, expectedRole] of cases) {
+      expect(deriveProjectMapNodeRole(nodePatch(baseNode, patch))).toBe(expectedRole);
+    }
+  });
+
   it("preserves existing nodes omitted from repeated global generation", () => {
     const riskNode = mockProjectMapData.nodes.find((node) => node.id === "hub-risk")!;
     const generatedRoot = nodePatch(mockProjectMapData.nodes[0]!, {
@@ -75,10 +134,11 @@ describe("project map incremental generation", () => {
     expect(merged.profile.buildSystems).toContain("vite");
   });
 
-  it("attaches auto-ingestion top-level additions to the existing root", () => {
+  it("groups auto-ingestion task-like orphans under unassigned discoveries", () => {
     const generatedAutoNode = nodePatch(mockProjectMapData.nodes[0]!, {
       id: "auto-memory-claim",
       title: "Auto Memory Claim",
+      nodeKind: "bugfix",
       parentId: undefined,
       children: [],
       candidate: true,
@@ -99,10 +159,82 @@ describe("project map incremental generation", () => {
     });
 
     expect(merged.nodes.find((node) => node.id === "auto-memory-claim")).toMatchObject({
+      parentId: PROJECT_MAP_UNASSIGNED_DISCOVERIES_NODE_ID,
+    });
+    expect(merged.nodes.find((node) => node.id === "project-core")?.children).not.toContain(
+      "auto-memory-claim",
+    );
+    expect(merged.nodes.find((node) => node.id === PROJECT_MAP_UNASSIGNED_DISCOVERIES_NODE_ID)).toMatchObject({
+      parentId: "project-core",
+    });
+    expect(merged.nodes.find((node) => node.id === PROJECT_MAP_UNASSIGNED_DISCOVERIES_NODE_ID)?.children).toContain(
+      "auto-memory-claim",
+    );
+  });
+
+  it("keeps auto-ingestion structural orphans reachable from the project root", () => {
+    const generatedAutoNode = nodePatch(mockProjectMapData.nodes[0]!, {
+      id: "auto-runtime-module",
+      title: "Runtime Subsystem Module",
+      nodeKind: "module",
+      summary: "Runtime subsystem for launch and process orchestration.",
+      parentId: undefined,
+      children: [],
+      candidate: true,
+      sources: [{ type: "file", label: "runtime", path: "src/runtime.ts" }],
+    });
+    const scope: ProjectMapRunMetadata["requestScope"] = {
+      kind: "auto",
+      messageHashes: ["hash-1"],
+    };
+
+    const merged = mergeProjectMapGenerationResult({
+      dataset: mockProjectMapData,
+      profile: mockProjectMapData.profile,
+      lenses: mockProjectMapData.lenses,
+      nodes: [generatedAutoNode],
+      scope,
+      run: run(scope),
+    });
+
+    expect(merged.nodes.find((node) => node.id === "auto-runtime-module")).toMatchObject({
       parentId: "project-core",
     });
     expect(merged.nodes.find((node) => node.id === "project-core")?.children).toContain(
-      "auto-memory-claim",
+      "auto-runtime-module",
+    );
+  });
+
+  it("groups concrete generated Java module leaves under unassigned discoveries", () => {
+    const generatedControllerNode = nodePatch(mockProjectMapData.nodes[0]!, {
+      id: "app-login-controller",
+      title: "AppLoginController",
+      nodeKind: "控制器 MODULE",
+      summary: "Concrete Spring controller class.",
+      parentId: "project-core",
+      children: [],
+      candidate: true,
+      sources: [{ type: "file", label: "AppLoginController.java", path: "src/main/java/AppLoginController.java" }],
+    });
+    const scope: ProjectMapRunMetadata["requestScope"] = {
+      kind: "auto",
+      messageHashes: ["hash-1"],
+    };
+
+    const merged = mergeProjectMapGenerationResult({
+      dataset: mockProjectMapData,
+      profile: mockProjectMapData.profile,
+      lenses: mockProjectMapData.lenses,
+      nodes: [generatedControllerNode],
+      scope,
+      run: run(scope),
+    });
+
+    expect(merged.nodes.find((node) => node.id === "app-login-controller")).toMatchObject({
+      parentId: PROJECT_MAP_UNASSIGNED_DISCOVERIES_NODE_ID,
+    });
+    expect(merged.nodes.find((node) => node.id === "project-core")?.children).not.toContain(
+      "app-login-controller",
     );
   });
 

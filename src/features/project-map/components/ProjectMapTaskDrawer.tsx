@@ -244,6 +244,41 @@ function ProjectMapRunCard({
       </dl>
       <code>{run.writePath ?? "-"}</code>
       {run.error ? <p className="project-map-task-error">{run.error}</p> : null}
+      {run.organizerResult ? (
+        <div className="project-map-task-organizer-result">
+          <p>
+            {t("projectMap.tasks.organizerSummary", {
+              candidates: run.organizerResult.candidateCount,
+              skipped: run.organizerResult.skippedCount,
+              unsafe: run.organizerResult.unsafeCount,
+            })}
+          </p>
+          {run.organizerResult.skips?.length ? (
+            <div>
+              <strong>{t("projectMap.tasks.organizerSkipped")}</strong>
+              <ul>
+                {run.organizerResult.skips.slice(0, 4).map((item) => (
+                  <li key={`skip-${item.nodeId}`}>
+                    {item.title}: {item.reason}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {run.organizerResult.unsafe?.length ? (
+            <div>
+              <strong>{t("projectMap.tasks.organizerUnsafe")}</strong>
+              <ul>
+                {run.organizerResult.unsafe.slice(0, 4).map((item) => (
+                  <li key={`unsafe-${item.nodeId}`}>
+                    {item.title}: {item.reason}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </article>
   );
 }

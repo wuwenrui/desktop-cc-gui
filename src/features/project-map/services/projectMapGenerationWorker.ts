@@ -10,6 +10,7 @@ import { subscribeAppServerEvents, type Unsubscribe } from "../../../services/ev
 import type { AppServerEvent } from "../../../types";
 import type { EngineType } from "../../../types";
 import type {
+  ProjectMapCandidate,
   ProjectMapDataset,
   ProjectMapDiagramArtifact,
   ProjectMapDiagramDocument,
@@ -25,6 +26,7 @@ import type {
 } from "../types";
 import { mergeProjectMapGenerationResult } from "../utils/incrementalGeneration";
 import { validateProjectMapNodePatch } from "../utils/evidenceGate";
+import { organizeProjectMapUnassignedDiscoveries } from "./projectMapNodeOrganizer";
 import {
   getProjectMapPathBasename,
   getProjectMapPathExtension,
@@ -97,6 +99,50 @@ const PROJECT_MAP_JSON_SCHEMA_EXAMPLE =
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+function getOrganizerCandidateReplacementKey(candidate: ProjectMapCandidate): string | null {
+  if (candidate.source !== "organizer" || candidate.kind !== "parentMove" || !candidate.move) {
+    return null;
+  }
+  return `${candidate.move.nodeId}->${candidate.move.suggestedParentId}`;
+}
+
+function mergeOrganizerCandidates(input: {
+  existingCandidates: ProjectMapCandidate[];
+  organizerCandidates: ProjectMapCandidate[];
+}): ProjectMapCandidate[] {
+  const replacementKeys = new Set(
+    input.organizerCandidates
+      .map(getOrganizerCandidateReplacementKey)
+      .filter((key): key is string => Boolean(key)),
+  );
+  return [
+    ...input.organizerCandidates,
+    ...input.existingCandidates.filter((candidate) => {
+      if (candidate.status !== "pending") {
+        return true;
+      }
+      const key = getOrganizerCandidateReplacementKey(candidate);
+      return !key || !replacementKeys.has(key);
+    }),
+  ];
+}
+
+function upsertOrganizerRunResult(input: {
+  runs: ProjectMapRunMetadata[];
+  activeRun: ProjectMapRunMetadata;
+  organizerResult: ProjectMapRunMetadata["organizerResult"];
+}): ProjectMapRunMetadata[] {
+  let matched = false;
+  const runs = input.runs.map((run) => {
+    if (run.id !== input.activeRun.id) {
+      return run;
+    }
+    matched = true;
+    return { ...run, organizerResult: input.organizerResult };
+  });
+  return matched ? runs : [{ ...input.activeRun, organizerResult: input.organizerResult }, ...runs];
 }
 
 function normalizeEngine(value: string): EngineType {
@@ -588,6 +634,9 @@ function resolveGenerationIntent(run: ProjectMapRunMetadata): ProjectMapGenerati
   if (run.kind === "auto" || requestScope.kind === "auto") {
     return "autoIngestion";
   }
+  if (run.kind === "organizer" || requestScope.kind === "organizer") {
+    return "organizeUnassigned";
+  }
   return requestScope.kind === "node" ? "completeNode" : "global";
 }
 
@@ -699,7 +748,9 @@ function buildPromptOutputRules(intent: ProjectMapGenerationIntent): string[] {
       : intent === "autoIngestion"
         ? [
             "Return incremental additions or corrections for the existing map; absence from output is not deletion.",
-            "New top-level concepts must set parentId to the existing Root node id from the context. Do not create a second root.",
+            "Only durable structural domains, modules, subsystems, or broad capabilities may use the existing Root node id as parentId. Do not create a second root.",
+            "Task, bugfix, risk, workflow, test, artifact, and evidence discoveries must set parentId to the nearest existing structural parent when possible.",
+            "If no reliable structural parent exists, set parentId to unassigned-discoveries so the client can group it for later triage.",
             "Use existing ids when updating known concepts; create new stable kebab-case ids only for new evidence-backed concepts.",
           ]
       : [
@@ -1911,6 +1962,57 @@ function applyAiPayload(input: {
   };
 }
 
+async function runOrganizerTask(input: {
+  workspaceId: string;
+  dataset: ProjectMapDataset;
+  run: ProjectMapRunMetadata;
+  update: (update: ProjectMapRunUpdate) => Promise<void>;
+}): Promise<ProjectMapDataset> {
+  await input.update({
+    phase: "preparingSources",
+    progress: 12,
+    log: "Preparing unassigned Project Map discoveries for AI organizer.",
+  });
+  const organizerResult = await organizeProjectMapUnassignedDiscoveries({
+    workspaceId: input.workspaceId,
+    dataset: input.dataset,
+    engine: input.run.engine,
+    model: input.run.model,
+    preferredLanguage: input.run.preferredLanguage,
+  });
+  await input.update({
+    phase: "writingMap",
+    progress: 88,
+    log: `Organizer produced ${organizerResult.candidates.length} safe candidate${organizerResult.candidates.length === 1 ? "" : "s"} from ${organizerResult.unassignedCount} unassigned node${organizerResult.unassignedCount === 1 ? "" : "s"} (${organizerResult.skippedCount} skipped, ${organizerResult.unsafeCount} unsafe ignored).`,
+  });
+  const updatedAt = nowIso();
+  const runResult = {
+    unassignedCount: organizerResult.unassignedCount,
+    candidateCount: organizerResult.candidates.length,
+    skippedCount: organizerResult.skippedCount,
+    unsafeCount: organizerResult.unsafeCount,
+    skips: organizerResult.skips,
+    unsafe: organizerResult.unsafe,
+  };
+  return {
+    ...input.dataset,
+    manifest: {
+      ...input.dataset.manifest,
+      updatedAt,
+      lastRunId: input.run.id,
+    },
+    runs: upsertOrganizerRunResult({
+      runs: input.dataset.runs,
+      activeRun: input.run,
+      organizerResult: runResult,
+    }),
+    candidates: mergeOrganizerCandidates({
+      organizerCandidates: organizerResult.candidates,
+      existingCandidates: input.dataset.candidates ?? [],
+    }),
+  };
+}
+
 export async function runProjectMapGenerationWorker({
   workspaceId,
   dataset,
@@ -1920,6 +2022,9 @@ export async function runProjectMapGenerationWorker({
   const update = async (updateValue: ProjectMapRunUpdate) => {
     await onRunUpdate(updateValue);
   };
+  if (resolveGenerationIntent(run) === "organizeUnassigned") {
+    return runOrganizerTask({ workspaceId, dataset, run, update });
+  }
   const evidence = await collectWorkspaceEvidence({
     workspaceId,
     requestSources: run.readSources ?? [],

@@ -193,6 +193,68 @@ function datasetWithAutoIngestion(input: {
   };
 }
 
+function datasetWithUnassignedDiscovery(input: {
+  workspace: WorkspaceInfo;
+  storageKey: string;
+}): ProjectMapDataset {
+  const dataset = datasetWithPromptNodes(input);
+  const generatedBy = {
+    engine: "codex",
+    model: "gpt-5.3-codex-spark",
+    runId: "seed",
+  };
+  return {
+    ...dataset,
+    nodes: [
+      ...dataset.nodes,
+      {
+        id: "unassigned-discoveries",
+        lensId: "overview",
+        nodeKind: "cross-cutting",
+        title: "Unassigned Discoveries",
+        summary: "Needs triage",
+        detail: {
+          coreDescription: "Needs triage",
+          keyFacts: [],
+          keyLogic: [],
+          riskSignals: [],
+          relatedArtifacts: [],
+        },
+        parentId: "project-core",
+        children: ["risk-taxonomy-drift"],
+        sources: [],
+        confidence: "unknown",
+        stale: false,
+        candidate: false,
+        lastGeneratedAt: "2026-05-26T01:00:00.000Z",
+        generatedBy,
+      },
+      {
+        id: "risk-taxonomy-drift",
+        lensId: "overview",
+        nodeKind: "risk",
+        title: "Risk taxonomy drift",
+        summary: "Risk node needs a structural parent",
+        detail: {
+          coreDescription: "Risk node needs a structural parent",
+          keyFacts: [],
+          keyLogic: [],
+          riskSignals: [],
+          relatedArtifacts: [],
+        },
+        parentId: "unassigned-discoveries",
+        children: [],
+        sources: [{ type: "file", label: "risk", path: "src/risk.ts" }],
+        confidence: "low",
+        stale: false,
+        candidate: false,
+        lastGeneratedAt: "2026-05-26T01:00:00.000Z",
+        generatedBy,
+      },
+    ],
+  };
+}
+
 function projectMemory(overrides: Partial<ProjectMemoryItem> = {}): ProjectMemoryItem {
   return {
     id: "memory-1",
@@ -546,6 +608,87 @@ describe("useProjectMapDataset", () => {
     );
   });
 
+  it("opens AI organizer confirmation before running and uses the confirmed engine/model", async () => {
+    const spring = workspace({
+      id: "ws-spring",
+      name: "springboot-demo",
+      path: "/repo/springboot-demo",
+    });
+    const springKey = deriveProjectMapStorageKey({
+      projectName: spring.name,
+      workspacePath: spring.path,
+      workspaceId: spring.id,
+    });
+    const dataset = datasetWithUnassignedDiscovery({ workspace: spring, storageKey: springKey });
+    vi.mocked(readProjectMapDataset).mockResolvedValue({
+      dataset,
+      response: {
+        ...emptyReadResponse(springKey, `/home/user/.ccgui/project-map/${springKey}`),
+        exists: true,
+      },
+    });
+    vi.mocked(writeProjectMapDataset).mockResolvedValue(undefined);
+    vi.mocked(runProjectMapGenerationWorker).mockImplementation(() => new Promise(() => {}));
+
+    const { result } = renderHook(() =>
+      useProjectMapDataset(spring, {
+        generationDefaults: {
+          engine: "claude",
+          model: "claude-sonnet",
+        },
+        preferredLanguage: "zh",
+      }),
+    );
+
+    await waitFor(() => expect(result.current.status).toBe("persisted"));
+
+    act(() => {
+      result.current.openUnassignedOrganizer();
+    });
+
+    expect(result.current.pendingRequest).toMatchObject({
+      generationIntent: "organizeUnassigned",
+      engine: "claude",
+      model: "claude-sonnet",
+      scope: { kind: "organizer", unassignedCount: 1 },
+    });
+    expect(result.current.dataset.runs).toEqual([]);
+
+    await act(async () => {
+      await result.current.confirmGenerationRequest({
+        ...result.current.pendingRequest!,
+        engine: "gemini",
+        model: "gemini-2.5-pro",
+      });
+    });
+
+    expect(writeProjectMapDataset).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dataset: expect.objectContaining({
+          runs: [
+            expect.objectContaining({
+              kind: "organizer",
+              status: "pending",
+              engine: "gemini",
+              model: "gemini-2.5-pro",
+              generationIntent: "organizeUnassigned",
+              requestScope: { kind: "organizer", unassignedCount: 1 },
+            }),
+          ],
+        }),
+      }),
+    );
+    expect(result.current.dataset.runs[0]).toMatchObject({
+      kind: "organizer",
+      status: "running",
+      engine: "gemini",
+      model: "gemini-2.5-pro",
+      generationIntent: "organizeUnassigned",
+      requestScope: { kind: "organizer", unassignedCount: 1 },
+    });
+    expect(result.current.pendingRequest).toBeNull();
+  });
+
   it("confirms a pending candidate through the evidence gate and persists the patched dataset", async () => {
     const spring = workspace({
       id: "ws-spring",
@@ -594,6 +737,217 @@ describe("useProjectMapDataset", () => {
         }),
       }),
     );
+  });
+
+  it("confirms all pending review and standalone node candidates with one persistence write", async () => {
+    const spring = workspace({
+      id: "ws-spring",
+      name: "springboot-demo",
+      path: "/repo/springboot-demo",
+    });
+    const springKey = deriveProjectMapStorageKey({
+      projectName: spring.name,
+      workspacePath: spring.path,
+      workspaceId: spring.id,
+    });
+    const baseDataset = datasetWithPromptNodes({ workspace: spring, storageKey: springKey });
+    const dataset = {
+      ...baseDataset,
+      nodes: baseDataset.nodes.map((node) =>
+        node.id === "unrelated-node" ? { ...node, candidate: true } : node,
+      ),
+      candidates: [reviewCandidate()],
+      evidenceRecords: [],
+    };
+    vi.mocked(readProjectMapDataset).mockResolvedValue({
+      dataset,
+      response: {
+        ...emptyReadResponse(springKey, `/home/user/.ccgui/project-map/${springKey}`),
+        exists: true,
+      },
+    });
+    vi.mocked(writeProjectMapDataset).mockResolvedValue(undefined);
+
+    const { result } = renderHook(() => useProjectMapDataset(spring));
+
+    await waitFor(() => expect(result.current.status).toBe("persisted"));
+
+    await act(async () => {
+      const batchResult = await result.current.confirmAllCandidates();
+      expect(batchResult).toMatchObject({ confirmed: 2, skipped: 0, errors: [] });
+    });
+
+    expect(result.current.error).toBeNull();
+    expect(result.current.dataset.candidates?.[0]).toMatchObject({ status: "confirmed" });
+    expect(result.current.dataset.nodes.find((node) => node.id === "runtime-node")).toMatchObject({
+      summary: "Confirmed runtime facts",
+      candidate: false,
+    });
+    expect(result.current.dataset.nodes.find((node) => node.id === "unrelated-node")?.candidate).toBe(false);
+    expect(writeProjectMapDataset).toHaveBeenCalledTimes(1);
+  });
+
+  it("confirms staged parent-move candidates in parent-before-child order", async () => {
+    const spring = workspace({
+      id: "ws-spring",
+      name: "springboot-demo",
+      path: "/repo/springboot-demo",
+    });
+    const springKey = deriveProjectMapStorageKey({
+      projectName: spring.name,
+      workspacePath: spring.path,
+      workspaceId: spring.id,
+    });
+    const baseDataset = datasetWithPromptNodes({ workspace: spring, storageKey: springKey });
+    const generatedBy = {
+      engine: "codex",
+      model: "gpt-5.3-codex-spark",
+      runId: "seed",
+    };
+    const unassignedParent = {
+      ...baseDataset.nodes[0]!,
+      id: "unassigned-discoveries",
+      nodeKind: "cross-cutting",
+      title: "Unassigned Discoveries",
+      parentId: "project-core",
+      children: ["frontend-application-layer", "messages-module"],
+      generatedBy,
+    };
+    const appNode = {
+      ...baseDataset.nodes[0]!,
+      id: "frontend-application-layer",
+      nodeKind: "module",
+      title: "Frontend Application Layer",
+      summary: "React frontend app module that owns user-facing features.",
+      parentId: "unassigned-discoveries",
+      children: ["messages-module"],
+      generatedBy,
+    };
+    const featureNode = {
+      ...baseDataset.nodes[0]!,
+      id: "messages-module",
+      nodeKind: "module",
+      title: "Messages Rendering Module",
+      summary: "Feature module for chat messages.",
+      parentId: "unassigned-discoveries",
+      children: [],
+      generatedBy,
+    };
+    const dataset = {
+      ...baseDataset,
+      nodes: [
+        ...baseDataset.nodes.map((node) => ({ ...node, candidate: false })),
+        unassignedParent,
+        appNode,
+        featureNode,
+      ],
+      candidates: [
+        reviewCandidate({
+          id: "move-feature-first",
+          source: "organizer",
+          kind: "parentMove",
+          targetNodeId: "messages-module",
+          patch: { nodeId: "messages-module" },
+          move: {
+            nodeId: "messages-module",
+            fromParentId: "unassigned-discoveries",
+            suggestedParentId: "frontend-application-layer",
+            confidence: "medium",
+            reason: "Feature belongs under app.",
+          },
+          evidence: [],
+        }),
+        reviewCandidate({
+          id: "move-app-second",
+          source: "organizer",
+          kind: "parentMove",
+          targetNodeId: "frontend-application-layer",
+          patch: { nodeId: "frontend-application-layer" },
+          move: {
+            nodeId: "frontend-application-layer",
+            fromParentId: "unassigned-discoveries",
+            suggestedParentId: "project-core",
+            confidence: "high",
+            reason: "App is top-level structure.",
+          },
+          evidence: [],
+        }),
+      ],
+      evidenceRecords: [],
+    };
+    vi.mocked(readProjectMapDataset).mockResolvedValue({
+      dataset,
+      response: {
+        ...emptyReadResponse(springKey, `/home/user/.ccgui/project-map/${springKey}`),
+        exists: true,
+      },
+    });
+    vi.mocked(writeProjectMapDataset).mockResolvedValue(undefined);
+
+    const { result } = renderHook(() => useProjectMapDataset(spring));
+
+    await waitFor(() => expect(result.current.status).toBe("persisted"));
+
+    await act(async () => {
+      const batchResult = await result.current.confirmAllCandidates();
+      expect(batchResult).toEqual({ confirmed: 2, skipped: 0, errors: [] });
+    });
+
+    expect(result.current.dataset.nodes.find((node) => node.id === "frontend-application-layer")?.parentId).toBe(
+      "project-core",
+    );
+    expect(result.current.dataset.nodes.find((node) => node.id === "messages-module")?.parentId).toBe(
+      "frontend-application-layer",
+    );
+    expect(result.current.dataset.nodes.find((node) => node.id === "unassigned-discoveries")?.children).not.toContain(
+      "messages-module",
+    );
+  });
+
+  it("does not report batch confirmation success when persistence fails", async () => {
+    const spring = workspace({
+      id: "ws-spring",
+      name: "springboot-demo",
+      path: "/repo/springboot-demo",
+    });
+    const springKey = deriveProjectMapStorageKey({
+      projectName: spring.name,
+      workspacePath: spring.path,
+      workspaceId: spring.id,
+    });
+    const dataset = {
+      ...datasetWithPromptNodes({ workspace: spring, storageKey: springKey }),
+      candidates: [reviewCandidate()],
+      evidenceRecords: [],
+    };
+    vi.mocked(readProjectMapDataset).mockResolvedValue({
+      dataset,
+      response: {
+        ...emptyReadResponse(springKey, `/home/user/.ccgui/project-map/${springKey}`),
+        exists: true,
+      },
+    });
+    vi.mocked(writeProjectMapDataset).mockRejectedValue(new Error("disk is read-only"));
+
+    const { result } = renderHook(() => useProjectMapDataset(spring));
+
+    await waitFor(() => expect(result.current.status).toBe("persisted"));
+
+    await act(async () => {
+      const batchResult = await result.current.confirmAllCandidates();
+      expect(batchResult).toEqual({
+        confirmed: 0,
+        skipped: 1,
+        errors: ["disk is read-only"],
+      });
+    });
+
+    expect(result.current.error).toBe("disk is read-only");
+    expect(result.current.dataset.candidates?.[0]).toMatchObject({ status: "pending" });
+    expect(result.current.dataset.nodes.find((node) => node.id === "runtime-node")).toMatchObject({
+      summary: "Runtime facts",
+      candidate: true,
+    });
   });
 
   it("keeps the active node unchanged and shows an error when candidate confirmation fails", async () => {

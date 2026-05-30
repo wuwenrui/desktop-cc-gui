@@ -5,7 +5,11 @@ import type {
   ProjectMapNode,
   ProjectMapViewState,
 } from "../types";
-import { normalizeProjectMapNodeTopology } from "./incrementalGeneration";
+import {
+  canProjectMapNodeAttachToRoot,
+  normalizeProjectMapNodeTopology,
+  PROJECT_MAP_UNASSIGNED_DISCOVERIES_NODE_ID,
+} from "./incrementalGeneration";
 
 export type ProjectMapGraphNodePosition = {
   id: string;
@@ -134,7 +138,12 @@ export function resolveVisibleProjectMapNodes(
   const rootNode = getProjectMapCoreNodeFromNodes(nodes);
   if (!focusNodeId && rootNode) {
     const nodeIndex = buildProjectMapNodeIndex(nodes);
-    return [rootNode, ...getSortedProjectMapChildren(rootNode, nodeIndex)];
+    const overviewChildren = getSortedProjectMapChildren(rootNode, nodeIndex).filter(
+      (node) =>
+        node.id === PROJECT_MAP_UNASSIGNED_DISCOVERIES_NODE_ID ||
+        canProjectMapNodeAttachToRoot(node),
+    );
+    return [rootNode, ...overviewChildren];
   }
 
   if (!focusNodeId) {

@@ -328,6 +328,38 @@
   background: color-mix(in srgb, var(--project-map-warning) 20%, var(--project-map-surface));
 }
 
+.project-map-confirm-all-candidates {
+  display: inline-flex;
+  align-items: center;
+  height: var(--project-map-toolbar-control-height);
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, var(--project-map-warning) 34%, transparent);
+  border-radius: 7px;
+  padding: 0 7px;
+  background: color-mix(in srgb, var(--project-map-warning) 7%, var(--project-map-surface));
+  color: var(--project-map-warning);
+  font-size: 10.5px;
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.project-map-confirm-all-candidates:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--project-map-warning) 14%, var(--project-map-surface));
+}
+
+.project-map-confirm-all-candidates:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+.project-map-inline-status {
+  margin: 0 14px 8px;
+  color: var(--project-map-muted);
+  font-size: 11px;
+  font-weight: 560;
+}
+
 .project-map-task-button {
   position: relative;
 }

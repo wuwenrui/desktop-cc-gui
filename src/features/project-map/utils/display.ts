@@ -70,6 +70,16 @@ export function getProjectMapRunTargetLabel(
   if (!scope || scope.kind === "global") {
     return t("projectMap.tasks.targetGlobal");
   }
+  if (scope.kind === "organizer") {
+    if (run.organizerResult) {
+      return t("projectMap.tasks.targetOrganizerResult", {
+        candidates: run.organizerResult.candidateCount,
+        total: run.organizerResult.unassignedCount,
+        skipped: run.organizerResult.skippedCount,
+      });
+    }
+    return t("projectMap.tasks.targetOrganizer", { count: scope.unassignedCount });
+  }
   if (scope.kind !== "node") {
     return t("projectMap.tasks.targetUnknown", { target: scope.kind });
   }

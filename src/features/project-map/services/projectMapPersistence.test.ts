@@ -421,6 +421,7 @@ describe("project map persistence mapper", () => {
       ...mockProjectMapData.nodes.find((node) => node.id === "hub-api")!,
       id: "auto-memory-claim",
       title: "Auto Memory Claim",
+      nodeKind: "bugfix",
       parentId: undefined,
       children: [],
       candidate: true,
@@ -444,9 +445,12 @@ describe("project map persistence mapper", () => {
     );
 
     expect(dataset?.nodes.find((node) => node.id === "auto-memory-claim")).toMatchObject({
-      parentId: "project-core",
+      parentId: "unassigned-discoveries",
     });
-    expect(dataset?.nodes.find((node) => node.id === "project-core")?.children).toContain(
+    expect(dataset?.nodes.find((node) => node.id === "project-core")?.children).not.toContain(
+      "auto-memory-claim",
+    );
+    expect(dataset?.nodes.find((node) => node.id === "unassigned-discoveries")?.children).toContain(
       "auto-memory-claim",
     );
   });

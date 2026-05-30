@@ -51,6 +51,37 @@ function expectNoOverlap(
 }
 
 describe("interactive project map layout", () => {
+  it("keeps task-like discoveries out of the root overview ring", () => {
+    const taskNode: ProjectMapNode = {
+      ...mockProjectMapData.nodes.find((node) => node.id === "hub-api")!,
+      id: "root-bugfix-task",
+      nodeKind: "bugfix",
+      title: "Root Bugfix Task",
+      parentId: "project-core",
+      children: [],
+    };
+    const dataset: ProjectMapDataset = {
+      ...mockProjectMapData,
+      nodes: [
+        ...mockProjectMapData.nodes.map((node) =>
+          node.id === "project-core"
+            ? { ...node, children: [...node.children, taskNode.id] }
+            : node,
+        ),
+        taskNode,
+      ],
+    };
+
+    const visibleNodeIds = resolveVisibleProjectMapNodes(dataset, null).map((node) => node.id);
+    expect(visibleNodeIds).not.toContain("root-bugfix-task");
+    expect(visibleNodeIds).toContain("unassigned-discoveries");
+
+    const focusedNodeIds = resolveVisibleProjectMapNodes(dataset, "unassigned-discoveries").map(
+      (node) => node.id,
+    );
+    expect(focusedNodeIds).toContain("root-bugfix-task");
+  });
+
   it("keeps the old deterministic overview positions when no view-state exists", () => {
     const visibleNodes = resolveVisibleProjectMapNodes(mockProjectMapData, null);
     const layout = buildInteractiveProjectMapLayout({

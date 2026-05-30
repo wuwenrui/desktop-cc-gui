@@ -127,6 +127,9 @@ function inferGenerationIntent(input: {
   if (input.kind === "auto" || input.scope.kind === "auto") {
     return "autoIngestion";
   }
+  if (input.scope.kind === "organizer") {
+    return "organizeUnassigned";
+  }
   return input.scope.kind === "node" ? "completeNode" : "global";
 }
 

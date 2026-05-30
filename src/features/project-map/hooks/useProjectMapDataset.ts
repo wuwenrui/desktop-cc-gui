@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { EngineType, WorkspaceInfo } from "../../../types";
 import { projectMemoryList } from "../../../services/tauri/projectMemory";
 import type {
+  ProjectMapCandidate,
   ProjectMapDataset,
   ProjectMapGenerationRequest,
   ProjectMapNode,
@@ -22,6 +23,7 @@ import {
   runProjectMapGenerationWorker,
   type ProjectMapRunUpdate,
 } from "../services/projectMapGenerationWorker";
+import { getProjectMapUnassignedDiscoveryChildren } from "../services/projectMapNodeOrganizer";
 import {
   createProjectMapGenerationRequest,
   createRunMetadataFromRequest,
@@ -54,6 +56,12 @@ export type ProjectMapGenerationDefaults = {
   model?: string | null;
 };
 
+export type ProjectMapConfirmAllCandidatesResult = {
+  confirmed: number;
+  skipped: number;
+  errors: string[];
+};
+
 export type ProjectMapDatasetController = {
   dataset: ProjectMapDataset;
   status: ProjectMapDatasetStatus;
@@ -64,6 +72,7 @@ export type ProjectMapDatasetController = {
   reload: () => Promise<void>;
   switchReadLocation: (location: ProjectMapStorageLocation) => void;
   openGlobalCollection: () => void;
+  openUnassignedOrganizer: () => void;
   openNodeGeneration: (kind: "node" | "calibrate", node: ProjectMapNode) => void;
   openRefreshEvidence: (node: ProjectMapNode | null) => void;
   closeGenerationRequest: () => void;
@@ -71,6 +80,7 @@ export type ProjectMapDatasetController = {
   cancelGenerationRun: (runId: string) => Promise<void>;
   clearFinishedRuns: () => Promise<void>;
   confirmCandidate: (candidateId: string) => Promise<boolean>;
+  confirmAllCandidates: () => Promise<ProjectMapConfirmAllCandidatesResult>;
   rejectCandidate: (candidateId: string) => Promise<boolean>;
   confirmNodeCandidate: (nodeId: string) => Promise<boolean>;
   rejectNodeCandidate: (nodeId: string) => Promise<boolean>;
@@ -84,6 +94,39 @@ function errorMessage(error: unknown): string {
 
 function createProjectMapWorkerKey(workspaceId: string, storageKey: string, runId: string): string {
   return `${workspaceId}:${storageKey}:${runId}`;
+}
+
+function orderProjectMapCandidatesForConfirmation(candidates: ProjectMapCandidate[]): ProjectMapCandidate[] {
+  const parentMoveByNodeId = new Map<string, ProjectMapCandidate>();
+  for (const candidate of candidates) {
+    if (candidate.kind === "parentMove" && candidate.move) {
+      parentMoveByNodeId.set(candidate.move.nodeId, candidate);
+    }
+  }
+
+  const orderedCandidates: ProjectMapCandidate[] = [];
+  const visitingCandidateIds = new Set<string>();
+  const visitedCandidateIds = new Set<string>();
+  const visitCandidate = (candidate: ProjectMapCandidate) => {
+    if (visitedCandidateIds.has(candidate.id) || visitingCandidateIds.has(candidate.id)) {
+      return;
+    }
+    visitingCandidateIds.add(candidate.id);
+    const parentCandidate = candidate.move
+      ? parentMoveByNodeId.get(candidate.move.suggestedParentId)
+      : null;
+    if (parentCandidate) {
+      visitCandidate(parentCandidate);
+    }
+    visitingCandidateIds.delete(candidate.id);
+    visitedCandidateIds.add(candidate.id);
+    orderedCandidates.push(candidate);
+  };
+
+  for (const candidate of candidates) {
+    visitCandidate(candidate);
+  }
+  return orderedCandidates;
 }
 
 export function __resetProjectMapWorkerClaimsForTests(): void {
@@ -706,9 +749,13 @@ export function useProjectMapDataset(
         }
         const completedAt = new Date().toISOString();
         const latestWorkerDataset = getWorkerDatasetSnapshot();
+        const generatedRunById = new Map(generatedDataset.runs.map((run) => [run.id, run]));
         const generatedWithLatestRuns = {
           ...generatedDataset,
-          runs: latestWorkerDataset.runs,
+          runs: latestWorkerDataset.runs.map((run) => {
+            const generatedRun = generatedRunById.get(run.id);
+            return generatedRun ? { ...run, organizerResult: generatedRun.organizerResult } : run;
+          }),
         };
         const completedRun =
           generatedWithLatestRuns.runs.find((run) => run.id === activeRun.id) ?? activeRun;
@@ -916,6 +963,39 @@ export function useProjectMapDataset(
     );
   }, [dataset, defaultWritePath, generationDefaults, preferredLanguage, workspaceId, workspacePath]);
 
+  const openUnassignedOrganizer = useCallback(() => {
+    if (!workspaceId) {
+      setError("Project Map organizer requires an active workspace.");
+      return;
+    }
+    const unassignedCount = getProjectMapUnassignedDiscoveryChildren(dataset).length;
+    if (unassignedCount === 0) {
+      setError("No unassigned Project Map discoveries are available to organize.");
+      return;
+    }
+    const defaults = resolveGenerationDefaults(dataset, generationDefaults);
+    setPendingRequest(
+      createProjectMapGenerationRequest({
+        dataset,
+        kind: "organizer",
+        engine: defaults.engine,
+        model: defaults.model,
+        preferredLanguage,
+        scope: { kind: "organizer", unassignedCount },
+        generationIntent: "organizeUnassigned",
+        storageLocation: DEFAULT_STORAGE_LOCATION,
+        ownership: createProjectMapRunOwnership({
+          workspaceId,
+          workspacePath,
+          storageKey: dataset.manifest.storageKey,
+          storageLocation: DEFAULT_STORAGE_LOCATION,
+        }),
+        writePath: defaultWritePath,
+        readSources: [],
+      }),
+    );
+  }, [dataset, defaultWritePath, generationDefaults, preferredLanguage, workspaceId, workspacePath]);
+
   const openNodeGeneration = useCallback(
     (kind: "node" | "calibrate", node: ProjectMapNode) => {
       const defaults = resolveGenerationDefaults(dataset, generationDefaults);
@@ -982,6 +1062,7 @@ export function useProjectMapDataset(
     try {
       await persistDataset(queuedDataset, false, request.storageLocation);
       datasetRef.current = queuedDataset;
+      setDataset(queuedDataset);
       setPendingRequest(null);
     } catch (writeError) {
       setError(errorMessage(writeError));
@@ -1039,6 +1120,70 @@ export function useProjectMapDataset(
     },
     [persistDataset],
   );
+
+  const confirmAllCandidates = useCallback(async (): Promise<ProjectMapConfirmAllCandidatesResult> => {
+    const confirmedAt = new Date().toISOString();
+    let nextDataset = datasetRef.current;
+    let confirmed = 0;
+    const errors: string[] = [];
+    const pendingReviewCandidates = orderProjectMapCandidatesForConfirmation(
+      (nextDataset.candidates ?? []).filter((candidate) => candidate.status === "pending"),
+    ).map((candidate) => candidate.id);
+
+    for (const candidateId of pendingReviewCandidates) {
+      const result = confirmProjectMapCandidate({
+        dataset: nextDataset,
+        candidateId,
+        confirmedAt,
+      });
+      if (result.ok) {
+        nextDataset = result.dataset;
+        confirmed += 1;
+        continue;
+      }
+      errors.push(`${candidateId}: ${result.errors.join("; ")}`);
+    }
+
+    const pendingCandidateTargetIds = new Set(
+      (nextDataset.candidates ?? [])
+        .filter((candidate) => candidate.status === "pending")
+        .map((candidate) => candidate.targetNodeId ?? candidate.patch.nodeId),
+    );
+    const standaloneNodeCandidateIds = nextDataset.nodes
+      .filter((node) => node.candidate && !pendingCandidateTargetIds.has(node.id))
+      .map((node) => node.id);
+
+    for (const nodeId of standaloneNodeCandidateIds) {
+      const result = confirmProjectMapNodeCandidate({
+        dataset: nextDataset,
+        nodeId,
+        confirmedAt,
+      });
+      if (result.ok) {
+        nextDataset = result.dataset;
+        confirmed += 1;
+        continue;
+      }
+      errors.push(`${nodeId}: ${result.errors.join("; ")}`);
+    }
+
+    const skipped = pendingReviewCandidates.length + standaloneNodeCandidateIds.length - confirmed;
+    if (confirmed === 0) {
+      setError(errors.join("\n") || "No pending Project Map candidates were accepted.");
+      return { confirmed, skipped, errors };
+    }
+
+    setError(errors.length > 0 ? errors.join("\n") : null);
+    try {
+      await persistDataset(nextDataset);
+      datasetRef.current = nextDataset;
+      return { confirmed, skipped, errors };
+    } catch (writeError) {
+      const message = errorMessage(writeError);
+      setError(message);
+      return { confirmed: 0, skipped: confirmed + skipped, errors: [message] };
+    }
+  }, [persistDataset]);
 
   const rejectCandidate = useCallback(
     async (candidateId: string): Promise<boolean> => {
@@ -1158,6 +1303,7 @@ export function useProjectMapDataset(
     reload,
     switchReadLocation,
     openGlobalCollection,
+    openUnassignedOrganizer,
     openNodeGeneration,
     openRefreshEvidence,
     closeGenerationRequest: () => setPendingRequest(null),
@@ -1165,6 +1311,7 @@ export function useProjectMapDataset(
     cancelGenerationRun,
     clearFinishedRuns,
     confirmCandidate,
+    confirmAllCandidates,
     rejectCandidate,
     confirmNodeCandidate,
     rejectNodeCandidate,
