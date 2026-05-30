@@ -1640,3 +1640,40 @@ Review 后修正 Codex no-progress watchdog 生命周期观测的全局日志范
 ### Next Steps
 
 - None - task complete
+
+
+## Session 644: 拆分线程事件处理辅助逻辑
+
+**Date**: 2026-05-31
+**Task**: 拆分线程事件处理辅助逻辑
+**Branch**: `feature/v0.5.4`
+
+### Summary
+
+将 useThreadEventHandlers 中的 options 类型与 terminal event helper 抽离为独立模块，降低 hook 文件复杂度。
+
+### Main Changes
+
+- 提交：7db221a7 refactor(threads): 拆分线程事件处理辅助逻辑
+- 改动：新增 threadEventHandlerTypes.ts 承载 ThreadEventHandlersOptions；新增 threadTerminalEventHelpers.ts 承载 foreground terminal event method set 与 thread/turn/result extraction helpers；useThreadEventHandlers.ts 改为导入这些 helper。
+- 影响：纯结构性重构，不改变线程事件运行时行为。
+- 验证：提交前已运行 Project Map 聚焦测试 5 个文件 123 tests passed；本提交为 threads 纯拆分，未单独发现 whitespace 问题。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7db221a7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

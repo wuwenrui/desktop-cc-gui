@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-17.md`
-- **Total Sessions**: 643
-- **Last Active**: 2026-05-30
+- **Total Sessions**: 644
+- **Last Active**: 2026-05-31
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-17.md` | ~1642 | Active |
+| `journal-17.md` | ~1679 | Active |
 | `journal-16.md` | ~1985 | Archived |
 | `journal-15.md` | ~1996 | Archived |
 | `journal-14.md` | ~1969 | Archived |
@@ -45,6 +45,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 644 | 2026-05-31 | 拆分线程事件处理辅助逻辑 | `7db221a7` | `feature/v0.5.4` |
 | 643 | 2026-05-30 | 收口 0.5.4 OpenSpec 归档状态 | `b4453658` | `feature/v0.5.4` |
 | 642 | 2026-05-30 | 收窄 watchdog 持久化日志范围 | `de9efefc` | `feature/v0.5.4` |
 | 641 | 2026-05-30 | 记录 Codex 无进展 watchdog 生命周期 | `f2cf941d` | `feature/v0.5.4` |
