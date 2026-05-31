@@ -13,16 +13,22 @@
 - 新增 Codex goal 命令面板入口，支持从 Composer 命令流直接创建和管理 goal
 - 新增用户输入请求的收起与跳过交互，支持 pending 问题在消息区更清晰地折叠、结算和恢复
 - 新增核心错误日志持久化与三证结算 diagnostics，支持干跑判断、状态查询和前后端对账
+- 新增知识地图待整理发现的 AI 整理候选能力，支持对候选节点进行结构化归并、过滤和复核
+- 新增消息尾部操作图标，将复制、Fork 等助手回复操作收敛到更清晰的消息级入口
 - 新增原生窗口透明度设置，让自定义外观可以控制 desktop window 的透明呈现
 
 🔧 Improvements
 - 优化 Project Map 稳定性，收紧数据集补全、生成 worker、交互布局、节点证据和任务抽屉的状态边界
+- 优化 Project Map 结构化模型输出解析，将通用 normalization 能力抽离为共享服务，降低模型返回形态漂移导致的整理失败
 - 优化 Markdown 预览渲染与交互状态，增强文件刷新、GitHub 风格 Markdown、公式和图表预览的测试覆盖
 - 优化 Runtime Pool 与 Codex Settings 文案、i18n 和测试覆盖，让启动配置、运行池状态和环境诊断更容易核对
 - 优化启动诊断与环境恢复链路，清理 optional visual effects、engine doctor 和 session history stale repair 相关噪声
 - 优化 diagnostics watchdog 记录范围，保留 Codex 无进展生命周期和三证对账早期信号，同时减少无关日志持久化
 - 优化 Composer 文件引用入口，即使文件树尚未打开也能使用 workspace 文件索引完成 `@` 引用
 - 优化 Composer 输入区高度与折叠入口，让首页与会话区的输入体验更紧凑、可恢复
+- 优化消息恢复卡片与 Fork 入口展示，将 stale recovery 场景下的继续执行路径和分叉入口区分得更明确
+- 优化 Git diff 规范化展示模型，统一 renamed / deleted / untracked 等文件状态在 diff 面板中的分组与路径呈现
+- 优化线程事件处理结构，拆分 terminal event helper 与事件类型，降低会话恢复和运行时事件链路的维护成本
 - 优化工作区文件树首屏加载，改用 root-first directory children 路径，减少启动和切换工作区时的递归扫描压力
 - 优化远程工作区 Git / GitHub 操作转发矩阵，降低 remote backend 模式误走本地 Git 的风险
 - 优化工作区会话文件夹相关操作，补齐远程后端转发并收敛阻塞式文件扫描边界
@@ -43,6 +49,13 @@
 - 修复 Web Service 误选空壳前端资源导致 `/app` 白屏的问题，启动时会继续探测后续有效 dist 候选
 - 修复工作区文件树首屏缓存、fallback 与 unmount 后异步回写边界，避免迟到响应污染当前 workspace 状态
 - 修复文件树 fallback 根层快照边界，避免 fallback 数据覆盖当前 root-first 文件树状态
+- 修复三证状态查询超时后未正确收口的问题，避免 diagnostics settlement 在无响应时长期悬挂
+- 修复助手回复复制入口重复或位置漂移的问题，让消息操作入口在 timeline 与 rows 渲染路径中保持一致
+- 修复自动会话可见性、归类和失败路径元数据链路，避免自动创建的 session 在 Sidebar、文件夹计数和恢复流程中不可见或归类错误
+- 修复 daemon helper read 运行时守卫缺失的问题，降低远程 daemon 状态读取异常导致的运行时崩溃风险
+- 修复文件 tab 独立窗口拖拽与多实例边界，避免 detached file explorer 多窗口会话互相覆盖或拖拽状态串线
+- 修复 Codex 线程列表和引擎切换错误的降级处理，避免异常响应直接打断 engine controller 状态恢复
+- 修复 Project Map 模型结构化输出解析不稳的问题，提升节点整理、候选生成和增量图谱更新对异常模型输出的容错
 
 English:
 
@@ -53,16 +66,22 @@ English:
 - Add a Codex goal command-palette entry so goals can be created and managed from the Composer command flow
 - Add collapse and skip interactions for user-input requests so pending questions can be settled, folded, and restored more clearly in the message timeline
 - Add persisted core error logs and three-evidence settlement diagnostics with dry-run checks, status queries, and frontend/backend reconciliation
+- Add AI organization candidates for Project Map discovered items, with structured merging, filtering, and review of candidate nodes
+- Add message-tail action icons so copy, fork, and related assistant-response actions are consolidated into clearer per-message entrypoints
 - Add native window transparency settings so custom appearance presets can control desktop window translucency
 
 🔧 Improvements
 - Improve Project Map stability by tightening dataset completion, generation worker, interactive layout, node evidence, and task drawer state boundaries
+- Improve Project Map structured model-output parsing by extracting shared normalization support and reducing failures from drifting model response shapes
 - Improve Markdown preview rendering and interaction state with stronger coverage for refresh behavior, GitHub-style Markdown, math, and diagram previews
 - Improve Runtime Pool and Codex Settings copy, i18n, and test coverage so launch configuration, runtime status, and environment diagnostics are easier to verify
 - Improve startup diagnostics and environment recovery by reducing noise around optional visual effects, engine doctor, and stale session-history repair
 - Improve diagnostics watchdog persistence so Codex no-progress lifecycle and early three-evidence reconciliation signals are retained without unrelated log noise
 - Improve Composer file references so `@` suggestions can use the workspace file index even before the file tree has been opened
 - Improve Composer input height and collapsed entrypoints so home and conversation inputs stay compact and recoverable
+- Improve reconnect cards and fork entrypoints so stale-recovery continuation paths and fork actions are easier to distinguish
+- Improve the canonical Git diff display model so renamed, deleted, untracked, and related file states render consistently in diff grouping and paths
+- Improve thread event handling structure by splitting terminal-event helpers and event types, reducing maintenance risk in session recovery and runtime-event flows
 - Improve workspace file-tree first paint with a root-first directory-children path to reduce recursive scan pressure during startup and workspace switches
 - Improve remote-workspace Git / GitHub forwarding coverage so remote backend mode does not fall back to local Git execution
 - Improve workspace session-folder operations by forwarding remote backend commands and narrowing blocking filesystem scan boundaries
@@ -83,6 +102,13 @@ English:
 - Fix Web Service choosing an empty shell frontend asset root and showing a blank `/app`; startup now continues to later valid dist candidates
 - Fix workspace file-tree first-paint cache, fallback, and post-unmount async boundaries so late responses cannot pollute the active workspace state
 - Fix file-tree fallback root snapshot boundaries so fallback data cannot overwrite the active root-first file-tree state
+- Fix three-evidence status-query timeout finalization so diagnostics settlement cannot hang indefinitely on missing responses
+- Fix duplicated or drifting assistant-response copy entrypoints so message actions stay aligned across timeline and row render paths
+- Fix automatic session visibility, classification, and failure-path metadata so auto-created sessions remain visible in Sidebar, folder counts, and recovery flows
+- Fix missing runtime guards around daemon helper reads, reducing crashes from abnormal remote daemon state reads
+- Fix detached file-tab drag and multi-instance boundaries so detached file explorer windows no longer overwrite each other or leak drag state
+- Fix degraded handling for Codex thread-list and engine-switch errors so abnormal responses do not break engine-controller recovery
+- Fix Project Map structured-output parsing resilience for node organization, candidate generation, and incremental graph updates
 
 ---
 

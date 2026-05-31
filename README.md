@@ -12,72 +12,71 @@
 
 </div>
 
-**ccgui** is built for professional developers as an alternative to Cursor. Focused on developer experience, our ultimate goal is to build a 100% open-source and transparent **next-generation VibeCoding editor (powered by Claude Code, Codex, and more)**.
+**ccgui** is a cross-platform desktop AI engineering workbench for professional developers. It brings multiple coding engines, project context, task execution, terminal, Git, memory, and governance surfaces into one transparent local-first client.
 
-> This is a project built upon [CodexMonitor](https://github.com/Dimillian/CodexMonitor)
+The current application is built on **Tauri 2 + React 19 + TypeScript + Vite** and focuses on making AI-assisted development observable, recoverable, and auditable instead of hiding work inside a single chat box.
+
+> This project originated from [CodexMonitor](https://github.com/Dimillian/CodexMonitor) and has evolved into a broader multi-engine coding client.
 
 <img src="./docs/banner.png" alt="ccgui Banner" width="800" />
 
 ---
 
-### Core Features
+## Core Capabilities
 
-#### Multi-Engine
+### Multi-Engine AI Workbench
 
-Manage multiple AI coding engines in a single interface and switch freely between them:
+Manage multiple coding engines in one interface and switch between them by task:
 
-- **Claude Code** — Deep integration with the full Anthropic model family (Haiku / Sonnet / Opus)
-- **Codex CLI** — Full lifecycle management with custom model and parameter support
-- **OpenCode CLI** — Built-in control panel with visual configuration for Providers / MCP / Sessions
-- **Gemini CLI** — Supported (under active development)
-- **Custom Providers** — Configurable channels including official, regional, aggregator, and third-party services
+- **Claude Code** — session continuity, history visibility, context usage surfaces, compact/reasoning controls, and runtime recovery flows.
+- **Codex CLI** — launch profile support, plan visibility, collaboration-mode enforcement, queued follow-up continuity, and runtime diagnostics.
+- **OpenCode CLI** — provider / MCP / session control surfaces.
+- **Gemini CLI** — supported as an engine integration path.
+- **Custom Providers** — configurable official, regional, aggregator, and third-party channels.
 
-#### Professional Development Panels
+### Professional Development Surfaces
 
-More than a chat window — a complete development workbench:
+ccgui is more than chat. It is a local development cockpit:
 
-- **Chat Canvas** — Rich-text input with file/image/code snippet attachments, `@` file references, `/` command triggers
-- **Built-in Terminal** — Full shell terminal powered by xterm.js with pseudo-TTY support
-- **Git Panel** — Commit history visualization, branch management, worktree support, diff review
-- **Kanban Board** — Drag-and-drop task management (Todo → In Progress → Testing → Done)
-- **Plan Panel** — Task decomposition and planning visualization
-- **Parallel Execution** — Run multiple agents simultaneously with real-time status tracking
+- **Chat Canvas** — rich input, attachments, file references, slash commands, streaming messages, tool cards, and rewind/review surfaces.
+- **Composer** — persistent input, file-tree assisted references, note cards, queued follow-ups, and shortcut action menus.
+- **Built-in Terminal** — xterm.js terminal with pseudo-TTY support and configurable shell behavior.
+- **Git Panel** — history, branches, worktrees, diffs, file view, and high-risk merge workflow support.
+- **Kanban + Plan Panels** — task breakdown, planning state, and execution-oriented task management.
+- **Task Center / TaskRun** — AI execution records, runtime states, diagnostics, retries, and output inspection.
+- **Session Activity** — workspace-level session aggregation and linked conversation navigation.
 
-#### AI Memory System
+### Project Intelligence
 
-- **Project Memory** — Persistent memory storage with semantic classification (8+ memory types)
-- **Skills System** — Reusable skill/agent management with import and export support
-- **Prompt Library** — Custom prompt management and quick execution
+- **Project Map / Project X-Ray** — evidence-backed project knowledge graph, source references, confidence/stale markers, candidate review, and incremental generation.
+- **Project Memory** — persistent semantic memory with multiple memory kinds and reusable context.
+- **Context Ledger** — context source attribution, cost/budget visibility, transition diffs, and governance-oriented review surfaces.
+- **SpecHub / Governance Panels** — OpenSpec/spec provider awareness, runtime evidence gates, status panels, and optional workflow evidence adapters.
 
-#### MCP Protocol Support
+### AI Runtime Safety
 
-Built-in Model Context Protocol support for configuring and managing MCP Servers, extending AI tool-calling capabilities.
+- **Structured model output normalization** — shared parser/repair/validator path for untrusted model JSON before feature code consumes it.
+- **Runtime stability contracts** — realtime batching, settlement diagnostics, stalled recovery, lifecycle hardening, and global client error logs.
+- **Computer Use bridge** — explicit status/availability surfaces and Codex CLI/plugin handoff boundaries.
+- **Local-first diagnostics** — doctor scripts, runtime contract checks, large-file governance, and performance baselines.
 
-#### Cross-Platform Native Experience
+### Cross-Platform Native Experience
 
-- **macOS** — Frameless window with native title bar integration (Intel / Apple Silicon / Universal)
-- **Windows** — Frameless window with custom drag regions
-- **Linux** — AppImage packaging, ready to use out of the box
-
-#### More Capabilities
-
-- Voice dictation (Whisper model, macOS/Linux)
-- Global search (files, conversations, kanban, skills, commands, and more — 8 result types)
-- Syntax highlighting (CodeMirror 6 + Prism.js, 10+ languages)
-- Mermaid diagram rendering
-- Multi-language UI (English / Chinese)
-- Auto-update
+- **macOS** — frameless native window integration, Apple Silicon / Intel / Universal build targets.
+- **Windows** — dedicated Tauri config and Windows build flow.
+- **Linux** — AppImage build target and Linux startup guards.
+- **Auto-update** — updater artifacts and release endpoint support.
 
 ---
 
-### Local Development and Debugging
+## Local Development
 
-#### 1. Prerequisites
+### 1. Prerequisites
 
-Make sure the following tools are installed:
+Install the following tools:
 
-- [Node.js](https://nodejs.org/) (>= 18)
-- [Rust](https://rustup.rs/) (stable)
+- [Node.js](https://nodejs.org/) >= 18
+- [Rust](https://rustup.rs/) stable
 - [Tauri CLI](https://tauri.app/) (`npm install -g @tauri-apps/cli`)
 - cmake
 
@@ -87,67 +86,88 @@ Run the environment check:
 npm run doctor
 ```
 
-#### 2. Install Frontend Dependencies
+For stricter app startup checks:
+
+```bash
+npm run doctor:strict
+```
+
+### 2. Install Dependencies
+
+This repository enforces npm through the preinstall script:
 
 ```bash
 npm install
 ```
 
-#### 3. Start Development Mode
+### 3. Start Development Mode
 
 ```bash
 npm run tauri:dev
 ```
 
-> The first launch will compile the Rust backend, which takes longer. Subsequent launches use incremental compilation.
+The first launch compiles the Rust backend. Later launches use incremental builds.
 
-#### 4. Frontend-Only Development (without Tauri)
+Frontend-only development is available with:
 
 ```bash
 npm run dev
 ```
 
-#### 5. Build for Production
+### 4. Build Production Packages
 
 ```bash
-# macOS (Apple Silicon)
+# macOS Apple Silicon
 npm run build:mac-arm64
 
-# macOS (Universal)
+# macOS Intel
+npm run build:mac-x64
+
+# macOS Universal
 npm run build:mac-universal
 
-# Windows
+# Windows x64
 npm run build:win-x64
 
-# Linux
+# Linux x64
 npm run build:linux-x64
+
+# Linux arm64
+npm run build:linux-arm64
 ```
 
-#### 6. Linting and Testing
+### 5. Quality Gates
 
 ```bash
-npm run lint          # ESLint check
-npm run typecheck     # TypeScript type check
-npm run test          # Run frontend tests
+npm run lint
+npm run typecheck
+npm run test
+npm run check:runtime-contracts
+npm run check:large-files
 ```
+
+Focused gates also exist for engine capability routing, context ledger budgets, checkpoint policy chains, runtime evidence, native menu usage, bundle chunking, and performance baselines. See `package.json` for the current command list.
 
 ---
 
-### Download
+## Documentation Map
+
+- `AGENTS.md` — repository rules, reading order, PlanFirst gate, and workflow boundaries.
+- `openspec/README.md` — OpenSpec workspace navigation.
+- `openspec/project.md` — current OpenSpec governance snapshot.
+- `.trellis/spec/**` — implementation rules and executable contracts.
+- `docs/architecture/**` — architecture governance and large-file policies.
+- `docs/perf/**` — performance baselines and runtime evidence reports.
+
+---
+
+## Download
 
 Download link: https://github.com/zhukunpenglinyutong/desktop-cc-gui/releases
 
 ---
 
-### Future Iterations
-
-While the app is already usable, I'm not yet satisfied with the polish on the details. I plan to release at least one update per day, aiming for 100 iterations. Feedback and issues are welcome!
-
-Your Stars and recommendations help more people discover this project. Thank you!
-
----
-
-### License
+## License
 
 [MIT](https://github.com/zhukunpenglinyutong/desktop-cc-gui?tab=MIT-1-ov-file)
 
@@ -155,13 +175,13 @@ Your Stars and recommendations help more people discover this project. Thank you
 
 ## Friendship Link
 
-Thanks for the support and feedback from the friends at [LINUX DO](https://linux.do/). 
+Thanks for the support and feedback from the friends at [LINUX DO](https://linux.do/).
 
 ---
 
 ## Contributors
 
-Thanks to all the contributors who help make ccgui better!
+Thanks to all the contributors who help make ccgui better.
 
 <table>
   <tr>
