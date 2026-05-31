@@ -330,3 +330,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 659: 补齐三证对账采证日志
+
+**Date**: 2026-06-01
+**Task**: 补齐三证对账采证日志
+**Branch**: `feature/v0.5.4`
+
+### Summary
+
+增强 Phase2b 前置采证：持久化 reconciliation query skipped/resolved/cleanup skipped 诊断，并在 proposal 标记本次不启用 cleanup、不放宽 PHASE2B_HANDOFF_MARKER。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1ea75869` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
