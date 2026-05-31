@@ -1,6 +1,7 @@
 use super::thread_listing::{
     build_local_codex_session_preview, build_thread_list_empty_response,
     codex_session_identifier_candidates, merge_unified_codex_thread_entries,
+    select_unified_codex_partial_source,
 };
 use super::{
     create_session_runtime_recovering_error, run_start_thread_with_hook_safe_fallback,
@@ -18,6 +19,21 @@ fn build_thread_list_empty_response_has_expected_shape() {
     let response = build_thread_list_empty_response();
     assert_eq!(response["result"]["data"], json!([]));
     assert!(response["result"]["nextCursor"].is_null());
+}
+
+#[test]
+fn select_unified_codex_partial_source_prefers_local_scan_failure() {
+    assert_eq!(
+        select_unified_codex_partial_source(
+            Some("local-session-scan-unavailable"),
+            Some("live-thread-list-unavailable"),
+        ),
+        Some("local-session-scan-unavailable")
+    );
+    assert_eq!(
+        select_unified_codex_partial_source(None, Some("live-thread-list-unavailable")),
+        Some("live-thread-list-unavailable")
+    );
 }
 
 #[test]

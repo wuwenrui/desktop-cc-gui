@@ -7,13 +7,14 @@ import {
   getActiveEngine,
   getEngineModels,
   isWebServiceRuntime,
+  runCodexDoctor,
   switchEngine,
 } from "../../../services/tauri";
 import {
   getClientStoreSync,
   writeClientStoreValue,
 } from "../../../services/clientStorage";
-import type { EngineStatus } from "../../../types";
+import type { DebugEntry, EngineStatus } from "../../../types";
 import { STORAGE_KEYS as MODEL_STORAGE_KEYS } from "../../models/constants";
 import { STORAGE_KEYS as PROVIDER_STORAGE_KEYS } from "../../composer/types/provider";
 
@@ -32,6 +33,7 @@ vi.mock("../../../services/tauri", () => ({
   getActiveEngine: vi.fn(),
   getEngineModels: vi.fn(),
   isWebServiceRuntime: vi.fn(),
+  runCodexDoctor: vi.fn(),
   switchEngine: vi.fn(),
 }));
 vi.mock("../../../services/clientStorage", () => ({
@@ -43,9 +45,32 @@ const detectEnginesMock = vi.mocked(detectEngines);
 const getActiveEngineMock = vi.mocked(getActiveEngine);
 const getEngineModelsMock = vi.mocked(getEngineModels);
 const isWebServiceRuntimeMock = vi.mocked(isWebServiceRuntime);
+const runCodexDoctorMock = vi.mocked(runCodexDoctor);
 const switchEngineMock = vi.mocked(switchEngine);
 const getClientStoreSyncMock = vi.mocked(getClientStoreSync);
 const writeClientStoreValueMock = vi.mocked(writeClientStoreValue);
+
+function createEngineStatus(
+  engineType: EngineStatus["engineType"],
+  installed: boolean,
+  models: EngineStatus["models"] = [],
+): EngineStatus {
+  return {
+    engineType,
+    installed,
+    version: installed ? "1.0.0" : null,
+    binPath: null,
+    features: {
+      streaming: true,
+      reasoning: true,
+      toolUse: true,
+      imageInput: true,
+      sessionContinuation: true,
+    },
+    models,
+    error: installed ? null : "not installed",
+  };
+}
 
 describe("useEngineController", () => {
   beforeEach(() => {
@@ -53,6 +78,17 @@ describe("useEngineController", () => {
     window.localStorage.clear();
     isWebServiceRuntimeMock.mockReturnValue(false);
     switchEngineMock.mockResolvedValue(undefined);
+    runCodexDoctorMock.mockResolvedValue({
+      ok: false,
+      codexBin: null,
+      version: null,
+      appServerOk: false,
+      details: "not found",
+      path: null,
+      nodeOk: true,
+      nodeVersion: "v20.0.0",
+      nodeDetails: null,
+    });
     getClientStoreSyncMock.mockReturnValue(undefined);
     writeClientStoreValueMock.mockReset();
   });
@@ -1183,5 +1219,107 @@ describe("useEngineController", () => {
     expect(refreshSettled).toBe(true);
     expect(detectEnginesMock).toHaveBeenCalledTimes(1);
     expect(refreshResult?.availableEngines.find((engine) => engine.type === "claude")?.installed).toBe(true);
+  });
+
+  it("refreshes stale engine status before switching", async () => {
+    const codexModels: EngineStatus["models"] = [
+      {
+        id: "gpt-5",
+        displayName: "GPT-5",
+        description: "default",
+        isDefault: true,
+      },
+    ];
+    detectEnginesMock
+      .mockResolvedValueOnce([
+        createEngineStatus("claude", true),
+        createEngineStatus("codex", false),
+      ])
+      .mockResolvedValueOnce([
+        createEngineStatus("claude", true),
+        createEngineStatus("codex", true, codexModels),
+      ]);
+    getActiveEngineMock.mockResolvedValue("claude");
+    getEngineModelsMock.mockResolvedValue(codexModels);
+
+    const { result } = renderHook(() =>
+      useEngineController({ activeWorkspace: null }),
+    );
+
+    await waitFor(() => expect(result.current.isInitialized).toBe(true));
+
+    await act(async () => {
+      await result.current.setActiveEngine("codex");
+    });
+
+    expect(detectEnginesMock).toHaveBeenCalledTimes(2);
+    expect(switchEngineMock).toHaveBeenCalledWith("codex");
+    expect(runCodexDoctorMock).not.toHaveBeenCalled();
+    expect(result.current.activeEngine).toBe("codex");
+  });
+
+  it("adds Codex doctor evidence when refreshed status is still unavailable", async () => {
+    const debugEntries: Array<{ label: string; payload: unknown }> = [];
+    const onDebug = (entry: DebugEntry) => {
+      debugEntries.push({ label: entry.label, payload: entry.payload });
+    };
+    detectEnginesMock
+      .mockResolvedValueOnce([
+        createEngineStatus("claude", true),
+        createEngineStatus("codex", false),
+      ])
+      .mockResolvedValueOnce([
+        createEngineStatus("claude", true),
+        createEngineStatus("codex", false),
+      ]);
+    getActiveEngineMock.mockResolvedValue("claude");
+    getEngineModelsMock.mockResolvedValue([]);
+    runCodexDoctorMock.mockResolvedValue({
+      ok: true,
+      codexBin: null,
+      version: "codex-cli 0.135.0",
+      appServerOk: true,
+      details: null,
+      path: "/opt/homebrew/bin:/usr/bin",
+      pathEnvUsed: "/opt/homebrew/bin:/usr/bin",
+      nodeOk: true,
+      nodeVersion: "v20.0.0",
+      nodeDetails: null,
+      resolvedBinaryPath: "/opt/homebrew/bin/codex",
+      environmentDiagnosis: {
+        category: "gui-path-drift",
+        message: "Codex is visible from fallback paths but not GUI PATH.",
+        resolvedBinaryPath: "/opt/homebrew/bin/codex",
+        missedByGuiPath: true,
+      },
+    });
+
+    const { result } = renderHook(() =>
+      useEngineController({
+        activeWorkspace: null,
+        onDebug,
+      }),
+    );
+
+    await waitFor(() => expect(result.current.isInitialized).toBe(true));
+
+    await act(async () => {
+      await result.current.setActiveEngine("codex");
+    });
+
+    expect(switchEngineMock).not.toHaveBeenCalled();
+    expect(runCodexDoctorMock).toHaveBeenCalledWith(null, null);
+    const switchError = debugEntries.find(
+      (entry) => entry.label === "engine/switch error",
+    );
+    expect(switchError?.payload).toMatchObject({
+      message: "Engine codex is not installed",
+      doctorOk: true,
+      resolvedBinaryPath: "/opt/homebrew/bin/codex",
+      environmentDiagnosis: {
+        category: "gui-path-drift",
+        missedByGuiPath: true,
+      },
+    });
   });
 });

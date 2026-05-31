@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   DebugEntry,
+  CodexDoctorResult,
   EngineModelInfo,
   EngineStatus,
   EngineType,
@@ -12,6 +13,7 @@ import {
   getActiveEngine,
   getEngineModels,
   isWebServiceRuntime,
+  runCodexDoctor,
   switchEngine,
 } from "../../../services/tauri";
 import {
@@ -99,6 +101,30 @@ function buildAvailableEngines(
       availabilityLabelKey,
     };
   });
+}
+
+function buildCodexSwitchUnavailablePayload(
+  doctorResult: CodexDoctorResult | null,
+  doctorError: unknown,
+) {
+  let doctorErrorMessage: string | null = null;
+  if (doctorError instanceof Error) {
+    doctorErrorMessage = doctorError.message;
+  } else if (doctorError) {
+    doctorErrorMessage = String(doctorError);
+  }
+
+  return {
+    message: "Engine codex is not installed",
+    doctorOk: doctorResult?.ok ?? false,
+    doctorError: doctorErrorMessage,
+    environmentDiagnosis: doctorResult?.environmentDiagnosis ?? null,
+    resolvedBinaryPath:
+      doctorResult?.resolvedBinaryPath ??
+      doctorResult?.environmentDiagnosis?.resolvedBinaryPath ??
+      null,
+    pathEnvUsed: doctorResult?.pathEnvUsed ?? null,
+  };
 }
 
 const GEMINI_VENDOR_UPDATED_EVENT = "ccgui:gemini-vendor-updated";
@@ -579,18 +605,67 @@ export function useEngineController({
         return;
       }
 
-      // Check if engine is installed
-      const status = engineStatuses.find((s) => s.engineType === engineType);
       const enabled = enabledEngineTypes.includes(engineType);
-      if (!enabled || !status?.installed) {
+      if (!enabled) {
         onDebug?.({
           id: `${Date.now()}-engine-switch-error`,
           timestamp: Date.now(),
           source: "error",
           label: "engine/switch error",
-          payload: enabled
-            ? `Engine ${engineType} is not installed`
-            : `Engine ${engineType} is disabled`,
+          payload: `Engine ${engineType} is disabled`,
+        });
+        return;
+      }
+
+      let targetStatus =
+        engineStatuses.find((status) => status.engineType === engineType) ??
+        null;
+      if (!targetStatus?.installed) {
+        try {
+          const refreshedStatuses = (await detectEngines()).filter((status) =>
+            enabledEngineTypes.includes(status.engineType),
+          );
+          setEngineStatuses(refreshedStatuses);
+          targetStatus =
+            refreshedStatuses.find(
+              (status) => status.engineType === engineType,
+            ) ?? null;
+        } catch (error) {
+          onDebug?.({
+            id: `${Date.now()}-engine-detect-error-before-switch`,
+            timestamp: Date.now(),
+            source: "error",
+            label: "engine/detect error",
+            payload: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
+      if (!targetStatus?.installed && engineType === "codex") {
+        let doctorResult: CodexDoctorResult | null = null;
+        let doctorError: unknown = null;
+        try {
+          doctorResult = await runCodexDoctor(null, null);
+        } catch (error) {
+          doctorError = error;
+        }
+        onDebug?.({
+          id: `${Date.now()}-engine-switch-error`,
+          timestamp: Date.now(),
+          source: "error",
+          label: "engine/switch error",
+          payload: buildCodexSwitchUnavailablePayload(doctorResult, doctorError),
+        });
+        return;
+      }
+
+      if (!targetStatus?.installed) {
+        onDebug?.({
+          id: `${Date.now()}-engine-switch-error`,
+          timestamp: Date.now(),
+          source: "error",
+          label: "engine/switch error",
+          payload: `Engine ${engineType} is not installed`,
         });
         return;
       }
@@ -610,8 +685,8 @@ export function useEngineController({
         // Immediately switch visible model list to target engine snapshot to avoid
         // showing stale models from previous engine while CLI refresh is in flight.
         setEngineModels(
-          status.models.length > 0
-            ? status.models.map((model) => normalizeEngineModelEntry(model))
+          targetStatus.models.length > 0
+            ? targetStatus.models.map((model) => normalizeEngineModelEntry(model))
             : [],
         );
 
@@ -623,7 +698,7 @@ export function useEngineController({
           timestamp: Date.now(),
           source: "server",
           label: "engine/switch success",
-          payload: { engine: engineType, models: status.models },
+          payload: { engine: engineType, models: targetStatus.models },
         });
       } catch (error) {
         onDebug?.({

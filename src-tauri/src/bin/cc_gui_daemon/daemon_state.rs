@@ -9,6 +9,9 @@ mod thread_title_generation;
 const DELETE_ARCHIVE_TIMEOUT_MS: u64 = 2_000;
 const LIST_THREADS_LIVE_TIMEOUT_MS: u64 = 1_500;
 const CLAUDE_POST_COMPLETION_USAGE_GRACE_MS: u64 = 35_000;
+const CODEX_DAEMON_LOCAL_THREAD_LIST_TIMEOUT_MS: u64 = 5_000;
+const CODEX_DAEMON_LOCAL_THREAD_LIST_PARTIAL_SOURCE: &str = "live-thread-list-unavailable";
+const CODEX_DAEMON_LOCAL_THREAD_CURSOR_PREFIX: &str = "codex-daemon-local:";
 
 fn prefixed_session_id(engine_prefix: &str, session_id: &str) -> String {
     if session_id.starts_with(&format!("{engine_prefix}:")) {
@@ -16,6 +19,144 @@ fn prefixed_session_id(engine_prefix: &str, session_id: &str) -> String {
     } else {
         format!("{engine_prefix}:{session_id}")
     }
+}
+
+fn parse_codex_daemon_local_thread_cursor(cursor: Option<&str>) -> usize {
+    let Some(cursor) = cursor.map(str::trim).filter(|value| !value.is_empty()) else {
+        return 0;
+    };
+    cursor
+        .strip_prefix(CODEX_DAEMON_LOCAL_THREAD_CURSOR_PREFIX)
+        .unwrap_or(cursor)
+        .parse::<usize>()
+        .unwrap_or(0)
+}
+
+fn build_codex_daemon_local_thread_cursor(offset: usize) -> Value {
+    Value::String(format!("{CODEX_DAEMON_LOCAL_THREAD_CURSOR_PREFIX}{offset}"))
+}
+
+fn normalize_optional_thread_source(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+}
+
+fn build_codex_daemon_thread_source_label(
+    source: Option<&str>,
+    provider: Option<&str>,
+) -> Option<String> {
+    let source = normalize_optional_thread_source(source);
+    let provider = normalize_optional_thread_source(provider);
+    match (source, provider) {
+        (Some(source), Some(provider)) => Some(format!("{source}/{provider}")),
+        (Some(source), None) => Some(source),
+        (None, Some(provider)) => Some(provider),
+        (None, None) => None,
+    }
+}
+
+fn build_codex_daemon_local_thread_entry(
+    workspace_path: &str,
+    session: &crate::types::LocalUsageSessionSummary,
+) -> Value {
+    let preview = session
+        .summary
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+        .unwrap_or_else(|| format!("Codex session ({})", session.model));
+    let source_label = build_codex_daemon_thread_source_label(
+        session.source.as_deref(),
+        session.provider.as_deref(),
+    );
+    json!({
+        "id": &session.session_id,
+        "engine": "codex",
+        "canonicalSessionId": &session.session_id,
+        "attributionStatus": "strict-match",
+        "preview": preview,
+        "title": preview,
+        "cwd": session.cwd.as_deref().unwrap_or(workspace_path),
+        "createdAt": session.timestamp,
+        "updatedAt": session.timestamp,
+        "model": &session.model,
+        "source": &session.source,
+        "provider": &session.provider,
+        "sourceLabel": source_label,
+        "partialSource": CODEX_DAEMON_LOCAL_THREAD_LIST_PARTIAL_SOURCE,
+    })
+}
+
+fn apply_codex_daemon_thread_folder_assignments(
+    entries: &mut [Value],
+    folder_id_by_session_id: &HashMap<String, String>,
+) {
+    if folder_id_by_session_id.is_empty() {
+        return;
+    }
+    for entry in entries {
+        let Some(entry_map) = entry.as_object_mut() else {
+            continue;
+        };
+        let Some(session_id) = entry_map
+            .get("id")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        else {
+            continue;
+        };
+        if let Some(folder_id) = folder_id_by_session_id.get(session_id) {
+            entry_map.insert("folderId".to_string(), Value::String(folder_id.clone()));
+        }
+    }
+}
+
+fn build_codex_daemon_local_thread_response(
+    workspace_path: &str,
+    sessions: Vec<crate::types::LocalUsageSessionSummary>,
+    cursor: Option<&str>,
+    limit: Option<u32>,
+    folder_id_by_session_id: &HashMap<String, String>,
+) -> Value {
+    let requested_limit = limit.unwrap_or(50).clamp(1, 200) as usize;
+    let offset = parse_codex_daemon_local_thread_cursor(cursor);
+    let entries: Vec<Value> = sessions
+        .iter()
+        .map(|session| build_codex_daemon_local_thread_entry(workspace_path, session))
+        .collect();
+    let mut data: Vec<Value> = entries
+        .iter()
+        .skip(offset)
+        .take(requested_limit)
+        .cloned()
+        .collect();
+    apply_codex_daemon_thread_folder_assignments(&mut data, folder_id_by_session_id);
+    let next_cursor = if offset + data.len() < entries.len() {
+        build_codex_daemon_local_thread_cursor(offset + data.len())
+    } else {
+        Value::Null
+    };
+    json!({
+        "result": {
+            "data": data,
+            "nextCursor": next_cursor,
+            "partialSource": CODEX_DAEMON_LOCAL_THREAD_LIST_PARTIAL_SOURCE,
+        }
+    })
+}
+
+fn build_codex_daemon_empty_thread_response(partial_source: &str) -> Value {
+    json!({
+        "result": {
+            "data": [],
+            "nextCursor": null,
+            "partialSource": partial_source,
+        }
+    })
 }
 
 use runtime_helpers::{
@@ -1972,9 +2113,14 @@ impl DaemonState {
         cursor: Option<String>,
         limit: Option<u32>,
     ) -> Result<Value, String> {
-        tokio::time::timeout(
+        let live_result = tokio::time::timeout(
             Duration::from_millis(LIST_THREADS_LIVE_TIMEOUT_MS),
-            codex_core::list_threads_core(&self.sessions, workspace_id, cursor, limit),
+            codex_core::list_threads_core(
+                &self.sessions,
+                workspace_id.clone(),
+                cursor.clone(),
+                limit,
+            ),
         )
         .await
         .map_err(|_| {
@@ -1982,7 +2128,76 @@ impl DaemonState {
                 "live thread/list timed out after {}ms",
                 LIST_THREADS_LIVE_TIMEOUT_MS
             )
-        })?
+        })
+        .and_then(|value| value);
+
+        match live_result {
+            Ok(response) => Ok(response),
+            Err(live_error) => {
+                log::debug!(
+                    "[daemon:list_threads] Live Codex thread list unavailable for {}: {}",
+                    workspace_id,
+                    live_error
+                );
+                let requested_limit = limit.unwrap_or(50).clamp(1, 200) as usize;
+                let requested_offset = parse_codex_daemon_local_thread_cursor(cursor.as_deref());
+                let requested_scan_limit = requested_offset
+                    .saturating_add(requested_limit)
+                    .saturating_add(1)
+                    .max(1);
+                let local_result = tokio::time::timeout(
+                    Duration::from_millis(CODEX_DAEMON_LOCAL_THREAD_LIST_TIMEOUT_MS),
+                    local_usage::list_codex_session_summaries_for_workspace(
+                        &self.workspaces,
+                        &workspace_id,
+                        requested_scan_limit,
+                    ),
+                )
+                .await;
+                let (workspace_path, local_sessions) = match local_result {
+                    Ok(Ok(value)) => value,
+                    Ok(Err(local_error)) => {
+                        if local_error
+                            .to_ascii_lowercase()
+                            .contains("workspace not found")
+                        {
+                            return Err(local_error);
+                        }
+                        log::debug!(
+                            "[daemon:list_threads] Local Codex thread fallback unavailable for {}: {}",
+                            workspace_id,
+                            local_error
+                        );
+                        return Ok(build_codex_daemon_empty_thread_response(
+                            CODEX_DAEMON_LOCAL_THREAD_LIST_PARTIAL_SOURCE,
+                        ));
+                    }
+                    Err(_) => {
+                        log::debug!(
+                            "[daemon:list_threads] Local Codex thread fallback timed out for {} after {}ms",
+                            workspace_id,
+                            CODEX_DAEMON_LOCAL_THREAD_LIST_TIMEOUT_MS
+                        );
+                        return Ok(build_codex_daemon_empty_thread_response(
+                            CODEX_DAEMON_LOCAL_THREAD_LIST_PARTIAL_SOURCE,
+                        ));
+                    }
+                };
+                let folder_id_by_session_id =
+                    session_management::read_workspace_session_folder_assignments(
+                        self.storage_path.as_path(),
+                        &workspace_id,
+                    )
+                    .unwrap_or_default();
+                Ok(build_codex_daemon_local_thread_response(
+                    &workspace_path,
+                    local_sessions,
+                    cursor.as_deref(),
+                    limit,
+                    &folder_id_by_session_id,
+                ))
+            }
+        }
     }
 
     pub(super) async fn opencode_session_list(
@@ -2713,5 +2928,67 @@ impl DaemonState {
 
     pub(super) async fn get_config_model(&self, workspace_id: String) -> Result<Value, String> {
         codex_core::get_config_model_core(&self.workspaces, workspace_id).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn codex_summary(session_id: &str, timestamp: i64) -> crate::types::LocalUsageSessionSummary {
+        crate::types::LocalUsageSessionSummary {
+            session_id: session_id.to_string(),
+            timestamp,
+            cwd: Some("/repo".to_string()),
+            model: "gpt-5".to_string(),
+            summary: Some(format!("Session {session_id}")),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn daemon_codex_local_thread_response_marks_live_unavailable() {
+        let sessions = vec![codex_summary("s1", 20), codex_summary("s2", 10)];
+        let response = build_codex_daemon_local_thread_response(
+            "/repo",
+            sessions,
+            None,
+            Some(1),
+            &HashMap::new(),
+        );
+        let result = response.get("result").and_then(Value::as_object).unwrap();
+        let data = result.get("data").and_then(Value::as_array).unwrap();
+
+        assert_eq!(
+            result.get("partialSource").and_then(Value::as_str),
+            Some(CODEX_DAEMON_LOCAL_THREAD_LIST_PARTIAL_SOURCE)
+        );
+        assert_eq!(data.len(), 1);
+        assert_eq!(data[0].get("id").and_then(Value::as_str), Some("s1"));
+        assert_eq!(
+            data[0].get("partialSource").and_then(Value::as_str),
+            Some(CODEX_DAEMON_LOCAL_THREAD_LIST_PARTIAL_SOURCE)
+        );
+        assert_eq!(
+            result.get("nextCursor").and_then(Value::as_str),
+            Some("codex-daemon-local:1")
+        );
+    }
+
+    #[test]
+    fn daemon_codex_empty_thread_response_still_marks_partial_source() {
+        let response =
+            build_codex_daemon_empty_thread_response(CODEX_DAEMON_LOCAL_THREAD_LIST_PARTIAL_SOURCE);
+        let result = response.get("result").and_then(Value::as_object).unwrap();
+
+        assert_eq!(
+            result.get("data").and_then(Value::as_array).unwrap().len(),
+            0
+        );
+        assert!(result.get("nextCursor").unwrap().is_null());
+        assert_eq!(
+            result.get("partialSource").and_then(Value::as_str),
+            Some(CODEX_DAEMON_LOCAL_THREAD_LIST_PARTIAL_SOURCE)
+        );
     }
 }

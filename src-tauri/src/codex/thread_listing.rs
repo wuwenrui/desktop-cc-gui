@@ -17,7 +17,9 @@ const UNIFIED_CODEX_CURSOR_PREFIX: &str = "codex-unified:";
 const UNIFIED_CODEX_MAX_THREADS: usize = 5_000;
 const UNIFIED_CODEX_MAX_PAGES: usize = 200;
 const UNIFIED_CODEX_PAGE_SIZE: u32 = 200;
+const LOCAL_SESSION_SCAN_FALLBACK_TIMEOUT_MS: u64 = 5_000;
 const LOCAL_SESSION_SCAN_UNAVAILABLE_PARTIAL_SOURCE: &str = "local-session-scan-unavailable";
+const LIVE_THREAD_LIST_UNAVAILABLE_PARTIAL_SOURCE: &str = "live-thread-list-unavailable";
 const CODEX_BACKGROUND_HELPER_PROMPT_PREFIXES: &[&str] = &[
     "Generate a concise title for a coding chat thread from the first user message.",
     "You create concise run metadata for a coding task.",
@@ -29,6 +31,7 @@ const CODEX_BACKGROUND_HELPER_PROMPT_PREFIXES: &[&str] = &[
 static WORKSPACE_CODEX_SESSION_ID_CACHE: OnceLock<Mutex<HashMap<String, HashSet<String>>>> =
     OnceLock::new();
 
+#[cfg(test)]
 pub(crate) fn build_thread_list_empty_response() -> Value {
     json!({
         "result": {
@@ -55,6 +58,13 @@ fn parse_unified_codex_cursor(cursor: Option<&str>) -> usize {
 
 fn build_unified_codex_cursor(offset: usize) -> Value {
     Value::String(format!("{UNIFIED_CODEX_CURSOR_PREFIX}{offset}"))
+}
+
+pub(super) fn select_unified_codex_partial_source<'a>(
+    local_partial_source: Option<&'a str>,
+    live_partial_source: Option<&'a str>,
+) -> Option<&'a str> {
+    local_partial_source.or(live_partial_source)
 }
 
 #[allow(dead_code)]
@@ -568,13 +578,26 @@ pub(crate) async fn build_unified_codex_thread_page(
     let page_offset = parse_unified_codex_cursor(cursor.as_deref());
     let workspace_path = resolve_workspace_path(state, workspace_id).await?;
 
-    let live_entries = if live_enabled {
-        load_all_live_codex_thread_entries(state, workspace_id).await?
+    let (live_entries, live_partial_source) = if live_enabled {
+        match load_all_live_codex_thread_entries(state, workspace_id).await {
+            Ok(entries) => (entries, None),
+            Err(error) => {
+                log::debug!(
+                    "[list_threads] Live Codex thread list unavailable for {}: {}",
+                    workspace_id,
+                    error
+                );
+                (
+                    Vec::new(),
+                    Some(LIVE_THREAD_LIST_UNAVAILABLE_PARTIAL_SOURCE),
+                )
+            }
+        }
     } else {
-        Vec::new()
+        (Vec::new(), None)
     };
 
-    let (local_sessions, workspace_session_ids, partial_source): (
+    let (local_sessions, workspace_session_ids, local_partial_source): (
         Vec<LocalUsageSessionSummary>,
         HashSet<String>,
         Option<&str>,
@@ -605,6 +628,8 @@ pub(crate) async fn build_unified_codex_thread_page(
             )
         }
     };
+    let partial_source =
+        select_unified_codex_partial_source(local_partial_source, live_partial_source);
 
     let merged_entries = merge_unified_codex_thread_entries(
         live_entries,
@@ -615,7 +640,11 @@ pub(crate) async fn build_unified_codex_thread_page(
     );
 
     if merged_entries.is_empty() {
-        return Ok(build_thread_list_empty_response());
+        return Ok(build_unified_codex_thread_response(
+            Vec::new(),
+            None,
+            partial_source,
+        ));
     }
 
     let mut data: Vec<Value> = merged_entries
@@ -647,12 +676,21 @@ async fn load_local_codex_session_summaries(
     workspace_id: &str,
     requested_limit: usize,
 ) -> Result<(String, Vec<LocalUsageSessionSummary>), String> {
-    local_usage::list_codex_session_summaries_for_workspace(
-        &state.workspaces,
-        workspace_id,
-        requested_limit,
+    timeout(
+        Duration::from_millis(LOCAL_SESSION_SCAN_FALLBACK_TIMEOUT_MS),
+        local_usage::list_codex_session_summaries_for_workspace(
+            &state.workspaces,
+            workspace_id,
+            requested_limit,
+        ),
     )
     .await
+    .map_err(|_| {
+        format!(
+            "local codex session fallback timed out after {}ms",
+            LOCAL_SESSION_SCAN_FALLBACK_TIMEOUT_MS
+        )
+    })?
 }
 
 pub(crate) async fn resolve_workspace_config_model(
