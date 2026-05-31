@@ -283,3 +283,50 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 658: 强化独立窗口图标主题色
+
+**Date**: 2026-06-01
+**Task**: 强化独立窗口图标主题色
+**Branch**: `feature/v0.5.4`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## Summary
+- 强化文件 tab 独立窗口打开 icon 的主题色可见性。
+- 保持按钮无边框、无背景，只对 SVG icon stroke 进行显式着色。
+- 回写 archived OpenSpec proposal，补记入口醒目与主题适配要求且不改变行为。
+
+## Changed Files
+- src/styles/file-view-panel.css
+- openspec/changes/archive/2026-05-31-add-file-tab-detached-open/proposal.md
+
+## Verification
+- Not run; visual-only CSS adjustment per request.
+
+## Notes
+- Existing unrelated worktree changes were left untouched.
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ca99d5e3` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

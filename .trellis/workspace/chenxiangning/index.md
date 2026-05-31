@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-18.md`
-- **Total Sessions**: 657
+- **Total Sessions**: 658
 - **Last Active**: 2026-06-01
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-18.md` | ~285 | Active |
+| `journal-18.md` | ~332 | Active |
 | `journal-17.md` | ~1971 | Archived |
 | `journal-16.md` | ~1985 | Archived |
 | `journal-15.md` | ~1996 | Archived |
@@ -46,6 +46,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 658 | 2026-06-01 | 强化独立窗口图标主题色 | `ca99d5e3` | `feature/v0.5.4` |
 | 657 | 2026-06-01 | 加固 Project Map 模型结构化输出 | `4cb04065` | `feature/v0.5.4` |
 | 656 | 2026-06-01 | 归档已验证 OpenSpec 变更并回写主规范 | `bad389e5d757670e12bf7acbbfdcad0a927b34f8` | `feature/v0.5.4` |
 | 655 | 2026-06-01 | 修复自动会话 system-auto 归类与失败路径元数据 | `59123d87` | `feature/v0.5.4` |
