@@ -363,3 +363,50 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 660: 提交内嵌浏览器 MVP phase1
+
+**Date**: 2026-06-01
+**Task**: 提交内嵌浏览器 MVP phase1
+**Branch**: `feature/v0.5.4`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| Area | Summary |
+|------|---------|
+| Browser Agent MVP | Committed phase1 embedded browser agent surface, including frontend dock, backend browser_agent module, Tauri service bridge, platform capability helpers, snapshot sanitizer, attachment utilities, settings/i18n/style integration, and OpenSpec change artifacts. |
+| Task/Conversation Integration | Included task center, queued handoff bubble, composer, message presentation, app shell, layout, sidebar, and workspace entry integrations for the browser-agent phase1 flow. |
+| Governance Gate Hardening | Included large-file/heavy-test-noise/test-batched boundary fixes: accurate fail-mode JSON evidence, strict batch-size parsing, .omx runtime artifact exclusion, and hard-debt blocking coverage. |
+
+**Validation Evidence**:
+- `node --test scripts/check-large-files.test.mjs scripts/check-heavy-test-noise.test.mjs scripts/test-batched.test.mjs` passed: 29/29.
+- `npm run check:large-files:near-threshold` passed; emitted 27 watch warnings.
+- `npm run check:large-files:gate` passed; hard gate found 0.
+- Full `npm run check:heavy-test-noise` was intentionally not run in this session because it executes the complete heavy suite; focused parser/gate tests covered the governance fixes.
+
+**Code Commit**:
+- `372a1679 feat(browser-agent): 提交内嵌浏览器 MVP phase1`
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `372a1679` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
