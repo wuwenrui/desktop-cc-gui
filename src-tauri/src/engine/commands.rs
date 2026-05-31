@@ -22,6 +22,7 @@ use tokio::time::timeout;
 
 use crate::backend::events::AppServerEvent;
 use crate::remote_backend;
+use crate::session_management::{self, AutoSessionMetadata};
 use crate::state::AppState;
 use crate::types::WorkspaceEntry;
 
@@ -57,6 +58,26 @@ const EVENT_FORWARDER_TIMEOUT_SECS: u64 = 30 * 60;
 /// Gemini may emit fallback reasoning shortly after turn/completed.
 /// Keep the forwarder alive briefly so realtime reasoning is not dropped.
 const GEMINI_POST_COMPLETION_REASONING_GRACE_MS: u64 = 8_000;
+
+async fn record_auto_session_metadata_if_present(
+    state: &AppState,
+    workspace_id: &str,
+    session_id: Option<&str>,
+    metadata: Option<AutoSessionMetadata>,
+    engine_prefix: &str,
+) {
+    let (Some(session_id), Some(metadata)) = (session_id, metadata) else {
+        return;
+    };
+    let _ = session_management::record_auto_session_metadata_core(
+        &state.workspaces,
+        state.storage_path.as_path(),
+        workspace_id.to_string(),
+        format!("{engine_prefix}:{session_id}"),
+        metadata,
+    )
+    .await;
+}
 /// Claude `/context` probing happens after the CLI turn completes. Keep the
 /// forwarder subscribed long enough for the post-completion UsageUpdate.
 const CLAUDE_POST_COMPLETION_USAGE_GRACE_MS: u64 = 35_000;
@@ -1076,6 +1097,7 @@ pub async fn engine_send_message(
     agent: Option<String>,
     variant: Option<String>,
     custom_spec_root: Option<String>,
+    auto_session: Option<AutoSessionMetadata>,
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<Value, String> {
@@ -1106,6 +1128,7 @@ pub async fn engine_send_message(
                 "agent": agent,
                 "variant": variant,
                 "customSpecRoot": custom_spec_root,
+                "autoSession": auto_session,
             }),
         )
         .await;
@@ -1220,6 +1243,7 @@ pub async fn engine_send_message(
             });
 
             let response_session_id = resolved_session_id.clone();
+            let auto_session_for_record = auto_session.clone();
             let params = super::SendMessageParams {
                 text,
                 model: sanitized_model,
@@ -1335,6 +1359,18 @@ pub async fn engine_send_message(
                     }
                 }
             });
+            if let (Some(session_id), Some(metadata)) =
+                (response_session_id.as_deref(), auto_session_for_record)
+            {
+                record_auto_session_metadata_if_present(
+                    &state,
+                    &workspace_id,
+                    Some(session_id),
+                    Some(metadata),
+                    "claude",
+                )
+                .await;
+            }
 
             // Spawn the message sender: drives the Claude CLI process
             let session_clone = session.clone();
@@ -1411,6 +1447,7 @@ pub async fn engine_send_message(
             } else {
                 Some(session_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string()))
             };
+            let response_session_id = resolved_session_id.clone();
 
             let sanitized_model = model
                 .as_ref()
@@ -1517,9 +1554,22 @@ pub async fn engine_send_message(
                     session_clone.emit_error(&turn_id_clone, e);
                 }
             });
+            if let (Some(session_id), Some(metadata)) =
+                (response_session_id.as_deref(), auto_session.clone())
+            {
+                record_auto_session_metadata_if_present(
+                    &state,
+                    &workspace_id,
+                    Some(session_id),
+                    Some(metadata),
+                    "opencode",
+                )
+                .await;
+            }
 
             Ok(json!({
                 "engine": "opencode",
+                "sessionId": response_session_id,
                 "result": {
                     "turn": {
                         "id": turn_id,
@@ -1554,6 +1604,7 @@ pub async fn engine_send_message(
             } else {
                 Some(session_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string()))
             };
+            let response_session_id = resolved_session_id.clone();
 
             let sanitized_model = model
                 .as_ref()
@@ -1721,9 +1772,22 @@ pub async fn engine_send_message(
                     log::error!("Gemini send_message failed: {}", e);
                 }
             });
+            if let (Some(session_id), Some(metadata)) =
+                (response_session_id.as_deref(), auto_session.clone())
+            {
+                record_auto_session_metadata_if_present(
+                    &state,
+                    &workspace_id,
+                    Some(session_id),
+                    Some(metadata),
+                    "gemini",
+                )
+                .await;
+            }
 
             Ok(json!({
                 "engine": "gemini",
+                "sessionId": response_session_id,
                 "result": {
                     "turn": {
                         "id": turn_id,
@@ -1756,6 +1820,7 @@ pub async fn engine_send_message_sync(
     agent: Option<String>,
     variant: Option<String>,
     custom_spec_root: Option<String>,
+    auto_session: Option<AutoSessionMetadata>,
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<Value, String> {
@@ -1778,6 +1843,7 @@ pub async fn engine_send_message_sync(
             agent,
             variant,
             custom_spec_root,
+            auto_session,
         );
         return remote_backend::call_remote(&*state, app, method, params).await;
     }
@@ -1864,6 +1930,14 @@ pub async fn engine_send_message_sync(
             })
             .await
             .map_err(|_| "Claude response timed out".to_string())??;
+            record_auto_session_metadata_if_present(
+                &state,
+                &workspace_id,
+                response_session_id.as_deref(),
+                auto_session,
+                "claude",
+            )
+            .await;
 
             Ok(json!({
                 "engine": "claude",
@@ -1892,6 +1966,7 @@ pub async fn engine_send_message_sync(
             } else {
                 Some(session_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string()))
             };
+            let response_session_id = resolved_session_id.clone();
 
             let sanitized_model = model
                 .as_ref()
@@ -1930,9 +2005,18 @@ pub async fn engine_send_message_sync(
             )
             .await
             .map_err(|_| "OpenCode response timed out".to_string())??;
+            record_auto_session_metadata_if_present(
+                &state,
+                &workspace_id,
+                response_session_id.as_deref(),
+                auto_session,
+                "opencode",
+            )
+            .await;
 
             Ok(json!({
                 "engine": "opencode",
+                "sessionId": response_session_id,
                 "text": response
             }))
         }
@@ -1944,6 +2028,7 @@ pub async fn engine_send_message_sync(
                 effort,
                 access_mode,
                 normalized_custom_spec_root.clone(),
+                auto_session.clone(),
                 &app,
                 &state,
             )
@@ -1975,6 +2060,7 @@ pub async fn engine_send_message_sync(
             } else {
                 Some(session_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string()))
             };
+            let response_session_id = resolved_session_id.clone();
 
             let sanitized_model = model
                 .as_ref()
@@ -2011,9 +2097,18 @@ pub async fn engine_send_message_sync(
             )
             .await
             .map_err(|_| "Gemini response timed out".to_string())??;
+            record_auto_session_metadata_if_present(
+                &state,
+                &workspace_id,
+                response_session_id.as_deref(),
+                auto_session,
+                "gemini",
+            )
+            .await;
 
             Ok(json!({
                 "engine": "gemini",
+                "sessionId": response_session_id,
                 "text": response
             }))
         }

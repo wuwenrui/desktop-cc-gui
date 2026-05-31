@@ -1255,6 +1255,13 @@ export function useSpecHub({ workspaceId, files, directories }: UseSpecHubOption
               accessMode: "full-access",
               continueSession: false,
               customSpecRoot,
+              autoSession: {
+                sessionPurpose: "spec-hub-apply",
+                visibility: "system-auto",
+                ownerFeature: "spec-hub",
+                autoArchive: false,
+                createdBy: "system",
+              },
             });
             return generated?.text ?? "";
           } finally {
@@ -1264,7 +1271,15 @@ export function useSpecHub({ workspaceId, files, directories }: UseSpecHubOption
 
         let generatedText = "";
         if (selectedExecutor === "codex") {
-          const threadStart = await startThread(workspaceId);
+          const threadStart = await startThread(workspaceId, {
+            autoSession: {
+              sessionPurpose: "spec-hub-apply",
+              visibility: "system-auto",
+              ownerFeature: "spec-hub",
+              autoArchive: false,
+              createdBy: "system",
+            },
+          });
           const threadId = extractThreadIdFromRpc(threadStart);
           if (threadId) {
             appendApplyLog("execution", `Execution thread created: ${threadId}`);
@@ -1285,6 +1300,13 @@ export function useSpecHub({ workspaceId, files, directories }: UseSpecHubOption
             accessMode: "full-access",
             continueSession: false,
             customSpecRoot,
+            autoSession: {
+              sessionPurpose: "spec-hub-apply",
+              visibility: "system-auto",
+              ownerFeature: "spec-hub",
+              autoArchive: false,
+              createdBy: "system",
+            },
           });
           const threadId = extractThreadIdFromRpc(trigger);
           if (threadId) {

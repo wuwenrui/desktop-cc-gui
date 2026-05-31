@@ -1459,6 +1459,11 @@ async fn handle_rpc_request(
             let agent = parse_optional_string(&params, "agent");
             let variant = parse_optional_string(&params, "variant");
             let custom_spec_root = parse_optional_string(&params, "customSpecRoot");
+            let auto_session =
+                serde_json::from_value::<Option<session_management::AutoSessionMetadata>>(
+                    params.get("autoSession").cloned().unwrap_or(Value::Null),
+                )
+                .map_err(|err| err.to_string())?;
             state
                 .engine_send_message(
                     workspace_id,
@@ -1476,6 +1481,7 @@ async fn handle_rpc_request(
                     agent,
                     variant,
                     custom_spec_root,
+                    auto_session,
                 )
                 .await
         }
@@ -1496,6 +1502,11 @@ async fn handle_rpc_request(
             let agent = parse_optional_string(&params, "agent");
             let variant = parse_optional_string(&params, "variant");
             let custom_spec_root = parse_optional_string(&params, "customSpecRoot");
+            let auto_session =
+                serde_json::from_value::<Option<session_management::AutoSessionMetadata>>(
+                    params.get("autoSession").cloned().unwrap_or(Value::Null),
+                )
+                .map_err(|err| err.to_string())?;
             state
                 .engine_send_message_sync(
                     workspace_id,
@@ -1512,6 +1523,7 @@ async fn handle_rpc_request(
                     agent,
                     variant,
                     custom_spec_root,
+                    auto_session,
                 )
                 .await
         }
@@ -1548,7 +1560,12 @@ async fn handle_rpc_request(
         }
         "start_thread" => {
             let workspace_id = parse_string(&params, "workspaceId")?;
-            state.start_thread(workspace_id).await
+            let auto_session =
+                serde_json::from_value::<Option<session_management::AutoSessionMetadata>>(
+                    params.get("autoSession").cloned().unwrap_or(Value::Null),
+                )
+                .map_err(|err| err.to_string())?;
+            state.start_thread(workspace_id, auto_session).await
         }
         "list_claude_sessions" => {
             let workspace_path = parse_string(&params, "workspacePath")?;

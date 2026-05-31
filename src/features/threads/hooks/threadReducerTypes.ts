@@ -1,6 +1,7 @@
 import type {
   AccountSnapshot,
   ApprovalRequest,
+  AutoSessionMetadata,
   ConversationItem,
   RateLimitSnapshot,
   RequestUserInputRequest,
@@ -76,6 +77,7 @@ export type ThreadAction =
       threadId: string;
       engine?: "codex" | "claude" | "gemini" | "opencode";
       folderId?: string | null;
+      autoSession?: AutoSessionMetadata | null;
     }
   | { type: "hideThread"; workspaceId: string; threadId: string }
   | { type: "removeThread"; workspaceId: string; threadId: string }

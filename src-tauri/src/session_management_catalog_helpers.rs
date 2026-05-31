@@ -102,6 +102,9 @@ pub(super) fn build_catalog_count_summary(
     };
 
     for entry in entries {
+        if entry_is_hidden_automatic_session(entry) {
+            continue;
+        }
         if !entry_matches_engine_and_keyword(entry, engine_filter.as_deref(), keyword.as_deref()) {
             continue;
         }
@@ -117,6 +120,13 @@ pub(super) fn build_catalog_count_summary(
     }
 
     counts
+}
+
+pub(super) fn entry_is_hidden_automatic_session(entry: &WorkspaceSessionCatalogEntry) -> bool {
+    entry
+        .auto_session
+        .as_ref()
+        .is_some_and(|metadata| metadata.visibility == super::AutoSessionVisibility::Hidden)
 }
 
 pub(super) fn entry_matches_query(

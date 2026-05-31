@@ -1487,7 +1487,15 @@ describe("runProjectMapGenerationWorker", () => {
     });
 
     expect(engineSendMessageSync).not.toHaveBeenCalled();
-    expect(startThread).toHaveBeenCalledWith("ws-1");
+    expect(startThread).toHaveBeenCalledWith("ws-1", {
+      autoSession: {
+        sessionPurpose: "project-map-generation",
+        visibility: "system-auto",
+        ownerFeature: "project-map",
+        autoArchive: false,
+        createdBy: "system",
+      },
+    });
     expect(sendUserMessage).toHaveBeenCalledWith(
       "ws-1",
       "codex-thread-1",

@@ -1,4 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
+import type {
+  AutoSessionCreatedBy,
+  AutoSessionMetadata,
+  AutoSessionVisibility,
+} from "../../types";
 
 export interface WorkspaceSessionCatalogEntry {
   sessionId: string;
@@ -24,6 +29,7 @@ export interface WorkspaceSessionCatalogEntry {
   matchedWorkspaceId?: string | null;
   matchedWorkspaceLabel?: string | null;
   folderId?: string | null;
+  autoSession?: AutoSessionMetadata | null;
   existsOnDisk?: boolean | null;
   inconsistencyCode?:
     | "missing-on-disk"
@@ -36,6 +42,12 @@ export interface WorkspaceSessionCatalogEntry {
   physicalPath?: string | null;
   childrenCount?: number | null;
 }
+
+export type {
+  AutoSessionCreatedBy,
+  AutoSessionMetadata,
+  AutoSessionVisibility,
+};
 
 export type WorkspaceSessionSourceCompleteness =
   | "complete"
@@ -161,6 +173,18 @@ export async function listWorkspaceSessions(
     query: options?.query ?? null,
     cursor: options?.cursor ?? null,
     limit: options?.limit ?? null,
+  });
+}
+
+export async function recordAutoSessionMetadata(
+  workspaceId: string,
+  sessionId: string,
+  metadata: AutoSessionMetadata,
+): Promise<void> {
+  return invoke<void>("record_auto_session_metadata", {
+    workspaceId,
+    sessionId,
+    metadata,
   });
 }
 

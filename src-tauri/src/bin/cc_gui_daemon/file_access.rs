@@ -118,9 +118,11 @@ impl DaemonState {
         workspace_id: String,
     ) -> Result<WorkspaceFilesResponse, String> {
         let root = workspaces_core::resolve_workspace_root(&self.workspaces, &workspace_id).await?;
-        Ok(tokio::task::spawn_blocking(move || list_workspace_files_inner(&root, 12_000))
-            .await
-            .map_err(|err| format!("failed to join workspace file scan task: {err}"))?)
+        Ok(
+            tokio::task::spawn_blocking(move || list_workspace_files_inner(&root, 12_000))
+                .await
+                .map_err(|err| format!("failed to join workspace file scan task: {err}"))?,
+        )
     }
 
     pub(crate) async fn list_workspace_directory_children(

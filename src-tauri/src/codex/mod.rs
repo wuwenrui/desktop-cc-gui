@@ -54,6 +54,36 @@ use crate::shared::{codex_core, thread_titles_core};
 use crate::state::AppState;
 use crate::types::WorkspaceEntry;
 
+fn hidden_auto_session_metadata(
+    session_purpose: &str,
+    owner_feature: &str,
+) -> crate::session_management::AutoSessionMetadata {
+    crate::session_management::AutoSessionMetadata {
+        session_purpose: session_purpose.to_string(),
+        visibility: crate::session_management::AutoSessionVisibility::Hidden,
+        owner_feature: owner_feature.to_string(),
+        auto_archive: Some(true),
+        created_by: crate::session_management::AutoSessionCreatedBy::System,
+    }
+}
+
+async fn record_hidden_codex_helper_thread(
+    state: &AppState,
+    workspace_id: &str,
+    thread_id: &str,
+    session_purpose: &str,
+    owner_feature: &str,
+) {
+    let _ = crate::session_management::record_auto_session_metadata_core(
+        &state.workspaces,
+        state.storage_path.as_path(),
+        workspace_id.to_string(),
+        thread_id.to_string(),
+        hidden_auto_session_metadata(session_purpose, owner_feature),
+    )
+    .await;
+}
+
 pub(crate) use self::session_runtime::ensure_codex_session;
 pub(crate) use self::session_runtime::{
     attach_hook_safe_fallback_metadata, create_session_runtime_recovering_error,
@@ -415,6 +445,7 @@ pub(crate) async fn cli_install_run(
 #[tauri::command]
 pub(crate) async fn start_thread(
     workspace_id: String,
+    auto_session: Option<crate::session_management::AutoSessionMetadata>,
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<Value, String> {
@@ -423,13 +454,29 @@ pub(crate) async fn start_thread(
             &*state,
             app,
             "start_thread",
-            json!({ "workspaceId": workspace_id }),
+            json!({ "workspaceId": workspace_id, "autoSession": auto_session }),
         )
         .await;
     }
 
     let resolved_model = resolve_workspace_fallback_model(&state, &workspace_id).await;
-    start_thread_with_runtime_retry(&workspace_id, resolved_model, &state, &app).await
+    let response =
+        start_thread_with_runtime_retry(&workspace_id, resolved_model, &state, &app).await?;
+    if let Some(metadata) = auto_session {
+        if let Some(thread_id) =
+            crate::shared::codex_core::extract_thread_id_from_response(&response)
+        {
+            let _ = crate::session_management::record_auto_session_metadata_core(
+                &state.workspaces,
+                state.storage_path.as_path(),
+                workspace_id,
+                thread_id,
+                metadata,
+            )
+            .await;
+        }
+    }
+    Ok(response)
 }
 
 #[tauri::command]
@@ -1497,6 +1544,8 @@ pub(crate) async fn generate_commit_message(
             )
         })?
         .to_string();
+    record_hidden_codex_helper_thread(&state, &workspace_id, &thread_id, "commit-message", "git")
+        .await;
 
     // Hide background helper threads from the sidebar, even if a thread/started event leaked.
     let _ = app.emit(
@@ -1806,6 +1855,14 @@ Keep it between 3 and 8 words.\n\
             )
         })?
         .to_string();
+    record_hidden_codex_helper_thread(
+        &state,
+        &workspace_id,
+        &helper_thread_id,
+        "title-generation",
+        "threads",
+    )
+    .await;
 
     let _ = app.emit(
         "app-server-event",
@@ -2029,6 +2086,8 @@ Task:\n{cleaned_prompt}"
             )
         })?
         .to_string();
+    record_hidden_codex_helper_thread(&state, &workspace_id, &thread_id, "run-metadata", "tasks")
+        .await;
 
     // Hide background helper threads from the sidebar, even if a thread/started event leaked.
     let _ = app.emit(

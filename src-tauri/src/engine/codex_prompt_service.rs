@@ -8,6 +8,7 @@ use tokio::time::timeout;
 use crate::backend::app_server::WorkspaceSession;
 use crate::backend::events::AppServerEvent;
 use crate::engine::error_mapper::extract_error_message;
+use crate::session_management::{self, AutoSessionMetadata};
 use crate::state::AppState;
 
 pub(crate) fn normalize_custom_spec_root(custom_spec_root: Option<&str>) -> Option<String> {
@@ -225,6 +226,7 @@ pub(crate) async fn run_codex_prompt_sync(
     effort: Option<String>,
     access_mode: Option<String>,
     custom_spec_root: Option<String>,
+    auto_session: Option<AutoSessionMetadata>,
     app: &AppHandle,
     state: &AppState,
 ) -> Result<String, String> {
@@ -269,6 +271,17 @@ pub(crate) async fn run_codex_prompt_sync(
         .and_then(|value| value.as_str())
         .ok_or_else(|| "Failed to get thread id for Codex prompt".to_string())?
         .to_string();
+
+    if let Some(metadata) = auto_session.clone() {
+        let _ = session_management::record_auto_session_metadata_core(
+            &state.workspaces,
+            state.storage_path.as_path(),
+            workspace_id.to_string(),
+            helper_thread_id.clone(),
+            metadata,
+        )
+        .await;
+    }
 
     let _ = app.emit(
         "app-server-event",

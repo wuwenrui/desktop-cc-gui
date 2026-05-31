@@ -183,13 +183,18 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
         // AND the existing engineSource is not already set.
         // This prevents inferred engines (from inferEngineFromThreadId) from
         // overwriting explicitly set engines.
-        if (!action.engine || existing.engineSource) {
+        if (
+          (!action.engine || existing.engineSource) &&
+          action.folderId === undefined &&
+          action.autoSession === undefined
+        ) {
           return state;
         }
         const updated = {
           ...existing,
-          engineSource: action.engine,
+          engineSource: action.engine ?? existing.engineSource,
           folderId: action.folderId ?? existing.folderId,
+          autoSession: action.autoSession ?? existing.autoSession ?? null,
         };
         const nextList = [...list];
         nextList[existingIndex] = updated;
@@ -338,6 +343,7 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
         updatedAt: 0,
         engineSource: action.engine,
         folderId: action.folderId ?? null,
+        autoSession: action.autoSession ?? null,
       };
       return {
         ...state,
@@ -1898,6 +1904,8 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
       };
     case "setThreads": {
       const hidden = state.hiddenThreadIdsByWorkspace[action.workspaceId] ?? {};
+      const isHiddenAutomaticThread = (thread: ThreadSummary) =>
+        thread.autoSession?.visibility === "hidden";
       const existingThreads = state.threadsByWorkspace[action.workspaceId] ?? [];
       const now = Date.now();
       const shouldPreserveDegradedCodexFinalizedThreads = action.threads.some(
@@ -1936,7 +1944,7 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
 
       // Merge incoming threads with preserved existing info
       const visibleThreads = action.threads
-        .filter((thread) => !hidden[thread.id])
+        .filter((thread) => !hidden[thread.id] && !isHiddenAutomaticThread(thread))
         .map((thread) => {
           const existing = existingThreadById.get(thread.id);
           if (existing) {
@@ -1945,10 +1953,11 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
             const threadKind = thread.threadKind || existing.threadKind;
             const selectedEngine = thread.selectedEngine || existing.selectedEngine;
             const nativeThreadIds = thread.nativeThreadIds || existing.nativeThreadIds;
+            const autoSession = thread.autoSession ?? existing.autoSession ?? null;
             const name = shouldPreferExistingThreadName(existing.name, thread.name)
               ? existing.name
               : thread.name;
-            return { ...thread, name, engineSource, threadKind, selectedEngine, nativeThreadIds };
+            return { ...thread, name, engineSource, threadKind, selectedEngine, nativeThreadIds, autoSession };
           }
           return thread;
         });
@@ -1958,7 +1967,12 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
       const activeThreadId = state.activeThreadIdByWorkspace[action.workspaceId];
       if (activeThreadId) {
         const activeThread = existingThreadById.get(activeThreadId);
-        if (activeThread && !newThreadIds.has(activeThreadId) && !hidden[activeThreadId]) {
+        if (
+          activeThread &&
+          !newThreadIds.has(activeThreadId) &&
+          !hidden[activeThreadId] &&
+          !isHiddenAutomaticThread(activeThread)
+        ) {
           // Prepend the active thread to preserve it
           visibleThreads.unshift(activeThread);
         }
@@ -1976,7 +1990,12 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
         if (threadId === activeThreadId) {
           return false;
         }
-        if (hidden[threadId] || newThreadIds.has(threadId) || preservedThreadIds.has(threadId)) {
+        if (
+          hidden[threadId] ||
+          isHiddenAutomaticThread(thread) ||
+          newThreadIds.has(threadId) ||
+          preservedThreadIds.has(threadId)
+        ) {
           return false;
         }
         if (typeof thread.folderId === "string" && thread.folderId.trim().length > 0) {
@@ -1992,6 +2011,7 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
             !isRetainableFinalizedCodexThread(thread)
             || threadId === activeThreadId
             || hidden[threadId]
+            || isHiddenAutomaticThread(thread)
             || newThreadIds.has(threadId)
             || preservedThreadIds.has(threadId)
           ) {

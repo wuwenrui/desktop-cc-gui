@@ -80,6 +80,7 @@ import {
   deleteWorkspaceSessionFolder,
   assignWorkspaceSessionFolder,
   assignWorkspaceSessionFolders,
+  recordAutoSessionMetadata,
   archiveWorkspaceSessions,
   unarchiveWorkspaceSessions,
   deleteWorkspaceSessions,
@@ -1071,6 +1072,29 @@ describe("tauri invoke wrappers", () => {
         workspaceId: "ws-2",
         sessionIds: ["claude:1", "codex-2"],
         folderId: null,
+      },
+    );
+
+    await recordAutoSessionMetadata("ws-2", "codex:auto-1", {
+      sessionPurpose: "prompt-enhancer",
+      visibility: "hidden",
+      ownerFeature: "composer",
+      autoArchive: true,
+      createdBy: "system",
+    });
+    expect(invokeMock).toHaveBeenNthCalledWith(
+      8,
+      "record_auto_session_metadata",
+      {
+        workspaceId: "ws-2",
+        sessionId: "codex:auto-1",
+        metadata: {
+          sessionPurpose: "prompt-enhancer",
+          visibility: "hidden",
+          ownerFeature: "composer",
+          autoArchive: true,
+          createdBy: "system",
+        },
       },
     );
   });
@@ -2174,6 +2198,7 @@ describe("tauri invoke wrappers", () => {
       agent: null,
       variant: null,
       customSpecRoot: null,
+      autoSession: null,
     });
   });
 
@@ -2205,6 +2230,51 @@ describe("tauri invoke wrappers", () => {
       agent: null,
       variant: null,
       customSpecRoot: "/tmp/external-openspec",
+      autoSession: null,
+    });
+  });
+
+  it("maps automatic session metadata in sync engine send payload", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({
+      engine: "codex",
+      text: "ok",
+    });
+
+    await engineSendMessageSync("ws-auto", {
+      text: "enhance prompt",
+      engine: "codex",
+      autoSession: {
+        sessionPurpose: "prompt-enhancer",
+        visibility: "hidden",
+        ownerFeature: "composer",
+        autoArchive: true,
+        createdBy: "system",
+      },
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith("engine_send_message_sync", {
+      workspaceId: "ws-auto",
+      text: "enhance prompt",
+      engine: "codex",
+      model: null,
+      effort: null,
+      disableThinking: false,
+      images: null,
+      continueSession: false,
+      accessMode: null,
+      sessionId: null,
+      forkSessionId: null,
+      agent: null,
+      variant: null,
+      customSpecRoot: null,
+      autoSession: {
+        sessionPurpose: "prompt-enhancer",
+        visibility: "hidden",
+        ownerFeature: "composer",
+        autoArchive: true,
+        createdBy: "system",
+      },
     });
   });
 
@@ -2282,6 +2352,7 @@ describe("tauri invoke wrappers", () => {
       agent: null,
       variant: null,
       customSpecRoot: null,
+      autoSession: null,
     });
   });
 
@@ -2316,6 +2387,7 @@ describe("tauri invoke wrappers", () => {
       agent: null,
       variant: null,
       customSpecRoot: null,
+      autoSession: null,
     });
   });
 
@@ -2346,6 +2418,7 @@ describe("tauri invoke wrappers", () => {
       agent: null,
       variant: null,
       customSpecRoot: null,
+      autoSession: null,
     });
   });
 

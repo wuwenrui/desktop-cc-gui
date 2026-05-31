@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  WORKSPACE_SESSION_SYSTEM_AUTO_FOLDER_ID,
   buildWorkspaceSessionFolderMoveTargets,
   buildWorkspaceSessionFolderProjection,
 } from "./workspaceSessionFolders";
@@ -117,6 +118,64 @@ describe("buildWorkspaceSessionFolderProjection", () => {
       "claude:parent",
     ]);
     expect(projection.rootRows.map((row) => row.thread.id)).toEqual(["claude:child"]);
+  });
+
+  it("applies automatic session visibility before projecting root rows", () => {
+    const projection = buildWorkspaceSessionFolderProjection({
+      folders: [
+        {
+          id: WORKSPACE_SESSION_SYSTEM_AUTO_FOLDER_ID,
+          workspaceId: "ws-1",
+          parentId: null,
+          name: "System auto",
+          createdAt: 0,
+          updatedAt: 0,
+        },
+      ],
+      rows: [
+        {
+          thread: {
+            id: "claude:hidden",
+            name: "Hidden helper",
+            updatedAt: 3,
+            autoSession: {
+              sessionPurpose: "title-generation",
+              visibility: "hidden",
+              ownerFeature: "threads",
+              autoArchive: true,
+              createdBy: "system",
+            },
+          },
+          depth: 0,
+        },
+        {
+          thread: {
+            id: "claude:system-auto",
+            name: "System trace",
+            updatedAt: 2,
+            autoSession: {
+              sessionPurpose: "pull-request-question",
+              visibility: "system-auto",
+              ownerFeature: "git",
+              autoArchive: false,
+              createdBy: "system",
+            },
+          },
+          depth: 0,
+        },
+        {
+          thread: { id: "claude:user", name: "User", updatedAt: 1 },
+          depth: 0,
+        },
+      ],
+      folderIdBySessionId: new Map(),
+    });
+
+    expect(projection.rootRows.map((row) => row.thread.id)).toEqual(["claude:user"]);
+    expect(projection.folders[0]?.rows.map((row) => row.thread.id)).toEqual([
+      "claude:system-auto",
+    ]);
+    expect(projection.visibleSessionCount).toBe(2);
   });
 
   it("builds move targets only from the provided project folders", () => {

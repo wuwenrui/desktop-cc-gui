@@ -11,6 +11,13 @@ const PROMPT_ENHANCER_EMPTY_FALLBACK_MESSAGE = 'Codex returned an empty prompt e
 const PROMPT_ENHANCER_TIMEOUT_MS = 60_000;
 const PROMPT_ENHANCER_TIMEOUT_MESSAGE =
   `Prompt enhancement timed out after ${PROMPT_ENHANCER_TIMEOUT_MS / 1000} seconds. Please try again.`;
+const PROMPT_ENHANCER_AUTO_SESSION = {
+  sessionPurpose: 'prompt-enhancer',
+  visibility: 'hidden',
+  ownerFeature: 'composer',
+  autoArchive: true,
+  createdBy: 'system',
+} as const;
 
 function buildPromptEnhancerInstruction(originalPrompt: string, engine: EngineType): string {
   const baseInstruction = [
@@ -151,6 +158,7 @@ async function requestEnhancedPrompt(options: {
       accessMode: 'read-only',
       continueSession: false,
       sessionId: options.sessionId,
+      autoSession: PROMPT_ENHANCER_AUTO_SESSION,
     }),
     PROMPT_ENHANCER_TIMEOUT_MS,
     PROMPT_ENHANCER_TIMEOUT_MESSAGE,

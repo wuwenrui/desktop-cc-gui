@@ -45,6 +45,7 @@ import type {
   GitPushPreviewResponse,
   ReviewTarget,
 } from "../types";
+import type { AutoSessionMetadata } from "./tauri/sessionManagement";
 export type {
   WorkspaceSessionCatalogEntry,
   WorkspaceSessionCatalogQuery,
@@ -61,6 +62,7 @@ export type {
   WorkspaceSessionFolderTree,
   WorkspaceSessionFolderMutation,
   WorkspaceSessionAssignmentResponse,
+  AutoSessionMetadata,
 } from "./tauri/sessionManagement";
 export {
   assignWorkspaceSessionFolders,
@@ -77,6 +79,7 @@ export {
   listWorkspaceSessionFolders,
   listWorkspaceSessions,
   moveWorkspaceSessionFolder,
+  recordAutoSessionMetadata,
   renameWorkspaceSessionFolder,
   unarchiveWorkspaceSessions,
 } from "./tauri/sessionManagement";
@@ -361,9 +364,10 @@ export async function getConfigModel(workspaceId: string): Promise<string | null
   return trimmed.length > 0 ? trimmed : null;
 }
 
-export async function startThread(workspaceId: string) {
+export async function startThread(workspaceId: string, options?: { autoSession?: AutoSessionMetadata | null }) {
   return invoke<Record<string, unknown> | null | undefined>("start_thread", {
     workspaceId,
+    autoSession: options?.autoSession ?? null,
   });
 }
 
@@ -1863,6 +1867,13 @@ export async function generateCommitMessageWithEngine(
   const response = await engineSendMessageSync(workspaceId, {
     text: prompt,
     engine,
+    autoSession: {
+      sessionPurpose: "commit-message",
+      visibility: "hidden",
+      ownerFeature: "git",
+      autoArchive: true,
+      createdBy: "system",
+    },
   });
   return response.text;
 }
@@ -2038,6 +2049,7 @@ export async function engineSendMessage(
     agent?: string | null;
     variant?: string | null;
     customSpecRoot?: string | null;
+    autoSession?: AutoSessionMetadata | null;
   },
 ): Promise<Record<string, unknown>> {
   if (isEngineRpcFallbackMode() && params.engine && params.engine !== "codex") {
@@ -2064,6 +2076,7 @@ export async function engineSendMessage(
       agent: params.agent ?? null,
       variant: params.variant ?? null,
       customSpecRoot: params.customSpecRoot ?? null,
+      autoSession: params.autoSession ?? null,
     });
   } catch (error) {
     if (isUnknownMethodError(error, "engine_send_message")) {
@@ -2100,6 +2113,7 @@ export async function engineSendMessageSync(
     agent?: string | null;
     variant?: string | null;
     customSpecRoot?: string | null;
+    autoSession?: AutoSessionMetadata | null;
   },
 ): Promise<{ engine: EngineType; text: string }> {
   if (isEngineRpcFallbackMode() && params.engine && params.engine !== "codex") {
@@ -2121,6 +2135,7 @@ export async function engineSendMessageSync(
       agent: params.agent ?? null,
       variant: params.variant ?? null,
       customSpecRoot: params.customSpecRoot ?? null,
+      autoSession: params.autoSession ?? null,
     });
   } catch (error) {
     if (isUnknownMethodError(error, "engine_send_message_sync")) {

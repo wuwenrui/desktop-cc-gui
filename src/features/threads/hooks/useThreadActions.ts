@@ -302,13 +302,21 @@ export function useThreadActions({
         deletedThreadIdSet.size === 0
           ? summaries
           : summaries.filter((summary) => !deletedThreadIdSet.has(summary.id));
+      const filterRootVisibleAutomaticSummaries = (summaries: ThreadSummary[]) =>
+        summaries.filter(
+          (summary) => summary.autoSession?.visibility !== "hidden",
+        );
       const getLastGoodThreadSummariesWithoutDeleted = () =>
-        filterDeletedSummaries(getLastGoodThreadSummaries(workspace.id));
+        filterRootVisibleAutomaticSummaries(
+          filterDeletedSummaries(getLastGoodThreadSummaries(workspace.id)),
+        );
       const getLastGoodThreadSummariesForEngineWithoutDeleted = (
         engine: ThreadEngineSource,
       ) =>
-        filterDeletedSummaries(
-          getLastGoodThreadSummariesForEngine(workspace.id, engine),
+        filterRootVisibleAutomaticSummaries(
+          filterDeletedSummaries(
+            getLastGoodThreadSummariesForEngine(workspace.id, engine),
+          ),
         );
       const recoverySource = options?.recoverySource ?? "thread-list-live";
       const allowRuntimeReconnect = options?.allowRuntimeReconnect ?? true;
@@ -1115,14 +1123,18 @@ export function useThreadActions({
           );
         }
         visibleSummaries = applySessionArchiveState(
-          filterDeletedSummaries(visibleSummaries),
+          filterRootVisibleAutomaticSummaries(
+            filterDeletedSummaries(visibleSummaries),
+          ),
           archivedSessionMap,
         );
         if (lastGoodSnapshotCandidates) {
           rememberLastGoodThreadSummariesByEngine(
             workspace.id,
             applySessionArchiveState(
-              filterDeletedSummaries(lastGoodSnapshotCandidates),
+              filterRootVisibleAutomaticSummaries(
+                filterDeletedSummaries(lastGoodSnapshotCandidates),
+              ),
               archivedSessionMap,
             ),
             buildLastGoodSnapshotBlockedEngines(

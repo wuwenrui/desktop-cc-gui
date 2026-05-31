@@ -13,6 +13,7 @@ import type {
   ReviewTarget,
   WorkspaceInfo,
 } from "../../../types";
+import type { AutoSessionMetadata } from "../../../services/tauri";
 import {
   extractClaudeForkParentSessionId,
   isClaudeForkThreadId,
@@ -122,6 +123,7 @@ type SendMessageOptions = {
     icon?: string | null;
   } | null;
   codexInvalidThreadRetryAttempted?: boolean;
+  autoSession?: AutoSessionMetadata | null;
 };
 
 type SendMessageToThreadFn = (
@@ -297,6 +299,7 @@ type UseThreadMessagingOptions = {
       activate?: boolean;
       engine?: "claude" | "codex" | "gemini" | "opencode";
       folderId?: string | null;
+      autoSession?: AutoSessionMetadata | null;
     },
   ) => Promise<string | null>;
   resolveOpenCodeAgent?: (threadId: string | null) => string | null;
@@ -1420,6 +1423,7 @@ export function useThreadMessaging({
               resolvedEngine === "claude"
                 ? extractClaudeForkParentSessionId(threadId)
                 : null,
+            autoSession: options?.autoSession ?? null,
             ...(customSpecRoot && shouldAttachCliSpecRootHint ? { customSpecRoot } : {}),
           });
 
@@ -2146,6 +2150,13 @@ export function useThreadMessaging({
       const reviewExecutionEngine: "claude" | "codex" =
         activeEngine === "claude" ? "claude" : "codex";
       const threadEngine = resolveThreadEngine(workspaceId, threadId);
+      const reviewAutoSession: AutoSessionMetadata = {
+        sessionPurpose: "review-fallback",
+        visibility: "system-auto",
+        ownerFeature: "review",
+        autoArchive: false,
+        createdBy: "system",
+      };
       const threadIdCompatible = isThreadIdCompatibleWithEngine(
         reviewExecutionEngine,
         threadId,
@@ -2167,6 +2178,7 @@ export function useThreadMessaging({
         const reviewThreadId = await startThreadForWorkspace(workspaceId, {
           activate: workspaceId === activeWorkspace?.id,
           engine: reviewExecutionEngine,
+          autoSession: reviewAutoSession,
         });
         if (!reviewThreadId) {
           return false;
@@ -2196,6 +2208,7 @@ export function useThreadMessaging({
         });
         await sendMessageToThread(reviewWorkspace, threadId, reviewCommand, [], {
           skipPromptExpansion: true,
+          autoSession: reviewAutoSession,
         });
         return true;
       }
@@ -2243,6 +2256,7 @@ export function useThreadMessaging({
           const fallbackThreadId = await startThreadForWorkspace(workspaceId, {
             activate: workspaceId === activeWorkspace?.id,
             engine: "codex",
+            autoSession: reviewAutoSession,
           });
           if (fallbackThreadId && fallbackThreadId !== reviewThreadId) {
             onDebug?.({

@@ -68,6 +68,7 @@ export type CodexCatalogSessionSummary = {
   provider?: string | null;
   sourceLabel?: string | null;
   folderId?: string | null;
+  autoSession?: ThreadSummary["autoSession"];
 };
 
 export function normalizeThreadListPartialSource(
@@ -1154,6 +1155,7 @@ export function mergeCodexCatalogSessionSummaries(
       provider: session.provider ?? undefined,
       sourceLabel: session.sourceLabel ?? undefined,
       folderId: session.folderId ?? null,
+      autoSession: session.autoSession ?? null,
       parentThreadId,
     };
     if (!prev || next.updatedAt >= prev.updatedAt) {

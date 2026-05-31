@@ -1,5 +1,8 @@
 import type { ThreadSummary, WorkspaceInfo } from "../../../types";
-import type { WorkspaceSessionSourceCompleteness } from "../../../services/tauri";
+import type {
+  AutoSessionMetadata,
+  WorkspaceSessionSourceCompleteness,
+} from "../../../services/tauri";
 import {
   DEFAULT_VISIBLE_THREAD_ROOT_COUNT,
   normalizeVisibleThreadRootCount,
@@ -71,6 +74,7 @@ export type ProjectCatalogSessionSummary = {
   sourceCompleteness?: WorkspaceSessionSourceCompleteness | null;
   sourceStatusReason?: string | null;
   folderId?: string | null;
+  autoSession?: AutoSessionMetadata | null;
 };
 
 function encodeThreadListCursorState(
@@ -216,6 +220,7 @@ export function normalizeProjectCatalogSession(
     sourceCompleteness?: unknown;
     sourceStatusReason?: unknown;
     folderId?: unknown;
+    autoSession?: unknown;
   };
   const sessionId = String(session.sessionId ?? "").trim();
   if (!sessionId) {
@@ -257,5 +262,39 @@ export function normalizeProjectCatalogSession(
       session.sourceStatusReason,
     ),
     folderId: normalizeOptionalCatalogString(session.folderId),
+    autoSession: normalizeAutoSessionMetadata(session.autoSession),
+  };
+}
+
+function normalizeAutoSessionMetadata(value: unknown): AutoSessionMetadata | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const record = value as {
+    sessionPurpose?: unknown;
+    visibility?: unknown;
+    ownerFeature?: unknown;
+    autoArchive?: unknown;
+    createdBy?: unknown;
+  };
+  const sessionPurpose = normalizeOptionalCatalogString(record.sessionPurpose);
+  const ownerFeature = normalizeOptionalCatalogString(record.ownerFeature);
+  const visibility = normalizeOptionalCatalogString(record.visibility);
+  const createdBy = normalizeOptionalCatalogString(record.createdBy);
+  if (
+    !sessionPurpose ||
+    !ownerFeature ||
+    (visibility !== "hidden" && visibility !== "system-auto" && visibility !== "user-visible") ||
+    (createdBy !== "system" && createdBy !== "user")
+  ) {
+    return null;
+  }
+  return {
+    sessionPurpose,
+    visibility,
+    ownerFeature,
+    autoArchive:
+      typeof record.autoArchive === "boolean" ? record.autoArchive : null,
+    createdBy,
   };
 }

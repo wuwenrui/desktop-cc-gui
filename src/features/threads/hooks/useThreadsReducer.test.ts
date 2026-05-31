@@ -37,6 +37,51 @@ describe("threadReducer", () => {
     });
   });
 
+  it("preserves automatic session metadata when a pending engine thread is finalized", () => {
+    const autoSession = {
+      sessionPurpose: "pull-request-question",
+      visibility: "system-auto" as const,
+      ownerFeature: "git",
+      autoArchive: false,
+      createdBy: "system" as const,
+    };
+    const pending = threadReducer(initialState, {
+      type: "ensureThread",
+      workspaceId: "ws-1",
+      threadId: "claude-pending-1",
+      engine: "claude",
+      autoSession,
+    });
+    const processing = threadReducer(pending, {
+      type: "markProcessing",
+      threadId: "claude-pending-1",
+      isProcessing: true,
+      timestamp: 1,
+    });
+    const withItem = threadReducer(processing, {
+      type: "upsertItem",
+      workspaceId: "ws-1",
+      threadId: "claude-pending-1",
+      item: {
+        id: "user-1",
+        kind: "message",
+        role: "user",
+        text: "hello",
+      },
+    });
+    const finalized = threadReducer(withItem, {
+      type: "ensureThread",
+      workspaceId: "ws-1",
+      threadId: "claude:real-session",
+      engine: "claude",
+    });
+
+    expect(finalized.threadsByWorkspace["ws-1"]?.[0]).toMatchObject({
+      id: "claude:real-session",
+      autoSession,
+    });
+  });
+
   it("keeps folder intent when a pending engine thread is finalized", () => {
     const pending = threadReducer(initialState, {
       type: "ensureThread",

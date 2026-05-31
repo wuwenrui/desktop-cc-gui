@@ -3,6 +3,7 @@ use serde_json::{json, Value};
 use tauri::AppHandle;
 
 use crate::remote_backend;
+use crate::session_management::AutoSessionMetadata;
 use crate::state::AppState;
 
 use super::EngineType;
@@ -36,6 +37,7 @@ pub(crate) fn remote_engine_send_message_sync_request(
     agent: Option<String>,
     variant: Option<String>,
     custom_spec_root: Option<String>,
+    auto_session: Option<AutoSessionMetadata>,
 ) -> (&'static str, Value) {
     let images = images.map(|paths| {
         paths
@@ -60,6 +62,7 @@ pub(crate) fn remote_engine_send_message_sync_request(
             "agent": agent,
             "variant": variant,
             "customSpecRoot": custom_spec_root,
+            "autoSession": auto_session,
         }),
     )
 }
@@ -102,6 +105,7 @@ mod tests {
             None,
             None,
             Some("/tmp/spec-root".to_string()),
+            None,
         );
 
         assert_eq!(method, "engine_send_message_sync");

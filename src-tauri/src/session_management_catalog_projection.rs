@@ -41,6 +41,7 @@ fn build_claude_catalog_entry_from_fact(
         matched_workspace_id: Some(owner_workspace.id.clone()),
         matched_workspace_label: Some(owner_workspace.name.clone()),
         folder_id: None,
+        auto_session: None,
         exists_on_disk: false,
         inconsistency_code: None,
         delete_mode: None,
@@ -76,6 +77,7 @@ fn build_catalog_page(
 
     let filtered: Vec<WorkspaceSessionCatalogEntry> = entries
         .into_iter()
+        .filter(|entry| !entry_is_hidden_automatic_session(entry))
         .filter(|entry| {
             entry_matches_engine_and_keyword(entry, engine_filter.as_deref(), keyword.as_deref())
                 && entry_matches_status(entry, status_filter)
@@ -259,6 +261,7 @@ async fn build_workspace_scope_catalog_data(
                         matched_workspace_id: Some(owner_workspace_id.clone()),
                         matched_workspace_label: Some(workspace.name.clone()),
                         folder_id: None,
+                        auto_session: None,
                         exists_on_disk: false,
                         inconsistency_code: None,
                         delete_mode: None,
@@ -397,6 +400,7 @@ async fn build_workspace_scope_catalog_data(
                         matched_workspace_id: Some(owner_workspace_id.clone()),
                         matched_workspace_label: Some(workspace.name.clone()),
                         folder_id: None,
+                        auto_session: None,
                         exists_on_disk: false,
                         inconsistency_code: None,
                         delete_mode: None,
@@ -469,6 +473,7 @@ async fn build_workspace_scope_catalog_data(
                         matched_workspace_id: Some(owner_workspace_id.clone()),
                         matched_workspace_label: Some(workspace.name.clone()),
                         folder_id: None,
+                        auto_session: None,
                         exists_on_disk: false,
                         inconsistency_code: None,
                         delete_mode: None,

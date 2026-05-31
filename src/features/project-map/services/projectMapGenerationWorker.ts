@@ -94,6 +94,13 @@ const SUPPORTED_SOURCE_TYPES = new Set<ProjectMapSource["type"]>([
   "test",
   "conversation",
 ]);
+const PROJECT_MAP_GENERATION_AUTO_SESSION = {
+  sessionPurpose: "project-map-generation",
+  visibility: "system-auto",
+  ownerFeature: "project-map",
+  autoArchive: false,
+  createdBy: "system",
+} as const;
 const PROJECT_MAP_JSON_SCHEMA_EXAMPLE =
   '{"profile": {"primaryLanguage": "unknown", "languages": [], "shapes": [], "frameworks": [], "interfaceKinds": [], "buildSystems": []}, "lenses": [], "nodes": [{"id": "...", "lensId": "...", "nodeKind": "...", "title": "...", "summary": "...", "detail": {"coreDescription": "...", "keyFacts": [], "keyLogic": [], "riskSignals": [], "diagramArtifacts": [], "relatedArtifacts": []}, "parentId": null, "children": [], "sources": [], "confidence": "high|medium|low|unknown", "stale": false, "candidate": false}], "diagrams": [{"id": "...", "nodeId": "...", "title": "...", "kind": "flowchart|sequence|state|class|er|timeline|mindmap|other", "summary": "...", "sourceRefs": ["path"], "mermaid": "graph TD\\nA-->B"}]}';
 
@@ -913,7 +920,9 @@ async function runCodexThreadTurn(input: {
   model: string;
   update: (update: ProjectMapRunUpdate) => Promise<void>;
 }): Promise<string> {
-  const threadStart = await startThread(input.workspaceId);
+  const threadStart = await startThread(input.workspaceId, {
+    autoSession: PROJECT_MAP_GENERATION_AUTO_SESSION,
+  });
   const threadId = extractThreadIdFromResponse(threadStart);
   if (!threadId) {
     throw new Error("Failed to start Codex project-map thread.");
@@ -982,6 +991,7 @@ async function runAiTurn(input: {
       model: input.run.model,
       accessMode: "read-only",
       continueSession: false,
+      autoSession: PROJECT_MAP_GENERATION_AUTO_SESSION,
     });
     return generated.text;
   } finally {

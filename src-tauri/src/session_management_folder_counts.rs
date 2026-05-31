@@ -1,6 +1,9 @@
 use std::collections::{HashMap, HashSet};
 
-use super::{WorkspaceSessionCatalogEntry, WorkspaceSessionCatalogQuery, SESSION_FOLDER_ROOT_ID};
+use super::{
+    AutoSessionVisibility, WorkspaceSessionCatalogEntry, WorkspaceSessionCatalogQuery,
+    SESSION_FOLDER_ROOT_ID, SESSION_FOLDER_SYSTEM_AUTO_ID,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct SessionCatalogFolderCountSummary {
@@ -16,6 +19,13 @@ pub(super) fn build_catalog_folder_count_summary(
     let mut unassigned_folder_count = 0usize;
 
     for entry in entries {
+        if entry
+            .auto_session
+            .as_ref()
+            .is_some_and(|metadata| metadata.visibility == AutoSessionVisibility::Hidden)
+        {
+            continue;
+        }
         match resolved_folder_by_session_id
             .get(&entry.session_id)
             .cloned()
@@ -103,6 +113,16 @@ fn resolve_effective_folder_id_for_entry(
 ) -> Option<String> {
     if let Some(resolved) = resolved_folder_by_session_id.get(&entry.session_id) {
         return resolved.clone();
+    }
+
+    if entry
+        .auto_session
+        .as_ref()
+        .is_some_and(|metadata| metadata.visibility == AutoSessionVisibility::SystemAuto)
+    {
+        let resolved = Some(SESSION_FOLDER_SYSTEM_AUTO_ID.to_string());
+        resolved_folder_by_session_id.insert(entry.session_id.clone(), resolved.clone());
+        return resolved;
     }
 
     if let Some(folder_id) = entry

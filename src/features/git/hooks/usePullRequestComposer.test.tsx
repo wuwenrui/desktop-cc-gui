@@ -34,6 +34,14 @@ const diffs: GitHubPullRequestDiff[] = [
   { path: "src/App.tsx", status: "modified", diff: "diff" },
 ];
 
+const pullRequestQuestionAutoSession = {
+  sessionPurpose: "pull-request-question",
+  visibility: "system-auto",
+  ownerFeature: "git",
+  autoArchive: false,
+  createdBy: "system",
+};
+
 const connectedWorkspace: WorkspaceInfo = {
   id: "workspace-1",
   name: "ccgui",
@@ -144,13 +152,14 @@ describe("usePullRequestComposer", () => {
     );
     expect(options.startThreadForWorkspace).toHaveBeenCalledWith(
       disconnectedWorkspace.id,
-      { activate: false },
+      { activate: false, autoSession: pullRequestQuestionAutoSession },
     );
     expect(options.sendUserMessageToThread).toHaveBeenCalledWith(
       disconnectedWorkspace,
       "thread-1",
       "Prompt text",
       ["img-1"],
+      { autoSession: pullRequestQuestionAutoSession },
     );
     expect(options.clearActiveImages).toHaveBeenCalled();
   });

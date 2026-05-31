@@ -187,6 +187,18 @@ export type ConversationItem =
       agentStatus?: Record<string, { status?: string } | string>;
     };
 
+export type AutoSessionVisibility = "hidden" | "system-auto" | "user-visible";
+
+export type AutoSessionCreatedBy = "system" | "user";
+
+export type AutoSessionMetadata = {
+  sessionPurpose: string;
+  visibility: AutoSessionVisibility;
+  ownerFeature: string;
+  autoArchive?: boolean | null;
+  createdBy: AutoSessionCreatedBy;
+};
+
 export type ThreadSummary = {
   id: string;
   name: string;
@@ -203,6 +215,7 @@ export type ThreadSummary = {
   isDegraded?: boolean;
   degradedReason?: string;
   folderId?: string | null;
+  autoSession?: AutoSessionMetadata | null;
   nativeThreadIds?: string[];
   parentThreadId?: string | null;
 };
@@ -1717,6 +1730,7 @@ export type MessageSendOptions = {
   resumeTurnId?: string | null;
   skipOptimisticUserBubble?: boolean;
   suppressUserMessageRender?: boolean;
+  autoSession?: AutoSessionMetadata | null;
 };
 
 export type SelectedAgentOption = {

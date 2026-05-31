@@ -64,6 +64,7 @@ import {
 import { normalizeVisibleThreadRootCount } from "../constants";
 import { getExitedSessionRowVisibility } from "../utils/exitedSessionRows";
 import {
+  WORKSPACE_SESSION_SYSTEM_AUTO_FOLDER_ID,
   buildWorkspaceSessionFolderMoveTargets,
   buildWorkspaceSessionFolderProjection,
 } from "../utils/workspaceSessionFolders";
@@ -1792,6 +1793,13 @@ export function Sidebar({
     const folderOverrides = sessionFolderOverrideByWorkspaceId[entry.id] ?? {};
     const folderIdBySessionId = new Map<string, string | null>();
     unpinnedRows.forEach((row) => {
+      if (row.thread.autoSession?.visibility === "hidden") {
+        return;
+      }
+      if (row.thread.autoSession?.visibility === "system-auto") {
+        folderIdBySessionId.set(row.thread.id, WORKSPACE_SESSION_SYSTEM_AUTO_FOLDER_ID);
+        return;
+      }
       if (Object.hasOwn(folderOverrides, row.thread.id)) {
         const folderId = folderOverrides[row.thread.id]?.trim();
         folderIdBySessionId.set(row.thread.id, folderId ? folderId : null);

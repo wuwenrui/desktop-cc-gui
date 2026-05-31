@@ -78,6 +78,13 @@ describe("useThreadMessaging command entrypoints", () => {
     connected: true,
     settings: { sidebarCollapsed: false },
   };
+  const reviewFallbackAutoSession = {
+    sessionPurpose: "review-fallback",
+    visibility: "system-auto",
+    ownerFeature: "review",
+    autoArchive: false,
+    createdBy: "system",
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -433,6 +440,7 @@ describe("useThreadMessaging command entrypoints", () => {
     await waitFor(() => {
       expect(startThreadForWorkspace).toHaveBeenCalledWith("ws-1", {
         activate: true,
+        autoSession: reviewFallbackAutoSession,
         engine: "codex",
       });
       expect(startReviewService).toHaveBeenCalledWith(
@@ -476,6 +484,7 @@ describe("useThreadMessaging command entrypoints", () => {
     await waitFor(() => {
       expect(startThreadForWorkspace).toHaveBeenCalledWith("ws-1", {
         activate: true,
+        autoSession: reviewFallbackAutoSession,
         engine: "codex",
       });
       expect(startReviewService).toHaveBeenNthCalledWith(

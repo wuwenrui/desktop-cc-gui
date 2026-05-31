@@ -456,6 +456,13 @@ export async function organizeProjectMapUnassignedDiscoveries(
     model: input.model,
     accessMode: "read-only",
     continueSession: false,
+    autoSession: {
+      sessionPurpose: "project-map-organizer",
+      visibility: "hidden",
+      ownerFeature: "project-map",
+      autoArchive: true,
+      createdBy: "system",
+    },
   });
   const payload = parseOrganizerPayload(response.text);
   const createdAt = new Date().toISOString();

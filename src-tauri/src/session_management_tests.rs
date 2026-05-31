@@ -63,6 +63,7 @@
             matched_workspace_id: None,
             matched_workspace_label: None,
             folder_id: None,
+            auto_session: None,
             exists_on_disk: true,
             inconsistency_code: None,
             delete_mode: Some(SESSION_DELETE_MODE_PHYSICAL.to_string()),
@@ -640,6 +641,202 @@
             .iter()
             .any(|entry| entry.engine == "claude"
                 && entry.delete_mode.as_deref() == Some(SESSION_DELETE_MODE_METADATA_CLEANUP)));
+    }
+
+    #[tokio::test]
+    async fn auto_session_metadata_persists_and_projects_visibility() {
+        let base = std::env::temp_dir().join(format!("auto-session-metadata-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&base).expect("create temp dir");
+        let storage_path = base.join("workspaces.json");
+        std::fs::write(&storage_path, "[]").expect("seed storage path");
+        let workspace = workspace_entry("ws-1", "Workspace", "/tmp/ws-1", WorkspaceKind::Main, None);
+        let workspaces = Mutex::new(HashMap::from([(workspace.id.clone(), workspace)]));
+
+        record_auto_session_metadata_core(
+            &workspaces,
+            &storage_path,
+            "ws-1".to_string(),
+            "codex-hidden".to_string(),
+            AutoSessionMetadata {
+                session_purpose: "prompt-enhancer".to_string(),
+                visibility: AutoSessionVisibility::Hidden,
+                owner_feature: "composer".to_string(),
+                auto_archive: Some(true),
+                created_by: AutoSessionCreatedBy::System,
+            },
+        )
+        .await
+        .expect("record hidden metadata");
+        record_auto_session_metadata_core(
+            &workspaces,
+            &storage_path,
+            "ws-1".to_string(),
+            "codex-traceable".to_string(),
+            AutoSessionMetadata {
+                session_purpose: "spec-hub-apply".to_string(),
+                visibility: AutoSessionVisibility::SystemAuto,
+                owner_feature: "spec-hub".to_string(),
+                auto_archive: Some(false),
+                created_by: AutoSessionCreatedBy::System,
+            },
+        )
+        .await
+        .expect("record system-auto metadata");
+
+        let metadata = read_catalog_metadata(&storage_path, "ws-1").expect("read metadata");
+        let metadata_by_workspace_id = HashMap::from([("ws-1".to_string(), metadata)]);
+        let hidden = finalize_existing_catalog_entry(
+            catalog_entry("codex-hidden", "ws-1", Some("Workspace"), None),
+            &metadata_by_workspace_id,
+        );
+        let traceable = finalize_existing_catalog_entry(
+            catalog_entry("codex-traceable", "ws-1", Some("Workspace"), None),
+            &metadata_by_workspace_id,
+        );
+
+        assert!(entry_is_hidden_automatic_session(&hidden));
+        assert_eq!(
+            traceable.folder_id.as_deref(),
+            Some(SESSION_FOLDER_SYSTEM_AUTO_ID)
+        );
+        assert_eq!(
+            traceable
+                .auto_session
+                .as_ref()
+                .map(|metadata| metadata.session_purpose.as_str()),
+            Some("spec-hub-apply")
+        );
+
+        std::fs::remove_dir_all(base).ok();
+    }
+
+    #[tokio::test]
+    async fn auto_session_metadata_rejects_invalid_boundary_values() {
+        let base = std::env::temp_dir().join(format!("auto-session-invalid-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&base).expect("create temp dir");
+        let storage_path = base.join("workspaces.json");
+        std::fs::write(&storage_path, "[]").expect("seed storage path");
+        let workspace = workspace_entry("ws-1", "Workspace", "/tmp/ws-1", WorkspaceKind::Main, None);
+        let workspaces = Mutex::new(HashMap::from([(workspace.id.clone(), workspace)]));
+
+        let valid_metadata = AutoSessionMetadata {
+            session_purpose: "prompt-enhancer".to_string(),
+            visibility: AutoSessionVisibility::Hidden,
+            owner_feature: "composer".to_string(),
+            auto_archive: Some(true),
+            created_by: AutoSessionCreatedBy::System,
+        };
+
+        let invalid_session = record_auto_session_metadata_core(
+            &workspaces,
+            &storage_path,
+            "ws-1".to_string(),
+            "../escape".to_string(),
+            valid_metadata.clone(),
+        )
+        .await
+        .expect_err("invalid session id rejected");
+        assert_eq!(invalid_session, "invalid session_id");
+
+        let empty_purpose = record_auto_session_metadata_core(
+            &workspaces,
+            &storage_path,
+            "ws-1".to_string(),
+            "codex-valid".to_string(),
+            AutoSessionMetadata {
+                session_purpose: "   ".to_string(),
+                ..valid_metadata.clone()
+            },
+        )
+        .await
+        .expect_err("empty session purpose rejected");
+        assert_eq!(empty_purpose, "sessionPurpose is required");
+
+        let path_like_owner = record_auto_session_metadata_core(
+            &workspaces,
+            &storage_path,
+            "ws-1".to_string(),
+            "codex-valid".to_string(),
+            AutoSessionMetadata {
+                owner_feature: "feature\\nested".to_string(),
+                ..valid_metadata
+            },
+        )
+        .await
+        .expect_err("path-like owner feature rejected");
+        assert_eq!(path_like_owner, "invalid ownerFeature");
+
+        let metadata = read_catalog_metadata(&storage_path, "ws-1").expect("read metadata");
+        assert!(metadata.auto_session_by_session_id.is_empty());
+
+        std::fs::remove_dir_all(base).ok();
+    }
+
+    #[tokio::test]
+    async fn system_auto_metadata_exposes_reserved_folder_group() {
+        let base = std::env::temp_dir().join(format!("system-auto-folder-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&base).expect("create temp dir");
+        let storage_path = base.join("workspaces.json");
+        std::fs::write(&storage_path, "[]").expect("seed storage path");
+        let workspace = workspace_entry("ws-1", "Workspace", "/tmp/ws-1", WorkspaceKind::Main, None);
+        let workspaces = Mutex::new(HashMap::from([(workspace.id.clone(), workspace)]));
+
+        let empty_tree = list_workspace_session_folders_core(
+            &workspaces,
+            &storage_path,
+            "ws-1".to_string(),
+        )
+        .await
+        .expect("list empty folders");
+        assert!(
+            empty_tree
+                .folders
+                .iter()
+                .all(|folder| folder.id != SESSION_FOLDER_SYSTEM_AUTO_ID)
+        );
+
+        record_auto_session_metadata_core(
+            &workspaces,
+            &storage_path,
+            "ws-1".to_string(),
+            "codex-traceable".to_string(),
+            AutoSessionMetadata {
+                session_purpose: "spec-hub-apply".to_string(),
+                visibility: AutoSessionVisibility::SystemAuto,
+                owner_feature: "spec-hub".to_string(),
+                auto_archive: Some(false),
+                created_by: AutoSessionCreatedBy::System,
+            },
+        )
+        .await
+        .expect("record system-auto metadata");
+
+        let tree = list_workspace_session_folders_core(
+            &workspaces,
+            &storage_path,
+            "ws-1".to_string(),
+        )
+        .await
+        .expect("list system-auto folders");
+        let system_folder = tree
+            .folders
+            .iter()
+            .find(|folder| folder.id == SESSION_FOLDER_SYSTEM_AUTO_ID)
+            .expect("system-auto folder");
+        assert_eq!(system_folder.workspace_id, "ws-1");
+        assert_eq!(system_folder.parent_id, None);
+
+        assert!(create_workspace_session_folder_core(
+            &workspaces,
+            &storage_path,
+            "ws-1".to_string(),
+            "Invalid".to_string(),
+            Some(SESSION_FOLDER_SYSTEM_AUTO_ID.to_string()),
+        )
+        .await
+        .is_err());
+
+        std::fs::remove_dir_all(base).ok();
     }
 
     #[tokio::test]

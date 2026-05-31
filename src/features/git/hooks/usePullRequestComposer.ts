@@ -5,6 +5,7 @@ import type {
   MessageSendOptions,
   WorkspaceInfo,
 } from "../../../types";
+import type { AutoSessionMetadata } from "../../../services/tauri";
 import {
   buildPullRequestDraft,
   buildPullRequestPrompt,
@@ -26,7 +27,10 @@ type UsePullRequestComposerOptions = {
   setPrefillDraft: (draft: { id: string; text: string; createdAt: number }) => void;
   setActiveTab: (tab: "projects" | "codex" | "spec" | "git" | "log") => void;
   connectWorkspace: (workspace: WorkspaceInfo) => Promise<void>;
-  startThreadForWorkspace: (workspaceId: string, options?: { activate?: boolean }) => Promise<string | null>;
+  startThreadForWorkspace: (
+    workspaceId: string,
+    options?: { activate?: boolean; autoSession?: AutoSessionMetadata | null },
+  ) => Promise<string | null>;
   sendUserMessageToThread: (
     workspace: WorkspaceInfo,
     threadId: string,
@@ -132,8 +136,16 @@ export function usePullRequestComposer({
         gitPullRequestDiffs,
         trimmed,
       );
+      const autoSession: AutoSessionMetadata = {
+        sessionPurpose: "pull-request-question",
+        visibility: "system-auto",
+        ownerFeature: "git",
+        autoArchive: false,
+        createdBy: "system",
+      };
       const threadId = await startThreadForWorkspace(activeWorkspace.id, {
         activate: false,
+        autoSession,
       });
       if (!threadId) {
         return;
@@ -144,10 +156,12 @@ export function usePullRequestComposer({
           threadId,
           prompt,
           images,
-          options,
+          { ...options, autoSession },
         );
       } else {
-        await sendUserMessageToThread(activeWorkspace, threadId, prompt, images);
+        await sendUserMessageToThread(activeWorkspace, threadId, prompt, images, {
+          autoSession,
+        });
       }
       clearActiveImages();
     },

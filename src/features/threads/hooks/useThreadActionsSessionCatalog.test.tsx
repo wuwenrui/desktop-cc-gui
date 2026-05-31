@@ -89,6 +89,50 @@ describe("useThreadActionsSessionCatalog", () => {
     expect(catalog?.partialSource).toBeNull();
   });
 
+  it("preserves automatic session metadata from catalog rows", async () => {
+    const autoSession = {
+      sessionPurpose: "pull-request-question",
+      visibility: "system-auto",
+      ownerFeature: "git",
+      autoArchive: false,
+      createdBy: "system",
+    };
+    const listWorkspaceSessionsService = vi.fn().mockResolvedValueOnce({
+      data: [
+        {
+          sessionId: "claude:system-auto",
+          workspaceId: "ws-1",
+          engine: "claude",
+          title: "System trace",
+          updatedAt: 20,
+          threadKind: "native",
+          folderId: "__system_auto__",
+          autoSession,
+        },
+      ],
+      nextCursor: null,
+      partialSource: null,
+      sourceStatuses: [{ engine: "claude", completeness: "complete" }],
+    });
+
+    const { result } = renderHook(() =>
+      useThreadActionsSessionCatalog({
+        canListWorkspaceSessions: true,
+        listWorkspaceSessionsService,
+        listWorkspaceSessionArchiveEvidenceService: null,
+      }),
+    );
+
+    const catalog =
+      await result.current.loadActiveProjectCatalogSessions("ws-1");
+
+    expect(catalog?.sessions[0]).toMatchObject({
+      sessionId: "claude:system-auto",
+      folderId: "__system_auto__",
+      autoSession,
+    });
+  });
+
   it("treats archive evidence with missing source status as incomplete", async () => {
     const listWorkspaceSessionArchiveEvidenceService = vi
       .fn()

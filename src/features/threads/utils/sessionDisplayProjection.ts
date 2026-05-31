@@ -88,6 +88,7 @@ export function mergeSessionDisplaySummary(
     }),
     parentThreadId: next.parentThreadId ?? previous.parentThreadId ?? null,
     folderId: next.folderId ?? previous.folderId ?? null,
+    autoSession: next.autoSession ?? previous.autoSession ?? null,
   };
 }
 

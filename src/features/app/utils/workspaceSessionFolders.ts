@@ -1,6 +1,8 @@
 import type { ThreadSummary } from "../../../types";
 import type { WorkspaceSessionFolder } from "../../../services/tauri";
 
+export const WORKSPACE_SESSION_SYSTEM_AUTO_FOLDER_ID = "__system_auto__";
+
 export type WorkspaceSessionThreadRow = {
   thread: ThreadSummary;
   depth: number;
@@ -88,7 +90,12 @@ export function buildWorkspaceSessionFolderProjection(params: {
 
   const rootRows: WorkspaceSessionThreadRow[] = [];
   const inheritedFolderByDepth: Array<string | null> = [];
+  let visibleSessionCount = 0;
   params.rows.forEach((row) => {
+    if (row.thread.autoSession?.visibility === "hidden") {
+      return;
+    }
+    visibleSessionCount += 1;
     inheritedFolderByDepth.length = row.depth;
     const hasExplicitFolder = params.folderIdBySessionId.has(row.thread.id);
     const explicitFolderId = hasExplicitFolder
@@ -96,7 +103,12 @@ export function buildWorkspaceSessionFolderProjection(params: {
       : undefined;
     const parentFolderId =
       row.depth > 0 ? inheritedFolderByDepth[row.depth - 1] ?? null : null;
-    const folderId = explicitFolderId !== undefined ? explicitFolderId : parentFolderId;
+    const folderId =
+      row.thread.autoSession?.visibility === "system-auto"
+        ? WORKSPACE_SESSION_SYSTEM_AUTO_FOLDER_ID
+        : explicitFolderId !== undefined
+          ? explicitFolderId
+          : parentFolderId;
     inheritedFolderByDepth[row.depth] = folderId;
     const node = folderId ? nodeById.get(folderId) : null;
     if (!node) {
@@ -109,7 +121,7 @@ export function buildWorkspaceSessionFolderProjection(params: {
   return {
     folders: rootFolders,
     rootRows,
-    visibleSessionCount: params.rows.length,
+    visibleSessionCount,
   };
 }
 

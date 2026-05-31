@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef } from "react";
 import type { Dispatch, MutableRefObject } from "react";
 
 import type { DebugEntry } from "../../../types";
+import type { AutoSessionMetadata } from "../../../services/tauri";
 import { pushGlobalRuntimeNotice } from "../../../services/globalRuntimeNotices";
 import {
   connectWorkspace as connectWorkspaceService,
@@ -216,12 +217,23 @@ export function useThreadActionsSessionRuntime({
         activate?: boolean;
         engine?: "claude" | "codex" | "gemini" | "opencode";
         folderId?: string | null;
+        autoSession?: AutoSessionMetadata | null;
       },
     ) => {
       const shouldActivate = options?.activate !== false;
       const engine = options?.engine;
       const folderId = options?.folderId?.trim() || null;
-      const codexStartInFlightKey = `${workspaceId}:codex:${folderId ?? "__root__"}`;
+      const autoSession = options?.autoSession ?? null;
+      const autoSessionPayload = autoSession ? { autoSession } : {};
+      const startThreadOptions = autoSession ? autoSessionPayload : undefined;
+      const startThreadWithOptionalMetadata = () =>
+        startThreadOptions
+          ? startThreadService(workspaceId, startThreadOptions)
+          : startThreadService(workspaceId);
+      const autoSessionKey = options?.autoSession
+        ? `${options.autoSession.sessionPurpose}:${options.autoSession.visibility}`
+        : "user-visible";
+      const codexStartInFlightKey = `${workspaceId}:codex:${folderId ?? "__root__"}:${autoSessionKey}`;
       const resolveStartedThread = (
         response: Record<string, unknown> | null | undefined,
       ) => {
@@ -237,6 +249,7 @@ export function useThreadActionsSessionRuntime({
             threadId,
             engine: "codex",
             ...(folderId ? { folderId } : {}),
+            ...autoSessionPayload,
           });
           dispatch({
             type: "markCodexAcceptedTurn",
@@ -272,6 +285,7 @@ export function useThreadActionsSessionRuntime({
           threadId,
           engine,
           ...(folderId ? { folderId } : {}),
+          ...autoSessionPayload,
         });
         if (shouldActivate) {
           dispatch({ type: "setActiveThreadId", workspaceId, threadId });
@@ -289,7 +303,7 @@ export function useThreadActionsSessionRuntime({
           payload: { workspaceId },
         });
         try {
-          const response = await startThreadService(workspaceId);
+          const response = await startThreadWithOptionalMetadata();
           onDebug?.({
             id: `${Date.now()}-server-thread-start`,
             timestamp: Date.now(),
@@ -309,7 +323,7 @@ export function useThreadActionsSessionRuntime({
             });
             try {
               await connectWorkspaceService(workspaceId);
-              const retryResponse = await startThreadService(workspaceId);
+              const retryResponse = await startThreadWithOptionalMetadata();
               onDebug?.({
                 id: `${Date.now()}-server-thread-start-retry`,
                 timestamp: Date.now(),

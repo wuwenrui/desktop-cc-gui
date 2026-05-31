@@ -10,6 +10,14 @@ const DELETE_ARCHIVE_TIMEOUT_MS: u64 = 2_000;
 const LIST_THREADS_LIVE_TIMEOUT_MS: u64 = 1_500;
 const CLAUDE_POST_COMPLETION_USAGE_GRACE_MS: u64 = 35_000;
 
+fn prefixed_session_id(engine_prefix: &str, session_id: &str) -> String {
+    if session_id.starts_with(&format!("{engine_prefix}:")) {
+        session_id.to_string()
+    } else {
+        format!("{engine_prefix}:{session_id}")
+    }
+}
+
 use runtime_helpers::{
     create_session_runtime_recovering_error, is_stopping_runtime_race_error,
     is_valid_claude_model_for_passthrough,
@@ -780,6 +788,34 @@ impl DaemonState {
             .ok_or_else(|| "Workspace not found".to_string())
     }
 
+    async fn record_auto_session_metadata_if_present(
+        &self,
+        workspace_id: &str,
+        session_id: Option<&str>,
+        metadata: Option<session_management::AutoSessionMetadata>,
+        engine_prefix: &str,
+    ) {
+        let (Some(session_id), Some(metadata)) = (session_id, metadata) else {
+            return;
+        };
+        if let Err(error) = session_management::record_auto_session_metadata_core(
+            &self.workspaces,
+            self.storage_path.as_path(),
+            workspace_id.to_string(),
+            prefixed_session_id(engine_prefix, session_id),
+            metadata,
+        )
+        .await
+        {
+            log::warn!(
+                "[daemon.auto_session] failed to record metadata for workspace {} session {}: {}",
+                workspace_id,
+                session_id,
+                error
+            );
+        }
+    }
+
     pub(super) async fn engine_send_message(
         &self,
         workspace_id: String,
@@ -797,6 +833,7 @@ impl DaemonState {
         agent: Option<String>,
         variant: Option<String>,
         custom_spec_root: Option<String>,
+        auto_session: Option<session_management::AutoSessionMetadata>,
     ) -> Result<Value, String> {
         self.sync_engine_configs().await;
         let active_engine = self.get_active_engine().await;
@@ -1053,6 +1090,13 @@ impl DaemonState {
                         eprintln!("Claude send_message failed: {error}");
                     }
                 });
+                self.record_auto_session_metadata_if_present(
+                    &workspace_id,
+                    response_session_id.as_deref(),
+                    auto_session,
+                    "claude",
+                )
+                .await;
 
                 Ok(json!({
                     "engine": "claude",
@@ -1087,6 +1131,7 @@ impl DaemonState {
                 } else {
                     Some(session_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string()))
                 };
+                let response_session_id = resolved_session_id.clone();
                 let sanitized_model = model
                     .as_ref()
                     .map(|value| value.trim())
@@ -1190,9 +1235,17 @@ impl DaemonState {
                         session_clone.emit_error(&turn_id_clone, error);
                     }
                 });
+                self.record_auto_session_metadata_if_present(
+                    &workspace_id,
+                    response_session_id.as_deref(),
+                    auto_session,
+                    "opencode",
+                )
+                .await;
 
                 Ok(json!({
                     "engine": "opencode",
+                    "sessionId": response_session_id,
                     "result": {
                         "turn": {
                             "id": turn_id,
@@ -1220,6 +1273,7 @@ impl DaemonState {
                 } else {
                     Some(session_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string()))
                 };
+                let response_session_id = resolved_session_id.clone();
                 let sanitized_model = model
                     .as_ref()
                     .map(|value| value.trim())
@@ -1387,9 +1441,17 @@ impl DaemonState {
                         eprintln!("Gemini send_message failed: {error}");
                     }
                 });
+                self.record_auto_session_metadata_if_present(
+                    &workspace_id,
+                    response_session_id.as_deref(),
+                    auto_session,
+                    "gemini",
+                )
+                .await;
 
                 Ok(json!({
                     "engine": "gemini",
+                    "sessionId": response_session_id,
                     "result": {
                         "turn": {
                             "id": turn_id,
@@ -1422,6 +1484,7 @@ impl DaemonState {
         agent: Option<String>,
         variant: Option<String>,
         custom_spec_root: Option<String>,
+        auto_session: Option<session_management::AutoSessionMetadata>,
     ) -> Result<Value, String> {
         self.sync_engine_configs().await;
         if text.trim().is_empty() {
@@ -1501,6 +1564,13 @@ impl DaemonState {
                 })
                 .await
                 .map_err(|_| "Claude response timed out".to_string())??;
+                self.record_auto_session_metadata_if_present(
+                    &workspace_id,
+                    response_session_id.as_deref(),
+                    auto_session,
+                    "claude",
+                )
+                .await;
                 Ok(json!({
                     "engine": "claude",
                     "sessionId": response_session_id,
@@ -1522,6 +1592,7 @@ impl DaemonState {
                 } else {
                     Some(session_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string()))
                 };
+                let response_session_id = resolved_session_id.clone();
                 let sanitized_model = model
                     .as_ref()
                     .map(|value| value.trim())
@@ -1557,8 +1628,16 @@ impl DaemonState {
                 )
                 .await
                 .map_err(|_| "OpenCode response timed out".to_string())??;
+                self.record_auto_session_metadata_if_present(
+                    &workspace_id,
+                    response_session_id.as_deref(),
+                    auto_session,
+                    "opencode",
+                )
+                .await;
                 Ok(json!({
                     "engine": "opencode",
+                    "sessionId": response_session_id,
                     "text": response,
                 }))
             }
@@ -1577,6 +1656,7 @@ impl DaemonState {
                 } else {
                     Some(session_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string()))
                 };
+                let response_session_id = resolved_session_id.clone();
                 let sanitized_model = model
                     .as_ref()
                     .map(|value| value.trim())
@@ -1610,8 +1690,16 @@ impl DaemonState {
                 )
                 .await
                 .map_err(|_| "Gemini response timed out".to_string())??;
+                self.record_auto_session_metadata_if_present(
+                    &workspace_id,
+                    response_session_id.as_deref(),
+                    auto_session,
+                    "gemini",
+                )
+                .await;
                 Ok(json!({
                     "engine": "gemini",
+                    "sessionId": response_session_id,
                     "text": response,
                 }))
             }
@@ -1741,12 +1829,16 @@ impl DaemonState {
         files_core::file_write_core(&self.workspaces, scope, kind, workspace_id, content).await
     }
 
-    pub(super) async fn start_thread(&self, workspace_id: String) -> Result<Value, String> {
+    pub(super) async fn start_thread(
+        &self,
+        workspace_id: String,
+        auto_session: Option<session_management::AutoSessionMetadata>,
+    ) -> Result<Value, String> {
         self.ensure_codex_session_for_workspace(&workspace_id)
             .await?;
         let first_attempt =
             codex_core::start_thread_core(&self.sessions, workspace_id.clone(), None).await;
-        match first_attempt {
+        let response = match first_attempt {
             Ok(response) => Ok(response),
             Err(error) if is_stopping_runtime_race_error(&error) => {
                 log::warn!(
@@ -1772,7 +1864,16 @@ impl DaemonState {
                 }
             }
             Err(error) => Err(error),
-        }
+        }?;
+        let thread_id = codex_core::extract_thread_id_from_response(&response);
+        self.record_auto_session_metadata_if_present(
+            &workspace_id,
+            thread_id.as_deref(),
+            auto_session,
+            "codex",
+        )
+        .await;
+        Ok(response)
     }
 
     pub(super) async fn resume_thread(

@@ -17,6 +17,7 @@ pub(crate) const SESSION_CATALOG_PARTIAL_OPENCODE: &str = "opencode-history-unav
 pub(crate) const SESSION_CATALOG_PARTIAL_ARCHIVE_METADATA: &str = "archive-metadata-unavailable";
 pub(crate) const SESSION_CATALOG_UNASSIGNED_WORKSPACE_ID: &str = "__global_unassigned__";
 pub(crate) const SESSION_FOLDER_ROOT_ID: &str = "__root__";
+pub(crate) const SESSION_FOLDER_SYSTEM_AUTO_ID: &str = "__system_auto__";
 pub(crate) const SESSION_INCONSISTENCY_MISSING_ON_DISK: &str = "missing-on-disk";
 pub(crate) const SESSION_DELETE_MODE_PHYSICAL: &str = "physical";
 pub(crate) const SESSION_DELETE_MODE_METADATA_CLEANUP: &str = "metadata-cleanup";
@@ -70,6 +71,8 @@ pub(crate) struct WorkspaceSessionCatalogEntry {
     pub(crate) matched_workspace_label: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) folder_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) auto_session: Option<AutoSessionMetadata>,
     #[serde(default)]
     pub(crate) exists_on_disk: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -189,6 +192,32 @@ pub(crate) struct WorkspaceSessionFolder {
     pub(crate) updated_at: i64,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum AutoSessionVisibility {
+    Hidden,
+    SystemAuto,
+    UserVisible,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum AutoSessionCreatedBy {
+    System,
+    User,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AutoSessionMetadata {
+    pub(crate) session_purpose: String,
+    pub(crate) visibility: AutoSessionVisibility,
+    pub(crate) owner_feature: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) auto_archive: Option<bool>,
+    pub(crate) created_by: AutoSessionCreatedBy,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct WorkspaceSessionFolderTree {
@@ -272,6 +301,8 @@ pub(crate) struct WorkspaceSessionCatalogMetadata {
     pub(crate) folders: Vec<WorkspaceSessionFolder>,
     #[serde(default)]
     pub(crate) folder_id_by_session_id: HashMap<String, String>,
+    #[serde(default)]
+    pub(crate) auto_session_by_session_id: HashMap<String, AutoSessionMetadata>,
 }
 
 #[derive(Debug, Clone)]
