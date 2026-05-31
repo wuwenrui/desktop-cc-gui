@@ -202,6 +202,20 @@ export function TaskCenterView({
                     : t("taskCenter.noArtifacts")}
                 </dd>
               </div>
+              <div>
+                <dt>{t("taskCenter.browserEvidence")}</dt>
+                <dd>
+                  {selectedRun.browserEvidence ? (
+                    <span title={selectedRun.browserEvidence.url}>
+                      {selectedRun.browserEvidence.title || selectedRun.browserEvidence.url}
+                      {" · "}
+                      {t(`taskCenter.browserEvidenceState.${selectedRun.browserEvidence.state}`)}
+                    </span>
+                  ) : (
+                    t("taskCenter.noBrowserEvidence")
+                  )}
+                </dd>
+              </div>
             </dl>
             <div className="task-center__actions">
               <button

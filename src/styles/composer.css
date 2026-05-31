@@ -2,3 +2,57 @@
 @import "./composer.rewind-modal.css";
 @import "./composer.part2.css";
 @import "./composer.kanban-mode.css";
+
+.composer-browser-context {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 12px 8px;
+}
+
+.composer-browser-context-attach,
+.composer-browser-context-remove {
+  align-self: flex-start;
+  border: 1px solid color-mix(in srgb, var(--border, #d1d5db) 80%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--background, #ffffff) 92%, #2563eb 8%);
+  color: var(--foreground, #111827);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 10px;
+}
+
+.composer-browser-context-attach:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.composer-browser-context-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid color-mix(in srgb, #2563eb 38%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, #2563eb 9%, transparent);
+  padding: 8px 10px;
+}
+
+.composer-browser-context-title {
+  color: var(--foreground, #111827);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.composer-browser-context-url,
+.composer-browser-context-error {
+  color: var(--muted-foreground, #6b7280);
+  font-size: 11px;
+  line-height: 1.4;
+  word-break: break-all;
+}
+
+.composer-browser-context-error {
+  color: #b45309;
+}

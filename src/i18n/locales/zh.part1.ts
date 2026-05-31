@@ -807,6 +807,20 @@ const zhPart1 = {
     behaviorStreaming: "流式输出",
     behaviorStreamingDesc:
       "启用后响应将逐字显示。禁用则等待完整响应后一次性展示。",
+    browserAgentTitle: "内置 Browser Agent",
+    browserAgentDesc:
+      "让客户端对话优先使用内嵌浏览器上下文，先帮助 AI 看懂网页，后续再承接浏览器操作。",
+    browserAgentEnabled: "启用内置 Browser Agent",
+    browserAgentStatusEnabled: "Browser Agent 已开启",
+    browserAgentStatusDisabled: "Browser Agent 已关闭",
+    browserAgentHint:
+      "MVP 先只提供只读网页事实；click/type/submit 等动作会在后续阶段开启前保持阻断。",
+    browserAgentPreferBuiltIn: "AI 浏览器操作优先使用内置模块",
+    browserAgentPreferBuiltInDesc:
+      "开启后，支持的 AI 浏览器操作默认先走这个通用模块；除非用户明确选择不使用。",
+    browserAgentFallback: "允许回落到外部浏览器操作",
+    browserAgentFallbackDesc:
+      "当模块关闭、平台不支持或当前阶段阻断时，客户端可回落到现有 skill/provider 浏览器操作。",
     terminalShellPathTitle: "终端 Shell",
     terminalShellPathDesc: "设置打开内置终端时使用的可执行文件。",
     terminalShellPathLabel: "终端 Shell 路径",
@@ -2513,6 +2527,11 @@ const zhPart1 = {
       "当前消息缺少可恢复的工作区或会话绑定，暂时无法自动恢复。",
     memoryContextSummary: "记忆上下文摘要",
     memoryContextSummaryCount: "{{count}} 条记忆",
+    browserContextSummary: "浏览器上下文",
+    browserContextState: {
+      available: "可用",
+      stale: "已过时",
+    },
     memoryContextViewSentDetails: "查看发送详情",
     memoryContextSentDetailsTitle: "真实发送的记忆详情",
     memoryContextSentDetailsHint:
@@ -2756,6 +2775,46 @@ const zhPart1 = {
     noteCardPreviewExpand: "展开便签",
     noteCardPreviewCollapse: "收起便签",
     noteCardArchivedBadge: "归档",
+  },
+  browserAgent: {
+    dock: {
+      description: "先读取网页关键事实，再逐步开放导航与元素操作。",
+      disabled: "已禁用",
+      statusDisconnected: "未连接",
+      statusLoading: "加载中",
+      statusReady: "可读取网页信息",
+      statusClosed: "已关闭",
+      statusNeedsAttention: "需要处理",
+      statusPreparing: "准备中",
+      emptyUrl: "请输入要打开的网页地址。",
+      blockedUrl: "该地址被 Browser Agent 策略阻止。",
+      opened: "Browser Agent 已打开网页标签页。",
+      closed: "Browser Agent 标签页已关闭。",
+      busy: "处理中",
+      open: "打开",
+      enable: "启用",
+      enabled: "Browser Agent 已启用。",
+      tabs: "浏览器标签页",
+      newTab: "新建浏览器标签页",
+      openDock: "浏览器",
+      panelTitle: "Browser Dock",
+      panelKicker: "先在这里打开网页，需要时再把网页上下文交给 AI。",
+      noWorkspace: "请先选择一个 workspace，再打开 Browser Dock。",
+      noPage: "打开一个允许的 http/https 页面后，会在这里渲染。",
+      rendering: "正在 Browser Dock 中渲染页面...",
+      closePanel: "关闭 Browser Dock",
+      close: "关闭 Browser Agent 会话",
+      info: "查看 Browser Agent 说明",
+      footnote:
+        "MVP 不存储 raw DOM、cookies、headers 或页面密文。",
+    },
+    composer: {
+      attach: "关联浏览器上下文",
+      attaching: "正在关联浏览器上下文...",
+      attached: "已关联浏览器上下文",
+      remove: "移除",
+      noSession: "暂无活跃 Browser Agent 会话。请先在 Browser Dock 打开网页。",
+    },
   },
 };
 

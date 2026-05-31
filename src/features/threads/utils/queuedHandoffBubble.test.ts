@@ -69,4 +69,33 @@ describe("queuedHandoffBubble", () => {
       ]),
     ).toBe(false);
   });
+
+  it("preserves browser context attachment metadata across queued handoff", () => {
+    const bubble = buildQueuedHandoffBubbleItem({
+      id: "queued-browser",
+      text: "分析这个页面",
+      createdAt: 1,
+      sendOptions: {
+        browserContextAttachment: {
+          kind: "browser_snapshot",
+          attachmentId: "browser-attachment-1",
+          browserSessionId: "browser-session-1",
+          snapshotId: "browser-snapshot-1",
+          workspaceId: "/repo",
+          title: "Example",
+          url: "https://example.com",
+          capturedAt: 100,
+          stale: false,
+          summary: "bounded facts",
+          privacy: {
+            redactionApplied: false,
+            redactedKinds: [],
+            omittedKinds: ["raw_dom"],
+          },
+        },
+      },
+    });
+
+    expect(bubble.browserContextAttachment?.snapshotId).toBe("browser-snapshot-1");
+  });
 });

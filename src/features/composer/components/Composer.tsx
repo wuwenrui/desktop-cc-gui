@@ -94,7 +94,9 @@ import {
 } from "../utils/inlineSelections";
 import { useStreamActivityPhase } from "../../threads/hooks/useStreamActivityPhase";
 import {
+  captureBrowserAgentSnapshot,
   exportRewindFiles,
+  listBrowserAgentSessions,
 } from "../../../services/tauri";
 import { pushErrorToast } from "../../../services/toasts";
 import { getManualMemoryInjectionMode } from "../../project-memory/utils/manualInjectionMode";
@@ -114,6 +116,11 @@ import type {
   ContextLedgerSourceNavigationTarget,
   ContextLedgerProjection,
 } from "../../context-ledger/types";
+import {
+  buildBrowserContextAttachment,
+  formatBrowserContextPrompt,
+  type BrowserContextAttachment,
+} from "../../browser-agent";
 
 type RewindExecutionOptions = {
   mode?: RewindMode;
@@ -371,6 +378,9 @@ const EMPTY_ITEMS: ConversationItem[] = [];
 const COMPOSER_MIN_HEIGHT = 20;
 const COMPOSER_EXPAND_HEIGHT = 80;
 const COMPOSER_INPUT_INTERACTION_IDLE_MS = 320;
+const BROWSER_OPEN_DOCK_EVENT = "browser-agent:open-dock";
+const BROWSER_OPEN_URL_EVENT = "browser-agent:open-url";
+const PENDING_BROWSER_URL_KEY = "mossx.browserAgent.pendingUrl";
 
 function resolveSelectedNamedItems<T extends { name: string }>(
   selectedNames: string[],
@@ -406,6 +416,29 @@ function resolveSelectedNamedItems<T extends { name: string }>(
 
 function toContextChipCarryOverKey(chip: ContextSelectionChip) {
   return `${chip.type}:${chip.name}`;
+}
+
+function resolveBrowserNavigationUrl(text: string): string | null {
+  const compactText = text.replace(/\s+/g, " ").trim();
+  if (!compactText) {
+    return null;
+  }
+  const hasNavigationIntent =
+    /(打开|访问|浏览|跳转|进入|open|visit|navigate|go to)/i.test(compactText);
+  if (!hasNavigationIntent) {
+    return null;
+  }
+  if (/(百度|baidu)/i.test(compactText)) {
+    return "https://www.baidu.com/";
+  }
+  const explicitUrl = compactText.match(/https?:\/\/[^\s，。！？,!?]+/i)?.[0];
+  if (explicitUrl) {
+    return explicitUrl;
+  }
+  const domain = compactText.match(
+    /\b((?:[a-z0-9-]+\.)+[a-z]{2,})(?:\/[^\s，。！？,!?]*)?/i,
+  )?.[0];
+  return domain ? `https://${domain}` : null;
 }
 
 const OPENCODE_DIRECT_COMMANDS = new Set(["status", "mcp", "export", "share"]);
@@ -632,6 +665,10 @@ export const Composer = memo(function Composer({
   const [carryOverContextChipKeys, setCarryOverContextChipKeys] = useState<string[]>([]);
   const [retainedContextChipKeys, setRetainedContextChipKeys] = useState<string[]>([]);
   const [selectedInlineFileReferences, setSelectedInlineFileReferences] = useState<InlineFileReferenceSelection[]>([]);
+  const [browserContextAttachment, setBrowserContextAttachment] =
+    useState<BrowserContextAttachment | null>(null);
+  const [browserContextBusy, setBrowserContextBusy] = useState(false);
+  const [browserContextError, setBrowserContextError] = useState<string | null>(null);
   const [contextLedgerExpanded, setContextLedgerExpanded] = useState(false);
   const currentContextLedgerProjectionRef = useRef<ContextLedgerProjection | null>(null);
   const previousContextLedgerSessionKeyRef = useRef("");
@@ -1339,6 +1376,29 @@ export const Composer = memo(function Composer({
     void onSend("/fork", []);
   }, [disabled, onForkQuickStart, onSend, selectedEngine]);
 
+  const handleAttachBrowserContext = useCallback(async () => {
+    const workspaceId = activeWorkspaceId?.trim();
+    if (!workspaceId || browserContextBusy) {
+      return;
+    }
+    setBrowserContextBusy(true);
+    setBrowserContextError(null);
+    try {
+      const sessions = await listBrowserAgentSessions(workspaceId);
+      const session = sessions.find((item) => item.status === "ready");
+      if (!session) {
+        setBrowserContextError(t("browserAgent.composer.noSession"));
+        return;
+      }
+      const snapshot = await captureBrowserAgentSnapshot(session.browserSessionId);
+      setBrowserContextAttachment(buildBrowserContextAttachment(snapshot));
+    } catch (error) {
+      setBrowserContextError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBrowserContextBusy(false);
+    }
+  }, [activeWorkspaceId, browserContextBusy, t]);
+
   const handleSend = useCallback(
     (submittedText?: string, submittedImages?: string[]) => {
       if (disabled) {
@@ -1362,6 +1422,24 @@ export const Composer = memo(function Composer({
         mergedImages.length === 0 &&
         !selectedOpenCodeDirectCommand
       ) {
+        return;
+      }
+      const browserNavigationUrl =
+        mergedImages.length === 0 ? resolveBrowserNavigationUrl(trimmed) : null;
+      if (browserNavigationUrl && activeWorkspaceId) {
+        window.sessionStorage.setItem(PENDING_BROWSER_URL_KEY, browserNavigationUrl);
+        window.dispatchEvent(new CustomEvent(BROWSER_OPEN_DOCK_EVENT));
+        window.dispatchEvent(
+          new CustomEvent(BROWSER_OPEN_URL_EVENT, {
+            detail: { url: browserNavigationUrl },
+          }),
+        );
+        recordHistory(trimmed);
+        recordInputHistory(trimmed);
+        clearComposerContextSelections();
+        inlineCompletion.clear();
+        resetHistoryNavigation();
+        setComposerText("");
         return;
       }
       if (selectedOpenCodeDirectCommand) {
@@ -1401,21 +1479,32 @@ export const Composer = memo(function Composer({
       const selectedNoteCardIds = selectedNoteCards.map((entry) => entry.id);
       const selectedMemoryInjectionMode = getManualMemoryInjectionMode();
       const shouldReferenceMemory = memoryReferenceMode !== "off";
+      const hasBrowserContextAttachment = Boolean(browserContextAttachment);
       const sendOptions =
-        selectedMemoryIds.length > 0 || selectedNoteCardIds.length > 0 || shouldReferenceMemory
+        selectedMemoryIds.length > 0 ||
+        selectedNoteCardIds.length > 0 ||
+        shouldReferenceMemory ||
+        hasBrowserContextAttachment
           ? {
               ...(shouldReferenceMemory ? { memoryReferenceEnabled: true } : {}),
               ...(selectedMemoryIds.length > 0
                 ? { selectedMemoryIds, selectedMemoryInjectionMode }
                 : {}),
               ...(selectedNoteCardIds.length > 0 ? { selectedNoteCardIds } : {}),
+              ...(browserContextAttachment ? { browserContextAttachment } : {}),
             }
           : undefined;
+      const resolvedTextWithBrowserContext = browserContextAttachment
+        ? `${formatBrowserContextPrompt(browserContextAttachment)}\n\n${resolvedFinalTextWithAnnotations}`
+        : resolvedFinalTextWithAnnotations;
       const sendResult = onSend(
-        resolvedFinalTextWithAnnotations,
+        resolvedTextWithBrowserContext,
         mergedImages,
         sendOptions,
       );
+      if (browserContextAttachment) {
+        setBrowserContextAttachment(null);
+      }
       const retainedManualMemories = filterRetainedEntries(
         selectedManualMemories,
         carryOverManualMemoryIds,
@@ -1464,6 +1553,8 @@ export const Composer = memo(function Composer({
     },
     [
       attachedImages,
+      activeWorkspaceId,
+      browserContextAttachment,
       disabled,
       applyActiveFileReference,
       opencodeDisconnected,
@@ -2248,6 +2339,45 @@ export const Composer = memo(function Composer({
                     />
                   </div>
                 )}
+              </div>
+            ) : null}
+            {activeWorkspaceId ? (
+              <div className="composer-browser-context">
+                {browserContextAttachment ? (
+                  <div className="composer-browser-context-card">
+                    <div>
+                      <div className="composer-browser-context-title">
+                        {t("browserAgent.composer.attached")}
+                      </div>
+                      <div className="composer-browser-context-url">
+                        {browserContextAttachment.url}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="composer-browser-context-remove"
+                      onClick={() => setBrowserContextAttachment(null)}
+                    >
+                      {t("browserAgent.composer.remove")}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="composer-browser-context-attach"
+                    onClick={() => void handleAttachBrowserContext()}
+                    disabled={browserContextBusy}
+                  >
+                    {browserContextBusy
+                      ? t("browserAgent.composer.attaching")
+                      : t("browserAgent.composer.attach")}
+                  </button>
+                )}
+                {browserContextError ? (
+                  <div className="composer-browser-context-error" role="status">
+                    {browserContextError}
+                  </div>
+                ) : null}
               </div>
             ) : null}
             <ChatInputBoxAdapter

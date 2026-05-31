@@ -75,14 +75,11 @@ import {
   type ThreadLifecycleSnapshot,
   type TurnDiagnosticState,
 } from "./threadEventDiagnostics";
-
 export {
   CODEX_EXECUTION_ACTIVE_NO_PROGRESS_STALL_MS,
   CODEX_TURN_NO_PROGRESS_STALL_MS,
 } from "./threadEventDiagnostics";
-
 const THREE_EVIDENCE_RECONCILIATION_QUERY_TIMEOUT_MS = 15_000;
-
 function queryTurnReconciliationStatusWithTimeout(
   request: TurnReconciliationStatusRequest,
 ): Promise<TurnReconciliationStatusResponse> {
@@ -96,7 +93,6 @@ function queryTurnReconciliationStatusWithTimeout(
       );
     }, THREE_EVIDENCE_RECONCILIATION_QUERY_TIMEOUT_MS);
   });
-
   return Promise.race([
     queryTurnReconciliationStatus(request),
     timeoutPromise,
@@ -106,7 +102,6 @@ function queryTurnReconciliationStatusWithTimeout(
     }
   });
 }
-
 export function useThreadEventHandlers({
   activeThreadId,
   dispatch,
@@ -154,13 +149,11 @@ export function useThreadEventHandlers({
   >(null);
   const assistantSnapshotIngressLengthRef = useRef<Map<string, number>>(new Map());
   const quarantinedCodexTurnsRef = useRef<Map<string, CodexQuarantinedTurn>>(new Map());
-
   const getThreadLifecycleSnapshot = useCallback((threadId: string) => {
     return (
       threadLifecycleSnapshotRef.current.get(threadId) ?? createThreadLifecycleSnapshot()
     );
   }, []);
-
   const emitTurnDiagnostic = useCallback(
     (
       label: string,
@@ -193,7 +186,6 @@ export function useThreadEventHandlers({
     },
     [onDebug],
   );
-
   const emitForegroundSettlementDiagnostic = useCallback(
     (label: string, payload: Record<string, unknown>) => {
       emitTurnDiagnostic(label, {
@@ -203,7 +195,6 @@ export function useThreadEventHandlers({
     },
     [emitTurnDiagnostic],
   );
-
   const buildReconciliationQueryKey = useCallback(
     (input: {
       workspaceId: string;
@@ -224,7 +215,6 @@ export function useThreadEventHandlers({
     },
     [],
   );
-
   const terminalKindFromReconciliationStatus = useCallback(
     (status: TurnReconciliationRuntimeStatus): TurnSettlementTerminalKind | null => {
       switch (status) {
@@ -244,7 +234,6 @@ export function useThreadEventHandlers({
     },
     [],
   );
-
   const emitThreeEvidenceDryRunDiagnostic = useCallback(
     (input: {
       workspaceId: string;
@@ -336,7 +325,6 @@ export function useThreadEventHandlers({
         activeThreadId,
         ...buildThreadStreamCorrelationDimensions(input.threadId),
       }, { force: decision.action !== "settle" });
-
       if (decision.action !== "request-reconciliation") {
         emitTurnDiagnostic("three-evidence-reconciliation-query-skipped", {
           workspaceId: input.workspaceId,

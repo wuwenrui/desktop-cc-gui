@@ -6,6 +6,7 @@ import type { EngineDisplayInfo } from "../../engine/hooks/useEngineController";
 import type { TaskRunRecord } from "../../tasks/types";
 import type { ThreadDeleteErrorCode } from "../../threads/hooks/useThreads";
 import { EngineIcon } from "../../engine/components/EngineIcon";
+import { BrowserDock } from "../../browser-agent";
 import { TaskCenterView } from "../../tasks/components/TaskCenterView";
 import { useTaskRunStore } from "../../tasks/hooks/useTaskRunStore";
 import { compareTaskRunSurfacePriority, describeTaskRunSurface } from "../../tasks/utils/taskRunSurface";
@@ -124,6 +125,11 @@ export function WorkspaceHome({
           </header>
 
           <div className="workspace-home-task-center">
+            <BrowserDock
+              workspaceId={workspace.path}
+              ownerSurface="workspace-home"
+              className="workspace-home-browser-dock"
+            />
             {highlightedRun && highlightedSurface ? (
               <section
                 className={`workspace-home-run-hero workspace-home-run-hero--${highlightedSurface.severity}`}

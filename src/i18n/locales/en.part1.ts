@@ -717,6 +717,20 @@ const enPart1 = {
     behaviorStreaming: "Streaming Output",
     behaviorStreamingDesc:
       "When enabled, responses appear word by word. Disable to show complete responses at once.",
+    browserAgentTitle: "Built-in Browser Agent",
+    browserAgentDesc:
+      "Let AI conversations use the client's embedded browser context for web page understanding and later browser actions.",
+    browserAgentEnabled: "Enable built-in Browser Agent",
+    browserAgentStatusEnabled: "Browser Agent on",
+    browserAgentStatusDisabled: "Browser Agent off",
+    browserAgentHint:
+      "MVP starts with read-only page facts. Click/type/submit remain blocked until later action phases are enabled.",
+    browserAgentPreferBuiltIn: "Prefer built-in module for AI browser operations",
+    browserAgentPreferBuiltInDesc:
+      "When enabled, supported AI browser operations route to this universal module first unless the user explicitly opts out.",
+    browserAgentFallback: "Allow external browser-operation fallback",
+    browserAgentFallbackDesc:
+      "When the module is disabled, unsupported, or blocked by phase, the client may fall back to existing skill/provider browser operations.",
     terminalShellPathTitle: "Terminal shell",
     terminalShellPathDesc:
       "Choose the executable used when opening the built-in terminal.",
@@ -2573,6 +2587,11 @@ const enPart1 = {
       "This message is missing the workspace or thread binding needed for automatic recovery.",
     memoryContextSummary: "Memory context summary",
     memoryContextSummaryCount: "{{count}} memories",
+    browserContextSummary: "Browser context",
+    browserContextState: {
+      available: "available",
+      stale: "stale",
+    },
     memoryContextViewSentDetails: "View sent details",
     memoryContextSentDetailsTitle: "Actual sent memory details",
     memoryContextSentDetailsHint:
@@ -2653,6 +2672,48 @@ const enPart1 = {
       "{{count}} middle steps are collapsed during live mode",
     collapseStickyHeader: "Hide sticky question bar",
     expandStickyHeader: "Show sticky question bar",
+  },
+  browserAgent: {
+    dock: {
+      description:
+        "Read key page facts first, then progressively enable navigation and element actions.",
+      disabled: "Disabled",
+      statusDisconnected: "Disconnected",
+      statusLoading: "Loading",
+      statusReady: "Readable",
+      statusClosed: "Closed",
+      statusNeedsAttention: "Needs attention",
+      statusPreparing: "Preparing",
+      emptyUrl: "Enter a page URL to open.",
+      blockedUrl: "This URL is blocked by Browser Agent policy.",
+      opened: "Browser Agent opened a browser tab.",
+      closed: "Browser Agent tab closed.",
+      busy: "Working",
+      open: "Open",
+      enable: "Enable",
+      enabled: "Browser Agent enabled.",
+      tabs: "Browser tabs",
+      newTab: "New browser tab",
+      openDock: "Browser",
+      panelTitle: "Browser Dock",
+      panelKicker: "Open a page here, then attach its context to AI when needed.",
+      noWorkspace: "Select a workspace before opening Browser Dock.",
+      noPage: "Open an allowed http/https page to render it here.",
+      rendering: "Rendering page in Browser Dock...",
+      closePanel: "Close Browser Dock",
+      close: "Close Browser Agent session",
+      info: "Show Browser Agent details",
+      footnote:
+        "MVP does not store raw DOM, cookies, headers, or page secrets.",
+    },
+    composer: {
+      attach: "Attach browser context",
+      attaching: "Attaching browser context...",
+      attached: "Browser context attached",
+      remove: "Remove",
+      noSession:
+        "No active Browser Agent session. Open a page in the Browser Dock first.",
+    },
   },
 };
 

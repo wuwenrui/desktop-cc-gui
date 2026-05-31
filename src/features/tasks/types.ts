@@ -25,6 +25,16 @@ export type TaskRunArtifact = {
   summary?: string | null;
 };
 
+export type TaskRunBrowserEvidenceRef = {
+  attachmentId: string;
+  browserSessionId: string;
+  snapshotId: string;
+  url: string;
+  title?: string | null;
+  capturedAt: number;
+  state: "available" | "stale" | "expired" | "deleted" | "unsupported";
+};
+
 export type TaskRunRecoveryAction =
   | "open_conversation"
   | "retry"
@@ -53,6 +63,7 @@ export type TaskRunRecord = {
   latestOutputSummary?: string | null;
   blockedReason?: string | null;
   failureReason?: string | null;
+  browserEvidence?: TaskRunBrowserEvidenceRef | null;
   artifacts: TaskRunArtifact[];
   availableRecoveryActions: TaskRunRecoveryAction[];
   startedAt?: number | null;
@@ -101,6 +112,7 @@ export type TaskRunPatch = Partial<
     | "latestOutputSummary"
     | "blockedReason"
     | "failureReason"
+    | "browserEvidence"
     | "artifacts"
     | "availableRecoveryActions"
     | "startedAt"

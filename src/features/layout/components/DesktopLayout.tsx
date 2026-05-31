@@ -36,6 +36,7 @@ type DesktopLayoutProps = {
   gitDiffViewerNode: ReactNode;
   fileViewPanelNode: ReactNode;
   projectMapPanelNode?: ReactNode;
+  browserDockNode?: ReactNode;
   rightPanelToolbarNode: ReactNode;
   gitDiffPanelNode: ReactNode;
   planPanelNode: ReactNode;
@@ -76,6 +77,7 @@ export function DesktopLayout({
   gitDiffViewerNode,
   fileViewPanelNode,
   projectMapPanelNode = null,
+  browserDockNode = null,
   rightPanelToolbarNode,
   gitDiffPanelNode,
   planPanelNode,
@@ -104,7 +106,9 @@ export function DesktopLayout({
     isEditorSplitMode &&
     editorSplitCompanion === "projectMap" &&
     !isEditorFileMaximized;
-  const shouldPlaceComposerInChatColumn = isEditorSplitChatVisible;
+  const isBrowserDockSplitVisible = centerMode === "chat" && Boolean(browserDockNode);
+  const shouldPlaceComposerInChatColumn =
+    isEditorSplitChatVisible || isBrowserDockSplitVisible;
   const hasBottomPanel = Boolean(planPanelNode);
   const shouldShowComposerBelowContent =
     centerMode !== "projectMap" &&
@@ -227,6 +231,74 @@ export function DesktopLayout({
     },
     [],
   );
+  const handleBrowserDockSplitPointerDown = useCallback(
+    (event: PointerEvent<HTMLDivElement>) => {
+      if (event.button !== 0) {
+        return;
+      }
+      const divider = event.currentTarget;
+      const splitRoot = divider.closest(".content.is-browser-dock-split") as HTMLElement | null;
+      if (!splitRoot) {
+        return;
+      }
+      const chatLayer = splitRoot.querySelector(
+        ".content-layer--chat",
+      ) as HTMLElement | null;
+      const browserLayer = splitRoot.querySelector(
+        ".content-layer--browser-dock",
+      ) as HTMLElement | null;
+      if (!chatLayer || !browserLayer) {
+        return;
+      }
+      const chatRect = chatLayer.getBoundingClientRect();
+      const browserRect = browserLayer.getBoundingClientRect();
+      const totalWidth = chatRect.width + browserRect.width;
+      if (totalWidth <= 0) {
+        return;
+      }
+
+      event.preventDefault();
+
+      const startX = event.clientX;
+      const startBrowserWidth = browserRect.width;
+      const minBrowserWidth = Math.max(320, totalWidth * 0.24);
+      const maxBrowserWidth = Math.min(totalWidth - 320, totalWidth * 0.72);
+      if (maxBrowserWidth <= minBrowserWidth) {
+        return;
+      }
+
+      document.body.classList.add("browser-dock-split-resizing");
+
+      const cleanup = () => {
+        window.removeEventListener("pointermove", handlePointerMove);
+        window.removeEventListener("pointerup", handlePointerUp);
+        window.removeEventListener("pointercancel", handlePointerUp);
+        document.body.classList.remove("browser-dock-split-resizing");
+        splitResizeCleanupRef.current = null;
+      };
+
+      const handlePointerMove = (moveEvent: globalThis.PointerEvent) => {
+        const deltaX = moveEvent.clientX - startX;
+        const nextBrowserWidth = Math.min(
+          maxBrowserWidth,
+          Math.max(minBrowserWidth, startBrowserWidth - deltaX),
+        );
+        const nextRatio = (nextBrowserWidth / totalWidth) * 100;
+        splitRoot.style.setProperty("--browser-dock-split-ratio", nextRatio.toFixed(2));
+      };
+
+      const handlePointerUp = () => {
+        cleanup();
+      };
+
+      splitResizeCleanupRef.current?.();
+      splitResizeCleanupRef.current = cleanup;
+      window.addEventListener("pointermove", handlePointerMove);
+      window.addEventListener("pointerup", handlePointerUp);
+      window.addEventListener("pointercancel", handlePointerUp);
+    },
+    [],
+  );
 
   if (showKanban) {
     return (
@@ -297,6 +369,8 @@ export function DesktopLayout({
                 {approvalToastsNode}
                 <div
                   className={`content${isEditorSplitMode ? " is-editor-split" : ""}${
+                    isBrowserDockSplitVisible ? " is-browser-dock-split" : ""
+                  }${
                     isEditorSplitMode
                       ? isEditorHorizontalSplitMode
                         ? " is-editor-split-horizontal"
@@ -363,6 +437,25 @@ export function DesktopLayout({
                   >
                     {messagesNode}
                     {shouldPlaceComposerInChatColumn ? composerNode : null}
+                  </div>
+                  {isBrowserDockSplitVisible ? (
+                    <div
+                      className="content-browser-dock-divider"
+                      role="separator"
+                      aria-orientation="vertical"
+                      aria-label={t("layout.resizeEditorSplit")}
+                      onPointerDown={handleBrowserDockSplitPointerDown}
+                    />
+                  ) : null}
+                  <div
+                    className={`content-layer content-layer--browser-dock ${
+                      isBrowserDockSplitVisible
+                        ? "is-active content-layer--browser-companion"
+                        : "is-hidden"
+                    }`}
+                    aria-hidden={!isBrowserDockSplitVisible}
+                  >
+                    {browserDockNode}
                   </div>
                 </div>
 

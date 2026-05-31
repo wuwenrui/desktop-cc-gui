@@ -259,17 +259,23 @@ function printViolations(report) {
   }
 }
 
-function buildStructuredReportJson(report, logSource, generatedAt) {
+function buildStructuredReportJson(report, logSource, generatedAt, mode) {
   const breachCount =
     report.actWarnings.length +
     report.stdoutPayloads.length +
     report.stderrPayloads.length;
+  const status = logSource.exitCode !== 0 || (mode === "fail" && breachCount > 0)
+    ? "fail"
+    : breachCount > 0
+      ? "warn"
+      : "pass";
   return JSON.stringify(
     {
       schemaVersion: 1,
       gate: "heavy-test-noise",
       generatedAt,
-      status: breachCount > 0 ? "warn" : "pass",
+      status,
+      mode,
       exitCode: logSource.exitCode,
       logPath: logSource.logPath.replace(/\\/g, "/"),
       breachCount,
@@ -341,7 +347,11 @@ async function main() {
   if (config.jsonOutput) {
     const jsonOutput = path.resolve(config.jsonOutput);
     await mkdir(path.dirname(jsonOutput), { recursive: true });
-    await writeFile(jsonOutput, buildStructuredReportJson(report, logSource, new Date().toISOString()), "utf8");
+    await writeFile(
+      jsonOutput,
+      buildStructuredReportJson(report, logSource, new Date().toISOString(), config.mode),
+      "utf8",
+    );
     console.log(`  JSON report: ${jsonOutput}`);
   }
 

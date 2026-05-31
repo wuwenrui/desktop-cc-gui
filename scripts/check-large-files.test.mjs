@@ -268,6 +268,7 @@ test("scanLargeFiles skips local runtime artifact directories", async () => {
       path.join(root, ".artifacts", "manual-codex-launch-home", ".cargo", "registry", "huge.rs"),
       200,
     );
+    await writeLines(path.join(root, ".omx", "runtime", "huge.ts"), 200);
 
     const scan = await scanLargeFiles({
       root,
@@ -284,6 +285,79 @@ test("scanLargeFiles skips local runtime artifact directories", async () => {
       scan.results.map((item) => item.path),
       ["src/visible-large.ts"],
     );
+  });
+});
+
+test("cli fails in fail mode for legacy oversized files without a policy baseline", async () => {
+  await withTempDir(async (root) => {
+    await writeLines(path.join(root, "src", "oversized.ts"), 6);
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        "scripts/check-large-files.mjs",
+        "--root",
+        root,
+        "--threshold",
+        "5",
+        "--mode",
+        "fail",
+      ],
+      {
+        cwd: process.cwd(),
+        encoding: "utf8",
+      },
+    );
+
+    assert.equal(result.status, 1);
+    assert.match(result.stdout, /status=oversized/);
+  });
+});
+
+test("cli fails in fail mode for policy hard debt when no baseline is loaded", async () => {
+  await withTempDir(async (root) => {
+    const policyPath = path.join(root, "policy.json");
+    await fs.writeFile(
+      policyPath,
+      JSON.stringify(
+        {
+          version: "test-policy",
+          policies: [],
+          defaultPolicy: {
+            id: "default-source",
+            priority: "P1",
+            warnThreshold: 4,
+            failThreshold: 5,
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+    await writeLines(path.join(root, "src", "captured.ts"), 6);
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        "scripts/check-large-files.mjs",
+        "--root",
+        root,
+        "--policy-file",
+        "policy.json",
+        "--scope",
+        "fail",
+        "--mode",
+        "fail",
+      ],
+      {
+        cwd: process.cwd(),
+        encoding: "utf8",
+      },
+    );
+
+    assert.equal(result.status, 1);
+    assert.match(result.stdout, /status=captured/);
   });
 });
 

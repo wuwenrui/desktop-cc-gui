@@ -29,6 +29,7 @@ const TEXT_EXTENSIONS = new Set([
 const EXCLUDED_DIRS = new Set([
   ".git",
   ".artifacts",
+  ".omx",
   "node_modules",
   "dist",
   "build",
@@ -507,7 +508,7 @@ function buildBaselineJson(scan, generatedAt) {
 }
 
 function buildStructuredReportJson(scan, generatedAt) {
-  const blockingItems = scan.results.filter((item) => item.status === "new" || item.status === "regressed");
+  const blockingItems = scan.results.filter(isBlockingLargeFileFinding);
   const status = blockingItems.length > 0 ? "fail" : scan.results.length > 0 ? "warn" : "pass";
   return JSON.stringify(
     {
@@ -553,7 +554,7 @@ function printRemediation(scan, mode) {
   if (mode !== "fail") {
     return;
   }
-  const blockingItems = scan.results.filter((item) => item.status === "new" || item.status === "regressed");
+  const blockingItems = scan.results.filter(isBlockingLargeFileFinding);
   if (blockingItems.length === 0) {
     return;
   }
@@ -588,10 +589,17 @@ export async function main(argv = process.argv.slice(2)) {
     console.log(`Structured JSON report written: ${toRepoPath(path.relative(options.root, reportPath))}`);
   }
 
-  const blockingItems = scan.results.filter((item) => item.status === "new" || item.status === "regressed");
+  const blockingItems = scan.results.filter(isBlockingLargeFileFinding);
   if (options.mode === "fail" && blockingItems.length > 0) {
     process.exitCode = 1;
   }
+}
+
+function isBlockingLargeFileFinding(item) {
+  if (item.status === "new" || item.status === "regressed" || item.status === "oversized") {
+    return true;
+  }
+  return item.status === "captured" && item.severity === "fail";
 }
 
 const isDirectExecution =

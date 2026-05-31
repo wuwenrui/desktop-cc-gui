@@ -29,6 +29,7 @@ import { ProjectMapPanel, type ProjectMapDatasetController } from "../../project
 import { WorkspaceNoteCardPanel } from "../../note-cards/components/WorkspaceNoteCardPanel";
 import { WorkspaceSessionActivityPanel } from "../../session-activity/components/WorkspaceSessionActivityPanel";
 import { WorkspaceSessionRadarPanel } from "../../session-activity/components/WorkspaceSessionRadarPanel";
+import { BrowserDock } from "../../browser-agent/components/BrowserDock";
 import { DebugPanel } from "../../debug/components/DebugPanel";
 import { PanelTabs } from "../components/PanelTabs";
 import { TabBar } from "../../app/components/TabBar";
@@ -446,6 +447,8 @@ type LayoutNodesOptions = {
   onSaveLaunchScript: () => void;
   launchScriptsState?: WorkspaceLaunchScriptsState;
   mainHeaderActionsNode?: ReactNode;
+  browserDockOpen?: boolean;
+  onCloseBrowserDock?: () => void;
   centerMode: "chat" | "diff" | "editor" | "memory" | "projectMap";
   setCenterMode: (mode: "chat" | "diff" | "editor" | "memory" | "projectMap") => void;
   editorSplitCompanion: "chat" | "projectMap";
@@ -800,6 +803,7 @@ type LayoutNodesResult = {
   gitDiffViewerNode: ReactNode;
   fileViewPanelNode: ReactNode;
   projectMapPanelNode: ReactNode;
+  browserDockNode: ReactNode;
   planPanelNode: ReactNode;
   debugPanelNode: ReactNode;
   debugPanelFullNode: ReactNode;
@@ -2641,6 +2645,43 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       <span className="workspace-title">{t("workspace.diff")}</span>
     </div>
   );
+  const browserDockNode = options.browserDockOpen ? (
+    <section
+      className="browser-agent-center-panel"
+      aria-label={t("browserAgent.dock.panelTitle")}
+    >
+      <div className="browser-agent-center-panel-header">
+        <div>
+          <div className="browser-agent-center-panel-title">
+            {t("browserAgent.dock.panelTitle")}
+          </div>
+          <div className="browser-agent-center-panel-kicker">
+            {t("browserAgent.dock.panelKicker")}
+          </div>
+        </div>
+        <button
+          type="button"
+          className="browser-agent-center-panel-close"
+          onClick={options.onCloseBrowserDock}
+          aria-label={t("browserAgent.dock.closePanel")}
+          data-tauri-drag-region="false"
+        >
+          ×
+        </button>
+      </div>
+      {options.activeWorkspaceId ? (
+        <BrowserDock
+          workspaceId={options.activeWorkspaceId}
+          ownerSurface="main-split-browser-dock"
+          className="browser-agent-center-panel-dock"
+        />
+      ) : (
+        <div className="browser-agent-center-panel-empty">
+          {t("browserAgent.dock.noWorkspace")}
+        </div>
+      )}
+    </section>
+  ) : null;
 
   return {
     codeAnnotationBridgeProps,
@@ -2661,6 +2702,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     gitDiffViewerNode,
     fileViewPanelNode,
     projectMapPanelNode,
+    browserDockNode,
     planPanelNode,
     debugPanelNode,
     debugPanelFullNode,

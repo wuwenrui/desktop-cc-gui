@@ -13,10 +13,11 @@ export function parseVitestBatchConfig(argv = [], env = process.env) {
     throw new Error(`Unknown argument: ${token}`);
   }
 
-  const batchSize = Number.parseInt(env.VITEST_BATCH_SIZE ?? "4", 10);
-  if (!Number.isFinite(batchSize) || batchSize <= 0) {
+  const batchSizeText = env.VITEST_BATCH_SIZE ?? "4";
+  if (!/^[1-9]\d*$/.test(batchSizeText)) {
     throw new Error(`Invalid VITEST_BATCH_SIZE: ${env.VITEST_BATCH_SIZE ?? ""}`);
   }
+  const batchSize = Number(batchSizeText);
 
   return {
     batchSize,

@@ -265,6 +265,9 @@ const defaultSettings: AppSettings = {
   codexAutoCompactionEnabled: true,
   codexAutoCompactionThresholdPercent:
     CODEX_AUTO_COMPACTION_THRESHOLD_DEFAULT_PERCENT,
+  browserAgentEnabled: true,
+  browserAgentPreferBuiltIn: true,
+  browserAgentAllowExternalProviderFallback: true,
 };
 
 const CODEX_WARM_TTL_DEFAULT_SECONDS = 7200;
@@ -372,6 +375,10 @@ function normalizeAppSettings(
         settings.codexAutoCompactionThresholdPercent,
       ),
     codexAutoCompactionEnabled: settings.codexAutoCompactionEnabled !== false,
+    browserAgentEnabled: settings.browserAgentEnabled !== false,
+    browserAgentPreferBuiltIn: settings.browserAgentPreferBuiltIn !== false,
+    browserAgentAllowExternalProviderFallback:
+      settings.browserAgentAllowExternalProviderFallback !== false,
     codeFontSize: clampCodeFontSize(settings.codeFontSize),
     notificationSoundId: ALLOWED_NOTIFICATION_SOUND_IDS.has(
       settings.notificationSoundId,

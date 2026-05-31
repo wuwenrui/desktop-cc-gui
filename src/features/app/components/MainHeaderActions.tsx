@@ -4,6 +4,7 @@ import Construction from "lucide-react/dist/esm/icons/construction";
 import Focus from "lucide-react/dist/esm/icons/focus";
 import LayoutDashboard from "lucide-react/dist/esm/icons/layout-dashboard";
 import BookOpen from "lucide-react/dist/esm/icons/book-open";
+import Globe from "lucide-react/dist/esm/icons/globe";
 import PanelLeftClose from "lucide-react/dist/esm/icons/panel-left-close";
 import PanelLeftOpen from "lucide-react/dist/esm/icons/panel-left-open";
 import PanelRightClose from "lucide-react/dist/esm/icons/panel-right-close";
@@ -28,6 +29,8 @@ type MainHeaderActionsProps = {
   showSpecHubButton?: boolean;
   isSpecHubActive?: boolean;
   onOpenSpecHub?: () => void;
+  isBrowserDockOpen?: boolean;
+  onToggleBrowserDock?: () => void;
   showClientDocumentationButton?: boolean;
   onOpenClientDocumentation?: () => void;
 };
@@ -48,6 +51,8 @@ export const MainHeaderActions = memo(function MainHeaderActions({
   showSpecHubButton = false,
   isSpecHubActive = false,
   onOpenSpecHub,
+  isBrowserDockOpen = false,
+  onToggleBrowserDock,
   showClientDocumentationButton = false,
   onOpenClientDocumentation,
 }: MainHeaderActionsProps) {
@@ -67,6 +72,7 @@ export const MainHeaderActions = memo(function MainHeaderActions({
   const canToggleSpecHub = showSpecHubButton && Boolean(onOpenSpecHub);
   const canOpenClientDocumentation =
     showClientDocumentationButton && Boolean(onOpenClientDocumentation);
+  const canToggleBrowserDock = !isCompact && Boolean(onToggleBrowserDock);
 
   if (
     isCompact ||
@@ -74,6 +80,7 @@ export const MainHeaderActions = memo(function MainHeaderActions({
       !canToggleRuntimeConsole &&
       !canToggleTerminal &&
       !canToggleSoloMode &&
+      !canToggleBrowserDock &&
       !canOpenClientDocumentation)
   ) {
     return null;
@@ -112,6 +119,16 @@ export const MainHeaderActions = memo(function MainHeaderActions({
           label={t(isSoloMode ? "sidebar.exitSoloMode" : "sidebar.enterSoloMode")}
         >
           <Focus size={14} aria-hidden />
+        </TooltipIconButton>
+      )}
+      {canToggleBrowserDock && (
+        <TooltipIconButton
+          className={`ghost main-header-action${isBrowserDockOpen ? " is-active" : ""}`}
+          onClick={() => onToggleBrowserDock?.()}
+          data-tauri-drag-region="false"
+          label={t("browserAgent.dock.openDock")}
+        >
+          <Globe size={14} aria-hidden />
         </TooltipIconButton>
       )}
       {canToggleSpecHub && (

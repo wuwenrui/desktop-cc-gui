@@ -78,6 +78,9 @@ export function buildQueuedHandoffBubbleItem(
     ...(collaborationMode ? { collaborationMode } : {}),
     ...(selectedAgentName ? { selectedAgentName } : {}),
     ...(selectedAgentIcon ? { selectedAgentIcon } : {}),
+    ...(item.sendOptions?.browserContextAttachment
+      ? { browserContextAttachment: item.sendOptions.browserContextAttachment }
+      : {}),
   };
 }
 

@@ -828,6 +828,36 @@
   max-width: 860px;
 }
 
+.browser-context-summary-card {
+  max-width: 860px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent-blue, #2563eb) 44%, var(--border-subtle));
+  border-radius: 10px;
+  background:
+    linear-gradient(135deg, rgba(37, 99, 235, 0.13), transparent 48%),
+    var(--surface-card);
+  color: var(--text-primary);
+}
+
+.browser-context-summary-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.browser-context-summary-url {
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.browser-context-summary-meta {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
 .memory-context-summary-toggle {
   width: 100%;
   border: none;

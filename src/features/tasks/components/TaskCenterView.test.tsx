@@ -89,6 +89,26 @@ describe("TaskCenterView", () => {
     expect(run.status).toBe("running");
   });
 
+  it("renders linked browser evidence state without treating it as completion", () => {
+    const run = makeRun({
+      browserEvidence: {
+        attachmentId: "browser-attachment-1",
+        browserSessionId: "browser-session-1",
+        snapshotId: "browser-snapshot-1",
+        url: "https://example.com",
+        title: "Example",
+        capturedAt: 100,
+        state: "available",
+      },
+    });
+
+    render(<TaskCenterView runs={[run]} />);
+
+    expect(screen.getByText(/Example/)).toBeTruthy();
+    expect(screen.getByText(/taskCenter.browserEvidenceState.available/)).toBeTruthy();
+    expect(run.status).toBe("running");
+  });
+
   it("disables duplicate-producing recovery actions when another active run exists", () => {
     render(
       <TaskCenterView

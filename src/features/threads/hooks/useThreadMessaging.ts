@@ -873,6 +873,7 @@ export function useThreadMessaging({
             collaborationMode: userCollaborationMode,
             selectedAgentName,
             selectedAgentIcon,
+            browserContextAttachment: options?.browserContextAttachment ?? null,
           };
           dispatch({
             type: "upsertItem",

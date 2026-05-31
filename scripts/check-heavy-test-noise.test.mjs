@@ -170,3 +170,45 @@ test("cli writes structured JSON report for governance evidence consumers", asyn
     await rm(tempDir, { recursive: true, force: true });
   }
 });
+
+test("cli marks structured JSON as fail when fail-mode violations are present", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "heavy-test-noise-"));
+  try {
+    const inputPath = path.join(tempDir, "log.txt");
+    const outputPath = path.join(tempDir, "heavy-test-noise.json");
+    await writeFile(
+      inputPath,
+      [
+        "stdout | src/features/threads/hooks/useThreadMessaging.test.tsx > useThreadMessaging > example",
+        "[model/resolve/send] { threadId: \"t-1\" }",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        "scripts/check-heavy-test-noise.mjs",
+        "--input",
+        inputPath,
+        "--mode",
+        "fail",
+        "--json-output",
+        outputPath,
+      ],
+      {
+        cwd: process.cwd(),
+        encoding: "utf8",
+      },
+    );
+
+    assert.equal(result.status, 1);
+    const report = JSON.parse(await readFile(outputPath, "utf8"));
+    assert.equal(report.status, "fail");
+    assert.equal(report.mode, "fail");
+    assert.equal(report.breachCount, 1);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});

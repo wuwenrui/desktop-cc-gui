@@ -9,6 +9,7 @@ import {
   type NoteCardContextSummary,
 } from "./messagesNoteCardContext";
 import { extractCommandMessageDisplayText } from "../utils/commandMessageTags";
+import { stripBrowserContextPrompt } from "../../browser-agent";
 
 const MODE_FALLBACK_MARKER_REGEX = /User request\s*:\s*/i;
 const MODE_FALLBACK_PREFIX_REGEX =
@@ -240,8 +241,9 @@ export function resolveUserMessagePresentation({
   selectedAgentIcon,
   enableCollaborationBadge,
 }: ResolveUserMessagePresentationParams): UserMessagePresentation {
-  const legacyUserMemory = parseInjectedMemoryPrefixFromUser(text);
-  const afterMemoryText = legacyUserMemory?.remainingText ?? text;
+  const textWithoutBrowserContext = stripBrowserContextPrompt(text);
+  const legacyUserMemory = parseInjectedMemoryPrefixFromUser(textWithoutBrowserContext);
+  const afterMemoryText = legacyUserMemory?.remainingText ?? textWithoutBrowserContext;
   const legacyUserNoteCard = parseInjectedNoteCardContextFromUser(afterMemoryText);
   const originalText = legacyUserNoteCard?.remainingText ?? afterMemoryText;
   const normalizedSelectedAgentName = normalizeSelectedAgentName(selectedAgentName);
@@ -258,7 +260,7 @@ export function resolveUserMessagePresentation({
   const displayText =
     preferredText.displayText.trim().length > 0
       ? preferredText.displayText
-      : text || originalText;
+      : textWithoutBrowserContext || originalText;
   return {
     displayText,
     stickyCandidateText: preferredText.stickyCandidateText,

@@ -191,6 +191,90 @@ export function BasicBehaviorSection({
         </CardHeader>
       </Card>
       <Card
+        className={`settings-basic-group-card settings-basic-shadcn-card settings-basic-browser-agent-card${
+          appSettings.browserAgentEnabled ? " is-enabled" : ""
+        }`}
+      >
+        <CardHeader className="settings-card-switch-header">
+          <div className="settings-card-switch-meta">
+            <CardTitle className="settings-toggle-title">
+              {t("settings.browserAgentTitle")}
+            </CardTitle>
+            <CardDescription className="settings-toggle-subtitle">
+              {t("settings.browserAgentDesc")}
+            </CardDescription>
+          </div>
+          <CardAction className="settings-card-switch-action">
+            <Switch
+              checked={appSettings.browserAgentEnabled}
+              onCheckedChange={(checked) =>
+                void onUpdateAppSettings({
+                  ...appSettings,
+                  browserAgentEnabled: checked,
+                })
+              }
+              aria-label={t("settings.browserAgentEnabled")}
+            />
+          </CardAction>
+        </CardHeader>
+        <CardContent className="settings-basic-sounds-card-content">
+          <div className="settings-help settings-sound-hint settings-sound-hint-shadcn">
+            <Badge variant="outline" className="settings-sound-status-badge">
+              <Info size={12} aria-hidden />
+              <span>
+                {appSettings.browserAgentEnabled
+                  ? t("settings.browserAgentStatusEnabled")
+                  : t("settings.browserAgentStatusDisabled")}
+              </span>
+            </Badge>
+            <span className="settings-sound-hint-copy">
+              {t("settings.browserAgentHint")}
+            </span>
+          </div>
+          <div className="settings-sound-toggle-row">
+            <div>
+              <div className="settings-toggle-title">
+                {t("settings.browserAgentPreferBuiltIn")}
+              </div>
+              <div className="settings-toggle-subtitle">
+                {t("settings.browserAgentPreferBuiltInDesc")}
+              </div>
+            </div>
+            <Switch
+              checked={appSettings.browserAgentPreferBuiltIn}
+              onCheckedChange={(checked) =>
+                void onUpdateAppSettings({
+                  ...appSettings,
+                  browserAgentPreferBuiltIn: checked,
+                })
+              }
+              disabled={!appSettings.browserAgentEnabled}
+              aria-label={t("settings.browserAgentPreferBuiltIn")}
+            />
+          </div>
+          <div className="settings-sound-toggle-row">
+            <div>
+              <div className="settings-toggle-title">
+                {t("settings.browserAgentFallback")}
+              </div>
+              <div className="settings-toggle-subtitle">
+                {t("settings.browserAgentFallbackDesc")}
+              </div>
+            </div>
+            <Switch
+              checked={appSettings.browserAgentAllowExternalProviderFallback}
+              onCheckedChange={(checked) =>
+                void onUpdateAppSettings({
+                  ...appSettings,
+                  browserAgentAllowExternalProviderFallback: checked,
+                })
+              }
+              aria-label={t("settings.browserAgentFallback")}
+            />
+          </div>
+        </CardContent>
+      </Card>
+      <Card
         className={`settings-basic-group-card settings-basic-shadcn-card settings-basic-performance-card${
           appSettings.performanceCompatibilityModeEnabled ? " is-enabled" : ""
         }`}

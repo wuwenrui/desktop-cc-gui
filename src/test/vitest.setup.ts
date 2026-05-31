@@ -283,6 +283,65 @@ vi.mock("react-i18next", () => ({
         "settings.sidebarExperimental": "Experimental",
         "settings.basicAppearance": "Appearance",
         "settings.basicBehavior": "Behavior",
+        "settings.browserAgentTitle": "Built-in Browser Agent",
+        "settings.browserAgentDesc":
+          "Let AI conversations use the client's embedded browser context for web page understanding and later browser actions.",
+        "settings.browserAgentEnabled": "Enable built-in Browser Agent",
+        "settings.browserAgentStatusEnabled": "Browser Agent on",
+        "settings.browserAgentStatusDisabled": "Browser Agent off",
+        "settings.browserAgentHint":
+          "MVP starts with read-only page facts. Click/type/submit remain blocked until later action phases are enabled.",
+        "settings.browserAgentPreferBuiltIn":
+          "Prefer built-in module for AI browser operations",
+        "settings.browserAgentPreferBuiltInDesc":
+          "When enabled, supported AI browser operations route to this universal module first unless the user explicitly opts out.",
+        "settings.browserAgentFallback": "Allow external browser-operation fallback",
+        "settings.browserAgentFallbackDesc":
+          "When the module is disabled, unsupported, or blocked by phase, the client may fall back to existing skill/provider browser operations.",
+        "browserAgent.dock.description":
+          "Read key page facts first, then progressively enable navigation and element actions.",
+        "browserAgent.dock.disabled": "Disabled",
+        "browserAgent.dock.statusDisconnected": "Disconnected",
+        "browserAgent.dock.statusLoading": "Loading",
+        "browserAgent.dock.statusReady": "Readable",
+        "browserAgent.dock.statusClosed": "Closed",
+        "browserAgent.dock.statusNeedsAttention": "Needs attention",
+        "browserAgent.dock.statusPreparing": "Preparing",
+        "browserAgent.dock.emptyUrl": "Enter a page URL to open.",
+        "browserAgent.dock.blockedUrl":
+          "This URL is blocked by Browser Agent policy.",
+        "browserAgent.dock.opened":
+          "Browser Agent opened a browser tab.",
+        "browserAgent.dock.closed": "Browser Agent tab closed.",
+        "browserAgent.dock.busy": "Working",
+        "browserAgent.dock.open": "Open",
+        "browserAgent.dock.enable": "Enable",
+        "browserAgent.dock.enabled": "Browser Agent enabled.",
+        "browserAgent.dock.tabs": "Browser tabs",
+        "browserAgent.dock.newTab": "New browser tab",
+        "browserAgent.dock.openDock": "Browser",
+        "browserAgent.dock.panelTitle": "Browser Dock",
+        "browserAgent.dock.panelKicker":
+          "Open a page here, then attach its context to AI when needed.",
+        "browserAgent.dock.noWorkspace":
+          "Select a workspace before opening Browser Dock.",
+        "browserAgent.dock.noPage":
+          "Open an allowed http/https page to render it here.",
+        "browserAgent.dock.rendering": "Rendering page in Browser Dock...",
+        "browserAgent.dock.closePanel": "Close Browser Dock",
+        "browserAgent.dock.close": "Close Browser Agent session",
+        "browserAgent.dock.info": "Show Browser Agent details",
+        "browserAgent.dock.footnote":
+          "MVP does not store raw DOM, cookies, headers, or page secrets.",
+        "browserAgent.composer.attach": "Attach browser context",
+        "browserAgent.composer.attaching": "Attaching browser context...",
+        "browserAgent.composer.attached": "Browser context attached",
+        "browserAgent.composer.remove": "Remove",
+        "browserAgent.composer.noSession":
+          "No active Browser Agent session. Open a page in the Browser Dock first.",
+        "messages.browserContextSummary": "Browser context",
+        "messages.browserContextState.available": "available",
+        "messages.browserContextState.stale": "stale",
         "settings.projectManagementDescription": "Manage project groups and real workspace sessions from one place.",
         "settings.projectManagementGroupsTab": "Groups",
         "settings.projectManagementSessionsTab": "Session Management",

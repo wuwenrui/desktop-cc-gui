@@ -1799,8 +1799,17 @@ const enPart2 = {
     latestOutput: "Latest output",
     diagnostics: "Diagnostics",
     artifacts: "Artifacts",
+    browserEvidence: "Browser evidence",
     unavailable: "Unavailable",
     noArtifacts: "No artifacts yet",
+    noBrowserEvidence: "No browser evidence linked",
+    browserEvidenceState: {
+      available: "available",
+      stale: "stale",
+      expired: "expired",
+      deleted: "deleted",
+      unsupported: "unsupported",
+    },
     status: {
       queued: "Queued",
       planning: "Planning",

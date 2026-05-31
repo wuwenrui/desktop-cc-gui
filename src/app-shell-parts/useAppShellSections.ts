@@ -8,7 +8,13 @@ import {
 } from "react";
 import { homeDir } from "@tauri-apps/api/path";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { ensureWorkspacePathDir, getWorkspaceFiles, isWebServiceRuntime } from "../services/tauri";
+import {
+  captureBrowserAgentSnapshot,
+  ensureWorkspacePathDir,
+  getWorkspaceFiles,
+  isWebServiceRuntime,
+  listBrowserAgentSessions,
+} from "../services/tauri";
 import { pushErrorToast } from "../services/toasts";
 import {
   isKanbanThreadCompatibleWithEngine,
@@ -30,8 +36,13 @@ import {
   deriveTaskRunTelemetryPatch,
 } from "../features/tasks/utils/taskRunTelemetry";
 import {
+  buildTaskRunBrowserEvidenceRef,
   loadTaskRunStore,
 } from "../features/tasks/utils/taskRunStorage";
+import {
+  buildBrowserContextAttachment,
+  formatBrowserContextPrompt,
+} from "../features/browser-agent";
 import type { TaskRunRecord } from "../features/tasks/types";
 import {
   applyMissedRunPolicy,
@@ -1197,12 +1208,30 @@ export function useAppShellSections(ctx: any) {
 
         const executionStartedAt = Date.now();
         const baseMessage = task.description?.trim() || task.title;
+        let browserContextAttachment = null;
+        try {
+          const browserSessions = await listBrowserAgentSessions(workspace.id);
+          const browserSession = browserSessions.find((entry) => entry.status !== "closed");
+          if (browserSession) {
+            const snapshot = await captureBrowserAgentSnapshot(browserSession.browserSessionId);
+            browserContextAttachment = buildBrowserContextAttachment(snapshot);
+          }
+        } catch (error) {
+          console.warn(
+            "Browser context source evidence unavailable for Kanban task dispatch",
+            error,
+          );
+        }
+        const browserContextPrefix = browserContextAttachment
+          ? `${formatBrowserContextPrompt(browserContextAttachment)}\n\n`
+          : "";
         const firstMessage = params.injectedPrefix
-          ? `${params.injectedPrefix}\n\n${baseMessage}`
-          : baseMessage;
+          ? `${browserContextPrefix}${params.injectedPrefix}\n\n${baseMessage}`
+          : `${browserContextPrefix}${baseMessage}`;
         if (firstMessage) {
           await sendUserMessageToThread(workspace, threadId, firstMessage, task.images ?? [], {
             ...(outboundModel ? { model: outboundModel } : {}),
+            ...(browserContextAttachment ? { browserContextAttachment } : {}),
           });
         }
 
@@ -1213,6 +1242,9 @@ export function useAppShellSections(ctx: any) {
           linkedThreadId: threadId,
           currentStep: "first_message_sent",
           startedAt: executionStartedAt,
+          browserEvidence: browserContextAttachment
+            ? buildTaskRunBrowserEvidenceRef(browserContextAttachment)
+            : undefined,
         });
         updateTaskExecution(task.id, {
           lastSource: params.source,

@@ -1243,6 +1243,8 @@ mod tests {
             sessions: tokio::sync::Mutex::new(std::collections::HashMap::new()),
             terminal_sessions: tokio::sync::Mutex::new(std::collections::HashMap::new()),
             runtime_log_sessions: tokio::sync::Mutex::new(std::collections::HashMap::new()),
+            browser_sessions: tokio::sync::Mutex::new(std::collections::HashMap::new()),
+            browser_evidence: tokio::sync::Mutex::new(std::collections::HashMap::new()),
             remote_backend: tokio::sync::Mutex::new(None),
             storage_path: data_dir.join("workspaces.json"),
             settings_path: data_dir.join("settings.json"),

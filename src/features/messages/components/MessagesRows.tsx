@@ -28,6 +28,10 @@ import { languageFromPath } from "../../../utils/syntax";
 import type { PresentationProfile } from "../presentation/presentationProfile";
 import { parseAgentTaskNotification } from "../utils/agentTaskNotification";
 import {
+  parseBrowserContextPrompt,
+  stripBrowserContextPrompt,
+} from "../../browser-agent";
+import {
   CollapsibleUserTextBlock,
   parseUserTextContent,
   UserCodeAnnotationContextBlock,
@@ -871,6 +875,12 @@ export const MessageRow = memo(function MessageRow({
     () => parseAgentTaskNotification(item.text),
     [item.text],
   );
+  const browserContextSummary = useMemo(() => {
+    if (item.role !== "user") {
+      return null;
+    }
+    return item.browserContextAttachment ?? parseBrowserContextPrompt(item.text);
+  }, [item]);
   const shouldHideSuppressedInjectedContextText =
     item.role === "user" &&
     !agentTaskNotification &&
@@ -892,7 +902,7 @@ export const MessageRow = memo(function MessageRow({
       ? (
           shouldHideSuppressedInjectedContextText
             ? ""
-            : (userMessagePresentation?.displayText ?? item.text)
+            : stripBrowserContextPrompt(userMessagePresentation?.displayText ?? item.text)
         )
       : resolvedMemorySummary || resolvedNoteCardSummary
         ? ""
@@ -1378,6 +1388,23 @@ export const MessageRow = memo(function MessageRow({
       onOpenFileLinkMenu={onOpenFileLinkMenu}
     />
   ) : null;
+  const browserContextSummaryNode = browserContextSummary ? (
+    <div className="browser-context-summary-card">
+      <div className="browser-context-summary-title">
+        {t("messages.browserContextSummary")}
+      </div>
+      <div className="browser-context-summary-url" title={browserContextSummary.url}>
+        {browserContextSummary.title || browserContextSummary.url}
+      </div>
+      <div className="browser-context-summary-meta">
+        {new Date(browserContextSummary.capturedAt).toLocaleString()}
+        {" · "}
+        {browserContextSummary.stale
+          ? t("messages.browserContextState.stale")
+          : t("messages.browserContextState.available")}
+      </div>
+    </div>
+  ) : null;
   const shouldRenderBubble =
     agentTaskNotification
     || imageItems.length > 0
@@ -1557,13 +1584,14 @@ export const MessageRow = memo(function MessageRow({
       {memoryPayloadDialogNode}
     </>
   ) : null;
-  if (!memorySummaryNode && !noteCardSummaryNode && !codeAnnotationContextNode && !shouldRenderBubble) {
+  if (!memorySummaryNode && !noteCardSummaryNode && !browserContextSummaryNode && !codeAnnotationContextNode && !shouldRenderBubble) {
     return null;
   }
-  const stackedContent = memorySummaryNode || noteCardSummaryNode || codeAnnotationContextNode ? (
+  const stackedContent = memorySummaryNode || noteCardSummaryNode || browserContextSummaryNode || codeAnnotationContextNode ? (
     <div className={`message-context-stack${item.role === "user" ? " is-user" : ""}`}>
       {memorySummaryNode}
       {codeAnnotationContextNode}
+      {browserContextSummaryNode}
       {noteCardSummaryNode}
       {shouldRenderBubble ? bubbleNode : null}
     </div>

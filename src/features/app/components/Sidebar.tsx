@@ -50,6 +50,7 @@ import ChevronsDownUp from "lucide-react/dist/esm/icons/chevrons-down-up";
 import Copy from "lucide-react/dist/esm/icons/copy";
 import FileText from "lucide-react/dist/esm/icons/file-text";
 import GitBranch from "lucide-react/dist/esm/icons/git-branch";
+import Globe from "lucide-react/dist/esm/icons/globe";
 import House from "lucide-react/dist/esm/icons/house";
 import LayoutDashboard from "lucide-react/dist/esm/icons/layout-dashboard";
 import Lock from "lucide-react/dist/esm/icons/lock";
@@ -2159,6 +2160,19 @@ export function Sidebar({
               <span className="sidebar-primary-nav-shortcut" aria-hidden>
                 {quickSearchShortcutLabel}
               </span>
+            </button>
+            <button
+              type="button"
+              className="sidebar-primary-nav-item sidebar-primary-nav-subitem"
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent("browser-agent:toggle-dock"));
+              }}
+              title={t("browserAgent.dock.openDock")}
+              aria-label={t("browserAgent.dock.openDock")}
+              data-tauri-drag-region="false"
+            >
+              <Globe className="sidebar-primary-nav-icon" aria-hidden size={20} strokeWidth={1.8} />
+              <span className="sidebar-primary-nav-text">{t("browserAgent.dock.openDock")}</span>
             </button>
           </nav>
           <ScrollArea

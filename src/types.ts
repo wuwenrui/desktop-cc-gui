@@ -119,6 +119,7 @@ export type ConversationItem =
       collaborationMode?: "plan" | "code" | null;
       selectedAgentName?: string | null;
       selectedAgentIcon?: string | null;
+      browserContextAttachment?: BrowserContextSendAttachment | null;
     }
   | {
       id: string;
@@ -844,6 +845,9 @@ export type AppSettings = {
   codexWarmTtlSeconds: number;
   codexAutoCompactionEnabled: boolean;
   codexAutoCompactionThresholdPercent: number;
+  browserAgentEnabled: boolean;
+  browserAgentPreferBuiltIn: boolean;
+  browserAgentAllowExternalProviderFallback: boolean;
   streamingEnabled?: boolean;
   autoOpenFileEnabled?: boolean;
   diffExpandedByDefault?: boolean;
@@ -1720,6 +1724,24 @@ export type QueuedMessage = {
 
 export type MemoryContextInjectionMode = "summary" | "detail";
 
+export type BrowserContextSendAttachment = {
+  kind: "browser_snapshot";
+  attachmentId: string;
+  browserSessionId: string;
+  snapshotId: string;
+  workspaceId: string;
+  title: string | null;
+  url: string;
+  capturedAt: number;
+  stale: boolean;
+  summary: string;
+  privacy: {
+    redactionApplied: boolean;
+    redactedKinds: string[];
+    omittedKinds: string[];
+  };
+};
+
 export type MessageSendOptions = {
   selectedMemoryIds?: string[];
   selectedMemoryInjectionMode?: MemoryContextInjectionMode;
@@ -1735,6 +1757,7 @@ export type MessageSendOptions = {
   skipOptimisticUserBubble?: boolean;
   suppressUserMessageRender?: boolean;
   autoSession?: AutoSessionMetadata | null;
+  browserContextAttachment?: BrowserContextSendAttachment | null;
 };
 
 export type SelectedAgentOption = {

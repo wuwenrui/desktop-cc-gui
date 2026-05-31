@@ -8,6 +8,7 @@ vi.mock("../../../services/clientStorage", () => ({
 import { getClientStoreSync, writeClientStoreValue } from "../../../services/clientStorage";
 import {
   createTaskRunRecord,
+  buildTaskRunBrowserEvidenceRef,
   findActiveRunForTask,
   loadTaskRunStore,
   normalizeTaskRunStore,
@@ -163,6 +164,36 @@ describe("taskRunStorage", () => {
       status: "failed",
       failureReason: "boom",
       updatedAt: 200,
+    });
+  });
+
+  it("builds stable browser evidence references without storing page payload", () => {
+    const evidence = buildTaskRunBrowserEvidenceRef({
+      kind: "browser_snapshot",
+      attachmentId: "browser-attachment-1",
+      browserSessionId: "browser-session-1",
+      snapshotId: "browser-snapshot-1",
+      workspaceId: "/repo",
+      title: "Example",
+      url: "https://example.com",
+      capturedAt: 100,
+      stale: false,
+      summary: "bounded summary",
+      privacy: {
+        redactionApplied: true,
+        redactedKinds: ["token"],
+        omittedKinds: ["raw_dom", "cookies"],
+      },
+    });
+
+    expect(evidence).toEqual({
+      attachmentId: "browser-attachment-1",
+      browserSessionId: "browser-session-1",
+      snapshotId: "browser-snapshot-1",
+      url: "https://example.com",
+      title: "Example",
+      capturedAt: 100,
+      state: "available",
     });
   });
 });

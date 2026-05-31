@@ -1709,8 +1709,17 @@ const zhPart2 = {
     latestOutput: "最新输出",
     diagnostics: "诊断",
     artifacts: "产物",
+    browserEvidence: "浏览器证据",
     unavailable: "暂不可用",
     noArtifacts: "暂无产物",
+    noBrowserEvidence: "暂无关联浏览器证据",
+    browserEvidenceState: {
+      available: "可用",
+      stale: "已过时",
+      expired: "已过期",
+      deleted: "已删除",
+      unsupported: "不支持",
+    },
     status: {
       queued: "排队中",
       planning: "规划中",

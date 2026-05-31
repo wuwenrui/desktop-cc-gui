@@ -22,6 +22,7 @@ fn get_pending_open_paths() -> Vec<String> {
 mod agents;
 mod app_paths;
 mod backend;
+mod browser_agent;
 mod claude_commands;
 mod claude_home;
 mod client_error_log;

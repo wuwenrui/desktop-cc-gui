@@ -1184,6 +1184,21 @@ pub(crate) struct AppSettings {
         rename = "codexAutoCompactionEnabled"
     )]
     pub(crate) codex_auto_compaction_enabled: bool,
+    #[serde(
+        default = "default_browser_agent_enabled",
+        rename = "browserAgentEnabled"
+    )]
+    pub(crate) browser_agent_enabled: bool,
+    #[serde(
+        default = "default_browser_agent_prefer_built_in",
+        rename = "browserAgentPreferBuiltIn"
+    )]
+    pub(crate) browser_agent_prefer_built_in: bool,
+    #[serde(
+        default = "default_browser_agent_allow_external_provider_fallback",
+        rename = "browserAgentAllowExternalProviderFallback"
+    )]
+    pub(crate) browser_agent_allow_external_provider_fallback: bool,
     /// Default engine type: "claude", "codex", or "opencode". If not set, auto-detect.
     #[serde(default, rename = "defaultEngine")]
     pub(crate) default_engine: Option<String>,
@@ -1557,6 +1572,18 @@ fn default_codex_auto_compaction_enabled() -> bool {
     true
 }
 
+fn default_browser_agent_enabled() -> bool {
+    true
+}
+
+fn default_browser_agent_prefer_built_in() -> bool {
+    true
+}
+
+fn default_browser_agent_allow_external_provider_fallback() -> bool {
+    true
+}
+
 fn is_allowed_codex_auto_compaction_threshold_percent(value: u16) -> bool {
     value == 92 || ((100..=200).contains(&value) && value % 10 == 0)
 }
@@ -1700,6 +1727,10 @@ impl Default for AppSettings {
             codex_auto_compaction_threshold_percent:
                 default_codex_auto_compaction_threshold_percent(),
             codex_auto_compaction_enabled: default_codex_auto_compaction_enabled(),
+            browser_agent_enabled: default_browser_agent_enabled(),
+            browser_agent_prefer_built_in: default_browser_agent_prefer_built_in(),
+            browser_agent_allow_external_provider_fallback:
+                default_browser_agent_allow_external_provider_fallback(),
         }
     }
 }

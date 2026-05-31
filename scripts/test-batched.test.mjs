@@ -32,6 +32,17 @@ test("rejects unsupported CLI arguments", () => {
   );
 });
 
+test("rejects partial and fractional batch sizes", () => {
+  assert.throws(
+    () => parseVitestBatchConfig([], { VITEST_BATCH_SIZE: "4abc" }),
+    /Invalid VITEST_BATCH_SIZE: 4abc/,
+  );
+  assert.throws(
+    () => parseVitestBatchConfig([], { VITEST_BATCH_SIZE: "1.5" }),
+    /Invalid VITEST_BATCH_SIZE: 1.5/,
+  );
+});
+
 test("normalizes ripgrep file output across line endings", () => {
   assert.deepEqual(
     testBatchedInternals.parseRipgrepFileList("src/b.test.tsx\r\nsrc/a.test.ts\n\n"),
