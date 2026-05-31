@@ -15,6 +15,7 @@ import {
   type ComposerRewindDialogRequest,
 } from "../../composer/components/Composer";
 import { GitDiffViewer } from "../../git/components/GitDiffViewer";
+import { buildCanonicalGitChanges } from "../../git/utils/gitChangeModel";
 import { FileTreePanel } from "../../files/components/FileTreePanel";
 import {
   clampRendererContextMenuPosition,
@@ -1045,6 +1046,21 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   );
   const activeWorkspacePath = options.activeWorkspace?.path ?? null;
   const gitDiffItems = options.gitDiffs;
+  const canonicalGitPanelChanges = useMemo(
+    () =>
+      buildCanonicalGitChanges({
+        files: options.gitStatus.files,
+        stagedFiles: options.gitStatus.stagedFiles,
+        unstagedFiles: options.gitStatus.unstagedFiles,
+        diffs: options.gitDiffs,
+      }),
+    [
+      options.gitDiffs,
+      options.gitStatus.files,
+      options.gitStatus.stagedFiles,
+      options.gitStatus.unstagedFiles,
+    ],
+  );
   const onGitDiffListViewChange = options.onGitDiffListViewChange;
   const onSelectDiff = options.onSelectDiff;
   const handleOpenDiffPath = useCallback(
@@ -2338,8 +2354,8 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         error={options.gitStatus.error}
         logError={options.gitLogError}
         logLoading={options.gitLogLoading}
-        stagedFiles={options.gitStatus.stagedFiles}
-        unstagedFiles={options.gitStatus.unstagedFiles}
+        stagedFiles={canonicalGitPanelChanges.stagedFiles}
+        unstagedFiles={canonicalGitPanelChanges.unstagedFiles}
         onSelectFile={options.onSelectDiff}
         onOpenFile={options.onOpenFile}
         selectedPath={sidebarSelectedDiffPath}

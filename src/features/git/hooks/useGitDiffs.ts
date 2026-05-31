@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GitFileDiff, GitFileStatus, WorkspaceInfo } from "../../../types";
 import { getGitDiffs } from "../../../services/tauri";
+import { buildCanonicalGitChanges } from "../utils/gitChangeModel";
 
 type GitDiffState = {
   diffs: GitFileDiff[];
@@ -102,22 +103,10 @@ export function useGitDiffs(
   }, [enabled, fileKey, refresh]);
 
   const orderedDiffs = useMemo(() => {
-    const diffByPath = new Map(
-      state.diffs.map((entry) => [entry.path, entry]),
-    );
-    return files.map((file) => {
-      const entry = diffByPath.get(file.path);
-      return {
-        path: file.path,
-        status: file.status,
-        diff: entry?.diff ?? "",
-        isImage: entry?.isImage,
-        oldImageData: entry?.oldImageData,
-        newImageData: entry?.newImageData,
-        oldImageMime: entry?.oldImageMime,
-        newImageMime: entry?.newImageMime,
-      };
-    });
+    return buildCanonicalGitChanges({
+      files,
+      diffs: state.diffs,
+    }).viewerDiffs;
   }, [files, state.diffs]);
 
   return {

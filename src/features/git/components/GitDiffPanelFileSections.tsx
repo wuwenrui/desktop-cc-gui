@@ -26,6 +26,8 @@ export type DiffFile = {
   status: string;
   additions: number;
   deletions: number;
+  isDiffOnlyFallback?: boolean;
+  mutationDisabled?: boolean;
 };
 
 export const TREE_INDENT_STEP = 8;
@@ -140,9 +142,10 @@ export function DiffFileRow({
   const { base, extension } = splitNameAndExtension(name ?? "");
   const statusSymbol = getStatusSymbol(file.status);
   const statusClass = getStatusClass(file.status);
-  const showStage = section === "unstaged" && Boolean(onStageFile);
-  const showUnstage = section === "staged" && Boolean(onUnstageFile);
-  const showDiscard = section === "unstaged" && Boolean(onDiscardFile);
+  const mutationDisabled = Boolean(file.mutationDisabled || file.isDiffOnlyFallback);
+  const showStage = section === "unstaged" && Boolean(onStageFile) && !mutationDisabled;
+  const showUnstage = section === "staged" && Boolean(onUnstageFile) && !mutationDisabled;
+  const showDiscard = section === "unstaged" && Boolean(onDiscardFile) && !mutationDisabled;
   const inclusionLabel = t("git.commitSelectionToggleFile", { path: file.path });
   const treeIndentPx = indentLevel * TREE_INDENT_STEP;
   const treeRowStyle = treeItem
@@ -160,6 +163,7 @@ export function DiffFileRow({
       data-section={section}
       data-status={file.status}
       data-path={file.path}
+      data-diff-only-fallback={file.isDiffOnlyFallback ? "true" : undefined}
       data-tree-depth={treeItem ? treeDepth : undefined}
       data-parent-folder-key={treeItem ? treeParentFolderKey : undefined}
       role={treeItem ? "treeitem" : "button"}
@@ -283,16 +287,18 @@ export function DiffFileRow({
             </button>
           )}
         </div>
-        <InclusionToggle
-          state={inclusionState}
-          label={inclusionLabel}
-          className="diff-row-selection diff-row-selection--trailing"
-          disabled={inclusionDisabled}
-          stopPropagation
-          onToggle={() => {
-            void onSetCommitSelection?.([file.path], inclusionState !== "all");
-          }}
-        />
+        {!mutationDisabled ? (
+          <InclusionToggle
+            state={inclusionState}
+            label={inclusionLabel}
+            className="diff-row-selection diff-row-selection--trailing"
+            disabled={inclusionDisabled}
+            stopPropagation
+            onToggle={() => {
+              void onSetCommitSelection?.([file.path], inclusionState !== "all");
+            }}
+          />
+        ) : null}
       </div>
     </div>
   );
@@ -404,10 +410,17 @@ export function DiffSection({
     () => new Set(normalizedPartialPaths),
     [normalizedPartialPaths],
   );
-  const filePaths = useMemo(() => files.map((file) => file.path), [files]);
+  const actionFilePaths = useMemo(
+    () =>
+      files
+        .filter((file) => !file.mutationDisabled && !file.isDiffOnlyFallback)
+        .map((file) => file.path),
+    [files],
+  );
   const toggleableFilePaths = useMemo(
     () =>
       files
+        .filter((file) => !file.mutationDisabled && !file.isDiffOnlyFallback)
         .map((file) => file.path)
         .filter((path) => !isCommitPathLocked?.(path)),
     [files, isCommitPathLocked],
@@ -433,7 +446,7 @@ export function DiffSection({
     return "partial";
   }, [excludedPathSet, files, includedPathSet, partialPathSet]);
   const showSectionActions =
-    toggleableFilePaths.length > 0 || filePaths.length > 0;
+    toggleableFilePaths.length > 0 || actionFilePaths.length > 0;
   const showCompactRoot = compactHeader && Boolean(rootFolderName?.trim());
 
   return (
@@ -469,9 +482,11 @@ export function DiffSection({
             section={section}
             sectionInclusionState={sectionInclusionState}
             toggleableFilePaths={toggleableFilePaths}
-            filePaths={filePaths}
+            filePaths={actionFilePaths}
             onSetCommitSelection={onSetCommitSelection}
-            onStageAllChanges={onStageAllChanges}
+            onStageAllChanges={
+              actionFilePaths.length === files.length ? onStageAllChanges : undefined
+            }
             onStageFile={onStageFile}
             onUnstageFile={onUnstageFile}
             onDiscardFiles={onDiscardFiles}
@@ -496,7 +511,11 @@ export function DiffSection({
                 excludedPathSet,
                 partialPathSet,
               )}
-              inclusionDisabled={Boolean(isCommitPathLocked?.(file.path))}
+              inclusionDisabled={Boolean(
+                file.mutationDisabled ||
+                  file.isDiffOnlyFallback ||
+                  isCommitPathLocked?.(file.path),
+              )}
               onClick={(event) => onFileClick(event, file.path, section)}
               onKeySelect={() => onSelectFile?.(file.path)}
               onOpenInlinePreview={() => onOpenInlinePreview?.(file.path)}

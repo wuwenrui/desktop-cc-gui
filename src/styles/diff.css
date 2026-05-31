@@ -1057,6 +1057,26 @@
   );
 }
 
+.diff-row[data-status="D"] .diff-name {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  text-decoration-color: color-mix(
+    in srgb,
+    var(--git-file-status-color) 72%,
+    transparent
+  );
+}
+
+.diff-row[data-status="D"] .diff-file-icon,
+.diff-row[data-status="D"] .diff-dir {
+  opacity: 0.68;
+}
+
+.diff-row[data-diff-only-fallback="true"] .diff-row-selection,
+.diff-row[data-diff-only-fallback="true"] .diff-counts-inline {
+  opacity: 0.62;
+}
+
 .diff-row[data-status="R"] {
   --git-file-status-color: var(--status-warning, #ffaf55);
   --git-file-status-color: color-mix(

@@ -77,12 +77,16 @@ export type GitDiffPanelProps = CodeAnnotationBridgeProps & {
     status: string;
     additions: number;
     deletions: number;
+    isDiffOnlyFallback?: boolean;
+    mutationDisabled?: boolean;
   }[];
   unstagedFiles: {
     path: string;
     status: string;
     additions: number;
     deletions: number;
+    isDiffOnlyFallback?: boolean;
+    mutationDisabled?: boolean;
   }[];
   onStageAllChanges?: () => void | Promise<void>;
   onStageFile?: (path: string) => Promise<void> | void;

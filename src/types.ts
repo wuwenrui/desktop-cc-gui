@@ -1271,13 +1271,17 @@ export type GitFileStatus = {
   status: string;
   additions: number;
   deletions: number;
+  isDiffOnlyFallback?: boolean;
+  mutationDisabled?: boolean;
 };
 
 export type GitFileDiff = {
   path: string;
+  status?: string;
   diff: string;
   isBinary?: boolean;
   isImage?: boolean;
+  isDiffOnlyFallback?: boolean;
   oldImageData?: string | null;
   newImageData?: string | null;
   oldImageMime?: string | null;

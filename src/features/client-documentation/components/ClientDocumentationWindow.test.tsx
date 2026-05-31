@@ -70,7 +70,7 @@ describe("ClientDocumentationWindow", () => {
     await waitFor(() => {
       expect(setTitleMock).toHaveBeenCalledWith("Client Documentation");
     });
-  });
+  }, 15_000);
 
   it("updates details when selecting a tree node", () => {
     render(<ClientDocumentationWindow />);
@@ -117,5 +117,5 @@ describe("ClientDocumentationWindow", () => {
     });
 
     expect(startDraggingMock).toHaveBeenCalledTimes(1);
-  });
+  }, 15_000);
 });

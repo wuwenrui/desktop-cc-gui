@@ -176,6 +176,55 @@ describe("GitDiffPanel", () => {
     expect(srcNode?.folders.has("git")).toBe(true);
   });
 
+  it("renders diff-only fallback rows as preview-only entries", () => {
+    render(
+      <GitDiffPanel
+        {...baseProps}
+        unstagedFiles={[
+          {
+            path: "src/new-file.ts",
+            status: "A",
+            additions: 1,
+            deletions: 0,
+            isDiffOnlyFallback: true,
+            mutationDisabled: true,
+          },
+        ]}
+        onStageFile={vi.fn()}
+        onRevertFile={vi.fn()}
+        onGenerateCommitMessage={vi.fn()}
+      />,
+    );
+
+    const row = screen.getByLabelText("src/new-file.ts");
+    expect(row.getAttribute("data-diff-only-fallback")).toBe("true");
+    expect(screen.queryByRole("button", { name: "Stage file" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Discard change" })).toBeNull();
+    expect(
+      screen.queryByRole("checkbox", {
+        name: "Toggle commit selection: src/new-file.ts",
+      }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Preview diff in center pane" }),
+    ).toBeTruthy();
+  });
+
+  it("marks deleted rows with a stable deleted status hook", () => {
+    render(
+      <GitDiffPanel
+        {...baseProps}
+        unstagedFiles={[
+          { path: "src/old-file.ts", status: "D", additions: 0, deletions: 1 },
+        ]}
+        onRevertFile={vi.fn()}
+        onGenerateCommitMessage={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText("src/old-file.ts").getAttribute("data-status")).toBe("D");
+  });
+
   it("builds a nested tree from Windows-style file paths", () => {
     const tree = buildDiffTree(
       [

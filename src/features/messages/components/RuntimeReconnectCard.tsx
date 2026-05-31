@@ -71,7 +71,9 @@ export function RuntimeReconnectCard({
     if (isReconnectRunning) {
       return;
     }
-    if (!workspaceId && !(mode === "resend" && requiresThreadRecovery)) {
+    const activeWorkspaceId = workspaceId;
+    const activeThreadId = threadId;
+    if (!activeWorkspaceId && !(mode === "resend" && requiresThreadRecovery)) {
       return;
     }
     if (mode === "resend" && requiresThreadRecovery) {
@@ -95,20 +97,23 @@ export function RuntimeReconnectCard({
     if (mode === "resend" && (resendUnavailable || !retryMessage || !threadId)) {
       return;
     }
+    if (!activeWorkspaceId) {
+      return;
+    }
     setIsReconnectRunning(true);
     setReconnectStatus("idle");
     setLastAction(mode);
     setReconnectErrorDetail(null);
     try {
       if (requiresThreadRecovery) {
-        if (!threadId) {
+        if (!activeThreadId) {
           setReconnectStatus("error");
           setReconnectErrorDetail(
             t("messages.threadRecoveryUnavailable"),
           );
           return;
         }
-        await ensureRuntimeReady(workspaceId);
+        await ensureRuntimeReady(activeWorkspaceId);
         if (mode === "resend") {
           if (!onRecoverThreadRuntimeAndResend || !retryMessage) {
             setReconnectStatus("error");
@@ -116,8 +121,8 @@ export function RuntimeReconnectCard({
             return;
           }
           const resentThreadId = await onRecoverThreadRuntimeAndResend(
-            workspaceId,
-            threadId,
+            activeWorkspaceId,
+            activeThreadId,
             retryMessage,
           );
           const resentResult = normalizeRuntimeReconnectRecoveryResult(resentThreadId);
@@ -147,7 +152,7 @@ export function RuntimeReconnectCard({
           );
           return;
         }
-        const recoveredThreadId = await onRecoverThreadRuntime(workspaceId, threadId);
+        const recoveredThreadId = await onRecoverThreadRuntime(activeWorkspaceId, activeThreadId);
         const recoveredResult = normalizeRuntimeReconnectRecoveryResult(recoveredThreadId);
         if (recoveredResult.kind === "failed") {
           setReconnectStatus("error");
@@ -168,16 +173,16 @@ export function RuntimeReconnectCard({
         setReconnectErrorDetail(t("messages.threadRecoveryRestoredDetail"));
         return;
       }
-      await ensureRuntimeReady(workspaceId);
+      await ensureRuntimeReady(activeWorkspaceId);
       if (mode === "resend") {
-        if (!threadId || !retryMessage || !onRecoverThreadRuntimeAndResend) {
+        if (!activeThreadId || !retryMessage || !onRecoverThreadRuntimeAndResend) {
           setReconnectStatus("error");
           setReconnectErrorDetail(t("messages.runtimeReconnectResendUnavailable"));
           return;
         }
         const resentThreadId = await onRecoverThreadRuntimeAndResend(
-          workspaceId,
-          threadId,
+          activeWorkspaceId,
+          activeThreadId,
           retryMessage,
         );
         const resentResult = normalizeRuntimeReconnectRecoveryResult(resentThreadId);
@@ -200,8 +205,8 @@ export function RuntimeReconnectCard({
         setReconnectErrorDetail(t("messages.runtimeReconnectRestoredAndResent"));
         return;
       }
-      if (threadId && onRecoverThreadRuntime) {
-        const recoveredThreadId = await onRecoverThreadRuntime(workspaceId, threadId);
+      if (activeThreadId && onRecoverThreadRuntime) {
+        const recoveredThreadId = await onRecoverThreadRuntime(activeWorkspaceId, activeThreadId);
         const recoveredResult = normalizeRuntimeReconnectRecoveryResult(recoveredThreadId);
         if (recoveredResult.kind === "failed") {
           setReconnectStatus("error");
