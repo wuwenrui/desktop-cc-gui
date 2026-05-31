@@ -50,6 +50,12 @@ Automatic session metadata SHALL migrate from pending or provisional thread ids 
 - **THEN** the metadata SHALL be written using that canonical identity
 - **AND** catalog projection SHALL classify the row on the next refresh
 
+#### Scenario: Failed automatic turn with known canonical id remains classified
+- **WHEN** an automatic sync engine run obtains a canonical session or thread id
+- **AND** the run later fails, times out after creating history, or returns a stream/runtime error
+- **THEN** the system SHALL still record automatic session metadata using the known canonical identity
+- **AND** the failed persisted session SHALL follow its declared `hidden` or `system-auto` projection instead of appearing at workspace root
+
 ### Requirement: Hidden Automatic Sessions SHALL Stay Out Of Normal Workspace Lists
 Sessions classified as `hidden` SHALL NOT appear in normal Sidebar, Workspace Home, or Session Management active workspace lists. They MAY be exposed only through explicit debug or internal diagnostics surfaces.
 

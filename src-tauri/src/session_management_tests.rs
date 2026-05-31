@@ -825,6 +825,7 @@
             .expect("system-auto folder");
         assert_eq!(system_folder.workspace_id, "ws-1");
         assert_eq!(system_folder.parent_id, None);
+        assert_eq!(system_folder.name, "system-auto");
 
         assert!(create_workspace_session_folder_core(
             &workspaces,

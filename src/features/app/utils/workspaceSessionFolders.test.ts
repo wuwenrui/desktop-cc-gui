@@ -127,7 +127,7 @@ describe("buildWorkspaceSessionFolderProjection", () => {
           id: WORKSPACE_SESSION_SYSTEM_AUTO_FOLDER_ID,
           workspaceId: "ws-1",
           parentId: null,
-          name: "System auto",
+          name: "system-auto",
           createdAt: 0,
           updatedAt: 0,
         },

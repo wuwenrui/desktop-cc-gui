@@ -1921,7 +1921,7 @@ fn system_auto_session_folder(workspace_id: &str) -> WorkspaceSessionFolder {
         id: SESSION_FOLDER_SYSTEM_AUTO_ID.to_string(),
         workspace_id: workspace_id.to_string(),
         parent_id: None,
-        name: "System auto".to_string(),
+        name: "system-auto".to_string(),
         created_at: 0,
         updated_at: 0,
     }

@@ -10,6 +10,7 @@
 - [x] 2.2 Mark Spec Hub apply, Project Map generation, review fallback, and PR question sessions as system-auto; depends on 1.1 and 1.2; output: traceable automatic metadata; validation: focused tests assert metadata purpose and visibility.
 - [x] 2.3 Preserve ordinary user-created sessions as user-visible or unclassified default; depends on 2.1 and 2.2; output: no regression for normal send, new session, `/new`, and `/clear`; validation: existing thread/session tests plus focused regression tests.
 - [x] 2.4 Add remote/shared backend compatibility handling so metadata can be recorded after receiving session/thread id when payload support is absent; depends on 1.2; output: additive fallback path; validation: mocked remote response test.
+- [x] 2.5 Record automatic metadata for sync engine runs once a stable identity is known, even if the run later fails; depends on 1.2 and 2.2; output: Claude sync failure paths do not leak failed automatic sessions to workspace root; validation: focused Rust regression for known session id + failed turn.
 
 ## 3. Catalog Projection And System Group
 
@@ -24,3 +25,4 @@
 - [x] 4.2 Add test coverage for system-auto traceable scenarios: Spec Hub apply, Project Map generation, review fallback, PR question; depends on 2.2 and 3.2; output: assertions that sessions appear under system-auto and not root; validation: focused test suite passes.
 - [x] 4.3 Run contract and quality gates; depends on all implementation tasks; output: validation evidence; validation: `openspec validate classify-auto-session-visibility --strict --no-interactive`, `npm run typecheck`, focused Vitest, and relevant `cargo test --manifest-path src-tauri/Cargo.toml` suites.
 - [x] 4.4 Update relevant Trellis/code-level specs if implementation introduces reusable contracts outside OpenSpec; depends on implementation outcome; output: synchronized `.trellis/spec/**` guidance when required; validation: review changed spec docs.
+- [x] 4.5 Add review regression coverage for failed automatic sessions with known canonical identity; depends on 2.5; output: test proves metadata is persisted before success-only return boundary; validation: focused Rust test plus `openspec validate classify-auto-session-visibility --strict --no-interactive`.

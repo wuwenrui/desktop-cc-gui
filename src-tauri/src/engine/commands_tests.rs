@@ -12,19 +12,171 @@ use super::{
     parse_imported_session_id, parse_json_value, parse_opencode_agent_list,
     parse_opencode_auth_providers, parse_opencode_debug_config_agents,
     parse_opencode_help_commands, parse_opencode_mcp_servers, parse_opencode_session_list,
-    parse_opencode_updated_at, provider_keys_match, EngineConfig, GeminiRenderLane,
-    GeminiRenderRoutingState, OpenCodeAgentEntry,
+    parse_opencode_updated_at, provider_keys_match,
+    record_claude_auto_session_metadata_for_sync_result,
+    resolve_claude_auto_session_metadata_session_id, resolve_claude_session_id_for_engine_send,
+    EngineConfig, GeminiRenderLane, GeminiRenderRoutingState, OpenCodeAgentEntry,
 };
 use crate::backend::events::AppServerEvent;
 use crate::engine::events::EngineEvent;
+use crate::session_management::{AutoSessionCreatedBy, AutoSessionMetadata, AutoSessionVisibility};
+use crate::types::{WorkspaceEntry, WorkspaceKind, WorkspaceSettings};
 use chrono::{Local, TimeZone};
 use rusqlite::{params, Connection};
 use serde_json::json;
+use std::collections::HashMap;
+use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex as StdMutex};
 use std::time::{Duration, Instant};
+use uuid::Uuid;
 
 use crate::engine::SendMessageParams;
+
+#[test]
+fn resolve_claude_session_id_for_sync_new_auto_session_generates_identity() {
+    let session_id = resolve_claude_session_id_for_engine_send(None, None, false, None)
+        .expect("new sync Claude session should get stable identity");
+
+    Uuid::parse_str(&session_id).expect("generated session id should be UUID-shaped");
+}
+
+#[test]
+fn resolve_claude_session_id_for_sync_keeps_resume_and_fork_boundaries() {
+    assert_eq!(
+        resolve_claude_session_id_for_engine_send(
+            None,
+            None,
+            true,
+            Some("tracked-session".to_string()),
+        )
+        .as_deref(),
+        Some("tracked-session"),
+    );
+    assert_eq!(
+        resolve_claude_session_id_for_engine_send(
+            Some("fork-source"),
+            Some("must-not-use".to_string()),
+            false,
+            None,
+        ),
+        None,
+    );
+}
+
+#[test]
+fn resolve_claude_auto_session_metadata_id_keeps_success_path() {
+    assert_eq!(
+        resolve_claude_auto_session_metadata_session_id(
+            true,
+            Some("11111111-1111-4111-8111-111111111111"),
+            None,
+        )
+        .as_deref(),
+        Some("11111111-1111-4111-8111-111111111111"),
+    );
+}
+
+#[test]
+fn resolve_claude_auto_session_metadata_id_uses_observed_failed_identity() {
+    assert_eq!(
+        resolve_claude_auto_session_metadata_session_id(
+            false,
+            Some("22222222-2222-4222-8222-222222222222"),
+            Some("22222222-2222-4222-8222-222222222222"),
+        )
+        .as_deref(),
+        Some("22222222-2222-4222-8222-222222222222"),
+    );
+}
+
+#[test]
+fn resolve_claude_auto_session_metadata_id_ignores_unobserved_failed_identity() {
+    assert_eq!(
+        resolve_claude_auto_session_metadata_session_id(
+            false,
+            Some("33333333-3333-4333-8333-333333333333"),
+            None,
+        ),
+        None,
+    );
+    assert_eq!(
+        resolve_claude_auto_session_metadata_session_id(
+            false,
+            Some("33333333-3333-4333-8333-333333333333"),
+            Some("different-session"),
+        ),
+        None,
+    );
+}
+
+#[tokio::test]
+async fn failed_claude_sync_auto_session_persists_metadata_after_identity_is_observed() {
+    let base = std::env::temp_dir().join(format!(
+        "claude-sync-failed-auto-session-{}",
+        Uuid::new_v4()
+    ));
+    fs::create_dir_all(&base).expect("create temp dir");
+    let storage_path = base.join("workspaces.json");
+    fs::write(&storage_path, "[]").expect("seed storage path");
+    let workspace = WorkspaceEntry {
+        id: "ws-1".to_string(),
+        name: "Workspace".to_string(),
+        path: "/tmp/ws-1".to_string(),
+        codex_bin: None,
+        kind: WorkspaceKind::Main,
+        parent_id: None,
+        worktree: None,
+        settings: WorkspaceSettings::default(),
+    };
+    let workspaces = tokio::sync::Mutex::new(HashMap::from([(workspace.id.clone(), workspace)]));
+    let session_id = "22222222-2222-4222-8222-222222222222";
+
+    record_claude_auto_session_metadata_for_sync_result(
+        &workspaces,
+        &storage_path,
+        "ws-1",
+        false,
+        Some(session_id),
+        Some(session_id),
+        Some(AutoSessionMetadata {
+            session_purpose: "spec-hub-apply".to_string(),
+            visibility: AutoSessionVisibility::SystemAuto,
+            owner_feature: "spec-hub".to_string(),
+            auto_archive: Some(false),
+            created_by: AutoSessionCreatedBy::System,
+        }),
+    )
+    .await;
+
+    let metadata_path = base
+        .join("session-management")
+        .join("workspaces")
+        .join("ws-1.json");
+    let stored: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(&metadata_path).expect("metadata file should exist"),
+    )
+    .expect("metadata json");
+    let stable_key = format!("claude:ws-1:{session_id}");
+    let stored_metadata = stored
+        .get("autoSessionBySessionId")
+        .and_then(|entries| entries.get(&stable_key))
+        .expect("failed automatic session metadata should be persisted");
+    assert_eq!(
+        stored_metadata
+            .get("visibility")
+            .and_then(|value| value.as_str()),
+        Some("system-auto")
+    );
+    assert_eq!(
+        stored_metadata
+            .get("sessionPurpose")
+            .and_then(|value| value.as_str()),
+        Some("spec-hub-apply")
+    );
+
+    fs::remove_dir_all(base).ok();
+}
 
 #[derive(Clone, Default)]
 struct FakeClaudeRuntimeOps {

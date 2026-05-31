@@ -94,9 +94,21 @@ Alternatives considered:
 | `pull-request-question` | `system-auto` | User-triggered contextual helper; traceable but not root conversation |
 | ordinary send, `/new`, `/clear` | `user-visible` | Explicit user conversation |
 
+### Decision 5: Metadata recording is tied to session identity, not successful completion
+
+For automatic sessions, the metadata overlay MUST be written once a stable session/thread identity is known, even if the engine turn later fails, times out after creating history, or returns a stream/runtime error.
+
+This matters for Claude sync paths because the CLI can emit a real `session_id` before a later non-zero process exit or stream error. If metadata is written only after a successful sync response, that failed but persisted automatic session can still leak into workspace root.
+
+Alternatives considered:
+
+- Record metadata only on successful response. Rejected because failure transcripts are still persisted and are exactly the sessions users notice as root noise.
+- Infer failed automatic sessions later from prompt/title text. Rejected because prompt/title heuristics are unstable and conflict with the non-goal of historical migration by title.
+
 ## Risks / Trade-offs
 
 - [Risk] Engine returns canonical session id after a pending id is already shown. → Mitigation: write metadata against pending id and migrate on pending-to-real identity transition using existing rename/folder migration contract.
+- [Risk] Sync engine emits a canonical id and then fails before returning success. → Mitigation: record automatic metadata as soon as the canonical id is known, or use the preallocated explicit session id for new sync sessions when the engine supports stable identity.
 - [Risk] Remote daemon does not understand new metadata payloads. → Mitigation: keep metadata additive and tolerate older daemon responses; frontend/backend can write overlay after receiving thread/session id.
 - [Risk] Historical helper sessions remain visible. → Mitigation: optional best-effort title/purpose heuristic may be added later, but this change focuses on new sessions only.
 - [Risk] `system-auto` grouping hides useful failures too deeply. → Mitigation: keep group visible when it has active/failed sessions and expose purpose labels in diagnostics.
@@ -110,6 +122,7 @@ Alternatives considered:
 4. Update catalog projection to apply metadata before root/folder surface projection.
 5. Add reserved `system-auto` grouping projection.
 6. Keep legacy `codex/backgroundThread hide` as a compatibility signal that writes/overlays `visibility=hidden`.
+7. Verify sync failure paths where a canonical session id is known before terminal error; these paths must still record automatic metadata.
 
 Rollback strategy:
 
