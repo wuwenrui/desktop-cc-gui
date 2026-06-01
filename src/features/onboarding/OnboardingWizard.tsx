@@ -26,9 +26,19 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
         provider: { id: "new-api", name: "New API", settingsConfig: { env } },
       });
       await invoke("vendor_switch_claude_provider", { id: "new-api" });
-      await invoke("install_bundled_skills");
+      // skill 安装/MCP 写入失败不应阻断 provider 配置完成
+      // (dev 模式 resource_dir 可能缺 skills；打包后才完整)
+      try {
+        await invoke("install_bundled_skills");
+      } catch (e) {
+        console.warn("skill 安装失败(dev 模式可忽略):", e);
+      }
       if (crawlerUrl) {
-        await invoke("write_court_crawler_mcp", { url: crawlerUrl });
+        try {
+          await invoke("write_court_crawler_mcp", { url: crawlerUrl });
+        } catch (e) {
+          console.warn("MCP 写入失败:", e);
+        }
       }
       onDone();
     } catch (e) {
