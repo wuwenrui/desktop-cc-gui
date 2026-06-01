@@ -160,8 +160,12 @@ pub(crate) async fn get_newapi_usage() -> Result<NewapiUsage, String> {
         .and_then(serde_json::Value::as_f64)
         .unwrap_or(0.0);
 
-    // new-api uses a negative sentinel for unlimited tokens.
-    let unlimited = total_granted < 0.0;
+    // new-api 用 `unlimited_quota` 布尔字段标识无限额度 token；
+    // total_granted 在无限时可能为 0/正数，不能用它判断。
+    let unlimited = payload
+        .get("unlimited_quota")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
 
     Ok(NewapiUsage {
         granted_cny: quota_to_cny(total_granted, quota_per_unit, usd_exchange_rate),
