@@ -16,7 +16,6 @@ const NEW_API_ENV = {
 
 export function OnboardingWizard({ onDone }: { onDone: () => void }) {
   const [key, setKey] = useState("");
-  const [crawlerUrl, setCrawlerUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
@@ -29,19 +28,12 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
         provider: { id: "new-api", name: "New API", settingsConfig: { env } },
       });
       await invoke("vendor_switch_claude_provider", { id: "new-api" });
-      // skill 安装/MCP 写入失败不应阻断 provider 配置完成
+      // skill 安装失败不应阻断 provider 配置完成
       // (dev 模式 resource_dir 可能缺 skills；打包后才完整)
       try {
         await invoke("install_bundled_skills");
       } catch (e) {
         console.warn("skill 安装失败(dev 模式可忽略):", e);
-      }
-      if (crawlerUrl.trim()) {
-        try {
-          await invoke("write_court_crawler_mcp", { url: crawlerUrl.trim() });
-        } catch (e) {
-          console.warn("MCP 写入失败:", e);
-        }
       }
       onDone();
     } catch (e) {
@@ -74,19 +66,6 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
             value={key}
             placeholder="粘贴你的 API Key"
             onChange={(e) => setKey(e.target.value)}
-          />
-        </label>
-
-        <label style={fieldLabel}>
-          <span>
-            案件查询服务地址 <span style={optMark}>(可选)</span>
-          </span>
-          <input
-            style={input}
-            aria-label="court crawler url"
-            value={crawlerUrl}
-            placeholder="https://host/mcp/sse"
-            onChange={(e) => setCrawlerUrl(e.target.value)}
           />
         </label>
 
@@ -194,7 +173,6 @@ const input: CSSProperties = {
 };
 
 const reqMark: CSSProperties = { color: "#f87171" };
-const optMark: CSSProperties = { color: "#6b7280", fontWeight: 400 };
 
 const errorBox: CSSProperties = {
   fontSize: 12,

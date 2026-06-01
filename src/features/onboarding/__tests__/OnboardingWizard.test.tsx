@@ -61,26 +61,6 @@ describe("OnboardingWizard", () => {
     );
   });
 
-  it("writes the court crawler mcp when a url is provided", async () => {
-    const invokeMock = vi.mocked(invoke);
-    invokeMock.mockResolvedValue(undefined);
-    const onDone = vi.fn();
-    render(<OnboardingWizard onDone={onDone} />);
-
-    fireEvent.change(screen.getByLabelText("new-api key"), {
-      target: { value: "sk-test" },
-    });
-    fireEvent.change(screen.getByLabelText("court crawler url"), {
-      target: { value: "https://host/mcp/sse" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "完成" }));
-
-    await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
-    expect(invokeMock).toHaveBeenCalledWith("write_court_crawler_mcp", {
-      url: "https://host/mcp/sse",
-    });
-  });
-
   it("shows an error and does not call onDone when provisioning fails", async () => {
     const invokeMock = vi.mocked(invoke);
     invokeMock.mockRejectedValue("boom");
