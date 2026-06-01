@@ -208,7 +208,10 @@ export function AppShell() {
         if (cancelled) {
           return;
         }
-        const alreadyConfigured = Boolean(config?.apiKey || config?.providerId);
+        // 只有配置了「我们的 new-api」才算已 onboarded；用户机器原有的
+        // default/官方 claude 配置(providerId="default")不应跳过向导。
+        const alreadyConfigured =
+          (config?.providerId ?? config?.provider_id) === "new-api";
         if (alreadyConfigured) {
           setOnboarded(true);
         }
