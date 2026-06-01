@@ -116,6 +116,7 @@ import {
   BrowserContextPreview,
   useBrowserContextAttachment,
 } from "../../browser-agent";
+import { resolveBrowserNavigationUrl } from "../utils/browserNavigation";
 
 type RewindExecutionOptions = {
   mode?: RewindMode;
@@ -411,29 +412,6 @@ function resolveSelectedNamedItems<T extends { name: string }>(
 
 function toContextChipCarryOverKey(chip: ContextSelectionChip) {
   return `${chip.type}:${chip.name}`;
-}
-
-function resolveBrowserNavigationUrl(text: string): string | null {
-  const compactText = text.replace(/\s+/g, " ").trim();
-  if (!compactText) {
-    return null;
-  }
-  const hasNavigationIntent =
-    /(打开|访问|浏览|跳转|进入|open|visit|navigate|go to)/i.test(compactText);
-  if (!hasNavigationIntent) {
-    return null;
-  }
-  if (/(百度|baidu)/i.test(compactText)) {
-    return "https://www.baidu.com/";
-  }
-  const explicitUrl = compactText.match(/https?:\/\/[^\s，。！？,!?]+/i)?.[0];
-  if (explicitUrl) {
-    return explicitUrl;
-  }
-  const domain = compactText.match(
-    /\b((?:[a-z0-9-]+\.)+[a-z]{2,})(?:\/[^\s，。！？,!?]*)?/i,
-  )?.[0];
-  return domain ? `https://${domain}` : null;
 }
 
 const OPENCODE_DIRECT_COMMANDS = new Set(["status", "mcp", "export", "share"]);
@@ -1539,7 +1517,6 @@ export const Composer = memo(function Composer({
       recordHistory,
       resetHistoryNavigation,
       setComposerText,
-      selectedEngine,
       selectedCommonsNames,
       selectedSkillNames,
       setSelectedManualMemories,

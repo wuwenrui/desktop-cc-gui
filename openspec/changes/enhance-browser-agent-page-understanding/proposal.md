@@ -152,3 +152,16 @@ Phase 2 的完成标准是：AI 能拿到安全、可预算、可追溯的当前
 - Browser Context detail 的二级折叠与证据过滤，按主内容、图片线索、候选代码、诊断独立展开。
 - 更完整的真实站点 fixture matrix，覆盖 GitHub issue、PR diff、docs search、新闻详情、表单 wizard、dashboard 和本地 dev app。
 - 授权式 click/type/submit action preview；默认仍保持只读 capture。
+
+## Post-Closure Hardening（2026-06-01）
+
+验收后发现 Composer 的 Browser Dock 快捷打开入口存在意图识别过宽的问题：用户在普通 bug report、截图说明或日志文本里提到“打开 / open / URL / Browser Dock”时，发送流程可能被误判为浏览器导航命令，导致消息没有正常发送而是直接打开 Browser Dock。
+
+本 change 追加约束：
+
+- Composer 自动打开 Browser Dock 只能响应明确、短句式导航命令，例如 `打开 https://example.com`、`访问 example.com`、`open https://example.com`、`go to example.com`、`百度`。
+- 描述性文本、问题反馈、截图说明、构建日志、包含 URL 的错误上下文 MUST NOT 被快捷导航劫持。
+- URL/navigation 识别逻辑 MUST 作为 pure utility 独立测试，不应继续内联堆在 `Composer.tsx`。
+- 当识别不确定时，必须 fail closed：优先把文本作为普通用户消息发送，而不是打开 Browser Dock。
+
+这属于 Browser Context / Browser Dock 输入边界的 post-closure hardening，不改变 Phase 2 的核心完成口径。

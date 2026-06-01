@@ -2069,27 +2069,22 @@ pub(crate) async fn open_workspace_in(
             .map_err(|error| format!("Failed to open app ({target_label}): {error}"))?
     } else if let Some(app) = app {
         #[cfg(target_os = "macos")]
-        let mut cmd = {
+        {
             let mut cmd = crate::utils::std_command("open");
             cmd.arg("-a").arg(&app).arg(&path);
             if !args.is_empty() {
                 cmd.arg("--args").args(&args);
             }
-            cmd
-        };
+
+            cmd.status()
+                .map_err(|error| format!("Failed to open app ({target_label}): {error}"))?
+        }
 
         #[cfg(not(target_os = "macos"))]
         {
             open_workspace_with_non_macos_app(&app, &args, &path, &target_label)?;
             return Ok(());
         }
-
-        #[cfg(target_os = "macos")]
-        let status = cmd
-            .status()
-            .map_err(|error| format!("Failed to open app ({target_label}): {error}"))?;
-
-        status
     } else {
         return Err("Missing app or command".to_string());
     };

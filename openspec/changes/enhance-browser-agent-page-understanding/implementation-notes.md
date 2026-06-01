@@ -110,3 +110,20 @@ Remaining optimization candidates captured in proposal:
 - Composer now renders Browser Context UI only after an attachment or error exists. The unassociated attach button is no longer shown above the input.
 - The composer preview outer card no longer shows the long visible-text excerpt. Source and visible snapshot text live inside the expandable detail panel, which has a bounded scroll area.
 - Phase 2 is closed as a read-only, evidence-grade page understanding MVP. OCR/vision, complex SPA deep understanding, advanced detail filtering, broader real-site fixtures, and authorized browser actions are explicitly next-stage inputs.
+
+## 2026-06-01 post-closure hardening: Browser Dock auto-navigation intent
+
+- Composer previously treated any text containing navigation words such as `打开` / `open` plus a URL/domain as a Browser Dock navigation request.
+- That heuristic was too broad for real bug reports: a user can describe "Browser Dock 莫名其妙打开" or paste a screenshot/log containing URL text, and the send path must not be hijacked.
+- Navigation intent is now resolved through `src/features/composer/utils/browserNavigation.ts` as a pure utility.
+- The utility only accepts explicit short commands such as `打开 https://hatch.rs/`, `访问 hatch.rs`, `open https://example.com/docs`, `go to example.com/path`, plus known short destinations like `百度`.
+- Descriptive long text, bug reports, screenshots, logs, or "不要打开" style context fail closed and continue through the normal message send path.
+- Focused coverage lives in `src/features/composer/utils/browserNavigation.test.ts`.
+
+## 2026-06-01 release CI hotfix: workspace open command cfg scope
+
+- Release #111 failed on Linux AppImage and Windows installer builds with Rust `E0425`: `cannot find value status in this scope` at `src/workspaces/commands.rs:2092`.
+- The root cause was a macOS-only `let status = ...` binding followed by an unconditional `status` expression. Non-macOS compilation removed the binding but kept the use site.
+- The fix keeps macOS command construction, execution, and status return inside the same `#[cfg(target_os = "macos")]` block.
+- The non-macOS branch continues to delegate to `open_workspace_with_non_macos_app(...)` and returns `Ok(())`.
+- This is a cross-platform release build hotfix and does not change Browser Agent page-understanding behavior.
