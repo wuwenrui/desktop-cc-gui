@@ -139,6 +139,8 @@ import { useAppShellSearchAndComposerSection } from "./app-shell-parts/useAppShe
 import { useAppShellSections } from "./app-shell-parts/useAppShellSections";
 import { useAppShellLayoutNodesSection } from "./app-shell-parts/useAppShellLayoutNodesSection";
 import { renderAppShell } from "./app-shell-parts/renderAppShell";
+import { invoke } from "@tauri-apps/api/core";
+import { OnboardingWizard } from "./features/onboarding/OnboardingWizard";
 import {
   getEffectiveSelectedEffort,
   getEffectiveModels,
@@ -164,8 +166,68 @@ import { defineRuntimeThreadShellBoundary } from "./app-shell-parts/runtimeThrea
 import { useAppShellWorkspaceHomeState } from "./app-shell-parts/useAppShellWorkspaceHomeState";
 import { useModelConfigRefresh } from "./app-shell-parts/useModelConfigRefresh";
 
+const ONBOARDED_STORAGE_KEY = "lawyer-copilot.onboarded";
+
+// Detect the real Tauri desktop runtime without importing a named export that
+// existing partial `@tauri-apps/api/core` test mocks do not provide. Mirrors
+// the convention in features/browser-agent/components/BrowserDock.tsx.
+function isTauriRuntime(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  const internals = (window as { __TAURI_INTERNALS__?: { invoke?: unknown } })
+    .__TAURI_INTERNALS__;
+  return typeof internals?.invoke === "function";
+}
+
 export function AppShell() {
   const { t } = useTranslation();
+  // First-run onboarding gate: show the wizard until a Claude provider is
+  // configured. localStorage acts as the synchronous gate (no flicker); we
+  // confirm against the runtime config once on mount so existing installs
+  // skip the wizard automatically.
+  const [onboarded, setOnboarded] = useState<boolean>(() => {
+    // Only gate the real desktop runtime. Non-Tauri contexts (tests, web
+    // preview) always render the shell directly.
+    if (!isTauriRuntime()) {
+      return true;
+    }
+    try {
+      return localStorage.getItem(ONBOARDED_STORAGE_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    if (onboarded || !isTauriRuntime()) {
+      return;
+    }
+    let cancelled = false;
+    void invoke("vendor_get_current_claude_config")
+      .then((config: any) => {
+        if (cancelled) {
+          return;
+        }
+        const alreadyConfigured = Boolean(config?.apiKey || config?.providerId);
+        if (alreadyConfigured) {
+          setOnboarded(true);
+        }
+      })
+      .catch(() => {
+        // Treat probe failure as "not yet configured" and keep showing the wizard.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [onboarded]);
+  const handleOnboardingDone = useCallback(() => {
+    try {
+      localStorage.setItem(ONBOARDED_STORAGE_KEY, "true");
+    } catch {
+      // Ignore storage write failures; in-memory state still gates this session.
+    }
+    setOnboarded(true);
+  }, []);
   const [claudeThinkingVisible, setClaudeThinkingVisible] = useState<boolean | undefined>(
     undefined,
   );
@@ -2242,6 +2304,10 @@ export function AppShell() {
     isPullRequestComposerFromSections: sections.isPullRequestComposer,
     sections,
   });
+
+  if (!onboarded) {
+    return <OnboardingWizard onDone={handleOnboardingDone} />;
+  }
 
   return renderAppShell({
     ...appShellContext,

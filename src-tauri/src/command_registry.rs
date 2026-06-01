@@ -357,6 +357,9 @@ pub(crate) fn invoke_handler(
         crate::vendors::vendor_save_gemini_settings,
         crate::vendors::vendor_gemini_preflight,
         // Open paths
-        crate::get_pending_open_paths
+        crate::get_pending_open_paths,
+        // Lawyer copilot: skill install + court-crawler MCP
+        crate::skill_installer::install_bundled_skills,
+        crate::mcp_writer::write_court_crawler_mcp
     ]
 }

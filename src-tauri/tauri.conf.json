@@ -36,7 +36,8 @@
     "resources": {
       "infoplist/**/*": "./",
       "../dist/*": "dist/",
-      "../dist/assets/**/*": "dist/assets/"
+      "../dist/assets/**/*": "dist/assets/",
+      "../skills/**/*": "skills/"
     },
     "macOS": {
       "minimumSystemVersion": "10.13",
