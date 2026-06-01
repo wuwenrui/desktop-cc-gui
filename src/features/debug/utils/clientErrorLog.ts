@@ -56,6 +56,7 @@ export function shouldPersistClientErrorLogEntry(entry: DebugEntry): boolean {
     label.includes("three-evidence-reconciliation-query-resolved") ||
     label.includes("three-evidence-reconciliation-query-rejected") ||
     label.includes("three-evidence-reconciliation-query-failed") ||
+    label.includes("three-evidence-reconciliation-cleanup-applied") ||
     label.includes("three-evidence-reconciliation-cleanup-skipped")
   );
 }

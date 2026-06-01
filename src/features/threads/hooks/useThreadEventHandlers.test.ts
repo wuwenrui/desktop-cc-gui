@@ -604,7 +604,7 @@ describe("useThreadEventHandlers diagnostics", () => {
     );
   });
 
-  it("records why the codex no-progress watchdog skips an interrupted turn", () => {
+  it("clears matching busy residue when the codex no-progress watchdog skips an interrupted turn", () => {
     const onDebug = vi.fn();
     const options = makeOptions(onDebug);
     const { result } = renderHook(() => useThreadEventHandlers(options));
@@ -615,7 +615,8 @@ describe("useThreadEventHandlers diagnostics", () => {
       vi.advanceTimersByTime(CODEX_TURN_NO_PROGRESS_STALL_MS);
     });
 
-    expect(options.markProcessing).not.toHaveBeenCalledWith("thread-1", false);
+    expect(options.markProcessing).toHaveBeenCalledWith("thread-1", false);
+    expect(options.setActiveTurnId).toHaveBeenCalledWith("thread-1", null);
     const skippedEntry = collectDiagnosticCalls(onDebug).find(
       (entry) =>
         entry.label ===
@@ -629,6 +630,24 @@ describe("useThreadEventHandlers diagnostics", () => {
         diagnosticCategory: "codex-no-progress-watchdog",
         stage: "skipped",
         reason: "interrupted",
+        isProcessing: true,
+        activeTurnId: "turn-1",
+      }),
+    );
+    const cleanupEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) =>
+        entry.label ===
+        "thread/session:turn-diagnostic:three-evidence-reconciliation-cleanup-applied",
+    );
+    expect(cleanupEntry?.payload).toEqual(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        turnId: "turn-1",
+        cleanupSource: "watchdog-interrupted",
+        decisionAction: "cleanup-residue",
+        decisionReason: "interrupted",
+        clearedProcessing: true,
       }),
     );
     expect(
@@ -640,7 +659,7 @@ describe("useThreadEventHandlers diagnostics", () => {
     ).toBe(false);
   });
 
-  it("queries scoped backend status after reconciliation-needed dry run without clearing busy state", async () => {
+  it("clears matching busy residue after scoped backend terminal reconciliation", async () => {
     const onDebug = vi.fn();
     const options = makeOptions(onDebug);
     streamLatencyMocks.queryTurnReconciliationStatus.mockResolvedValueOnce({
@@ -675,8 +694,8 @@ describe("useThreadEventHandlers diagnostics", () => {
       requestSource: "three-evidence-reconciliation",
       requestedAtMs: Date.now(),
     });
-    expect(options.markProcessing).not.toHaveBeenCalledWith("thread-1", false);
-    expect(options.setActiveTurnId).not.toHaveBeenCalledWith("thread-1", null);
+    expect(options.markProcessing).toHaveBeenCalledWith("thread-1", false);
+    expect(options.setActiveTurnId).toHaveBeenCalledWith("thread-1", null);
     const requestedEntry = collectDiagnosticCalls(onDebug).find(
       (entry) =>
         entry.label ===
@@ -705,6 +724,156 @@ describe("useThreadEventHandlers diagnostics", () => {
         status: "runtime-ended",
         statusSource: "runtime-end-context",
         decisionAction: "cleanup-residue",
+      }),
+    );
+    const cleanupEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) =>
+        entry.label ===
+        "thread/session:turn-diagnostic:three-evidence-reconciliation-cleanup-applied",
+    );
+    expect(cleanupEntry?.payload).toEqual(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        turnId: "turn-1",
+        cleanupSource: "three-evidence-query-resolved",
+        status: "runtime-ended",
+        decisionAction: "cleanup-residue",
+        clearedProcessing: true,
+      }),
+    );
+  });
+
+  it("does not cleanup a running reconciliation response", async () => {
+    const onDebug = vi.fn();
+    const options = makeOptions(onDebug);
+    streamLatencyMocks.queryTurnReconciliationStatus.mockResolvedValueOnce({
+      workspaceId: "ws-1",
+      engine: "codex",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      runtimeSessionId: null,
+      runtimeLeaseId: null,
+      status: "running",
+      statusSource: "runtime",
+      observedAtMs: Date.now(),
+      boundedReason: "runtime still has matching active work",
+    });
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-1");
+      vi.advanceTimersByTime(CODEX_TURN_NO_PROGRESS_STALL_MS);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(options.markProcessing).not.toHaveBeenCalledWith("thread-1", false);
+    expect(options.setActiveTurnId).not.toHaveBeenCalledWith("thread-1", null);
+    const cleanupEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) =>
+        entry.label ===
+        "thread/session:turn-diagnostic:three-evidence-reconciliation-cleanup-skipped",
+    );
+    expect(cleanupEntry?.payload).toEqual(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        turnId: "turn-1",
+        status: "running",
+        decisionAction: "keep-running",
+        skipReason: "decision-not-cleanup-residue",
+      }),
+    );
+  });
+
+  it("does not cleanup a terminal reconciliation response after a newer active turn starts", async () => {
+    const onDebug = vi.fn();
+    const options = makeOptions(onDebug);
+    let resolveQuery:
+      | ((response: {
+          workspaceId: string;
+          engine: "codex";
+          threadId: string;
+          turnId: string;
+          runtimeSessionId: null;
+          runtimeLeaseId: null;
+          status: "runtime-ended";
+          statusSource: "runtime-end-context";
+          observedAtMs: number;
+          boundedReason: string;
+        }) => void)
+      | null = null;
+    streamLatencyMocks.queryTurnReconciliationStatus.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveQuery = resolve;
+      }),
+    );
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-1");
+      vi.advanceTimersByTime(CODEX_TURN_NO_PROGRESS_STALL_MS);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-2");
+    });
+    options.markProcessing.mockClear();
+    options.setActiveTurnId.mockClear();
+    options.dispatch.mockClear();
+
+    await act(async () => {
+      resolveQuery?.({
+        workspaceId: "ws-1",
+        engine: "codex",
+        threadId: "thread-1",
+        turnId: "turn-1",
+        runtimeSessionId: null,
+        runtimeLeaseId: null,
+        status: "runtime-ended",
+        statusSource: "runtime-end-context",
+        observedAtMs: Date.now(),
+        boundedReason: "old runtime ended after successor turn started",
+      });
+      await Promise.resolve();
+    });
+
+    expect(options.markProcessing).not.toHaveBeenCalledWith("thread-1", false);
+    expect(options.setActiveTurnId).not.toHaveBeenCalledWith("thread-1", null);
+    expect(options.dispatch).not.toHaveBeenCalledWith({
+      type: "clearCodexSilentSuspected",
+      threadId: "thread-1",
+    });
+    const rejectedEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) =>
+        entry.label ===
+        "thread/session:turn-diagnostic:three-evidence-reconciliation-query-rejected",
+    );
+    expect(rejectedEntry?.payload).toEqual(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        turnId: "turn-1",
+        status: "runtime-ended",
+      }),
+    );
+    const cleanupEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) =>
+        entry.label ===
+        "thread/session:turn-diagnostic:three-evidence-reconciliation-cleanup-skipped",
+    );
+    expect(cleanupEntry?.payload).toEqual(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        turnId: "turn-1",
+        status: "runtime-ended",
+        skipReason: "scope-mismatch",
       }),
     );
   });
@@ -1550,7 +1719,7 @@ describe("useThreadEventHandlers diagnostics", () => {
     );
   });
 
-  it("records busy residue when completed settlement is rejected without fallback evidence", () => {
+  it("clears matched terminal busy residue when completed settlement is rejected without fallback evidence", () => {
     const onDebug = vi.fn();
     const options = makeOptions(onDebug);
     const rejectCompletion = vi.fn(() => false);
@@ -1563,8 +1732,8 @@ describe("useThreadEventHandlers diagnostics", () => {
     });
 
     expect(rejectCompletion).toHaveBeenCalledWith("ws-1", "thread-1", "turn-1");
-    expect(options.markProcessing).not.toHaveBeenCalledWith("thread-1", false);
-    expect(options.setActiveTurnId).not.toHaveBeenCalledWith("thread-1", null);
+    expect(options.markProcessing).toHaveBeenCalledWith("thread-1", false);
+    expect(options.setActiveTurnId).toHaveBeenCalledWith("thread-1", null);
     const residueEntry = collectDiagnosticCalls(onDebug).find(
       (entry) => entry.label === "thread/session:turn-diagnostic:terminal-settlement-busy-residue",
     );
@@ -1597,6 +1766,34 @@ describe("useThreadEventHandlers diagnostics", () => {
         fallbackApplied: false,
         isProcessing: true,
         activeTurnId: "turn-1",
+      }),
+    );
+    const skippedQueryEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) =>
+        entry.label ===
+        "thread/session:turn-diagnostic:three-evidence-reconciliation-query-skipped",
+    );
+    expect(skippedQueryEntry?.payload).toEqual(
+      expect.objectContaining({
+        skipReason: "decision-not-reconciliation",
+        decisionAction: "cleanup-residue",
+        decisionReason: "busy-residue",
+      }),
+    );
+    const cleanupEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) =>
+        entry.label ===
+        "thread/session:turn-diagnostic:three-evidence-reconciliation-cleanup-applied",
+    );
+    expect(cleanupEntry?.payload).toEqual(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        turnId: "turn-1",
+        cleanupSource: "three-evidence-query-skipped",
+        decisionAction: "cleanup-residue",
+        decisionReason: "busy-residue",
+        clearedProcessing: true,
       }),
     );
   });

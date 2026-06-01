@@ -234,6 +234,106 @@ export function useThreadEventHandlers({
     },
     [],
   );
+  const settleForegroundTurnResidue = useCallback(
+    (input: {
+      workspaceId: string;
+      threadId: string;
+      turnId: string | null;
+      engine: ConversationEngine;
+      lifecycle: ThreadLifecycleSnapshot;
+      source: "three-evidence-query-skipped" | "three-evidence-query-resolved" | "watchdog-interrupted";
+      decisionAction: string;
+      decisionReason: string;
+      scopeMatch: Record<string, unknown>;
+      acceptedEvidence: Record<string, unknown>;
+      boundedReason: string | null;
+      status?: TurnReconciliationRuntimeStatus | null;
+      statusSource?: string | null;
+      lastProgressAgeMs?: number | null;
+      allowAbandonedActiveTurn?: boolean;
+    }) => {
+      const activeTurnId = input.lifecycle.activeTurnId;
+      const turnMatches =
+        activeTurnId === input.turnId ||
+        (input.allowAbandonedActiveTurn === true && activeTurnId === null);
+      const scopeMatched = input.scopeMatch.matched === true;
+      const terminalAccepted = input.acceptedEvidence.terminal === true;
+      const stateAccepted = input.acceptedEvidence.state === true;
+      const cleanupAllowed =
+        input.decisionAction === "cleanup-residue" &&
+        input.lifecycle.isProcessing &&
+        turnMatches &&
+        (input.source === "watchdog-interrupted" ||
+          (scopeMatched && terminalAccepted && stateAccepted));
+
+      if (!cleanupAllowed) {
+        emitTurnDiagnostic("three-evidence-reconciliation-cleanup-skipped", {
+          workspaceId: input.workspaceId,
+          threadId: input.threadId,
+          turnId: input.turnId,
+          engine: input.engine,
+          diagnosticCategory: "three-evidence-reconciliation",
+          cleanupSource: input.source,
+          skipReason: !input.lifecycle.isProcessing
+            ? "not-processing"
+            : !turnMatches
+              ? "active-turn-mismatch"
+              : input.decisionAction !== "cleanup-residue"
+                ? "decision-not-cleanup-residue"
+                : input.source !== "watchdog-interrupted" && !scopeMatched
+                  ? "scope-mismatch"
+                  : input.source !== "watchdog-interrupted" &&
+                      (!terminalAccepted || !stateAccepted)
+                    ? "evidence-not-accepted"
+                    : "guard-rejected",
+          status: input.status ?? null,
+          statusSource: input.statusSource ?? null,
+          decisionAction: input.decisionAction,
+          decisionReason: input.decisionReason,
+          scopeMatch: input.scopeMatch,
+          acceptedEvidence: input.acceptedEvidence,
+          boundedReason: input.boundedReason,
+          lastProgressAgeMs: input.lastProgressAgeMs ?? null,
+          isProcessing: input.lifecycle.isProcessing,
+          activeTurnId,
+          activeThreadId,
+        }, { force: true });
+        return false;
+      }
+
+      threadLifecycleSnapshotRef.current.set(input.threadId, {
+        ...input.lifecycle,
+        isProcessing: false,
+        activeTurnId: null,
+      });
+      dispatch({ type: "clearCodexSilentSuspected", threadId: input.threadId });
+      markProcessing(input.threadId, false);
+      setActiveTurnId(input.threadId, null);
+      emitTurnDiagnostic("three-evidence-reconciliation-cleanup-applied", {
+        workspaceId: input.workspaceId,
+        threadId: input.threadId,
+        turnId: input.turnId,
+        engine: input.engine,
+        diagnosticCategory: "three-evidence-reconciliation",
+        cleanupSource: input.source,
+        status: input.status ?? null,
+        statusSource: input.statusSource ?? null,
+        decisionAction: input.decisionAction,
+        decisionReason: input.decisionReason,
+        scopeMatch: input.scopeMatch,
+        acceptedEvidence: input.acceptedEvidence,
+        boundedReason: input.boundedReason,
+        lastProgressAgeMs: input.lastProgressAgeMs ?? null,
+        wasProcessing: input.lifecycle.isProcessing,
+        previousActiveTurnId: activeTurnId,
+        clearedProcessing: true,
+        clearedActiveTurn: activeTurnId !== null,
+        activeThreadId,
+      }, { force: true });
+      return true;
+    },
+    [activeThreadId, dispatch, emitTurnDiagnostic, markProcessing, setActiveTurnId],
+  );
   const emitThreeEvidenceDryRunDiagnostic = useCallback(
     (input: {
       workspaceId: string;
@@ -350,6 +450,22 @@ export function useThreadEventHandlers({
           progressSequence: input.diagnostic?.progressSequence ?? null,
           activeThreadId,
         }, { force: decision.action !== "settle" });
+        if (decision.action === "cleanup-residue") {
+          settleForegroundTurnResidue({
+            workspaceId: input.workspaceId,
+            threadId: input.threadId,
+            turnId: input.turnId || null,
+            engine,
+            lifecycle: input.lifecycle,
+            source: "three-evidence-query-skipped",
+            decisionAction: decision.action,
+            decisionReason: decision.reason,
+            scopeMatch: decision.scopeMatch,
+            acceptedEvidence: decision.acceptedEvidence,
+            boundedReason: decision.diagnostics.boundedReason,
+            lastProgressAgeMs,
+          });
+        }
         return;
       }
 
@@ -517,7 +633,24 @@ export function useThreadEventHandlers({
               activeTurnId: latestLifecycle.activeTurnId,
               activeThreadId,
             }, { force: true });
+            return;
           }
+          settleForegroundTurnResidue({
+            workspaceId: input.workspaceId,
+            threadId: input.threadId,
+            turnId: input.turnId || null,
+            engine,
+            lifecycle: latestLifecycle,
+            source: "three-evidence-query-resolved",
+            decisionAction: responseDecision.action,
+            decisionReason: responseDecision.reason,
+            scopeMatch: responseDecision.scopeMatch,
+            acceptedEvidence: responseDecision.acceptedEvidence,
+            boundedReason: responseDecision.diagnostics.boundedReason,
+            status: response.status,
+            statusSource: response.statusSource,
+            lastProgressAgeMs: responseLastProgressAgeMs,
+          });
         })
         .catch((error: unknown) => {
           const latestLifecycle = getThreadLifecycleSnapshot(input.threadId);
@@ -547,6 +680,7 @@ export function useThreadEventHandlers({
       buildReconciliationQueryKey,
       emitTurnDiagnostic,
       getThreadLifecycleSnapshot,
+      settleForegroundTurnResidue,
       terminalKindFromReconciliationStatus,
     ],
   );
@@ -740,12 +874,45 @@ export function useThreadEventHandlers({
           return;
         }
         if (interruptedThreadsRef.current.has(threadId)) {
+          settleForegroundTurnResidue({
+            workspaceId: latestDiagnostic.workspaceId,
+            threadId,
+            turnId: latestDiagnostic.turnId,
+            engine: inferThreadEngine(threadId),
+            lifecycle,
+            source: "watchdog-interrupted",
+            decisionAction: "cleanup-residue",
+            decisionReason: "interrupted",
+            scopeMatch: {
+              matched:
+                lifecycle.activeTurnId === latestDiagnostic.turnId ||
+                lifecycle.activeTurnId === null,
+              workspace: true,
+              engine: true,
+              thread: true,
+              turn:
+                lifecycle.activeTurnId === latestDiagnostic.turnId ||
+                lifecycle.activeTurnId === null,
+              foregroundOwner: true,
+              runtimeLease: null,
+            },
+            acceptedEvidence: {
+              terminal: true,
+              state: lifecycle.isProcessing,
+              progress: false,
+              reconciliation: false,
+            },
+            boundedReason: "watchdog skipped because turn was interrupted",
+            lastProgressAgeMs: elapsedSinceProgressMs,
+            allowAbandonedActiveTurn: true,
+          });
           emitCodexNoProgressWatchdogDiagnostic("skipped", {
             threadId,
             diagnostic: latestDiagnostic,
             reason: "interrupted",
             timeoutMs,
             elapsedSinceProgressMs,
+            lifecycle,
           });
           return;
         }
@@ -799,6 +966,7 @@ export function useThreadEventHandlers({
       getThreadLifecycleSnapshot,
       interruptedThreadsRef,
       markCodexNoProgressSuspected,
+      settleForegroundTurnResidue,
     ],
   );
 
