@@ -142,7 +142,7 @@ const enPart1 = {
     announcementText:
       "Explore landing templates, workflow cards, and starter prompts",
     announcementAction: "Discover",
-    title: "ccgui Agent, make work easier",
+    title: "LawyerCopilot · make legal work easier",
     titleLineOne: "Press Enter",
     titleLineTwo: "Build Apps Faster",
     subtitle:
@@ -1636,7 +1636,7 @@ const enPart1 = {
         editDescription:
           "Updates are applied to ~/.claude/settings.json immediately.",
         securityNotice:
-          "Notice: all settings stay local on your machine. This project is 100% open source.",
+          "Notice: all settings stay local on your machine.",
         presetGroup: "Quick Presets",
         providerName: "Provider Name",
         required: "*",

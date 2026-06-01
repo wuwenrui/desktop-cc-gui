@@ -42,7 +42,7 @@ const enPart1Base = {
 
   // App
   app: {
-    title: "ccgui",
+    title: "LawyerCopilot",
     subtitle: "Orchestrate agents across your local projects.",
   },
 

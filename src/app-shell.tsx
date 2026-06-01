@@ -2062,8 +2062,8 @@ export function AppShell() {
 
   useEffect(() => {
     const title = activeWorkspace
-      ? `ccgui - ${activeWorkspace.name}`
-      : "ccgui";
+      ? `律师助理 - ${activeWorkspace.name}`
+      : "律师助理";
     try {
       void getCurrentWindow().setTitle(title).catch(() => {});
     } catch {

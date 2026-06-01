@@ -62,8 +62,11 @@ export function ChatInputBoxHeader({
   onDismissOpenSourceBanner?: () => void;
 }) {
   // Check if there's any content to render
+  const hasOpenSourceBanner = Boolean(
+    showOpenSourceBanner && t('chat.openSourceBanner'),
+  );
   const hasContent =
-    showOpenSourceBanner ||
+    hasOpenSourceBanner ||
     sdkStatusLoading ||
     !sdkInstalled ||
     Boolean(sendReadiness) ||
@@ -77,7 +80,7 @@ export function ChatInputBoxHeader({
   return (
     <>
       {/* Open source banner */}
-      {showOpenSourceBanner && (
+      {hasOpenSourceBanner && (
         <div className="open-source-banner">
           <span className="banner-text">{t('chat.openSourceBanner')}</span>
           <button

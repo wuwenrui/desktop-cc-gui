@@ -2519,8 +2519,7 @@ const enPart2 = {
     noMatchingCommands: "No matching commands",
     noMatchingHistory: "No matching history",
     noAvailableAgents: "No available agents",
-    openSourceBanner:
-      "This project is guaranteed to be 100% open source (beware of pirated projects)",
+    openSourceBanner: "",
     sdkNotInstalled:
       "{{provider}} SDK is not installed. Please install the SDK to start chatting.",
     sdkStatusLoading: "Checking SDK status...",

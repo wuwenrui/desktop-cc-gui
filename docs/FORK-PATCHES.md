@@ -11,9 +11,13 @@
 |---|---|---|---|
 | `src-tauri/src/command_registry.rs` | generate_handler! 列表加 `skill_installer::install_bundled_skills`、`mcp_writer::write_court_crawler_mcp`、`newapi_usage::get_newapi_usage`、`claude_installer::check_claude_cli`、`claude_installer::install_claude_cli` | 注册律师助理命令 | 确认五命令仍在 handler 列表内 |
 | `src-tauri/src/lib.rs` | 加 `mod mcp_writer;`、`mod skill_installer;`、`mod newapi_usage;`、`mod claude_installer;` | 声明新模块 | 确认四 mod 声明在 |
-| `src-tauri/tauri.conf.json` | `:40` bundle.resources 加 `"../skills/**/*": "skills/"` | 打包律师 skill 到 app 资源 | 确认 resources 含该 glob |
-| `src/app-shell.tsx` | import + `ONBOARDED_STORAGE_KEY` + `isTauriRuntime()` + 首启 onboarded 门禁；门禁渲染 `<DependencyGate>` 包裹 `<OnboardingWizard>`(先自检 claude CLI 再进向导) | 首启引导配置 new-api/skill/MCP + claude CLI 自检/自动安装 | 上游若改 app-shell 启动渲染需重应用门禁与 DependencyGate 包裹 |
+| `src-tauri/tauri.conf.json` | `:40` bundle.resources 加 `"../skills/**/*": "skills/"`；`:3` `productName` 改 `LawyerCopilot`(不动 `identifier`) | 打包律师 skill 到 app 资源；换品牌 | 确认 resources 含该 glob；productName 仍为 LawyerCopilot |
+| `src/app-shell.tsx` | import + `ONBOARDED_STORAGE_KEY` + `isTauriRuntime()` + 首启 onboarded 门禁；门禁渲染 `<DependencyGate>` 包裹 `<OnboardingWizard>`(先自检 claude CLI 再进向导)；`:2064-2066` 窗口标题 `ccgui` → `律师助理` | 首启引导配置 new-api/skill/MCP + claude CLI 自检/自动安装；换品牌 | 上游若改 app-shell 启动渲染需重应用门禁与 DependencyGate 包裹；确认窗口标题为律师助理 |
 | `src/features/app/components/MainTopbar.tsx` | +5 行：import `UsageBadge` + 在 `.actions` 槽内渲染 `<UsageBadge />`(置于 `actionsNode` 前) | 顶栏常驻展示 new-api 余额/用量 | 上游若改 MainTopbar 结构需重新插入 `<UsageBadge />` |
+| `src/i18n/locales/en.part1.base.ts` / `zh.part1.ts` | `app.title` `ccgui` → `LawyerCopilot` / `律师助理` | 换品牌(应用标题) | 确认 app.title 两语言已换 |
+| `src/i18n/locales/en.part1.ts` / `zh.part1.ts` | 首页 slogan `ccgui Agent...` → `LawyerCopilot · make legal work easier` / `律师助理 · 让法律工作更简单`；设置页 securityNotice 去掉"本项目100%开源/This project is 100% open source" | 换品牌 + 去开源标语 | 确认 slogan 已换、securityNotice 无开源句 |
+| `src/i18n/locales/en.part2.ts` / `zh.part2.ts` | `chat.openSourceBanner` 文案改空字符串 `""` | 去开源标语 | 确认 openSourceBanner 为空 |
+| `src/features/composer/components/ChatInputBox/ChatInputBoxHeader.tsx` | 新增 `hasOpenSourceBanner = showOpenSourceBanner && t('chat.openSourceBanner')`，banner 文案为空则不渲染该条 + 不计入 `hasContent` | 文案清空后避免留空白条 | 上游若改 banner 渲染逻辑需重应用空文案守卫 |
 
 ## 二、纯新增文件（与 upstream 不冲突，无需在上表跟踪）
 

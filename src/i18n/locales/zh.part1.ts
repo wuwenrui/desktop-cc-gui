@@ -42,7 +42,7 @@ const zhPart1 = {
 
   // 应用
   app: {
-    title: "ccgui",
+    title: "律师助理",
     subtitle: "下一代 VibeCoding编辑器",
   },
 
@@ -251,7 +251,7 @@ const zhPart1 = {
     announcementTag: "New",
     announcementText: "探索首页模板、流程卡片与启动提示",
     announcementAction: "查看",
-    title: "ccgui Agent，让你的工作更轻松",
+    title: "律师助理 · 让法律工作更简单",
     titleLineOne: "按下回车",
     titleLineTwo: "更快开始构建",
     subtitle:
@@ -1643,7 +1643,7 @@ const zhPart1 = {
           "配置新的供应商信息，配置将写入 ~/.claude/settings.json。",
         editDescription: "更新后将立即应用到 ~/.claude/settings.json。",
         securityNotice:
-          "声明：当前设置全部在您电脑本地，本项目100%开源，请放心使用",
+          "声明：当前设置全部保存在您电脑本地，请放心使用",
         presetGroup: "快捷配置",
         providerName: "供应商名称",
         required: "*",
