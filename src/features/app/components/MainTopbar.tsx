@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+// Lawyer copilot: skill 市场入口
+import { SkillMarketButton } from "../../skill-market/SkillMarketButton";
 // Lawyer copilot: always-visible new-api balance/usage badge
 import { UsageBadge } from "../../usage/UsageBadge";
 
@@ -14,6 +16,7 @@ export function MainTopbar({ leftNode, actionsNode, className }: MainTopbarProps
     <div className={classNames} data-tauri-drag-region>
       <div className="main-topbar-left">{leftNode}</div>
       <div className="actions">
+        <SkillMarketButton />
         <UsageBadge />
         {actionsNode ?? null}
       </div>

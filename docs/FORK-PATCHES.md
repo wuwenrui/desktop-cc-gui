@@ -9,11 +9,12 @@
 
 | 文件 | 改动摘要 | 原因 | merge 后检查点 |
 |---|---|---|---|
-| `src-tauri/src/command_registry.rs` | generate_handler! 列表加 `skill_installer::install_bundled_skills`、`mcp_writer::write_court_crawler_mcp`、`newapi_usage::get_newapi_usage`、`claude_installer::check_claude_cli`、`claude_installer::install_claude_cli` | 注册律师助理命令 | 确认五命令仍在 handler 列表内 |
-| `src-tauri/src/lib.rs` | 加 `mod mcp_writer;`、`mod skill_installer;`、`mod newapi_usage;`、`mod claude_installer;` | 声明新模块 | 确认四 mod 声明在 |
+| `src-tauri/src/command_registry.rs` | generate_handler! 列表加 `skill_installer::install_bundled_skills`、`mcp_writer::write_court_crawler_mcp`、`newapi_usage::get_newapi_usage`、`claude_installer::check_claude_cli`、`claude_installer::install_claude_cli`、`skill_market::market_add_skill`、`skill_market::market_list_installed` | 注册律师助理命令 | 确认七命令仍在 handler 列表内 |
+| `src-tauri/src/lib.rs` | 加 `mod mcp_writer;`、`mod skill_installer;`、`mod newapi_usage;`、`mod claude_installer;`、`mod skill_market;` | 声明新模块 | 确认五 mod 声明在 |
+| `src-tauri/Cargo.toml` | `[dependencies]` 末尾加 `zip = "4"` | skill 市场下载 zip 解压（lockfile 已有 zip 4.6.1，仅提为直接依赖） | 确认 zip 仍在 deps |
 | `src-tauri/tauri.conf.json` | `:40` bundle.resources 加 `"../skills/**/*": "skills/"`；`:3` `productName` 改 `LawyerCopilot`(不动 `identifier`) | 打包律师 skill 到 app 资源；换品牌 | 确认 resources 含该 glob；productName 仍为 LawyerCopilot |
 | `src/app-shell.tsx` | import + `ONBOARDED_STORAGE_KEY` + `isTauriRuntime()` + 首启 onboarded 门禁；门禁渲染 `<DependencyGate>` 包裹 `<OnboardingWizard>`(先自检 claude CLI 再进向导)；`:2064-2066` 窗口标题 `ccgui` → `律师助理` | 首启引导配置 new-api/skill/MCP + claude CLI 自检/自动安装；换品牌 | 上游若改 app-shell 启动渲染需重应用门禁与 DependencyGate 包裹；确认窗口标题为律师助理 |
-| `src/features/app/components/MainTopbar.tsx` | +5 行：import `UsageBadge` + 在 `.actions` 槽内渲染 `<UsageBadge />`(置于 `actionsNode` 前) | 顶栏常驻展示 new-api 余额/用量 | 上游若改 MainTopbar 结构需重新插入 `<UsageBadge />` |
+| `src/features/app/components/MainTopbar.tsx` | import `UsageBadge` + `SkillMarketButton`，在 `.actions` 槽内渲染 `<SkillMarketButton />` 与 `<UsageBadge />`(置于 `actionsNode` 前) | 顶栏常驻展示 new-api 余额/用量 + skill 市场入口 | 上游若改 MainTopbar 结构需重新插入两组件 |
 | `src/i18n/locales/en.part1.base.ts` / `zh.part1.ts` | `app.title` `ccgui` → `LawyerCopilot` / `律师助理` | 换品牌(应用标题) | 确认 app.title 两语言已换 |
 | `src/i18n/locales/en.part1.ts` / `zh.part1.ts` | 首页 slogan `ccgui Agent...` → `LawyerCopilot · make legal work easier` / `律师助理 · 让法律工作更简单`；设置页 securityNotice 去掉"本项目100%开源/This project is 100% open source" | 换品牌 + 去开源标语 | 确认 slogan 已换、securityNotice 无开源句 |
 | `src/i18n/locales/en.part2.ts` / `zh.part2.ts` | `chat.openSourceBanner` 文案改空字符串 `""` | 去开源标语 | 确认 openSourceBanner 为空 |
@@ -34,6 +35,13 @@
 | `src-tauri/src/claude_installer.rs` | `check_claude_cli` / `install_claude_cli` 命令：自检 claude CLI(PATH + ~/.local/bin)，缺失则跑官方 native installer 自动安装并校验 |
 | `src/features/setup/DependencyGate.tsx` | 启动门禁：自检 claude CLI，缺失则提供一键官方安装/重启提示，安装好后渲染 children |
 | `src/features/setup/__tests__/DependencyGate.test.tsx` | DependencyGate 组件测试(mock invoke) |
+| `src-tauri/src/skill_market.rs` | `market_add_skill`(下载平台 zip → 防 zip-slip 解压到 ~/.claude/skills/<name> + 记 .skillhub-installed.json) / `market_list_installed`(读已装版本) 命令；纯函数化 + cargo test 覆盖 |
+| `src/features/skill-market/platformConfig.ts` | 平台 base_url 配置(localStorage，dev 默认 localhost:8000) |
+| `src/features/skill-market/api.ts` | 平台 HTTP 客户端：`fetchPublicSkills`(列公开) / `loginPlatform`(new-api key 换 JWT，预留 mine) |
+| `src/features/skill-market/SkillMarketPanel.tsx` | skill 市场面板：搜索/列公开 skill + 对比本地版本决定"添加/有更新/已是最新" → invoke `market_add_skill` |
+| `src/features/skill-market/SkillMarketButton.tsx` | 顶栏入口按钮 + overlay 弹出面板 |
+| `src/features/skill-market/SkillMarketPanel.test.tsx` | 面板测试(mock invoke + fetchPublicSkills)：列表渲染 / 添加触发 invoke / 更新与最新判定 / 错误态 |
+| `src/features/skill-market/platformConfig.test.ts` | base_url 配置读写归一化测试 |
 
 ## 三、运行时注入(不改任何上游代码)
 

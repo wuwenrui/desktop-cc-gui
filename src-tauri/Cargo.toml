@@ -55,6 +55,8 @@ encoding_rs = "0.8"
 lettre = { version = "0.11.21", default-features = false, features = ["smtp-transport", "builder", "tokio1-rustls-tls", "hostname"] }
 imap = { version = "3.0.0-alpha.15", default-features = false, features = ["rustls-tls"] }
 mailparse = "0.16.1"
+# Lawyer copilot: skill 市场 zip 解压（下载平台 skill → 写 ~/.claude/skills）
+zip = "4"
 
 [target."cfg(not(any(target_os = \"android\", target_os = \"ios\")))".dependencies]
 tauri-plugin-updater = "2"

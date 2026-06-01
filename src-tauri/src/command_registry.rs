@@ -365,6 +365,9 @@ pub(crate) fn invoke_handler(
         crate::newapi_usage::get_newapi_usage,
         // Lawyer copilot: claude CLI self-check + native installer
         crate::claude_installer::check_claude_cli,
-        crate::claude_installer::install_claude_cli
+        crate::claude_installer::install_claude_cli,
+        // Lawyer copilot: skill 市场（下载/更新平台 skill）
+        crate::skill_market::market_add_skill,
+        crate::skill_market::market_list_installed
     ]
 }
