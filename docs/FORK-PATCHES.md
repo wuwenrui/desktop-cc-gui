@@ -9,10 +9,10 @@
 
 | 文件 | 改动摘要 | 原因 | merge 后检查点 |
 |---|---|---|---|
-| `src-tauri/src/command_registry.rs` | generate_handler! 列表加 `skill_installer::install_bundled_skills`、`mcp_writer::write_court_crawler_mcp`、`newapi_usage::get_newapi_usage` | 注册律师助理命令 | 确认三命令仍在 handler 列表内 |
-| `src-tauri/src/lib.rs` | 加 `mod mcp_writer;`、`mod skill_installer;`、`mod newapi_usage;` | 声明新模块 | 确认三 mod 声明在 |
+| `src-tauri/src/command_registry.rs` | generate_handler! 列表加 `skill_installer::install_bundled_skills`、`mcp_writer::write_court_crawler_mcp`、`newapi_usage::get_newapi_usage`、`claude_installer::check_claude_cli`、`claude_installer::install_claude_cli` | 注册律师助理命令 | 确认五命令仍在 handler 列表内 |
+| `src-tauri/src/lib.rs` | 加 `mod mcp_writer;`、`mod skill_installer;`、`mod newapi_usage;`、`mod claude_installer;` | 声明新模块 | 确认四 mod 声明在 |
 | `src-tauri/tauri.conf.json` | `:40` bundle.resources 加 `"../skills/**/*": "skills/"` | 打包律师 skill 到 app 资源 | 确认 resources 含该 glob |
-| `src/app/app-shell.tsx` | +66 行：import + `ONBOARDED_STORAGE_KEY` + `isTauriRuntime()` + 首启 onboarded 门禁(未配置则渲染 OnboardingWizard) | 首启引导配置 new-api/skill/MCP | 上游若改 app-shell 启动渲染需重应用门禁 |
+| `src/app-shell.tsx` | import + `ONBOARDED_STORAGE_KEY` + `isTauriRuntime()` + 首启 onboarded 门禁；门禁渲染 `<DependencyGate>` 包裹 `<OnboardingWizard>`(先自检 claude CLI 再进向导) | 首启引导配置 new-api/skill/MCP + claude CLI 自检/自动安装 | 上游若改 app-shell 启动渲染需重应用门禁与 DependencyGate 包裹 |
 | `src/features/app/components/MainTopbar.tsx` | +5 行：import `UsageBadge` + 在 `.actions` 槽内渲染 `<UsageBadge />`(置于 `actionsNode` 前) | 顶栏常驻展示 new-api 余额/用量 | 上游若改 MainTopbar 结构需重新插入 `<UsageBadge />` |
 
 ## 二、纯新增文件（与 upstream 不冲突，无需在上表跟踪）
@@ -27,6 +27,9 @@
 | `src-tauri/src/newapi_usage.rs` | `get_newapi_usage` 命令：读 settings.json 的 ANTHROPIC_BASE_URL/AUTH_TOKEN，调 new-api `/api/usage/token`，quota→CNY 换算 |
 | `src/features/usage/UsageBadge.tsx` | 顶栏余额/用量徽标(invoke get_newapi_usage，60s 刷新) |
 | `src/features/usage/UsageBadge.test.tsx` | UsageBadge 组件测试(mock invoke) |
+| `src-tauri/src/claude_installer.rs` | `check_claude_cli` / `install_claude_cli` 命令：自检 claude CLI(PATH + ~/.local/bin)，缺失则跑官方 native installer 自动安装并校验 |
+| `src/features/setup/DependencyGate.tsx` | 启动门禁：自检 claude CLI，缺失则提供一键官方安装/重启提示，安装好后渲染 children |
+| `src/features/setup/__tests__/DependencyGate.test.tsx` | DependencyGate 组件测试(mock invoke) |
 
 ## 三、运行时注入(不改任何上游代码)
 

@@ -25,6 +25,8 @@ mod backend;
 mod browser_agent;
 mod claude_commands;
 mod claude_home;
+// Lawyer copilot: claude CLI self-check + native installer
+mod claude_installer;
 mod client_error_log;
 mod client_storage;
 mod code_intel;

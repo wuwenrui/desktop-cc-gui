@@ -362,6 +362,9 @@ pub(crate) fn invoke_handler(
         crate::skill_installer::install_bundled_skills,
         crate::mcp_writer::write_court_crawler_mcp,
         // Lawyer copilot: new-api balance/usage
-        crate::newapi_usage::get_newapi_usage
+        crate::newapi_usage::get_newapi_usage,
+        // Lawyer copilot: claude CLI self-check + native installer
+        crate::claude_installer::check_claude_cli,
+        crate::claude_installer::install_claude_cli
     ]
 }
