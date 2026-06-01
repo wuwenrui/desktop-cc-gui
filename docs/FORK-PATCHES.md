@@ -9,10 +9,11 @@
 
 | 文件 | 改动摘要 | 原因 | merge 后检查点 |
 |---|---|---|---|
-| `src-tauri/src/command_registry.rs` | `:360-364` generate_handler! 列表加 `skill_installer::install_bundled_skills`、`mcp_writer::write_court_crawler_mcp` | 注册律师助理命令 | 确认两命令仍在 handler 列表内 |
-| `src-tauri/src/lib.rs` | `:44` 加 `mod mcp_writer;`、`:57` 加 `mod skill_installer;` | 声明新模块 | 确认两 mod 声明在 |
+| `src-tauri/src/command_registry.rs` | generate_handler! 列表加 `skill_installer::install_bundled_skills`、`mcp_writer::write_court_crawler_mcp`、`newapi_usage::get_newapi_usage` | 注册律师助理命令 | 确认三命令仍在 handler 列表内 |
+| `src-tauri/src/lib.rs` | 加 `mod mcp_writer;`、`mod skill_installer;`、`mod newapi_usage;` | 声明新模块 | 确认三 mod 声明在 |
 | `src-tauri/tauri.conf.json` | `:40` bundle.resources 加 `"../skills/**/*": "skills/"` | 打包律师 skill 到 app 资源 | 确认 resources 含该 glob |
 | `src/app/app-shell.tsx` | +66 行：import + `ONBOARDED_STORAGE_KEY` + `isTauriRuntime()` + 首启 onboarded 门禁(未配置则渲染 OnboardingWizard) | 首启引导配置 new-api/skill/MCP | 上游若改 app-shell 启动渲染需重应用门禁 |
+| `src/features/app/components/MainTopbar.tsx` | +5 行：import `UsageBadge` + 在 `.actions` 槽内渲染 `<UsageBadge />`(置于 `actionsNode` 前) | 顶栏常驻展示 new-api 余额/用量 | 上游若改 MainTopbar 结构需重新插入 `<UsageBadge />` |
 
 ## 二、纯新增文件（与 upstream 不冲突，无需在上表跟踪）
 
@@ -23,6 +24,9 @@
 | `src-tauri/src/skill_installer.rs` | 首启把 skill 安装到 ~/.claude/skills |
 | `src-tauri/src/mcp_writer.rs` | 写 court-crawler SSE MCP 到 ~/.claude.json |
 | `src/features/onboarding/OnboardingWizard.tsx` | 首启向导(new-api provider 运行时注入 + 装 skill + 写 MCP) |
+| `src-tauri/src/newapi_usage.rs` | `get_newapi_usage` 命令：读 settings.json 的 ANTHROPIC_BASE_URL/AUTH_TOKEN，调 new-api `/api/usage/token`，quota→CNY 换算 |
+| `src/features/usage/UsageBadge.tsx` | 顶栏余额/用量徽标(invoke get_newapi_usage，60s 刷新) |
+| `src/features/usage/UsageBadge.test.tsx` | UsageBadge 组件测试(mock invoke) |
 
 ## 三、运行时注入(不改任何上游代码)
 

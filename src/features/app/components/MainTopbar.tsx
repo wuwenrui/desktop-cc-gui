@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+// Lawyer copilot: always-visible new-api balance/usage badge
+import { UsageBadge } from "../../usage/UsageBadge";
 
 type MainTopbarProps = {
   leftNode: ReactNode;
@@ -11,7 +13,10 @@ export function MainTopbar({ leftNode, actionsNode, className }: MainTopbarProps
   return (
     <div className={classNames} data-tauri-drag-region>
       <div className="main-topbar-left">{leftNode}</div>
-      <div className="actions">{actionsNode ?? null}</div>
+      <div className="actions">
+        <UsageBadge />
+        {actionsNode ?? null}
+      </div>
     </div>
   );
 }

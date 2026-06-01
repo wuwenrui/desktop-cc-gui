@@ -44,6 +44,8 @@ mod linux_startup_guard;
 mod local_usage;
 mod mcp_writer;
 mod menu;
+// Lawyer copilot: new-api balance/usage command
+mod newapi_usage;
 mod note_cards;
 mod project_map;
 mod project_memory;

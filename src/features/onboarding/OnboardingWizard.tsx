@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 // new-api 预设(运行时注入，不依赖上游预设数组)。base_url 先用占位，后续可改。
 const NEW_API_ENV = {
-  ANTHROPIC_BASE_URL: "https://YOUR-NEW-API-HOST",
+  ANTHROPIC_BASE_URL: "http://47.239.143.243:3000",
   ANTHROPIC_AUTH_TOKEN: "",
   ANTHROPIC_MODEL: "glm-4.7",
   ANTHROPIC_DEFAULT_HAIKU_MODEL: "glm-4.7",

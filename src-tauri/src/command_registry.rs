@@ -360,6 +360,8 @@ pub(crate) fn invoke_handler(
         crate::get_pending_open_paths,
         // Lawyer copilot: skill install + court-crawler MCP
         crate::skill_installer::install_bundled_skills,
-        crate::mcp_writer::write_court_crawler_mcp
+        crate::mcp_writer::write_court_crawler_mcp,
+        // Lawyer copilot: new-api balance/usage
+        crate::newapi_usage::get_newapi_usage
     ]
 }
