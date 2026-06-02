@@ -78,7 +78,7 @@ describe("SkillMarketPanel", () => {
 
     await waitFor(() => {
       expect(invoke).toHaveBeenCalledWith("market_add_skill", {
-        baseUrl: "http://localhost:8000",
+        baseUrl: "http://47.239.143.243:8100",
         skillId: 1,
         version: 3,
         name: "labor-helper",

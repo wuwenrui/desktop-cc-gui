@@ -2,13 +2,13 @@
  * skill 平台基址配置。
  *
  * 运行时可配：优先读 localStorage 的 `skillhub.baseUrl`，缺省回落到
- * dev 默认 `http://localhost:8000`。所有读写都做 trim + 去尾斜杠归一化。
+ * dev 默认 `http://47.239.143.243:8100`。所有读写都做 trim + 去尾斜杠归一化。
  *
  * 新增文件（fork-friendly）：不依赖任何上游模块。
  */
 
 export const SKILLHUB_BASE_URL_KEY = "skillhub.baseUrl";
-export const DEFAULT_SKILLHUB_BASE_URL = "http://localhost:8000";
+export const DEFAULT_SKILLHUB_BASE_URL = "http://47.239.143.243:8100";
 
 function normalizeBaseUrl(raw: string): string {
   return raw.trim().replace(/\/+$/, "");
