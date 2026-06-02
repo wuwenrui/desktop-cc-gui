@@ -155,28 +155,24 @@ The system MUST prevent a directory from being copied into itself or one of its 
 - **THEN** the backend MUST reject the operation
 - **AND** no recursive descendant copy SHALL be created
 
-### Requirement: External File Source Contract SHALL Use The Same Paste Safety Model
-The system SHALL define an external paste source model for importing external absolute file or folder sources into a workspace target directory, and SHALL either import supported external sources with the same backend safety rules as internal paste or show an explicit unavailable fallback when the platform/source is not supported.
+### Requirement: External File Source Import SHALL Remain Deferred In This Slice
+The system SHALL keep external file source import out of the file tree UI for this change while preserving an explicit unsupported backend/service contract if the command is called directly.
 
-#### Scenario: Supported external file source imports into workspace folder
-- **WHEN** external file import is supported and the user imports an existing external file into a workspace folder target
-- **THEN** the backend SHALL copy the external file into the target directory using collision-safe naming
-- **AND** the backend MUST return the created workspace-relative path
+#### Scenario: File tree has no external import drop target
+- **WHEN** the user drags an external file over the workspace file tree
+- **THEN** this change SHALL NOT register a new external file-tree import handler
+- **AND** this change MUST NOT intercept composer external file drop behavior
 
-#### Scenario: Supported external folder source imports into workspace folder
-- **WHEN** external folder import is supported and the user imports an existing external folder into a workspace folder target
-- **THEN** the backend SHALL recursively copy the external folder into the target directory using collision-safe naming
-- **AND** the backend MUST return the created workspace-relative folder path
-
-#### Scenario: External source model exists before platform import support
-- **WHEN** external drag/drop or operating system clipboard file import is not implemented for the current platform
-- **THEN** the file tree SHALL expose a recoverable unavailable or fallback state for external import
+#### Scenario: External import command is explicitly unsupported
+- **WHEN** `paste_external_workspace_items` is called in the current build
+- **THEN** the backend SHALL return a clear unsupported error
+- **AND** the backend MUST NOT mutate workspace files through an external source import path
 - **AND** internal Copy, Paste, Duplicate, and Rename SHALL remain available
 
-#### Scenario: Unsupported OS clipboard file source is visible
-- **WHEN** the user requests paste from the operating system clipboard on a platform where file paths cannot be read reliably
-- **THEN** the file tree SHALL show an unsupported or fallback message
-- **AND** the system MUST NOT silently fail the paste request
+#### Scenario: OS clipboard file paste is out of scope
+- **WHEN** operating system clipboard file paths are unavailable or unreliable on Windows, macOS, or Linux
+- **THEN** the file tree SHALL NOT silently attempt an external file paste
+- **AND** future external import support MUST be specified in a separate change with platform compatibility evidence
 
 ### Requirement: File Operations SHALL Preserve Cross-Platform Path Semantics
 The system SHALL use a platform-neutral IPC path contract and platform-aware backend filesystem operations for Windows, macOS, and Linux.
@@ -191,7 +187,7 @@ The system SHALL use a platform-neutral IPC path contract and platform-aware bac
 - **THEN** the resulting workspace item SHALL preserve the intended user-visible filename
 - **AND** collision checks SHALL use filesystem existence checks rather than hard-coded case assumptions
 
-#### Scenario: Linux clipboard limitations degrade explicitly
+#### Scenario: Linux external import remains deferred
 - **WHEN** Linux desktop clipboard integration cannot provide external file source paths
-- **THEN** the file tree SHALL provide an explicit fallback or unsupported state
+- **THEN** this change SHALL leave file-tree external import deferred
 - **AND** internal Copy, Paste, Duplicate, and Rename SHALL remain available

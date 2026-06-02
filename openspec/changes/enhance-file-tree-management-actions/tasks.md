@@ -10,14 +10,14 @@
 
 - [x] 2.1 [P0][depends:1.*][I: shared copy engine][O: `paste_workspace_item` core/helper command for same-workspace internal paste][V: Rust tests paste file/folder to root and nested folder] Add internal paste backend operation.
 - [x] 2.2 [P0][depends:1.1][I: basename validator][O: `rename_workspace_item` helper/core command returning new relative path and kind][V: Rust tests rename file, rename folder, reject conflict, reject path-like basename] Add rename backend operation.
-- [x] 2.3 [P0][depends:1.4][I: external source model + workspace target directory][O: external source DTO/contract with explicit unsupported fallback when import is deferred][V: tests or code review prove unsupported external import returns visible error and does not affect internal paste] Add external source import contract without requiring first-slice import success.
+- [x] 2.3 [P0][depends:1.4][I: external source model + workspace target directory][O: external source command/service contract returns explicit unsupported error][V: code review confirms `paste_external_workspace_items_inner` returns unsupported and does not affect internal paste] Add external source import contract without first-slice import success.
 - [x] 2.4 [P0][depends:2.1,2.2,2.3][I: new backend helpers][O: Tauri commands registered in `workspaces/commands.rs` and `command_registry.rs`][V: command compile plus service mapping tests later] Register new workspace file operation commands.
-- [x] 2.5 [P1][depends:2.4][I: remote mode branch][O: explicit remote forwarding or unsupported errors for paste/rename/external import][V: tests or code review confirm remote mode does not silently fail] Define remote mode behavior for new commands.
+- [x] 2.5 [P1][depends:2.4][I: remote mode branch][O: explicit remote forwarding or unsupported errors for paste/rename/external import contract][V: tests or code review confirm remote mode does not silently fail] Define remote mode behavior for new commands.
 
 ## 3. Frontend Service Boundary
 
 - [x] 3.1 [P0][depends:2.4][I: command names and DTOs][O: TypeScript types for file operation item kind/result/input payloads in `src/services/tauri.ts`][V: `npm run typecheck`] Add service DTOs.
-- [x] 3.2 [P0][depends:3.1][I: backend command contract][O: service wrappers for `duplicateWorkspaceItem`, paste internal, rename, and external paste/import fallback][V: `src/services/tauri.test.ts` payload mapping tests] Add Tauri service wrappers.
+- [x] 3.2 [P0][depends:3.1][I: backend command contract][O: service wrappers for `duplicateWorkspaceItem`, paste internal, rename, and external unsupported contract][V: `src/services/tauri.test.ts` payload mapping tests] Add Tauri service wrappers.
 - [x] 3.3 [P0][depends:3.2][I: existing `copyWorkspaceItem` wrapper][O: `duplicateWorkspaceItem` as the FileTreePanel-facing API and `copyWorkspaceItem` retained only as legacy duplicate compatibility][V: tests prove FileTreePanel duplicate uses `duplicateWorkspaceItem` and user-facing Copy does not call `copyWorkspaceItem`] Remove copy/duplicate naming ambiguity.
 
 ## 4. FileTreePanel Operation State And Helpers
@@ -41,7 +41,7 @@
 - [x] 6.1 [P0][depends:5.2][I: workspace root row context menu][O: root Paste target support using `targetDirectory: ""` and no root Duplicate/Rename/Move to Trash actions][V: component tests paste on root invokes backend with root target and dangerous root actions are absent] Make root node a safe paste/create target.
 - [x] 6.2 [P0][depends:4.3][I: root create/paste action results][O: root actions using shared operation feedback and refresh behavior][V: component tests cover root action failure visibility] Route root actions through shared feedback.
 - [x] 6.3 [P1][depends:5.*][I: detached FileTreePanel usage][O: detached explorer exposes same supported file management actions when workspace context exists][V: `FileTreePanel.detached.test.tsx` covers action availability] Preserve detached explorer action parity.
-- [x] 6.4 [P1][depends:6.3][I: missing workspace context or unavailable clipboard source][O: disabled/unavailable detached paste/import messaging][V: detached tests cover no backend request without source context] Add detached fallback states.
+- [x] 6.4 [P1][depends:6.3][I: missing workspace context or unavailable internal clipboard source][O: disabled/unavailable detached paste messaging][V: detached tests cover no backend request without source context] Add detached fallback states.
 
 ## 7. External Source Import Slice
 

@@ -12,17 +12,17 @@ The detached file explorer SHALL provide the same workspace file management acti
 - **THEN** the detached explorer SHALL refresh its file tree state
 - **AND** the action result SHALL be visible through the same operation feedback model as the embedded file tree
 
-### Requirement: Detached File Explorer SHALL Degrade Gracefully When Clipboard Or Import Context Is Unavailable
-The detached file explorer SHALL not silently fail when cross-window clipboard state or external file import capabilities are unavailable.
+### Requirement: Detached File Explorer SHALL Degrade Gracefully When Clipboard Context Is Unavailable
+The detached file explorer SHALL not silently fail when internal file tree clipboard state or workspace context is unavailable.
 
 #### Scenario: Detached paste without internal clipboard is unavailable
 - **WHEN** the detached explorer has no valid internal file tree clipboard item for the active workspace
 - **THEN** Paste SHALL be disabled or SHALL show a recoverable unavailable message
 - **AND** the detached explorer MUST NOT dispatch a backend paste request with missing source context
 
-#### Scenario: Detached external paste unsupported by platform
-- **WHEN** the user requests external file paste from the detached explorer on a platform where file clipboard paths cannot be read reliably
-- **THEN** the detached explorer SHALL show an unsupported or fallback message
+#### Scenario: Detached external file import is not exposed in this slice
+- **WHEN** the detached explorer is rendered in the current implementation
+- **THEN** it SHALL NOT expose a new external file import action
 - **AND** internal workspace management actions SHALL remain usable
 
 #### Scenario: Detached explorer missing workspace context

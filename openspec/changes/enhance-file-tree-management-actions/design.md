@@ -19,7 +19,7 @@
 
 - 在文件树中实现一致的 `Copy`、`Paste`、`Rename`、`Duplicate` 管理语义。
 - 让 `Duplicate` 成为原子快捷动作，底层复用 copy/paste engine，但不污染 internal clipboard。
-- 设计可扩展的 `PasteSource` model，支持 internal workspace source，并为 external file/folder import 留出稳定 contract。
+- 支持 internal workspace source；external file/folder import 仅保留 unsupported command/service contract，不作为本轮 UI 能力。
 - 把 path safety、collision naming、recursive copy、rename conflict handling 收敛到 Rust backend。
 - 给 frontend 增加 operation pending/success/error feedback，替换 silent catch。
 - 让 root row、folder row、file row、detached file explorer 使用一致 target resolution 规则。
@@ -32,7 +32,7 @@
 - 不实现 clipboard text -> new file。
 - 不做危险 overwrite。
 - 不引入外部文件管理依赖。
-- 不把 OS clipboard file paste 作为首版唯一 external import 能力。
+- 不实现 OS clipboard file paste 或 file-tree external drag/drop import。
 
 ## Decisions
 
@@ -76,14 +76,16 @@ duplicateWorkspaceItem(input: {
 
 Frontend UI MUST use `duplicateWorkspaceItem` for Duplicate semantics. `copyWorkspaceItem` can remain only as a backward-compatible legacy wrapper for the existing backend `copy_workspace_item` command, but new FileTreePanel code MUST NOT call it for user-facing Copy. In this design, user-facing Copy always means internal clipboard state and never means filesystem mutation.
 
+`pasteExternalWorkspaceItems` exists only as an unsupported compatibility contract in the current code baseline. FileTreePanel MUST NOT call it and MUST NOT register a new external file-tree drop/import UI in this change.
+
 Alternatives considered:
 
 - 前端直接拼接 target path 后调用现有 write/copy command。拒绝：path traversal、collision naming、平台差异和错误处理会分散。
 - 复用 OS shell copy/move。拒绝：CI 不稳定，平台差异不可控。
 
-### Decision 2: Shared Rust copy engine for duplicate, internal paste, and external import
+### Decision 2: Shared Rust copy engine for duplicate and internal paste
 
-Backend 应抽出一个 shared copy engine，而不是为 duplicate/internal paste/external import 写三套逻辑。
+Backend 应抽出一个 shared copy engine，而不是为 duplicate/internal paste 写两套逻辑。External import 当前为 unsupported contract，不进入本轮 copy engine。
 
 推荐内部 helper 结构：
 
@@ -275,9 +277,9 @@ Alternatives considered:
 - Toast-only global notice。可用但不够贴近 file tree context。
 - Console-only logging。拒绝：用户仍然感知为无响应。
 
-### Decision 8: External source support is phased behind a common contract
+### Decision 8: External source support is deferred behind an unsupported contract
 
-External source support should use a common backend shape even if implementation lands in phases.
+External source support is not a delivered file-tree capability in this slice. The current code baseline keeps a backend/service command shape that returns an explicit unsupported error, while FileTreePanel does not expose an external import entrypoint.
 
 Conceptual source union:
 
@@ -287,18 +289,18 @@ type FilePasteSource =
   | { kind: "external"; absolutePaths: string[] };
 ```
 
-Implementation phases:
+Current calibrated status:
 
-1. P0: Internal workspace paste plus external source contract and explicit unavailable fallback.
-2. P1: Drag/drop external file/folder import when platform payloads are available.
-3. P2: OS clipboard file paste where platform support is reliable.
+1. Delivered: internal workspace paste.
+2. Present but unavailable: external command/service contract returning unsupported.
+3. Not delivered: file-tree external drag/drop import.
+4. Not delivered: OS clipboard file paste.
 
 Rationale:
 
-- Drag/drop is usually easier to reason about in Tauri/browser contexts than OS clipboard file lists.
-- Linux clipboard file protocol differs by desktop environment, so clipboard paste cannot be the only external path.
-- Backend copy engine can treat external absolute paths and workspace internal paths consistently after source validation.
-- The first implementation can satisfy the spec by exposing the contract and fallback without claiming OS clipboard file paste support.
+- A previous file-tree external drag bridge regressed normal composer external file drops.
+- Current code must preserve composer drop behavior and internal file-tree row drag behavior.
+- Future external import requires a separate compatibility design and platform matrix before implementation.
 
 ### Decision 9: Path normalization remains `/` at IPC boundary
 
@@ -455,7 +457,7 @@ Focused tests in `FileTreePanel.run.test.tsx`:
 Detached tests:
 
 - Detached file explorer keeps management actions when workspace context exists.
-- Unsupported external paste fallback is visible if platform source unavailable.
+- Paste without valid internal clipboard context is unavailable and does not dispatch backend mutation.
 
 ### Service tests
 
@@ -485,7 +487,7 @@ Focused tests in `workspaces/files.rs` or a dedicated module:
 - traversal rejects.
 - Windows-style separators normalize.
 - source copied into descendant rejects.
-- external absolute source imports into workspace target.
+- external import command returns explicit unsupported error and is not wired from FileTreePanel.
 
 ## Risks / Trade-offs
 

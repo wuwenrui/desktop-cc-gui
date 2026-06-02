@@ -34,7 +34,7 @@ Issue #644 暴露的不是单个菜单项缺失，而是文件树作为桌面客
 - `Duplicate` 必须被定义为 `Copy + Paste to original parent` 的原子快捷动作。
 - `Duplicate` 不得污染 internal clipboard，也不得覆盖用户当前复制状态。
 - `Paste` 必须支持 internal workspace source。
-- `Paste` 必须为 external file/folder source 预留统一 source model；首版 P0 只要求 contract 和显式 fallback，drag/drop import 可作为 P1 实现，OS clipboard file paste 可作为 P2 平台能力。
+- `Paste` 本轮只支持 internal workspace source；external file/folder source 仅保留 backend/service unsupported contract，不提供文件树外部导入 UI。
 - 文件树 root row 必须可作为 create/paste target。
 - 文件树 root row 只作为目录 target，不允许执行 `Duplicate`、`Rename`、`Move to Trash` 这类可能破坏 workspace root 的危险动作。
 - 普通文件夹 row 必须可作为 create/paste target。
@@ -61,7 +61,7 @@ Issue #644 暴露的不是单个菜单项缺失，而是文件树作为桌面客
 - 不实现危险覆盖确认流程；本变更默认采用 collision-safe rename，不覆盖已有文件。
 - 不允许复制、粘贴、重命名、写入 `.git` 内部路径。
 - 不引入 shell command 作为核心文件操作路径。
-- 不把平台 clipboard 的不可控行为作为唯一外部导入路径；必须保留 drag/drop fallback 或 unsupported feedback。
+- 不在本轮实现文件树 external drag/drop 或 OS clipboard file paste；该能力必须另立变更并先证明不会破坏 composer 外部文件拖拽。
 
 ## 用户故事
 
@@ -111,16 +111,16 @@ Issue #644 暴露的不是单个菜单项缺失，而是文件树作为桌面客
 - 输入为空、包含路径分隔符、尝试逃逸 workspace、命中 `.git` 时必须拒绝。
 - 目标名称冲突时必须拒绝并展示错误；Rename 不使用自动 suffix，避免用户误解为 move/copy。
 
-### Story 5: 外部文件导入
+### Story 5: 外部文件导入延期
 
-用户从 Finder / Explorer / Linux file manager 复制或拖拽一个文件到文件树中的 `assets/`。该能力按平台可用性分阶段落地：P0 定义 external source contract 和 fallback，P1 优先支持 drag/drop import，P2 再评估 OS clipboard file paste。
+用户从 Finder / Explorer / Linux file manager 复制或拖拽一个文件到文件树中的 `assets/`。当前代码基准下，该能力不作为本变更交付能力；只保留 `paste_external_workspace_items` 的 unsupported contract，避免文件树拖拽链路拦截 composer 的正常外部文件拖拽。
 
 期望：
 
-- 当 external source import 已实现且平台 payload 可用时，文件被导入 `assets/`。
-- 如果平台 clipboard 无法稳定提供文件路径，则 UI 提示使用 drag/drop 导入。
-- 导入失败时显示具体失败对象和原因。
-- 外部 source 不得让 target 路径逃逸 workspace。
+- 文件树不注册新的 external drop handler。
+- 当前 UI 不展示外部导入入口，不引导用户把外部文件拖到文件树。
+- 如果未来重新实现 external import，必须另立 OpenSpec 变更并验证 Windows/macOS/Linux 与 composer drop 兼容性。
+- 保留的 backend/service contract 当前返回明确 unsupported error，不影响 internal Copy/Paste/Rename/Duplicate。
 
 ### Story 6: 独立文件窗口
 
@@ -189,13 +189,10 @@ Issue #644 暴露的不是单个菜单项缺失，而是文件树作为桌面客
 
 ### External source behavior
 
-- 定义 `PasteSource` source model：
-  - `workspace`: 当前 workspace 内部 source
-  - `external`: 外部 absolute source paths
-- P0 初期实现必须支持 internal source，并定义 external source contract 与 unavailable fallback。
-- P1 优先通过 drag/drop import 支持 external file/folder source。
-- P2 再评估 OS clipboard file paste；如果平台能力不足，必须 graceful fallback。
-- drag/drop import 是 external source 的首选稳定 fallback。
+- 当前实现支持 `workspace` internal source。
+- `external` absolute source paths 只保留 command/service unsupported contract，不作为文件树 UI 能力。
+- 本变更不得新增文件树 external drag/drop handler，也不得拦截 composer 外部文件拖拽。
+- OS clipboard file paste 和 file-tree external import 均延期到后续独立变更。
 
 ## 技术方案选项与取舍
 
@@ -289,7 +286,7 @@ folder copy    -> folder copy 1
 - 无 extension 文件按 basename 处理。
 - folder 不使用 extension 语义。
 - suffix counter 必须有上限，超过时返回可读错误。
-- 同一 helper 必须被 duplicate、paste internal、paste external 复用。
+- 同一 helper 必须被 duplicate 和 paste internal 复用；paste external 当前为 unsupported contract，不进入 copy engine。
 
 ## Cross-platform Compatibility
 
@@ -306,14 +303,14 @@ folder copy    -> folder copy 1
 
 - 必须支持 Unicode 文件名。
 - 不依赖 Finder-only API 作为核心 copy/rename path。
-- 外部 Finder clipboard file source 如果不可稳定读取，必须允许 drag/drop import fallback。
+- 外部 Finder clipboard file source 不在本轮实现；不得用文件树 drag/drop fallback 影响 composer 外部拖拽。
 - 不假设大小写敏感；collision 判断以 filesystem exists 为准。
 - Reveal action 可以继续使用已有 opener capability，但文件 mutation 不依赖 Finder。
 
 ### Linux
 
 - 不依赖单一 desktop environment clipboard protocol。
-- Clipboard file paste 不稳定时必须显示 unsupported/fallback，推荐 drag/drop import。
+- Clipboard file paste 不在本轮实现；文件树不提供 external drag/drop fallback。
 - 文件 mutation 不依赖 `cp`、`mv`、`xdg-*` shell command。
 - symlink、permission denied、read-only filesystem 等错误必须返回明确 message。
 
@@ -323,7 +320,7 @@ folder copy    -> folder copy 1
 - 三端都必须拒绝 path traversal。
 - 三端都必须 reject directory pasted into itself or descendant。
 - 三端都必须使用相同 collision suffix contract。
-- 三端都必须在 partial failure 时报告失败项。
+- 三端 external import partial failure UI 不在本轮实现；internal file operations 必须报告失败。
 
 ## CI / Validation Gate
 
@@ -386,18 +383,18 @@ Implementation verification notes must explicitly state coverage for:
 
 - Windows separator/prefix rejection.
 - macOS Unicode filename path.
-- Linux unsupported clipboard fallback or drag/drop fallback.
+- Linux external clipboard/file-tree import deferred note.
 
 ## Capabilities
 
 ### New Capabilities
 
-- `workspace-filetree-management-actions`: Defines workspace file tree management actions for files and folders, including copy, paste, rename, duplicate, create, trash, error feedback, path safety, collision naming, external source ingress, and cross-platform compatibility.
+- `workspace-filetree-management-actions`: Defines workspace file tree management actions for files and folders, including copy, paste, rename, duplicate, create, trash, error feedback, path safety, collision naming, explicit external-import deferral, and cross-platform compatibility.
 
 ### Modified Capabilities
 
 - `workspace-filetree-root-node`: Root row becomes a valid management target for paste/create operations and must follow the same selection and context-menu semantics as folder targets.
-- `detached-file-explorer`: Detached file explorer must preserve file management actions where the workspace context is available, and must expose graceful fallback where platform clipboard/import support is unavailable.
+- `detached-file-explorer`: Detached file explorer must preserve file management actions where the workspace context is available, and must avoid silent failure when clipboard context is unavailable.
 
 ## Impact
 
@@ -433,7 +430,7 @@ Implementation verification notes must explicitly state coverage for:
 | Risk | Impact | Mitigation |
 |---|---|---|
 | Large directory copy blocks runtime | UI stalls or backend task starvation | Run recursive copy in blocking IO path; return pending state in UI |
-| Clipboard file paths differ across OS | External paste unreliable | Treat OS clipboard file paste as optional source; provide drag/drop fallback |
+| File-tree external drag/drop intercepts composer drop | Existing external file-to-chat flow regresses | Remove external file-tree import from this slice; future work needs separate compatibility design |
 | Symlink escapes workspace | Security issue | Canonicalize source/target and reject escape |
 | Rename overwrites existing path | Data loss | Reject conflicts or use explicit collision-safe copy only; never silent overwrite |
 | Duplicate and Paste drift | Different suffix/error behavior | Share backend copy engine and collision helper |
@@ -446,8 +443,8 @@ Implementation verification notes must explicitly state coverage for:
 2. Implement backend shared file operation helpers and focused Rust tests.
 3. Add service wrappers and service mapping tests.
 4. Add FileTreePanel state/actions and UI tests.
-5. Add external source contract; implement internal source first if needed.
-6. Add drag/drop or clipboard external source support according to platform feasibility.
+5. Keep external source import as unsupported contract only; do not add file-tree external drop UI.
+6. Record external file-tree import as a follow-up change that must prove composer drop compatibility.
 7. Run focused validation and record platform compatibility evidence.
 
 ## Acceptance Criteria
@@ -461,14 +458,14 @@ Implementation verification notes must explicitly state coverage for:
 - `.git`、path traversal、absolute/prefix path、descendant self-copy 都会被后端拒绝。
 - 所有新增文件操作失败时，用户能看到可读错误，不再 silent fail。
 - 文件操作成功后文件树刷新，并尽量选中新路径。
-- external file/folder source 有明确 contract；不可用平台显示 fallback，不静默失败。
+- external file/folder source 当前为 unsupported contract，文件树不提供外部导入入口，不影响 composer 外部文件拖拽。
 - Windows/macOS/Linux 的 path normalization、安全拒绝和 collision naming 行为一致。
 - OpenSpec strict validation 通过。
 - Frontend focused tests、service mapping tests、Rust focused tests 覆盖新增 contract。
 
-## Open Questions
+## Resolved Calibration Notes
 
-- OS clipboard file paste 是否在首版实现，还是首版只实现 drag/drop external import fallback？
-- internal clipboard 是否需要跨 detached explorer window 共享，还是先限定当前窗口？
-- Rename 目标冲突时应该直接拒绝，还是允许用户选择自动 suffix？建议首版直接拒绝，避免 rename 语义不透明。
-- 批量 external paste 是否需要 partial success UI？建议 backend 返回 per-item result，首版 UI 可以展示 summary。
+- OS clipboard file paste 和 file-tree external drag/drop import 本轮均不实现。
+- Internal clipboard 当前限定在 FileTreePanel 实例内，跨窗口共享后续单独设计。
+- Rename 目标冲突当前直接拒绝，不自动 suffix。
+- 批量 external paste / partial success UI 本轮不实现。
