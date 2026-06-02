@@ -47,3 +47,10 @@
 
 - **new-api provider**：首启向导调用上游已有命令 `vendor_add_claude_provider` + `vendor_switch_claude_provider` 写入 `~/.claude/settings.json`，**不改** `src/features/vendors/types.ts` 的预设数组。
 - **court-crawler MCP**：写入 `~/.claude.json` 的 `mcpServers`(上游对此只读、且在 PROTECTED_SYSTEM_FIELDS，切 provider 不会动它)。
+
+
+## skill 市场入口(补记)
+- `src/features/app/components/Sidebar.tsx`: 主菜单 sidebar-primary-nav 搜索项后插入 `<SkillMarketNavItem />` + import
+- `src/features/app/components/SidebarMarketLinks.tsx`: rail「MCP 技能市场」按钮 onClick 接 SkillMarketPanel(原弹 comingSoon)
+- `src/features/app/components/MainTopbar.tsx`: 顶栏 SkillMarketButton(备用入口)
+- 新增 `src/features/skill-market/*`(SkillMarketNavItem/SkillMarketButton/SkillMarketPanel/api/platformConfig) + `src-tauri/src/skill_market.rs`
