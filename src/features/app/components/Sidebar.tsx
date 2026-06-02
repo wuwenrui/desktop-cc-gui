@@ -8,6 +8,7 @@ import type {
   WorkspaceInfo,
 } from "../../../types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { SkillMarketNavItem } from "../../skill-market/SkillMarketNavItem";
 import type { MouseEvent as ReactMouseEvent, ReactNode, RefObject } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -2160,6 +2161,7 @@ export function Sidebar({
                 {quickSearchShortcutLabel}
               </span>
             </button>
+            <SkillMarketNavItem />
           </nav>
           <ScrollArea
             className={`sidebar-content-column${scrollFade.top ? " fade-top" : ""}${
