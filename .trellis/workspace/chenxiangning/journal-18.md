@@ -771,3 +771,43 @@ Validation performed before commit:
 ### Next Steps
 
 - None - task complete
+
+
+## Session 669: 增强文件树文件管理能力
+
+**Date**: 2026-06-02
+**Task**: 增强文件树文件管理能力
+**Branch**: `feature/v0.5.5`
+
+### Summary
+
+实现文件树复制、粘贴、重命名、创建副本能力，补齐边界校验与跨平台验证，并拆分线程事件诊断模块解除 large-file hard gate。
+
+### Main Changes
+
+- OpenSpec change: enhance-file-tree-management-actions
+- 实现 backend duplicate/paste/rename Tauri commands 与 service wrappers。
+- FileTreePanel 增加内部 clipboard、Paste/Rename/Duplicate UI、可见 operation notice、root 安全操作。
+- Rust workspace file operations 增加路径逃逸、.git、self/descendant copy、Windows reserved basename 等边界校验。
+- 修复 paste 命名语义：目标目录无冲突时保留原名，冲突时使用 copy suffix；duplicate 始终使用 copy suffix。
+- 抽出 threadAppServerEventDiagnostics，解除 useThreadEventHandlers large-file hard gate。
+- 验证通过：typecheck、focused FileTreePanel Vitest、cargo test workspace_item、large-file gate、heavy-test-noise、runtime-contracts、OpenSpec strict validate。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8cbb022b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
