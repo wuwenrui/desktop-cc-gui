@@ -189,6 +189,67 @@ const CROSS_WINDOW_TREE_DRAG_REBROADCAST_THROTTLE_MS = 120;
 const EMPTY_DIRECTORY_METADATA: WorkspaceDirectoryEntry[] = [];
 const FILE_TREE_VIRTUALIZATION_THRESHOLD = 250;
 
+function isSameOrDescendantFileTreePath(path: string, rootPath: string) {
+  return path === rootPath || path.startsWith(`${rootPath}/`);
+}
+
+function isSuppressedFileTreePath(path: string, suppressedPaths: Set<string>) {
+  for (const suppressedPath of suppressedPaths) {
+    if (isSameOrDescendantFileTreePath(path, suppressedPath)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function filterSuppressedFileTreePaths(paths: Set<string>, suppressedPaths: Set<string>) {
+  if (suppressedPaths.size === 0 || paths.size === 0) {
+    return paths;
+  }
+  let changed = false;
+  const next = new Set<string>();
+  paths.forEach((path) => {
+    if (isSuppressedFileTreePath(path, suppressedPaths)) {
+      changed = true;
+      return;
+    }
+    next.add(path);
+  });
+  return changed ? next : paths;
+}
+
+function filterDeletedFileTreePathFromSet(paths: Set<string>, deletedPath: string) {
+  if (paths.size === 0) {
+    return paths;
+  }
+  let changed = false;
+  const next = new Set<string>();
+  paths.forEach((path) => {
+    if (isSameOrDescendantFileTreePath(path, deletedPath)) {
+      changed = true;
+      return;
+    }
+    next.add(path);
+  });
+  return changed ? next : paths;
+}
+
+function filterDeletedFileTreePathFromMap<T>(valuesByPath: Map<string, T>, deletedPath: string) {
+  if (valuesByPath.size === 0) {
+    return valuesByPath;
+  }
+  let changed = false;
+  const next = new Map<string, T>();
+  valuesByPath.forEach((value, path) => {
+    if (isSameOrDescendantFileTreePath(path, deletedPath)) {
+      changed = true;
+      return;
+    }
+    next.set(path, value);
+  });
+  return changed ? next : valuesByPath;
+}
+
 function setFileTreeDragBridge(paths: string[]) {
   if (typeof window === "undefined") {
     return;
@@ -861,6 +922,7 @@ export function FileTreePanel({
   const [lazyDirectoryLoadErrors, setLazyDirectoryLoadErrors] = useState<Map<string, string>>(
     new Map(),
   );
+  const [suppressedDeletedPaths, setSuppressedDeletedPaths] = useState<Set<string>>(new Set());
   const loadedLazyDirectoriesRef = useRef<Set<string>>(new Set());
   const loadingLazyDirectoriesRef = useRef<Set<string>>(new Set());
 
@@ -886,35 +948,37 @@ export function FileTreePanel({
   const mergedFiles = useMemo(() => {
     const next = new Set<string>(files);
     lazyFiles.forEach((path) => next.add(path));
-    return Array.from(next);
-  }, [files, lazyFiles]);
+    return Array.from(next).filter((path) => !isSuppressedFileTreePath(path, suppressedDeletedPaths));
+  }, [files, lazyFiles, suppressedDeletedPaths]);
   const mergedDirectories = useMemo(() => {
     const next = new Set<string>(directoryEntries);
     lazyDirectories.forEach((path) => next.add(path));
-    return Array.from(next);
-  }, [directoryEntries, lazyDirectories]);
+    return Array.from(next).filter((path) => !isSuppressedFileTreePath(path, suppressedDeletedPaths));
+  }, [directoryEntries, lazyDirectories, suppressedDeletedPaths]);
   const mergedGitignoredFiles = useMemo(() => {
     const next = new Set<string>(ignoredFileEntries);
     lazyGitignoredFiles.forEach((path) => next.add(path));
-    return next;
-  }, [ignoredFileEntries, lazyGitignoredFiles]);
+    return filterSuppressedFileTreePaths(next, suppressedDeletedPaths);
+  }, [ignoredFileEntries, lazyGitignoredFiles, suppressedDeletedPaths]);
   const mergedGitignoredDirectories = useMemo(() => {
     const next = new Set<string>(ignoredDirectoryEntries);
     lazyGitignoredDirectories.forEach((path) => next.add(path));
-    return next;
-  }, [ignoredDirectoryEntries, lazyGitignoredDirectories]);
+    return filterSuppressedFileTreePaths(next, suppressedDeletedPaths);
+  }, [ignoredDirectoryEntries, lazyGitignoredDirectories, suppressedDeletedPaths]);
   const directoryMetadataByPath = useMemo(() => {
     const next = new Map<string, WorkspaceDirectoryEntry>();
     directoryMetadata.forEach((entry) => {
-      if (entry.path) {
+      if (entry.path && !isSuppressedFileTreePath(entry.path, suppressedDeletedPaths)) {
         next.set(entry.path, entry);
       }
     });
     lazyDirectoryMetadata.forEach((entry, path) => {
-      next.set(path, entry);
+      if (!isSuppressedFileTreePath(path, suppressedDeletedPaths)) {
+        next.set(path, entry);
+      }
     });
     return next;
-  }, [directoryMetadata, lazyDirectoryMetadata]);
+  }, [directoryMetadata, lazyDirectoryMetadata, suppressedDeletedPaths]);
   const seededLazyLoadableDirectories = useMemo(() => {
     const result = new Set<string>();
     mergedDirectories.forEach((path) => {
@@ -1235,6 +1299,7 @@ export function FileTreePanel({
     setNewFileName("");
     setNewFolderParent(null);
     setNewFolderName("");
+    setSuppressedDeletedPaths(new Set());
     setRootExpanded(true);
     setSelectedNodePath(null);
     setSelectedNodeType(null);
@@ -1626,6 +1691,104 @@ export function FileTreePanel({
     });
   }, []);
 
+  useEffect(() => {
+    setSuppressedDeletedPaths((prev) => {
+      if (prev.size === 0) {
+        return prev;
+      }
+      let changed = false;
+      const next = new Set(prev);
+      prev.forEach((deletedPath) => {
+        const stillPresent =
+          files.some((path) => isSameOrDescendantFileTreePath(path, deletedPath)) ||
+          directoryEntries.some((path) => isSameOrDescendantFileTreePath(path, deletedPath)) ||
+          Array.from(lazyFiles).some((path) => isSameOrDescendantFileTreePath(path, deletedPath)) ||
+          Array.from(lazyDirectories).some((path) =>
+            isSameOrDescendantFileTreePath(path, deletedPath),
+          );
+        if (!stillPresent) {
+          next.delete(deletedPath);
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [directoryEntries, files, lazyDirectories, lazyFiles]);
+
+  const purgeDeletedFileTreePath = useCallback(
+    (deletedPath: string) => {
+      setSuppressedDeletedPaths((prev) => {
+        if (prev.has(deletedPath)) {
+          return prev;
+        }
+        return new Set(prev).add(deletedPath);
+      });
+      setExpandedFolders((prev) => filterDeletedFileTreePathFromSet(prev, deletedPath));
+      setLazyFiles((prev) => filterDeletedFileTreePathFromSet(prev, deletedPath));
+      setLazyDirectories((prev) => filterDeletedFileTreePathFromSet(prev, deletedPath));
+      setLazyGitignoredFiles((prev) => filterDeletedFileTreePathFromSet(prev, deletedPath));
+      setLazyGitignoredDirectories((prev) => filterDeletedFileTreePathFromSet(prev, deletedPath));
+      setLazyLoadableDirectories((prev) => filterDeletedFileTreePathFromSet(prev, deletedPath));
+      setLazyDirectoryMetadata((prev) => filterDeletedFileTreePathFromMap(prev, deletedPath));
+      setLoadedLazyDirectories((prev) => filterDeletedFileTreePathFromSet(prev, deletedPath));
+      setLoadingLazyDirectories((prev) => filterDeletedFileTreePathFromSet(prev, deletedPath));
+      setLazyDirectoryLoadErrors((prev) => filterDeletedFileTreePathFromMap(prev, deletedPath));
+      loadedLazyDirectoriesRef.current = filterDeletedFileTreePathFromSet(
+        loadedLazyDirectoriesRef.current,
+        deletedPath,
+      );
+      loadingLazyDirectoriesRef.current = filterDeletedFileTreePathFromSet(
+        loadingLazyDirectoriesRef.current,
+        deletedPath,
+      );
+      setSelectedNodePaths((prev) => {
+        const next = filterDeletedFileTreePathFromSet(prev, deletedPath);
+        if (next === prev) {
+          return prev;
+        }
+        const nextPrimaryPath =
+          selectedNodePath && next.has(selectedNodePath)
+            ? selectedNodePath
+            : visibleTreePathOrder.find((path) => next.has(path)) ?? null;
+        setSelectedNodePath(nextPrimaryPath);
+        setSelectedNodeType(
+          nextPrimaryPath
+            ? (visibleTreePathTypeMap.get(nextPrimaryPath) === "file" ? "file" : "folder")
+            : null,
+        );
+        if (
+          selectionAnchorPathRef.current &&
+          isSameOrDescendantFileTreePath(selectionAnchorPathRef.current, deletedPath)
+        ) {
+          selectionAnchorPathRef.current = nextPrimaryPath;
+        }
+        return next;
+      });
+      setFileTreeClipboardItem((prev) =>
+        prev && isSameOrDescendantFileTreePath(prev.path, deletedPath) ? null : prev,
+      );
+      setRenamePrompt((prev) =>
+        prev && isSameOrDescendantFileTreePath(prev.path, deletedPath) ? null : prev,
+      );
+      setNewFileParent((prev) =>
+        prev && isSameOrDescendantFileTreePath(prev, deletedPath) ? null : prev,
+      );
+      setNewFolderParent((prev) =>
+        prev && isSameOrDescendantFileTreePath(prev, deletedPath) ? null : prev,
+      );
+      if (previewPath && isSameOrDescendantFileTreePath(previewPath, deletedPath)) {
+        closePreview();
+      }
+    },
+    [
+      closePreview,
+      previewPath,
+      selectedNodePath,
+      visibleTreePathOrder,
+      visibleTreePathTypeMap,
+    ],
+  );
+
   const trashItem = useCallback(
     async (relativePath: string, isFolder: boolean) => {
       const name = relativePath.split("/").pop() ?? relativePath;
@@ -1646,27 +1809,8 @@ export function FileTreePanel({
 
       try {
         await trashWorkspaceItem(workspaceId, relativePath);
+        purgeDeletedFileTreePath(relativePath);
         showOperationNotice("success", t("files.trashComplete"));
-        setSelectedNodePaths((prev) => {
-          if (!prev.has(relativePath)) {
-            return prev;
-          }
-          const next = new Set(prev);
-          next.delete(relativePath);
-          const nextPrimaryPath = next.size > 0
-            ? visibleTreePathOrder.find((path) => next.has(path)) ?? null
-            : null;
-          setSelectedNodePath(nextPrimaryPath);
-          setSelectedNodeType(
-            nextPrimaryPath
-              ? (visibleTreePathTypeMap.get(nextPrimaryPath) === "file" ? "file" : "folder")
-              : null,
-          );
-          if (selectionAnchorPathRef.current === relativePath) {
-            selectionAnchorPathRef.current = nextPrimaryPath;
-          }
-          return next;
-        });
         onRefreshFiles?.();
       } catch (error) {
         showOperationNotice("error", t("files.trashFailed", { message: normalizeOperationError(error) }));
@@ -1675,10 +1819,9 @@ export function FileTreePanel({
     [
       normalizeOperationError,
       onRefreshFiles,
+      purgeDeletedFileTreePath,
       showOperationNotice,
       t,
-      visibleTreePathOrder,
-      visibleTreePathTypeMap,
       workspaceId,
     ],
   );

@@ -490,7 +490,7 @@ Focused tests in `workspaces/files.rs` or a dedicated module:
 ## Risks / Trade-offs
 
 - [Risk] Recursive directory copy can be slow for large directories. → Mitigation: run in blocking IO path, show pending state, avoid locking UI state globally.
-- [Risk] OS clipboard file paste differs across platforms. → Mitigation: use common external source model; implement drag/drop fallback; show unsupported feedback instead of silent fail.
+- [Risk] External file drag/drop differs across app panes and can intercept chat-composer drops. → Mitigation: remove file-tree external import from this slice; preserve normal composer external drop behavior and revisit file-tree import only behind a separate compatibility design.
 - [Risk] Symlinks can escape workspace. → Mitigation: canonicalize source and target; reject operations where canonical path escapes workspace root.
 - [Risk] Rename semantics conflict with collision suffix behavior. → Mitigation: duplicate/paste use suffix; rename rejects conflict for clarity.
 - [Risk] Existing `copy_workspace_item` name is semantically misleading. → Mitigation: either add `duplicate_workspace_item` wrapper or document `copy_workspace_item` as backward-compatible duplicate command.
@@ -500,23 +500,29 @@ Focused tests in `workspaces/files.rs` or a dedicated module:
 ## Migration Plan
 
 1. Add backend DTOs and shared file operation helpers without changing UI.
-2. Add or alias Tauri commands for duplicate, paste, rename, and external paste.
+2. Add or alias Tauri commands for duplicate, paste, and rename.
 3. Add service wrappers and mapping tests.
 4. Update FileTreePanel menu and operation state.
 5. Replace silent catch paths with visible operation notices.
 6. Add focused frontend and Rust tests.
-7. Add external import source support in a separate implementation slice if platform details require additional investigation.
+7. Keep external source import out of this slice after compatibility rollback.
 8. Run OpenSpec validation and focused CI gates.
 
 Rollback strategy:
 
 - Keep existing `copy_workspace_item` behavior intact until new commands are proven.
 - UI changes can be reverted independently because backend commands are additive.
-- If external source proves unstable, keep internal Copy/Paste/Rename/Duplicate and mark external paste as unsupported until follow-up.
+- External file-tree import has been removed from this slice; a future implementation must not reuse the removed drag bridge without proving composer external drop compatibility.
 
-## Open Questions
+## Resolved Platform Decisions
 
-- Should the first implementation expose OS clipboard file paste, or only drag/drop external import plus internal paste?
-- Should internal clipboard be scoped per FileTreePanel instance or shared across app windows?
-- Should `copy_workspace_item` be renamed to `duplicate_workspace_item` at service layer while preserving backend command compatibility?
-- Should batch external paste return all-or-nothing or partial success results? Recommended: partial per-item result for external import, atomic single result for internal paste/duplicate/rename.
+- First implementation exposes internal Copy/Paste/Rename/Duplicate only; external file-tree import is deferred because the attempted drag bridge regressed normal composer external file drops.
+- OS clipboard file paste remains out of scope because Tauri WebView/browser clipboard APIs do not reliably expose file paths on Windows/macOS/Linux.
+- Internal clipboard is scoped per FileTreePanel instance; cross-window shared clipboard can be added as a later enhancement.
+- `copy_workspace_item` remains a backward-compatible duplicate command; FileTreePanel uses `duplicate_workspace_item`.
+- Internal paste/duplicate/rename remain atomic single-item operations.
+
+## Archive delta semantics note
+
+- `workspace-filetree-root-node` is an additive modified-capability delta: it adds safe root create/paste behavior and explicitly blocks dangerous root duplicate/rename/trash actions without replacing the existing root node capability.
+- `detached-file-explorer` is an additive modified-capability delta: it preserves management-action parity where workspace context exists and adds fallback states for missing clipboard or unsupported platform import sources without replacing existing detached explorer behavior.

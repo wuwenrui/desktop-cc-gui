@@ -961,6 +961,45 @@ describe("FileTreePanel run action isolation", () => {
     expect(onRefreshFiles).toHaveBeenCalledTimes(2);
   });
 
+  it("removes a trashed folder subtree from the visible tree before parent refresh settles", async () => {
+    const onRefreshFiles = vi.fn();
+
+    render(
+      <FileTreePanel
+        workspaceId="workspace-1"
+        workspacePath="/tmp/workspace"
+        files={["target/debug/app"]}
+        directories={["target", "target/debug"]}
+        isLoading={false}
+        filePanelMode="files"
+        onFilePanelModeChange={() => undefined}
+        onOpenFile={() => undefined}
+        onInsertText={() => undefined}
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={() => undefined}
+        onRefreshFiles={onRefreshFiles}
+        gitStatusFiles={[]}
+        gitignoredFiles={new Set<string>()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /target/ }));
+    fireEvent.click(screen.getByRole("button", { name: "files.deleteItem" }));
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("trash_workspace_item", {
+        workspaceId: "workspace-1",
+        path: "target",
+      });
+    });
+
+    expect(screen.queryByRole("button", { name: "target" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /debug/ })).toBeNull();
+    expect(onRefreshFiles).toHaveBeenCalledTimes(1);
+  });
+
   it("creates new folder from root action", async () => {
     const onRefreshFiles = vi.fn();
 
