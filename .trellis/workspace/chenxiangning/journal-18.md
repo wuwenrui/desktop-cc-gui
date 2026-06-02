@@ -908,3 +908,48 @@ Validation performed before commit:
 ### Next Steps
 
 - None - task complete
+
+
+## Session 672: OpenSpec 文件树管理范围校准
+
+**Date**: 2026-06-02
+**Task**: OpenSpec 文件树管理范围校准
+**Branch**: `feature/v0.5.5`
+
+### Summary
+
+以当前代码为基准校准 enhance-file-tree-management-actions，明确外部文件树导入延期且不做主 spec 同步。
+
+### Main Changes
+
+## 本次记录
+- 按用户要求以当前代码为事实源校准 `enhance-file-tree-management-actions`。
+- 未执行主 specs 同步/归档，仅调整 change 内 proposal/design/tasks/delta specs。
+- 将 external file-tree import 从已交付/目标能力降级为：当前仅保留 unsupported command/service contract，文件树 UI 不注册外部导入入口。
+- 明确未来 external import 需另立变更，并验证 composer 外部文件 drop 与 Windows/macOS/Linux 兼容性。
+
+## 验证
+- `npx openspec validate enhance-file-tree-management-actions --strict --no-interactive`: pass
+
+## 注意
+- 本次提交只包含 OpenSpec change 文档。
+- 按用户选择保留未提交代码脏改：`src/features/files/components/FileTreePanel.tsx`、`src/features/files/components/FileTreePanel.run.test.tsx`。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b2688517` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
