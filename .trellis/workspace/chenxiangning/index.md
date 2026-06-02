@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-18.md`
-- **Total Sessions**: 681
-- **Last Active**: 2026-06-02
+- **Total Sessions**: 682
+- **Last Active**: 2026-06-03
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-18.md` | ~1361 | Active |
+| `journal-18.md` | ~1418 | Active |
 | `journal-17.md` | ~1971 | Archived |
 | `journal-16.md` | ~1985 | Archived |
 | `journal-15.md` | ~1996 | Archived |
@@ -46,6 +46,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 682 | 2026-06-03 | Browser Agent 浏览器上下文收口 | `e05159c7` | `feature/v0.5.5` |
 | 681 | 2026-06-02 | 回滚 DMG 创建脚本到 v0.5.4 | `862fb673` | `feature/v0.5.5` |
 | 680 | 2026-06-02 | 修复被动读取拉起 Codex 进程 | `20e17a52` | `feature/v0.5.5` |
 | 679 | 2026-06-02 | 记录 Browser Dock 可见性开关提交 | `3f66098a` | `feature/v0.5.5` |

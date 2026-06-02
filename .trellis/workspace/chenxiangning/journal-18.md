@@ -1359,3 +1359,60 @@ Validation performed before commit:
 ### Next Steps
 
 - None - task complete
+
+
+## Session 682: Browser Agent 浏览器上下文收口
+
+**Date**: 2026-06-03
+**Task**: Browser Agent 浏览器上下文收口
+**Branch**: `feature/v0.5.5`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+本次会话完成 Browser Dock / Browser Agent 阶段性收口并提交。
+
+提交：e05159c7 feat(browser-agent): 收口浏览器上下文关联与证据桥接
+
+主要内容：
+- 收口 detached Browser Agent window、Browser Dock 多 tab toolbar、read-only capture、visual evidence、action audit、code bridge 与 context attachment 数据流。
+- 修复 toolbar session/workspace 关联边界，通过 toolbar URL 显式携带 sessionId/workspaceId/locale，避免多 tab 时旧 session 闭包导致关联错位。
+- 补齐 toolbar 与 Browser Dock 相关 i18n，Tauri command 支持 locale 可选传递。
+- 拆分 src-tauri/src/browser_agent/mod.rs 中 toolbar bridge 到 toolbar.rs，解除 browser_agent/mod.rs 的 large-file hard gate 风险。
+- 修复 FileTreePanel 对 gitignored 子目录的祖先展开边界。
+- 修正 workspace restore/focus runtime reconnect contract，启动恢复可按模式重连，focus refresh 明确不重连。
+- 补齐 Client Documentation 中 topTool.browserDock 控制项。
+- 回写 OpenSpec/Trellis proposal、design、tasks、implementation evidence、verification 与阶段计划。
+
+验证：
+- npm run typecheck 通过。
+- browser-agent/client-doc/file-tree 聚焦 vitest：14 个测试文件、79 个测试通过。
+- cargo test --manifest-path src-tauri/Cargo.toml browser_agent 通过：7 个测试通过。
+- npm run check:heavy-test-noise 通过：580 个测试文件完成，act warnings/stdout payload/stderr payload 均为 0。
+- large-file browser_agent/mod.rs 硬门禁已解除；全局 large-file gate 仍被非本次浏览器范围的 src-tauri/src/bin/cc_gui_daemon/daemon_state.rs 历史超限阻塞。
+
+后续注意：
+- 若要让 large-file gate 全绿，需要单独处理 daemon_state.rs 的拆分或 baseline 策略。
+- Browser Agent change 可进入最终 verify/archive 前的人测确认阶段。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e05159c7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
