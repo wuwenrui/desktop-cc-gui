@@ -16,6 +16,7 @@ ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 # Finder DMG layout uses point-based coordinates; prefer 1x background.
 BG_IMAGE="${ROOT_DIR}/src-tauri/icons/dmg-background.png"
 BG_IMAGE_2X="${ROOT_DIR}/src-tauri/icons/dmg-background@2x.png"
+ALLOW_LAYOUT_FALLBACK="${ALLOW_DMG_LAYOUT_FALLBACK:-0}"
 
 if [ ! -d "$APP_PATH" ]; then
   echo "Error: App not found at $APP_PATH"
@@ -177,7 +178,8 @@ mdutil -i off "$MOUNT_DIR" 2>/dev/null || true
 mdutil -d "$MOUNT_DIR" 2>/dev/null || true
 
 echo "Configuring Finder window layout via AppleScript..."
-if ! osascript <<APPLESCRIPT
+LAYOUT_CONFIGURED=false
+if osascript <<APPLESCRIPT
 tell application "Finder"
   tell disk "$DISK_NAME"
     open
@@ -203,7 +205,32 @@ tell application "Finder"
 end tell
 APPLESCRIPT
 then
-  echo "Warning: AppleScript layout configuration failed (expected in CI). DMG will still contain Applications alias."
+  LAYOUT_CONFIGURED=true
+else
+  echo "Error: AppleScript layout configuration failed."
+  echo "This would publish a default white Finder DMG instead of the drag-to-Applications installer panel."
+  if [ "$ALLOW_LAYOUT_FALLBACK" != "1" ]; then
+    echo "Set ALLOW_DMG_LAYOUT_FALLBACK=1 only when intentionally accepting the degraded DMG layout."
+    exit 1
+  fi
+  echo "Warning: ALLOW_DMG_LAYOUT_FALLBACK=1 is set; continuing with degraded DMG layout."
+fi
+
+if [ "$LAYOUT_CONFIGURED" = true ]; then
+  if [ ! -f "$MOUNT_DIR/.background/background.png" ]; then
+    echo "Error: DMG background asset is missing from the mounted volume."
+    exit 1
+  fi
+
+  if [ ! -f "$MOUNT_DIR/.DS_Store" ]; then
+    echo "Error: Finder did not persist DMG layout metadata (.DS_Store)."
+    echo "This would publish a default white Finder DMG instead of the drag-to-Applications installer panel."
+    if [ "$ALLOW_LAYOUT_FALLBACK" != "1" ]; then
+      echo "Set ALLOW_DMG_LAYOUT_FALLBACK=1 only when intentionally accepting the degraded DMG layout."
+      exit 1
+    fi
+    echo "Warning: ALLOW_DMG_LAYOUT_FALLBACK=1 is set; continuing without persisted Finder layout metadata."
+  fi
 fi
 
 # Close Finder windows referencing the volume to prevent busy-volume issues
