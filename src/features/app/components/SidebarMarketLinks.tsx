@@ -9,7 +9,9 @@ import MessageSquareMore from "lucide-react/dist/esm/icons/message-square-more";
 import Puzzle from "lucide-react/dist/esm/icons/puzzle";
 import Settings from "lucide-react/dist/esm/icons/settings";
 import SquareTerminal from "lucide-react/dist/esm/icons/square-terminal";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { SkillMarketPanel } from "../../skill-market/SkillMarketPanel";
 import type { AppMode } from "../../../types";
 import { pushErrorToast } from "../../../services/toasts";
 
@@ -39,6 +41,7 @@ export function SidebarMarketLinks({
   onToggleCollapsed,
 }: SidebarMarketLinksProps) {
   const { t } = useTranslation();
+  const [marketOpen, setMarketOpen] = useState(false);
 
   const handleClick = () => {
     pushErrorToast({
@@ -54,6 +57,7 @@ export function SidebarMarketLinks({
   };
 
   return (
+    <>
     <div
       className={`sidebar-market-rail ${isCollapsed ? "is-collapsed" : "is-expanded"}`}
       role="navigation"
@@ -93,7 +97,7 @@ export function SidebarMarketLinks({
           type="button"
           className="sidebar-market-rail-item"
           data-market-item="mcp"
-          onClick={handleClick}
+          onClick={() => setMarketOpen(true)}
           title={t("sidebar.mcpSkillsMarket")}
           aria-label={t("sidebar.mcpSkillsMarket")}
           data-tauri-drag-region="false"
@@ -212,5 +216,14 @@ export function SidebarMarketLinks({
         </button>
       </div>
     </div>
+    {marketOpen && (
+      <div className="skill-market-overlay" role="dialog" aria-modal="true" aria-label="Skill 市场" onClick={(e) => { if (e.target === e.currentTarget) setMarketOpen(false); }}>
+        <div className="skill-market-dialog">
+          <div className="skill-market-dialog-header"><span>Skill 市场</span><button type="button" aria-label="关闭" onClick={() => setMarketOpen(false)}>关闭</button></div>
+          <SkillMarketPanel />
+        </div>
+      </div>
+    )}
+    </>
   );
 }
