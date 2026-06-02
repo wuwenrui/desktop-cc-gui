@@ -1,0 +1,319 @@
+/*
+ * Skill 市场面板样式 — 新增文件(fork-friendly)，零改上游。
+ * 全部复用客户端设计 token(themes.dark.css / themes.light.css)，自动跟随主题切换。
+ * 结构: .skill-market-overlay > .skill-market-dialog > (.skill-market-dialog-header + .skill-market-panel)
+ */
+
+/* ---- 居中模态遮罩 ---- */
+.skill-market-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  background: rgba(6, 8, 12, 0.66);
+  backdrop-filter: blur(6px) saturate(120%);
+  -webkit-backdrop-filter: blur(6px) saturate(120%);
+  animation: skill-market-fade 160ms ease-out;
+}
+
+@keyframes skill-market-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ---- 模态卡片(Tauri 窗口透明，背景必须实色) ---- */
+.skill-market-dialog {
+  width: min(720px, 100%);
+  max-height: min(84vh, 760px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface-popover, #0c1016);
+  border: 1px solid var(--border-strong, #353540);
+  border-radius: 16px;
+  box-shadow:
+    0 24px 64px -12px rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset,
+    0 1px 0 rgba(255, 255, 255, 0.06) inset;
+  animation: skill-market-rise 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes skill-market-rise {
+  from { opacity: 0; transform: translateY(12px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ---- 头部 ---- */
+.skill-market-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px 14px;
+  border-bottom: 1px solid var(--border-subtle, #252530);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface-card, #1f1f25) 55%, transparent),
+    transparent
+  );
+}
+
+.skill-market-dialog-header > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  color: var(--text-strong, #fff);
+}
+
+/* 标题前一道暖色竖条做记忆点(呼应 Claude 橙) */
+.skill-market-dialog-header > span:first-child::before {
+  content: "";
+  width: 3px;
+  height: 17px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--status-warning, #ffaf55), #d97757);
+}
+
+.skill-market-dialog-header button {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-subtle, #999);
+  font-size: 13px;
+  padding: 5px 11px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 140ms, color 140ms;
+}
+.skill-market-dialog-header button:hover {
+  background: var(--surface-control, #27272e);
+  color: var(--text-primary, #e6e7ea);
+}
+
+/* ---- 面板主体: 滚动区 ---- */
+.skill-market-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 22px 22px;
+  overflow-y: auto;
+}
+
+/* ---- 配置 + 搜索行 ---- */
+.skill-market-config,
+.skill-market-search {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 0;
+}
+
+/* 配置行(平台地址)视觉弱化为次要工具 */
+.skill-market-config {
+  opacity: 0.78;
+}
+.skill-market-config:focus-within {
+  opacity: 1;
+}
+
+.skill-market-panel input {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  padding: 0 12px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text-primary, #e6e7ea);
+  background: var(--surface-control, #27272e);
+  border: 1px solid var(--border-quiet, #404050);
+  border-radius: 9px;
+  outline: none;
+  transition: border-color 140ms, box-shadow 140ms, background 140ms;
+}
+.skill-market-panel input::placeholder {
+  color: var(--text-faint, #808080);
+}
+.skill-market-panel input:focus {
+  border-color: var(--border-accent, #4a8caa);
+  background: var(--surface-item, #1b1b20);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--border-accent, #4a8caa) 22%, transparent);
+}
+
+/* ---- 通用按钮(次级) ---- */
+.skill-market-panel button {
+  appearance: none;
+  height: 36px;
+  padding: 0 16px;
+  font-size: 13px;
+  font-weight: 550;
+  font-family: inherit;
+  white-space: nowrap;
+  color: var(--text-primary, #e6e7ea);
+  background: var(--surface-control, #27272e);
+  border: 1px solid var(--border-strong, #353540);
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background 140ms, border-color 140ms, transform 80ms;
+}
+.skill-market-panel button:hover {
+  background: var(--surface-control-hover, #353540);
+}
+.skill-market-panel button:active {
+  transform: translateY(1px);
+}
+.skill-market-panel button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* 搜索按钮 = 主色 */
+.skill-market-search button {
+  color: #fff;
+  background: var(--surface-bubble-user, #005fb8);
+  border-color: color-mix(in srgb, var(--surface-bubble-user, #005fb8) 72%, #fff 8%);
+}
+.skill-market-search button:hover {
+  background: color-mix(in srgb, var(--surface-bubble-user, #005fb8) 88%, #fff 12%);
+}
+
+/* ---- 提示 / 错误 ---- */
+.skill-market-hint {
+  margin: 0;
+  padding: 36px 0;
+  font-size: 13px;
+  color: var(--text-subtle, #999);
+  text-align: center;
+}
+.skill-market-error {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--status-error, #ff6e6e);
+}
+
+/* ---- skill 列表 ---- */
+.skill-market-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.skill-market-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  overflow: hidden;
+  background: var(--surface-card, #1f1f25);
+  border: 1px solid var(--border-subtle, #252530);
+  border-radius: 12px;
+  transition: border-color 160ms, transform 160ms, box-shadow 160ms;
+  animation: skill-market-rise 260ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+/* 卡片左侧 accent 条(hover 显现) */
+.skill-market-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(180deg, var(--status-warning, #ffaf55), #d97757);
+  opacity: 0;
+  transition: opacity 160ms;
+}
+.skill-market-item:hover {
+  border-color: var(--border-quiet, #404050);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px -10px rgba(0, 0, 0, 0.55);
+}
+.skill-market-item:hover::before {
+  opacity: 1;
+}
+
+.skill-market-item-main {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: baseline;
+  gap: 6px 10px;
+}
+.skill-market-item-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-strong, #fff);
+}
+.skill-market-item-version {
+  justify-self: start;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--text-accent, #7a9dcc);
+  background: color-mix(in srgb, var(--text-accent, #7a9dcc) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text-accent, #7a9dcc) 30%, transparent);
+  padding: 1px 7px;
+  border-radius: 6px;
+}
+.skill-market-item-desc {
+  grid-column: 1 / -1;
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted, #b3b3b3);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.skill-market-item-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+  max-width: 160px;
+}
+
+/* 添加 = 主按钮 */
+.skill-market-item-actions button {
+  color: #fff;
+  background: var(--surface-bubble-user, #005fb8);
+  border-color: color-mix(in srgb, var(--surface-bubble-user, #005fb8) 72%, #fff 10%);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.08) inset;
+}
+.skill-market-item-actions button:hover {
+  background: color-mix(in srgb, var(--surface-bubble-user, #005fb8) 88%, #fff 12%);
+}
+
+.skill-market-uptodate {
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--status-success, #78ebbe);
+  padding: 0 4px;
+}
+
+/* ---- 滚动条 ---- */
+.skill-market-panel::-webkit-scrollbar {
+  width: 10px;
+}
+.skill-market-panel::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb, #404050);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.skill-market-panel::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover, #5a5a6a);
+  background-clip: padding-box;
+}

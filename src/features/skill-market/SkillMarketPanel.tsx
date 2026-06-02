@@ -1,3 +1,4 @@
+import "./skill-market.css";
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
 import {
