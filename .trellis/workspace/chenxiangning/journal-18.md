@@ -1515,3 +1515,53 @@ Validation performed before commit:
 ### Next Steps
 
 - None - task complete
+
+
+## Session 685: 修复打包构建阻断与治理边界
+
+**Date**: 2026-06-03
+**Task**: 修复打包构建阻断与治理边界
+**Branch**: `feature/v0.5.5`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| Area | Summary |
+|------|---------|
+| Build | 修复 mac-arm64 打包前端构建阶段的 TS6133 阻断，移除 Project Map relation panel 已失效 unused prop contract。 |
+| Packaging | 为 build-platform 子进程增加隔离 npm userconfig，并清理 legacy electron mirror npm config env，降低嵌套 npm run build/tauri 的 warning 噪声。 |
+| Governance | 补齐 large-file governance 输出路径边界校验，禁止治理报告写出仓库根目录。 |
+| Tests | 增加 large-file CLI 越界输出路径回归测试。 |
+| Verification | npm run build 通过；npm run build:mac-arm64 -- --skip-sign 通过并生成 release-local/ccgui_0.5.5_aarch64.dmg；node --check scripts/build-platform.mjs 通过；隔离 npm userconfig 下 electron_mirror 为 undefined。 |
+
+**Updated Files**:
+- `scripts/build-platform.mjs`
+- `scripts/check-large-files.mjs`
+- `scripts/check-large-files.test.mjs`
+- `src/styles/browser-agent-window.css`
+
+**Notes**:
+- 顶层 npm warning `Unknown user config "electron_mirror"` 来自用户级 `/Users/chenxiangning/.npmrc`，仓库脚本只能隔离子进程，不能在 npm 启动前消除顶层 warning。
+- 完整 mac-arm64 打包已成功生成 DMG，本地 release artifact 未纳入提交。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `63b5ef57` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
