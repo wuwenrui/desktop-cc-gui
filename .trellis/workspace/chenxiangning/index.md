@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-18.md`
-- **Total Sessions**: 664
+- **Total Sessions**: 666
 - **Last Active**: 2026-06-01
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-18.md` | ~585 | Active |
+| `journal-18.md` | ~674 | Active |
 | `journal-17.md` | ~1971 | Archived |
 | `journal-16.md` | ~1985 | Archived |
 | `journal-15.md` | ~1996 | Archived |
@@ -46,6 +46,8 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 666 | 2026-06-01 | 稳定 Project Map 面板批量测试 | `90bf8321` | `feature/v0.5.4` |
+| 665 | 2026-06-01 | 收窄 Browser Dock 自动打开触发 | `e22c9b1b` | `feature/v0.5.4` |
 | 664 | 2026-06-01 | 修复 CI 品牌与测试噪音门禁 | `08f17169` | `feature/v0.5.4` |
 | 663 | 2026-06-01 | Browser Context 类型契约修复 | `16f2187b` | `feature/v0.5.4` |
 | 662 | 2026-06-01 | 校准 Phase2b 启动证据 | `1cbbab37` | `feature/v0.5.4` |

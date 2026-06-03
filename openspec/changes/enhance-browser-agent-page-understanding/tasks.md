@@ -74,3 +74,8 @@
 - [x] 10.2 [P0][deps:3.4,9.3,9.4][input: composer preview detail content][output: compact outer preview plus bounded scroll detail panel][validation: preview no longer exposes long visible text outside details] Keep Browser Context details inspectable without letting long evidence blocks dominate the composer.
 - [x] 10.3 [P0][deps:all Phase 2 tasks][input: completed implementation and acceptance findings][output: proposal closure section][validation: OpenSpec status remains all_done] Mark Phase 2 as an evidence-grade page understanding MVP rather than an open-ended visual browser agent.
 - [x] 10.4 [P1][deps:10.3][input: remaining acceptance gaps][output: next-stage input list for OCR/vision, complex SPA, detail filtering, real fixture matrix, and authorized actions][validation: proposal distinguishes completed Phase 2 scope from future work] Move non-MVP work out of this change.
+
+## 11. Post-Closure Hardening
+
+- [x] 11.1 [P0][deps:10.3][input: Composer browser auto-navigation shortcut][output: strict pure `resolveBrowserNavigationUrl` utility and Composer wiring][validation: focused Vitest covers explicit navigation commands and descriptive bug reports] Prevent Browser Dock auto-open from hijacking normal text, screenshots, logs, or bug reports that merely mention open/browser/URL terms.
+- [x] 11.2 [P0][deps:11.1][input: release CI failure on Linux/Windows][output: cfg-scoped Rust status handling in workspace open command][validation: `cargo check --manifest-path src-tauri/Cargo.toml`] Fix cross-platform build failure caused by macOS-only `status` binding leaking into non-macOS compilation.

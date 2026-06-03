@@ -583,3 +583,92 @@ Review result:
 ### Next Steps
 
 - None - task complete
+
+
+## Session 665: 收窄 Browser Dock 自动打开触发
+
+**Date**: 2026-06-01
+**Task**: 收窄 Browser Dock 自动打开触发
+**Branch**: `feature/v0.5.4`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+完成 Browser Dock 自动导航误触发修复与 release CI hotfix。
+
+主要改动：
+- 将 Composer 中的 Browser Dock 自动导航识别抽成 src/features/composer/utils/browserNavigation.ts。
+- 收窄自动打开 Browser Dock 的触发条件：只允许明确短导航命令，描述性 bug report、截图说明、日志文本和包含 URL 的上下文 fail closed 为普通发送。
+- 新增 browserNavigation.test.ts 覆盖 explicit navigation 与描述性文本拒绝。
+- 修复 src-tauri/src/workspaces/commands.rs 中 macOS-only status 绑定泄漏到非 macOS 编译的问题，恢复 Linux/Windows release build 编译。
+- 回写 openspec/changes/enhance-browser-agent-page-understanding 的 proposal/tasks/implementation-notes/validation，记录 post-closure hardening 和验证结果。
+
+验证：
+- openspec validate enhance-browser-agent-page-understanding --strict
+- npx vitest run src/features/composer/utils/browserNavigation.test.ts
+- npm run typecheck
+- cargo check --manifest-path src-tauri/Cargo.toml
+- npm run lint
+
+Commit: e22c9b1b fix(browser-agent): 收窄浏览器自动打开触发
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e22c9b1b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 666: 稳定 Project Map 面板批量测试
+
+**Date**: 2026-06-01
+**Task**: 稳定 Project Map 面板批量测试
+**Branch**: `feature/v0.5.4`
+
+### Summary
+
+修复 ProjectMapPanel 测试在 batch/CI 下可能受全局查询与状态残留影响的 flaky 风险。
+
+### Main Changes
+
+| 项目 | 内容 |
+|------|------|
+| 改动 | 为 `ProjectMapPanel.test.tsx` 增加 afterEach cleanup/localStorage/mock 清理，并将 API Surface 节点点击限定到 graph viewport 内。 |
+| 验证 | `npx vitest run src/features/project-map/components/ProjectMapPanel.test.tsx --reporter=verbose` 通过 35/35。 |
+| 验证 | `npx vitest run --maxWorkers 1 --minWorkers 1 src/features/project-map/components/ProjectMapPanel.test.tsx src/features/project-map/hooks/useProjectMapDataset.test.tsx src/features/project-map/hooks/useProjectMapGenerationOptions.test.tsx src/features/project-map/projectMapI18n.test.ts --reporter=verbose` 通过 71/71。 |
+| 门禁 | `npm run lint` 与 `npm run typecheck` 通过。 |
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `90bf8321` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

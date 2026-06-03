@@ -30,3 +30,20 @@ The read-only capture script artifact exists, but the current Tauri child WebVie
 - `openspec validate enhance-browser-agent-page-understanding --strict`
   - Result: passed on 2026-06-01 during Phase 2 closure.
 - Commit-time note: no additional frontend or backend test commands were run during the final closure-only turn; the passed test commands above remain the recorded validation evidence for this change.
+
+## Post-closure hardening verification（2026-06-01）
+
+- `npx vitest run src/features/composer/utils/browserNavigation.test.ts`
+  - Result: passed, 1 file passed, 3 tests passed
+- `npm run typecheck`
+  - Result: passed
+- `cargo check --manifest-path src-tauri/Cargo.toml`
+  - Result: passed
+- `npm run lint`
+  - Result: passed after removing a pre-existing unnecessary `selectedEngine` callback dependency warning in `Composer.tsx`
+
+## Post-closure review notes
+
+- Browser Dock auto-navigation now fails closed for descriptive text, screenshots, build logs, and bug reports.
+- Explicit short navigation commands remain supported.
+- Rust release CI fix was verified with `cargo check`; it addresses cfg-scoped compilation and does not change non-macOS open behavior beyond restoring compilation.

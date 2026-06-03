@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { ComponentProps } from "react";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { mockProjectMapData } from "../mockProjectMapData";
 import type { ProjectMapDatasetController } from "../hooks/useProjectMapDataset";
@@ -53,6 +53,22 @@ function createDatasetControllerMock(
 beforeEach(() => {
   window.localStorage.clear();
 });
+
+afterEach(() => {
+  cleanup();
+  window.localStorage.clear();
+  vi.clearAllMocks();
+});
+
+function getGraphViewport(container: HTMLElement): HTMLElement {
+  const graphViewport = container.querySelector<HTMLElement>(".project-map-graph-viewport");
+  expect(graphViewport).toBeTruthy();
+  return graphViewport!;
+}
+
+function getGraphNodeButton(container: HTMLElement, name: RegExp | string): HTMLElement {
+  return within(getGraphViewport(container)).getByRole("button", { name });
+}
 
 function getGraphNodeBounds(nodeElement: Element): {
   left: number;
@@ -254,8 +270,8 @@ describe("ProjectMapPanel", () => {
       nodes: [...mockProjectMapData.nodes, duplicateApiNode],
     };
 
-    render(<ProjectMapPanel workspaceName="mossx" dataset={datasetWithDuplicateNode} />);
-    fireEvent.click(screen.getByRole("button", { name: /接口表面 API Surface/i }));
+    const view = render(<ProjectMapPanel workspaceName="mossx" dataset={datasetWithDuplicateNode} />);
+    fireEvent.click(getGraphNodeButton(view.container, /接口表面 API Surface/i));
 
     const detailPanel = screen.getByLabelText("projectMap.detailPanel");
     expect(within(detailPanel).getByText("该视角来自 Project Profile 和 evidence scan，不是 UI 固定枚举。")).toBeTruthy();
