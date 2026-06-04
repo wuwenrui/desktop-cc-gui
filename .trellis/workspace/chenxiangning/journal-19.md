@@ -137,3 +137,51 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 697: 收口提问超时结算
+
+**Date**: 2026-06-05
+**Task**: 收口提问超时结算
+**Branch**: `feature/v0.5.6`
+
+### Summary
+
+修复 AskUserQuestion timeout stale settlement 并归档 OpenSpec change。
+
+### Main Changes
+
+### Summary
+
+完成 AskUserQuestion timeout stale settlement 收口：
+
+- 补建并归档 OpenSpec change `fix-ask-user-question-timeout-settlement`。
+- 同步 `codex-chat-canvas-user-input-elicitation` 主规范，明确 stale timeout/cancel settlement 与普通 submit failure 的边界。
+- 加强 `useThreadUserInput.test.tsx` 回归断言：stale dismiss path 必须释放 optimistic processing residue 后移除 pending request。
+- 保持普通 submit failure 可 retry，不移除 pending request。
+
+### Validation
+
+- `npm exec vitest run src/features/threads/hooks/useThreadUserInput.test.tsx`: 8 passed
+- `npm run typecheck`: passed
+- `openspec validate fix-ask-user-question-timeout-settlement --strict --no-interactive`: passed
+- `openspec validate --all --strict --no-interactive`: 309 passed, 0 failed
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `94772cc6` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
