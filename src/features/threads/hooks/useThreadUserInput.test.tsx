@@ -240,6 +240,12 @@ describe("useThreadUserInput", () => {
         turnId: "turn-1",
       },
     );
+    expect(dispatch).toHaveBeenNthCalledWith(2, {
+      type: "markProcessing",
+      threadId: "thread-1",
+      isProcessing: false,
+      timestamp: expect.any(Number),
+    });
     expect(dispatch).toHaveBeenNthCalledWith(3, {
       type: "removeUserInputRequest",
       requestId: "req-1",
