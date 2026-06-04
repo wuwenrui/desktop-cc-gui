@@ -7,8 +7,8 @@
 ## Current Status
 
 <!-- @@@auto:current-status -->
-- **Active File**: `journal-18.md`
-- **Total Sessions**: 693
+- **Active File**: `journal-19.md`
+- **Total Sessions**: 694
 - **Last Active**: 2026-06-05
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,8 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-18.md` | ~1966 | Active |
+| `journal-19.md` | ~43 | Active |
+| `journal-18.md` | ~1966 | Archived |
 | `journal-17.md` | ~1971 | Archived |
 | `journal-16.md` | ~1985 | Archived |
 | `journal-15.md` | ~1996 | Archived |
@@ -46,6 +47,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 694 | 2026-06-05 | 修复运行时提示测试类型错误 | `9361e253` | `feature/v0.5.6` |
 | 693 | 2026-06-05 | 运行时提示仅显示错误消息 | `c585cc14` | `feature/v0.5.6` |
 | 692 | 2026-06-05 | 修复 WebView2 消息图片内存压力 | `63d6e8b8` | `feature/v0.5.6` |
 | 691 | 2026-06-04 | 归档运行时交互卡顿优化提案 | `980a7b57ac9b07804455e31f8a1eab133677b4bc` | `feature/v0.5.6` |
