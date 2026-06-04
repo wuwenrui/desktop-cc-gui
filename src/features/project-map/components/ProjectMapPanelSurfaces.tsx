@@ -35,7 +35,8 @@ import type {
   ProjectMapEvidenceFileEntry,
   ProjectMapEvidenceFileIndex,
 } from "../utils/evidenceFileIndex";
-import type { ProjectMapPathResult, ProjectMapSearchResult } from "../utils/navigation";
+import { projectMapPathMatches } from "../utils/projectionGuards";
+import type { ProjectMapPathResult } from "../utils/navigation";
 import type {
   ProjectMapIndexedRelation,
   ProjectMapNodeRelationBucket,
@@ -44,6 +45,10 @@ import type {
 } from "../utils/relationIndex";
 import type {
   ProjectMapCandidate,
+  ProjectMapActivityItem,
+  ProjectMapActivityProjection,
+  ProjectMapAdvisorHint,
+  ProjectMapAssociationExplanation,
   ProjectMapDataset,
   ProjectMapExplainPack,
   ProjectMapGenerationRequest,
@@ -61,6 +66,8 @@ import {
   ProjectMapArtifactChip,
   ProjectMapDiagramChip,
   ProjectMapSourceChip,
+  dedupeProjectMapArtifactsForDisplay,
+  dedupeProjectMapSourcesForDisplay,
   normalizeProjectMapArtifactForDisplay,
   type ProjectMapTraceTarget,
 } from "./ProjectMapTraceChips";
@@ -149,31 +156,30 @@ type ProjectMapOrchestrationDraftState =
 
 export function ProjectMapNavigationPanel({
   searchQuery,
-  searchResults,
   expanded,
   pathNodeOptions,
   pathSourceNodeId,
   pathTargetNodeId,
   pathResult,
+  associationExplanation,
   onSearchQueryChange,
   onFocusNode,
   onPathSourceNodeChange,
   onPathTargetNodeChange,
 }: {
   searchQuery: string;
-  searchResults: ProjectMapSearchResult[];
   expanded: boolean;
   pathNodeOptions: ProjectMapNode[];
   pathSourceNodeId: string | null;
   pathTargetNodeId: string | null;
   pathResult: ProjectMapPathResult;
+  associationExplanation: ProjectMapAssociationExplanation;
   onSearchQueryChange: (query: string) => void;
   onFocusNode: (nodeId: string | null) => void;
   onPathSourceNodeChange: (nodeId: string | null) => void;
   onPathTargetNodeChange: (nodeId: string | null) => void;
 }) {
   const { t } = useTranslation();
-  const hasSearchQuery = searchQuery.trim().length > 0;
 
   return (
     <section
@@ -198,25 +204,6 @@ export function ProjectMapNavigationPanel({
             onChange={(event) => onSearchQueryChange(event.currentTarget.value)}
           />
         </label>
-        {hasSearchQuery ? (
-          <div className="project-map-navigation-list" role="list">
-            {searchResults.length > 0 ? (
-              searchResults.map((result) => (
-                <button
-                  key={result.node.id}
-                  type="button"
-                  role="listitem"
-                  onClick={() => onFocusNode(result.node.id)}
-                >
-                  <strong>{result.node.title}</strong>
-                  <span>{result.matchedFields.join(" / ")}</span>
-                </button>
-              ))
-            ) : (
-              <p>{t("projectMap.navigation.search.empty")}</p>
-            )}
-          </div>
-        ) : null}
       </div>
 
       <div className="project-map-navigation-card">
@@ -286,6 +273,33 @@ export function ProjectMapNavigationPanel({
                 </li>
               ))}
             </ol>
+          ) : null}
+          {associationExplanation.status === "found" && associationExplanation.reasons.length > 0 ? (
+            <details className="project-map-path-explanation">
+              <summary>{t("projectMap.navigation.path.explain")}</summary>
+              <ul>
+                {associationExplanation.reasons.slice(0, 6).map((reason, index) => (
+                  <li
+                    key={`${reason.relationId ?? reason.label}:${index}`}
+                    className={cn(reason.degraded && "is-degraded")}
+                  >
+                    <strong>{reason.label}</strong>
+                    <span>
+                      {t("projectMap.navigation.path.reasonMeta", {
+                        confidence: t(`projectMap.confidence.${reason.confidence}`),
+                        evidence: reason.evidenceCount,
+                        sourceKind: reason.sourceKind ?? t("projectMap.navigation.path.hierarchy"),
+                      })}
+                      {reason.stale ? ` · ${t("projectMap.relations.stale")}` : ""}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : associationExplanation.status === "not-found" ? (
+            <p className="project-map-path-explanation-empty">
+              {t("projectMap.navigation.path.noExplanation")}
+            </p>
           ) : null}
         </div>
       </div>
@@ -614,6 +628,8 @@ export function ProjectMapEvidenceFilesPanel({
   filteredFiles,
   selectedFile,
   expanded,
+  changedFilePaths,
+  unmappedFilePaths,
   selectedNodeId,
   searchQuery,
   sourceKindFilter,
@@ -626,6 +642,7 @@ export function ProjectMapEvidenceFilesPanel({
   onSelectedNodeOnlyChange,
   onSelectFile,
   onFocusNode,
+  onSelectRelation,
   onClearHighlight,
   onOpenTrace,
 }: {
@@ -633,6 +650,8 @@ export function ProjectMapEvidenceFilesPanel({
   filteredFiles: ProjectMapEvidenceFileEntry[];
   selectedFile: ProjectMapEvidenceFileEntry | null;
   expanded: boolean;
+  changedFilePaths: string[];
+  unmappedFilePaths: string[];
   selectedNodeId: string | null;
   searchQuery: string;
   sourceKindFilter: string;
@@ -645,12 +664,56 @@ export function ProjectMapEvidenceFilesPanel({
   onSelectedNodeOnlyChange: (enabled: boolean) => void;
   onSelectFile: (path: string) => void;
   onFocusNode: (nodeId: string) => void;
+  onSelectRelation: (relationId: string) => void;
   onClearHighlight: () => void;
   onOpenTrace?: (target: ProjectMapTraceTarget) => void;
 }) {
   const { t } = useTranslation();
   const firstLineRef = selectedFile?.lineRefs[0] ?? null;
   const canOpenSelectedFile = Boolean(selectedFile && onOpenTrace);
+  const visibleFiles = filteredFiles.slice(0, 10);
+  const cappedFileCount = Math.max(0, filteredFiles.length - visibleFiles.length);
+  const selectedFileRelationLinks = selectedFile?.relationLinks.slice(0, 6) ?? [];
+  const selectedFileNodeLinks = selectedFile?.nodeLinks.slice(0, 8) ?? [];
+  const selectedFileLineRefs = selectedFile?.lineRefs.slice(0, 6) ?? [];
+  const selectedFileGovernanceLinks = selectedFile?.governanceLinks.slice(0, 5) ?? [];
+  const selectedFileHasLargeContext = Boolean(
+    selectedFile &&
+      (selectedFile.nodeLinks.length > selectedFileNodeLinks.length ||
+        selectedFile.relationLinks.length > selectedFileRelationLinks.length ||
+        selectedFile.lineRefs.length > selectedFileLineRefs.length ||
+        selectedFile.governanceLinks.length > selectedFileGovernanceLinks.length),
+  );
+
+  const getFileMarkers = (fileEntry: ProjectMapEvidenceFileEntry): Array<{
+    key: string;
+    label: string;
+    className?: string;
+  }> => {
+    const markers = [];
+    if (changedFilePaths.some((filePath) => projectMapPathMatches(fileEntry.path, filePath))) {
+      markers.push({
+        key: "changed",
+        label: t("projectMap.evidenceFiles.changed"),
+        className: "is-changed",
+      });
+    }
+    if (unmappedFilePaths.some((filePath) => projectMapPathMatches(fileEntry.path, filePath))) {
+      markers.push({
+        key: "unmapped",
+        label: t("projectMap.evidenceFiles.unmapped"),
+        className: "is-degraded",
+      });
+    }
+    if (fileEntry.nodeCount > 8 || fileEntry.relationCount > 6 || fileEntry.lineRefs.length > 6) {
+      markers.push({
+        key: "large",
+        label: t("projectMap.evidenceFiles.largeContext"),
+        className: "is-warning",
+      });
+    }
+    return markers;
+  };
 
   return (
     <section className={cn("project-map-evidence-files-panel", !expanded && "is-collapsed")}>
@@ -718,47 +781,58 @@ export function ProjectMapEvidenceFilesPanel({
         </p>
       ) : (
         <div className="project-map-evidence-file-list" role="list">
-          {filteredFiles.slice(0, 10).map((fileEntry) => (
-            <button
-              key={fileEntry.path}
-              type="button"
-              className={cn(
-                "project-map-evidence-file-row",
-                selectedFile?.path === fileEntry.path && "is-selected",
-              )}
-              onClick={() => {
-                onSelectFile(fileEntry.path);
-                const fileLineRef = fileEntry.lineRefs[0] ?? null;
-                onOpenTrace?.(
-                  fileLineRef
-                    ? { path: fileEntry.path, line: fileLineRef.line }
-                    : { path: fileEntry.path },
-                );
-              }}
-            >
-              <span className="project-map-evidence-file-path">{fileEntry.displayPath}</span>
-              <span className="project-map-evidence-file-meta">
-                {t("projectMap.evidenceFiles.fileMeta", {
-                  nodes: fileEntry.nodeCount,
-                  evidence: fileEntry.evidenceCount,
-                })}
-              </span>
-              <span className="project-map-evidence-file-tags">
-                {fileEntry.sourceKinds.slice(0, 3).map((sourceKind) => (
-                  <em key={sourceKind}>{sourceKind}</em>
-                ))}
-                {fileEntry.staleCount > 0 ? (
-                  <em className="is-warning">{t("projectMap.evidenceFiles.stale")}</em>
-                ) : null}
-                {fileEntry.lowConfidenceCount > 0 ? (
-                  <em className="is-warning">{t("projectMap.evidenceFiles.lowConfidence")}</em>
-                ) : null}
-                {fileEntry.degradedCount > 0 ? (
-                  <em className="is-degraded">{t("projectMap.evidenceFiles.degraded")}</em>
-                ) : null}
-              </span>
-            </button>
-          ))}
+          {visibleFiles.map((fileEntry) => {
+            const markers = getFileMarkers(fileEntry);
+            return (
+              <button
+                key={fileEntry.path}
+                type="button"
+                className={cn(
+                  "project-map-evidence-file-row",
+                  selectedFile?.path === fileEntry.path && "is-selected",
+                )}
+                onClick={() => {
+                  onSelectFile(fileEntry.path);
+                  const fileLineRef = fileEntry.lineRefs[0] ?? null;
+                  onOpenTrace?.(
+                    fileLineRef
+                      ? { path: fileEntry.path, line: fileLineRef.line }
+                      : { path: fileEntry.path },
+                  );
+                }}
+              >
+                <span className="project-map-evidence-file-path">{fileEntry.displayPath}</span>
+                <span className="project-map-evidence-file-meta">
+                  {t("projectMap.evidenceFiles.fileMeta", {
+                    nodes: fileEntry.nodeCount,
+                    evidence: fileEntry.evidenceCount,
+                  })}
+                </span>
+                <span className="project-map-evidence-file-tags">
+                  {markers.map((marker) => (
+                    <em key={marker.key} className={marker.className}>{marker.label}</em>
+                  ))}
+                  {fileEntry.sourceKinds.slice(0, 3).map((sourceKind) => (
+                    <em key={sourceKind}>{sourceKind}</em>
+                  ))}
+                  {fileEntry.staleCount > 0 ? (
+                    <em className="is-warning">{t("projectMap.evidenceFiles.stale")}</em>
+                  ) : null}
+                  {fileEntry.lowConfidenceCount > 0 ? (
+                    <em className="is-warning">{t("projectMap.evidenceFiles.lowConfidence")}</em>
+                  ) : null}
+                  {fileEntry.degradedCount > 0 ? (
+                    <em className="is-degraded">{t("projectMap.evidenceFiles.degraded")}</em>
+                  ) : null}
+                </span>
+              </button>
+            );
+          })}
+          {cappedFileCount > 0 ? (
+            <p className="project-map-evidence-files-empty">
+              {t("projectMap.evidenceFiles.cappedFiles", { count: cappedFileCount })}
+            </p>
+          ) : null}
         </div>
       )}
 
@@ -803,11 +877,16 @@ export function ProjectMapEvidenceFilesPanel({
               )}
             </div>
           </header>
+          {selectedFileHasLargeContext ? (
+            <p className="project-map-evidence-files-empty">
+              {t("projectMap.evidenceFiles.largeContent")}
+            </p>
+          ) : null}
 
           {selectedFile.nodeLinks.length > 0 ? (
             <div className="project-map-evidence-related-nodes">
               <strong>{t("projectMap.evidenceFiles.relatedNodes")}</strong>
-              {selectedFile.nodeLinks.slice(0, 8).map((nodeLink) => (
+              {selectedFileNodeLinks.map((nodeLink) => (
                 <button
                   key={nodeLink.nodeId}
                   type="button"
@@ -829,12 +908,49 @@ export function ProjectMapEvidenceFilesPanel({
             </p>
           )}
 
+          {selectedFileRelationLinks.length > 0 ? (
+            <div className="project-map-evidence-related-nodes">
+              <strong>{t("projectMap.evidenceFiles.relatedRelations")}</strong>
+              {selectedFileRelationLinks.map((relationLink) => (
+                <button
+                  key={relationLink.relationId}
+                  type="button"
+                  onClick={() => {
+                    onSelectRelation(relationLink.relationId);
+                    const focusNodeId = relationLink.sourceNodeId || relationLink.targetNodeId;
+                    if (focusNodeId) {
+                      onFocusNode(focusNodeId);
+                    }
+                  }}
+                >
+                  <span>{relationLink.type}</span>
+                  <em>
+                    {t("projectMap.evidenceFiles.relationMeta", {
+                      evidence: relationLink.evidenceCount,
+                      confidence: relationLink.confidence,
+                    })}
+                  </em>
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          {selectedFileGovernanceLinks.length > 0 ? (
+            <div className="project-map-evidence-line-refs">
+              <strong>{t("projectMap.evidenceFiles.governanceRefs")}</strong>
+              <span>
+                {selectedFileGovernanceLinks
+                  .map((link) => link.line ? `${link.label}:${link.line}` : link.label)
+                  .join(" · ")}
+              </span>
+            </div>
+          ) : null}
+
           {selectedFile.lineRefs.length > 0 ? (
             <div className="project-map-evidence-line-refs">
               <strong>{t("projectMap.evidenceFiles.lineRefs")}</strong>
               <span>
-                {selectedFile.lineRefs
-                  .slice(0, 6)
+                {selectedFileLineRefs
                   .map((lineRef) => `${lineRef.label}:${lineRef.line}`)
                   .join(" · ")}
               </span>
@@ -863,6 +979,8 @@ export function DetailPanel({
   lens,
   explainPack,
   relationBucket,
+  activityProjection,
+  nodeExplainHint,
   selectedRelationId,
   impactAnalysis,
   refreshSummary,
@@ -902,6 +1020,8 @@ export function DetailPanel({
   lens: ProjectMapLens | null;
   explainPack: ProjectMapExplainPack | null;
   relationBucket: ProjectMapNodeRelationBucket | null;
+  activityProjection: ProjectMapActivityProjection;
+  nodeExplainHint: ProjectMapAdvisorHint | null;
   selectedRelationId: string | null;
   impactAnalysis: ProjectMapImpactResult;
   refreshSummary: ProjectMapRefreshSummary;
@@ -961,6 +1081,13 @@ export function DetailPanel({
     graphIntegrityIssues.some((issue) => issue.kind !== "missing-node-evidence")
       ? t("projectMap.repair.cleanupAction")
       : t("projectMap.repair.markEvidenceAction");
+  const nodeRelatedActivity = node
+    ? activityProjection.items.filter((item) => item.nodeIds.includes(node.id)).slice(0, 6)
+    : [];
+  const explainPackRelationCount = explainPack?.relations.length ?? 0;
+  const explainPackEvidenceCount = explainPack
+    ? explainPack.evidenceSources.length + explainPack.evidenceRecords.length + explainPack.governanceEvidence.length
+    : 0;
 
   return (
     <aside
@@ -1190,7 +1317,7 @@ export function DetailPanel({
                 </section>
               ) : null}
             </section>
-            <section className="project-map-inspector-zone is-evidence">
+              <section className="project-map-inspector-zone is-evidence">
               <header className="project-map-inspector-zone-header">
                 <span>02</span>
                 <div>
@@ -1202,73 +1329,117 @@ export function DetailPanel({
                   </p>
                 </div>
               </header>
-              {explainPack ? (
-                <section>
-                  <h4>{t("projectMap.detail.explainPack", { defaultValue: "Explain Pack" })}</h4>
-                  <dl className="project-map-definition-grid">
-                    <div>
-                      <dt>{t("projectMap.detail.relatedNodes", { defaultValue: "Related nodes" })}</dt>
-                      <dd>{explainPack.relatedNodes.length}</dd>
-                    </div>
-                    <div>
-                      <dt>{t("projectMap.detail.relations", { defaultValue: "Relations" })}</dt>
-                      <dd>{explainPack.relations.length}</dd>
-                    </div>
-                    <div>
-                      <dt>{t("projectMap.detail.riskFlags", { defaultValue: "Risk flags" })}</dt>
-                      <dd>{explainPack.riskFlags.length}</dd>
-                    </div>
-                  </dl>
-                  {explainPack.relatedNodes.length > 0 ? (
-                    <ul>
-                      {explainPack.relatedNodes.slice(0, 6).map((relatedNode) => (
-                        <li key={relatedNode.id}>
-                          <strong>{relatedNode.title}</strong>
-                          {" · "}
-                          {translateProjectMapNodeKind(t, relatedNode.nodeKind)}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-                  {explainPack.evidenceSources.length > 0 ? (
-                    <div className="project-map-source-list">
-                      {explainPack.evidenceSources.slice(0, 6).map((source) => (
-                        <ProjectMapSourceChip
-                          key={`${source.type}-${source.label}-${source.path ?? source.hash ?? ""}`}
-                          source={source}
-                          onOpenTrace={onOpenTrace}
-                        />
-                      ))}
-                    </div>
-                  ) : null}
-                  {explainPack.governanceEvidence.length > 0 ? (
-                    <div className="project-map-governance-links">
-                      {explainPack.governanceEvidence.slice(0, 8).map((link) => (
-                        <span
-                          key={link.id}
-                          className={cn(
-                            "project-map-governance-link",
-                            `kind-${link.kind}`,
-                            !link.deterministic && "is-inferred",
-                          )}
-                        >
-                          <strong>{link.kind}</strong>
-                          {link.path ? (
-                            <button
-                              type="button"
-                              onClick={() => onOpenTrace?.({ path: link.path!, line: link.line })}
-                            >
-                              {link.label}
-                            </button>
-                          ) : (
-                            <em>{link.label}</em>
-                          )}
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
-                </section>
+              {nodeExplainHint ? (
+                <details className="project-map-detail-disclosure" open>
+                  <summary>
+                    <span>{t("projectMap.detail.explainContext")}</span>
+                    <em>{nodeExplainHint.deterministic ? t("projectMap.detail.deterministic") : t("projectMap.detail.inferred")}</em>
+                  </summary>
+                  <p>{nodeExplainHint.summary}</p>
+                  <div className="project-map-detail-mini-pills">
+                    <span>{nodeExplainHint.kind}</span>
+                    <span>{nodeExplainHint.severity ?? "info"}</span>
+                    {nodeExplainHint.degraded ? <span>{t("projectMap.detail.degraded")}</span> : null}
+                  </div>
+                </details>
               ) : null}
+              {explainPack ? (
+                <details className="project-map-detail-disclosure">
+                  <summary>
+                    <span>{t("projectMap.detail.evidenceAndContext")}</span>
+                    <em>
+                      {t("projectMap.detail.evidenceSummary", {
+                        evidence: explainPackEvidenceCount,
+                        relations: explainPackRelationCount,
+                      })}
+                    </em>
+                  </summary>
+                  <section>
+                    <h4>{t("projectMap.detail.explainPack", { defaultValue: "Explain Pack" })}</h4>
+                    <dl className="project-map-definition-grid">
+                      <div>
+                        <dt>{t("projectMap.detail.relatedNodes", { defaultValue: "Related nodes" })}</dt>
+                        <dd>{explainPack.relatedNodes.length}</dd>
+                      </div>
+                      <div>
+                        <dt>{t("projectMap.detail.relations", { defaultValue: "Relations" })}</dt>
+                        <dd>{explainPack.relations.length}</dd>
+                      </div>
+                      <div>
+                        <dt>{t("projectMap.detail.riskFlags", { defaultValue: "Risk flags" })}</dt>
+                        <dd>{explainPack.riskFlags.length}</dd>
+                      </div>
+                    </dl>
+                    {explainPack.relatedNodes.length > 0 ? (
+                      <ul>
+                        {explainPack.relatedNodes.slice(0, 6).map((relatedNode) => (
+                          <li key={relatedNode.id}>
+                            <strong>{relatedNode.title}</strong>
+                            {" · "}
+                            {translateProjectMapNodeKind(t, relatedNode.nodeKind)}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    {explainPack.evidenceSources.length > 0 ? (
+                      <div className="project-map-source-list">
+                        {dedupeProjectMapSourcesForDisplay(explainPack.evidenceSources).slice(0, 6).map((source) => (
+                          <ProjectMapSourceChip
+                            key={`${source.type}-${source.label}-${source.path ?? source.hash ?? ""}-${source.line ?? ""}`}
+                            source={source}
+                            onOpenTrace={onOpenTrace}
+                          />
+                        ))}
+                      </div>
+                    ) : null}
+                    {explainPack.governanceEvidence.length > 0 ? (
+                      <div className="project-map-governance-links">
+                        {explainPack.governanceEvidence.slice(0, 8).map((link) => (
+                          <span
+                            key={link.id}
+                            className={cn(
+                              "project-map-governance-link",
+                              `kind-${link.kind}`,
+                              !link.deterministic && "is-inferred",
+                            )}
+                          >
+                            <strong>{link.kind}</strong>
+                            {link.path ? (
+                              <button
+                                type="button"
+                                onClick={() => onOpenTrace?.({ path: link.path!, line: link.line })}
+                              >
+                                {link.label}
+                              </button>
+                            ) : (
+                              <em>{link.label}</em>
+                            )}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </section>
+                </details>
+              ) : null}
+              <details className="project-map-detail-disclosure">
+                <summary>
+                  <span>{t("projectMap.detail.recentActivity")}</span>
+                  <em>{t("projectMap.detail.activitySummary", { count: nodeRelatedActivity.length })}</em>
+                </summary>
+                {nodeRelatedActivity.length > 0 ? (
+                  <ul className="project-map-detail-activity-list">
+                    {nodeRelatedActivity.map((item: ProjectMapActivityItem) => (
+                      <li key={item.id} className={cn(item.degraded && "is-degraded")}>
+                        <strong>{item.title}</strong>
+                        <span>{item.summary}</span>
+                        <em>{item.sourceCategory} · {item.confidence}</em>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>{t("projectMap.detail.noRecentActivity")}</p>
+                )}
+              </details>
               {(node.detail.diagramArtifacts ?? []).length > 0 ? (
                 <section>
                   <h4>{t("projectMap.detail.diagrams")}</h4>
@@ -1286,12 +1457,14 @@ export function DetailPanel({
               <section>
                 <h4>{t("projectMap.detail.relatedArtifacts")}</h4>
                 <div className="project-map-artifact-list">
-                  {node.detail.relatedArtifacts
-                    .map(normalizeProjectMapArtifactForDisplay)
-                    .filter((artifact): artifact is ProjectMapRelatedArtifact => Boolean(artifact))
+                  {dedupeProjectMapArtifactsForDisplay(
+                    node.detail.relatedArtifacts
+                      .map(normalizeProjectMapArtifactForDisplay)
+                      .filter((artifact): artifact is ProjectMapRelatedArtifact => Boolean(artifact)),
+                  )
                     .map((artifact) => (
                       <ProjectMapArtifactChip
-                        key={`${artifact.type}-${artifact.label}-${artifact.path ?? artifact.ref ?? ""}`}
+                        key={`${artifact.type}-${artifact.label}-${artifact.path ?? artifact.ref ?? ""}-${artifact.line ?? ""}`}
                         artifact={artifact}
                         onOpenTrace={onOpenTrace}
                       />
@@ -1301,9 +1474,9 @@ export function DetailPanel({
               <section>
                 <h4>{t("projectMap.evidenceTitle")}</h4>
                 <div className="project-map-source-list">
-                  {node.sources.map((source) => (
+                  {dedupeProjectMapSourcesForDisplay(node.sources).map((source) => (
                     <ProjectMapSourceChip
-                      key={`${source.type}-${source.label}-${source.path ?? source.hash ?? ""}`}
+                      key={`${source.type}-${source.label}-${source.path ?? source.hash ?? ""}-${source.line ?? ""}`}
                       source={source}
                       onOpenTrace={onOpenTrace}
                     />
@@ -1347,12 +1520,23 @@ export function DetailPanel({
                   </p>
                 </div>
               </header>
-              <ProjectMapRelationInspector
-                bucket={relationBucket}
-                selectedRelationId={selectedRelationId}
-                onFocusNode={onFocusRelationNode}
-                onSelectRelation={onSelectRelation}
-              />
+              <details className="project-map-detail-disclosure">
+                <summary>
+                  <span>{t("projectMap.detail.associations")}</span>
+                  <em>
+                    {t("projectMap.detail.associationSummary", {
+                      incoming: relationBucket?.incoming.length ?? 0,
+                      outgoing: relationBucket?.outgoing.length ?? 0,
+                    })}
+                  </em>
+                </summary>
+                <ProjectMapRelationInspector
+                  bucket={relationBucket}
+                  selectedRelationId={selectedRelationId}
+                  onFocusNode={onFocusRelationNode}
+                  onSelectRelation={onSelectRelation}
+                />
+              </details>
             </section>
             <section className="project-map-inspector-zone is-actions">
               <header className="project-map-inspector-zone-header">

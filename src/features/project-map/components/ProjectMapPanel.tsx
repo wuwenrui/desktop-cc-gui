@@ -11,8 +11,11 @@ import Crosshair from "lucide-react/dist/esm/icons/crosshair";
 import Folder from "lucide-react/dist/esm/icons/folder";
 import Globe2 from "lucide-react/dist/esm/icons/globe-2";
 import HardDrive from "lucide-react/dist/esm/icons/hard-drive";
+import Lightbulb from "lucide-react/dist/esm/icons/lightbulb";
 import ListChecks from "lucide-react/dist/esm/icons/list-checks";
+import ListFilter from "lucide-react/dist/esm/icons/list-filter";
 import Network from "lucide-react/dist/esm/icons/network";
+import RadioTower from "lucide-react/dist/esm/icons/radio-tower";
 import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
 import Sparkles from "lucide-react/dist/esm/icons/sparkles";
 import ZoomIn from "lucide-react/dist/esm/icons/zoom-in";
@@ -66,9 +69,18 @@ import {
   validateProjectMapGraphIntegrity,
 } from "../utils/graphIntegrity";
 import {
+  explainProjectMapAssociationPath,
   buildProjectMapShortestPath,
   searchProjectMapNodes,
+  searchProjectMapGrouped,
 } from "../utils/navigation";
+import { buildProjectMapActivityProjection } from "../utils/activityProjection";
+import {
+  buildProjectMapHighlightProjection,
+} from "../utils/highlightProjection";
+import {
+  buildProjectMapAdvisorHints,
+} from "../utils/advisorProjections";
 import {
   buildProjectMapRelationIndex,
   filterProjectMapRelations,
@@ -80,6 +92,13 @@ import {
   ProjectMapGenerationTaskDrawer,
 } from "./ProjectMapTaskDrawer";
 import {
+  ProjectMapAdvisorHintsPanel,
+  ProjectMapGroupedQueryPanel,
+  ProjectMapNavigationHistoryChips,
+  ProjectMapRecentActivityPanel,
+  type ProjectMapNavigationHistoryItem,
+} from "./ProjectMapWorkbenchPanels";
+import {
   DeleteNodeConfirmDialog,
   DetailPanel,
   GenerationConfirmationDialog,
@@ -87,6 +106,9 @@ import {
   ProjectMapRelationLegendPanel,
   ProjectMapSettingsPanel,
 } from "./ProjectMapPanelSurfaces";
+import {
+  buildProjectMapEvidenceFileIndex,
+} from "../utils/evidenceFileIndex";
 import type { ProjectMapHierarchyRelationView } from "./ProjectMapPanelSurfaces";
 import type {
   ProjectMapDataset,
@@ -98,6 +120,9 @@ import type {
   ProjectMapImpactSourceMetadata,
   ProjectMapPreferredLanguage,
   ProjectMapProfile,
+  ProjectMapQuickFilterId,
+  ProjectMapAdvisorHint,
+  ProjectMapQueryResult,
 } from "../types";
 
 type ProjectMapPanelProps = {
@@ -140,8 +165,11 @@ type ProjectMapOrchestrationDraftState =
 
 type ProjectMapVisibleSectionState = {
   navigation: boolean;
+  query: boolean;
+  activity: boolean;
   evidence: boolean;
   relations: boolean;
+  advisor: boolean;
   health: boolean;
 };
 
@@ -161,6 +189,34 @@ const DETAIL_PANEL_FOCUS_OFFSET_MIN = 160;
 const DETAIL_PANEL_FOCUS_OFFSET_MAX = 240;
 const CANVAS_CONTROLS_COLLAPSED_STORAGE_KEY = "ccgui.projectMap.canvasControlsCollapsed";
 const PROJECT_MAP_RELATION_FILTER_ALL = "all";
+const PROJECT_MAP_LOCAL_HISTORY_LIMIT = 6;
+const PROJECT_MAP_QUICK_FILTERS: ProjectMapQuickFilterId[] = [
+  "changed",
+  "affected",
+  "stale",
+  "candidate",
+  "low-confidence",
+  "inferred-relations",
+];
+
+function normalizeLocalHistoryLabel(value: string): string {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+function appendUniqueLocalHistory<T>(
+  current: T[],
+  nextItem: T,
+  getKey: (item: T) => string,
+): T[] {
+  const nextKey = getKey(nextItem);
+  if (!nextKey) {
+    return current;
+  }
+  return [
+    nextItem,
+    ...current.filter((item) => getKey(item) !== nextKey),
+  ].slice(0, PROJECT_MAP_LOCAL_HISTORY_LIMIT);
+}
 
 function readCanvasControlsCollapsedPreference(): boolean {
   if (typeof window === "undefined" || !window.localStorage) {
@@ -360,7 +416,10 @@ export function ProjectMapPanel({
   const [isLensStripCollapsed, setIsLensStripCollapsed] = useState(true);
   const [isProjectMapChromeCollapsed, setIsProjectMapChromeCollapsed] = useState(false);
   const [isNavigationPanelExpanded, setIsNavigationPanelExpanded] = useState(false);
+  const [isQueryPanelExpanded, setIsQueryPanelExpanded] = useState(false);
+  const [isActivityPanelExpanded, setIsActivityPanelExpanded] = useState(false);
   const [isRelationPanelExpanded, setIsRelationPanelExpanded] = useState(false);
+  const [isAdvisorPanelExpanded, setIsAdvisorPanelExpanded] = useState(false);
   const [isGraphHealthExpanded, setIsGraphHealthExpanded] = useState(false);
   const [isCanvasControlsCollapsed, setIsCanvasControlsCollapsed] = useState(
     readCanvasControlsCollapsedPreference,
@@ -374,6 +433,10 @@ export function ProjectMapPanel({
     useState<ProjectMapGraphRepairSummary | null>(dataset.graphRepair ?? null);
   const [isConfirmingAllCandidates, setIsConfirmingAllCandidates] = useState(false);
   const [selectedGraphNodeIds, setSelectedGraphNodeIds] = useState<Set<string>>(new Set());
+  const [activeQuickFilters, setActiveQuickFilters] = useState<Set<ProjectMapQuickFilterId>>(new Set());
+  const [selectedAdvisorHintId, setSelectedAdvisorHintId] = useState<string | null>(null);
+  const [queryHistory, setQueryHistory] = useState<string[]>([]);
+  const [navigationHistory, setNavigationHistory] = useState<ProjectMapNavigationHistoryItem[]>([]);
   const [dragPreviewPositions, setDragPreviewPositions] = useState<
     Record<string, ProjectMapGraphNodePosition>
   >({});
@@ -445,9 +508,43 @@ export function ProjectMapPanel({
     () => searchProjectMapNodes({ dataset, query: searchQuery, limit: 8 }),
     [dataset, searchQuery],
   );
-  const searchResultNodeIds = useMemo(
-    () => new Set(searchResults.map((result) => result.node.id)),
-    [searchResults],
+  const activityProjection = useMemo(
+    () =>
+      buildProjectMapActivityProjection({
+        dataset,
+        changedFilePaths,
+        source: changedFileSource,
+      }),
+    [changedFilePaths, changedFileSource, dataset],
+  );
+  const evidenceFileIndex = useMemo(
+    () => buildProjectMapEvidenceFileIndex({ dataset }),
+    [dataset],
+  );
+  const groupedQueryResults = useMemo(
+    () =>
+      searchProjectMapGrouped({
+        dataset,
+        query: searchQuery,
+        activityProjection,
+        evidenceFileIndex,
+      }),
+    [activityProjection, dataset, evidenceFileIndex, searchQuery],
+  );
+  const advisorHints = useMemo(
+    () =>
+      buildProjectMapAdvisorHints({
+        dataset,
+        activityProjection,
+        queryResults: groupedQueryResults,
+        selectedNodeId: selectedNode?.id ?? null,
+        changedFilePaths,
+      }),
+    [activityProjection, changedFilePaths, dataset, groupedQueryResults, selectedNode?.id],
+  );
+  const selectedAdvisorHint = useMemo(
+    () => advisorHints.find((hint) => hint.id === selectedAdvisorHintId) ?? null,
+    [advisorHints, selectedAdvisorHintId],
   );
   const pathNodeOptions = useMemo(
     () => [...projectionNodes].sort((left, right) => left.title.localeCompare(right.title)),
@@ -465,9 +562,14 @@ export function ProjectMapPanel({
       }),
     [dataset, pathSourceNodeId, pathTargetNodeId, t],
   );
-  const pathNodeIds = useMemo(
-    () => new Set(pathResult.steps.map((step) => step.node.id)),
-    [pathResult.steps],
+  const associationExplanation = useMemo(
+    () =>
+      explainProjectMapAssociationPath({
+        sourceNodeId: pathSourceNodeId,
+        targetNodeId: pathTargetNodeId,
+        pathResult,
+      }),
+    [pathResult, pathSourceNodeId, pathTargetNodeId],
   );
   const refreshSummary = useMemo(
     () => classifyProjectMapRefresh({ dataset, changedFiles: changedFilePaths }),
@@ -517,6 +619,13 @@ export function ProjectMapPanel({
   const selectedRelation = selectedRelationId
     ? relationIndex.relations.find((item) => item.relation.id === selectedRelationId) ?? null
     : null;
+  const selectedNodeExplainHint = useMemo(
+    () =>
+      selectedNode
+        ? advisorHints.find((hint) => hint.kind === "node-explain") ?? null
+        : null,
+    [advisorHints, selectedNode],
+  );
   const hierarchyRelations = useMemo<ProjectMapHierarchyRelationView[]>(
     () =>
       dataset.nodes.flatMap((child) => {
@@ -587,23 +696,21 @@ export function ProjectMapPanel({
   const visibleSectionState = useMemo<ProjectMapVisibleSectionState>(
     () => ({
       navigation: isNavigationPanelExpanded,
+      query: isQueryPanelExpanded,
+      activity: isActivityPanelExpanded,
       evidence: false,
       relations: isRelationPanelExpanded,
+      advisor: isAdvisorPanelExpanded,
       health: isGraphHealthExpanded,
     }),
     [
+      isActivityPanelExpanded,
+      isAdvisorPanelExpanded,
       isGraphHealthExpanded,
       isNavigationPanelExpanded,
+      isQueryPanelExpanded,
       isRelationPanelExpanded,
     ],
-  );
-  const impactChangedNodeIds = useMemo(
-    () => new Set(impactAnalysis.changedNodes.map((item) => item.node.id)),
-    [impactAnalysis.changedNodes],
-  );
-  const impactAffectedNodeIds = useMemo(
-    () => new Set(impactAnalysis.affectedNodes.map((item) => item.node.id)),
-    [impactAnalysis.affectedNodes],
   );
   const selectedNodeStaleReasons = useMemo(
     () =>
@@ -656,6 +763,37 @@ export function ProjectMapPanel({
       return [{ indexedRelation, source, target }];
     });
   }, [filteredRelations, renderGraphLayout.positions]);
+  const highlightProjection = useMemo(
+    () =>
+      buildProjectMapHighlightProjection({
+        dataset,
+        selectedNodeId: selectedNode?.id ?? null,
+        selectedRelationId,
+        pathResult,
+        queryResults: groupedQueryResults,
+        activityProjection,
+        advisorHints: selectedAdvisorHint ? [selectedAdvisorHint] : [],
+        quickFilters: activeQuickFilters,
+        baseNodeIds: visibleNodes.map((node) => node.id),
+        baseRelationIds: [
+          ...renderGraphLayout.edges.map((edge) => edge.id),
+          ...relationRenderEdges.map(({ indexedRelation }) => indexedRelation.relation.id),
+        ],
+      }),
+    [
+      activeQuickFilters,
+      activityProjection,
+      dataset,
+      groupedQueryResults,
+      pathResult,
+      relationRenderEdges,
+      renderGraphLayout.edges,
+      selectedNode?.id,
+      selectedAdvisorHint,
+      selectedRelationId,
+      visibleNodes,
+    ],
+  );
   const miniMapProjection = useMemo(() => {
     if (!renderGraphLayout.rootNodeId) {
       return null;
@@ -718,6 +856,11 @@ export function ProjectMapPanel({
   const activeLens = selectedNode ? lensIndex.get(selectedNode.lensId) ?? null : null;
   const isPersistenceBacked = Boolean(activeWorkspace?.id) && !controlledDataset;
   const profileSummary = getProfileSummary(dataset.profile);
+  const groupedQueryResultCount = groupedQueryResults.groups.reduce(
+    (total, group) => total + group.results.length,
+    0,
+  );
+  const activityItemCount = activityProjection.items.length;
   const previousViewSnapshot = viewHistory.at(-1) ?? null;
   const hasBackToParentFallback = Boolean(focusNodeId);
   const backToPreviousLabel = previousViewSnapshot
@@ -986,6 +1129,38 @@ export function ProjectMapPanel({
     setPathTargetNodeId(nodeId);
   }, []);
 
+  const handleQuickFilterToggle = useCallback((filterId: ProjectMapQuickFilterId) => {
+    setActiveQuickFilters((current) => {
+      const nextFilters = new Set(current);
+      if (nextFilters.has(filterId)) {
+        nextFilters.delete(filterId);
+      } else {
+        nextFilters.add(filterId);
+      }
+      return nextFilters;
+    });
+  }, []);
+
+  const rememberQuery = useCallback((query: string) => {
+    const normalizedQuery = normalizeLocalHistoryLabel(query);
+    if (!normalizedQuery) {
+      return;
+    }
+    setQueryHistory((current) =>
+      appendUniqueLocalHistory(current, normalizedQuery, (item) => item),
+    );
+  }, []);
+
+  const handleSearchQueryChange = useCallback((query: string) => {
+    setSearchQuery(query);
+  }, []);
+
+  const rememberNavigationItem = useCallback((item: ProjectMapNavigationHistoryItem) => {
+    setNavigationHistory((current) =>
+      appendUniqueLocalHistory(current, item, (historyItem) => historyItem.id),
+    );
+  }, []);
+
   const handleNodeSelect = (node: ProjectMapNode) => {
     setHoverNodeId(null);
     setSelectedNodeId(node.id);
@@ -1021,6 +1196,12 @@ export function ProjectMapPanel({
     rememberCurrentView();
     setHoverNodeId(null);
     setSelectedNodeId(targetNode.id);
+    rememberNavigationItem({
+      id: `node:${targetNode.id}`,
+      kind: "node",
+      label: targetNode.title,
+      nodeId: targetNode.id,
+    });
     setFocusNodeId(
       targetNode.parentId && targetNode.parentId !== rootNode?.id
         ? targetNode.parentId
@@ -1028,7 +1209,68 @@ export function ProjectMapPanel({
     );
     setIsDetailCollapsed(false);
     setSelectedGraphNodeIds(new Set([targetNode.id]));
-  }, [nodeIndex, rememberCurrentView, rootNode?.id]);
+  }, [nodeIndex, rememberCurrentView, rememberNavigationItem, rootNode?.id]);
+
+  const activateWorkbenchTarget = useCallback((target: {
+    nodeIds: string[];
+    relationIds: string[];
+  }) => {
+    const focusableNodeId = target.nodeIds.find((nodeId) => nodeIndex.has(nodeId)) ?? null;
+    if (focusableNodeId) {
+      focusNavigationNode(focusableNodeId);
+      return;
+    }
+    const selectableRelationId = target.relationIds.find((relationId) =>
+      relationIndex.relations.some((item) => item.relation.id === relationId),
+    ) ?? null;
+    if (selectableRelationId) {
+      setSelectedRelationId(selectableRelationId);
+      setIsRelationPanelExpanded(true);
+    }
+  }, [focusNavigationNode, nodeIndex, relationIndex.relations]);
+
+  const handleQueryResultActivate = useCallback((result: ProjectMapQueryResult) => {
+    rememberQuery(searchQuery);
+    activateWorkbenchTarget(result);
+  }, [activateWorkbenchTarget, rememberQuery, searchQuery]);
+
+  const handleAdvisorHintActivate = useCallback((hint: ProjectMapAdvisorHint) => {
+    setSelectedAdvisorHintId(hint.id);
+    activateWorkbenchTarget(hint);
+  }, [activateWorkbenchTarget]);
+
+  const handlePathNavigationRemember = useCallback(() => {
+    const sourceNode = pathSourceNodeId ? nodeIndex.get(pathSourceNodeId) ?? null : null;
+    const targetNode = pathTargetNodeId ? nodeIndex.get(pathTargetNodeId) ?? null : null;
+    if (!sourceNode || !targetNode) {
+      return;
+    }
+    rememberNavigationItem({
+      id: `path:${sourceNode.id}:${targetNode.id}`,
+      kind: "path",
+      label: `${sourceNode.title} → ${targetNode.title}`,
+      sourceNodeId: sourceNode.id,
+      targetNodeId: targetNode.id,
+    });
+  }, [nodeIndex, pathSourceNodeId, pathTargetNodeId, rememberNavigationItem]);
+
+  useEffect(() => {
+    if (!pathEndpointsEditedByUserRef.current) {
+      return;
+    }
+    handlePathNavigationRemember();
+  }, [handlePathNavigationRemember]);
+
+  const handleNavigationHistoryActivate = useCallback((item: ProjectMapNavigationHistoryItem) => {
+    if (item.kind === "path") {
+      pathEndpointsEditedByUserRef.current = true;
+      setPathSourceNodeId(item.sourceNodeId ?? null);
+      setPathTargetNodeId(item.targetNodeId ?? null);
+      setIsNavigationPanelExpanded(true);
+      return;
+    }
+    focusNavigationNode(item.nodeId ?? null);
+  }, [focusNavigationNode]);
 
   useEffect(() => {
     if (!sourceFocusNodeId || lastSourceFocusNodeIdRef.current === sourceFocusNodeId) {
@@ -1715,16 +1957,36 @@ export function ProjectMapPanel({
                 aria-label={t("projectMap.viewIa.modesAria")}
               >
                   <button
-                    className={cn("project-map-investigation-mode", visibleSectionState.navigation && "is-active")}
+                    className={cn(
+                      "project-map-investigation-mode",
+                      (visibleSectionState.navigation || visibleSectionState.query) && "is-active",
+                    )}
                     type="button"
                     aria-label={t("projectMap.viewIa.navigationMode")}
-                    aria-pressed={visibleSectionState.navigation}
-                    aria-expanded={visibleSectionState.navigation}
-                    onClick={() => setIsNavigationPanelExpanded((current) => !current)}
+                    aria-pressed={visibleSectionState.navigation || visibleSectionState.query}
+                    aria-expanded={visibleSectionState.navigation || visibleSectionState.query}
+                    onClick={() => {
+                      const nextExpanded = !(visibleSectionState.navigation || visibleSectionState.query);
+                      rememberQuery(searchQuery);
+                      setIsNavigationPanelExpanded(nextExpanded);
+                      setIsQueryPanelExpanded(nextExpanded);
+                    }}
                   >
-                    <ListChecks aria-hidden />
+                    <ListFilter aria-hidden />
                     <span><strong>{t("projectMap.viewIa.navigationMode")}</strong></span>
-                    <b>{searchResults.length}</b>
+                    <b>{searchResults.length + groupedQueryResultCount}</b>
+                  </button>
+                  <button
+                    className={cn("project-map-investigation-mode", visibleSectionState.activity && "is-active")}
+                    type="button"
+                    aria-label={t("projectMap.viewIa.activityMode")}
+                    aria-pressed={visibleSectionState.activity}
+                    aria-expanded={visibleSectionState.activity}
+                    onClick={() => setIsActivityPanelExpanded((current) => !current)}
+                  >
+                    <RadioTower aria-hidden />
+                    <span><strong>{t("projectMap.viewIa.activityMode")}</strong></span>
+                    <b>{activityItemCount}</b>
                   </button>
                   <button
                     className={cn("project-map-investigation-mode", visibleSectionState.relations && "is-active")}
@@ -1737,6 +1999,18 @@ export function ProjectMapPanel({
                     <Network aria-hidden />
                     <span><strong>{t("projectMap.viewIa.relationsMode")}</strong></span>
                   <b>{filteredRelations.length + filteredHierarchyRelations.length}</b>
+                  </button>
+                  <button
+                    className={cn("project-map-investigation-mode", visibleSectionState.advisor && "is-active")}
+                    type="button"
+                    aria-label={t("projectMap.viewIa.advisorMode")}
+                    aria-pressed={visibleSectionState.advisor}
+                    aria-expanded={visibleSectionState.advisor}
+                    onClick={() => setIsAdvisorPanelExpanded((current) => !current)}
+                  >
+                    <Lightbulb aria-hidden />
+                    <span><strong>{t("projectMap.viewIa.advisorMode")}</strong></span>
+                    <b>{advisorHints.length}</b>
                   </button>
                   <button
                     className={cn(
@@ -1764,16 +2038,41 @@ export function ProjectMapPanel({
             {visibleSectionState.navigation ? (
               <ProjectMapNavigationPanel
                 searchQuery={searchQuery}
-                searchResults={searchResults}
                 expanded={visibleSectionState.navigation}
                 pathNodeOptions={pathNodeOptions}
                 pathSourceNodeId={pathSourceNodeId}
                 pathTargetNodeId={pathTargetNodeId}
                 pathResult={pathResult}
-                onSearchQueryChange={setSearchQuery}
+                associationExplanation={associationExplanation}
+                onSearchQueryChange={handleSearchQueryChange}
                 onFocusNode={focusNavigationNode}
                 onPathSourceNodeChange={handlePathSourceNodeChange}
                 onPathTargetNodeChange={handlePathTargetNodeChange}
+              />
+            ) : null}
+
+            <ProjectMapNavigationHistoryChips
+              items={navigationHistory}
+              onActivate={handleNavigationHistoryActivate}
+              onClear={() => setNavigationHistory([])}
+            />
+
+            {visibleSectionState.query ? (
+              <ProjectMapGroupedQueryPanel
+                results={groupedQueryResults}
+                expanded={visibleSectionState.query}
+                queryHistory={queryHistory}
+                onActivateResult={handleQueryResultActivate}
+                onRestoreQuery={handleSearchQueryChange}
+                onClearQueryHistory={() => setQueryHistory([])}
+              />
+            ) : null}
+
+            {visibleSectionState.activity ? (
+              <ProjectMapRecentActivityPanel
+                activity={activityProjection}
+                expanded={visibleSectionState.activity}
+                onActivateTarget={activateWorkbenchTarget}
               />
             ) : null}
 
@@ -1794,6 +2093,16 @@ export function ProjectMapPanel({
                 onDirectionFilterChange={setRelationDirectionFilter}
                 onClearSelectedRelation={() => setSelectedRelationId(null)}
                 onFocusNode={focusNavigationNode}
+              />
+            ) : null}
+
+            {visibleSectionState.advisor ? (
+              <ProjectMapAdvisorHintsPanel
+                hints={advisorHints}
+                expanded={visibleSectionState.advisor}
+                selectedHintId={selectedAdvisorHintId}
+                onActivateHint={handleAdvisorHintActivate}
+                onClearHint={() => setSelectedAdvisorHintId(null)}
               />
             ) : null}
 
@@ -1950,6 +2259,26 @@ export function ProjectMapPanel({
               ) : null}
             </div>
             <div
+              className="project-map-quick-filters"
+              role="toolbar"
+              aria-label={t("projectMap.quickFilters.title")}
+            >
+              {PROJECT_MAP_QUICK_FILTERS.map((filterId) => {
+                const isActive = activeQuickFilters.has(filterId);
+                return (
+                  <button
+                    key={filterId}
+                    type="button"
+                    className={cn("project-map-quick-filter-chip", isActive && "is-active")}
+                    aria-pressed={isActive}
+                    onClick={() => handleQuickFilterToggle(filterId)}
+                  >
+                    {t(`projectMap.quickFilters.${filterId}`)}
+                  </button>
+                );
+              })}
+            </div>
+            <div
               className="project-map-graph-viewport"
               style={{
                 transform: `translate(${viewport.pan.x}px, ${viewport.pan.y}px) scale(${viewport.zoom})`,
@@ -1964,7 +2293,10 @@ export function ProjectMapPanel({
                   const isFocused =
                     neighborNodeIds.has(edge.source.id) &&
                     neighborNodeIds.has(edge.target.id);
+                  const relationState = highlightProjection.relationStates.get(edge.id);
                   const isPathEdge = pathResult.edgeKeys.has(`${edge.source.id}::${edge.target.id}`);
+                  const isFilterEdge = highlightProjection.filterRelationIds.has(edge.id);
+                  const isAdvisorEdge = highlightProjection.advisorRelationIds.has(edge.id);
                   return (
                     <line
                       key={edge.id}
@@ -1976,12 +2308,16 @@ export function ProjectMapPanel({
                         "project-map-edge",
                         isFocused && "is-focused",
                         isPathEdge && "is-path-edge",
+                        isFilterEdge && "is-filter-edge",
+                        isAdvisorEdge && "is-advisor-edge",
+                        relationState?.primary && `is-highlight-${relationState.primary}`,
                       )}
                     />
                   );
                 })}
                 {relationRenderEdges.map(({ indexedRelation, source, target }) => {
                   const isSelectedRelation = selectedRelationId === indexedRelation.relation.id;
+                  const relationState = highlightProjection.relationStates.get(indexedRelation.relation.id);
                   return (
                     <line
                       key={`relation:${indexedRelation.relation.id}:${source.id}:${target.id}`}
@@ -1994,6 +2330,10 @@ export function ProjectMapPanel({
                         "is-relation-edge",
                         indexedRelation.degraded && "is-degraded",
                         isSelectedRelation && "is-selected-relation",
+                        highlightProjection.pathRelationIds.has(indexedRelation.relation.id) && "is-path-edge",
+                        highlightProjection.filterRelationIds.has(indexedRelation.relation.id) && "is-filter-edge",
+                        highlightProjection.advisorRelationIds.has(indexedRelation.relation.id) && "is-advisor-edge",
+                        relationState?.primary && `is-highlight-${relationState.primary}`,
                       )}
                     />
                   );
@@ -2008,15 +2348,22 @@ export function ProjectMapPanel({
                 const isGroupSelected = selectedGraphNodeIds.has(node.id);
                 const isFocused = neighborNodeIds.has(node.id);
                 const isHub = node.parentId === rootNode?.id;
-                const isImpactChanged = impactChangedNodeIds.has(node.id);
-                const isImpactAffected = impactAffectedNodeIds.has(node.id);
-                const isSearchMatch = searchResultNodeIds.has(node.id);
-                const isPathNode = pathNodeIds.has(node.id);
+                const nodeHighlightState = highlightProjection.nodeStates.get(node.id);
+                const isImpactChanged = highlightProjection.activityChangedNodeIds.has(node.id);
+                const isImpactAffected = highlightProjection.activityAffectedNodeIds.has(node.id);
+                const isSearchMatch = highlightProjection.searchNodeIds.has(node.id);
+                const isPathNode = highlightProjection.pathNodeIds.has(node.id);
+                const isQuickFilterMatch = highlightProjection.filterNodeIds.has(node.id);
+                const isAdvisorMatch = highlightProjection.advisorNodeIds.has(node.id);
                 const isRelationFilteredNode = relationFilteredNodeIds.has(node.id);
                 const isSelectedRelationNode = selectedRelationNodeIds.has(node.id);
                 const isNavigationHighlighted =
                   isSearchMatch ||
                   isPathNode ||
+                  isImpactChanged ||
+                  isImpactAffected ||
+                  isQuickFilterMatch ||
+                  isAdvisorMatch ||
                   isRelationFilteredNode ||
                   isSelectedRelationNode;
                 const descendantStats = getDescendantStats(node, nodeIndex);
@@ -2034,6 +2381,9 @@ export function ProjectMapPanel({
                       isImpactAffected && "is-impact-affected",
                       isSearchMatch && "is-search-match",
                       isPathNode && "is-path-node",
+                      isQuickFilterMatch && "is-filter-match",
+                      isAdvisorMatch && "is-advisor-match",
+                      nodeHighlightState?.primary && `is-highlight-${nodeHighlightState.primary}`,
                       isRelationFilteredNode && "is-relation-filtered-node",
                       isSelectedRelationNode && "is-selected-relation-node",
                       isSelected && "is-selected",
@@ -2081,6 +2431,18 @@ export function ProjectMapPanel({
                             : isPathNode
                             ? t("projectMap.navigation.path.badge")
                             : t("projectMap.navigation.search.badge")}
+                        </>
+                      ) : null}
+                      {isQuickFilterMatch ? (
+                        <>
+                          {" · "}
+                          {t("projectMap.quickFilters.badge")}
+                        </>
+                      ) : null}
+                      {isAdvisorMatch ? (
+                        <>
+                          {" · "}
+                          {t("projectMap.advisor.badge")}
                         </>
                       ) : null}
                     </span>
@@ -2175,6 +2537,8 @@ export function ProjectMapPanel({
               lens={selectedNode ? lensIndex.get(selectedNode.lensId) ?? null : null}
               explainPack={selectedExplainPack}
               relationBucket={selectedNodeRelationBucket}
+              activityProjection={activityProjection}
+              nodeExplainHint={selectedNodeExplainHint}
               selectedRelationId={selectedRelationId}
               impactAnalysis={impactAnalysis}
               refreshSummary={refreshSummary}

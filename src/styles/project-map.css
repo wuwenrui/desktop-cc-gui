@@ -1,4 +1,5 @@
 @import "./project-map.inspector.css";
+@import "./project-map.overlays.css";
 
 .project-map-panel {
   --project-map-toolbar-control-height: 22px;
@@ -564,19 +565,28 @@
 }
 
 .project-map-investigation-strip {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(118px, max-content));
+  display: flex;
   gap: 4px;
-  align-content: stretch;
+  align-items: center;
   justify-self: end;
   min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  scrollbar-width: none;
+}
+
+.project-map-investigation-strip::-webkit-scrollbar {
+  display: none;
 }
 
 .project-map-investigation-mode {
   display: grid;
-  grid-template-columns: 14px minmax(0, 1fr) auto;
+  grid-template-columns: 14px max-content auto;
   gap: 5px;
   align-items: center;
+  flex: 0 0 auto;
   min-width: 0;
   border: 0;
   border-radius: 8px;
@@ -614,9 +624,10 @@
 }
 
 .project-map-investigation-mode span {
-  display: grid;
+  display: inline-flex;
   gap: 0;
   min-width: 0;
+  align-items: center;
 }
 
 .project-map-investigation-mode span strong {
@@ -1851,6 +1862,54 @@
   min-height: 28px;
 }
 
+.project-map-path-explanation {
+  border-top: 1px solid color-mix(in srgb, var(--project-map-border) 60%, transparent);
+  padding-top: 5px;
+}
+
+.project-map-path-explanation summary {
+  color: var(--project-map-accent);
+  font-size: 10px;
+  font-weight: 720;
+  cursor: pointer;
+}
+
+.project-map-path-explanation ul {
+  display: grid;
+  gap: 4px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.project-map-path-explanation li {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+  border-radius: 8px;
+  padding: 6px 7px;
+  background: color-mix(in srgb, var(--project-map-surface) 62%, transparent);
+}
+
+.project-map-path-explanation li.is-degraded {
+  background: color-mix(in srgb, var(--project-map-warning) 8%, var(--project-map-surface));
+}
+
+.project-map-path-explanation strong,
+.project-map-path-explanation span,
+.project-map-path-explanation-empty {
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.project-map-path-explanation strong {
+  color: var(--project-map-text-strong);
+}
+
+.project-map-path-explanation span,
+.project-map-path-explanation-empty {
+  color: var(--project-map-text-muted);
+}
+
 .project-map-canvas-control-group {
   position: absolute;
   left: 14px;
@@ -2543,6 +2602,11 @@
 .project-map-evidence-file-tags em.is-warning {
   background: color-mix(in srgb, var(--project-map-warning) 14%, transparent);
   color: var(--project-map-warning);
+}
+
+.project-map-evidence-file-tags em.is-changed {
+  background: color-mix(in srgb, var(--project-map-accent) 16%, transparent);
+  color: var(--project-map-accent);
 }
 
 .project-map-evidence-file-tags em.is-degraded {

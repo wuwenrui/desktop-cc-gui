@@ -675,3 +675,176 @@ export type ProjectMapImpactSourceMetadata = {
   label: string;
   fileCount: number;
 };
+
+export type ProjectMapActivityKind =
+  | "git-change"
+  | "project-map-run"
+  | "candidate"
+  | "stale"
+  | "evidence"
+  | "manual";
+
+export type ProjectMapActivitySourceCategory =
+  | "changed-files"
+  | "map-runs"
+  | "stale-state"
+  | "candidate-state"
+  | "evidence-state"
+  | "degraded";
+
+export type ProjectMapActivityItem = {
+  id: string;
+  kind: ProjectMapActivityKind;
+  sourceCategory: ProjectMapActivitySourceCategory;
+  title: string;
+  summary: string;
+  occurredAt: string;
+  nodeIds: string[];
+  relationIds: string[];
+  filePaths: string[];
+  lensIds: string[];
+  confidence: ProjectMapConfidence;
+  sourceRefs: ProjectMapSource[];
+  deterministic: boolean;
+  degraded?: boolean;
+};
+
+export type ProjectMapActivityGroup = {
+  id: ProjectMapActivitySourceCategory;
+  title: string;
+  items: ProjectMapActivityItem[];
+  degraded?: boolean;
+};
+
+export type ProjectMapActivityProjection = {
+  groups: ProjectMapActivityGroup[];
+  items: ProjectMapActivityItem[];
+  changedNodeIds: Set<string>;
+  affectedNodeIds: Set<string>;
+  relationIds: Set<string>;
+  filePaths: Set<string>;
+  degraded: boolean;
+};
+
+export type ProjectMapQueryGroup =
+  | "nodes"
+  | "evidence-files"
+  | "relations"
+  | "artifact-references"
+  | "stale-reasons"
+  | "activity";
+
+export type ProjectMapQueryResult = {
+  id: string;
+  group: ProjectMapQueryGroup;
+  title: string;
+  summary: string;
+  matchedFields: string[];
+  nodeIds: string[];
+  relationIds: string[];
+  filePaths: string[];
+  score: number;
+  preview?: string;
+  degraded?: boolean;
+};
+
+export type ProjectMapGroupedQueryResults = {
+  query: string;
+  groups: Array<{
+    group: ProjectMapQueryGroup;
+    title: string;
+    results: ProjectMapQueryResult[];
+    capped: boolean;
+    totalCount: number;
+  }>;
+  nodeIds: Set<string>;
+  relationIds: Set<string>;
+  filePaths: Set<string>;
+};
+
+export type ProjectMapAssociationExplanationReason = {
+  label: string;
+  relationId?: string;
+  sourceKind?: ProjectMapRelationSourceKind;
+  confidence: ProjectMapConfidence;
+  stale: boolean;
+  evidenceCount: number;
+  deterministic: boolean;
+  degraded?: boolean;
+};
+
+export type ProjectMapAssociationExplanation = {
+  sourceNodeId: string;
+  targetNodeId: string;
+  status: "idle" | "found" | "not-found";
+  steps: Array<{
+    nodeId: string;
+    title: string;
+    via: "hierarchy" | "relation" | "self";
+    relationId?: string;
+  }>;
+  reasons: ProjectMapAssociationExplanationReason[];
+};
+
+export type ProjectMapQuickFilterId =
+  | "changed"
+  | "affected"
+  | "stale"
+  | "candidate"
+  | "low-confidence"
+  | "inferred-relations";
+
+export type ProjectMapHighlightSource =
+  | "selected"
+  | "path"
+  | "search"
+  | "activity-changed"
+  | "activity-affected"
+  | "advisor"
+  | "filter"
+  | "base";
+
+export type ProjectMapHighlightItemState = {
+  id: string;
+  primary: ProjectMapHighlightSource;
+  sources: ProjectMapHighlightSource[];
+  priority: number;
+};
+
+export type ProjectMapHighlightProjection = {
+  selectedNodeIds: Set<string>;
+  selectedRelationIds: Set<string>;
+  pathNodeIds: Set<string>;
+  pathRelationIds: Set<string>;
+  searchNodeIds: Set<string>;
+  activityChangedNodeIds: Set<string>;
+  activityAffectedNodeIds: Set<string>;
+  advisorNodeIds: Set<string>;
+  advisorRelationIds: Set<string>;
+  filterNodeIds: Set<string>;
+  filterRelationIds: Set<string>;
+  baseNodeIds: Set<string>;
+  baseRelationIds: Set<string>;
+  nodeStates: Map<string, ProjectMapHighlightItemState>;
+  relationStates: Map<string, ProjectMapHighlightItemState>;
+};
+
+export type ProjectMapAdvisorKind =
+  | "diff-impact"
+  | "query-neighborhood"
+  | "node-explain"
+  | "guide-topology"
+  | "graph-health";
+
+export type ProjectMapAdvisorHint = {
+  id: string;
+  kind: ProjectMapAdvisorKind;
+  title: string;
+  summary: string;
+  nodeIds: string[];
+  relationIds: string[];
+  filePaths: string[];
+  severity?: "info" | "warning" | "risk";
+  deterministic: boolean;
+  degraded?: boolean;
+};

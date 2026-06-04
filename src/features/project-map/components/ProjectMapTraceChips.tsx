@@ -5,7 +5,6 @@ import {
   getProjectMapPathBasename,
   inferProjectMapWorkspaceFilePath,
 } from "../utils/evidencePaths";
-import { translateProjectMapSourceType } from "../utils/display";
 import type {
   ProjectMapDiagramArtifact,
   ProjectMapRelatedArtifact,
@@ -99,6 +98,98 @@ function getTraceTarget(
   return item.path ? { path: item.path, line: item.line } : null;
 }
 
+function normalizeTraceTextForCompare(value: string): string {
+  return value.trim().replace(/\\/g, "/").replace(/\s+/g, " ");
+}
+
+function shouldShowTracePath(input: { label: string; traceLabel: string | null }): boolean {
+  if (!input.traceLabel) {
+    return false;
+  }
+  return normalizeTraceTextForCompare(input.label) !== normalizeTraceTextForCompare(input.traceLabel);
+}
+
+function normalizeTraceTypeText(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, "")
+    .replace(/[^\p{L}\p{N}]/gu, "");
+}
+
+const LEGACY_TRACE_TYPE_LABELS: Record<ProjectMapRelatedArtifact["type"], Set<string>> = {
+  file: new Set(["file", "文件", "文件file"]),
+  symbol: new Set(["symbol", "符号", "符号symbol"]),
+  spec: new Set(["spec", "规范", "规范spec"]),
+  task: new Set(["task", "任务", "任务task"]),
+  document: new Set(["document", "文档", "文档document"]),
+  commit: new Set(["commit", "提交", "提交commit"]),
+  test: new Set(["test", "测试", "测试test"]),
+  conversation: new Set(["conversation", "对话", "对话conversation"]),
+};
+
+function isLegacyTraceTypeLabel(type: ProjectMapRelatedArtifact["type"], label: string): boolean {
+  const normalizedLabel = normalizeTraceTypeText(label);
+  return normalizedLabel.length > 0 && (LEGACY_TRACE_TYPE_LABELS[type]?.has(normalizedLabel) ?? false);
+}
+
+function resolveTraceDisplayLabel(
+  item: Pick<ProjectMapRelatedArtifact, "type" | "label" | "path" | "ref">,
+): string {
+  if (!isLegacyTraceTypeLabel(item.type, item.label)) {
+    return item.label;
+  }
+  if (item.path) {
+    return getProjectMapPathBasename(item.path);
+  }
+  return item.ref ?? item.label;
+}
+
+function normalizeTraceDedupText(value: string): string {
+  return value.trim().replace(/\\/g, "/").replace(/\/+/g, "/").toLowerCase();
+}
+
+function getTraceDedupKey(
+  item: Pick<ProjectMapRelatedArtifact, "type" | "label" | "path" | "ref"> & {
+    hash?: string;
+  },
+): string {
+  if (item.path) {
+    return `path:${normalizeTraceDedupText(item.path)}`;
+  }
+  if (item.ref) {
+    return `ref:${normalizeTraceDedupText(item.ref)}`;
+  }
+  if (item.hash) {
+    return `hash:${normalizeTraceDedupText(item.hash)}`;
+  }
+  return `visible:${normalizeTraceDedupText(resolveTraceDisplayLabel(item))}`;
+}
+
+function dedupeProjectMapTraceItemsForDisplay<T extends Parameters<typeof getTraceDedupKey>[0]>(
+  items: T[],
+): T[] {
+  const seenKeys = new Set<string>();
+  return items.filter((item) => {
+    const key = getTraceDedupKey(item);
+    if (seenKeys.has(key)) {
+      return false;
+    }
+    seenKeys.add(key);
+    return true;
+  });
+}
+
+export function dedupeProjectMapSourcesForDisplay(sources: ProjectMapSource[]): ProjectMapSource[] {
+  return dedupeProjectMapTraceItemsForDisplay(sources);
+}
+
+export function dedupeProjectMapArtifactsForDisplay(
+  artifacts: ProjectMapRelatedArtifact[],
+): ProjectMapRelatedArtifact[] {
+  return dedupeProjectMapTraceItemsForDisplay(artifacts);
+}
+
 export function ProjectMapSourceChip({
   source,
   onOpenTrace,
@@ -106,13 +197,11 @@ export function ProjectMapSourceChip({
   source: ProjectMapSource;
   onOpenTrace?: (target: ProjectMapTraceTarget) => void;
 }) {
-  const { t } = useTranslation();
   const traceLabel = getTraceLabel(source);
 
   return (
     <ProjectMapTraceChip
-      label={source.label}
-      typeLabel={translateProjectMapSourceType(t, source.type)}
+      label={resolveTraceDisplayLabel(source)}
       traceLabel={traceLabel}
       target={getTraceTarget(source)}
       excerpt={source.excerpt}
@@ -128,12 +217,9 @@ export function ProjectMapArtifactChip({
   artifact: ProjectMapRelatedArtifact;
   onOpenTrace?: (target: ProjectMapTraceTarget) => void;
 }) {
-  const { t } = useTranslation();
-
   return (
     <ProjectMapTraceChip
-      label={artifact.label}
-      typeLabel={translateProjectMapSourceType(t, artifact.type)}
+      label={resolveTraceDisplayLabel(artifact)}
       traceLabel={getTraceLabel(artifact)}
       target={getTraceTarget(artifact)}
       onOpenTrace={onOpenTrace}
@@ -148,12 +234,9 @@ export function ProjectMapDiagramChip({
   diagram: ProjectMapDiagramArtifact;
   onOpenTrace?: (target: ProjectMapTraceTarget) => void;
 }) {
-  const { t } = useTranslation();
-
   return (
     <ProjectMapTraceChip
       label={diagram.label}
-      typeLabel={t("projectMap.detail.diagramArtifact")}
       traceLabel={diagram.path}
       target={{ path: diagram.path }}
       excerpt={diagram.summary}
@@ -164,25 +247,23 @@ export function ProjectMapDiagramChip({
 
 function ProjectMapTraceChip({
   label,
-  typeLabel,
   traceLabel,
   target,
   excerpt,
   onOpenTrace,
 }: {
   label: string;
-  typeLabel: string;
   traceLabel: string | null;
   target: ProjectMapTraceTarget | null;
   excerpt?: string;
   onOpenTrace?: (target: ProjectMapTraceTarget) => void;
 }) {
   const { t } = useTranslation();
+  const visibleTraceLabel = shouldShowTracePath({ label, traceLabel }) ? traceLabel : null;
   const body = (
     <>
-      <span className="project-map-source-type">{typeLabel}</span>
       <span className="project-map-trace-label">{label}</span>
-      {traceLabel ? <span className="project-map-trace-path">{traceLabel}</span> : null}
+      {visibleTraceLabel ? <span className="project-map-trace-path">{visibleTraceLabel}</span> : null}
       {excerpt ? <span className="project-map-trace-excerpt">{excerpt}</span> : null}
     </>
   );
