@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-18.md`
-- **Total Sessions**: 689
+- **Total Sessions**: 690
 - **Last Active**: 2026-06-04
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-18.md` | ~1769 | Active |
+| `journal-18.md` | ~1818 | Active |
 | `journal-17.md` | ~1971 | Archived |
 | `journal-16.md` | ~1985 | Archived |
 | `journal-15.md` | ~1996 | Archived |
@@ -46,6 +46,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 690 | 2026-06-04 | Fix Claude argv prompt shell escaping | `512b9e6b` | `feature/v0.5.6` |
 | 689 | 2026-06-04 | 增加工作区会话拉取模式切换 | `649ef387` | `feature/v0.5.6` |
 | 688 | 2026-06-04 | Project Map 查询关联工作台 | `6fffd914` | `feature/v0.5.6` |
 | 687 | 2026-06-03 | 补充 v0.5.5 发布说明 | `b05258de` | `feature/v0.5.6` |

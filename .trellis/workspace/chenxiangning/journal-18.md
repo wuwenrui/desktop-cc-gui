@@ -1767,3 +1767,52 @@ Validation performed before commit:
 ### Next Steps
 
 - None - task complete
+
+
+## Session 690: Fix Claude argv prompt shell escaping
+
+**Date**: 2026-06-04
+**Task**: Fix Claude argv prompt shell escaping
+**Branch**: `feature/v0.5.6`
+
+### Summary
+
+修复 Claude 提示词通过 argv 传递导致 Windows shell metacharacter/skill 调用失败的问题，改为默认使用 stream-json stdin 传递用户 prompt，并补充 OpenSpec 记录和回归测试。
+
+### Main Changes
+
+| Area | Change |
+|------|--------|
+| Claude command contract | 非空用户 prompt 默认走 `--input-format stream-json` stdin，避免 `.cmd/.bat` wrapper 或 shell metacharacter 解析 prompt argv。 |
+| Compatibility | 保留 `build_command(..., use_stream_json_input=false, ...)` fallback，仅生产路径通过 `should_use_stream_json_input` 选择 stdin。 |
+| Boundary preservation | `build_message_content` 继续用 trim 判断空文本，但 text payload 保留首尾 whitespace，避免从 argv 切到 stdin 后改变用户输入字节。 |
+| Regression coverage | 新增单行文本、特殊字符 prompt 不进入 argv、边界 whitespace 保真测试；保留 multiline/image stream-json 行为。 |
+| OpenSpec | 新增 `fix-claude-argv-prompt-shell-escaping` proposal/design/spec/tasks，记录根因、方案取舍、兼容边界和验收标准。 |
+
+**Validation**:
+- `cargo test --manifest-path src-tauri/Cargo.toml claude::tests_stream`
+- `cargo test --manifest-path src-tauri/Cargo.toml claude::tests_command`
+- `cargo test --manifest-path src-tauri/Cargo.toml claude_message_content`
+- `openspec validate fix-claude-argv-prompt-shell-escaping --strict --no-interactive`
+
+**Known residual**:
+- `cargo fmt --manifest-path src-tauri/Cargo.toml --check` 之前被无关既有文件 `src-tauri/src/browser_agent/toolbar.rs` 格式问题阻断，未纳入本次原子修复提交。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `512b9e6b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
