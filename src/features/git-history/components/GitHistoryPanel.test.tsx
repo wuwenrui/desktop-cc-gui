@@ -472,15 +472,20 @@ describe("GitHistoryPanel interactions", () => {
   it("opens pull dialog and runs pull only after confirm", async () => {
     render(<GitHistoryPanel workspace={workspace as never} />);
 
+    const pullButton = await screen.findByRole("button", { name: "git.pull" });
     await waitFor(() => {
-      expect(screen.getByText("git.pull")).toBeTruthy();
+      expect(tauriService.listGitBranches).toHaveBeenCalledWith("w1");
+      expect(screen.getAllByText("main").length).toBeGreaterThan(0);
     });
 
-    fireEvent.click(screen.getAllByText("git.pull")[0]!);
-    expect(screen.getByRole("dialog", { name: "git.historyPullDialogTitle" })).toBeTruthy();
+    fireEvent.click(pullButton);
+    const dialog = await screen.findByRole("dialog", { name: "git.historyPullDialogTitle" });
+    expect(within(dialog).getAllByText("origin").length).toBeGreaterThan(0);
+    expect(within(dialog).getAllByText("main").length).toBeGreaterThan(0);
+    expect(within(dialog).getAllByText("git pull origin main").length).toBeGreaterThan(0);
     expect(tauriService.pullGit).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getAllByText("git.pull")[1]!);
+    fireEvent.click(within(dialog).getByRole("button", { name: "git.pull" }));
 
     await waitFor(() => {
       expect(tauriService.pullGit).toHaveBeenCalledWith(
