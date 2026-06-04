@@ -100,3 +100,40 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 696: 稳定工作区提交提示测试
+
+**Date**: 2026-06-05
+**Task**: 稳定工作区提交提示测试
+**Branch**: `feature/v0.5.6`
+
+### Summary
+
+修复 GitHistoryWorktreePanel 提交提示测试在 CI batch 下的 timeout 与 act warning 风险。
+
+### Main Changes
+
+- 在 `GitHistoryWorktreePanel.test.tsx` 的 staged-default commit hint 用例中，先等待 `getGitStatus` 首次调用，再用 `act` 显式 await 首次 status promise。
+- 将 hint 断言改为状态加载完成后的同步断言，避免 CI batch/Windows 下异步状态更新落在测试边界外。
+- 验证：`npm exec vitest -- run src/features/git-history/components/GitHistoryWorktreePanel.test.tsx`，19 tests passed。
+- 验证：`npm run typecheck` 通过。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1faaa8db` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
