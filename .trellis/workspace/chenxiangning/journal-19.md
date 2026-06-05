@@ -331,3 +331,54 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 701: 归档实时用户问题固定
+
+**Date**: 2026-06-05
+**Task**: 归档实时用户问题固定
+**Branch**: `feature/v0.5.6`
+
+### Summary
+
+归档 pin-live-user-question-bubble OpenSpec change，确认 live sticky focused tests 通过。
+
+### Main Changes
+
+本轮完成 `pin-live-user-question-bubble` OpenSpec 收口：
+
+- 基于 Trellis task `04-21-pin-live-user-question-bubble` 创建 OpenSpec change。
+- 确认生产实现已存在，无需新增代码：
+  - `src/features/messages/components/messagesLiveWindow.ts` 已实现 ordinary user sticky candidate、bounded live tail working set、render window sticky candidate 保留。
+  - `src/features/messages/components/Messages.tsx` / `MessagesTimeline.tsx` 已复用 shared condensed history sticky header。
+  - live sticky 行为保持 display-only，不新增 runtime/storage/history payload contract。
+- 归档到：`openspec/changes/archive/2026-06-05-pin-live-user-question-bubble/`。
+- 同步主 spec：`openspec/specs/conversation-live-user-bubble-pinning/spec.md`。
+
+验证证据：
+
+- `npm exec vitest run src/features/messages/components/messagesLiveWindow.test.ts src/features/messages/components/Messages.live-behavior.test.tsx`：53 passed。
+- `npm run typecheck`：passed。
+- `openspec validate pin-live-user-question-bubble --strict --no-interactive`：passed。
+- `openspec validate --all --strict --no-interactive`：archive 前 310 passed / 0 failed，archive 后 309 passed / 0 failed。
+
+关联提交：`2269366f chore(openspec): 归档实时用户问题固定提案`。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2269366f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
