@@ -21,8 +21,8 @@
 
 import { execSync, spawn } from "child_process";
 import { existsSync, mkdirSync, rmSync, readFileSync } from "fs";
-import { dirname, join } from "path";
-import { fileURLToPath } from "url";
+import { dirname, join, resolve } from "path";
+import { fileURLToPath, pathToFileURL } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = join(__dirname, "..");
@@ -42,12 +42,67 @@ const CONFIG = {
   },
 };
 
-// Get version from tauri.conf.json
-function getVersion() {
+function getTauriConfig() {
   const confPath = join(TAURI_DIR, "tauri.conf.json");
-  const conf = JSON.parse(readFileSync(confPath, "utf-8"));
-  return conf.version;
+  return JSON.parse(readFileSync(confPath, "utf-8"));
 }
+
+// Get version from tauri.conf.json
+function getVersion(config = getTauriConfig()) {
+  return config.version;
+}
+
+function getProductName(config = getTauriConfig()) {
+  return config.productName || "ccgui";
+}
+
+function getMacTarget(arch) {
+  if (arch === "arm64") {
+    return "aarch64-apple-darwin";
+  }
+  if (arch === "x64") {
+    return "x86_64-apple-darwin";
+  }
+  if (arch === "universal") {
+    return "universal-apple-darwin";
+  }
+  throw new Error(`Unsupported macOS arch: ${arch}`);
+}
+
+function getMacBundlePath(arch, config = getTauriConfig()) {
+  const target = getMacTarget(arch);
+  return join(
+    TAURI_DIR,
+    `target/${target}/release/bundle/macos/${getProductName(config)}.app`,
+  );
+}
+
+function getMacDmgName(arch, config = getTauriConfig()) {
+  const version = getVersion(config);
+  if (arch === "arm64") {
+    return `ccgui_${version}_aarch64.dmg`;
+  }
+  if (arch === "x64") {
+    return `ccgui_${version}_x86_64.dmg`;
+  }
+  if (arch === "universal") {
+    return `ccgui_${version}_universal.dmg`;
+  }
+  throw new Error(`Unsupported macOS arch: ${arch}`);
+}
+
+function getMacInstallerTitle(config = getTauriConfig()) {
+  return `${getProductName(config)} Installer`;
+}
+
+export const buildPlatformInternals = {
+  getMacBundlePath,
+  getMacDmgName,
+  getMacInstallerTitle,
+  getMacTarget,
+  getProductName,
+  getVersion,
+};
 
 // Execute command with logging
 function exec(cmd, options = {}) {
@@ -107,7 +162,10 @@ function ensureReleaseDir() {
 // Build macOS app
 async function buildMacOS(arch, options = {}) {
   const { skipSign = false, skipNotarize = false } = options;
-  const version = getVersion();
+  const tauriConfig = getTauriConfig();
+  const target = getMacTarget(arch);
+  const bundlePath = getMacBundlePath(arch, tauriConfig);
+  const dmgName = getMacDmgName(arch, tauriConfig);
 
   console.log(`\n========================================`);
   console.log(`Building macOS ${arch}...`);
@@ -124,23 +182,7 @@ async function buildMacOS(arch, options = {}) {
     process.exit(1);
   }
 
-  let target, bundlePath, dmgName;
-
-  if (arch === "arm64") {
-    target = "aarch64-apple-darwin";
-    bundlePath = join(
-      TAURI_DIR,
-      "target/aarch64-apple-darwin/release/bundle/macos/ccgui.app",
-    );
-    dmgName = `ccgui_${version}_aarch64.dmg`;
-  } else if (arch === "x64") {
-    target = "x86_64-apple-darwin";
-    bundlePath = join(
-      TAURI_DIR,
-      "target/x86_64-apple-darwin/release/bundle/macos/ccgui.app",
-    );
-    dmgName = `ccgui_${version}_x86_64.dmg`;
-
+  if (arch === "x64") {
     // Check x86_64 OpenSSL
     if (!existsSync(CONFIG.openssl.x64)) {
       console.error(`Error: x86_64 OpenSSL not found at ${CONFIG.openssl.x64}`);
@@ -154,13 +196,6 @@ async function buildMacOS(arch, options = {}) {
       process.exit(1);
     }
   } else if (arch === "universal") {
-    target = "universal-apple-darwin";
-    bundlePath = join(
-      TAURI_DIR,
-      "target/universal-apple-darwin/release/bundle/macos/ccgui.app",
-    );
-    dmgName = `ccgui_${version}_universal.dmg`;
-
     // Check x86_64 OpenSSL for universal builds
     if (!existsSync(CONFIG.openssl.x64)) {
       console.error(`Error: x86_64 OpenSSL not found at ${CONFIG.openssl.x64}`);
@@ -256,7 +291,7 @@ async function buildMacOS(arch, options = {}) {
   // Create DMG with drag-to-install panel
   ensureReleaseDir();
   const createDmgScript = join(ROOT_DIR, "scripts", "create-dmg.sh");
-  exec(`bash "${createDmgScript}" "${bundlePath}" "${RELEASE_DIR}/${dmgName}" "ccgui Installer"`);
+  exec(`bash "${createDmgScript}" "${bundlePath}" "${RELEASE_DIR}/${dmgName}" "${getMacInstallerTitle(tauriConfig)}"`);
 
   // Notarize
   if (!skipNotarize && !skipSign) {
@@ -390,16 +425,17 @@ async function buildAll(options = {}) {
   return results;
 }
 
-// Parse arguments
-const args = process.argv.slice(2);
-const platform = args[0];
-const options = {
-  skipSign: args.includes("--skip-sign"),
-  skipNotarize: args.includes("--skip-notarize"),
-};
+async function main() {
+  // Parse arguments
+  const args = process.argv.slice(2);
+  const platform = args[0];
+  const options = {
+    skipSign: args.includes("--skip-sign"),
+    skipNotarize: args.includes("--skip-notarize"),
+  };
 
-if (!platform) {
-  console.log(`
+  if (!platform) {
+    console.log(`
 ccgui Multi-Platform Build Script
 
 Usage:
@@ -423,39 +459,47 @@ Examples:
   npm run build:mac-universal -- --skip-notarize
   npm run build:all
 `);
-  process.exit(0);
+    process.exit(0);
+  }
+
+  // Execute build
+  try {
+    switch (platform) {
+      case "mac-arm64":
+        await buildMacOS("arm64", options);
+        break;
+      case "mac-x64":
+        await buildMacOS("x64", options);
+        break;
+      case "mac-universal":
+        await buildMacOS("universal", options);
+        break;
+      case "win-x64":
+        await buildWindows("x64", options);
+        break;
+      case "linux-x64":
+        await buildLinux("x64", options);
+        break;
+      case "linux-arm64":
+        await buildLinux("arm64", options);
+        break;
+      case "all":
+        await buildAll(options);
+        break;
+      default:
+        console.error(`Unknown platform: ${platform}`);
+        console.log("Run without arguments to see available platforms.");
+        process.exit(1);
+    }
+  } catch (error) {
+    console.error("\nBuild failed:", error.message);
+    process.exit(1);
+  }
 }
 
-// Execute build
-try {
-  switch (platform) {
-    case "mac-arm64":
-      await buildMacOS("arm64", options);
-      break;
-    case "mac-x64":
-      await buildMacOS("x64", options);
-      break;
-    case "mac-universal":
-      await buildMacOS("universal", options);
-      break;
-    case "win-x64":
-      await buildWindows("x64", options);
-      break;
-    case "linux-x64":
-      await buildLinux("x64", options);
-      break;
-    case "linux-arm64":
-      await buildLinux("arm64", options);
-      break;
-    case "all":
-      await buildAll(options);
-      break;
-    default:
-      console.error(`Unknown platform: ${platform}`);
-      console.log("Run without arguments to see available platforms.");
-      process.exit(1);
-  }
-} catch (error) {
-  console.error("\nBuild failed:", error.message);
-  process.exit(1);
+const isDirectExecution = process.argv[1] &&
+  import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
+
+if (isDirectExecution) {
+  await main();
 }

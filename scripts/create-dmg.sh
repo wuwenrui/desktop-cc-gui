@@ -8,7 +8,8 @@ set -euo pipefail
 
 APP_PATH="${1:?Usage: $0 <app_path> <output_dmg_path> [volume_name]}"
 OUTPUT_DMG="${2:?Usage: $0 <app_path> <output_dmg_path> [volume_name]}"
-VOLUME_NAME="${3:-ccgui Installer}"
+APP_BUNDLE_NAME="$(basename "$APP_PATH")"
+VOLUME_NAME="${3:-$(basename "$APP_BUNDLE_NAME" .app) Installer}"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
@@ -114,6 +115,26 @@ APPLESCRIPT
   ln -s /Applications "$target_path"
 }
 
+close_finder_windows() {
+  osascript -e "tell application \"Finder\" to close every window" 2>/dev/null &
+  local finder_close_pid=$!
+  local elapsed=0
+
+  while kill -0 "$finder_close_pid" 2>/dev/null; do
+    if [ "$elapsed" -ge 5 ]; then
+      kill "$finder_close_pid" 2>/dev/null || true
+      wait "$finder_close_pid" 2>/dev/null || true
+      echo "Warning: Finder window close timed out, continuing"
+      return 0
+    fi
+
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
+
+  wait "$finder_close_pid" 2>/dev/null || true
+}
+
 cleanup() {
   if [ -n "$MOUNT_DIR" ]; then
     local detach_target="${DEVICE_NODE:-$MOUNT_DIR}"
@@ -140,7 +161,7 @@ DMG_SIZE_KB=$((APP_SIZE_KB + 20480))
 STAGE_DIR="$(mktemp -d /tmp/ccgui-dmg-stage-XXXXXX)"
 mkdir -p "$STAGE_DIR/.background"
 
-if ! copy_app_bundle "$APP_PATH" "$STAGE_DIR/ccgui.app"; then
+if ! copy_app_bundle "$APP_PATH" "$STAGE_DIR/$APP_BUNDLE_NAME"; then
   echo "Error: Failed to stage app bundle"
   exit 1
 fi
@@ -192,7 +213,7 @@ tell application "Finder"
     set text size of theViewOptions to 12
     set background picture of theViewOptions to file ".background:background.png"
 
-    set position of item "ccgui.app" of container window to {180, 170}
+    set position of item "$APP_BUNDLE_NAME" of container window to {180, 170}
     set position of item "Applications" of container window to {480, 170}
 
     close
@@ -207,7 +228,7 @@ then
 fi
 
 # Close Finder windows referencing the volume to prevent busy-volume issues
-osascript -e "tell application \"Finder\" to close every window" 2>/dev/null || true
+close_finder_windows
 sleep 2
 
 chmod -Rf go-w "$MOUNT_DIR" 2>/dev/null || true

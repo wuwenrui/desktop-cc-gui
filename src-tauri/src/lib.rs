@@ -37,6 +37,7 @@ mod diagnostics_bundle;
 mod dictation;
 mod email;
 mod engine;
+mod environment_installer;
 mod event_sink;
 mod files;
 mod git;
