@@ -1147,3 +1147,59 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 719: 完善文件关系图谱面板
+
+**Date**: 2026-06-05
+**Task**: 完善文件关系图谱面板
+**Branch**: `feature/v0.5.7`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| 项目 | 内容 |
+|------|------|
+| Code commit | `c4535bda feat(project-map): 完善文件关系图谱面板` |
+| Scope | 完成 Project Map 文件关系图谱 dashboard 的 OpenSpec、Rust scan 逻辑、前端拆分、i18n 与 CSS 分片 |
+| Frontend | 将 relationship dashboard 从 `ProjectMapPanel.tsx` 拆到 `ProjectMapRelationshipSection.tsx`，抽离 `relationshipDashboardModel.ts`，修复搜索空结果、role/noise filter 同步、重复搜索框、方法调用完整展示、伪 List 视图清理 |
+| Backend | 更新 `src-tauri/src/project_map_relations.rs` 支持文件关系扫描/读取相关能力 |
+| Styles | 将 relationship / controls 样式拆到 `project-map.relationship.css` 与 `project-map.controls.css`，解除 large-file gate |
+| Validation | `npm run typecheck` passed; `npm run check:large-files` passed with `found=0` |
+
+**Updated Files**:
+- `openspec/changes/add-project-map-relationship-dashboard/design.md`
+- `openspec/changes/add-project-map-relationship-dashboard/proposal.md`
+- `openspec/changes/add-project-map-relationship-dashboard/tasks.md`
+- `src-tauri/src/project_map_relations.rs`
+- `src/features/project-map/components/ProjectMapPanel.tsx`
+- `src/features/project-map/components/ProjectMapRelationshipSection.tsx`
+- `src/features/project-map/types.ts`
+- `src/features/project-map/utils/relationshipDashboardModel.ts`
+- `src/i18n/locales/en.part5.ts`
+- `src/i18n/locales/zh.part5.ts`
+- `src/styles/project-map.css`
+- `src/styles/project-map.controls.css`
+- `src/styles/project-map.relationship.css`
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c4535bda` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

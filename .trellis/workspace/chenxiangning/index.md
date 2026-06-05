@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-19.md`
-- **Total Sessions**: 718
+- **Total Sessions**: 719
 - **Last Active**: 2026-06-05
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-19.md` | ~1149 | Active |
+| `journal-19.md` | ~1205 | Active |
 | `journal-18.md` | ~1966 | Archived |
 | `journal-17.md` | ~1971 | Archived |
 | `journal-16.md` | ~1985 | Archived |
@@ -47,6 +47,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 719 | 2026-06-05 | 完善文件关系图谱面板 | `c4535bda` | `feature/v0.5.7` |
 | 718 | 2026-06-05 | Project Map 文件关系上下文闭环 | `104417eb01fb08235439a76f47884f1e278cb1e6` | `feature/v0.5.7` |
 | 717 | 2026-06-05 | Project Map 文件关系扫描看板 Alpha | `79a6777e` | `feature/v0.5.7` |
 | 716 | 2026-06-05 | OpenSpec Markdown 预览渲染重构提案 | `07d14186` | `feature/v0.5.7` |
