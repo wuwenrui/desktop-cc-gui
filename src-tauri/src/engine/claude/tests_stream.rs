@@ -455,6 +455,22 @@ fn ask_user_question_response_summary_does_not_require_answer_text() {
 #[tokio::test]
 async fn ask_user_question_resume_fails_explicitly_without_session_id() {
     let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+    #[cfg(windows)]
+    let script = "@echo off\r\nping -n 6 127.0.0.1 > nul\r\n";
+    #[cfg(not(windows))]
+    let script = "#!/bin/sh\nsleep 5\n";
+    let (root, workspace_path, script_path) = create_fake_claude_script(script);
+    let child = Command::new(script_path)
+        .current_dir(workspace_path)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("fake active Claude child should spawn");
+    {
+        let mut active = session.active_processes.lock().await;
+        active.insert("turn-missing-session".to_string(), child);
+    }
     if let Ok(mut pending) = session.pending_user_inputs.lock() {
         pending.insert(
             "request-missing-session".to_string(),
@@ -477,6 +493,11 @@ async fn ask_user_question_resume_fails_explicitly_without_session_id() {
 
     assert!(error.contains("no Claude session_id"));
     assert!(error.contains("wrapper_kind="));
+    assert!(
+        session.active_process_ids().await.is_empty(),
+        "missing-session resume failure should remove the active child"
+    );
+    let _ = std::fs::remove_dir_all(&root);
 }
 
 #[tokio::test]
@@ -505,6 +526,7 @@ async fn ask_user_question_resume_spawn_failure_includes_wrapper_context() {
                 .push(diagnostic);
         },
     )));
+    session.register_turn_thread_id("turn-spawn-failure", "thread-spawn-failure");
     if let Ok(mut pending) = session.pending_user_inputs.lock() {
         pending.insert(
             "request-spawn-failure".to_string(),
@@ -540,6 +562,7 @@ async fn ask_user_question_resume_spawn_failure_includes_wrapper_context() {
         .last()
         .expect("spawn failure should emit a resume diagnostic");
     assert_eq!(diagnostic.workspace_id, "test-workspace");
+    assert_eq!(diagnostic.thread_id.as_deref(), Some("thread-spawn-failure"));
     assert_eq!(diagnostic.turn_id, "turn-spawn-failure");
     assert_eq!(
         diagnostic.request_id.as_deref(),

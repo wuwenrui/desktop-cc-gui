@@ -27,6 +27,7 @@ pub(crate) type ClaudeAskUserQuestionResumeDiagnosticSink =
 #[derive(Debug, Clone)]
 pub(crate) struct ClaudeAskUserQuestionResumeDiagnostic {
     pub(crate) workspace_id: String,
+    pub(crate) thread_id: Option<String>,
     pub(crate) turn_id: String,
     pub(crate) request_id: Option<String>,
     pub(crate) succeeded: bool,
@@ -292,6 +293,10 @@ pub struct ClaudeSession {
     user_input_answer_by_turn: StdMutex<HashMap<String, String>>,
     /// Per-turn request id for AskUserQuestion resume diagnostics.
     user_input_request_id_by_turn: StdMutex<HashMap<String, String>>,
+    /// Per-turn frontend thread id for runtime diagnostics.
+    thread_id_by_turn: StdMutex<HashMap<String, String>>,
+    /// AskUserQuestion resume attempts waiting for the resumed stream to produce a valid event.
+    pending_user_input_resume_diagnostic_by_turn: StdMutex<HashMap<String, Option<String>>>,
     /// Optional observer for real AskUserQuestion resume success/failure.
     ask_user_question_resume_diagnostic_sink:
         StdMutex<Option<ClaudeAskUserQuestionResumeDiagnosticSink>>,
@@ -479,6 +484,7 @@ impl ClaudeSession {
         let error_msg = Self::build_stream_no_event_timeout_error(
             &Self::stream_diagnostic_sample_snapshot(&diagnostic_sample),
         );
+        self.emit_pending_ask_user_question_resume_failure(turn_id, &error_msg);
         self.emit_turn_event(
             turn_id,
             EngineEvent::TurnError {
@@ -556,7 +562,19 @@ impl ClaudeSession {
             user_input_notify_by_turn: StdMutex::new(HashMap::new()),
             user_input_answer_by_turn: StdMutex::new(HashMap::new()),
             user_input_request_id_by_turn: StdMutex::new(HashMap::new()),
+            thread_id_by_turn: StdMutex::new(HashMap::new()),
+            pending_user_input_resume_diagnostic_by_turn: StdMutex::new(HashMap::new()),
             ask_user_question_resume_diagnostic_sink: StdMutex::new(None),
+        }
+    }
+
+    pub(crate) fn register_turn_thread_id(&self, turn_id: &str, thread_id: &str) {
+        let normalized_thread_id = thread_id.trim();
+        if normalized_thread_id.is_empty() {
+            return;
+        }
+        if let Ok(mut map) = self.thread_id_by_turn.lock() {
+            map.insert(turn_id.to_string(), normalized_thread_id.to_string());
         }
     }
 
@@ -576,6 +594,43 @@ impl ClaudeSession {
             .and_then(|mut map| map.remove(turn_id))
     }
 
+    fn remember_pending_ask_user_question_resume_diagnostic(
+        &self,
+        turn_id: &str,
+        request_id: Option<String>,
+    ) {
+        if let Ok(mut map) = self.pending_user_input_resume_diagnostic_by_turn.lock() {
+            map.insert(turn_id.to_string(), request_id);
+        }
+    }
+
+    fn take_pending_ask_user_question_resume_diagnostic(
+        &self,
+        turn_id: &str,
+    ) -> Option<Option<String>> {
+        self.pending_user_input_resume_diagnostic_by_turn
+            .lock()
+            .ok()
+            .and_then(|mut map| map.remove(turn_id))
+    }
+
+    fn emit_pending_ask_user_question_resume_success(&self, turn_id: &str) {
+        if let Some(request_id) = self.take_pending_ask_user_question_resume_diagnostic(turn_id) {
+            self.emit_ask_user_question_resume_diagnostic(turn_id, request_id, true, None);
+        }
+    }
+
+    fn emit_pending_ask_user_question_resume_failure(&self, turn_id: &str, error: &str) {
+        if let Some(request_id) = self.take_pending_ask_user_question_resume_diagnostic(turn_id) {
+            self.emit_ask_user_question_resume_diagnostic(
+                turn_id,
+                request_id,
+                false,
+                Some(error.to_string()),
+            );
+        }
+    }
+
     fn emit_ask_user_question_resume_diagnostic(
         &self,
         turn_id: &str,
@@ -588,9 +643,15 @@ impl ClaudeSession {
             .lock()
             .ok()
             .and_then(|current| current.clone());
+        let thread_id = self
+            .thread_id_by_turn
+            .lock()
+            .ok()
+            .and_then(|map| map.get(turn_id).cloned());
         if let Some(sink) = sink {
             sink(ClaudeAskUserQuestionResumeDiagnostic {
                 workspace_id: self.workspace_id.clone(),
+                thread_id,
                 turn_id: turn_id.to_string(),
                 request_id,
                 succeeded,
@@ -1229,6 +1290,7 @@ impl ClaudeSession {
                                 Some(line_received_at_ms);
                         }
                         saw_valid_stream_event = true;
+                        self.emit_pending_ask_user_question_resume_success(turn_id);
                     } else if !saw_valid_stream_event {
                         if let Ok(mut sample) = stream_diagnostic_sample.lock() {
                             Self::push_stream_diagnostic_sample(&mut sample, &line);
@@ -1453,6 +1515,7 @@ impl ClaudeSession {
                 }
 
                 log::error!("Claude process failed: {}", error_msg);
+                self.emit_pending_ask_user_question_resume_failure(turn_id, &error_msg);
 
                 if Self::is_prompt_too_long_error(&error_msg) {
                     self.clear_turn_ephemeral_state(turn_id);
@@ -1499,6 +1562,7 @@ impl ClaudeSession {
             if response_text.is_empty() {
                 let error_msg = "Claude process terminated unexpectedly".to_string();
                 log::error!("{}", error_msg);
+                self.emit_pending_ask_user_question_resume_failure(turn_id, &error_msg);
                 self.emit_turn_event(
                     turn_id,
                     EngineEvent::TurnError {
@@ -1522,6 +1586,7 @@ impl ClaudeSession {
                 stream_error
             };
             log::error!("Claude stream reported runtime error: {}", error_msg);
+            self.emit_pending_ask_user_question_resume_failure(turn_id, &error_msg);
             if Self::is_prompt_too_long_error(&error_msg) {
                 self.clear_turn_ephemeral_state(turn_id);
                 return Err(Self::mark_retryable_prompt_too_long_error(&error_msg));
@@ -1544,6 +1609,7 @@ impl ClaudeSession {
             let diagnostic_sample =
                 Self::stream_diagnostic_sample_snapshot(&stream_diagnostic_sample);
             let error_msg = self.emit_stream_no_valid_event_error(turn_id, &diagnostic_sample);
+            self.emit_pending_ask_user_question_resume_failure(turn_id, &error_msg);
             self.clear_turn_ephemeral_state(turn_id);
             return Err(error_msg);
         }
@@ -1721,6 +1787,14 @@ impl ClaudeSession {
             .unwrap_or_else(|e| e.into_inner())
             .clear();
         self.user_input_request_id_by_turn
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
+        self.thread_id_by_turn
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
+        self.pending_user_input_resume_diagnostic_by_turn
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clear();

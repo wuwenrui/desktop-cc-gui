@@ -357,6 +357,7 @@ async fn snapshot_surfaces_claude_ask_user_question_resume_diagnostics() {
     manager
         .record_claude_ask_user_question_resume_result(
             "ws-claude",
+            Some("thread-1"),
             Some("turn-1"),
             Some("request-1"),
             false,
@@ -395,7 +396,7 @@ async fn snapshot_surfaces_claude_ask_user_question_resume_diagnostics() {
             .diagnostics
             .last_claude_ask_user_question_resume_thread_id
             .as_deref(),
-        None
+        Some("thread-1")
     );
     assert_eq!(
         snapshot

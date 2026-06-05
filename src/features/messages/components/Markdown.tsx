@@ -116,6 +116,7 @@ const MARKDOWN_ALERT_TONE_SET = new Set([
   "warning",
   "caution",
 ]);
+const TOOL_CALL_XML_CANDIDATE_REGEX = /<\s*(?:antml:)?(?:function_calls|invoke)\b/i;
 
 function stableToolCallHash(value: string) {
   let hash = 5381;
@@ -1997,7 +1998,11 @@ export const Markdown = memo(function Markdown({
   const renderMarkdownContent = useCallback((nextContent: string) => {
     const hasSyntaxIncompleteInlineCode =
       getMarkdownInlineCodeInfo(nextContent).hasUnclosedInlineCode;
-    if (liveRenderMode === "lightweight" || hasSyntaxIncompleteInlineCode) {
+    const shouldUseStreamingInlineCodeFallback =
+      streamingThrottleMs !== undefined &&
+      hasSyntaxIncompleteInlineCode &&
+      TOOL_CALL_XML_CANDIDATE_REGEX.test(nextContent);
+    if (liveRenderMode === "lightweight" || shouldUseStreamingInlineCodeFallback) {
       return (
         <LightweightMarkdown
           value={nextContent}
@@ -2021,6 +2026,7 @@ export const Markdown = memo(function Markdown({
     rehypePluginsMemo,
     remarkPluginsMemo,
     renderLightweightLink,
+    streamingThrottleMs,
     urlTransform,
   ]);
 

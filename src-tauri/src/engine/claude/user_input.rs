@@ -56,6 +56,28 @@ impl ClaudeSession {
         message
     }
 
+    async fn terminate_active_child_for_resume_failure(
+        &self,
+        turn_id: &str,
+        context: &str,
+    ) -> Result<(), String> {
+        let mut existing_child = {
+            let mut active = self.active_processes.lock().await;
+            active.remove(turn_id)
+        };
+        if let Some(mut child) = existing_child.take() {
+            self.terminate_child_process(turn_id, &mut child)
+                .await
+                .map_err(|error| {
+                    format!(
+                        "{}; additionally failed to terminate active Claude process: {}",
+                        context, error
+                    )
+                })?;
+        }
+        Ok(())
+    }
+
     fn get_or_create_user_input_notify(&self, turn_id: &str) -> Arc<Notify> {
         if let Ok(mut map) = self.user_input_notify_by_turn.lock() {
             if let Some(existing) = map.get(turn_id) {
@@ -95,6 +117,12 @@ impl ClaudeSession {
         }
         if let Ok(mut request_ids) = self.user_input_request_id_by_turn.lock() {
             request_ids.remove(turn_id);
+        }
+        if let Ok(mut diagnostics) = self.pending_user_input_resume_diagnostic_by_turn.lock() {
+            diagnostics.remove(turn_id);
+        }
+        if let Ok(mut thread_ids) = self.thread_id_by_turn.lock() {
+            thread_ids.remove(turn_id);
         }
         if let Ok(mut notifies) = self.approval_notify_by_turn.lock() {
             notifies.remove(turn_id);
@@ -470,12 +498,18 @@ impl ClaudeSession {
         let sid = match new_session_id.clone() {
             Some(s) => s,
             None => {
-                let error = format!(
+                let mut error = format!(
                     "AskUserQuestion answer accepted but no Claude session_id is available for --resume (turn_id={}, wrapper_kind={}, bin={})",
                     turn_id,
                     resume_wrapper_kind,
                     resume_bin
                 );
+                if let Err(termination_error) = self
+                    .terminate_active_child_for_resume_failure(turn_id, &error)
+                    .await
+                {
+                    error = termination_error;
+                }
                 self.emit_ask_user_question_resume_diagnostic(
                     turn_id,
                     resume_request_id.clone(),
@@ -658,10 +692,25 @@ impl ClaudeSession {
                     drop(new_child.stdin.take());
                 }
 
-                let new_lines = new_child
-                    .stdout
-                    .take()
-                    .map(|stdout| BufReader::new(stdout).lines());
+                let new_lines = match new_child.stdout.take() {
+                    Some(stdout) => BufReader::new(stdout).lines(),
+                    None => {
+                        let failure = self
+                            .stop_child_after_resume_failure(
+                                turn_id,
+                                new_child,
+                                "AskUserQuestion resume process missing stdout".to_string(),
+                            )
+                            .await;
+                        self.emit_ask_user_question_resume_diagnostic(
+                            turn_id,
+                    resume_request_id.clone(),
+                            false,
+                            Some(failure.clone()),
+                        );
+                        return Err(failure);
+                    }
+                };
 
                 // Capture stderr of new process
                 // (old stderr task will finish on its own)
@@ -703,13 +752,11 @@ impl ClaudeSession {
                     resume_wrapper_kind,
                     resume_bin
                 );
-                self.emit_ask_user_question_resume_diagnostic(
+                self.remember_pending_ask_user_question_resume_diagnostic(
                     turn_id,
                     resume_request_id.clone(),
-                    true,
-                    None,
                 );
-                Ok(new_lines)
+                Ok(Some(new_lines))
             }
             Err(e) => {
                 let error = format!(

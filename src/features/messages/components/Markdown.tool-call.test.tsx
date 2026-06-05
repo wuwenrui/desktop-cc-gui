@@ -142,4 +142,25 @@ describe("Markdown tool-call fallback", () => {
     expect(container.textContent ?? "").toContain("<function_calls>");
     expect(container.textContent ?? "").toContain("<invoke name=\"example\">");
   });
+
+  it("keeps full markdown rendering for stable content with non-tool unclosed inline code", () => {
+    const value = [
+      "Document `unfinished inline code",
+      "",
+      "| A | B |",
+      "| - | - |",
+      "| 1 | 2 |",
+    ].join("\n");
+
+    const { container } = render(
+      <Markdown
+        value={value}
+        className="markdown"
+        codeBlockStyle="message"
+      />,
+    );
+
+    expect(container.querySelector("table")).toBeTruthy();
+    expect(screen.queryByRole("group", { name: "messages.toolCallCard.title" })).toBeNull();
+  });
 });

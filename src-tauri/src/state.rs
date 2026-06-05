@@ -111,6 +111,7 @@ impl AppState {
                     runtime_manager
                         .record_claude_ask_user_question_resume_result(
                             &diagnostic.workspace_id,
+                            diagnostic.thread_id.as_deref(),
                             Some(diagnostic.turn_id.as_str()),
                             diagnostic.request_id.as_deref(),
                             diagnostic.succeeded,

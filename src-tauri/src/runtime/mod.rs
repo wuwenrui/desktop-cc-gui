@@ -2196,6 +2196,7 @@ impl RuntimeManager {
     pub(crate) async fn record_claude_ask_user_question_resume_result(
         &self,
         workspace_id: &str,
+        thread_id: Option<&str>,
         turn_id: Option<&str>,
         request_id: Option<&str>,
         succeeded: bool,
@@ -2217,7 +2218,7 @@ impl RuntimeManager {
         diagnostics.last_claude_ask_user_question_resume_at_ms = Some(now_millis());
         diagnostics.last_claude_ask_user_question_resume_workspace_id =
             Some(workspace_id.to_string());
-        diagnostics.last_claude_ask_user_question_resume_thread_id = None;
+        diagnostics.last_claude_ask_user_question_resume_thread_id = thread_id.map(str::to_string);
         diagnostics.last_claude_ask_user_question_resume_turn_id = turn_id.map(str::to_string);
         diagnostics.last_claude_ask_user_question_resume_request_id =
             request_id.map(str::to_string);
