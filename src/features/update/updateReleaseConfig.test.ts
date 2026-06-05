@@ -13,14 +13,13 @@ describe("update release configuration", () => {
     };
 
     expect(config.plugins?.updater?.endpoints).toContain(
-      "https://github.com/zhukunpenglinyutong/desktop-cc-gui/releases/latest/download/latest.json",
+      "https://github.com/wuwenrui/desktop-cc-gui/releases/latest/download/latest.json",
     );
   });
 
   it("generates latest.json asset URLs from the desktop-cc-gui repo", () => {
     const workflow = readWorkspaceFile(".github/workflows/release.yml");
 
-    expect(workflow).toContain("zhukunpenglinyutong/desktop-cc-gui/releases/download");
-    expect(workflow).not.toContain("zhukunpenglinyutong/ccgui/releases/download");
+    expect(workflow).toContain("wuwenrui/desktop-cc-gui/releases/download");
   });
 });
