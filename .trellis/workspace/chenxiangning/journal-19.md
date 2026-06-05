@@ -998,3 +998,99 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 716: OpenSpec Markdown 预览渲染重构提案
+
+**Date**: 2026-06-05
+**Task**: OpenSpec Markdown 预览渲染重构提案
+**Branch**: `feature/v0.5.7`
+
+### Summary
+
+新增 harden-file-markdown-preview-rendering OpenSpec change，规划 fast sanitized HTML Markdown renderer、parser-derived outline、Worker-ready compile boundary 与 file-preview fallback 策略。
+
+### Main Changes
+
+- 新建 `openspec/changes/harden-file-markdown-preview-rendering/` spec-driven change。
+- 完成 `proposal.md`、`design.md`、`tasks.md`、`.openspec.yaml`。
+- 为 `file-markdown-preview-render-architecture` 增加 fast document renderer、parser-derived outline、Worker-ready compile pipeline 等要求。
+- 为 `file-view-markdown-github-preview` 增加 fast renderer GitHub-style parity、outline navigation、fallback isolation 等要求。
+- 已执行 `openspec validate harden-file-markdown-preview-rendering --strict --no-interactive` 并通过。
+- 本次只提交 OpenSpec 提案；未启动实现，后续由用户决定实现时机。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `07d14186` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 717: Project Map 文件关系扫描看板 Alpha
+
+**Date**: 2026-06-05
+**Task**: Project Map 文件关系扫描看板 Alpha
+**Branch**: `feature/v0.5.7`
+
+### Summary
+
+实现 Project Map Relationship Dashboard Alpha：新增通用文件关系扫描、project-map-relations 分层落盘、File Relations 独立视图、Board/List/Neighborhood 多视图、impact 与 Agent Read Plan artifact。
+
+### Main Changes
+
+## Summary
+
+阶段性提交 `add-project-map-relationship-dashboard` OpenSpec change 的 Alpha checkpoint。
+
+## Main Changes
+
+- 新增 `project_map_relations` Tauri backend，支持 workspace 文件扫描、通用 inventory、多语言增强 parser、关系构建、repair summary、impact artifact、context-pack artifact。
+- 新增 Project Map relationship service/types，前端可调用 scan/read/write/clear relationship snapshot。
+- 在 Project Map investigation strip 中拆出 `File Relations / 文件关系`，避免扫描结果继续堆进 `Inspect Relations / 检查关系`。
+- Dashboard 支持 UA-like `Board / List / Neighborhood` 多视图，并提供搜索、关系类型过滤、文件角色过滤、噪音文件开关、selected neighborhood。
+- OpenSpec proposal/design/spec/tasks 已回写阶段性评估，明确当前为 `MVP-1.5 Alpha`，剩余 Task 16-19 不提前关闭。
+
+## Calibration
+
+- 当前可作为阶段性 checkpoint commit。
+- 当前不可归档 OpenSpec change，因为 stale detection、UA-style actions、Composer/Agent consumption、focused validation 仍未完成。
+- 本次未执行 lint/typecheck/test；用户在 UI 中做了人工扫描测试反馈，后续 Task 19 需要补 focused validation evidence。
+
+## Next Steps
+
+1. Task 16：实现 stale detection 与 incremental refresh UX。
+2. Task 17：实现 Explain selected file / Guided read tour 等 UA-style actions。
+3. Task 18：打通 Composer/Agent 对 `context-packs/latest.json` 的消费。
+4. Task 19：执行 focused validation，再考虑 verify/sync/archive。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `79a6777e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
