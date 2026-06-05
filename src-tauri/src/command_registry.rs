@@ -130,6 +130,9 @@ pub(crate) fn invoke_handler(
         crate::codex::claude_doctor,
         crate::codex::cli_install_plan,
         crate::codex::cli_install_run,
+        crate::environment_installer::environment_doctor,
+        crate::environment_installer::environment_install_plan,
+        crate::environment_installer::environment_install_run,
         crate::codex::start_thread,
         crate::codex::send_user_message,
         crate::codex::turn_interrupt,
@@ -368,6 +371,8 @@ pub(crate) fn invoke_handler(
         crate::claude_installer::install_claude_cli,
         // Lawyer copilot: skill 市场（下载/更新平台 skill）
         crate::skill_market::market_add_skill,
-        crate::skill_market::market_list_installed
+        crate::skill_market::market_list_installed,
+        // Lawyer copilot: site model auto-load
+        crate::vendors::fetch_site_models
     ]
 }

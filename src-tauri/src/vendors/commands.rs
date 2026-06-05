@@ -890,3 +890,50 @@ pub(crate) async fn vendor_gemini_preflight() -> Result<GeminiVendorPreflightRes
 
     Ok(GeminiVendorPreflightResult { checks })
 }
+
+// ==================== Site Model Auto-Load ====================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct SiteModel {
+    pub id: String,
+    #[serde(default)]
+    pub owned_by: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAIModelListResponse {
+    data: Vec<SiteModel>,
+}
+
+#[tauri::command]
+pub(crate) async fn fetch_site_models(
+    base_url: String,
+    api_key: String,
+) -> Result<Vec<SiteModel>, String> {
+    let url = format!("{}/v1/models", base_url.trim_end_matches('/'));
+    let client = reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(20))
+        .build()
+        .map_err(|e| format!("HTTP client error: {e}"))?;
+
+    let resp = client
+        .get(&url)
+        .header("Authorization", format!("Bearer {api_key}"))
+        .send()
+        .await
+        .map_err(|e| format!("Failed to reach model site: {e}"))?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("Site returned {status}: {body}"));
+    }
+
+    let list: OpenAIModelListResponse = resp
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse model list: {e}"))?;
+
+    Ok(list.data)
+}

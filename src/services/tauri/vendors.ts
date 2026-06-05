@@ -97,3 +97,18 @@ export async function saveGeminiVendorSettings(
 export async function getGeminiVendorPreflight(): Promise<GeminiVendorPreflightResult> {
   return invoke<GeminiVendorPreflightResult>("vendor_gemini_preflight");
 }
+
+export interface SiteModel {
+  id: string;
+  owned_by: string;
+}
+
+export async function fetchSiteModels(
+  baseUrl: string,
+  apiKey: string,
+): Promise<SiteModel[]> {
+  return invoke<SiteModel[]>("fetch_site_models", {
+    baseUrl,
+    apiKey,
+  });
+}

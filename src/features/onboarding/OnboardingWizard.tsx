@@ -1,39 +1,81 @@
 import { useState } from "react";
 import type { CSSProperties } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import {
+  fetchSiteModels,
+  type SiteModel,
+} from "../../services/tauri/vendors";
+import {
+  SiteModelPicker,
+  type SlotMapping,
+} from "../vendors/components/SiteModelPicker";
+import { STORAGE_KEYS } from "../vendors/types";
 
 const NEW_API_HOST = "http://47.239.143.243:3000";
 
-// new-api 预设(运行时注入，不依赖上游预设数组)。
-const NEW_API_ENV = {
-  ANTHROPIC_BASE_URL: NEW_API_HOST,
-  ANTHROPIC_AUTH_TOKEN: "",
-  ANTHROPIC_MODEL: "glm-4.7",
-  ANTHROPIC_DEFAULT_HAIKU_MODEL: "glm-4.7",
-  ANTHROPIC_DEFAULT_SONNET_MODEL: "glm-4.7",
-  ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-4.7",
-};
+type Step = "key" | "models";
 
 export function OnboardingWizard({ onDone }: { onDone: () => void }) {
+  const [step, setStep] = useState<Step>("key");
   const [key, setKey] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [models, setModels] = useState<SiteModel[]>([]);
 
-  async function submit() {
+  async function handleKeySubmit() {
     setBusy(true);
     setErr("");
     try {
-      const env = { ...NEW_API_ENV, ANTHROPIC_AUTH_TOKEN: key.trim() };
+      const list = await fetchSiteModels(NEW_API_HOST, key.trim());
+      if (list.length === 0) {
+        setErr("No models available for this key.");
+        return;
+      }
+      setModels(list);
+      setStep("models");
+    } catch (e) {
+      setErr(String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleModelConfirm(
+    claudeSlots: SlotMapping,
+    codexModels: string[],
+  ) {
+    setBusy(true);
+    setErr("");
+    try {
+      const env = {
+        ANTHROPIC_BASE_URL: NEW_API_HOST,
+        ANTHROPIC_AUTH_TOKEN: key.trim(),
+        ANTHROPIC_MODEL: claudeSlots.sonnet,
+        ANTHROPIC_DEFAULT_HAIKU_MODEL: claudeSlots.haiku,
+        ANTHROPIC_DEFAULT_SONNET_MODEL: claudeSlots.sonnet,
+        ANTHROPIC_DEFAULT_OPUS_MODEL: claudeSlots.opus,
+      };
       await invoke("vendor_add_claude_provider", {
         provider: { id: "new-api", name: "New API", settingsConfig: { env } },
       });
       await invoke("vendor_switch_claude_provider", { id: "new-api" });
-      // skill 安装失败不应阻断 provider 配置完成
-      // (dev 模式 resource_dir 可能缺 skills；打包后才完整)
+
+      if (codexModels.length > 0) {
+        const codexCustom = codexModels.map((id) => ({
+          id,
+          label: id,
+        }));
+        localStorage.setItem(
+          STORAGE_KEYS.CODEX_CUSTOM_MODELS,
+          JSON.stringify(codexCustom),
+        );
+        window.dispatchEvent(new Event("localStorageChange"));
+      }
+
       try {
         await invoke("install_bundled_skills");
-      } catch (e) {
-        console.warn("skill 安装失败(dev 模式可忽略):", e);
+      } catch {
+        // skill install failure should not block onboarding
       }
       onDone();
     } catch (e) {
@@ -46,42 +88,72 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
   return (
     <div style={overlay}>
       <div style={card}>
-        <div style={brand}>律师助理</div>
-        <h2 style={titleStyle}>首次配置</h2>
-        <p style={subtitle}>连接模型服务站点，几秒完成设置即可开始使用。</p>
+        <div style={brand}>Lawyer Copilot</div>
 
-        <div style={hostBadge}>
-          <span style={hostDot} />
-          模型站点 {NEW_API_HOST}
-        </div>
+        {step === "key" && (
+          <>
+            <h2 style={titleStyle}>Setup</h2>
+            <p style={subtitle}>
+              Connect to the model site, then select which models to use.
+            </p>
 
-        <label style={fieldLabel}>
-          <span>
-            New API Key <span style={reqMark}>*</span>
-          </span>
-          <input
-            style={input}
-            aria-label="new-api key"
-            type="password"
-            value={key}
-            placeholder="粘贴你的 API Key"
-            onChange={(e) => setKey(e.target.value)}
-          />
-        </label>
+            <div style={hostBadge}>
+              <span style={hostDot} />
+              {NEW_API_HOST}
+            </div>
 
-        {err && (
-          <div style={errorBox} role="alert">
-            {err}
-          </div>
+            <label style={fieldLabel}>
+              <span>
+                API Key <span style={reqMark}>*</span>
+              </span>
+              <input
+                style={input}
+                aria-label="new-api key"
+                type="password"
+                value={key}
+                placeholder="Paste your API Key"
+                onChange={(e) => setKey(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && key.trim()) handleKeySubmit();
+                }}
+              />
+            </label>
+
+            {err && (
+              <div style={errorBox} role="alert">
+                {err}
+              </div>
+            )}
+
+            <button
+              type="button"
+              style={{ ...button, ...(!key.trim() || busy ? buttonDisabled : undefined) }}
+              disabled={!key.trim() || busy}
+              onClick={handleKeySubmit}
+            >
+              {busy ? "Loading models..." : "Next"}
+            </button>
+          </>
         )}
 
-        <button
-          style={{ ...button, ...(!key || busy ? buttonDisabled : null) }}
-          disabled={!key || busy}
-          onClick={submit}
-        >
-          {busy ? "配置中…" : "完成"}
-        </button>
+        {step === "models" && (
+          <>
+            <SiteModelPicker
+              models={models}
+              loading={busy}
+              onBack={() => {
+                setStep("key");
+                setErr("");
+              }}
+              onConfirm={handleModelConfirm}
+            />
+            {err && (
+              <div style={errorBox} role="alert">
+                {err}
+              </div>
+            )}
+          </>
+        )}
       </div>
     </div>
   );
@@ -100,7 +172,7 @@ const overlay: CSSProperties = {
 
 const card: CSSProperties = {
   width: "100%",
-  maxWidth: 420,
+  maxWidth: 480,
   display: "flex",
   flexDirection: "column",
   gap: 16,

@@ -1,8 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import PackagePlus from "lucide-react/dist/esm/icons/package-plus";
+import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
 import type { CodexCustomModel, CodexProviderConfig, VendorTab } from "../types";
 import { STORAGE_KEYS, validateCodexCustomModels } from "../types";
+import {
+  fetchSiteModels,
+  updateClaudeProvider,
+  switchClaudeProvider,
+  type SiteModel,
+} from "../../../services/tauri/vendors";
+import { SiteModelPicker, type SlotMapping } from "./SiteModelPicker";
 import type { CodexUnifiedExecExternalStatus } from "../../../types";
 import { useProviderManagement } from "../hooks/useProviderManagement";
 import { useCodexProviderManagement } from "../hooks/useCodexProviderManagement";
@@ -108,6 +116,11 @@ export function VendorSettingsPanel({
   const didRunLegacyMigrationRef = useRef(false);
   const didSeedCodexPluginModelsRef = useRef(false);
 
+  const [siteModelDialogOpen, setSiteModelDialogOpen] = useState(false);
+  const [siteModels, setSiteModels] = useState<SiteModel[]>([]);
+  const [siteModelLoading, setSiteModelLoading] = useState(false);
+  const [siteModelError, setSiteModelError] = useState<string | null>(null);
+
   const claude = useProviderManagement();
   const codex = useCodexProviderManagement();
   const claudeModels = usePluginModels(STORAGE_KEYS.CLAUDE_CUSTOM_MODELS);
@@ -126,6 +139,80 @@ export function VendorSettingsPanel({
     setModelDialogOpen(false);
     setModelDialogAddMode(false);
   }, []);
+
+  const NEW_API_HOST = "http://47.239.143.243:3000";
+
+  const handleSyncSiteModels = useCallback(async () => {
+    const activeProvider = claude.providers.find((p) => p.isActive);
+    const apiKey =
+      activeProvider?.settingsConfig?.env?.ANTHROPIC_AUTH_TOKEN ?? "";
+    if (!apiKey) {
+      pushErrorToast({ title: "Sync failed", message: "No active provider with API key configured" });
+      return;
+    }
+    const baseUrl =
+      activeProvider?.settingsConfig?.env?.ANTHROPIC_BASE_URL ?? NEW_API_HOST;
+    setSiteModelLoading(true);
+    setSiteModelError(null);
+    try {
+      const list = await fetchSiteModels(baseUrl, apiKey);
+      if (list.length === 0) {
+        setSiteModelError("No models available for this key.");
+        return;
+      }
+      setSiteModels(list);
+      setSiteModelDialogOpen(true);
+    } catch (e) {
+      setSiteModelError(String(e));
+      pushErrorToast({ title: "Sync failed", message: String(e) });
+    } finally {
+      setSiteModelLoading(false);
+    }
+  }, [claude.providers]);
+
+  const handleSiteModelConfirm = useCallback(
+    async (claudeSlots: SlotMapping, codexModelIds: string[]) => {
+      setSiteModelLoading(true);
+      try {
+        const activeProvider = claude.providers.find((p) => p.isActive);
+        if (activeProvider && activeProvider.id !== "__local_settings_json__") {
+          const env = {
+            ...(activeProvider.settingsConfig?.env ?? {}),
+            ANTHROPIC_MODEL: claudeSlots.sonnet,
+            ANTHROPIC_DEFAULT_HAIKU_MODEL: claudeSlots.haiku,
+            ANTHROPIC_DEFAULT_SONNET_MODEL: claudeSlots.sonnet,
+            ANTHROPIC_DEFAULT_OPUS_MODEL: claudeSlots.opus,
+          };
+          const updates = {
+            name: activeProvider.name,
+            remark: activeProvider.remark ?? "",
+            settingsConfig: { ...activeProvider.settingsConfig, env },
+          };
+          await updateClaudeProvider(activeProvider.id, updates);
+          await switchClaudeProvider(activeProvider.id);
+          await claude.loadProviders();
+          await claude.loadCurrentConfig();
+        }
+        if (codexModelIds.length > 0) {
+          const existing = codexModels.models;
+          const existingIds = new Set(existing.map((m) => m.id));
+          const merged = [
+            ...existing,
+            ...codexModelIds
+              .filter((id) => !existingIds.has(id))
+              .map((id) => ({ id, label: id })),
+          ];
+          codexModels.updateModels(merged);
+        }
+        setSiteModelDialogOpen(false);
+      } catch (e) {
+        pushErrorToast({ title: "Save failed", message: String(e) });
+      } finally {
+        setSiteModelLoading(false);
+      }
+    },
+    [claude, codexModels],
+  );
 
   const loadCodexGlobalConfig = useCallback(async () => {
     setCodexGlobalConfigLoading(true);
@@ -483,6 +570,21 @@ export function VendorSettingsPanel({
                 {t("settings.vendor.manageModels")}
               </Button>
             </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleSyncSiteModels}
+              disabled={siteModelLoading}
+              style={{ marginBottom: 4 }}
+            >
+              <RefreshCw size={14} />
+              {siteModelLoading ? "Loading..." : "Sync Models from Site"}
+            </Button>
+            {siteModelError && (
+              <div className="settings-help" style={{ color: "var(--text-danger)" }}>
+                {siteModelError}
+              </div>
+            )}
             <CurrentClaudeConfigCard
               config={claude.currentConfig}
               loading={claude.currentConfigLoading}
@@ -743,6 +845,45 @@ export function VendorSettingsPanel({
         initialAddMode={modelDialogAddMode}
         modelValidation={dialogTarget === "claude" ? "shape-only" : "model-id"}
       />
+
+      {siteModelDialogOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "rgba(0,0,0,0.6)",
+            zIndex: 9998,
+          }}
+          onClick={() => setSiteModelDialogOpen(false)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setSiteModelDialogOpen(false);
+          }}
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: 520,
+              padding: 28,
+              background: "#161618",
+              border: "1px solid #2a2a2e",
+              borderRadius: 14,
+              boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={() => {}}
+          >
+            <SiteModelPicker
+              models={siteModels}
+              loading={siteModelLoading}
+              onBack={() => setSiteModelDialogOpen(false)}
+              onConfirm={handleSiteModelConfirm}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
