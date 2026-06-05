@@ -737,3 +737,50 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 710: 修复 Claude Windows 互动回答恢复链路
+
+**Date**: 2026-06-05
+**Task**: 修复 Claude Windows 互动回答恢复链路
+**Branch**: `feature/v0.5.6`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| 项目 | 内容 |
+|------|------|
+| 目标 | 修复 issue #658 线索对应的 Claude AskUserQuestion 回答后 Windows resume 链路不透明/可能卡死问题 |
+| OpenSpec | 新增 `harden-windows-ask-user-question-resume` change，覆盖 wrapper 选择、resume diagnostics、failure propagation、验证证据 |
+| 后端修复 | Claude AskUserQuestion resume 在缺 session_id、parent terminate 失败、spawn 失败、stdin/message 失败、dispose race 时显式返回错误 |
+| Windows 线索 | implicit Claude binary 选择优先 `.cmd/.exe` 等稳定 wrapper，保留显式 `.ps1` 用户路径 |
+| 可观测性 | 增加真实 resume result diagnostic sink，只在实际 `--resume` 成功/失败分支写入 runtime diagnostics，避免把 answer accepted 误报为 resume success |
+| 日志安全 | AskUserQuestion response 日志只记录 answer 计数/非空计数/skip 状态，不输出用户回答全文 |
+| 前端类型 | RuntimePoolSnapshot diagnostics 增加 Claude AskUserQuestion resume 统计字段 |
+| 验证 | `openspec validate ... --strict --no-interactive`、`cargo test ... ask_user_question`、`cargo test ... prefer_windows_executable_variant_prefers_stable_wrapper_before_ps1`、`cargo test ... claude_doctor_failure_keeps_structured_diagnostics_fields`、`npm run typecheck` 均通过 |
+| 剩余证据 | 仍需 Windows 真机复现 AskUserQuestion，确认 accepted -> terminate parent -> resumed 或显式 failure 证据 |
+
+**提交**:
+- `21048455 fix(claude): 加固 Windows 互动回答恢复链路`
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `21048455` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

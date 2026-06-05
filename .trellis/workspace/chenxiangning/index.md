@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-19.md`
-- **Total Sessions**: 709
+- **Total Sessions**: 710
 - **Last Active**: 2026-06-05
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-19.md` | ~739 | Active |
+| `journal-19.md` | ~786 | Active |
 | `journal-18.md` | ~1966 | Archived |
 | `journal-17.md` | ~1971 | Archived |
 | `journal-16.md` | ~1985 | Archived |
@@ -47,6 +47,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 710 | 2026-06-05 | 修复 Claude Windows 互动回答恢复链路 | `21048455` | `feature/v0.5.6` |
 | 709 | 2026-06-05 | 补齐工作区打开性能任务 | `b4cb127bbe952a8aa4300cd70e29c1beaa2d1d05` | `feature/v0.5.6` |
 | 708 | 2026-06-05 | 收口 Codex 历史加载任务 | `3154bf99b4b0db5aad4d2792bf1a4872f4a23df6` | `feature/v0.5.6` |
 | 707 | 2026-06-05 | 收口 inline code 渲染任务 | `6f695a8868d59ba6bc51e7a9acab2b2fa2c992a6` | `feature/v0.5.6` |
