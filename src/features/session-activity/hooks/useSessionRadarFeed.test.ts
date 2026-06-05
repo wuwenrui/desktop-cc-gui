@@ -105,4 +105,84 @@ describe("buildSessionRadarFeed", () => {
     expect(feed.runningSessions.map((entry) => entry.threadId)).toEqual(["r1", "r2"]);
     expect(feed.recentCompletedSessions).toEqual([]);
   });
+
+  it("dedupes and stably orders running sessions when freshness ties", () => {
+    const workspaceA = createWorkspace("ws-a", "Workspace A");
+    const workspaceB = createWorkspace("ws-b", "Workspace B");
+    const now = 5_000_000;
+
+    const feed = buildSessionRadarFeed({
+      workspaces: [workspaceB, workspaceA, workspaceA],
+      threadsByWorkspace: {
+        [workspaceA.id]: [
+          createThread("thread-b", "Thread B", now),
+          createThread("thread-a", "Thread A", now),
+        ],
+        [workspaceB.id]: [createThread("thread-c", "Thread C", now)],
+      },
+      threadStatusById: {
+        "thread-a": { isProcessing: true, processingStartedAt: now - 2000 },
+        "thread-b": { isProcessing: true, processingStartedAt: now - 2000 },
+        "thread-c": { isProcessing: true, processingStartedAt: now - 2000 },
+      },
+      threadItemsByThread: {},
+      lastAgentMessageByThread: {},
+      now,
+    });
+
+    expect(feed.runningSessions.map((entry) => entry.id)).toEqual([
+      "ws-a:thread-a",
+      "ws-a:thread-b",
+      "ws-b:thread-c",
+    ]);
+  });
+
+  it("keeps running counts keyed to the affected workspace", () => {
+    const workspaceA = createWorkspace("ws-a", "Workspace A");
+    const workspaceB = createWorkspace("ws-b", "Workspace B");
+    const now = 8_000_000;
+
+    const baseInput = {
+      workspaces: [workspaceA, workspaceB],
+      threadsByWorkspace: {
+        [workspaceA.id]: [
+          createThread("a-1", "A 1", now - 1000),
+          createThread("a-2", "A 2", now - 2000),
+        ],
+        [workspaceB.id]: [
+          createThread("b-1", "B 1", now - 3000),
+          createThread("b-2", "B 2", now - 4000),
+        ],
+      },
+      threadItemsByThread: {},
+      lastAgentMessageByThread: {},
+      now,
+    };
+
+    const firstFeed = buildSessionRadarFeed({
+      ...baseInput,
+      threadStatusById: {
+        "a-1": { isProcessing: true },
+        "b-1": { isProcessing: true },
+      },
+    });
+    const secondFeed = buildSessionRadarFeed({
+      ...baseInput,
+      threadStatusById: {
+        "a-1": { isProcessing: true },
+        "a-2": { isProcessing: true },
+        "b-1": { isProcessing: true },
+      },
+    });
+
+    expect(firstFeed.runningCountByWorkspaceId).toEqual({
+      "ws-a": 1,
+      "ws-b": 1,
+    });
+    expect(secondFeed.runningCountByWorkspaceId).toEqual({
+      "ws-a": 2,
+      "ws-b": 1,
+    });
+    expect(secondFeed.runningSessions.filter((entry) => entry.workspaceId === "ws-b")).toHaveLength(1);
+  });
 });

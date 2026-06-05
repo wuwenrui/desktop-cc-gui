@@ -3,9 +3,7 @@
 ## Purpose
 
 定义实时 assistant markdown 在 streaming、completed 与 history restore 路径中的兼容性约束，确保 inline code span 在 partial syntax、merge、normalize 与最终收敛过程中保持边界稳定。
-
 ## Requirements
-
 ### Requirement: Live Assistant Markdown MUST Preserve Inline Code Boundaries During Partial Streaming
 
 在 assistant 实时输出尚未完成时，系统 MUST 保持 inline code span 的 backtick 边界稳定；对于 closing backtick 尚未到达的 partial syntax，系统 MUST NOT 把相邻正文错误并入 code span。
@@ -21,6 +19,12 @@
 - **WHEN** assistant live message 在后续 delta 中补齐 closing backtick
 - **THEN** 系统 MUST 收敛到预期的 inline code span 结构
 - **AND** code span 外的前后正文 MUST 保持为普通正文，而不是遗留先前的错位解析结果
+
+#### Scenario: tool-call XML after unmatched opening backtick stays protected
+
+- **WHEN** assistant live markdown contains an unmatched opening inline-code backtick followed by literal `<function_calls>` or `<invoke>` XML text
+- **THEN** tool-call fallback segmentation MUST treat the text from that opening backtick through the current streaming fragment end as a protected region
+- **AND** that literal XML MUST remain Markdown text instead of rendering as a tool-call fallback card
 
 ### Requirement: Live Markdown Normalization MUST Treat Inline Code Spans As Protected Regions
 
@@ -91,3 +95,4 @@
 - **WHEN** 同一 assistant message 先在 live 对话中完成，再从 history reload 或 restore 路径重新载入
 - **THEN** 两条路径的最终 inline code span 结构 MUST 等价
 - **AND** 系统 MUST NOT 出现“live 错位而 history 正常”或反向分叉
+

@@ -118,6 +118,130 @@ fn normalize_workspace_relative_directory_path(path: &str) -> Result<String, Str
     normalize_workspace_relative_path(path)
 }
 
+fn validate_workspace_item_basename(name: &str) -> Result<String, String> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err("Name cannot be empty.".to_string());
+    }
+    if trimmed == "." || trimmed == ".." || trimmed.contains('/') || trimmed.contains('\\') {
+        return Err("Invalid item name.".to_string());
+    }
+    if trimmed.ends_with('.') || trimmed.ends_with(' ') {
+        return Err("Invalid item name.".to_string());
+    }
+    if trimmed
+        .chars()
+        .any(|ch| ch.is_control() || matches!(ch, '<' | '>' | ':' | '"' | '|' | '?' | '*'))
+    {
+        return Err("Invalid item name.".to_string());
+    }
+    let reserved_windows_name = trimmed
+        .split('.')
+        .next()
+        .unwrap_or(trimmed)
+        .to_ascii_uppercase();
+    if matches!(
+        reserved_windows_name.as_str(),
+        "CON"
+            | "PRN"
+            | "AUX"
+            | "NUL"
+            | "COM1"
+            | "COM2"
+            | "COM3"
+            | "COM4"
+            | "COM5"
+            | "COM6"
+            | "COM7"
+            | "COM8"
+            | "COM9"
+            | "LPT1"
+            | "LPT2"
+            | "LPT3"
+            | "LPT4"
+            | "LPT5"
+            | "LPT6"
+            | "LPT7"
+            | "LPT8"
+            | "LPT9"
+    ) {
+        return Err("Invalid item name.".to_string());
+    }
+    if trimmed == ".git" {
+        return Err("Cannot operate on .git directory.".to_string());
+    }
+    Ok(trimmed.to_string())
+}
+
+fn infer_workspace_item_kind(path: &Path) -> Result<WorkspaceFileItemKind, String> {
+    let metadata =
+        std::fs::metadata(path).map_err(|err| format!("Failed to read path metadata: {err}"))?;
+    if metadata.is_dir() {
+        return Ok(WorkspaceFileItemKind::Folder);
+    }
+    if metadata.is_file() {
+        return Ok(WorkspaceFileItemKind::File);
+    }
+    Err("Path is neither a file nor a folder.".to_string())
+}
+
+fn resolve_workspace_root(root: &PathBuf) -> Result<PathBuf, String> {
+    root.canonicalize()
+        .map_err(|err| format!("Failed to resolve workspace root: {err}"))
+}
+
+fn resolve_workspace_item_path(
+    canonical_root: &Path,
+    relative_path: &str,
+) -> Result<(String, PathBuf, WorkspaceFileItemKind), String> {
+    let normalized_path = normalize_workspace_relative_path(relative_path)?;
+    let candidate = canonical_root.join(normalized_relative_to_pathbuf(&normalized_path));
+    let canonical_path = candidate
+        .canonicalize()
+        .map_err(|err| format!("Failed to resolve path {normalized_path}: {err}"))?;
+
+    if !canonical_path.starts_with(canonical_root) {
+        return Err("Invalid file path".to_string());
+    }
+
+    let kind = infer_workspace_item_kind(&canonical_path)?;
+    Ok((normalized_path, canonical_path, kind))
+}
+
+fn resolve_workspace_target_directory(
+    canonical_root: &Path,
+    relative_path: &str,
+) -> Result<(String, PathBuf), String> {
+    let normalized_path = normalize_workspace_relative_directory_path(relative_path)?;
+    let candidate = if normalized_path.is_empty() {
+        canonical_root.to_path_buf()
+    } else {
+        canonical_root.join(normalized_relative_to_pathbuf(&normalized_path))
+    };
+    let canonical_path = candidate
+        .canonicalize()
+        .map_err(|err| format!("Failed to resolve target directory {normalized_path}: {err}"))?;
+
+    if !canonical_path.starts_with(canonical_root) {
+        return Err("Invalid target directory".to_string());
+    }
+    if !canonical_path.is_dir() {
+        return Err("Target path is not a directory.".to_string());
+    }
+
+    Ok((normalized_path, canonical_path))
+}
+
+fn relative_path_from_absolute(
+    canonical_root: &Path,
+    absolute_path: &Path,
+) -> Result<String, String> {
+    let relative = absolute_path
+        .strip_prefix(canonical_root)
+        .map_err(|_| "Failed to compute relative path".to_string())?;
+    Ok(normalize_git_path(&relative.to_string_lossy()))
+}
+
 fn sort_and_dedup_workspace_lists(
     files: &mut Vec<String>,
     directories: &mut Vec<String>,
@@ -188,6 +312,19 @@ pub(crate) struct WorkspaceDirectoryEntry {
     pub(crate) special_kind: Option<WorkspaceDirectorySpecialKind>,
     #[serde(default)]
     pub(crate) has_more: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum WorkspaceFileItemKind {
+    File,
+    Folder,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub(crate) struct WorkspaceFileOperationResult {
+    pub(crate) path: String,
+    pub(crate) kind: WorkspaceFileItemKind,
 }
 
 fn default_workspace_scan_state() -> WorkspaceScanState {
@@ -1616,71 +1753,165 @@ pub(crate) fn copy_workspace_item_inner(
     root: &PathBuf,
     relative_path: &str,
 ) -> Result<String, String> {
-    let normalized_path = normalize_workspace_relative_path(relative_path)?;
-    let canonical_root = root
-        .canonicalize()
-        .map_err(|err| format!("Failed to resolve workspace root: {err}"))?;
-    let candidate = canonical_root.join(normalized_relative_to_pathbuf(&normalized_path));
-    let canonical_path = candidate
-        .canonicalize()
-        .map_err(|err| format!("Failed to resolve path: {err}"))?;
+    duplicate_workspace_item_inner(root, relative_path).map(|result| result.path)
+}
 
-    if !canonical_path.starts_with(&canonical_root) {
-        return Err("Invalid file path".to_string());
-    }
-
-    if !canonical_path.exists() {
-        return Err("Path does not exist".to_string());
-    }
-
-    // Build destination path with " copy" suffix
+pub(crate) fn duplicate_workspace_item_inner(
+    root: &PathBuf,
+    relative_path: &str,
+) -> Result<WorkspaceFileOperationResult, String> {
+    let canonical_root = resolve_workspace_root(root)?;
+    let (_normalized_path, canonical_path, kind) =
+        resolve_workspace_item_path(&canonical_root, relative_path)?;
     let parent = canonical_path
         .parent()
         .ok_or_else(|| "Invalid file path".to_string())?;
+    copy_workspace_item_to_directory(&canonical_root, &canonical_path, kind, parent, false)
+}
 
-    let stem = canonical_path
+pub(crate) fn paste_workspace_item_inner(
+    root: &PathBuf,
+    source_path: &str,
+    target_directory: &str,
+) -> Result<WorkspaceFileOperationResult, String> {
+    let canonical_root = resolve_workspace_root(root)?;
+    let (_normalized_source, canonical_source, kind) =
+        resolve_workspace_item_path(&canonical_root, source_path)?;
+    let (_normalized_target, canonical_target) =
+        resolve_workspace_target_directory(&canonical_root, target_directory)?;
+    copy_workspace_item_to_directory(
+        &canonical_root,
+        &canonical_source,
+        kind,
+        &canonical_target,
+        true,
+    )
+}
+
+pub(crate) fn rename_workspace_item_inner(
+    root: &PathBuf,
+    relative_path: &str,
+    new_name: &str,
+) -> Result<WorkspaceFileOperationResult, String> {
+    let canonical_root = resolve_workspace_root(root)?;
+    let (_normalized_path, canonical_path, kind) =
+        resolve_workspace_item_path(&canonical_root, relative_path)?;
+    let validated_name = validate_workspace_item_basename(new_name)?;
+    let parent = canonical_path
+        .parent()
+        .ok_or_else(|| "Invalid file path".to_string())?;
+    let target = parent.join(validated_name);
+
+    if target.exists() {
+        return Err("Target path already exists.".to_string());
+    }
+
+    std::fs::rename(&canonical_path, &target)
+        .map_err(|err| format!("Failed to rename workspace item: {err}"))?;
+
+    Ok(WorkspaceFileOperationResult {
+        path: relative_path_from_absolute(&canonical_root, &target)?,
+        kind,
+    })
+}
+
+pub(crate) fn paste_external_workspace_items_inner(
+    _root: &PathBuf,
+    _source_paths: &[String],
+    _target_directory: &str,
+) -> Result<Vec<WorkspaceFileOperationResult>, String> {
+    Err("External file import is not supported in this build yet. Use internal file tree Copy and Paste.".to_string())
+}
+
+fn build_copy_destination_name(
+    source_path: &Path,
+    kind: WorkspaceFileItemKind,
+    counter: u32,
+) -> Result<String, String> {
+    let source_name = source_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| "Invalid source file name".to_string())?;
+    let source_stem = source_path
         .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("");
-    let ext = canonical_path.extension().and_then(|s| s.to_str());
-
-    let mut dest;
-    let mut counter = 0u32;
-    loop {
-        let suffix = if counter == 0 {
-            " copy".to_string()
-        } else {
-            format!(" copy {counter}")
-        };
-        let new_name = if canonical_path.is_dir() {
-            format!("{stem}{suffix}")
-        } else if let Some(e) = ext {
-            format!("{stem}{suffix}.{e}")
-        } else {
-            format!("{stem}{suffix}")
-        };
-        dest = parent.join(&new_name);
-        if !dest.exists() {
-            break;
-        }
-        counter += 1;
-        if counter > 999 {
-            return Err("Too many copies exist".to_string());
-        }
-    }
-
-    if canonical_path.is_dir() {
-        copy_dir_recursive(&canonical_path, &dest)?;
+        .and_then(|stem| stem.to_str())
+        .unwrap_or(source_name);
+    let source_extension = source_path
+        .extension()
+        .and_then(|extension| extension.to_str());
+    let suffix = if counter == 0 {
+        " copy".to_string()
     } else {
-        std::fs::copy(&canonical_path, &dest)
-            .map_err(|err| format!("Failed to copy file: {err}"))?;
+        format!(" copy {counter}")
+    };
+
+    Ok(match (kind, source_extension) {
+        (WorkspaceFileItemKind::File, Some(extension)) => {
+            format!("{source_stem}{suffix}.{extension}")
+        }
+        _ => format!("{source_stem}{suffix}"),
+    })
+}
+
+fn resolve_collision_safe_destination(
+    target_directory: &Path,
+    source_path: &Path,
+    kind: WorkspaceFileItemKind,
+    prefer_original_name: bool,
+) -> Result<PathBuf, String> {
+    let source_name = source_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| "Invalid source file name".to_string())?;
+
+    if prefer_original_name {
+        let original_destination = target_directory.join(source_name);
+        if !original_destination.exists() {
+            return Ok(original_destination);
+        }
     }
 
-    // Return the relative path of the new copy
-    let new_relative = dest
-        .strip_prefix(&canonical_root)
-        .map_err(|_| "Failed to compute relative path".to_string())?;
-    Ok(normalize_git_path(&new_relative.to_string_lossy()))
+    for counter in 0..=999u32 {
+        let destination_name = build_copy_destination_name(source_path, kind, counter)?;
+        let destination = target_directory.join(destination_name);
+        if !destination.exists() {
+            return Ok(destination);
+        }
+    }
+
+    Err("Too many copies exist".to_string())
+}
+
+fn copy_workspace_item_to_directory(
+    canonical_root: &Path,
+    source_path: &Path,
+    source_kind: WorkspaceFileItemKind,
+    target_directory: &Path,
+    prefer_original_name: bool,
+) -> Result<WorkspaceFileOperationResult, String> {
+    if source_kind == WorkspaceFileItemKind::Folder && target_directory.starts_with(source_path) {
+        return Err("Cannot copy a folder into itself or its descendant.".to_string());
+    }
+
+    let destination = resolve_collision_safe_destination(
+        target_directory,
+        source_path,
+        source_kind,
+        prefer_original_name,
+    )?;
+
+    match source_kind {
+        WorkspaceFileItemKind::Folder => copy_dir_recursive(source_path, &destination)?,
+        WorkspaceFileItemKind::File => {
+            std::fs::copy(source_path, &destination)
+                .map_err(|err| format!("Failed to copy file: {err}"))?;
+        }
+    }
+
+    Ok(WorkspaceFileOperationResult {
+        path: relative_path_from_absolute(canonical_root, &destination)?,
+        kind: source_kind,
+    })
 }
 
 fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> Result<(), String> {
@@ -1689,6 +1920,12 @@ fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> Result<()
         let entry = entry.map_err(|err| format!("Failed to read entry: {err}"))?;
         let src_path = entry.path();
         let dst_path = dst.join(entry.file_name());
+        let file_type = std::fs::symlink_metadata(&src_path)
+            .map_err(|err| format!("Failed to read entry metadata: {err}"))?
+            .file_type();
+        if file_type.is_symlink() {
+            return Err("Cannot copy symbolic links in workspace directories.".to_string());
+        }
         if src_path.is_dir() {
             copy_dir_recursive(&src_path, &dst_path)?;
         } else {
@@ -1702,16 +1939,17 @@ fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> Result<()
 #[cfg(test)]
 mod tests {
     use super::{
-        compile_search_regex, create_workspace_directory_inner, is_special_directory_path,
-        list_external_absolute_directory_children_inner, list_external_spec_tree_inner,
-        list_workspace_directory_children_inner, list_workspace_files_inner,
-        normalize_workspace_relative_directory_path, normalize_workspace_relative_path,
+        compile_search_regex, create_workspace_directory_inner, duplicate_workspace_item_inner,
+        is_special_directory_path, list_external_absolute_directory_children_inner,
+        list_external_spec_tree_inner, list_workspace_directory_children_inner,
+        list_workspace_files_inner, normalize_workspace_relative_directory_path,
+        normalize_workspace_relative_path, paste_workspace_item_inner,
         read_external_absolute_file_inner, read_external_spec_file_inner,
-        read_workspace_file_inner, resolve_external_absolute_preview_handle_inner,
-        resolve_external_spec_preview_handle_inner, resolve_workspace_preview_handle_inner,
-        search_workspace_text_inner, sort_and_truncate_named_entries,
-        write_external_absolute_file_inner, WorkspaceDirectoryChildState, WorkspaceScanState,
-        WorkspaceTextSearchOptions,
+        read_workspace_file_inner, rename_workspace_item_inner,
+        resolve_external_absolute_preview_handle_inner, resolve_external_spec_preview_handle_inner,
+        resolve_workspace_preview_handle_inner, search_workspace_text_inner,
+        sort_and_truncate_named_entries, write_external_absolute_file_inner,
+        WorkspaceDirectoryChildState, WorkspaceScanState, WorkspaceTextSearchOptions,
     };
     use crate::utils::normalize_git_path;
     use std::path::PathBuf;
@@ -1783,6 +2021,127 @@ mod tests {
 
         create_workspace_directory_inner(&PathBuf::from(&root), "docs").expect("create docs");
         assert!(root.join("docs").is_dir());
+
+        std::fs::remove_dir_all(&root).expect("cleanup root");
+    }
+
+    #[test]
+    fn duplicate_workspace_item_preserves_extension_and_collision_suffix() {
+        let root = std::env::temp_dir().join(format!("mossx-duplicate-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("src")).expect("create src");
+        std::fs::write(root.join("src/index.ts"), "one").expect("write index");
+        std::fs::write(root.join("src/index copy.ts"), "existing").expect("write copy");
+
+        let result = duplicate_workspace_item_inner(&PathBuf::from(&root), "src/index.ts")
+            .expect("duplicate file");
+
+        assert_eq!(result.path, "src/index copy 1.ts");
+        assert!(root.join("src/index copy 1.ts").is_file());
+
+        std::fs::remove_dir_all(&root).expect("cleanup root");
+    }
+
+    #[test]
+    fn paste_workspace_item_copies_folder_to_target_directory() {
+        let root = std::env::temp_dir().join(format!("mossx-paste-folder-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("src/components")).expect("create source");
+        std::fs::create_dir_all(root.join("examples")).expect("create target");
+        std::fs::write(root.join("src/components/Button.tsx"), "button").expect("write file");
+
+        let result =
+            paste_workspace_item_inner(&PathBuf::from(&root), "src/components", "examples")
+                .expect("paste folder");
+
+        assert_eq!(result.path, "examples/components");
+        assert!(root.join("examples/components/Button.tsx").is_file());
+
+        std::fs::remove_dir_all(&root).expect("cleanup root");
+    }
+
+    #[test]
+    fn paste_workspace_item_uses_copy_suffix_on_target_collision() {
+        let root = std::env::temp_dir().join(format!("mossx-paste-collision-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("src")).expect("create source");
+        std::fs::create_dir_all(root.join("examples/components")).expect("create existing target");
+        std::fs::write(root.join("src/components.tsx"), "source").expect("write source");
+        std::fs::write(root.join("examples/components.tsx"), "existing").expect("write target");
+
+        let result =
+            paste_workspace_item_inner(&PathBuf::from(&root), "src/components.tsx", "examples")
+                .expect("paste file");
+
+        assert_eq!(result.path, "examples/components copy.tsx");
+        assert!(root.join("examples/components copy.tsx").is_file());
+
+        std::fs::remove_dir_all(&root).expect("cleanup root");
+    }
+
+    #[test]
+    fn paste_workspace_item_rejects_folder_into_descendant() {
+        let root = std::env::temp_dir().join(format!("mossx-paste-descendant-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("src/components")).expect("create dirs");
+
+        let result = paste_workspace_item_inner(&PathBuf::from(&root), "src", "src/components");
+
+        assert!(result.is_err());
+        assert_eq!(
+            result.err().as_deref(),
+            Some("Cannot copy a folder into itself or its descendant.")
+        );
+
+        std::fs::remove_dir_all(&root).expect("cleanup root");
+    }
+
+    #[test]
+    fn rename_workspace_item_renames_file_and_rejects_conflict() {
+        let root = std::env::temp_dir().join(format!("mossx-rename-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("docs")).expect("create docs");
+        std::fs::write(root.join("docs/readme.md"), "readme").expect("write readme");
+        std::fs::write(root.join("docs/guide.md"), "guide").expect("write guide");
+
+        let conflict =
+            rename_workspace_item_inner(&PathBuf::from(&root), "docs/readme.md", "guide.md");
+        assert!(conflict.is_err());
+        assert_eq!(
+            conflict.err().as_deref(),
+            Some("Target path already exists.")
+        );
+
+        let result =
+            rename_workspace_item_inner(&PathBuf::from(&root), "docs/readme.md", "intro.md")
+                .expect("rename file");
+        assert_eq!(result.path, "docs/intro.md");
+        assert!(root.join("docs/intro.md").is_file());
+
+        std::fs::remove_dir_all(&root).expect("cleanup root");
+    }
+
+    #[test]
+    fn rename_workspace_item_rejects_path_like_basename() {
+        let root = std::env::temp_dir().join(format!("mossx-rename-invalid-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("docs")).expect("create docs");
+        std::fs::write(root.join("docs/readme.md"), "readme").expect("write readme");
+
+        let result =
+            rename_workspace_item_inner(&PathBuf::from(&root), "docs/readme.md", "../escape.md");
+
+        assert!(result.is_err());
+        assert_eq!(result.err().as_deref(), Some("Invalid item name."));
+
+        std::fs::remove_dir_all(&root).expect("cleanup root");
+    }
+
+    #[test]
+    fn rename_workspace_item_rejects_windows_reserved_basename() {
+        let root = std::env::temp_dir().join(format!("mossx-rename-windows-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("docs")).expect("create docs");
+        std::fs::write(root.join("docs/readme.md"), "readme").expect("write readme");
+
+        for name in ["CON", "aux.txt", "bad:name.md", "trailing."] {
+            let result = rename_workspace_item_inner(&PathBuf::from(&root), "docs/readme.md", name);
+            assert!(result.is_err(), "{name} should be rejected");
+            assert_eq!(result.err().as_deref(), Some("Invalid item name."));
+        }
 
         std::fs::remove_dir_all(&root).expect("cleanup root");
     }

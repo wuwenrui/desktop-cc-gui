@@ -1116,6 +1116,7 @@ const enPart1 = {
         topToolRuntimeConsole: "Runtime console shortcut",
         topToolTerminal: "Terminal shortcut",
         topToolFocus: "Focus mode shortcut",
+        topToolBrowserDock: "Browser Dock shortcut",
         topToolRightPanel: "Right panel toggle",
         topToolClientDocumentation: "Client documentation entry",
         rightToolbarActivity: "Activity entry",
@@ -1143,6 +1144,8 @@ const enPart1 = {
           "Hides the top terminal shortcut; terminal shortcuts keep working.",
         topToolFocus:
           "Hides the focus mode shortcut without changing focus state.",
+        topToolBrowserDock:
+          "Hides the top Browser Dock shortcut without closing existing browser sessions.",
         topToolRightPanel: "Hides the top right-panel collapse/expand button.",
         topToolClientDocumentation:
           "Hides the client documentation entry without removing the documentation window.",
@@ -1311,6 +1314,16 @@ const enPart1 = {
       "Manage real session history per project with paged loading, filtering, batch archive, unarchive, and deletion.",
     sessionManagementModeProject: "Project view",
     sessionManagementModeGlobal: "Global archive",
+    sessionAttributionModeTitle: "Workspace session pull mode",
+    sessionAttributionModeDescription:
+      "This only changes the pull scope in Project view, not Global archive. Legacy default is the behavior before this switch existed. Current workspace is the new narrower pull mode.",
+    sessionAttributionModeCurrent: "Current: {{mode}}",
+    sessionAttributionModeRelated: "Legacy default",
+    sessionAttributionModeRelatedDescription:
+      "Keeps the pre-switch behavior and tries to recover same-project, worktree, and inferred related history.",
+    sessionAttributionModeWorkspaceOnly: "Current workspace",
+    sessionAttributionModeWorkspaceOnlyDescription:
+      "Only uses path evidence for the selected workspace, improving isolation while possibly showing fewer sessions.",
     sessionManagementGlobalCodexOnly:
       "Global history currently shows Codex sessions visible to this client.",
     sessionManagementGlobalHistoryAllEngines:
@@ -2722,8 +2735,9 @@ const enPart1 = {
       panelTitle: "Browser Dock",
       panelKicker: "Open a page here, then attach its context to AI when needed.",
       noWorkspace: "Select a workspace before opening Browser Dock.",
-      noPage: "Open an allowed http/https page to render it here.",
-      rendering: "Rendering page in Browser Dock...",
+      noPage: "Open an allowed http/https page to launch the Browser Agent window.",
+      rendering: "Rendering page in Browser Agent window...",
+      windowOpened: "The page is open in a separate Browser Agent window.",
       closePanel: "Close Browser Dock",
       close: "Close Browser Agent session",
       info: "Show Browser Agent details",

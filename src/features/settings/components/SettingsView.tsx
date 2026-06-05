@@ -2162,9 +2162,11 @@ export function SettingsView({
                 <SessionManagementSection
                   title={t("settings.projectSessionTitle")}
                   description={t("settings.sessionManagementDescription")}
+                  appSettings={appSettings}
                   workspaces={sessionWorkspaceOptions}
                   groupedWorkspaces={groupedWorkspaces}
                   initialWorkspaceId={selectedSettingsWorkspace?.id ?? null}
+                  onUpdateAppSettings={onUpdateAppSettings}
                   onUpdateWorkspaceSettings={onUpdateWorkspaceSettings}
                   onSessionsMutated={_onEnsureWorkspaceThreads}
                 />

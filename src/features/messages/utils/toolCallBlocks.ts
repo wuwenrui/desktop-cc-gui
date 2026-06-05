@@ -262,6 +262,8 @@ function markInlineCodeSpans(text: string, protectedIndexes: Set<number>) {
       protectedIndexes,
     );
     if (closingIndex === null) {
+      markRange(protectedIndexes, runStart, text.length);
+      cursor = text.length;
       continue;
     }
     markRange(protectedIndexes, runStart, closingIndex + runLength);

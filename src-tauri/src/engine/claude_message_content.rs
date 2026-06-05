@@ -140,7 +140,7 @@ pub(super) fn build_message_content(params: &SendMessageParams) -> Result<Value,
     if !params.text.trim().is_empty() {
         content.push(json!({
             "type": "text",
-            "text": params.text.trim()
+            "text": params.text
         }));
     }
 
@@ -318,6 +318,19 @@ mod tests {
         assert_eq!(blocks[0]["source"]["media_type"], "image/jpeg");
 
         let _ = std::fs::remove_file(image_path);
+    }
+
+    #[test]
+    fn build_message_content_preserves_text_boundary_whitespace() {
+        let mut params = SendMessageParams::default();
+        params.text = "  keep boundary whitespace\t\n".to_string();
+
+        let content = build_message_content(&params).expect("content");
+        let blocks = content["message"]["content"].as_array().expect("array");
+
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(blocks[0]["type"], "text");
+        assert_eq!(blocks[0]["text"], params.text);
     }
 
     #[test]

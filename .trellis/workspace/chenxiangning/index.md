@@ -7,9 +7,9 @@
 ## Current Status
 
 <!-- @@@auto:current-status -->
-- **Active File**: `journal-18.md`
-- **Total Sessions**: 666
-- **Last Active**: 2026-06-01
+- **Active File**: `journal-19.md`
+- **Total Sessions**: 714
+- **Last Active**: 2026-06-05
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,8 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-18.md` | ~674 | Active |
+| `journal-19.md` | ~956 | Active |
+| `journal-18.md` | ~1966 | Archived |
 | `journal-17.md` | ~1971 | Archived |
 | `journal-16.md` | ~1985 | Archived |
 | `journal-15.md` | ~1996 | Archived |
@@ -46,6 +47,54 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 714 | 2026-06-05 | 全量 CI 门禁与格式化收口 | `425b2d8e` | `feature/v0.5.6` |
+| 713 | 2026-06-05 | 加固 Claude 提问恢复边界 | `19d0485c10212a0e946657c99eb4c860cc0112ec` | `feature/v0.5.6` |
+| 712 | 2026-06-05 | 收口实时吸顶对齐任务 | `77f29fa49f1f6065ccf86bab8715a251378c28e9` | `feature/v0.5.6` |
+| 711 | 2026-06-05 | 收口实时提问吸顶任务 | `89641455d8ce32180c47020494f8e63b9f62b2c6` | `feature/v0.5.6` |
+| 710 | 2026-06-05 | 修复 Claude Windows 互动回答恢复链路 | `21048455` | `feature/v0.5.6` |
+| 709 | 2026-06-05 | 补齐工作区打开性能任务 | `b4cb127bbe952a8aa4300cd70e29c1beaa2d1d05` | `feature/v0.5.6` |
+| 708 | 2026-06-05 | 收口 Codex 历史加载任务 | `3154bf99b4b0db5aad4d2792bf1a4872f4a23df6` | `feature/v0.5.6` |
+| 707 | 2026-06-05 | 收口 inline code 渲染任务 | `6f695a8868d59ba6bc51e7a9acab2b2fa2c992a6` | `feature/v0.5.6` |
+| 706 | 2026-06-05 | 收口 stale 线程绑定任务 | `0f68b5da2611013c147556171793316f1adff639` | `feature/v0.5.6` |
+| 705 | 2026-06-05 | 收口完成提示音任务 | `64f2e89be3f9501ea9068628dbb314672faf8cb3` | `feature/v0.5.6` |
+| 704 | 2026-06-05 | 收口 explored 卡片折叠任务 | `aa64758348cb06ff93064322fd7e418b32cba353` | `feature/v0.5.6` |
+| 703 | 2026-06-05 | 归档 Codex 历史加载状态提案 | `b0e18b4fa1f87fb7079db1d93ce61971d0e5463a` | `feature/v0.5.6` |
+| 702 | 2026-06-05 | 修复实时 inline code 工具卡误判 | `a0f379c89f7b269ba884d8ea9af6845d12e7b9ba` | `feature/v0.5.6` |
+| 701 | 2026-06-05 | 归档实时用户问题固定 | `2269366f` | `feature/v0.5.6` |
+| 700 | 2026-06-05 | 归档 Codex 创建会话竞态 | `dfa9d799` | `feature/v0.5.6` |
+| 699 | 2026-06-05 | 收口 stale 线程绑定连续性 | `cec8360f` | `feature/v0.5.6` |
+| 698 | 2026-06-05 | 收口队列气泡连续性 | `52935ef8` | `feature/v0.5.6` |
+| 697 | 2026-06-05 | 收口提问超时结算 | `94772cc6` | `feature/v0.5.6` |
+| 696 | 2026-06-05 | 稳定工作区提交提示测试 | `1faaa8db` | `feature/v0.5.6` |
+| 695 | 2026-06-05 | 归档稳定性提案 | `291a7698` | `feature/v0.5.6` |
+| 694 | 2026-06-05 | 修复运行时提示测试类型错误 | `9361e253` | `feature/v0.5.6` |
+| 693 | 2026-06-05 | 运行时提示仅显示错误消息 | `c585cc14` | `feature/v0.5.6` |
+| 692 | 2026-06-05 | 修复 WebView2 消息图片内存压力 | `63d6e8b8` | `feature/v0.5.6` |
+| 691 | 2026-06-04 | 归档运行时交互卡顿优化提案 | `980a7b57ac9b07804455e31f8a1eab133677b4bc` | `feature/v0.5.6` |
+| 690 | 2026-06-04 | Fix Claude argv prompt shell escaping | `512b9e6b` | `feature/v0.5.6` |
+| 689 | 2026-06-04 | 增加工作区会话拉取模式切换 | `649ef387` | `feature/v0.5.6` |
+| 688 | 2026-06-04 | Project Map 查询关联工作台 | `6fffd914` | `feature/v0.5.6` |
+| 687 | 2026-06-03 | 补充 v0.5.5 发布说明 | `b05258de` | `feature/v0.5.6` |
+| 686 | 2026-06-03 | 归档已验证 OpenSpec 提案并同步主规范 | `36463247` | `feature/v0.5.6` |
+| 685 | 2026-06-03 | 修复打包构建阻断与治理边界 | `63b5ef57` | `feature/v0.5.5` |
+| 684 | 2026-06-03 | 校准 Project Map 视图交互与门禁噪音 | `0ed9db03` | `feature/v0.5.5` |
+| 683 | 2026-06-03 | Project Map 图谱体系与大文件治理批量收口 | `e672301c`, `c1ecd630`, `1e7123c3`, `66929982` | `feature/v0.5.5` |
+| 682 | 2026-06-03 | Browser Agent 浏览器上下文收口 | `e05159c7` | `feature/v0.5.5` |
+| 681 | 2026-06-02 | 回滚 DMG 创建脚本到 v0.5.4 | `862fb673` | `feature/v0.5.5` |
+| 680 | 2026-06-02 | 修复被动读取拉起 Codex 进程 | `20e17a52` | `feature/v0.5.5` |
+| 679 | 2026-06-02 | 记录 Browser Dock 可见性开关提交 | `3f66098a` | `feature/v0.5.5` |
+| 678 | 2026-06-02 | 收敛 stale cleanup runtime ended 事件 | `0dae096c` | `feature/v0.5.5` |
+| 677 | 2026-06-02 | 优化 Browser Dock Phase 3 提案中文可读性 | `d9da91f7` | `feature/v0.5.5` |
+| 676 | 2026-06-02 | 修复 DMG 安装引导布局回退 | `e0ec07c6` | `feature/v0.5.5` |
+| 675 | 2026-06-02 | 归档已验证 OpenSpec 变更 | `e3ac6a9a` | `feature/v0.5.5` |
+| 674 | 2026-06-02 | 记录主 WebView 拖拽转发回归修复 | `f18b38df` | `feature/v0.5.5` |
+| 673 | 2026-06-02 | 修复文件树 ignored 文件夹置灰 | `0841d893` | `feature/v0.5.5` |
+| 672 | 2026-06-02 | OpenSpec 文件树管理范围校准 | `b2688517` | `feature/v0.5.5` |
+| 671 | 2026-06-02 | 修复多 WebView 外部拖拽断链 | `695b64de` | `feature/v0.5.5` |
+| 670 | 2026-06-02 | 文件树删除残留清理收口 | `884f3251` | `feature/v0.5.5` |
+| 669 | 2026-06-02 | 增强文件树文件管理能力 | `8cbb022b` | `feature/v0.5.5` |
+| 668 | 2026-06-01 | Phase2b 前台残留清理收口 | `6e69a6e5` | `feature/v0.5.5` |
+| 667 | 2026-06-01 | 关联 Browser Dock Phase 3 提案文档 | `80f3ada6`, `3ec81734` | `feature/v0.5.5` |
 | 666 | 2026-06-01 | 稳定 Project Map 面板批量测试 | `90bf8321` | `feature/v0.5.4` |
 | 665 | 2026-06-01 | 收窄 Browser Dock 自动打开触发 | `e22c9b1b` | `feature/v0.5.4` |
 | 664 | 2026-06-01 | 修复 CI 品牌与测试噪音门禁 | `08f17169` | `feature/v0.5.4` |

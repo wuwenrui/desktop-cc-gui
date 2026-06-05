@@ -2,8 +2,10 @@ import type { Virtualizer } from "@tanstack/react-virtual";
 import { describe, expect, it, vi } from "vitest";
 import {
   estimateTimelineProjectionRowSize,
+  estimateTimelineProjectionRenderWeight,
   observeTimelineElementOffset,
   shouldVirtualizeTimelineRows,
+  TIMELINE_VIRTUALIZATION_MIN_RENDER_WEIGHT,
   TIMELINE_VIRTUALIZATION_MIN_ROWS,
 } from "./messagesTimelineVirtualization";
 import type { TimelineProjectionRow } from "./messagesTimelineProjection";
@@ -20,11 +22,19 @@ describe("messagesTimelineVirtualization", () => {
     })).toBe(false);
   });
 
-  it("keeps active streaming timelines out of virtualization", () => {
+  it("keeps active streaming timelines out of row-count virtualization", () => {
     expect(shouldVirtualizeTimelineRows({
       isThinking: true,
       rowCount: 1_000,
     })).toBe(false);
+  });
+
+  it("enables virtualization for image-heavy streaming timelines by render weight", () => {
+    expect(shouldVirtualizeTimelineRows({
+      isThinking: true,
+      rowCount: 12,
+      renderWeight: TIMELINE_VIRTUALIZATION_MIN_RENDER_WEIGHT,
+    })).toBe(true);
   });
 
   it("estimates grouped rows higher than a single item row", () => {
@@ -69,6 +79,27 @@ describe("messagesTimelineVirtualization", () => {
     expect(estimateTimelineProjectionRowSize(groupRow)).toBeGreaterThan(
       estimateTimelineProjectionRowSize(singleRow),
     );
+  });
+
+  it("assigns high render weight to image-heavy message rows", () => {
+    const imageRow: TimelineProjectionRow = {
+      kind: "entry",
+      key: "item:message:image",
+      entry: {
+        kind: "item",
+        item: {
+          id: "message-image",
+          kind: "message",
+          role: "user",
+          text: "screenshot",
+          images: ["data:image/png;base64,AAA", "data:image/png;base64,BBB"],
+        },
+      },
+      itemIds: ["message-image"],
+      hasActiveUserInputAnchor: false,
+    };
+
+    expect(estimateTimelineProjectionRenderWeight(imageRow)).toBeGreaterThan(40);
   });
 
   it("clears pending scroll-end fallback when virtualizer unmounts", () => {

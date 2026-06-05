@@ -463,6 +463,33 @@ test("cli writes structured JSON report for governance evidence consumers", asyn
   });
 });
 
+test("cli rejects governance output paths outside the scanned root", async () => {
+  await withTempDir(async (root) => {
+    const outsidePath = path.join(path.dirname(root), `large-files-outside-${Date.now()}.json`);
+    const result = spawnSync(
+      process.execPath,
+      [
+        "scripts/check-large-files.mjs",
+        "--root",
+        root,
+        "--threshold",
+        "5",
+        "--mode",
+        "report",
+        "--json-output",
+        outsidePath,
+      ],
+      {
+        cwd: process.cwd(),
+        encoding: "utf8",
+      },
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(`${result.stdout}\n${result.stderr}`, /Output path must stay inside repository root/);
+  });
+});
+
 function expectPaths(paths) {
   assert.deepEqual(paths.sort(), [
     ".github/workflows/large-file-governance.yml",

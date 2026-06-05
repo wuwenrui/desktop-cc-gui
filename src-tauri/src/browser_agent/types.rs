@@ -115,6 +115,8 @@ pub(crate) struct BrowserActionRequest {
     pub(crate) value: Option<String>,
     pub(crate) reason: String,
     pub(crate) requested_by: String,
+    #[serde(default)]
+    pub(crate) confirmed: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -130,18 +132,43 @@ pub(crate) struct BrowserActionAuditEntry {
     pub(crate) diagnostic_message: Option<String>,
     pub(crate) before_snapshot_id: Option<String>,
     pub(crate) after_snapshot_id: Option<String>,
+    pub(crate) comparison: Option<BrowserActionSnapshotComparison>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct BrowserActionSnapshotComparison {
+    pub(crate) before_snapshot_id: Option<String>,
+    pub(crate) after_snapshot_id: Option<String>,
+    pub(crate) state: String,
+    pub(crate) diagnostics: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct BrowserActionGateResolution {
+    pub(crate) allowed: bool,
+    pub(crate) blocked_reasons: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct BrowserActionPreview {
+    pub(crate) action_id: String,
+    pub(crate) browser_session_id: String,
     pub(crate) action: String,
     pub(crate) target_id: Option<String>,
     pub(crate) target_description: Option<String>,
     pub(crate) value_preview: Option<String>,
     pub(crate) reason: String,
+    pub(crate) risk_level: String,
     pub(crate) requires_user_confirmation: bool,
     pub(crate) blocked_by_default: bool,
+    pub(crate) before_snapshot_id: Option<String>,
+    pub(crate) after_snapshot_id: Option<String>,
+    pub(crate) expected_effect: String,
+    pub(crate) privacy_notice: String,
+    pub(crate) gate: BrowserActionGateResolution,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -580,6 +607,8 @@ pub(crate) struct BrowserContextSnapshot {
     pub(crate) code_candidates: Vec<BrowserCodeCandidate>,
     pub(crate) diagnostics: BrowserContextSnapshotDiagnostics,
     pub(crate) evidence: BrowserContextSnapshotEvidence,
+    #[serde(default)]
+    pub(crate) omitted_capabilities: Vec<String>,
     pub(crate) privacy: BrowserPrivacyReport,
     pub(crate) budget: BrowserSnapshotBudget,
     pub(crate) availability: String,

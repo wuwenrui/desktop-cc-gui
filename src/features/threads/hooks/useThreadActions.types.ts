@@ -1,5 +1,5 @@
 import type { Dispatch, MutableRefObject } from "react";
-import type { DebugEntry } from "../../../types";
+import type { DebugEntry, WorkspaceSessionAttributionMode } from "../../../types";
 import type { ThreadAction, ThreadState } from "./useThreadsReducer";
 
 export type UseThreadActionsOptions = {
@@ -33,4 +33,5 @@ export type UseThreadActionsOptions = {
   clearThreadAlias?: (oldThreadId: string) => void;
   resolveWorkspacePath?: (workspaceId: string) => string | null;
   useUnifiedHistoryLoader?: boolean;
+  sessionAttributionMode?: WorkspaceSessionAttributionMode;
 };

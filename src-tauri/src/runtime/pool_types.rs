@@ -202,6 +202,26 @@ pub(crate) struct RuntimePoolDiagnostics {
     pub(crate) last_runtime_end_workspace_id: Option<String>,
     #[serde(default)]
     pub(crate) last_runtime_end_engine: Option<String>,
+    #[serde(default)]
+    pub(crate) claude_ask_user_question_resume_attempt_count: u32,
+    #[serde(default)]
+    pub(crate) claude_ask_user_question_resume_success_count: u32,
+    #[serde(default)]
+    pub(crate) claude_ask_user_question_resume_failure_count: u32,
+    #[serde(default)]
+    pub(crate) last_claude_ask_user_question_resume_at_ms: Option<u64>,
+    #[serde(default)]
+    pub(crate) last_claude_ask_user_question_resume_workspace_id: Option<String>,
+    #[serde(default)]
+    pub(crate) last_claude_ask_user_question_resume_thread_id: Option<String>,
+    #[serde(default)]
+    pub(crate) last_claude_ask_user_question_resume_turn_id: Option<String>,
+    #[serde(default)]
+    pub(crate) last_claude_ask_user_question_resume_request_id: Option<String>,
+    #[serde(default)]
+    pub(crate) last_claude_ask_user_question_resume_status: Option<String>,
+    #[serde(default)]
+    pub(crate) last_claude_ask_user_question_resume_error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

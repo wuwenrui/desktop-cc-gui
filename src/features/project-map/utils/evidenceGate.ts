@@ -11,6 +11,8 @@ const SOURCE_PRIORITY: Record<ProjectMapSourceType, ProjectMapEvidencePriority> 
   file: "code",
   symbol: "code",
   spec: "spec",
+  task: "task",
+  document: "document",
   test: "tests",
   commit: "commit",
   conversation: "memory",
@@ -19,6 +21,8 @@ const SOURCE_PRIORITY: Record<ProjectMapSourceType, ProjectMapEvidencePriority> 
 const PRIORITY_SCORE: Record<ProjectMapEvidencePriority, number> = {
   code: 5,
   spec: 4,
+  task: 4,
+  document: 3,
   tests: 3,
   commit: 2,
   memory: 1,

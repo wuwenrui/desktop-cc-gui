@@ -7,6 +7,9 @@ import type {
   ProjectMapDiagramDocument,
   ProjectMapDataset,
   ProjectMapEvidenceRecord,
+  ProjectMapGraphIntegrityIssueKind,
+  ProjectMapGraphRepairActionKind,
+  ProjectMapGraphRepairSummary,
   ProjectMapLens,
   ProjectMapManifest,
   ProjectMapMemoryIngestionCursor,
@@ -14,10 +17,16 @@ import type {
   ProjectMapNodeDetail,
   ProjectMapProfile,
   ProjectMapRelatedArtifact,
+  ProjectMapRelation,
+  ProjectMapRefreshReasonKind,
+  ProjectMapRefreshSummary,
   ProjectMapRunMetadata,
   ProjectMapSource,
   ProjectMapSourceType,
   ProjectMapStorageLocation,
+  ProjectMapStaleReason,
+  ProjectMapTourMetadata,
+  ProjectMapTourStep,
   ProjectMapViewState,
 } from "../types";
 import { normalizeProjectMapNodeTopology } from "../utils/incrementalGeneration";
@@ -49,6 +58,7 @@ export type ProjectMapReadResponse = {
   evidence: Record<string, unknown>;
   runs: Record<string, unknown>;
   diagrams?: unknown;
+  relations?: unknown;
 };
 
 export type ProjectMapWriteFile = {
@@ -144,6 +154,8 @@ export function createEmptyProjectMapDataset(input: {
     candidates: [],
     evidenceRecords: [],
     diagramDocuments: [],
+    relations: [],
+    tours: { steps: [], updatedAt: now },
     autoIngestionSettings: { ...DEFAULT_AUTO_INGESTION_SETTINGS },
     memoryCursor: {
       lastCheckedAt: DEFAULT_MEMORY_CURSOR.lastCheckedAt,
@@ -169,6 +181,8 @@ const SUPPORTED_SOURCE_TYPES = new Set<ProjectMapSourceType>([
   "file",
   "symbol",
   "spec",
+  "task",
+  "document",
   "commit",
   "test",
   "conversation",
@@ -406,6 +420,7 @@ function sanitizeProjectMapNode(value: unknown): ProjectMapNode | null {
     sources,
     confidence: sanitizeProjectMapConfidence(value.confidence),
     stale: value.stale === true,
+    staleReasons: sanitizeProjectMapStaleReasons(value.staleReasons),
     candidate: value.candidate === true,
     lastGeneratedAt: asTrimmedString(value.lastGeneratedAt) || new Date(0).toISOString(),
     generatedBy: isRecord(value.generatedBy)
@@ -442,6 +457,60 @@ function isProjectMapCandidate(value: unknown): value is ProjectMapCandidate {
 
 function isProjectMapEvidenceRecord(value: unknown): value is ProjectMapEvidenceRecord {
   return isRecord(value) && typeof value.id === "string" && isRecord(value.source);
+}
+
+function sanitizeProjectMapRelation(value: unknown): ProjectMapRelation | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const id = asTrimmedString(value.id);
+  const sourceNodeId = asTrimmedString(value.sourceNodeId);
+  const targetNodeId = asTrimmedString(value.targetNodeId);
+  const type = asTrimmedString(value.type);
+  if (!id || !sourceNodeId || !targetNodeId || !type) {
+    return null;
+  }
+  const direction =
+    value.direction === "backward" || value.direction === "bidirectional"
+      ? value.direction
+      : "forward";
+  const weight = typeof value.weight === "number" ? value.weight : Number(asTrimmedString(value.weight));
+  return {
+    id,
+    sourceNodeId,
+    targetNodeId,
+    type,
+    direction,
+    confidence: sanitizeProjectMapConfidence(value.confidence),
+    stale: value.stale === true,
+    ...(Number.isFinite(weight) ? { weight } : {}),
+    label: asTrimmedString(value.label) || undefined,
+    sourceKind: asTrimmedString(value.sourceKind) || "llm-inferred",
+    evidence: safeArray(
+      Array.isArray(value.evidence) ? value.evidence : [],
+      isProjectMapEvidenceRecord,
+    ),
+    generatedBy: isRecord(value.generatedBy)
+      ? {
+          engine: asTrimmedString(value.generatedBy.engine) || "unknown",
+          model: asTrimmedString(value.generatedBy.model) || "unknown",
+          runId: asTrimmedString(value.generatedBy.runId) || "unknown",
+        }
+      : undefined,
+  };
+}
+
+function sanitizeProjectMapRelationsPayload(value: unknown, nodeIds: Set<string>): ProjectMapRelation[] {
+  const rawItems = isRecord(value) ? value.items : value;
+  if (!Array.isArray(rawItems)) {
+    return [];
+  }
+  return rawItems
+    .map(sanitizeProjectMapRelation)
+    .filter((relation): relation is ProjectMapRelation => Boolean(relation))
+    .filter(
+      (relation) => nodeIds.has(relation.sourceNodeId) && nodeIds.has(relation.targetNodeId),
+    );
 }
 
 function sanitizeProjectMapDiagramDocument(value: unknown): ProjectMapDiagramDocument | null {
@@ -612,6 +681,204 @@ function sanitizeViewState(value: unknown): ProjectMapViewState | undefined {
   };
 }
 
+function sanitizeRefreshClassification(value: unknown): ProjectMapStaleReason["recommendation"] {
+  return value === "skip" ||
+    value === "partial-refresh" ||
+    value === "architecture-refresh" ||
+    value === "full-refresh-suggested"
+    ? value
+    : "partial-refresh";
+}
+
+function sanitizeRefreshReasonKind(value: unknown): ProjectMapRefreshReasonKind {
+  return value === "ignored" ||
+    value === "cosmetic" ||
+    value === "source-changed" ||
+    value === "spec-changed" ||
+    value === "task-changed" ||
+    value === "architecture-changed" ||
+    value === "fingerprint-matched" ||
+    value === "unknown"
+    ? value
+    : "unknown";
+}
+
+function sanitizeGraphIssueKind(value: unknown): ProjectMapGraphIntegrityIssueKind {
+  return value === "duplicate-node-id" ||
+    value === "missing-parent" ||
+    value === "missing-child" ||
+    value === "missing-relation-source" ||
+    value === "missing-relation-target" ||
+    value === "duplicate-relation-id" ||
+    value === "missing-node-evidence" ||
+    value === "stale-relation"
+    ? value
+    : "missing-node-evidence";
+}
+
+function sanitizeGraphRepairActionKind(value: unknown): ProjectMapGraphRepairActionKind {
+  return value === "remove-invalid-relation" ||
+    value === "remove-missing-child-reference" ||
+    value === "clear-missing-parent" ||
+    value === "quarantine-evidence-gap"
+    ? value
+    : "quarantine-evidence-gap";
+}
+
+function sanitizeProjectMapStaleReason(value: unknown): ProjectMapStaleReason | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const id = asTrimmedString(value.id);
+  const label = asTrimmedString(value.label);
+  if (!id || !label) {
+    return null;
+  }
+  return {
+    id,
+    kind: sanitizeRefreshReasonKind(value.kind),
+    label,
+    path: asTrimmedString(value.path) || undefined,
+    nodeId: asTrimmedString(value.nodeId) || undefined,
+    relationId: asTrimmedString(value.relationId) || undefined,
+    observedHash: asTrimmedString(value.observedHash) || null,
+    currentHash: asTrimmedString(value.currentHash) || null,
+    recommendation: sanitizeRefreshClassification(value.recommendation),
+  };
+}
+
+function sanitizeProjectMapStaleReasons(value: unknown): ProjectMapStaleReason[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map(sanitizeProjectMapStaleReason)
+    .filter((reason): reason is ProjectMapStaleReason => Boolean(reason));
+}
+
+function sanitizeProjectMapRefreshSummary(value: unknown): ProjectMapRefreshSummary | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const classification = sanitizeRefreshClassification(value.classification);
+  return {
+    classification,
+    label: asTrimmedString(value.label) || classification,
+    changedPaths: sanitizeStringArray(value.changedPaths, 500),
+    ignoredPaths: Array.isArray(value.ignoredPaths)
+      ? value.ignoredPaths.flatMap((item) => {
+          if (!isRecord(item)) {
+            return [];
+          }
+          const path = asTrimmedString(item.path);
+          const reason = asTrimmedString(item.reason);
+          return path && reason ? [{ path, reason }] : [];
+        })
+      : [],
+    staleReasons: sanitizeProjectMapStaleReasons(value.staleReasons),
+    evaluatedAt: asTrimmedString(value.evaluatedAt) || new Date(0).toISOString(),
+  };
+}
+
+function sanitizeProjectMapGraphRepairSummary(value: unknown): ProjectMapGraphRepairSummary | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const rawIssues = Array.isArray(value.issues) ? value.issues : [];
+  const rawActions = Array.isArray(value.actions) ? value.actions : [];
+  return {
+    issues: rawIssues.flatMap((item) => {
+      if (!isRecord(item)) {
+        return [];
+      }
+      const id = asTrimmedString(item.id);
+      const label = asTrimmedString(item.label);
+      if (!id || !label) {
+        return [];
+      }
+      return [{
+        id,
+        kind: sanitizeGraphIssueKind(item.kind),
+        severity:
+          item.severity === "critical" || item.severity === "warning" || item.severity === "info"
+            ? item.severity
+            : "info",
+        label,
+        nodeId: asTrimmedString(item.nodeId) || undefined,
+        relationId: asTrimmedString(item.relationId) || undefined,
+      }];
+    }),
+    actions: rawActions.flatMap((item) => {
+      if (!isRecord(item)) {
+        return [];
+      }
+      const id = asTrimmedString(item.id);
+      const label = asTrimmedString(item.label);
+      if (!id || !label) {
+        return [];
+      }
+      return [{
+        id,
+        kind: sanitizeGraphRepairActionKind(item.kind),
+        label,
+        nodeId: asTrimmedString(item.nodeId) || undefined,
+        relationId: asTrimmedString(item.relationId) || undefined,
+      }];
+    }),
+    repairedAt: asTrimmedString(value.repairedAt) || undefined,
+  };
+}
+
+function sanitizeProjectMapTourStep(
+  value: unknown,
+  nodeIds: Set<string>,
+): ProjectMapTourStep | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const id = asTrimmedString(value.id);
+  const title = asTrimmedString(value.title);
+  const summary = asTrimmedString(value.summary);
+  const purpose = asTrimmedString(value.purpose) || "onboarding";
+  const stepNodeIds = sanitizeStringArray(value.nodeIds, 12).filter((nodeId) => nodeIds.has(nodeId));
+  if (!id || !title || !summary || stepNodeIds.length === 0) {
+    return null;
+  }
+  const priority = typeof value.priority === "number" ? value.priority : Number(asTrimmedString(value.priority));
+  return {
+    id,
+    purpose,
+    title,
+    summary,
+    nodeIds: stepNodeIds,
+    ...(Number.isFinite(priority) ? { priority } : {}),
+  };
+}
+
+function sanitizeProjectMapTourMetadata(
+  value: unknown,
+  nodeIds: Set<string>,
+): ProjectMapTourMetadata | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const rawSteps = Array.isArray(value.steps) ? value.steps : [];
+  const sanitizedSteps = rawSteps
+    .map((step) => sanitizeProjectMapTourStep(step, nodeIds))
+    .filter((step): step is ProjectMapTourStep => Boolean(step));
+  return {
+    steps: sanitizedSteps,
+    updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : undefined,
+    generatedBy: isRecord(value.generatedBy)
+      ? {
+          engine: asTrimmedString(value.generatedBy.engine) || "unknown",
+          model: asTrimmedString(value.generatedBy.model) || "unknown",
+          runId: asTrimmedString(value.generatedBy.runId) || "unknown",
+        }
+      : undefined,
+  };
+}
+
 export function buildDatasetFromProjectMapRead(
   response: ProjectMapReadResponse,
   identity: ProjectMapStorageIdentity,
@@ -627,6 +894,7 @@ export function buildDatasetFromProjectMapRead(
     Object.values(response.lensNodes).flatMap(sanitizeProjectMapNodesPayload),
     { attachOrphansToRoot: true },
   );
+  const nodeIds = new Set(nodes.map((node) => node.id));
 
   if (!manifest || !profile) {
     return null;
@@ -637,6 +905,17 @@ export function buildDatasetFromProjectMapRead(
     profile,
     lenses,
     nodes,
+    relations: sanitizeProjectMapRelationsPayload(response.relations, nodeIds),
+    tours: sanitizeProjectMapTourMetadata(
+      isRecord(response.viewState) ? response.viewState.tours : undefined,
+      nodeIds,
+    ),
+    refreshState: sanitizeProjectMapRefreshSummary(
+      isRecord(response.viewState) ? response.viewState.refreshState : undefined,
+    ),
+    graphRepair: sanitizeProjectMapGraphRepairSummary(
+      isRecord(response.viewState) ? response.viewState.graphRepair : undefined,
+    ),
     viewState: sanitizeViewState(response.viewState),
     runs: Object.values(response.runs).flatMap((value) =>
       safeArray(isRecord(value) ? value.items : [value], isProjectMapRun),
@@ -666,7 +945,21 @@ export function serializeProjectMapDataset(dataset: ProjectMapDataset): ProjectM
     { relativePath: "manifest.json", content: JSON.stringify(dataset.manifest, null, 2) },
     { relativePath: "profile.json", content: JSON.stringify(dataset.profile, null, 2) },
     { relativePath: "lenses/manifest.json", content: JSON.stringify({ items: dataset.lenses }, null, 2) },
-    { relativePath: "view-state.json", content: JSON.stringify(dataset.viewState ?? null, null, 2) },
+    {
+      relativePath: "view-state.json",
+      content: JSON.stringify(
+        dataset.viewState || dataset.tours
+          ? {
+              ...(dataset.viewState ?? {}),
+              ...(dataset.tours ? { tours: dataset.tours } : {}),
+              ...(dataset.refreshState ? { refreshState: dataset.refreshState } : {}),
+              ...(dataset.graphRepair ? { graphRepair: dataset.graphRepair } : {}),
+            }
+          : null,
+        null,
+        2,
+      ),
+    },
     { relativePath: "settings.json", content: JSON.stringify(dataset.autoIngestionSettings, null, 2) },
     { relativePath: "memory-ingestion/cursor.json", content: JSON.stringify(dataset.memoryCursor, null, 2) },
     {
@@ -685,6 +978,10 @@ export function serializeProjectMapDataset(dataset: ProjectMapDataset): ProjectM
     {
       relativePath: "diagrams/manifest.json",
       content: JSON.stringify({ items: dataset.diagramDocuments ?? [] }, null, 2),
+    },
+    {
+      relativePath: "relations/latest.json",
+      content: JSON.stringify({ items: dataset.relations ?? [] }, null, 2),
     },
   ];
 

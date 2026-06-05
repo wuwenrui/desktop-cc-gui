@@ -1,6 +1,6 @@
 {
   "schemaVersion": "1.0",
-  "generatedAt": "2026-05-24T11:31:59.707Z",
+  "generatedAt": "2026-06-04T15:35:39.998Z",
   "sources": {
     "perfBaseline": "docs/perf/baseline.json",
     "browserScroll": "docs/perf/long-list-browser-scroll.json",
@@ -12,7 +12,7 @@
       "source": "docs/perf/baseline.json",
       "scenario": "S-LL-200",
       "metric": "commitDurationP50",
-      "value": 14.15,
+      "value": 17.6,
       "unit": "ms",
       "evidenceClass": "proxy",
       "reason": "Fixture or replay evidence; useful for regression comparison, not release-grade runtime proof.",
@@ -22,7 +22,7 @@
       "source": "docs/perf/baseline.json",
       "scenario": "S-LL-200",
       "metric": "commitDurationP95",
-      "value": 14.15,
+      "value": 17.6,
       "unit": "ms",
       "evidenceClass": "proxy",
       "reason": "Fixture or replay evidence; useful for regression comparison, not release-grade runtime proof.",
@@ -32,7 +32,7 @@
       "source": "docs/perf/baseline.json",
       "scenario": "S-LL-200",
       "metric": "firstPaintAfterMount",
-      "value": 40.01,
+      "value": 54.54,
       "unit": "ms",
       "evidenceClass": "proxy",
       "reason": "Fixture or replay evidence; useful for regression comparison, not release-grade runtime proof.",
@@ -42,7 +42,7 @@
       "source": "docs/perf/baseline.json",
       "scenario": "S-LL-500",
       "metric": "commitDurationP50",
-      "value": 20.08,
+      "value": 170.66,
       "unit": "ms",
       "evidenceClass": "proxy",
       "reason": "Fixture or replay evidence; useful for regression comparison, not release-grade runtime proof.",
@@ -52,7 +52,7 @@
       "source": "docs/perf/baseline.json",
       "scenario": "S-LL-500",
       "metric": "commitDurationP95",
-      "value": 20.08,
+      "value": 170.66,
       "unit": "ms",
       "evidenceClass": "proxy",
       "reason": "Fixture or replay evidence; useful for regression comparison, not release-grade runtime proof.",
@@ -62,7 +62,7 @@
       "source": "docs/perf/baseline.json",
       "scenario": "S-LL-500",
       "metric": "firstPaintAfterMount",
-      "value": 41.12,
+      "value": 195.04,
       "unit": "ms",
       "evidenceClass": "proxy",
       "reason": "Fixture or replay evidence; useful for regression comparison, not release-grade runtime proof.",
@@ -72,7 +72,7 @@
       "source": "docs/perf/baseline.json",
       "scenario": "S-LL-1000",
       "metric": "commitDurationP50",
-      "value": 18.71,
+      "value": 34.47,
       "unit": "ms",
       "evidenceClass": "proxy",
       "reason": "Fixture or replay evidence; useful for regression comparison, not release-grade runtime proof.",
@@ -82,7 +82,7 @@
       "source": "docs/perf/baseline.json",
       "scenario": "S-LL-1000",
       "metric": "commitDurationP95",
-      "value": 18.71,
+      "value": 34.47,
       "unit": "ms",
       "evidenceClass": "proxy",
       "reason": "Fixture or replay evidence; useful for regression comparison, not release-grade runtime proof.",
@@ -92,7 +92,7 @@
       "source": "docs/perf/baseline.json",
       "scenario": "S-LL-1000",
       "metric": "firstPaintAfterMount",
-      "value": 39.5,
+      "value": 58.43,
       "unit": "ms",
       "evidenceClass": "proxy",
       "reason": "Fixture or replay evidence; useful for regression comparison, not release-grade runtime proof.",
@@ -112,7 +112,7 @@
       "source": "docs/perf/baseline.json",
       "scenario": "S-CI-50",
       "metric": "keystrokeToCommitP95",
-      "value": 0.09,
+      "value": 0.08,
       "unit": "ms",
       "evidenceClass": "proxy",
       "reason": "Fixture or replay evidence; useful for regression comparison, not release-grade runtime proof.",
@@ -202,7 +202,7 @@
       "source": "docs/perf/baseline.json",
       "scenario": "S-RS-PE",
       "metric": "assemblerLatency",
-      "value": 4.05,
+      "value": 5.73,
       "unit": "ms",
       "evidenceClass": "proxy",
       "reason": "replay reducer-path proxy latency",
@@ -212,20 +212,20 @@
       "source": "docs/perf/baseline.json",
       "scenario": "S-CS-COLD",
       "metric": "bundleSizeMain",
-      "value": 1128218,
+      "value": 1284244,
       "unit": "bytes",
       "evidenceClass": "measured",
-      "reason": "App-GaIGSlNJ.js",
+      "reason": "App-CiaJ8_Ht.js",
       "nextAction": "Track for regression."
     },
     {
       "source": "docs/perf/baseline.json",
       "scenario": "S-CS-COLD",
       "metric": "bundleSizeVendor",
-      "value": 672902,
+      "value": 672901,
       "unit": "bytes",
       "evidenceClass": "measured",
-      "reason": "vendor-mermaid-DpHPKkXo.js",
+      "reason": "vendor-mermaid-BczYtMM2.js",
       "nextAction": "Track for regression."
     },
     {
@@ -262,7 +262,7 @@
   "realtimeSummary": {
     "firstTokenLatencyMs": 5000,
     "interTokenJitterP95Ms": 920,
-    "assemblerLatencyMs": 4.05,
+    "assemblerLatencyMs": 5.73,
     "evidenceClass": "proxy",
     "visibleLagRisk": "high",
     "terminalPressure": "not-directly-measured",
@@ -278,202 +278,34 @@
     "source": "openspec list --json",
     "completed": [
       {
-        "name": "refactor-file-open-rendering-scheduler",
-        "tasks": "37/37",
-        "recommendation": "archive-candidate-after-qualifier-review",
-        "qualifier": "Review validation and platform qualifiers before archive."
-      },
-      {
-        "name": "stabilize-runtime-performance-evidence-gates",
-        "tasks": "21/21",
-        "recommendation": "archive-candidate-after-qualifier-review",
-        "qualifier": "Archive only after evidence report identifies measured/proxy/unsupported boundaries."
-      },
-      {
-        "name": "fix-claude-issue529-second-turn-blank-session",
-        "tasks": "6/6",
-        "recommendation": "archive-candidate-after-qualifier-review",
-        "qualifier": "Keep local manual QA and Windows/Claude-manual qualifiers explicit before archive."
-      },
-      {
-        "name": "harden-claude-sidebar-list-timeout-fallback",
-        "tasks": "30/30",
-        "recommendation": "archive-candidate-after-qualifier-review",
-        "qualifier": "Keep local manual QA and Windows/Claude-manual qualifiers explicit before archive."
-      },
-      {
-        "name": "fix-stale-thread-recovery-confidence-gates",
-        "tasks": "50/50",
-        "recommendation": "archive-candidate-after-qualifier-review",
-        "qualifier": "Keep local manual QA and Windows/Claude-manual qualifiers explicit before archive."
-      },
-      {
-        "name": "unify-claude-workspace-session-catalog",
-        "tasks": "55/55",
-        "recommendation": "archive-candidate-after-qualifier-review",
-        "qualifier": "Keep local manual QA and Windows/Claude-manual qualifiers explicit before archive."
-      },
-      {
-        "name": "stabilize-session-management-truth-boundaries",
-        "tasks": "23/23",
-        "recommendation": "archive-candidate-after-qualifier-review",
-        "qualifier": "Keep local manual QA and Windows/Claude-manual qualifiers explicit before archive."
-      },
-      {
-        "name": "preserve-editor-on-topbar-session-switch",
-        "tasks": "7/7",
-        "recommendation": "archive-candidate-after-qualifier-review",
-        "qualifier": "Keep local manual QA and Windows/Claude-manual qualifiers explicit before archive."
-      },
-      {
-        "name": "refactor-workspace-session-management",
-        "tasks": "62/62",
-        "recommendation": "archive-candidate-after-qualifier-review",
-        "qualifier": "Keep local manual QA and Windows/Claude-manual qualifiers explicit before archive."
-      },
-      {
-        "name": "desktop-editor-split-left-composer",
-        "tasks": "8/8",
-        "recommendation": "archive-candidate-after-qualifier-review",
-        "qualifier": "Review validation and platform qualifiers before archive."
-      },
-      {
-        "name": "add-file-markdown-math-preview",
-        "tasks": "12/12",
-        "recommendation": "archive-candidate-after-qualifier-review",
-        "qualifier": "Review validation and platform qualifiers before archive."
-      },
-      {
-        "name": "adjust-git-worktree-checkbox-placement",
-        "tasks": "15/15",
-        "recommendation": "archive-candidate-after-qualifier-review",
-        "qualifier": "Review validation and platform qualifiers before archive."
-      },
-      {
-        "name": "integrate-openspec-trellis-bridge-into-status-panel",
-        "tasks": "18/18",
-        "recommendation": "archive-candidate-after-qualifier-review",
-        "qualifier": "Review validation and platform qualifiers before archive."
-      },
-      {
-        "name": "optimize-long-list-virtualization",
-        "tasks": "16/16",
-        "recommendation": "archive-candidate-after-qualifier-review",
-        "qualifier": "Archive only after evidence report identifies measured/proxy/unsupported boundaries."
-      },
-      {
-        "name": "optimize-realtime-event-batching",
-        "tasks": "17/17",
-        "recommendation": "archive-candidate-after-qualifier-review",
-        "qualifier": "Archive only after evidence report identifies measured/proxy/unsupported boundaries."
-      },
-      {
-        "name": "stabilize-markdown-preview-awareness-and-large-rendering",
-        "tasks": "15/15",
-        "recommendation": "archive-candidate-after-qualifier-review",
-        "qualifier": "Review validation and platform qualifiers before archive."
-      },
-      {
-        "name": "add-email-driven-session-continuation",
-        "tasks": "57/57",
-        "recommendation": "archive-candidate-after-qualifier-review",
-        "qualifier": "Keep local manual QA and Windows/Claude-manual qualifiers explicit before archive."
-      },
-      {
-        "name": "add-memory-reference-persistent-mode",
-        "tasks": "13/13",
-        "recommendation": "archive-candidate-after-qualifier-review",
-        "qualifier": "Review validation and platform qualifiers before archive."
-      },
-      {
-        "name": "dynamic-project-governance-evidence",
-        "tasks": "34/34",
-        "recommendation": "archive-candidate-after-qualifier-review",
-        "qualifier": "Review validation and platform qualifiers before archive."
-      },
-      {
-        "name": "fix-codex-empty-draft-stale-thread-auto-replay",
-        "tasks": "11/11",
-        "recommendation": "archive-candidate-after-qualifier-review",
-        "qualifier": "Keep local manual QA and Windows/Claude-manual qualifiers explicit before archive."
-      },
-      {
-        "name": "fix-markdown-preview-auto-refresh",
-        "tasks": "8/8",
-        "recommendation": "archive-candidate-after-qualifier-review",
-        "qualifier": "Review validation and platform qualifiers before archive."
-      },
-      {
-        "name": "add-cross-workspace-cost-admin-view",
-        "tasks": "6/6",
-        "recommendation": "archive-candidate-after-qualifier-review",
-        "qualifier": "Review validation and platform qualifiers before archive."
-      },
-      {
-        "name": "add-engine-plugin-onboarding-kit",
-        "tasks": "6/6",
-        "recommendation": "archive-candidate-after-qualifier-review",
-        "qualifier": "Review validation and platform qualifiers before archive."
-      },
-      {
-        "name": "advance-harness-governance-to-90",
-        "tasks": "51/51",
-        "recommendation": "archive-candidate-after-qualifier-review",
-        "qualifier": "Review validation and platform qualifiers before archive."
-      },
-      {
-        "name": "stabilize-core-runtime-and-realtime-contracts",
-        "tasks": "32/32",
-        "recommendation": "archive-candidate-after-qualifier-review",
-        "qualifier": "Review validation and platform qualifiers before archive."
-      },
-      {
-        "name": "fix-codex-deferred-completion-after-assistant-ingress",
+        "name": "fix-claude-argv-prompt-shell-escaping",
         "tasks": "7/7",
         "recommendation": "archive-candidate-after-qualifier-review",
         "qualifier": "Review validation and platform qualifiers before archive."
       },
       {
-        "name": "improve-email-mail-session-list-controls",
-        "tasks": "21/21",
+        "name": "fix-client-runtime-interaction-jank",
+        "tasks": "43/43",
+        "recommendation": "archive-candidate-after-qualifier-review",
+        "qualifier": "Review validation and platform qualifiers before archive."
+      },
+      {
+        "name": "add-session-attribution-mode-setting",
+        "tasks": "31/31",
         "recommendation": "archive-candidate-after-qualifier-review",
         "qualifier": "Keep local manual QA and Windows/Claude-manual qualifiers explicit before archive."
       },
       {
-        "name": "optimize-bundle-chunking",
-        "tasks": "14/14",
-        "recommendation": "archive-candidate-after-qualifier-review",
-        "qualifier": "Archive only after evidence report identifies measured/proxy/unsupported boundaries."
-      },
-      {
-        "name": "refactor-mega-hub-split",
-        "tasks": "16/16",
-        "recommendation": "archive-candidate-after-qualifier-review",
-        "qualifier": "Review validation and platform qualifiers before archive."
-      },
-      {
-        "name": "stabilize-composer-control-surface",
-        "tasks": "22/22",
-        "recommendation": "archive-candidate-after-qualifier-review",
-        "qualifier": "Review validation and platform qualifiers before archive."
-      },
-      {
-        "name": "fix-bottom-status-dock-collapse-stability",
-        "tasks": "11/11",
-        "recommendation": "archive-candidate-after-qualifier-review",
-        "qualifier": "Review validation and platform qualifiers before archive."
-      },
-      {
-        "name": "stabilize-file-markdown-preview-render-architecture",
-        "tasks": "26/26",
+        "name": "deepen-project-map-query-and-association-workbench",
+        "tasks": "52/52",
         "recommendation": "archive-candidate-after-qualifier-review",
         "qualifier": "Review validation and platform qualifiers before archive."
       }
     ],
     "inProgress": [
       {
-        "name": "add-codex-structured-launch-profile",
-        "tasks": "0/7",
+        "name": "refactor-project-map-view-information-architecture",
+        "tasks": "23/25",
         "recommendation": "not-archive-ready"
       }
     ],
@@ -507,88 +339,88 @@
   ],
   "largeFileSummary": {
     "source": ".artifacts/large-files-near-threshold.json",
-    "generatedAt": "2026-05-24T11:03:18.589Z",
+    "generatedAt": "2026-06-04T13:11:37.864Z",
     "status": "warn",
     "candidates": [
       {
         "path": "src-tauri/src/engine/claude_history.rs",
-        "lines": 2308,
+        "lines": 2505,
         "priority": "P0",
         "policyId": "bridge-runtime-critical",
-        "headroom": 292,
+        "headroom": 95,
+        "facade": "Preserve command registration, Rust module facade, payload shape, and cross-platform paths."
+      },
+      {
+        "path": "src/services/tauri.ts",
+        "lines": 2395,
+        "priority": "P0",
+        "policyId": "bridge-runtime-critical",
+        "headroom": 205,
+        "facade": "Preserve service exports, payload mapping, and web/Tauri fallback semantics."
+      },
+      {
+        "path": "src-tauri/src/runtime/mod.rs",
+        "lines": 2336,
+        "priority": "P0",
+        "policyId": "bridge-runtime-critical",
+        "headroom": 264,
+        "facade": "Preserve command registration, Rust module facade, payload shape, and cross-platform paths."
+      },
+      {
+        "path": "src-tauri/src/git/mod.rs",
+        "lines": 2332,
+        "priority": "P0",
+        "policyId": "bridge-runtime-critical",
+        "headroom": 268,
+        "facade": "Preserve command registration, Rust module facade, payload shape, and cross-platform paths."
+      },
+      {
+        "path": "src-tauri/src/engine/commands.rs",
+        "lines": 2285,
+        "priority": "P0",
+        "policyId": "bridge-runtime-critical",
+        "headroom": 315,
+        "facade": "Preserve command registration, Rust module facade, payload shape, and cross-platform paths."
+      },
+      {
+        "path": "src-tauri/src/codex/mod.rs",
+        "lines": 2259,
+        "priority": "P0",
+        "policyId": "bridge-runtime-critical",
+        "headroom": 341,
         "facade": "Preserve command registration, Rust module facade, payload shape, and cross-platform paths."
       },
       {
         "path": "src/app-shell.tsx",
-        "lines": 2248,
+        "lines": 2256,
         "priority": "P0",
         "policyId": "bridge-runtime-critical",
-        "headroom": 352,
+        "headroom": 344,
         "facade": "Declare public facade before splitting."
       },
       {
-        "path": "src/services/tauri.ts",
-        "lines": 2237,
-        "priority": "P0",
-        "policyId": "bridge-runtime-critical",
-        "headroom": 363,
-        "facade": "Preserve service exports, payload mapping, and web/Tauri fallback semantics."
+        "path": "src/styles/project-map.css",
+        "lines": 2790,
+        "priority": "P1",
+        "policyId": "styles",
+        "headroom": 10,
+        "facade": "Preserve selector names, import order, and cascade compatibility."
       },
       {
-        "path": "src/features/threads/hooks/useThreadActions.ts",
-        "lines": 2777,
+        "path": "src/features/layout/hooks/useLayoutNodes.tsx",
+        "lines": 2940,
         "priority": "P1",
-        "policyId": "feature-hotpath",
-        "headroom": 23,
+        "policyId": "default-source",
+        "headroom": 60,
         "facade": "Preserve hook input/output shape and async cleanup semantics."
       },
       {
-        "path": "src-tauri/src/session_management.rs",
-        "lines": 2952,
+        "path": "src/features/threads/hooks/useThreadEventHandlers.ts",
+        "lines": 2739,
         "priority": "P1",
-        "policyId": "default-source",
-        "headroom": 48,
-        "facade": "Preserve command registration, Rust module facade, payload shape, and cross-platform paths."
-      },
-      {
-        "path": "src-tauri/src/session_management_tests.rs",
-        "lines": 2717,
-        "priority": "P1",
-        "policyId": "default-source",
-        "headroom": 283,
-        "facade": "Preserve command registration, Rust module facade, payload shape, and cross-platform paths."
-      },
-      {
-        "path": "src/app-shell-parts/useAppShellSections.ts",
-        "lines": 2623,
-        "priority": "P1",
-        "policyId": "default-source",
-        "headroom": 377,
-        "facade": "Declare public facade before splitting."
-      },
-      {
-        "path": "src/styles/status-panel.css",
-        "lines": 2333,
-        "priority": "P1",
-        "policyId": "styles",
-        "headroom": 467,
-        "facade": "Preserve selector names, import order, and cascade compatibility."
-      },
-      {
-        "path": "src/styles/settings.part2.css",
-        "lines": 2283,
-        "priority": "P1",
-        "policyId": "styles",
-        "headroom": 517,
-        "facade": "Preserve selector names, import order, and cascade compatibility."
-      },
-      {
-        "path": "src/styles/composer.part2.css",
-        "lines": 2205,
-        "priority": "P1",
-        "policyId": "styles",
-        "headroom": 595,
-        "facade": "Preserve selector names, import order, and cascade compatibility."
+        "policyId": "feature-hotpath",
+        "headroom": 61,
+        "facade": "Preserve hook input/output shape and async cleanup semantics."
       }
     ],
     "nextAction": "Pick one coherent runtime boundary; do not batch unrelated hot paths together."

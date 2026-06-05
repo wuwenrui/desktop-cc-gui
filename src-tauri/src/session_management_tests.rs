@@ -444,6 +444,7 @@
                 engine: None,
                 status: Some("all".to_string()),
                 folder_id: None,
+                ..Default::default()
             }
         ));
         assert!(query_requires_exhaustive_scan(
@@ -452,6 +453,7 @@
                 engine: None,
                 status: Some("archived".to_string()),
                 folder_id: None,
+                ..Default::default()
             }
         ));
         assert!(query_requires_exhaustive_scan(
@@ -460,6 +462,7 @@
                 engine: None,
                 status: Some("active".to_string()),
                 folder_id: Some("folder-a".to_string()),
+                ..Default::default()
             }
         ));
         assert!(!query_requires_exhaustive_scan(
@@ -468,6 +471,7 @@
                 engine: None,
                 status: Some("all".to_string()),
                 folder_id: None,
+                ..Default::default()
             }
         ));
     }
@@ -1794,6 +1798,7 @@
                 engine: None,
                 status: Some("all".to_string()),
                 folder_id: None,
+                ..Default::default()
             }),
             None,
             Some(10),
@@ -1838,6 +1843,7 @@
                 engine: None,
                 status: Some("all".to_string()),
                 folder_id: None,
+                ..Default::default()
             }),
         )
         .await
@@ -1934,6 +1940,7 @@
                 engine: None,
                 status: Some("all".to_string()),
                 folder_id: None,
+                ..Default::default()
             }),
             None,
             Some(20),
@@ -2143,6 +2150,7 @@
             &storage_path,
             "parent",
             SessionCatalogScanMode::Bounded(20),
+            WorkspaceSessionAttributionMode::Related,
         )
         .await
         .expect("build parent catalog data");
@@ -2152,6 +2160,7 @@
             &storage_path,
             "child",
             SessionCatalogScanMode::Bounded(20),
+            WorkspaceSessionAttributionMode::Related,
         )
         .await
         .expect("build child catalog data");
@@ -2180,6 +2189,160 @@
             Some("child")
         );
 
+        std::fs::remove_dir_all(base).ok();
+    }
+
+    #[tokio::test]
+    async fn workspace_only_excludes_unrelated_claude_project_dir_with_matching_cwd() {
+        let base = std::env::temp_dir().join(format!("claude-workspace-only-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&base).expect("create temp dir");
+        let storage_path = base.join("workspaces.json");
+        std::fs::write(&storage_path, "[]").expect("seed storage path");
+
+        let workspace_path = base.join("workspace");
+        let unrelated_path = base.join("unrelated");
+        std::fs::create_dir_all(&workspace_path).expect("create workspace path");
+        std::fs::create_dir_all(&unrelated_path).expect("create unrelated path");
+
+        let claude_home = base.join("claude-home");
+        let claude_projects_dir = claude_home.join("projects");
+        write_claude_session_fixture(
+            &claude_projects_dir,
+            &unrelated_path,
+            "foreign-project-matching-cwd",
+            &workspace_path,
+            "foreign project but matching cwd",
+        );
+
+        let workspace = workspace_entry(
+            "workspace",
+            "Workspace",
+            &workspace_path.to_string_lossy(),
+            WorkspaceKind::Main,
+            None,
+        );
+        let workspaces = Mutex::new(HashMap::from([(workspace.id.clone(), workspace)]));
+        let sessions = Mutex::new(HashMap::new());
+        let engine_manager = engine::EngineManager::new();
+        engine_manager
+            .set_engine_config(
+                engine::EngineType::Claude,
+                engine::EngineConfig {
+                    home_dir: Some(claude_home.to_string_lossy().to_string()),
+                    ..engine::EngineConfig::default()
+                },
+            )
+            .await;
+
+        let related_page = list_workspace_sessions_core(
+            &workspaces,
+            &sessions,
+            &engine_manager,
+            &storage_path,
+            "workspace".to_string(),
+            Some(WorkspaceSessionCatalogQuery {
+                engine: Some("claude".to_string()),
+                status: Some("all".to_string()),
+                ..Default::default()
+            }),
+            None,
+            Some(20),
+        )
+        .await
+        .expect("list related sessions");
+        assert!(related_page
+            .data
+            .iter()
+            .any(|entry| entry.session_id == "claude:foreign-project-matching-cwd"));
+
+        let workspace_only_page = list_workspace_sessions_core(
+            &workspaces,
+            &sessions,
+            &engine_manager,
+            &storage_path,
+            "workspace".to_string(),
+            Some(WorkspaceSessionCatalogQuery {
+                engine: Some("claude".to_string()),
+                status: Some("all".to_string()),
+                session_attribution_mode: Some(WorkspaceSessionAttributionMode::WorkspaceOnly),
+                ..Default::default()
+            }),
+            None,
+            Some(20),
+        )
+        .await
+        .expect("list workspace-only sessions");
+
+        assert!(workspace_only_page
+            .data
+            .iter()
+            .all(|entry| entry.session_id != "claude:foreign-project-matching-cwd"));
+        std::fs::remove_dir_all(base).ok();
+    }
+
+    #[tokio::test]
+    async fn workspace_only_keeps_claude_child_prefix_project_dir() {
+        let base = std::env::temp_dir().join(format!("claude-child-prefix-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&base).expect("create temp dir");
+        let storage_path = base.join("workspaces.json");
+        std::fs::write(&storage_path, "[]").expect("seed storage path");
+
+        let workspace_path = base.join("workspace");
+        let child_path = workspace_path.join("nested");
+        std::fs::create_dir_all(&child_path).expect("create child workspace path");
+
+        let claude_home = base.join("claude-home");
+        let claude_projects_dir = claude_home.join("projects");
+        write_claude_session_fixture(
+            &claude_projects_dir,
+            &child_path,
+            "child-prefix-session",
+            &child_path,
+            "child prefix task",
+        );
+
+        let workspace = workspace_entry(
+            "workspace",
+            "Workspace",
+            &workspace_path.to_string_lossy(),
+            WorkspaceKind::Main,
+            None,
+        );
+        let workspaces = Mutex::new(HashMap::from([(workspace.id.clone(), workspace)]));
+        let sessions = Mutex::new(HashMap::new());
+        let engine_manager = engine::EngineManager::new();
+        engine_manager
+            .set_engine_config(
+                engine::EngineType::Claude,
+                engine::EngineConfig {
+                    home_dir: Some(claude_home.to_string_lossy().to_string()),
+                    ..engine::EngineConfig::default()
+                },
+            )
+            .await;
+
+        let page = list_workspace_sessions_core(
+            &workspaces,
+            &sessions,
+            &engine_manager,
+            &storage_path,
+            "workspace".to_string(),
+            Some(WorkspaceSessionCatalogQuery {
+                engine: Some("claude".to_string()),
+                status: Some("all".to_string()),
+                session_attribution_mode: Some(WorkspaceSessionAttributionMode::WorkspaceOnly),
+                ..Default::default()
+            }),
+            None,
+            Some(20),
+        )
+        .await
+        .expect("list workspace-only sessions");
+
+        assert!(page
+            .data
+            .iter()
+            .any(|entry| entry.session_id == "claude:child-prefix-session"));
         std::fs::remove_dir_all(base).ok();
     }
 
@@ -2522,6 +2685,7 @@
             &storage_path,
             "parent",
             SessionCatalogScanMode::Bounded(20),
+            WorkspaceSessionAttributionMode::Related,
         )
         .await
         .expect("build parent catalog data");
@@ -2531,6 +2695,7 @@
             &storage_path,
             "child",
             SessionCatalogScanMode::Bounded(20),
+            WorkspaceSessionAttributionMode::Related,
         )
         .await
         .expect("build child catalog data");
@@ -2620,6 +2785,7 @@
                 engine: None,
                 status: Some("active".to_string()),
                 folder_id: None,
+                ..Default::default()
             },
         );
 
@@ -2656,6 +2822,7 @@
             engine: None,
             status: Some("active".to_string()),
             folder_id: None,
+            ..Default::default()
         };
         let entries = [parent, inherited_child, root, filtered_out];
         let filtered_entries = entries
@@ -2688,6 +2855,7 @@
                 engine: None,
                 status: Some("active".to_string()),
                 folder_id: Some("folder-a".to_string()),
+                ..Default::default()
             },
             None,
             Some(1),

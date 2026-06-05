@@ -129,6 +129,7 @@ type MessageRowProps = {
 type DeferredImageState = {
   status: "idle" | "loading" | "loaded" | "error";
   src?: string;
+  transient?: boolean;
   error?: string;
 };
 
@@ -156,6 +157,35 @@ function formatDeferredImageSize(byteSize: number) {
     return `${Math.round(byteSize / 1024)} KB`;
   }
   return `${Math.round(byteSize)} B`;
+}
+
+function isTransientImageObjectUrl(src: string | undefined, transient: boolean | undefined) {
+  return Boolean(transient && src?.startsWith("blob:"));
+}
+
+function revokeDeferredImageState(state: DeferredImageState | undefined) {
+  const objectUrl = isTransientImageObjectUrl(state?.src, state?.transient)
+    ? state?.src
+    : null;
+  if (objectUrl) {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+async function createTransientImageObjectUrl(dataUrl: string) {
+  if (!dataUrl.toLowerCase().startsWith("data:image/")) {
+    return { src: dataUrl, transient: false };
+  }
+  try {
+    const response = await fetch(dataUrl);
+    const blob = await response.blob();
+    return {
+      src: URL.createObjectURL(blob),
+      transient: true,
+    };
+  } catch {
+    return { src: dataUrl, transient: false };
+  }
 }
 
 type ReasoningRowProps = {
@@ -217,6 +247,35 @@ function areMessageImagesEqual(
   return previous.every((image, index) => image === next[index]);
 }
 
+function areDeferredMessageImagesEqual(
+  previous: Extract<ConversationItem, { kind: "message" }>["deferredImages"],
+  next: Extract<ConversationItem, { kind: "message" }>["deferredImages"],
+) {
+  if (previous === next) {
+    return true;
+  }
+  if (!previous?.length && !next?.length) {
+    return true;
+  }
+  if (!previous || !next || previous.length !== next.length) {
+    return false;
+  }
+  return previous.every((image, index) => {
+    const nextImage = next[index];
+    return (
+      nextImage?.workspacePath === image.workspacePath &&
+      nextImage.mediaType === image.mediaType &&
+      nextImage.estimatedByteSize === image.estimatedByteSize &&
+      nextImage.reason === image.reason &&
+      nextImage.locator.sessionId === image.locator.sessionId &&
+      nextImage.locator.lineIndex === image.locator.lineIndex &&
+      nextImage.locator.blockIndex === image.locator.blockIndex &&
+      nextImage.locator.messageId === image.locator.messageId &&
+      nextImage.locator.mediaType === image.locator.mediaType
+    );
+  });
+}
+
 function areMessageItemsEqual(
   previous: Extract<ConversationItem, { kind: "message" }>,
   next: Extract<ConversationItem, { kind: "message" }>,
@@ -233,7 +292,8 @@ function areMessageItemsEqual(
       previous.finalDurationMs === next.finalDurationMs &&
       previous.selectedAgentName === next.selectedAgentName &&
       previous.selectedAgentIcon === next.selectedAgentIcon &&
-      areMessageImagesEqual(previous.images, next.images)
+      areMessageImagesEqual(previous.images, next.images) &&
+      areDeferredMessageImagesEqual(previous.deferredImages, next.deferredImages)
     )
   );
 }
@@ -810,6 +870,8 @@ export const MessageRow = memo(function MessageRow({
   }>({ itemId: "", textLength: 0 });
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [deferredImageStates, setDeferredImageStates] = useState<Record<string, DeferredImageState>>({});
+  const deferredImageObjectUrlsRef = useRef(new Set<string>());
+  const isMountedRef = useRef(true);
   const [memorySummaryExpanded, setMemorySummaryExpanded] = useState(false);
   const [memoryPayloadDialogOpen, setMemoryPayloadDialogOpen] = useState(false);
   const [isAgentBadgeExpanded, setIsAgentBadgeExpanded] = useState(false);
@@ -983,49 +1045,104 @@ export const MessageRow = memo(function MessageRow({
       .filter(Boolean) as MessageImage[];
   }, [item.images, noteCardImagePathSet]);
   const deferredImageItems = item.deferredImages ?? [];
+  const revokeTrackedDeferredImageState = useCallback((state: DeferredImageState | undefined) => {
+    const objectUrl = isTransientImageObjectUrl(state?.src, state?.transient)
+      ? state?.src ?? null
+      : null;
+    revokeDeferredImageState(state);
+    if (objectUrl) {
+      deferredImageObjectUrlsRef.current.delete(objectUrl);
+    }
+  }, []);
   const handleLoadDeferredImage = useCallback(
     async (
       image: NonNullable<Extract<ConversationItem, { kind: "message" }>["deferredImages"]>[number],
     ) => {
       const key = deferredImageKey(image);
       if (!image.workspacePath) {
-        setDeferredImageStates((current) => ({
-          ...current,
-          [key]: {
-            status: "error",
-            error: "Missing workspace path for this Claude image.",
-          },
-        }));
+        setDeferredImageStates((current) => {
+          revokeTrackedDeferredImageState(current[key]);
+          return {
+            ...current,
+            [key]: {
+              status: "error",
+              error: "Missing workspace path for this Claude image.",
+            },
+          };
+        });
         return;
       }
-      setDeferredImageStates((current) => ({
-        ...current,
-        [key]: { status: "loading" },
-      }));
+      setDeferredImageStates((current) => {
+        revokeTrackedDeferredImageState(current[key]);
+        return {
+          ...current,
+          [key]: { status: "loading" },
+        };
+      });
       try {
         const hydrated = await hydrateClaudeDeferredImage(
           image.workspacePath,
           image.locator,
         );
-        setDeferredImageStates((current) => ({
-          ...current,
-          [key]: {
-            status: "loaded",
-            src: hydrated.src,
-          },
-        }));
+        const transientImage = await createTransientImageObjectUrl(hydrated.src);
+        const loadedState: DeferredImageState = {
+          status: "loaded",
+          src: transientImage.src,
+          transient: transientImage.transient,
+        };
+        const loadedObjectUrl = isTransientImageObjectUrl(
+          loadedState.src,
+          loadedState.transient,
+        )
+          ? loadedState.src
+          : null;
+        if (loadedObjectUrl) {
+          deferredImageObjectUrlsRef.current.add(loadedObjectUrl);
+        }
+        if (!isMountedRef.current) {
+          revokeDeferredImageState(loadedState);
+          if (loadedObjectUrl) {
+            deferredImageObjectUrlsRef.current.delete(loadedObjectUrl);
+          }
+          return;
+        }
+        setDeferredImageStates((current) => {
+          revokeTrackedDeferredImageState(current[key]);
+          return {
+            ...current,
+            [key]: loadedState,
+          };
+        });
       } catch (error) {
-        setDeferredImageStates((current) => ({
-          ...current,
-          [key]: {
-            status: "error",
-            error: error instanceof Error ? error.message : String(error),
-          },
-        }));
+        if (!isMountedRef.current) {
+          return;
+        }
+        setDeferredImageStates((current) => {
+          revokeTrackedDeferredImageState(current[key]);
+          return {
+            ...current,
+            [key]: {
+              status: "error",
+              error: error instanceof Error ? error.message : String(error),
+            },
+          };
+        });
       }
     },
-    [],
+    [revokeTrackedDeferredImageState],
   );
+  const deferredImageStatesRef = useRef(deferredImageStates);
+  useEffect(() => {
+    deferredImageStatesRef.current = deferredImageStates;
+  }, [deferredImageStates]);
+  useEffect(() => () => {
+    isMountedRef.current = false;
+    Object.values(deferredImageStatesRef.current).forEach(revokeTrackedDeferredImageState);
+    deferredImageObjectUrlsRef.current.forEach((objectUrl) => {
+      URL.revokeObjectURL(objectUrl);
+    });
+    deferredImageObjectUrlsRef.current.clear();
+  }, []);
   const hideCopyButton = (
     !hasText
     && imageItems.length === 0

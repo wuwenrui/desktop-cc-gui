@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import AlertCircle from "lucide-react/dist/esm/icons/alert-circle";
 import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
 import X from "lucide-react/dist/esm/icons/x";
 import type { BrowserContextAttachment } from "../types";
+import { buildBrowserEvidenceViewModel } from "../evidence";
 
 export type BrowserContextPreviewProps = {
   attachment: BrowserContextAttachment;
@@ -34,12 +35,21 @@ export function BrowserContextPreview({
 }: BrowserContextPreviewProps) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
-  const stateLabel = attachment.stale
+  const evidenceViewModel = useMemo(
+    () => buildBrowserEvidenceViewModel(attachment),
+    [attachment],
+  );
+  const stateLabel = evidenceViewModel.observationState === "available"
+    ? t("browserAgent.composer.fresh")
+    : evidenceViewModel.observationState === "stale"
     ? t("browserAgent.composer.stale")
-    : t("browserAgent.composer.fresh");
+    : evidenceViewModel.observationState;
   const diagnostics = attachment.diagnostics.slice(0, 3);
   const counts = attachment.elementCounts;
-  const detailSnapshotText = attachment.visibleTextExcerpt || attachment.summary;
+  const detailSnapshotText =
+    (evidenceViewModel.primaryContent.items[0] ??
+    attachment.visibleTextExcerpt) ||
+    attachment.summary;
   useEffect(() => {
     setExpanded(false);
   }, [attachment.snapshotId, attachment.title, attachment.url]);
@@ -51,7 +61,7 @@ export function BrowserContextPreview({
           <div className="composer-browser-context-kicker">
             {t("browserAgent.composer.visibleSnapshot")}
           </div>
-          <span className={`composer-browser-context-state ${attachment.stale ? "is-stale" : "is-fresh"}`}>
+          <span className={`composer-browser-context-state ${evidenceViewModel.observationState === "available" ? "is-fresh" : "is-stale"}`}>
             {stateLabel}
           </span>
         </div>
@@ -82,6 +92,12 @@ export function BrowserContextPreview({
               {" · "}
               {t("browserAgent.composer.noRawApi")}
             </div>
+            <section className="composer-browser-context-section">
+              <div className="composer-browser-context-section-title">
+                {evidenceViewModel.overview.title}
+              </div>
+              <p>{compactDetailText(evidenceViewModel.overview.copySafeText, 1_000)}</p>
+            </section>
             {detailSnapshotText ? (
               <section className="composer-browser-context-section">
                 <div className="composer-browser-context-section-title">
@@ -109,54 +125,49 @@ export function BrowserContextPreview({
                 <p>{compactDetailText(attachment.primaryContent, 1_000)}</p>
               </section>
             ) : null}
-            {attachment.readableBlocks && attachment.readableBlocks.length > 0 ? (
+            {evidenceViewModel.readableBlocks.items.length > 0 ? (
               <section className="composer-browser-context-section">
                 <div className="composer-browser-context-section-title">
                   {t("browserAgent.composer.readableBlocks", {
-                    count: attachment.readableBlocks.length,
+                    count: evidenceViewModel.readableBlocks.items.length,
                   })}
                 </div>
                 <ol className="composer-browser-context-evidence-list">
-                  {attachment.readableBlocks.slice(0, 8).map((block) => (
-                    <li key={block.blockId}>
-                      <span>{block.role} · score {block.score}</span>
-                      <p>{compactDetailText(block.text)}</p>
+                  {evidenceViewModel.readableBlocks.items.slice(0, 8).map((item, index) => (
+                    <li key={`readable-${index}`}>
+                      <p>{compactDetailText(item)}</p>
                     </li>
                   ))}
                 </ol>
               </section>
             ) : null}
-            {attachment.visualEvidence && attachment.visualEvidence.length > 0 ? (
+            {evidenceViewModel.visualEvidence.items.length > 0 ? (
               <section className="composer-browser-context-section">
                 <div className="composer-browser-context-section-title">
                   {t("browserAgent.composer.visualEvidence", {
-                    count: attachment.visualEvidence.length,
+                    count: evidenceViewModel.visualEvidence.items.length,
                   })}
                 </div>
                 <ul className="composer-browser-context-evidence-list">
-                  {attachment.visualEvidence.slice(0, 12).map((item) => (
-                    <li key={item.evidenceId}>
-                      <span>{item.kind} · {item.label}</span>
-                      {item.altText ? <p>alt: {compactDetailText(item.altText, 240)}</p> : null}
-                      {item.nearbyText ? <p>{compactDetailText(item.nearbyText, 460)}</p> : null}
-                      {item.srcOrigin ? <p className="composer-browser-context-origin">{item.srcOrigin}</p> : null}
+                  {evidenceViewModel.visualEvidence.items.slice(0, 12).map((item, index) => (
+                    <li key={`visual-${index}`}>
+                      <p>{compactDetailText(item, 520)}</p>
                     </li>
                   ))}
                 </ul>
               </section>
             ) : null}
-            {attachment.codeCandidates.length > 0 ? (
+            {evidenceViewModel.codeCandidates.items.length > 0 ? (
               <section className="composer-browser-context-section">
                 <div className="composer-browser-context-section-title">
                   {t("browserAgent.composer.codeCandidates", {
-                    count: attachment.codeCandidates.length,
+                    count: evidenceViewModel.codeCandidates.items.length,
                   })}
                 </div>
                 <ul className="composer-browser-context-evidence-list">
-                  {attachment.codeCandidates.map((candidate) => (
-                    <li key={candidate.candidateId}>
-                      <span>{candidate.filePath}</span>
-                      <p>{candidate.reason} · {candidate.confidence}</p>
+                  {evidenceViewModel.codeCandidates.items.map((item, index) => (
+                    <li key={`candidate-${index}`}>
+                      <p>{item}</p>
                     </li>
                   ))}
                 </ul>

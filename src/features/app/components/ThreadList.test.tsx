@@ -317,6 +317,55 @@ describe("ThreadList", () => {
     expect(onSelectThread).toHaveBeenCalledWith("ws-1", "claude:agent-parent-agent");
   });
 
+  it("does not expose subagent parent controls on deeper nested child rows", () => {
+    render(
+      <ThreadList
+        {...baseProps}
+        unpinnedRows={[
+          {
+            thread: {
+              ...thread,
+              id: "claude:parent",
+              engineSource: "claude",
+            },
+            depth: 0,
+            hasChildren: true,
+          },
+          {
+            thread: {
+              id: "claude:agent-mid",
+              name: "Mid Agent",
+              updatedAt: 800,
+              parentThreadId: "claude:parent",
+              engineSource: "claude",
+            },
+            depth: 1,
+            hasChildren: true,
+          },
+          {
+            thread: {
+              id: "claude:agent-leaf",
+              name: "Leaf Agent",
+              updatedAt: 700,
+              parentThreadId: "claude:agent-mid",
+              engineSource: "claude",
+            },
+            depth: 2,
+          },
+        ]}
+      />,
+    );
+
+    const topLevelRow = screen.getByText("Alpha").closest(".thread-row");
+    const midRow = screen.getByText("Mid Agent").closest(".thread-row");
+    expect(topLevelRow?.classList.contains("is-subagent-parent")).toBe(true);
+    expect(topLevelRow?.querySelector(".thread-tree-expander")).toBeTruthy();
+    expect(midRow?.classList.contains("has-child-threads")).toBe(true);
+    expect(midRow?.classList.contains("is-subagent-parent")).toBe(false);
+    expect(midRow?.getAttribute("aria-expanded")).toBeNull();
+    expect(midRow?.querySelector(".thread-tree-expander")).toBeNull();
+  });
+
   it("routes pending subagent child row clicks back to the parent session", () => {
     const onSelectThread = vi.fn();
     const pendingChildThread: ThreadSummary = {

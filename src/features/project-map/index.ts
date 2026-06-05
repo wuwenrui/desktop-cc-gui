@@ -20,16 +20,40 @@ export {
   validateProjectMapNodePatch,
 } from "./utils/evidenceGate";
 export {
+  buildProjectMapAgentTaskContextPack,
+  buildProjectMapContextPack,
+} from "./utils/contextBuilder";
+export {
+  buildProjectMapAgentTaskContext,
+  collectProjectMapGovernanceLinks,
+  extractOpenSpecMetadata,
+  extractTrellisTaskMetadata,
+} from "./utils/governanceGraph";
+export {
+  classifyProjectMapRefresh,
+  getProjectMapNodeStaleReasons,
+} from "./utils/refreshClassifier";
+export {
+  repairProjectMapGraphIntegrity,
+  validateProjectMapGraphIntegrity,
+} from "./utils/graphIntegrity";
+export {
   confirmProjectMapCandidate,
   rejectProjectMapCandidate,
 } from "./utils/candidates";
 export type {
   ProjectMapAutoIngestionSettings,
+  ProjectMapAgentTaskContext,
   ProjectMapCandidate,
+  ProjectMapChangedFileFingerprint,
   ProjectMapConfidence,
+  ProjectMapContextPack,
   ProjectMapDataset,
   ProjectMapEvidenceRecord,
   ProjectMapGenerationRequest,
+  ProjectMapGraphIntegrityIssue,
+  ProjectMapGraphRepairSummary,
+  ProjectMapGovernanceLink,
   ProjectMapLens,
   ProjectMapLensId,
   ProjectMapLensStats,
@@ -39,8 +63,13 @@ export type {
   ProjectMapNode,
   ProjectMapNodeDetail,
   ProjectMapNodePatch,
+  ProjectMapOpenSpecMetadata,
+  ProjectMapRefreshClassification,
+  ProjectMapRefreshSummary,
   ProjectMapRunMetadata,
   ProjectMapSource,
+  ProjectMapStaleReason,
+  ProjectMapTrellisTaskMetadata,
 } from "./types";
 export type {
   ProjectMapDatasetController,

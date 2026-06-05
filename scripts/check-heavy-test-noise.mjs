@@ -131,6 +131,13 @@ function shouldIgnorePayloadLine(line) {
   return false;
 }
 
+function shouldResetPayloadContext(line) {
+  if (!line.trim()) {
+    return true;
+  }
+  return RUNNER_PREFIXES.some((prefix) => line.startsWith(prefix));
+}
+
 function detectEnvironmentOwnedWarningsFromEnv(env = process.env) {
   const warnings = [];
 
@@ -189,6 +196,12 @@ export function analyzeHeavyTestNoise(logText, options = {}) {
     }
 
     if (!currentContext || !currentStream) {
+      continue;
+    }
+
+    if (shouldResetPayloadContext(normalizedLine)) {
+      currentContext = null;
+      currentStream = null;
       continue;
     }
 

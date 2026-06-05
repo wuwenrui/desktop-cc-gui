@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import { mockProjectMapData } from "../mockProjectMapData";
 import {
+  createProjectMapDatasetFixture,
+  createProjectMapRelationFixture,
+} from "../testUtils/fixtures";
+import {
   buildDatasetFromProjectMapRead,
   serializeProjectMapDataset,
   writeProjectMapDataset,
@@ -589,5 +593,92 @@ describe("project map persistence mapper", () => {
     );
 
     expect(dataset).toBeNull();
+  });
+
+  it("roundtrips relation payloads and filters invalid persisted endpoints", () => {
+    const fixture = createProjectMapDatasetFixture({
+      relations: [
+        createProjectMapRelationFixture({
+          id: "relation-api-data",
+          label: "API depends on data store",
+          weight: 2,
+        }),
+      ],
+    });
+    const relation = fixture.relations?.[0];
+    if (!relation) {
+      throw new Error("Expected relation fixture to contain a relation");
+    }
+    const relationFile = serializeProjectMapDataset(fixture).find(
+      (file) => file.relativePath === "relations/latest.json",
+    );
+    const serializedRelations = JSON.parse(relationFile?.content ?? "{}") as {
+      items?: Array<{ id?: string; sourceKind?: string; weight?: number }>;
+    };
+
+    const dataset = buildDatasetFromProjectMapRead(
+      {
+        storageKey: "project-map-fixture",
+        storageDir: "workspace/project-map-fixture/.ccgui/project-map/project-map-fixture",
+        exists: true,
+        manifest: fixture.manifest,
+        profile: fixture.profile,
+        lenses: { items: fixture.lenses },
+        lensNodes: {
+          overview: { items: fixture.nodes },
+        },
+        candidates: {},
+        evidence: {},
+        runs: {},
+        relations: {
+          items: [
+            relation,
+            {},
+            {
+              ...relation,
+              id: "relation-missing-target",
+              targetNodeId: "missing-node",
+            },
+          ],
+        },
+      },
+      { projectName: "project-map-fixture", workspacePath: "workspace/project-map-fixture", workspaceId: "ws-1" },
+    );
+
+    expect(serializedRelations.items?.[0]).toMatchObject({
+      id: "relation-api-data",
+      sourceKind: "deterministic",
+      weight: 2,
+    });
+    expect(dataset?.relations).toEqual([
+      expect.objectContaining({
+        id: "relation-api-data",
+        label: "API depends on data store",
+        weight: 2,
+      }),
+    ]);
+  });
+
+  it("loads legacy snapshots without relation payloads as an empty relation set", () => {
+    const fixture = createProjectMapDatasetFixture();
+    const dataset = buildDatasetFromProjectMapRead(
+      {
+        storageKey: "project-map-fixture",
+        storageDir: "workspace/project-map-fixture/.ccgui/project-map/project-map-fixture",
+        exists: true,
+        manifest: fixture.manifest,
+        profile: fixture.profile,
+        lenses: { items: fixture.lenses },
+        lensNodes: {
+          overview: { items: fixture.nodes },
+        },
+        candidates: {},
+        evidence: {},
+        runs: {},
+      },
+      { projectName: "project-map-fixture", workspacePath: "workspace/project-map-fixture", workspaceId: "ws-1" },
+    );
+
+    expect(dataset?.relations).toEqual([]);
   });
 });

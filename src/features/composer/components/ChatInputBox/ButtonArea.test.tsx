@@ -396,4 +396,46 @@ describe("ButtonArea custom model storage refresh", () => {
     expect(screen.queryByRole("dialog", { name: "composer.memoryReferenceDialogTitle" })).toBeNull();
   });
 
+  it("keeps the stop action clickable while advisory stream phase changes", () => {
+    const onStop = vi.fn();
+    const { rerender } = render(
+      <ButtonArea
+        currentProvider="codex"
+        models={[]}
+        selectedModel=""
+        disabled
+        isLoading
+        streamActivityPhase="waiting"
+        hasInputContent={false}
+        onStop={onStop}
+        shortcutActions={[]}
+      />,
+    );
+
+    const stopButton = screen.getByTitle("chat.stopGeneration") as HTMLButtonElement;
+    expect(stopButton.disabled).toBe(false);
+    expect(stopButton.dataset.streamPhase).toBe("waiting");
+
+    rerender(
+      <ButtonArea
+        currentProvider="codex"
+        models={[]}
+        selectedModel=""
+        disabled
+        isLoading
+        streamActivityPhase="ingress"
+        hasInputContent={false}
+        onStop={onStop}
+        shortcutActions={[]}
+      />,
+    );
+
+    fireEvent.click(screen.getByTitle("chat.stopGeneration"));
+
+    expect(onStop).toHaveBeenCalledTimes(1);
+    expect(screen.getByTitle("chat.stopGeneration").dataset.streamPhase).toBe(
+      "ingress",
+    );
+  });
+
 });

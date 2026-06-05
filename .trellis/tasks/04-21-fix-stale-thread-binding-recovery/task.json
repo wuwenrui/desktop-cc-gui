@@ -3,19 +3,19 @@
   "name": "fix-stale-thread-binding-recovery",
   "title": "Fix stale thread binding recovery continuity",
   "description": "",
-  "status": "planning",
-  "dev_type": null,
-  "scope": null,
+  "status": "completed",
+  "dev_type": "frontend",
+  "scope": "threads",
   "package": null,
   "priority": "P2",
   "creator": "chenxiangning",
   "assignee": "chenxiangning",
   "createdAt": "2026-04-21",
-  "completedAt": null,
+  "completedAt": "2026-06-05",
   "branch": null,
   "base_branch": "feature/f-v0.4.6",
   "worktree_path": null,
-  "current_phase": 0,
+  "current_phase": 6,
   "next_action": [
     {
       "phase": 1,
@@ -42,12 +42,19 @@
       "action": "record-session"
     }
   ],
-  "commit": null,
+  "commit": "cec8360fdc24d7506fadbdd97323afffc3d0ee16",
   "pr_url": null,
   "subtasks": [],
   "children": [],
   "parent": null,
-  "relatedFiles": [],
-  "notes": "",
+  "relatedFiles": [
+    "openspec/changes/archive/2026-06-04-fix-stale-thread-binding-recovery-continuity/",
+    "openspec/specs/codex-stale-thread-binding-recovery/spec.md",
+    "src/features/threads/utils/threadStorage.ts",
+    "src/features/threads/hooks/useThreads.ts",
+    "src/features/threads/utils/threadStorage.test.ts",
+    "src/features/threads/hooks/useThreads.memory-race.integration.test.tsx"
+  ],
+  "notes": "Implementation and OpenSpec archive were completed in commit cec8360fdc24d7506fadbdd97323afffc3d0ee16. Verified threadStorage regression tests, useThreads memory-race integration tests, typecheck, change-level OpenSpec validation, and full OpenSpec validation.",
   "meta": {}
 }

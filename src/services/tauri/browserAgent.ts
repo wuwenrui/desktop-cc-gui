@@ -95,6 +95,16 @@ export async function mountBrowserAgentWebview(
   return invoke<BrowserSession>("mount_browser_agent_webview", { request });
 }
 
+export async function openBrowserAgentWindow(
+  browserSessionId: string,
+  locale?: string | null,
+): Promise<BrowserSession> {
+  return invoke<BrowserSession>("open_browser_agent_window", {
+    browserSessionId,
+    locale,
+  });
+}
+
 export async function syncBrowserAgentWebviewBounds(
   browserSessionId: string,
   bounds: BrowserWebviewBounds,

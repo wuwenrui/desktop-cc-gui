@@ -3,19 +3,19 @@
   "name": "fix-live-inline-code-markdown-rendering",
   "title": "Fix live inline code markdown rendering (OpenSpec: fix-live-inline-code-markdown-rendering)",
   "description": "",
-  "status": "planning",
-  "dev_type": null,
-  "scope": null,
+  "status": "completed",
+  "dev_type": "frontend",
+  "scope": "messages",
   "package": null,
   "priority": "P2",
   "creator": "chenxiangning",
   "assignee": "chenxiangning",
   "createdAt": "2026-04-22",
-  "completedAt": null,
+  "completedAt": "2026-06-05",
   "branch": null,
   "base_branch": "feature/v-0.4.7",
   "worktree_path": null,
-  "current_phase": 0,
+  "current_phase": 6,
   "next_action": [
     {
       "phase": 1,
@@ -42,12 +42,20 @@
       "action": "record-session"
     }
   ],
-  "commit": null,
+  "commit": "a0f379c8",
   "pr_url": null,
   "subtasks": [],
   "children": [],
   "parent": null,
-  "relatedFiles": [],
-  "notes": "",
+  "relatedFiles": [
+    "openspec/changes/archive/2026-04-22-fix-live-inline-code-markdown-rendering/",
+    "openspec/changes/archive/2026-06-05-fix-live-inline-code-markdown-rendering-continuity/",
+    "openspec/specs/message-markdown-streaming-compatibility/spec.md",
+    "src/features/messages/utils/toolCallBlocks.ts",
+    "src/features/messages/components/Markdown.tsx",
+    "src/features/messages/utils/toolCallBlocks.test.ts",
+    "src/features/messages/components/Markdown.tool-call.test.tsx"
+  ],
+  "notes": "Implementation and continuity OpenSpec archive were completed in commit a0f379c8. Covered live unclosed inline code spans so literal tool-call XML remains markdown text during streaming, with regression tests, typecheck, change validation, and full OpenSpec validation passing.",
   "meta": {}
 }

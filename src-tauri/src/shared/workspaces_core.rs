@@ -1532,6 +1532,61 @@ where
     copy_item(&root, path)
 }
 
+pub(crate) async fn duplicate_workspace_item_core<F, T>(
+    workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
+    workspace_id: &str,
+    path: &str,
+    duplicate_item: F,
+) -> Result<T, String>
+where
+    F: Fn(&PathBuf, &str) -> Result<T, String>,
+{
+    let root = resolve_workspace_root(workspaces, workspace_id).await?;
+    duplicate_item(&root, path)
+}
+
+pub(crate) async fn paste_workspace_item_core<F, T>(
+    workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
+    workspace_id: &str,
+    source_path: &str,
+    target_directory: &str,
+    paste_item: F,
+) -> Result<T, String>
+where
+    F: Fn(&PathBuf, &str, &str) -> Result<T, String>,
+{
+    let root = resolve_workspace_root(workspaces, workspace_id).await?;
+    paste_item(&root, source_path, target_directory)
+}
+
+pub(crate) async fn rename_workspace_item_core<F, T>(
+    workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
+    workspace_id: &str,
+    path: &str,
+    new_name: &str,
+    rename_item: F,
+) -> Result<T, String>
+where
+    F: Fn(&PathBuf, &str, &str) -> Result<T, String>,
+{
+    let root = resolve_workspace_root(workspaces, workspace_id).await?;
+    rename_item(&root, path, new_name)
+}
+
+pub(crate) async fn paste_external_workspace_items_core<F, T>(
+    workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
+    workspace_id: &str,
+    source_paths: &[String],
+    target_directory: &str,
+    paste_items: F,
+) -> Result<T, String>
+where
+    F: Fn(&PathBuf, &[String], &str) -> Result<T, String>,
+{
+    let root = resolve_workspace_root(workspaces, workspace_id).await?;
+    paste_items(&root, source_paths, target_directory)
+}
+
 fn sort_workspaces(workspaces: &mut [WorkspaceInfo]) {
     workspaces.sort_by(|a, b| {
         let a_order = a.settings.sort_order.unwrap_or(u32::MAX);

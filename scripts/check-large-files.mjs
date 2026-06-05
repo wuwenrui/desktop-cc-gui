@@ -530,6 +530,10 @@ function buildStructuredReportJson(scan, generatedAt) {
 
 async function writeOptionalOutput(root, outputPath, content) {
   const absolutePath = path.resolve(root, outputPath);
+  const relativePath = path.relative(root, absolutePath);
+  if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+    throw new Error(`Output path must stay inside repository root: ${outputPath}`);
+  }
   await fs.mkdir(path.dirname(absolutePath), { recursive: true });
   await fs.writeFile(absolutePath, content, "utf8");
   return absolutePath;

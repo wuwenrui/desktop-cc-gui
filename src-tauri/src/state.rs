@@ -102,6 +102,24 @@ impl AppState {
         let runtime_manager = Arc::new(crate::runtime::RuntimeManager::new(&data_dir));
         runtime_manager.orphan_sweep_on_startup(app_settings.runtime_orphan_sweep_on_launch);
         let engine_manager = EngineManager::new();
+        let claude_resume_diagnostics_runtime = Arc::clone(&runtime_manager);
+        engine_manager
+            .claude_manager
+            .set_ask_user_question_resume_diagnostic_sink(Some(Arc::new(move |diagnostic| {
+                let runtime_manager = Arc::clone(&claude_resume_diagnostics_runtime);
+                tauri::async_runtime::spawn(async move {
+                    runtime_manager
+                        .record_claude_ask_user_question_resume_result(
+                            &diagnostic.workspace_id,
+                            diagnostic.thread_id.as_deref(),
+                            Some(diagnostic.turn_id.as_str()),
+                            diagnostic.request_id.as_deref(),
+                            diagnostic.succeeded,
+                            diagnostic.error.as_deref(),
+                        )
+                        .await;
+                });
+            })));
         Self {
             workspaces: Mutex::new(workspaces),
             sessions: Mutex::new(HashMap::new()),

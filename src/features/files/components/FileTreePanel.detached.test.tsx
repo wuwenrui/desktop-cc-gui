@@ -33,6 +33,17 @@ vi.mock("../../../services/tauri", () => ({
     invokeMock("create_workspace_directory", { workspaceId, path }),
   copyWorkspaceItem: (workspaceId: string, path: string) =>
     invokeMock("copy_workspace_item", { workspaceId, path }),
+  duplicateWorkspaceItem: (workspaceId: string, path: string) =>
+    invokeMock("duplicate_workspace_item", { workspaceId, path }),
+  pasteWorkspaceItem: (workspaceId: string, sourcePath: string, targetDirectory: string) =>
+    invokeMock("paste_workspace_item", { workspaceId, sourcePath, targetDirectory }),
+  renameWorkspaceItem: (workspaceId: string, path: string, newName: string) =>
+    invokeMock("rename_workspace_item", { workspaceId, path, newName }),
+  pasteExternalWorkspaceItems: (
+    workspaceId: string,
+    sourcePaths: string[],
+    targetDirectory: string,
+  ) => invokeMock("paste_external_workspace_items", { workspaceId, sourcePaths, targetDirectory }),
   trashWorkspaceItem: (workspaceId: string, path: string) =>
     invokeMock("trash_workspace_item", { workspaceId, path }),
   writeWorkspaceFile: (workspaceId: string, path: string, content: string) =>

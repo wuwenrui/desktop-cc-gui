@@ -3,6 +3,7 @@ import type {
   AutoSessionCreatedBy,
   AutoSessionMetadata,
   AutoSessionVisibility,
+  WorkspaceSessionAttributionMode,
 } from "../../types";
 
 export interface WorkspaceSessionCatalogEntry {
@@ -90,6 +91,7 @@ export interface WorkspaceSessionCatalogQuery {
   engine?: string | null;
   status?: "active" | "archived" | "all" | null;
   folderId?: string | null;
+  sessionAttributionMode?: WorkspaceSessionAttributionMode | null;
 }
 
 export interface WorkspaceSessionCatalogPage {

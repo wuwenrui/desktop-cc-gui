@@ -1,5 +1,6 @@
 mod capture_script;
 mod platform;
+mod toolbar;
 mod types;
 
 use std::{
@@ -11,16 +12,19 @@ use std::{
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde::Deserialize;
 use tauri::{
-    AppHandle, Emitter, Manager, State, WebviewUrl,
     webview::{NewWindowResponse, WebviewBuilder},
+    AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder,
 };
 
 use crate::state::AppState;
 
+use toolbar::{handle_browser_toolbar_navigation, spawn_browser_toolbar_injection};
 pub(crate) use types::*;
 
 const BROWSER_WEBVIEW_EVENT: &str = "browser-agent://webview-event";
 const BROWSER_RENDERER_WEBVIEW_LABEL: &str = "browser-agent-webview-main";
+const BROWSER_RENDERER_WINDOW_LABEL: &str = "browser-agent-window";
+const BROWSER_DOCK_WINDOW_LABEL: &str = "browser-agent-dock";
 const BROWSER_CAPTURE_BRIDGE_HOST: &str = "browser-agent-capture.invalid";
 const BROWSER_CAPTURE_BRIDGE_PATH: &str = "/__mossx_capture__";
 const BROWSER_CAPTURE_CHUNK_SIZE: usize = 1_600;
@@ -71,6 +75,8 @@ struct BrowserRawCapture {
     noise_diagnostics: Vec<BrowserNoiseDiagnostic>,
     #[serde(default)]
     visual_evidence: Vec<BrowserVisualEvidence>,
+    #[serde(default)]
+    omitted_capabilities: Vec<String>,
     language_hint: Option<String>,
 }
 
@@ -377,7 +383,11 @@ fn percent_decode_browser_capture(value: &str) -> String {
                 continue;
             }
         }
-        decoded.push(if bytes[index] == b'+' { b' ' } else { bytes[index] });
+        decoded.push(if bytes[index] == b'+' {
+            b' '
+        } else {
+            bytes[index]
+        });
         index += 1;
     }
     String::from_utf8_lossy(&decoded).into_owned()
@@ -421,13 +431,12 @@ fn handle_browser_capture_navigation(target_url: &str) -> bool {
         return true;
     }
     if let Ok(mut bridge) = browser_capture_bridge().lock() {
-        let entry =
-            bridge
-                .entry(chunk.token)
-                .or_insert_with(|| BrowserCaptureBridgeState {
-                    browser_session_id: chunk.browser_session_id.clone(),
-                    chunks: vec![None; chunk.total],
-                });
+        let entry = bridge
+            .entry(chunk.token)
+            .or_insert_with(|| BrowserCaptureBridgeState {
+                browser_session_id: chunk.browser_session_id.clone(),
+                chunks: vec![None; chunk.total],
+            });
         if entry.browser_session_id == chunk.browser_session_id && entry.chunks.len() == chunk.total
         {
             entry.chunks[chunk.index] = Some(chunk.payload);
@@ -519,19 +528,16 @@ async fn capture_browser_webview_dom(
     app: &AppHandle,
     browser_session_id: &str,
 ) -> Result<BrowserRawCapture, String> {
-    let label = browser_webview_label(browser_session_id);
-    let webview = app
-        .get_webview(label.as_str())
-        .ok_or_else(|| format!("Browser Agent WebView not found: {browser_session_id}"))?;
     let token = format!("browser-capture-{}", uuid::Uuid::new_v4());
     let script = browser_capture_bridge_script(browser_session_id, token.as_str());
-    webview
-        .eval(script)
-        .map_err(|error| format!("failed to run Browser Agent read-only capture script: {error}"))?;
+    eval_browser_renderer_script(app, browser_session_id, script).map_err(|error| {
+        format!("failed to run Browser Agent read-only capture script: {error}")
+    })?;
     for _ in 0..BROWSER_CAPTURE_WAIT_ATTEMPTS {
         if let Some(payload) = take_browser_capture_payload(token.as_str()) {
-            return serde_json::from_str::<BrowserRawCapture>(payload.as_str())
-                .map_err(|error| format!("failed to parse Browser Agent capture payload: {error}"));
+            return serde_json::from_str::<BrowserRawCapture>(payload.as_str()).map_err(|error| {
+                format!("failed to parse Browser Agent capture payload: {error}")
+            });
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
@@ -658,10 +664,8 @@ fn sanitize_browser_string(
     if raw.trim().is_empty() {
         return None;
     }
-    let mut sanitized = redact_sensitive_assignments(
-        compact_browser_text(raw.as_str()).as_str(),
-        privacy,
-    );
+    let mut sanitized =
+        redact_sensitive_assignments(compact_browser_text(raw.as_str()).as_str(), privacy);
     if sanitized.contains('@') && sanitized.contains('.') {
         mark_redaction(privacy, "email");
         sanitized = sanitized
@@ -725,23 +729,12 @@ fn browser_element_landmarks_from_targets(
         sensitive: target.sensitive,
         bounds: target.bounds.clone(),
     });
-    let button_landmarks = buttons.iter().take(40).map(|target| BrowserElementLandmark {
-        landmark_id: target.target_id.clone(),
-        role: "button".to_string(),
-        label: target.label.clone(),
-        text_preview: target.text.clone(),
-        selector_hint: None,
-        href: None,
-        placeholder: target.placeholder.clone(),
-        enabled: !target.disabled,
-        visible: target.visible,
-        sensitive: target.sensitive,
-        bounds: target.bounds.clone(),
-    });
-    let field_landmarks = forms.iter().flat_map(|form| {
-        form.fields.iter().take(12).map(|target| BrowserElementLandmark {
+    let button_landmarks = buttons
+        .iter()
+        .take(40)
+        .map(|target| BrowserElementLandmark {
             landmark_id: target.target_id.clone(),
-            role: target.kind.clone(),
+            role: "button".to_string(),
             label: target.label.clone(),
             text_preview: target.text.clone(),
             selector_hint: None,
@@ -751,7 +744,24 @@ fn browser_element_landmarks_from_targets(
             visible: target.visible,
             sensitive: target.sensitive,
             bounds: target.bounds.clone(),
-        })
+        });
+    let field_landmarks = forms.iter().flat_map(|form| {
+        form.fields
+            .iter()
+            .take(12)
+            .map(|target| BrowserElementLandmark {
+                landmark_id: target.target_id.clone(),
+                role: target.kind.clone(),
+                label: target.label.clone(),
+                text_preview: target.text.clone(),
+                selector_hint: None,
+                href: None,
+                placeholder: target.placeholder.clone(),
+                enabled: !target.disabled,
+                visible: target.visible,
+                sensitive: target.sensitive,
+                bounds: target.bounds.clone(),
+            })
     });
     link_landmarks
         .chain(button_landmarks)
@@ -765,8 +775,9 @@ fn page_from_raw_capture(
     budget: &mut BrowserSnapshotBudget,
     privacy: &mut BrowserPrivacyReport,
 ) -> BrowserContextSnapshotPage {
-    let visible_text = sanitize_browser_string(raw.visible_text, budget.visible_text_limit, privacy)
-        .unwrap_or_default();
+    let visible_text =
+        sanitize_browser_string(raw.visible_text, budget.visible_text_limit, privacy)
+            .unwrap_or_default();
     let text_truncated = visible_text.chars().count() >= budget.visible_text_limit;
     let headings = raw
         .headings
@@ -830,7 +841,8 @@ fn page_from_raw_capture(
         content.text =
             sanitize_browser_string(Some(content.text), budget.visible_text_limit, privacy)
                 .unwrap_or_default();
-        content.truncated = content.truncated || content.text.chars().count() >= budget.visible_text_limit;
+        content.truncated =
+            content.truncated || content.text.chars().count() >= budget.visible_text_limit;
         content
     });
     let readable_blocks = raw
@@ -838,8 +850,8 @@ fn page_from_raw_capture(
         .into_iter()
         .take(12)
         .map(|mut block| {
-            block.text = sanitize_browser_string(Some(block.text), 1_200, privacy)
-                .unwrap_or_default();
+            block.text =
+                sanitize_browser_string(Some(block.text), 1_200, privacy).unwrap_or_default();
             block
         })
         .collect::<Vec<_>>();
@@ -858,7 +870,8 @@ fn page_from_raw_capture(
         .into_iter()
         .take(20)
         .map(|mut item| {
-            item.label = sanitize_browser_string(Some(item.label), 320, privacy).unwrap_or_default();
+            item.label =
+                sanitize_browser_string(Some(item.label), 320, privacy).unwrap_or_default();
             item.alt_text = sanitize_browser_string(item.alt_text, 320, privacy);
             item.src_origin = sanitize_browser_string(item.src_origin, 320, privacy);
             item.nearby_text = if item.sensitive {
@@ -921,9 +934,13 @@ async fn persist_snapshot_evidence(
         diagnostics: snapshot.diagnostics.capture_warnings.clone(),
         code_candidates: snapshot.code_candidates.clone(),
     };
-    state.browser_evidence.lock().await.insert(evidence_id.clone(), record);
+    state
+        .browser_evidence
+        .lock()
+        .await
+        .insert(evidence_id.clone(), record);
     BrowserContextSnapshotEvidence {
-        screenshot_ref: None,
+        screenshot_ref: Some(format!("browser-screenshot-ref-{}", snapshot.snapshot_id)),
         html_excerpt_ref: Some(evidence_id),
     }
 }
@@ -942,8 +959,60 @@ fn valid_webview_bounds(bounds: &BrowserWebviewBounds) -> bool {
         && bounds.height >= 40.0
 }
 
+fn browser_webview_rect(bounds: &BrowserWebviewBounds) -> tauri::Rect {
+    tauri::Rect {
+        position: tauri::Position::Logical(tauri::LogicalPosition::new(bounds.x, bounds.y)),
+        size: tauri::Size::Logical(tauri::LogicalSize::new(bounds.width, bounds.height)),
+    }
+}
+
 fn emit_browser_webview_event(app: &AppHandle, event: BrowserWebviewEvent) {
     let _ = app.emit(BROWSER_WEBVIEW_EVENT, event);
+}
+
+fn eval_browser_renderer_script(
+    app: &AppHandle,
+    browser_session_id: &str,
+    script: impl Into<String>,
+) -> Result<(), String> {
+    let script = script.into();
+    let renderer_matches = current_browser_renderer_session_id()
+        .as_deref()
+        .map(|session_id| session_id == browser_session_id)
+        .unwrap_or(false);
+    if renderer_matches {
+        if let Some(window) = app.get_webview_window(BROWSER_RENDERER_WINDOW_LABEL) {
+            return window.eval(script).map_err(|error| error.to_string());
+        }
+    }
+
+    let label = browser_webview_label(browser_session_id);
+    let webview = app
+        .get_webview(label.as_str())
+        .ok_or_else(|| format!("Browser Agent renderer not found: {browser_session_id}"))?;
+    webview.eval(script).map_err(|error| error.to_string())
+}
+
+fn navigate_browser_renderer(
+    app: &AppHandle,
+    browser_session_id: &str,
+    url: tauri::Url,
+) -> Result<(), String> {
+    let renderer_matches = current_browser_renderer_session_id()
+        .as_deref()
+        .map(|session_id| session_id == browser_session_id)
+        .unwrap_or(false);
+    if renderer_matches {
+        if let Some(window) = app.get_webview_window(BROWSER_RENDERER_WINDOW_LABEL) {
+            return window.navigate(url).map_err(|error| error.to_string());
+        }
+    }
+
+    let label = browser_webview_label(browser_session_id);
+    let webview = app
+        .get_webview(label.as_str())
+        .ok_or_else(|| format!("Browser Agent renderer not found: {browser_session_id}"))?;
+    webview.navigate(url).map_err(|error| error.to_string())
 }
 
 fn resolve_browser_parent_window(
@@ -1061,14 +1130,8 @@ fn create_browser_child_webview(
 
     if let Some(webview) = app.get_webview(label.as_str()) {
         webview
-            .set_position(tauri::LogicalPosition::new(bounds.x, bounds.y))
-            .map_err(|error| error.to_string())?;
-        webview
-            .set_size(tauri::LogicalSize::new(bounds.width, bounds.height))
-            .map_err(|error| error.to_string())?;
-        webview.navigate(url).map_err(|error| error.to_string())?;
-        webview.show().map_err(|error| error.to_string())?;
-        return Ok(());
+            .close()
+            .map_err(|error| format!("Failed to reset Browser Agent WebView: {error}"))?;
     }
 
     let window = resolve_browser_parent_window(app)?;
@@ -1140,6 +1203,151 @@ fn create_browser_child_webview(
         )
         .map_err(|error| error.to_string())?;
     let _ = webview.set_auto_resize(false);
+    webview
+        .set_bounds(browser_webview_rect(bounds))
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+fn create_browser_agent_window(
+    app: &AppHandle,
+    session: &BrowserSession,
+    locale: Option<String>,
+) -> Result<(), String> {
+    let renderer_url: tauri::Url = session
+        .normalized_url
+        .parse()
+        .map_err(|error| format!("Invalid Browser Agent URL: {error}"))?;
+    bind_browser_renderer_session(session.browser_session_id.as_str());
+
+    if let Some(window) = app.get_webview_window(BROWSER_RENDERER_WINDOW_LABEL) {
+        window
+            .close()
+            .map_err(|error| format!("Failed to reset Browser Agent window: {error}"))?;
+    }
+    if let Some(webview) =
+        app.get_webview(browser_webview_label(session.browser_session_id.as_str()).as_str())
+    {
+        let _ = webview.close();
+    }
+
+    let session_id_for_navigation = session.browser_session_id.clone();
+    let workspace_id_for_navigation = session.workspace_id.clone();
+    let session_id_for_load = session.browser_session_id.clone();
+    let session_id_for_title = session.browser_session_id.clone();
+    let app_for_navigation = app.clone();
+    let app_for_load = app.clone();
+    let app_for_title = app.clone();
+    let locale_for_load = locale.clone();
+    let locale_for_title = locale.clone();
+
+    let renderer_window = WebviewWindowBuilder::new(
+        app,
+        BROWSER_RENDERER_WINDOW_LABEL,
+        WebviewUrl::External(renderer_url),
+    )
+    .title("Browser Dock")
+    .inner_size(1100.0, 820.0)
+    .min_inner_size(480.0, 360.0)
+    .resizable(true)
+    .center()
+    .on_navigation(move |target_url| {
+        if handle_browser_toolbar_navigation(
+            &app_for_navigation,
+            target_url.as_str(),
+            session_id_for_navigation.as_str(),
+            workspace_id_for_navigation.as_str(),
+        ) {
+            return false;
+        }
+        if handle_browser_capture_navigation(target_url.as_str()) {
+            return false;
+        }
+        let validation = validate_browser_url_for_workspace(
+            target_url.as_str(),
+            Some(workspace_id_for_navigation.as_str()),
+        );
+        if validation.allowed {
+            return true;
+        }
+        spawn_browser_webview_session_patch(
+            app_for_navigation.clone(),
+            current_browser_renderer_session(session_id_for_navigation.as_str()),
+            Some(BrowserSessionStatus::Blocked),
+            Some(target_url.to_string()),
+            None,
+            validation.blocked_reason,
+            validation.diagnostic.map(|diagnostic| diagnostic.message),
+        );
+        false
+    })
+    .on_new_window(|_, _| NewWindowResponse::Deny)
+    .on_page_load(move |window, payload| {
+        let status = match payload.event() {
+            tauri::webview::PageLoadEvent::Started => BrowserSessionStatus::Loading,
+            tauri::webview::PageLoadEvent::Finished => BrowserSessionStatus::Ready,
+        };
+        let active_session_id = current_browser_renderer_session(session_id_for_load.as_str());
+        if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+            spawn_browser_toolbar_injection(
+                app_for_load.clone(),
+                window.clone(),
+                active_session_id.clone(),
+                Some(payload.url().to_string()),
+                None,
+                locale_for_load.clone(),
+            );
+        }
+        spawn_browser_webview_session_patch(
+            app_for_load.clone(),
+            active_session_id,
+            Some(status),
+            Some(payload.url().to_string()),
+            None,
+            None,
+            None,
+        );
+    })
+    .on_document_title_changed(move |window, title| {
+        let window_title = if title.trim().is_empty() {
+            "Browser Dock".to_string()
+        } else {
+            title.clone()
+        };
+        let _ = window.set_title(window_title.as_str());
+        let active_session_id = current_browser_renderer_session(session_id_for_title.as_str());
+        spawn_browser_toolbar_injection(
+            app_for_title.clone(),
+            window.clone(),
+            active_session_id.clone(),
+            None,
+            Some(title.clone()),
+            locale_for_title.clone(),
+        );
+        spawn_browser_webview_session_patch(
+            app_for_title.clone(),
+            active_session_id,
+            None,
+            None,
+            Some(title),
+            None,
+            None,
+        );
+    })
+    .build()
+    .map_err(|error| format!("Failed to open Browser Agent window: {error}"))?;
+    spawn_browser_toolbar_injection(
+        app.clone(),
+        renderer_window.clone(),
+        session.browser_session_id.clone(),
+        Some(session.normalized_url.clone()),
+        session.title.clone(),
+        locale,
+    );
+    if let Some(dock_window) = app.get_webview_window(BROWSER_DOCK_WINDOW_LABEL) {
+        let _ = dock_window.close();
+    }
+    let _ = renderer_window.set_focus();
     Ok(())
 }
 
@@ -1173,11 +1381,16 @@ fn validate_browser_url_for_workspace(
     }
 
     let Some(host) = host_from_normalized_url(trimmed) else {
-        return blocked_url(raw_url, "missing_host", "Browser Agent URL must include a host.");
+        return blocked_url(
+            raw_url,
+            "missing_host",
+            "Browser Agent URL must include a host.",
+        );
     };
-    let workspace_local_allowed =
-        workspace_id.map(|id| !id.trim().is_empty()).unwrap_or(false)
-            && is_workspace_local_development_host(host.as_str());
+    let workspace_local_allowed = workspace_id
+        .map(|id| !id.trim().is_empty())
+        .unwrap_or(false)
+        && is_workspace_local_development_host(host.as_str());
     if is_blocked_local_host(&host) && !workspace_local_allowed {
         return blocked_url(
             raw_url,
@@ -1314,10 +1527,8 @@ pub(crate) async fn update_browser_agent_session(
         .ok_or_else(|| format!("Browser session not found: {}", request.browser_session_id))?;
 
     if let Some(next_url) = request.url {
-        let validation = validate_browser_url_for_workspace(
-            next_url.as_str(),
-            request.workspace_id.as_deref(),
-        );
+        let validation =
+            validate_browser_url_for_workspace(next_url.as_str(), request.workspace_id.as_deref());
         let Some(normalized_url) = validation.normalized_url else {
             return Err(validation
                 .diagnostic
@@ -1354,7 +1565,7 @@ pub(crate) async fn update_browser_agent_session(
 #[tauri::command]
 pub(crate) async fn close_browser_agent_session(
     browser_session_id: String,
-    _app: AppHandle,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<BrowserSession, String> {
     let now = unix_time_ms();
@@ -1365,7 +1576,21 @@ pub(crate) async fn close_browser_agent_session(
     session.status = BrowserSessionStatus::Closed;
     session.updated_at = now;
     session.closed_at = Some(now);
+    let should_close_renderer = browser_renderer_session_binding()
+        .lock()
+        .map(|binding| binding.as_deref() == Some(browser_session_id.as_str()))
+        .unwrap_or(false);
     clear_browser_renderer_session(browser_session_id.as_str());
+    if should_close_renderer {
+        if let Some(window) = app.get_webview_window(BROWSER_RENDERER_WINDOW_LABEL) {
+            let _ = window.close();
+        }
+        if let Some(webview) =
+            app.get_webview(browser_webview_label(browser_session_id.as_str()).as_str())
+        {
+            let _ = webview.hide();
+        }
+    }
     Ok(session.clone())
 }
 
@@ -1454,13 +1679,13 @@ pub(crate) async fn mount_browser_agent_webview(
 
     let capability = platform::current_platform_capability();
     if capability.browser_dock == BrowserCapabilityState::Unsupported {
-        return Err(
-            capability
-                .unsupported_reasons
-                .first()
-                .cloned()
-                .unwrap_or_else(|| "Browser Agent WebView is unsupported on this platform.".to_string()),
-        );
+        return Err(capability
+            .unsupported_reasons
+            .first()
+            .cloned()
+            .unwrap_or_else(|| {
+                "Browser Agent WebView is unsupported on this platform.".to_string()
+            }));
     }
 
     let session = {
@@ -1471,10 +1696,68 @@ pub(crate) async fn mount_browser_agent_webview(
             .ok_or_else(|| format!("Browser session not found: {}", request.browser_session_id))?
     };
     if session.status == BrowserSessionStatus::Closed {
-        return Err(format!("Browser session is closed: {}", session.browser_session_id));
+        return Err(format!(
+            "Browser session is closed: {}",
+            session.browser_session_id
+        ));
     }
 
     create_browser_child_webview(&app, &session, &request.bounds)?;
+    spawn_browser_webview_session_patch(
+        app,
+        session.browser_session_id.clone(),
+        Some(BrowserSessionStatus::Loading),
+        Some(session.normalized_url.clone()),
+        None,
+        None,
+        None,
+    );
+
+    let sessions = state.browser_sessions.lock().await;
+    sessions
+        .get(session.browser_session_id.as_str())
+        .cloned()
+        .ok_or_else(|| format!("Browser session not found: {}", session.browser_session_id))
+}
+
+#[tauri::command]
+pub(crate) async fn open_browser_agent_window(
+    browser_session_id: String,
+    locale: Option<String>,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<BrowserSession, String> {
+    let settings = current_settings(&state).await;
+    if !settings.enabled {
+        return Err("Browser Agent is disabled in settings.".to_string());
+    }
+
+    let capability = platform::current_platform_capability();
+    if capability.browser_dock == BrowserCapabilityState::Unsupported {
+        return Err(capability
+            .unsupported_reasons
+            .first()
+            .cloned()
+            .unwrap_or_else(|| {
+                "Browser Agent window is unsupported on this platform.".to_string()
+            }));
+    }
+
+    let session = {
+        let sessions = state.browser_sessions.lock().await;
+        sessions
+            .get(browser_session_id.as_str())
+            .cloned()
+            .ok_or_else(|| format!("Browser session not found: {browser_session_id}"))?
+    };
+    if session.status == BrowserSessionStatus::Closed {
+        return Err(format!(
+            "Browser session is closed: {}",
+            session.browser_session_id
+        ));
+    }
+
+    create_browser_agent_window(&app, &session, locale)?;
     spawn_browser_webview_session_patch(
         app,
         session.browser_session_id.clone(),
@@ -1507,10 +1790,7 @@ pub(crate) async fn sync_browser_agent_webview_bounds(
         return Ok(());
     }
     webview
-        .set_position(tauri::LogicalPosition::new(bounds.x, bounds.y))
-        .map_err(|error| error.to_string())?;
-    webview
-        .set_size(tauri::LogicalSize::new(bounds.width, bounds.height))
+        .set_bounds(browser_webview_rect(&bounds))
         .map_err(|error| error.to_string())?;
     webview.show().map_err(|error| error.to_string())
 }
@@ -1520,7 +1800,9 @@ pub(crate) async fn hide_browser_agent_webview(
     browser_session_id: String,
     app: AppHandle,
 ) -> Result<(), String> {
-    if let Some(webview) = app.get_webview(browser_webview_label(browser_session_id.as_str()).as_str()) {
+    if let Some(webview) =
+        app.get_webview(browser_webview_label(browser_session_id.as_str()).as_str())
+    {
         webview.hide().map_err(|error| error.to_string())?;
     }
     Ok(())
@@ -1605,10 +1887,18 @@ pub(crate) async fn capture_browser_agent_snapshot(
             "hidden_nodes".to_string(),
         ],
     };
+    let mut omitted_capabilities = Vec::new();
     let (source_url, source_title, viewport, page) = if let Some(raw) = raw_capture {
-        let raw_url = raw.url.clone().unwrap_or_else(|| session.normalized_url.clone());
+        let raw_url = raw
+            .url
+            .clone()
+            .unwrap_or_else(|| session.normalized_url.clone());
         let raw_title = raw.title.clone().or_else(|| session.title.clone());
-        let viewport = raw.viewport.clone().unwrap_or_else(default_browser_viewport);
+        let viewport = raw
+            .viewport
+            .clone()
+            .unwrap_or_else(default_browser_viewport);
+        omitted_capabilities = raw.omitted_capabilities.clone();
         let page = page_from_raw_capture(raw, &mut budget, &mut privacy);
         (raw_url, raw_title, viewport, page)
     } else {
@@ -1650,7 +1940,8 @@ pub(crate) async fn capture_browser_agent_snapshot(
         source: BrowserSnapshotSource {
             url: source_url.clone(),
             normalized_url: source_url.clone(),
-            origin: origin_from_normalized_url(source_url.as_str()).or_else(|| session.origin.clone()),
+            origin: origin_from_normalized_url(source_url.as_str())
+                .or_else(|| session.origin.clone()),
             title: source_title,
             tab_label: session.label.clone(),
             capture_reason: "manual_attach".to_string(),
@@ -1668,9 +1959,15 @@ pub(crate) async fn capture_browser_agent_snapshot(
             screenshot_ref: None,
             html_excerpt_ref: None,
         },
+        omitted_capabilities,
         privacy,
         budget,
-        availability: if has_live_capture { "available" } else { "partial" }.to_string(),
+        availability: if has_live_capture {
+            "available"
+        } else {
+            "partial"
+        }
+        .to_string(),
     };
     snapshot.evidence = persist_snapshot_evidence(&state, &snapshot).await;
     {
@@ -1748,6 +2045,7 @@ pub(crate) async fn get_browser_agent_status(
 #[tauri::command]
 pub(crate) async fn run_browser_agent_action(
     request: BrowserActionRequest,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<BrowserActionResult, String> {
     let now = unix_time_ms();
@@ -1764,7 +2062,34 @@ pub(crate) async fn run_browser_agent_action(
     } else {
         false
     };
+    let action_id = format!("browser-action-{now}");
+    let before_snapshot_id = {
+        let sessions = state.browser_sessions.lock().await;
+        sessions
+            .get(request.browser_session_id.as_str())
+            .and_then(|session| session.last_snapshot_id.clone())
+    };
+    let mut blocked_reasons = Vec::new();
+    if !request.confirmed {
+        blocked_reasons.push("not_confirmed".to_string());
+    }
+    if !feature_allowed {
+        blocked_reasons.push("settings_disabled".to_string());
+    }
+    if is_element_action {
+        blocked_reasons.push("mutating_action_blocked_by_default".to_string());
+    }
+    let gate = BrowserActionGateResolution {
+        allowed: settings.enabled && request.confirmed && is_safe_navigation && feature_allowed,
+        blocked_reasons: if blocked_reasons.is_empty() {
+            vec!["requires_user_confirmation".to_string()]
+        } else {
+            blocked_reasons.clone()
+        },
+    };
     let preview = BrowserActionPreview {
+        action_id: action_id.clone(),
+        browser_session_id: request.browser_session_id.clone(),
         action: action.clone(),
         target_id: request.target_id.clone(),
         target_description: request.target_id.clone(),
@@ -1776,34 +2101,126 @@ pub(crate) async fn run_browser_agent_action(
             }
         }),
         reason: request.reason.clone(),
+        risk_level: if is_safe_navigation { "low" } else if is_element_action { "medium" } else { "high" }.to_string(),
         requires_user_confirmation: true,
-        blocked_by_default: !feature_allowed,
+        blocked_by_default: !is_safe_navigation,
+        before_snapshot_id: before_snapshot_id.clone(),
+        after_snapshot_id: None,
+        expected_effect: match action.as_str() {
+            "navigate" => "Load the requested page in the active Browser Dock session.",
+            "reload" => "Reload the active Browser Dock page.",
+            "scroll" => "Scroll the active Browser Dock page.",
+            _ => "Preview only; mutating actions remain blocked by default.",
+        }.to_string(),
+        privacy_notice: "Browser actions require explicit confirmation; secret-like values are redacted in previews.".to_string(),
+        gate: gate.clone(),
     };
-    let message = if !settings.enabled {
-        "Browser Agent is disabled in settings."
-    } else if is_safe_navigation {
-        "Browser Agent safe navigation actions are preview-only until user confirmation UI is enabled."
-    } else if is_element_action {
-        "Browser Agent element actions have a disabled preview skeleton and remain blocked by default."
+    let mut outcome = "blocked".to_string();
+    let mut diagnostic_message = if !settings.enabled {
+        Some("Browser Agent is disabled in settings.".to_string())
+    } else if !request.confirmed {
+        Some("Browser action was not confirmed; no operation was executed.".to_string())
+    } else if !is_safe_navigation {
+        Some("Browser Agent mutating actions remain blocked by default.".to_string())
+    } else if !feature_allowed {
+        Some("Browser Agent safe navigation actions are disabled in settings.".to_string())
     } else {
-        "Browser Agent does not support this action."
+        None
     };
+    let mut after_snapshot_id = None;
+
+    if gate.allowed {
+        let execution_result = match action.as_str() {
+            "navigate" => {
+                let target_url = request
+                    .value
+                    .as_deref()
+                    .or(request.target_id.as_deref())
+                    .ok_or_else(|| "navigate action requires a target URL.".to_string())
+                    .and_then(|target| {
+                        let validation = validate_browser_url_for_workspace(target, None);
+                        validation.normalized_url.ok_or_else(|| {
+                            validation
+                                .diagnostic
+                                .map(|diagnostic| diagnostic.message)
+                                .unwrap_or_else(|| "Browser Agent URL is blocked.".to_string())
+                        })
+                    });
+                match target_url {
+                    Ok(url) => {
+                        let parsed_url = url
+                            .parse()
+                            .map_err(|error| format!("Invalid Browser Agent URL: {error}"));
+                        match parsed_url {
+                            Ok(parsed_url) => navigate_browser_renderer(
+                                &app,
+                                request.browser_session_id.as_str(),
+                                parsed_url,
+                            ),
+                            Err(error) => Err(error),
+                        }
+                    }
+                    Err(error) => Err(error),
+                }
+            }
+            "reload" => eval_browser_renderer_script(
+                &app,
+                request.browser_session_id.as_str(),
+                "window.location.reload()",
+            ),
+            "scroll" => {
+                let scroll_value = request.value.as_deref().unwrap_or("window.innerHeight");
+                let script = format!(
+                    "window.scrollBy(0, Number({}) || window.innerHeight)",
+                    escape_js_string(scroll_value)
+                );
+                eval_browser_renderer_script(&app, request.browser_session_id.as_str(), script)
+            }
+            _ => Err("Unsupported Browser Agent action.".to_string()),
+        };
+        match execution_result {
+            Ok(()) => {
+                outcome = "completed".to_string();
+                after_snapshot_id = Some(format!("browser-snapshot-after-{now}"));
+                diagnostic_message = None;
+            }
+            Err(error) => {
+                outcome = "failed".to_string();
+                diagnostic_message = Some(error);
+            }
+        }
+    }
 
     let audit_entry = BrowserActionAuditEntry {
-        action_id: format!("browser-action-{now}"),
+        action_id,
         browser_session_id: request.browser_session_id,
         requested_at: now,
         completed_at: Some(now),
         action,
         target_description: request.target_id,
-        outcome: "blocked".to_string(),
-        diagnostic_message: Some(message.to_string()),
-        before_snapshot_id: None,
-        after_snapshot_id: None,
+        outcome: outcome.clone(),
+        diagnostic_message,
+        before_snapshot_id: before_snapshot_id.clone(),
+        after_snapshot_id: after_snapshot_id.clone(),
+        comparison: Some(BrowserActionSnapshotComparison {
+            before_snapshot_id,
+            after_snapshot_id,
+            state: (if outcome == "completed" {
+                "available"
+            } else {
+                "failed"
+            })
+            .to_string(),
+            diagnostics: if outcome == "completed" {
+                Vec::new()
+            } else {
+                gate.blocked_reasons.clone()
+            },
+        }),
     };
 
     Ok(BrowserActionResult {
-        outcome: "blocked".to_string(),
+        outcome,
         audit_entry,
         preview: Some(preview),
     })
@@ -1912,6 +2329,7 @@ mod tests {
                 screenshot_ref: None,
                 html_excerpt_ref: None,
             },
+            omitted_capabilities: Vec::new(),
             privacy: BrowserPrivacyReport {
                 redaction_applied: false,
                 redacted_kinds: Vec::new(),
@@ -1930,6 +2348,9 @@ mod tests {
             availability: "available".to_string(),
         };
 
-        assert_eq!(snapshot_summary(&snapshot), "Example\nfirst line second line");
+        assert_eq!(
+            snapshot_summary(&snapshot),
+            "Example\nfirst line second line"
+        );
     }
 }

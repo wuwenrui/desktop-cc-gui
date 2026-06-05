@@ -351,6 +351,88 @@ async fn snapshot_surfaces_recovery_churn_context() {
 }
 
 #[tokio::test]
+async fn snapshot_surfaces_claude_ask_user_question_resume_diagnostics() {
+    let manager = RuntimeManager::new(&std::env::temp_dir());
+
+    manager
+        .record_claude_ask_user_question_resume_result(
+            "ws-claude",
+            Some("thread-1"),
+            Some("turn-1"),
+            Some("request-1"),
+            false,
+            Some("resume spawn failed"),
+        )
+        .await;
+
+    let snapshot = manager.snapshot(&AppSettings::default()).await;
+    assert_eq!(
+        snapshot
+            .diagnostics
+            .claude_ask_user_question_resume_attempt_count,
+        1
+    );
+    assert_eq!(
+        snapshot
+            .diagnostics
+            .claude_ask_user_question_resume_success_count,
+        0
+    );
+    assert_eq!(
+        snapshot
+            .diagnostics
+            .claude_ask_user_question_resume_failure_count,
+        1
+    );
+    assert_eq!(
+        snapshot
+            .diagnostics
+            .last_claude_ask_user_question_resume_workspace_id
+            .as_deref(),
+        Some("ws-claude")
+    );
+    assert_eq!(
+        snapshot
+            .diagnostics
+            .last_claude_ask_user_question_resume_thread_id
+            .as_deref(),
+        Some("thread-1")
+    );
+    assert_eq!(
+        snapshot
+            .diagnostics
+            .last_claude_ask_user_question_resume_turn_id
+            .as_deref(),
+        Some("turn-1")
+    );
+    assert_eq!(
+        snapshot
+            .diagnostics
+            .last_claude_ask_user_question_resume_request_id
+            .as_deref(),
+        Some("request-1")
+    );
+    assert_eq!(
+        snapshot
+            .diagnostics
+            .last_claude_ask_user_question_resume_status
+            .as_deref(),
+        Some("failure")
+    );
+    assert_eq!(
+        snapshot
+            .diagnostics
+            .last_claude_ask_user_question_resume_error
+            .as_deref(),
+        Some("resume spawn failed")
+    );
+    assert!(snapshot
+        .diagnostics
+        .last_claude_ask_user_question_resume_at_ms
+        .is_some());
+}
+
+#[tokio::test]
 async fn recovery_quarantine_projects_retryable_reconnect_action() {
     let manager = RuntimeManager::new(&std::env::temp_dir());
     let entry = workspace_entry("ws-quarantine-projection");

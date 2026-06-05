@@ -4,6 +4,8 @@ use super::*;
 pub struct ClaudeSessionManager {
     sessions: Mutex<HashMap<String, Arc<ClaudeSession>>>,
     default_config: RwLock<EngineConfig>,
+    ask_user_question_resume_diagnostic_sink:
+        StdMutex<Option<ClaudeAskUserQuestionResumeDiagnosticSink>>,
 }
 
 impl ClaudeSessionManager {
@@ -11,6 +13,16 @@ impl ClaudeSessionManager {
         Self {
             sessions: Mutex::new(HashMap::new()),
             default_config: RwLock::new(EngineConfig::default()),
+            ask_user_question_resume_diagnostic_sink: StdMutex::new(None),
+        }
+    }
+
+    pub fn set_ask_user_question_resume_diagnostic_sink(
+        &self,
+        sink: Option<ClaudeAskUserQuestionResumeDiagnosticSink>,
+    ) {
+        if let Ok(mut current) = self.ask_user_question_resume_diagnostic_sink.lock() {
+            *current = sink;
         }
     }
 
@@ -37,6 +49,12 @@ impl ClaudeSessionManager {
             workspace_path.to_path_buf(),
             Some(config),
         ));
+        let diagnostic_sink = self
+            .ask_user_question_resume_diagnostic_sink
+            .lock()
+            .ok()
+            .and_then(|current| current.clone());
+        session.set_ask_user_question_resume_diagnostic_sink(diagnostic_sink);
 
         sessions.insert(workspace_id.to_string(), session.clone());
         session

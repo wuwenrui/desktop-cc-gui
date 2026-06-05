@@ -20,6 +20,11 @@ function normalizeQuery(query?: WorkspaceSessionCatalogQuery | null): WorkspaceS
     keyword: query?.keyword?.trim() || null,
     engine: query?.engine?.trim() || null,
     status: query?.status ?? "active",
+    folderId: query?.folderId?.trim() || null,
+    sessionAttributionMode:
+      query?.sessionAttributionMode === "workspace-only"
+        ? "workspace-only"
+        : "related",
   };
 }
 
@@ -32,7 +37,16 @@ export function useWorkspaceSessionProjectionSummary({
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const requestSeqRef = useRef(0);
-  const normalizedQuery = useMemo(() => normalizeQuery(query), [query]);
+  const normalizedQuery = useMemo(
+    () => normalizeQuery(query),
+    [
+      query?.engine,
+      query?.folderId,
+      query?.keyword,
+      query?.sessionAttributionMode,
+      query?.status,
+    ],
+  );
 
   const load = useCallback(async () => {
     const requestId = requestSeqRef.current + 1;

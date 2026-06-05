@@ -7,6 +7,12 @@ export type PinnedThreadsMap = Record<string, number>;
 export type CustomNamesMap = Record<string, string>;
 export type AutoTitlePendingMap = Record<string, true>;
 export type ThreadAliasMap = Record<string, string>;
+export type ActiveThreadIdByWorkspaceMap = Record<string, string | null>;
+export type CanonicalActiveThreadRebinding = {
+  workspaceId: string;
+  threadId: string;
+  canonicalThreadId: string;
+};
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -116,6 +122,29 @@ export function resolveCanonicalThreadAlias(
     current = aliases[current] ?? current;
   }
   return current;
+}
+
+export function collectCanonicalActiveThreadRebindings(
+  activeThreadIdByWorkspace: ActiveThreadIdByWorkspaceMap,
+  resolveCanonicalThreadId: (threadId: string) => string,
+): CanonicalActiveThreadRebinding[] {
+  return Object.entries(activeThreadIdByWorkspace).flatMap(([workspaceId, threadId]) => {
+    const normalizedThreadId = threadId?.trim() ?? "";
+    if (!normalizedThreadId) {
+      return [];
+    }
+    const canonicalThreadId = resolveCanonicalThreadId(normalizedThreadId).trim();
+    if (!canonicalThreadId || canonicalThreadId === normalizedThreadId) {
+      return [];
+    }
+    return [
+      {
+        workspaceId,
+        threadId: normalizedThreadId,
+        canonicalThreadId,
+      },
+    ];
+  });
 }
 
 export function loadThreadAliases(): ThreadAliasMap {

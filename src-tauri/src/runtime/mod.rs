@@ -2193,6 +2193,40 @@ impl RuntimeManager {
         }
     }
 
+    pub(crate) async fn record_claude_ask_user_question_resume_result(
+        &self,
+        workspace_id: &str,
+        thread_id: Option<&str>,
+        turn_id: Option<&str>,
+        request_id: Option<&str>,
+        succeeded: bool,
+        error: Option<&str>,
+    ) {
+        let mut diagnostics = self.diagnostics.lock().await;
+        diagnostics.claude_ask_user_question_resume_attempt_count = diagnostics
+            .claude_ask_user_question_resume_attempt_count
+            .saturating_add(1);
+        if succeeded {
+            diagnostics.claude_ask_user_question_resume_success_count = diagnostics
+                .claude_ask_user_question_resume_success_count
+                .saturating_add(1);
+        } else {
+            diagnostics.claude_ask_user_question_resume_failure_count = diagnostics
+                .claude_ask_user_question_resume_failure_count
+                .saturating_add(1);
+        }
+        diagnostics.last_claude_ask_user_question_resume_at_ms = Some(now_millis());
+        diagnostics.last_claude_ask_user_question_resume_workspace_id =
+            Some(workspace_id.to_string());
+        diagnostics.last_claude_ask_user_question_resume_thread_id = thread_id.map(str::to_string);
+        diagnostics.last_claude_ask_user_question_resume_turn_id = turn_id.map(str::to_string);
+        diagnostics.last_claude_ask_user_question_resume_request_id =
+            request_id.map(str::to_string);
+        diagnostics.last_claude_ask_user_question_resume_status =
+            Some(if succeeded { "success" } else { "failure" }.to_string());
+        diagnostics.last_claude_ask_user_question_resume_error = error.map(str::to_string);
+    }
+
     pub(crate) async fn reconcile_pool(&self, settings: &AppSettings) -> Vec<EvictionCandidate> {
         let mut entries = self.entries.lock().await;
         let mut diagnostics = self.diagnostics.lock().await;

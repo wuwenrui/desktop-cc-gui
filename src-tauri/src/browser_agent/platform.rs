@@ -101,10 +101,7 @@ mod tests {
             capability.snapshot_capture,
             BrowserCapabilityState::Unsupported
         );
-        assert_eq!(
-            capability.webview_runtime,
-            BrowserWebviewRuntime::Unknown
-        );
+        assert_eq!(capability.webview_runtime, BrowserWebviewRuntime::Unknown);
         assert_eq!(capability.unsupported_reasons, vec!["not available"]);
     }
 
@@ -116,8 +113,14 @@ mod tests {
             vec!["capture pending".to_string()],
         );
         assert_eq!(capability.browser_dock, BrowserCapabilityState::Supported);
-        assert_eq!(capability.snapshot_capture, BrowserCapabilityState::Degraded);
-        assert_eq!(capability.element_actions, BrowserCapabilityState::Unsupported);
+        assert_eq!(
+            capability.snapshot_capture,
+            BrowserCapabilityState::Degraded
+        );
+        assert_eq!(
+            capability.element_actions,
+            BrowserCapabilityState::Unsupported
+        );
         assert_eq!(
             capability.form_submit_actions,
             BrowserCapabilityState::Unsupported

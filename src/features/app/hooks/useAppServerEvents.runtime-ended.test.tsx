@@ -113,8 +113,6 @@ describe("useAppServerEvents runtime ended routing", () => {
           params: {
             reasonCode: "manual_shutdown",
             message: "Managed runtime stopped after manual shutdown.",
-            affectedThreadIds: ["thread-1"],
-            affectedTurnIds: ["turn-1"],
             pendingRequestCount: 0,
             hadActiveLease: false,
           },
@@ -129,6 +127,93 @@ describe("useAppServerEvents runtime ended routing", () => {
       }),
     );
     expect(handlers.onTurnError).not.toHaveBeenCalled();
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("routes stale reuse cleanup manual shutdowns to turn errors", async () => {
+    const handlers: Handlers = {
+      onRuntimeEnded: vi.fn(),
+      onTurnError: vi.fn(),
+    };
+    const { root } = await mount(handlers);
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-runtime-ended-stale-cleanup",
+        message: {
+          method: "runtime/ended",
+          params: {
+            reasonCode: "manual_shutdown",
+            message:
+              "[RUNTIME_ENDED] Managed runtime stopped after manual shutdown (source: stale_reuse_cleanup).",
+            shutdownSource: "stale_reuse_cleanup",
+            affectedThreadIds: ["thread-stale"],
+            affectedTurnIds: ["turn-stale"],
+            pendingRequestCount: 0,
+            hadActiveLease: false,
+          },
+        },
+      });
+    });
+
+    expect(handlers.onRuntimeEnded).toHaveBeenCalledWith(
+      "ws-runtime-ended-stale-cleanup",
+      expect.objectContaining({
+        reasonCode: "manual_shutdown",
+      }),
+    );
+    expect(handlers.onTurnError).toHaveBeenCalledWith(
+      "ws-runtime-ended-stale-cleanup",
+      "thread-stale",
+      "turn-stale",
+      expect.objectContaining({
+        message:
+          "[RUNTIME_ENDED] Managed runtime stopped after manual shutdown (source: stale_reuse_cleanup).",
+        willRetry: false,
+        engine: "codex",
+      }),
+    );
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("routes manual shutdowns with active leases to turn errors", async () => {
+    const handlers: Handlers = {
+      getActiveCodexThreadId: vi.fn(() => "active-thread"),
+      onTurnError: vi.fn(),
+    };
+    const { root } = await mount(handlers);
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-runtime-ended-active-lease",
+        message: {
+          method: "runtime/ended",
+          params: {
+            reasonCode: "manual_shutdown",
+            message: "Managed runtime stopped after manual shutdown.",
+            pendingRequestCount: 1,
+            hadActiveLease: true,
+          },
+        },
+      });
+    });
+
+    expect(handlers.onTurnError).toHaveBeenCalledWith(
+      "ws-runtime-ended-active-lease",
+      "active-thread",
+      "",
+      expect.objectContaining({
+        message: "[RUNTIME_ENDED] Managed runtime stopped after manual shutdown.",
+        willRetry: false,
+        engine: "codex",
+      }),
+    );
 
     await act(async () => {
       root.unmount();

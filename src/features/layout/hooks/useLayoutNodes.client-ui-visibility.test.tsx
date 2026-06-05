@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import type { ConversationItem, WorkspaceInfo } from "../../../types";
@@ -705,6 +705,16 @@ function LayoutNodesHarness({
   return <>{nodes.messagesNode}</>;
 }
 
+async function renderUseLayoutNodes(
+  options: Parameters<typeof useLayoutNodes>[0],
+) {
+  const renderedHook = renderHook(() => useLayoutNodes(options));
+  await act(async () => {
+    await Promise.resolve();
+  });
+  return renderedHook;
+}
+
 describe("useLayoutNodes client UI visibility", () => {
   afterEach(() => {
     clientUiVisibilityMock.visiblePanels.clear();
@@ -712,12 +722,10 @@ describe("useLayoutNodes client UI visibility", () => {
     vi.clearAllMocks();
   });
 
-  it("keeps conversation, composer, send, and settings recovery available when every optional entry is hidden", () => {
+  it("keeps conversation, composer, send, and settings recovery available when every optional entry is hidden", async () => {
     const onOpenSettings = vi.fn();
     const onSend = vi.fn();
-    const { result } = renderHook(() =>
-      useLayoutNodes(createLayoutOptions({ onOpenSettings, onSend })),
-    );
+    const { result } = await renderUseLayoutNodes(createLayoutOptions({ onOpenSettings, onSend }));
 
     expect(result.current.rightPanelToolbarNode).toBeNull();
     expect(result.current.planPanelNode).toBeNull();
@@ -745,15 +753,13 @@ describe("useLayoutNodes client UI visibility", () => {
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
   });
 
-  it("forwards restored history metadata into the runtime conversation state", () => {
-    const { result } = renderHook(() =>
-      useLayoutNodes(
-        createLayoutOptions({
-          historyRestoredAtMsByThread: {
-            "thread-1": 1234,
-          },
-        }),
-      ),
+  it("forwards restored history metadata into the runtime conversation state", async () => {
+    const { result } = await renderUseLayoutNodes(
+      createLayoutOptions({
+        historyRestoredAtMsByThread: {
+          "thread-1": 1234,
+        },
+      }),
     );
 
     render(<>{result.current.messagesNode}</>);
@@ -785,27 +791,25 @@ describe("useLayoutNodes client UI visibility", () => {
     });
   });
 
-  it("uses the active thread engine when restoring a Claude session while Codex is selected globally", () => {
-    const { result } = renderHook(() =>
-      useLayoutNodes(
-        createLayoutOptions({
-          selectedEngine: "codex",
-          activeThreadId: "claude:session-1",
-          threadsByWorkspace: {
-            [workspace.id]: [
-              {
-                id: "claude:session-1",
-                name: "Claude history",
-                updatedAt: 1,
-                engineSource: "claude",
-              },
-            ],
-          },
-          historyLoadingByThreadId: {
-            "claude:session-1": true,
-          },
-        }),
-      ),
+  it("uses the active thread engine when restoring a Claude session while Codex is selected globally", async () => {
+    const { result } = await renderUseLayoutNodes(
+      createLayoutOptions({
+        selectedEngine: "codex",
+        activeThreadId: "claude:session-1",
+        threadsByWorkspace: {
+          [workspace.id]: [
+            {
+              id: "claude:session-1",
+              name: "Claude history",
+              updatedAt: 1,
+              engineSource: "claude",
+            },
+          ],
+        },
+        historyLoadingByThreadId: {
+          "claude:session-1": true,
+        },
+      }),
     );
 
     render(<>{result.current.messagesNode}</>);
@@ -814,29 +818,25 @@ describe("useLayoutNodes client UI visibility", () => {
     expect(screen.getByTestId("messages").dataset.conversationEngine).toBe("claude");
   });
 
-  it("does not crash when restored history metadata is omitted by a caller", () => {
+  it("does not crash when restored history metadata is omitted by a caller", async () => {
     const optionsWithoutRestoreMeta = {
       ...createLayoutOptions(),
       historyRestoredAtMsByThread: undefined,
     };
 
-    const { result } = renderHook(() =>
-      useLayoutNodes(optionsWithoutRestoreMeta),
-    );
+    const { result } = await renderUseLayoutNodes(optionsWithoutRestoreMeta);
 
     render(<>{result.current.messagesNode}</>);
 
     expect(screen.getByTestId("messages").dataset.historyRestoredAt ?? "").toBe("");
   });
 
-  it("routes composer file reference open actions through the file-open pipeline", () => {
+  it("routes composer file reference open actions through the file-open pipeline", async () => {
     const onOpenFile = vi.fn();
-    const { result } = renderHook(() =>
-      useLayoutNodes(
-        createLayoutOptions({
-          onOpenFile,
-        }),
-      ),
+    const { result } = await renderUseLayoutNodes(
+      createLayoutOptions({
+        onOpenFile,
+      }),
     );
 
     render(<>{result.current.composerNode}</>);
@@ -846,17 +846,15 @@ describe("useLayoutNodes client UI visibility", () => {
     expect(onOpenFile).toHaveBeenCalledWith("src/App.tsx");
   });
 
-  it("toggles the Project Map toolbar icon off from full Project Map mode", () => {
+  it("toggles the Project Map toolbar icon off from full Project Map mode", async () => {
     clientUiVisibilityMock.visiblePanels.add("rightActivityToolbar");
     clientUiVisibilityMock.visibleControls.add("rightToolbar.projectMap");
     const setCenterMode = vi.fn();
-    const { result } = renderHook(() =>
-      useLayoutNodes(
-        createLayoutOptions({
-          centerMode: "projectMap",
-          setCenterMode,
-        }),
-      ),
+    const { result } = await renderUseLayoutNodes(
+      createLayoutOptions({
+        centerMode: "projectMap",
+        setCenterMode,
+      }),
     );
 
     render(<>{result.current.rightPanelToolbarNode}</>);
@@ -867,17 +865,15 @@ describe("useLayoutNodes client UI visibility", () => {
     expect(setCenterMode).toHaveBeenCalledWith("chat");
   });
 
-  it("opens the Project Map toolbar icon from chat mode", () => {
+  it("opens the Project Map toolbar icon from chat mode", async () => {
     clientUiVisibilityMock.visiblePanels.add("rightActivityToolbar");
     clientUiVisibilityMock.visibleControls.add("rightToolbar.projectMap");
     const onOpenProjectMap = vi.fn();
-    const { result } = renderHook(() =>
-      useLayoutNodes(
-        createLayoutOptions({
-          centerMode: "chat",
-          onOpenProjectMap,
-        }),
-      ),
+    const { result } = await renderUseLayoutNodes(
+      createLayoutOptions({
+        centerMode: "chat",
+        onOpenProjectMap,
+      }),
     );
 
     render(<>{result.current.rightPanelToolbarNode}</>);
@@ -888,18 +884,16 @@ describe("useLayoutNodes client UI visibility", () => {
     expect(onOpenProjectMap).toHaveBeenCalledTimes(1);
   });
 
-  it("toggles the Project Map toolbar icon off from editor companion mode", () => {
+  it("toggles the Project Map toolbar icon off from editor companion mode", async () => {
     clientUiVisibilityMock.visiblePanels.add("rightActivityToolbar");
     clientUiVisibilityMock.visibleControls.add("rightToolbar.projectMap");
     const setEditorSplitCompanion = vi.fn();
-    const { result } = renderHook(() =>
-      useLayoutNodes(
-        createLayoutOptions({
-          centerMode: "editor",
-          editorSplitCompanion: "projectMap",
-          setEditorSplitCompanion,
-        }),
-      ),
+    const { result } = await renderUseLayoutNodes(
+      createLayoutOptions({
+        centerMode: "editor",
+        editorSplitCompanion: "projectMap",
+        setEditorSplitCompanion,
+      }),
     );
 
     render(<>{result.current.rightPanelToolbarNode}</>);
@@ -910,22 +904,20 @@ describe("useLayoutNodes client UI visibility", () => {
     expect(setEditorSplitCompanion).toHaveBeenCalledWith("chat");
   });
 
-  it("opens the Project Map toolbar icon as an editor companion without closing the editor", () => {
+  it("opens the Project Map toolbar icon as an editor companion without closing the editor", async () => {
     clientUiVisibilityMock.visiblePanels.add("rightActivityToolbar");
     clientUiVisibilityMock.visibleControls.add("rightToolbar.projectMap");
     const onOpenProjectMap = vi.fn();
     const setCenterMode = vi.fn();
     const setEditorSplitCompanion = vi.fn();
-    const { result } = renderHook(() =>
-      useLayoutNodes(
-        createLayoutOptions({
-          centerMode: "editor",
-          editorSplitCompanion: "chat",
-          onOpenProjectMap,
-          setCenterMode,
-          setEditorSplitCompanion,
-        }),
-      ),
+    const { result } = await renderUseLayoutNodes(
+      createLayoutOptions({
+        centerMode: "editor",
+        editorSplitCompanion: "chat",
+        onOpenProjectMap,
+        setCenterMode,
+        setEditorSplitCompanion,
+      }),
     );
 
     render(<>{result.current.rightPanelToolbarNode}</>);
@@ -938,21 +930,19 @@ describe("useLayoutNodes client UI visibility", () => {
     expect(setCenterMode).not.toHaveBeenCalled();
   });
 
-  it("restores a maximized editor when the Project Map toolbar icon opens as companion", () => {
+  it("restores a maximized editor when the Project Map toolbar icon opens as companion", async () => {
     clientUiVisibilityMock.visiblePanels.add("rightActivityToolbar");
     clientUiVisibilityMock.visibleControls.add("rightToolbar.projectMap");
     const setEditorSplitCompanion = vi.fn();
     const onToggleEditorFileMaximized = vi.fn();
-    const { result } = renderHook(() =>
-      useLayoutNodes(
-        createLayoutOptions({
-          centerMode: "editor",
-          editorSplitCompanion: "chat",
-          setEditorSplitCompanion,
-          isEditorFileMaximized: true,
-          onToggleEditorFileMaximized,
-        }),
-      ),
+    const { result } = await renderUseLayoutNodes(
+      createLayoutOptions({
+        centerMode: "editor",
+        editorSplitCompanion: "chat",
+        setEditorSplitCompanion,
+        isEditorFileMaximized: true,
+        onToggleEditorFileMaximized,
+      }),
     );
 
     render(<>{result.current.rightPanelToolbarNode}</>);
@@ -963,17 +953,15 @@ describe("useLayoutNodes client UI visibility", () => {
     expect(onToggleEditorFileMaximized).toHaveBeenCalledTimes(1);
   });
 
-  it("hides the Project Map toolbar icon when its visibility control is disabled", () => {
+  it("hides the Project Map toolbar icon when its visibility control is disabled", async () => {
     clientUiVisibilityMock.visiblePanels.add("rightActivityToolbar");
     clientUiVisibilityMock.visibleControls.add("rightToolbar.files");
     const onOpenProjectMap = vi.fn();
-    const { result } = renderHook(() =>
-      useLayoutNodes(
-        createLayoutOptions({
-          centerMode: "chat",
-          onOpenProjectMap,
-        }),
-      ),
+    const { result } = await renderUseLayoutNodes(
+      createLayoutOptions({
+        centerMode: "chat",
+        onOpenProjectMap,
+      }),
     );
 
     render(<>{result.current.rightPanelToolbarNode}</>);
@@ -982,18 +970,16 @@ describe("useLayoutNodes client UI visibility", () => {
     expect(screen.getByRole("button", { name: "files" })).toBeTruthy();
   });
 
-  it("keeps the bottom status dock mounted when baseline tabs are visible and collapsed", () => {
+  it("keeps the bottom status dock mounted when baseline tabs are visible and collapsed", async () => {
     clientUiVisibilityMock.visiblePanels.add("bottomActivityPanel");
     clientUiVisibilityMock.visibleControls.add("bottomActivity.checkpoint");
     clientUiVisibilityMock.visibleControls.add("bottomActivity.latestConversation");
 
-    const { result } = renderHook(() =>
-      useLayoutNodes(
-        createLayoutOptions({
-          bottomStatusPanelExpanded: false,
-          selectedEngine: "opencode",
-        }),
-      ),
+    const { result } = await renderUseLayoutNodes(
+      createLayoutOptions({
+        bottomStatusPanelExpanded: false,
+        selectedEngine: "opencode",
+      }),
     );
 
     expect(result.current.planPanelNode).toBeTruthy();

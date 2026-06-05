@@ -1033,3 +1033,91 @@ Phase 2a lifecycle reconciliation MUST query backend/runtime status when termina
 - **THEN** the frontend MUST defer settlement
 - **AND** it MUST NOT mark the turn completed
 
+### Requirement: Conversation requests include BrowserContextAttachment v2
+Conversation lifecycle SHALL support BrowserContextAttachment v2 as an explicit, removable, refreshable attachment on user messages without breaking streaming, message persistence, replay, or recovery.
+
+#### Scenario: Browser context is sent with a message
+- **WHEN** the user sends a message with an attached Browser Context Snapshot v2
+- **THEN** the conversation request SHALL include the bounded engine-agnostic attachment and SHALL continue normal streaming behavior
+
+#### Scenario: Browser context is sent through canonical path
+- **WHEN** BrowserContextAttachment v2 is present on a message
+- **THEN** conversation lifecycle SHALL avoid duplicating the same browser context as both structured metadata and inline prompt text
+
+#### Scenario: Conversation is reopened
+- **WHEN** a conversation containing browser context attachments is reopened
+- **THEN** the UI SHALL show historical browser attachment references with available, expired, stale, or degraded state
+
+### Requirement: Conversation UI exposes browser context freshness
+Conversation lifecycle SHALL show whether the active browser attachment is fresh, stale, expired, or degraded before message send.
+
+#### Scenario: Attachment becomes stale before send
+- **WHEN** the attached browser snapshot becomes stale before the user sends a message
+- **THEN** the composer SHALL indicate stale state and provide a refresh affordance without silently replacing the attachment
+
+### Requirement: Conversation Lifecycle SHALL preserve explicit browser context attachments
+
+Conversation lifecycle handling SHALL preserve explicit browser context attachments as bounded evidence without allowing browser context to destabilize streaming, recovery, or replay semantics.
+
+#### Scenario: browser snapshot attachment is visible in sent message lifecycle
+- **WHEN** a user sends a message with an attached Browser Context Snapshot
+- **THEN** the conversation SHALL preserve a visible attachment reference with title, URL, snapshot id, and capture time when available
+- **AND** the attachment SHALL remain associated with the user turn during streaming and terminal settlement
+
+#### Scenario: browser attachment does not force processing state
+- **WHEN** a browser snapshot attachment exists on a conversation turn
+- **THEN** lifecycle processing state SHALL still be governed by engine events and existing terminal settlement rules
+- **AND** the presence of browser evidence SHALL NOT leave the thread in pseudo-processing
+
+#### Scenario: reopened conversation handles missing browser evidence
+- **WHEN** a conversation is reopened and a historical browser snapshot reference is no longer available
+- **THEN** the conversation SHALL show a degraded or unavailable attachment state
+- **AND** the message history SHALL remain readable without requiring the browser evidence payload to be restored
+
+#### Scenario: browser context is not injected into unrelated turns
+- **WHEN** a browser snapshot is attached to one message or task dispatch
+- **THEN** lifecycle replay and subsequent sends SHALL NOT automatically inject that snapshot into unrelated future turns
+- **AND** future browser context use SHALL require a new explicit attachment or orchestration rule
+
+### Requirement: Browser Context Attachments SHALL remain engine-neutral in conversation lifecycle
+
+Conversation lifecycle SHALL preserve browser context attachments without coupling the attachment model to a specific engine runtime.
+
+#### Scenario: browser attachment survives engine selection
+- **WHEN** the user switches between Claude, Codex, Gemini, OpenCode, or a custom provider before sending a browser-attached message
+- **THEN** the browser attachment SHALL keep the same visible metadata and bounded snapshot reference
+- **AND** engine-specific adapters SHALL NOT mutate the stored attachment into provider-specific history shape
+
+#### Scenario: engine fallback preserves browser evidence visibility
+- **WHEN** a browser-attached request falls back to another engine or provider
+- **THEN** the conversation SHALL preserve the browser attachment reference and fallback reason
+- **AND** the user SHALL be able to tell whether the final engine consumed, ignored, or could not support that browser context
+
+### Requirement: Passive Runtime Helper Reads MUST NOT Acquire Codex Runtime
+The system SHALL treat model metadata, account metadata, account rate-limit reads, and similar helper reads as passive operations unless the user explicitly performs a runtime-required action.
+
+#### Scenario: model list read without existing Codex runtime
+- **WHEN** the client requests Codex model metadata for a workspace that has no existing Codex runtime session
+- **THEN** the system SHALL return cached, static, degraded, or empty fallback data without starting a Codex runtime process
+
+#### Scenario: rate-limit read without existing Codex runtime
+- **WHEN** the client requests Codex account rate limits for a workspace that has no existing Codex runtime session
+- **THEN** the system SHALL return cached, degraded, unavailable, or empty fallback data without starting a Codex runtime process
+
+### Requirement: Background Workspace Refresh MUST NOT Reconnect Runtime
+The system SHALL prevent background workspace refresh, idle hydration, passive restore, and focus refresh for non-active workspaces from starting or reconnecting AI runtime processes.
+
+#### Scenario: idle hydration refreshes multiple visible workspaces
+- **WHEN** idle hydration or background prewarm refreshes thread lists for visible or restored workspaces
+- **THEN** the system SHALL load available cached/list data without invoking automatic runtime recovery for those workspaces
+
+#### Scenario: focus refresh sees disconnected background workspace
+- **WHEN** a window focus or visibility refresh encounters a disconnected non-active workspace
+- **THEN** the system SHALL skip runtime reconnect for that workspace unless the user explicitly activates or reconnects it
+
+### Requirement: Explicit Runtime Actions MAY Acquire Runtime
+The system SHALL preserve runtime acquisition for explicit user actions that require a live AI runtime.
+
+#### Scenario: user sends a Codex message
+- **WHEN** the user sends a Codex message or explicitly requests reconnect/retry for a workspace
+- **THEN** the system MAY start or reuse the required Codex runtime session

@@ -16,6 +16,7 @@ React Component
 
 - hook <-> `services/tauri.ts`
 - `services/tauri.ts` <-> Rust command 参数/字段
+- `services/dragDrop.ts` <-> Tauri `onDragDropEvent` / forwarded WebView drag-drop event
 - client storage <-> runtime default/fallback
 - i18n key <-> UI copy fallback
 
@@ -33,6 +34,7 @@ React Component
 - `undefined` 与显式空集合（如 `[]`）被错误地当成同一语义，导致 fallback 误吃全量数据。
 - retry 流程非 idempotent，触发重复副作用。
 - listener 未清理，导致重复触发。
+- 只监听 main WebView 的 drag/drop，遗漏 Browser Agent child WebView 截获的 OS drop，导致 Composer 外部文件拖入断链。
 
 ## Optional Payload Contract
 

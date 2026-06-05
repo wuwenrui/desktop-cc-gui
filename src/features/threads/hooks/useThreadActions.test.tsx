@@ -1911,9 +1911,9 @@ describe("useThreadActions", () => {
     });
 
     expect(listWorkspaceSessions).toHaveBeenCalledWith("ws-1", {
-      query: { status: "active" },
+      query: { status: "active", sessionAttributionMode: "related" },
       cursor: null,
-      limit: 9_999,
+      limit: 100,
     });
     expectSetThreadsDispatched(dispatch, "ws-1", [
       {
@@ -2000,7 +2000,7 @@ describe("useThreadActions", () => {
     });
   });
 
-  it("uses project visible root count as the Claude native list window", async () => {
+  it("caps the Claude native list window to the sidebar catalog page size", async () => {
     vi.mocked(listThreads).mockResolvedValue({
       result: {
         data: [],
@@ -2032,7 +2032,7 @@ describe("useThreadActions", () => {
       });
     });
 
-    expect(listClaudeSessions).toHaveBeenCalledWith("/tmp/codex", 200);
+    expect(listClaudeSessions).toHaveBeenCalledWith("/tmp/codex", 100);
     expectSetThreadsDispatched(dispatch, "ws-1", [
       {
         id: "claude:claude-visible-200",
@@ -2103,9 +2103,9 @@ describe("useThreadActions", () => {
     expect(listClaudeSessions).toHaveBeenCalled();
     expect(getOpenCodeSessionList).toHaveBeenCalled();
     expect(listWorkspaceSessions).toHaveBeenCalledWith("ws-1", {
-      query: { status: "active" },
+      query: { status: "active", sessionAttributionMode: "related" },
       cursor: null,
-      limit: 9_999,
+      limit: 100,
     });
     expectSetThreadsDispatched(dispatch, "ws-1", [
       {

@@ -34,6 +34,32 @@ function candidateId(filePath: string, reason: BrowserCodeCandidate["reason"]): 
   return `${reason}:${filePath}`;
 }
 
+function buildCandidate(input: {
+  filePath: string;
+  reason: BrowserCodeCandidate["reason"];
+  confidence: BrowserCodeCandidate["confidence"];
+  matchedText?: string | null;
+  explanation: string;
+}): BrowserCodeCandidate {
+  const openable = input.filePath !== "src/**" && !input.filePath.includes("*");
+  return {
+    candidateId: candidateId(input.filePath, input.reason),
+    filePath: input.filePath,
+    symbolName: null,
+    reason: input.reason,
+    confidence: input.confidence,
+    matchedText: input.matchedText ?? null,
+    sourceEvidence: input.matchedText ? [input.matchedText] : [],
+    explanation: input.explanation,
+    openAction: openable
+      ? {
+          kind: "open_file",
+          filePath: input.filePath,
+        }
+      : null,
+  };
+}
+
 function routeCandidatePaths(pathname: string): string[] {
   const segments = routeSegments(pathname);
   if (segments.length === 0) {
@@ -59,28 +85,71 @@ function matchWorkspaceFiles(candidates: string[], workspaceFiles: string[]): st
   return candidates.filter((candidate) => normalizedFiles.has(candidate));
 }
 
-function textNeedles(snapshot: BrowserContextSnapshot): string[] {
-  const headings = snapshot.page.headings.map((heading) => heading.text);
-  const buttons = snapshot.page.buttons.map((button) => button.label);
-  const landmarks = snapshot.page.elementLandmarks.map((landmark) => landmark.label);
-  return [...headings, ...buttons, ...landmarks]
+function fileNameCandidates(pathname: string, workspaceFiles: string[]): BrowserCodeCandidate[] {
+  if (workspaceFiles.length === 0) {
+    return [];
+  }
+  const segments = routeSegments(pathname);
+  const leaf = segments[segments.length - 1]?.toLowerCase();
+  if (!leaf) {
+    return [];
+  }
+  return workspaceFiles
+    .map((file) => file.replace(/\\/g, "/"))
+    .filter((file) => file.toLowerCase().includes(leaf))
+    .slice(0, 4)
+    .map((filePath) => buildCandidate({
+      filePath,
+      reason: "file_name_match",
+      confidence: "medium",
+      matchedText: leaf,
+      explanation: "Workspace file name matched the Browser Dock route leaf.",
+    }));
+}
+
+function visibleTextNeedles(snapshot: BrowserContextSnapshot): string[] {
+  const primaryText = snapshot.page.primaryContent?.text ?? snapshot.page.visibleText;
+  return [primaryText, ...(snapshot.page.readableBlocks ?? []).map((block) => block.text)]
     .map((value) => value.replace(/\s+/g, " ").trim())
     .filter((value) => value.length >= 4)
-    .slice(0, 8);
+    .map((value) => value.slice(0, 96))
+    .slice(0, 4);
+}
+
+function headingNeedles(snapshot: BrowserContextSnapshot): string[] {
+  return snapshot.page.headings
+    .map((heading) => heading.text.replace(/\s+/g, " ").trim())
+    .filter((value) => value.length >= 4)
+    .slice(0, 4);
 }
 
 function landmarkCandidates(landmarks: BrowserElementLandmark[]): BrowserCodeCandidate[] {
   return landmarks
     .filter((landmark) => landmark.role === "button" || landmark.role === "form" || landmark.role === "input")
     .slice(0, 4)
-    .map((landmark) => ({
-      candidateId: candidateId(`src/**/*${landmark.label.slice(0, 24)}*`, "landmark_match"),
+    .map((landmark) => buildCandidate({
       filePath: "src/**",
-      symbolName: null,
-      reason: "landmark_match",
+      reason: landmark.role === "button"
+        ? "button_label_match"
+        : landmark.role === "form"
+          ? "form_label_match"
+          : "aria_label_match",
       confidence: "low",
       matchedText: landmark.label,
+      explanation: "Interactive landmark text matched visible Browser Dock evidence.",
     }));
+}
+
+function scoreCandidates(candidates: BrowserCodeCandidate[]): BrowserCodeCandidate[] {
+  return candidates.map((candidate) => {
+    if (candidate.confidence !== "low") {
+      return candidate;
+    }
+    return {
+      ...candidate,
+      explanation: `${candidate.explanation} Low confidence means this is a clue, not a definitive match.`,
+    };
+  });
 }
 
 export function buildBrowserCodeCandidates(
@@ -99,34 +168,42 @@ export function buildBrowserCodeCandidates(
   }
 
   const routeMatches = matchWorkspaceFiles(routeCandidatePaths(pathname), workspaceFiles).map(
-    (filePath) => ({
-      candidateId: candidateId(filePath, "route_match"),
+    (filePath) => buildCandidate({
       filePath,
-      symbolName: null,
-      reason: "route_match" as const,
+      reason: "route_match",
       confidence: workspaceFiles.length > 0 ? "medium" as const : "low" as const,
       matchedText: pathname,
+      explanation: "Workspace-local URL route matched a likely frontend route file.",
     }),
   );
+  const fileNameMatches = fileNameCandidates(pathname, workspaceFiles);
 
-  const visibleTextMatches = textNeedles(snapshot).map((needle) => ({
-    candidateId: candidateId(`src/**:${needle}`, "visible_text_match"),
+  const visibleTextMatches = visibleTextNeedles(snapshot).map((needle) => buildCandidate({
     filePath: "src/**",
-    symbolName: null,
-    reason: "visible_text_match" as const,
-    confidence: "low" as const,
+    reason: "visible_text_match",
+    confidence: "low",
     matchedText: needle,
+    explanation: "Visible page text can help locate the responsible component but is not definitive.",
+  }));
+  const headingMatches = headingNeedles(snapshot).map((needle) => buildCandidate({
+    filePath: "src/**",
+    reason: "heading_match",
+    confidence: "low",
+    matchedText: needle,
+    explanation: "Visible heading text can help locate the responsible component but is not definitive.",
   }));
 
   const byId = new Map<string, BrowserCodeCandidate>();
   for (const candidate of [
     ...routeMatches,
+    ...fileNameMatches,
     ...visibleTextMatches,
+    ...headingMatches,
     ...landmarkCandidates(snapshot.page.elementLandmarks),
   ]) {
     if (!byId.has(candidate.candidateId)) {
       byId.set(candidate.candidateId, candidate);
     }
   }
-  return Array.from(byId.values()).slice(0, MAX_CANDIDATES);
+  return scoreCandidates(Array.from(byId.values())).slice(0, MAX_CANDIDATES);
 }

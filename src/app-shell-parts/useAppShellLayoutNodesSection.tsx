@@ -18,6 +18,7 @@ import {
   clearDetachedExternalChangeMonitor,
   configureDetachedExternalChangeMonitor,
 } from "../services/tauri";
+import { openOrFocusBrowserAgentDockWindow } from "../features/browser-agent/browserAgentDockWindow";
 import { shouldEnableMainFileExternalChangeMonitoring } from "./fileExternalMonitoring";
 import {
   getThreadSelectDiffCleanupAction,
@@ -100,7 +101,7 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     handleCopyThread, handleCreateBranch, handleCreatePrompt, handleDebugClick, handleDeletePrompt, handleDeleteQueued, handleDeleteThreadPromptCancel, handleDeleteThreadPromptConfirm,
     handleDeleteWorkspaceConversations, handleDeleteWorkspaceConversationsInSettings, handleDraftChange, handleDragToInProgress, handleDropWorkspacePaths, handleEditQueued, handleEnsureWorkspaceThreadsForSettings, handleExitEditor,
     handleExitWorkspaceEditor, handleGenerateCommitMessage, handleGitIssuesChange, handleGitPanelModeChange, handleGitPullRequestCommentsChange, handleGitPullRequestDiffsChange, handleGitPullRequestsChange, handleInsertComposerText,
-    handleKanbanCreateTask, handleLockPanel, handleMovePrompt, handleMoveWorkspace, handleOpenComposerKanbanPanel, handleOpenDetachedFileExplorer, handleOpenFile, handleOpenHomeChat, handleOpenModelSettings, handleRefreshModelConfig,
+    handleKanbanCreateTask, handleDispatchOrchestrationTask, handleLockPanel, handleMovePrompt, handleMoveWorkspace, handleOpenComposerKanbanPanel, handleOpenDetachedFileExplorer, handleOpenFile, handleOpenHomeChat, handleOpenModelSettings, handleRefreshModelConfig,
     handleOpenRenameWorktree, handleOpenSearchPalette, handleOpenSpecHub, handleOpenClientDocumentation, handleOpenTaskConversation, handleResolvedClaudeThinkingVisibleChange, handleRetryTaskRun, handleResumeTaskRun, handleCancelTaskRun, handleForkTaskRun, handleOpenWorkspaceFile, handleOpenWorkspaceHome, handlePickGitRoot, handlePointerMove,
     handlePointerUp, handlePush, handleRefreshAccountRateLimits, handleRenamePromptCancel, handleRenamePromptChange, handleRenamePromptConfirm, handleRenameThread, handleRenameWorktreeCancel,
     handleRenameWorktreeChange, handleRenameWorktreeConfirm, handleResize, handleRevealActiveWorkspace, handleRevealGeneralPrompts, handleRevealWorkspacePrompts, handleRevertAllGitChanges, handleRevertGitFile,
@@ -347,23 +348,35 @@ export function useAppShellLayoutNodesSection(ctx: any) {
       sidebarToggleProps.rightPanelAvailable &&
       clientUiVisibility.isControlVisible("topTool.rightPanel"),
   };
-  const [browserDockOpen, setBrowserDockOpen] = useState(false);
+  const browserDockOpen = false;
   const handleToggleBrowserDock = useCallback(() => {
-    setCenterMode("chat");
-    setBrowserDockOpen((current) => !current);
-  }, [setCenterMode]);
+    void openOrFocusBrowserAgentDockWindow({
+      workspaceId: activeWorkspaceId,
+      workspaceName: activeWorkspace?.name ?? null,
+    }).catch((error) => {
+      alertError(error instanceof Error ? error.message : String(error));
+    });
+  }, [activeWorkspace?.name, activeWorkspaceId, alertError]);
   const handleCloseBrowserDock = useCallback(() => {
-    setBrowserDockOpen(false);
+    // Browser Agent now lives in its own tool window.
   }, []);
 
   useEffect(() => {
     const handleExternalToggle = () => {
-      setCenterMode("chat");
-      setBrowserDockOpen((current) => !current);
+      void openOrFocusBrowserAgentDockWindow({
+        workspaceId: activeWorkspaceId,
+        workspaceName: activeWorkspace?.name ?? null,
+      }).catch((error) => {
+        alertError(error instanceof Error ? error.message : String(error));
+      });
     };
     const handleExternalOpen = () => {
-      setCenterMode("chat");
-      setBrowserDockOpen(true);
+      void openOrFocusBrowserAgentDockWindow({
+        workspaceId: activeWorkspaceId,
+        workspaceName: activeWorkspace?.name ?? null,
+      }).catch((error) => {
+        alertError(error instanceof Error ? error.message : String(error));
+      });
     };
 
     window.addEventListener("browser-agent:toggle-dock", handleExternalToggle);
@@ -372,7 +385,7 @@ export function useAppShellLayoutNodesSection(ctx: any) {
       window.removeEventListener("browser-agent:toggle-dock", handleExternalToggle);
       window.removeEventListener("browser-agent:open-dock", handleExternalOpen);
     };
-  }, [setCenterMode]);
+  }, [activeWorkspace?.name, activeWorkspaceId, alertError]);
 
   const {
     sidebarNode,
@@ -763,7 +776,11 @@ export function useAppShellLayoutNodesSection(ctx: any) {
         isSoloMode={isSoloMode}
         onToggleSoloMode={toggleSoloMode}
         isBrowserDockOpen={browserDockOpen}
-        onToggleBrowserDock={handleToggleBrowserDock}
+        onToggleBrowserDock={
+          clientUiVisibility.isControlVisible("topTool.browserDock")
+            ? handleToggleBrowserDock
+            : undefined
+        }
         showClientDocumentationButton={
           !isCompact && clientUiVisibility.isControlVisible("topTool.clientDocumentation")
         }
@@ -1018,6 +1035,7 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     selectedModelId: effectiveSelectedModelId,
     projectMapDatasetController,
     onSelectModel: handleSelectModel,
+    onDispatchOrchestrationTask: handleDispatchOrchestrationTask,
     reasoningOptions,
     selectedEffort,
     onSelectEffort: setSelectedEffort,

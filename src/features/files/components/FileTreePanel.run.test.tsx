@@ -54,6 +54,17 @@ vi.mock("../../../services/tauri", () => ({
     invokeMock("create_workspace_directory", { workspaceId, path }),
   copyWorkspaceItem: (workspaceId: string, path: string) =>
     invokeMock("copy_workspace_item", { workspaceId, path }),
+  duplicateWorkspaceItem: (workspaceId: string, path: string) =>
+    invokeMock("duplicate_workspace_item", { workspaceId, path }),
+  pasteWorkspaceItem: (workspaceId: string, sourcePath: string, targetDirectory: string) =>
+    invokeMock("paste_workspace_item", { workspaceId, sourcePath, targetDirectory }),
+  renameWorkspaceItem: (workspaceId: string, path: string, newName: string) =>
+    invokeMock("rename_workspace_item", { workspaceId, path, newName }),
+  pasteExternalWorkspaceItems: (
+    workspaceId: string,
+    sourcePaths: string[],
+    targetDirectory: string,
+  ) => invokeMock("paste_external_workspace_items", { workspaceId, sourcePaths, targetDirectory }),
   trashWorkspaceItem: (workspaceId: string, path: string) =>
     invokeMock("trash_workspace_item", { workspaceId, path }),
   writeWorkspaceFile: (workspaceId: string, path: string, content: string) =>
@@ -275,6 +286,55 @@ describe("FileTreePanel run action isolation", () => {
     fireEvent.doubleClick(screen.getByRole("button", { name: /src/ }));
     const fileLabel = screen.getByText("index.ts");
     expect(fileLabel.className).toContain("git-m");
+  });
+
+  it("marks visible folders as gitignored only when the whole folder is ignored", () => {
+    render(
+      <FileTreePanel
+        workspaceId="workspace-1"
+        workspacePath="/tmp/workspace"
+        files={[
+          "node_modules/pkg/index.js",
+          ".idea/workspace.xml",
+          "src-tauri/target/debug/app",
+          "src-tauri/src/main.rs",
+          "src-tauri/Cargo.toml",
+          "src/index.ts",
+        ]}
+        directories={[
+          "node_modules",
+          "node_modules/pkg",
+          ".idea",
+          "src-tauri",
+          "src-tauri/target",
+          "src-tauri/target/debug",
+          "src-tauri/src",
+          "src",
+        ]}
+        isLoading={false}
+        filePanelMode="files"
+        onFilePanelModeChange={() => undefined}
+        onOpenFile={() => undefined}
+        onInsertText={() => undefined}
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={() => undefined}
+        gitStatusFiles={[]}
+        gitignoredFiles={new Set<string>()}
+        gitignoredDirectories={new Set<string>(["node_modules", ".idea", "target"])}
+      />,
+    );
+
+    const ignoredFolderLabels = Array.from(
+      document.querySelectorAll(".file-tree-row.is-gitignored .file-tree-name"),
+    ).map((label) => label.textContent ?? "");
+
+    expect(ignoredFolderLabels).toContain("node_modules");
+    expect(ignoredFolderLabels).toContain(".idea");
+    expect(ignoredFolderLabels).toContain("target");
+    expect(ignoredFolderLabels).not.toContain("src-tauri");
+    expect(ignoredFolderLabels).not.toContain("src");
   });
 
   it("applies git color class for repo-relative status when git root is a workspace subdirectory", () => {
@@ -948,6 +1008,45 @@ describe("FileTreePanel run action isolation", () => {
       });
     });
     expect(onRefreshFiles).toHaveBeenCalledTimes(2);
+  });
+
+  it("removes a trashed folder subtree from the visible tree before parent refresh settles", async () => {
+    const onRefreshFiles = vi.fn();
+
+    render(
+      <FileTreePanel
+        workspaceId="workspace-1"
+        workspacePath="/tmp/workspace"
+        files={["target/debug/app"]}
+        directories={["target", "target/debug"]}
+        isLoading={false}
+        filePanelMode="files"
+        onFilePanelModeChange={() => undefined}
+        onOpenFile={() => undefined}
+        onInsertText={() => undefined}
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={() => undefined}
+        onRefreshFiles={onRefreshFiles}
+        gitStatusFiles={[]}
+        gitignoredFiles={new Set<string>()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /target/ }));
+    fireEvent.click(screen.getByRole("button", { name: "files.deleteItem" }));
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("trash_workspace_item", {
+        workspaceId: "workspace-1",
+        path: "target",
+      });
+    });
+
+    expect(screen.queryByRole("button", { name: "target" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /debug/ })).toBeNull();
+    expect(onRefreshFiles).toHaveBeenCalledTimes(1);
   });
 
   it("creates new folder from root action", async () => {

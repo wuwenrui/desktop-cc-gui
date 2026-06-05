@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { clearGlobalRuntimeNotices } from "../../../services/globalRuntimeNotices";
+import {
+  clearGlobalRuntimeNotices,
+  getGlobalRuntimeNoticesSnapshot,
+} from "../../../services/globalRuntimeNotices";
 import {
   recordStartupMilestone,
   recordStartupTaskTrace,
@@ -154,7 +157,7 @@ describe("useGlobalRuntimeNoticeDock", () => {
     );
   });
 
-  it("maps runtime pool transitions into notices and lets streaming status decay to idle", async () => {
+  it("records runtime pool transitions but exposes only error notices to the dock", async () => {
     const initialSnapshot = {
       ...createEmptyRuntimePoolSnapshot(),
       rows: [
@@ -201,7 +204,7 @@ describe("useGlobalRuntimeNoticeDock", () => {
       await initialLoadPromise;
     });
 
-    expect(result.current.notices[0]).toEqual(
+    expect(getGlobalRuntimeNoticesSnapshot()[0]).toEqual(
       expect.objectContaining({
         messageKey: "runtimeNotice.runtime.resumePending",
         messageParams: {
@@ -210,7 +213,8 @@ describe("useGlobalRuntimeNoticeDock", () => {
         },
       }),
     );
-    expect(result.current.status).toBe("streaming");
+    expect(result.current.notices).toEqual([]);
+    expect(result.current.status).toBe("idle");
     expect(result.current.runtimeRows).toEqual(initialSnapshot.rows);
 
     await act(async () => {
@@ -345,8 +349,9 @@ describe("useGlobalRuntimeNoticeDock", () => {
       await initialLoadPromise;
     });
 
-    expect(result.current.notices).toHaveLength(2);
-    expect(result.current.notices[0]).toEqual(
+    const storedNotices = getGlobalRuntimeNoticesSnapshot();
+    expect(storedNotices).toHaveLength(2);
+    expect(storedNotices[0]).toEqual(
       expect.objectContaining({
         messageKey: "runtimeNotice.runtime.ready",
         messageParams: {
@@ -355,7 +360,7 @@ describe("useGlobalRuntimeNoticeDock", () => {
         },
       }),
     );
-    expect(result.current.notices[1]).toEqual(
+    expect(storedNotices[1]).toEqual(
       expect.objectContaining({
         messageKey: "runtimeNotice.runtime.ready",
         messageParams: {
@@ -364,6 +369,7 @@ describe("useGlobalRuntimeNoticeDock", () => {
         },
       }),
     );
+    expect(result.current.notices).toEqual([]);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5000);
@@ -371,10 +377,11 @@ describe("useGlobalRuntimeNoticeDock", () => {
       await nextLoadPromise;
     });
 
-    expect(result.current.notices).toHaveLength(2);
+    expect(getGlobalRuntimeNoticesSnapshot()).toHaveLength(2);
+    expect(result.current.notices).toEqual([]);
   });
 
-  it("mirrors startup trace tasks, commands, and milestones into runtime notices", async () => {
+  it("mirrors startup trace events but exposes only failed events to the dock", async () => {
     const { result } = renderHook(() =>
       useGlobalRuntimeNoticeDock([
         {
@@ -416,14 +423,29 @@ describe("useGlobalRuntimeNoticeDock", () => {
         cancellationMode: null,
         commandLabel: "list_threads",
       });
+      recordStartupTaskTrace({
+        type: "task",
+        taskId: "thread-list:first-page:ws-1",
+        phase: "active-workspace",
+        traceLabel: "Load active workspace threads",
+        workspaceScope: { workspaceId: "ws-1" },
+        lifecycleState: "failed",
+        durationMs: 45.6,
+        fallbackReason: "failure",
+        cancellationMode: null,
+        commandLabel: "list_threads",
+      });
       recordStartupMilestone("active-workspace-ready");
     });
 
     await act(async () => {
       await traceStartupCommand("list_threads", { workspaceId: "ws-1" }, async () => "ok");
+      await traceStartupCommand("list_threads", { workspaceId: "ws-1" }, async () => {
+        throw new Error("boom");
+      }).catch(() => undefined);
     });
 
-    expect(result.current.notices).toEqual(
+    expect(getGlobalRuntimeNoticesSnapshot()).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           category: "diagnostic",
@@ -461,6 +483,31 @@ describe("useGlobalRuntimeNoticeDock", () => {
         }),
       ]),
     );
+    expect(result.current.notices).toHaveLength(2);
+    expect(result.current.notices).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          severity: "error",
+          messageKey: "runtimeNotice.startup.taskFailed",
+          messageParams: {
+            phase: "active-workspace",
+            task: "Load active workspace threads",
+            workspace: "Moss X",
+            durationMs: 46,
+            reason: "failure",
+          },
+        }),
+        expect.objectContaining({
+          severity: "error",
+          messageKey: "runtimeNotice.startup.commandFailed",
+          messageParams: {
+            command: "list_threads",
+            workspace: "Moss X",
+            durationMs: 0,
+          },
+        }),
+      ]),
+    );
   });
 
   it("deduplicates repeated successful startup command notices in a short time bucket", async () => {
@@ -485,7 +532,7 @@ describe("useGlobalRuntimeNoticeDock", () => {
       await traceStartupCommand("get_git_status", { workspaceId: "ws-git" }, async () => "ok");
     });
 
-    const commandNotices = result.current.notices.filter(
+    const commandNotices = getGlobalRuntimeNoticesSnapshot().filter(
       (notice) => notice.messageKey === "runtimeNotice.startup.commandCompleted",
     );
     expect(commandNotices).toHaveLength(1);
@@ -499,6 +546,7 @@ describe("useGlobalRuntimeNoticeDock", () => {
         },
       }),
     );
+    expect(result.current.notices).toEqual([]);
   });
 
   it("groups repeated successful startup commands by project without merging unrelated logs", async () => {
@@ -532,7 +580,7 @@ describe("useGlobalRuntimeNoticeDock", () => {
       await traceStartupCommand("list_threads", { workspaceId: "ws-alpha" }, async () => "ok");
     });
 
-    const commandNotices = result.current.notices.filter(
+    const commandNotices = getGlobalRuntimeNoticesSnapshot().filter(
       (notice) => notice.messageKey === "runtimeNotice.startup.commandCompleted",
     );
     expect(commandNotices).toHaveLength(3);
@@ -573,6 +621,7 @@ describe("useGlobalRuntimeNoticeDock", () => {
         }),
       }),
     );
+    expect(result.current.notices).toEqual([]);
   });
 
   it("does not mirror old startup trace events again after remount", async () => {
@@ -594,20 +643,20 @@ describe("useGlobalRuntimeNoticeDock", () => {
     });
 
     expect(
-      firstRender.result.current.notices.filter(
+      getGlobalRuntimeNoticesSnapshot().filter(
         (notice) => notice.messageKey === "runtimeNotice.startup.commandCompleted",
       ),
     ).toHaveLength(1);
 
     firstRender.unmount();
-    const secondRender = renderHook(() => useGlobalRuntimeNoticeDock([workspace]));
+    renderHook(() => useGlobalRuntimeNoticeDock([workspace]));
 
     await act(async () => {
       await tauriMocks.getRuntimePoolSnapshot.mock.results[1]?.value;
     });
 
     expect(
-      secondRender.result.current.notices.filter(
+      getGlobalRuntimeNoticesSnapshot().filter(
         (notice) => notice.messageKey === "runtimeNotice.startup.commandCompleted",
       ),
     ).toHaveLength(1);
@@ -617,7 +666,7 @@ describe("useGlobalRuntimeNoticeDock", () => {
     });
 
     expect(
-      secondRender.result.current.notices.filter(
+      getGlobalRuntimeNoticesSnapshot().filter(
         (notice) => notice.messageKey === "runtimeNotice.startup.commandCompleted",
       ),
     ).toHaveLength(2);
@@ -648,7 +697,7 @@ describe("useGlobalRuntimeNoticeDock", () => {
       await traceStartupCommand("list_threads", { workspaceId: "ws-alpha" }, async () => "ok");
     });
 
-    const successfulNotices = result.current.notices.filter(
+    const successfulNotices = getGlobalRuntimeNoticesSnapshot().filter(
       (notice) => notice.messageKey === "runtimeNotice.startup.commandCompleted",
     );
     const failedNotices = result.current.notices.filter(

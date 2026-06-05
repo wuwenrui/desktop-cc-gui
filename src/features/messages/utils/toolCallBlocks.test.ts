@@ -90,6 +90,12 @@ describe("parseToolCallBlocks", () => {
     expect(parseToolCallBlocks(value)).toEqual([{ kind: "md", content: value }]);
   });
 
+  it("does not promote streaming XML after an unclosed inline code delimiter", () => {
+    const value = "Document `<function_calls><invoke name=\"example\">";
+
+    expect(parseToolCallBlocks(value)).toEqual([{ kind: "md", content: value }]);
+  });
+
   it("parses multiple tool-call blocks in one message", () => {
     const blocks = parseToolCallBlocks([
       "<invoke name=\"first\"></invoke>",

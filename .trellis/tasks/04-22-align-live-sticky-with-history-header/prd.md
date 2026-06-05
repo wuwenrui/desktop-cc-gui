@@ -14,11 +14,11 @@
 
 ## Acceptance Criteria
 
-- [ ] realtime 不再渲染 `.messages-live-sticky-user-message`
-- [ ] realtime/history 都通过同一条 sticky header 出口渲染
-- [ ] realtime 回看更早 rendered sections 时，sticky header 会按 history-style handoff 接棒
-- [ ] trimmed live latest question 仍然可以驱动 sticky header
-- [ ] `Messages.live-behavior.test.tsx` 通过
+- [x] realtime 不再渲染 `.messages-live-sticky-user-message`
+- [x] realtime/history 都通过同一条 sticky header 出口渲染
+- [x] realtime 回看更早 rendered sections 时，sticky header 会按 history-style handoff 接棒
+- [x] trimmed live latest question 仍然可以驱动 sticky header
+- [x] `Messages.live-behavior.test.tsx` 通过
 
 ## Technical Notes
 

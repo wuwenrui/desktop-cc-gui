@@ -1565,6 +1565,9 @@ export function useAppServerEvents(
         const runtimeGeneration = asString(
           params.runtimeGeneration ?? params.runtime_generation,
         ).trim();
+        const shutdownSource = asString(
+          params.shutdownSource ?? params.shutdown_source,
+        ).trim();
         const rawRuntimeProcessId = Number(
           params.runtimeProcessId ?? params.runtime_process_id ?? 0,
         );
@@ -1591,7 +1594,18 @@ export function useAppServerEvents(
           ...runtimeIdentityPayload,
         });
 
-        if (reasonCode === "manual_shutdown") {
+        const isRecoverableRuntimeShutdownSource =
+          shutdownSource === "stale_reuse_cleanup" ||
+          shutdownSource === "internal_replacement";
+        const isBenignManualShutdown =
+          reasonCode === "manual_shutdown" &&
+          !isRecoverableRuntimeShutdownSource &&
+          !hadActiveLease &&
+          normalizedPendingRequestCount === 0 &&
+          affectedThreadIds.length === 0 &&
+          affectedTurnIds.length === 0 &&
+          affectedActiveTurns.size === 0;
+        if (isBenignManualShutdown) {
           return;
         }
 

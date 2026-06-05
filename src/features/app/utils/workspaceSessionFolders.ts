@@ -26,9 +26,71 @@ export type WorkspaceSessionFolderMoveTarget = {
   label: string;
 };
 
+export type WorkspaceSessionFolderWorkspaceProjection = {
+  projectedRows: WorkspaceSessionThreadRow[];
+  folderIdBySessionId: ReadonlyMap<string, string | null>;
+  folderProjection: WorkspaceSessionFolderProjection;
+  folderMoveTargets: WorkspaceSessionFolderMoveTarget[];
+};
+
+export type WorkspaceSessionFolderWorkspaceProjectionCacheEntry = {
+  folders: WorkspaceSessionFolder[];
+  rows: WorkspaceSessionThreadRow[];
+  folderOverrides: Readonly<Record<string, string | null | undefined>>;
+  rootLabel: string;
+  signature: string;
+  projection: WorkspaceSessionFolderWorkspaceProjection;
+};
+
 function normalizeFolderId(value: string | null | undefined): string | null {
   const normalized = value?.trim();
   return normalized ? normalized : null;
+}
+
+function buildWorkspaceProjectionSignature(params: {
+  folders: WorkspaceSessionFolder[];
+  rows: WorkspaceSessionThreadRow[];
+  folderOverrides: Readonly<Record<string, string | null | undefined>>;
+  rootLabel: string;
+}) {
+  const folderSignature = params.folders
+    .map((folder) =>
+      [
+        folder.id,
+        normalizeFolderId(folder.parentId) ?? "",
+        folder.name,
+        folder.createdAt,
+        folder.updatedAt,
+      ].join("\u001f"),
+    )
+    .join("\u001e");
+  const rowSignature = params.rows
+    .map((row) =>
+      [
+        row.thread.id,
+        row.depth,
+        row.hasChildren ? "1" : "0",
+        normalizeFolderId(row.thread.folderId) ?? "",
+        row.thread.parentThreadId ?? "",
+        row.thread.autoSession?.visibility ?? "",
+      ].join("\u001f"),
+    )
+    .join("\u001e");
+  const overrideSignature = Object.keys(params.folderOverrides)
+    .sort()
+    .map(
+      (threadId) =>
+        `${threadId}\u001f${
+          normalizeFolderId(params.folderOverrides[threadId]) ?? ""
+        }`,
+    )
+    .join("\u001e");
+  return [
+    params.rootLabel,
+    folderSignature,
+    rowSignature,
+    overrideSignature,
+  ].join("\u001d");
 }
 
 function sortFolders(folders: WorkspaceSessionFolder[]) {
@@ -170,4 +232,94 @@ export function buildWorkspaceSessionFolderMoveTargets(params: {
   };
   visit(null, "");
   return targets;
+}
+
+export function buildWorkspaceSessionFolderWorkspaceProjection(params: {
+  folders: WorkspaceSessionFolder[];
+  rows: WorkspaceSessionThreadRow[];
+  folderOverrides: Readonly<Record<string, string | null | undefined>>;
+  rootLabel: string;
+}): WorkspaceSessionFolderWorkspaceProjection {
+  const folderIdBySessionId = new Map<string, string | null>();
+  params.rows.forEach((row) => {
+    if (row.thread.autoSession?.visibility === "hidden") {
+      return;
+    }
+    if (row.thread.autoSession?.visibility === "system-auto") {
+      folderIdBySessionId.set(
+        row.thread.id,
+        WORKSPACE_SESSION_SYSTEM_AUTO_FOLDER_ID,
+      );
+      return;
+    }
+    if (Object.hasOwn(params.folderOverrides, row.thread.id)) {
+      folderIdBySessionId.set(
+        row.thread.id,
+        normalizeFolderId(params.folderOverrides[row.thread.id]),
+      );
+      return;
+    }
+    const folderId = normalizeFolderId(row.thread.folderId);
+    if (folderId) {
+      folderIdBySessionId.set(row.thread.id, folderId);
+    }
+  });
+
+  const projectedRows = params.rows.map((row) => {
+    if (!Object.hasOwn(params.folderOverrides, row.thread.id)) {
+      return row;
+    }
+    return {
+      ...row,
+      thread: {
+        ...row.thread,
+        folderId: params.folderOverrides[row.thread.id],
+      },
+    };
+  });
+
+  return {
+    projectedRows,
+    folderIdBySessionId,
+    folderProjection: buildWorkspaceSessionFolderProjection({
+      folders: params.folders,
+      rows: projectedRows,
+      folderIdBySessionId,
+    }),
+    folderMoveTargets: buildWorkspaceSessionFolderMoveTargets({
+      folders: params.folders,
+      rootLabel: params.rootLabel,
+    }),
+  };
+}
+
+export function getCachedWorkspaceSessionFolderWorkspaceProjection(
+  cacheByWorkspaceId: Map<string, WorkspaceSessionFolderWorkspaceProjectionCacheEntry>,
+  workspaceId: string,
+  params: {
+    folders: WorkspaceSessionFolder[];
+    rows: WorkspaceSessionThreadRow[];
+    folderOverrides: Readonly<Record<string, string | null | undefined>>;
+    rootLabel: string;
+  },
+): WorkspaceSessionFolderWorkspaceProjection {
+  const cached = cacheByWorkspaceId.get(workspaceId);
+  const signature = buildWorkspaceProjectionSignature(params);
+  if (
+    cached &&
+    cached.folders === params.folders &&
+    cached.rows === params.rows &&
+    cached.folderOverrides === params.folderOverrides &&
+    cached.rootLabel === params.rootLabel &&
+    cached.signature === signature
+  ) {
+    return cached.projection;
+  }
+  const projection = buildWorkspaceSessionFolderWorkspaceProjection(params);
+  cacheByWorkspaceId.set(workspaceId, {
+    ...params,
+    signature,
+    projection,
+  });
+  return projection;
 }

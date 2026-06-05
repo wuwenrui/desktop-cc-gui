@@ -1,4 +1,8 @@
+import { emitTo } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { BrowserSession } from "../types";
+
+const ACTIVE_BROWSER_CONTEXT_EVENT = "browser-agent://active-context";
 
 export type ActiveBrowserContextState = {
   workspaceId: string;
@@ -21,6 +25,23 @@ function emitActiveBrowserContextChange(): void {
   }
 }
 
+function broadcastActiveBrowserContextChange(): void {
+  try {
+    const label = getCurrentWindow().label ?? null;
+    if (label === "main") {
+      return;
+    }
+    void emitTo("main", ACTIVE_BROWSER_CONTEXT_EVENT, activeBrowserContextState).catch(() => {});
+  } catch {
+    // Non-Tauri test/runtime cases only need local listeners.
+  }
+}
+
+function applyActiveBrowserContextState(state: ActiveBrowserContextState | null): void {
+  activeBrowserContextState = state;
+  emitActiveBrowserContextChange();
+}
+
 export function getActiveBrowserContext(): ActiveBrowserContextState | null {
   return activeBrowserContextState;
 }
@@ -38,6 +59,7 @@ export function setActiveBrowserContextSession(
   };
   activeBrowserContextState = nextState;
   emitActiveBrowserContextChange();
+  broadcastActiveBrowserContextChange();
   return nextState;
 }
 
@@ -55,6 +77,7 @@ export function clearActiveBrowserContextSession(
   }
   activeBrowserContextState = null;
   emitActiveBrowserContextChange();
+  broadcastActiveBrowserContextChange();
 }
 
 export function subscribeActiveBrowserContext(
@@ -64,5 +87,35 @@ export function subscribeActiveBrowserContext(
   listener(activeBrowserContextState);
   return () => {
     activeBrowserContextListeners.delete(listener);
+  };
+}
+
+export function subscribeActiveBrowserContextBridge(): () => void {
+  let disposed = false;
+  let unlisten: (() => void) | null = null;
+
+  try {
+    getCurrentWindow()
+      .listen<ActiveBrowserContextState | null>(ACTIVE_BROWSER_CONTEXT_EVENT, (event) => {
+        if (disposed) {
+          return;
+        }
+        applyActiveBrowserContextState(event.payload);
+      })
+      .then((handler) => {
+        if (disposed) {
+          handler();
+          return;
+        }
+        unlisten = handler;
+      })
+      .catch(() => {});
+  } catch {
+    // Non-Tauri test/runtime cases only need local state.
+  }
+
+  return () => {
+    disposed = true;
+    unlisten?.();
   };
 }

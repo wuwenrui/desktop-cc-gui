@@ -2,6 +2,112 @@
 
 ---
 
+##### **2026年6月5日（v0.5.6）**
+
+中文：
+
+✨ Features
+- 新增 Project Map 查询关联工作台，支持统一查询、近期活动、Advisor Hints、关联解释、快速过滤和本地历史，让结构图保持主舞台的同时可以折叠查看证据与活动上下文
+- 新增 Project Map 图上高亮、节点聚焦和证据反查体验，用户可以从查询结果、活动记录或证据 chip 快速回到对应结构节点，减少在图谱、详情和证据面板之间来回定位的成本
+- 新增工作区会话拉取模式切换，支持在默认相关会话模式与当前工作区模式之间选择，让会话列表可以按更窄范围拉取和分页
+- 新增会话归因模式设置项，在 Session Management 中提供单选切换、当前生效模式提示和保存失败反馈，让会话范围配置更清晰可控
+
+🔧 Improvements
+- 优化运行时交互性能，收紧会话列表、工作区目录、Composer 适配层和状态面板的数据流，降低长列表、恢复和多会话场景下的卡顿
+- 优化长列表虚拟化与会话恢复路径，减少线程列表、消息时间线和工作区 session catalog 在大量数据下的重复渲染与阻塞式计算
+- 优化 Composer 双视图适配和状态面板数据聚合，让输入区、会话活动和运行时状态在高频更新时保持更稳定的交互响应
+- 优化 Project Map 路径、行号、结果数量和证据 chip 的边界处理，避免异常路径、极值输入和同名异目录证据造成错误匹配或折叠
+- 优化工作区会话目录投影和分页加载链路，确保当前工作区模式作为独立配置生效，同时不改变默认相关会话模式的既有行为
+- 优化会话归因配置的持久化与坏值回退，避免异常 settings 数据导致界面闪回、读取失败或模式状态漂移
+- 补齐 v0.5.6 性能基线与运行时证据门禁记录，让交互性能变化具备可追踪的发布证据
+- 升级应用版本号到 `0.5.6`，同步前端包配置与 Tauri 配置
+
+🐛 Fixes
+- 修复 WebView2 下消息时间线图片造成的内存压力问题，通过消息媒体块与时间线虚拟化边界降低大量图片场景的内存占用和滚动风险
+- 修复 rich content 图片消息在长会话中触发过高内存占用的问题，避免大量图片、媒体块和虚拟列表组合时放大 WebView2 渲染压力
+- 修复 Claude 启动时提示词进入命令行参数的问题，改为通过更安全的消息内容链路传递，降低 shell escaping 异常和敏感提示词暴露风险
+- 修复 Claude realtime stream 可见性相关的提示词解析边界，避免参数拼接方式影响流式消息内容识别和后续恢复
+
+English:
+
+✨ Features
+- Add a Project Map query and association workbench with unified search, recent activity, Advisor Hints, association explanations, quick filters, and local history while keeping the structure graph as the main workspace
+- Add Project Map graph highlighting, node focus, and evidence backtracking so users can jump from search results, activity records, or evidence chips back to the matching structure node
+- Add a workspace session attribution mode setting so session lists can switch between the default related-session scope and a narrower current-workspace scope
+- Add Session Management controls for attribution mode selection, active-mode hints, and save-failure feedback so session scope configuration is easier to understand and recover
+
+🔧 Improvements
+- Improve runtime interaction performance by tightening data flow across the thread list, workspace catalog, Composer adapter, and status panel, reducing jank in long-list, recovery, and multi-session scenarios
+- Improve long-list virtualization and session recovery paths to reduce repeated rendering and blocking computation across thread lists, message timelines, and workspace session catalogs
+- Improve Composer dual-view adaptation and status-panel aggregation so input, session activity, and runtime status remain responsive during high-frequency updates
+- Improve Project Map boundary handling for paths, line numbers, result limits, and evidence chips so unsupported paths, extreme inputs, and same-name files in different folders are not matched or folded incorrectly
+- Improve workspace session catalog projection and pagination so current-workspace mode works as an independent setting without changing the default related-session behavior
+- Improve session attribution persistence and invalid-value fallback to avoid UI flicker, settings read failures, or mode drift from malformed configuration
+- Add v0.5.6 performance baselines and runtime evidence-gate records so interaction-performance changes remain traceable for release review
+- Bump app version to `0.5.6` across frontend package metadata and Tauri configuration
+
+🐛 Fixes
+- Fix WebView2 message-timeline image memory pressure by tightening media-block and timeline virtualization boundaries for image-heavy conversations
+- Fix rich-content image messages causing excessive memory pressure in long conversations, especially when many images, media blocks, and virtualized rows are rendered together
+- Fix Claude launch prompts leaking into command-line arguments by routing prompt content through a safer message-content path, reducing shell-escaping failures and sensitive prompt exposure risk
+- Fix Claude realtime-stream prompt parsing boundaries so argument construction no longer interferes with streaming message-content recognition and recovery
+
+---
+
+##### **2026年6月3日（v0.5.5）**
+
+中文：
+
+✨ Features
+- 新增文件树复制、粘贴与重命名能力，让工作区文件管理可以在应用内完成更多常用操作
+- 新增 Browser Agent 上下文关联与证据桥接链路，将浏览器 dock、页面上下文和任务中心证据串联到同一条可审计路径
+- 新增 Agent Task 任务编排中心运行队列，支持浏览器代理与后续自动化任务进入统一队列管理
+- 重塑 Project Map 图谱优先知识地图体验，让知识地图以图谱浏览、证据核对和候选整理作为主要交互入口
+
+🔧 Improvements
+- 优化 Browser Dock Phase 3 OpenSpec 提案文档与中文可读性，明确浏览器上下文、证据桥接和任务编排的后续边界
+- 优化大文件治理基线，清理历史硬债并收紧构建产物、运行态文件和仓库治理噪音的边界
+- 优化 Project Map 面板批量测试隔离和视图交互门禁，降低图谱整理体验在测试与运行时的状态漂移
+- 优化 Browser Dock 设置入口，接入可见性开关，让用户可以控制内嵌浏览器 dock 的显示状态
+- 升级应用版本号到 `0.5.5`，同步前端包配置与 Tauri 配置
+
+🐛 Fixes
+- 修复文件树删除后残留节点未清理的问题，避免已删除文件或目录继续停留在树视图中
+- 修复文件树 ignored 文件夹置灰展示问题，让忽略状态在文件浏览中更准确可见
+- 修复多 WebView 外部拖拽断链和主 WebView 拖拽转发问题，恢复 Composer 与文件入口的拖拽交互
+- 修复 Browser Agent 上下文附件类型契约问题，并收窄浏览器自动打开触发条件，减少误触发和附件解析失败
+- 修复 Runtime Phase2b 前台残留清理、stale cleanup 结束事件和被动读取拉起 Codex 进程的问题，降低后台运行态副作用
+- 修复 release DMG 布局回退包发布风险，并回滚 DMG 创建脚本到 v0.5.4 的稳定路径
+- 修复 Project Map 视图交互与门禁噪音问题，降低图谱优先体验中的误报和交互不稳
+- 修复打包构建阻断与治理边界问题，确保发布构建链路可以继续收口
+
+English:
+
+✨ Features
+- Add file-tree copy, paste, and rename actions so more workspace file-management flows can be completed inside the app
+- Add Browser Agent context linking and evidence bridging so browser dock state, page context, and Task Center evidence share an auditable path
+- Add the Agent Task orchestration queue for managing Browser Agent work and future automation tasks through a unified queue
+- Rework Project Map into a graph-first knowledge-map experience centered on graph browsing, evidence review, and candidate organization
+
+🔧 Improvements
+- Improve the Browser Dock Phase 3 OpenSpec proposal and Chinese readability, clarifying follow-up boundaries for browser context, evidence bridging, and task orchestration
+- Improve large-file governance baselines by cleaning up historical debt and tightening boundaries for build artifacts, runtime files, and repository-governance noise
+- Improve Project Map bulk test isolation and view-interaction gates to reduce state drift across graph organization tests and runtime behavior
+- Improve Browser Dock settings by wiring a visibility toggle so users can control whether the embedded browser dock is shown
+- Bump app version to `0.5.5` across frontend package metadata and Tauri configuration
+
+🐛 Fixes
+- Fix stale file-tree nodes remaining after delete operations so removed files or directories no longer stay visible
+- Fix ignored-folder dimming in the file tree so ignore state is represented more accurately while browsing files
+- Fix external drag-and-drop across multiple WebViews and restore main WebView drag forwarding for Composer and file entrypoints
+- Fix the Browser Agent context-attachment type contract and narrow automatic browser-open triggers to reduce false starts and attachment parsing failures
+- Fix Runtime Phase2b foreground residue cleanup, stale-cleanup completion events, and passive reads starting Codex processes to reduce runtime side effects
+- Fix release risk from regressed DMG layout packages and roll the DMG creation script back to the stable v0.5.4 path
+- Fix Project Map view interactions and gate noise to reduce false positives and unstable behavior in the graph-first experience
+- Fix packaging build blockers and governance boundaries so the release build path can close cleanly
+
+---
+
 ##### **2026年5月29日（v0.5.4）**
 
 中文：

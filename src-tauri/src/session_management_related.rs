@@ -43,9 +43,20 @@ pub(crate) async fn list_project_related_sessions_core(
 
     let normalized_query = query.unwrap_or_default();
     let scan_mode = build_catalog_scan_mode(&normalized_query, cursor.as_deref(), limit);
-    let (global_entries, partial_sources) =
-        build_global_engine_catalog_entries(engine_manager, workspaces, storage_path, scan_mode)
-            .await?;
+    let engine_filter = normalized_query
+        .engine
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_ascii_lowercase);
+    let (global_entries, partial_sources) = build_global_engine_catalog_entries(
+        engine_manager,
+        workspaces,
+        storage_path,
+        scan_mode,
+        engine_filter.as_deref(),
+    )
+    .await?;
     let related_entries = global_entries
         .into_iter()
         .filter_map(|entry| {

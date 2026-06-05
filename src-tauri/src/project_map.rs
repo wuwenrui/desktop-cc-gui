@@ -29,6 +29,7 @@ pub(crate) struct ProjectMapReadResponse {
     evidence: HashMap<String, Value>,
     runs: HashMap<String, Value>,
     diagrams: Option<Value>,
+    relations: Option<Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -195,6 +196,7 @@ fn validate_relative_project_map_path(path: &str) -> Result<PathBuf, String> {
         [dir, file] if matches!(dir.as_str(), "runs" | "candidates" | "evidence") => {
             is_safe_project_map_json_file(file)
         }
+        [dir, file] if dir == "relations" => file == "latest.json",
         [dir, file] if dir == "diagrams" => {
             file == "manifest.json"
                 || (file.ends_with(".md")
@@ -339,6 +341,7 @@ fn create_backup(root: &Path) -> Result<(), String> {
         "settings.json",
         "memory-ingestion/cursor.json",
         "memory-ingestion/processed.json",
+        "relations/latest.json",
     ] {
         let source = root.join(relative);
         if source.is_file() {
@@ -380,6 +383,7 @@ pub(crate) async fn project_map_read(
         evidence: read_json_dir(&root.join("evidence")),
         runs: read_json_dir(&root.join("runs")),
         diagrams: read_json(&root.join("diagrams").join("manifest.json")),
+        relations: read_json(&root.join("relations").join("latest.json")),
     })
 }
 
@@ -451,6 +455,7 @@ mod tests {
         assert!(validate_relative_project_map_path("lenses/api-domain/nodes.json").is_ok());
         assert!(validate_relative_project_map_path("runs/latest.json").is_ok());
         assert!(validate_relative_project_map_path("evidence/latest.json").is_ok());
+        assert!(validate_relative_project_map_path("relations/latest.json").is_ok());
         assert!(validate_relative_project_map_path("diagrams/manifest.json").is_ok());
         assert!(validate_relative_project_map_path("diagrams/auth-service-flow.md").is_ok());
         assert!(validate_relative_project_map_path("../src/main.rs").is_err());
@@ -461,6 +466,8 @@ mod tests {
         assert!(validate_relative_project_map_path("lenses/con.audit/nodes.json").is_err());
         assert!(validate_relative_project_map_path("runs/archive/latest.json").is_err());
         assert!(validate_relative_project_map_path("runs/con.json").is_err());
+        assert!(validate_relative_project_map_path("relations/archive/latest.json").is_err());
+        assert!(validate_relative_project_map_path("relations/Latest.json").is_err());
         assert!(validate_relative_project_map_path("diagrams/auth/service.md").is_err());
         assert!(validate_relative_project_map_path("diagrams/auth-service-flow.json").is_err());
         assert!(validate_relative_project_map_path("diagrams/CON.md").is_err());

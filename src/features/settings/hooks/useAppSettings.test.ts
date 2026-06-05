@@ -87,6 +87,33 @@ describe("useAppSettings", () => {
     expect(result.current.settings.performanceCompatibilityModeEnabled).toBe(
       false,
     );
+    expect(result.current.settings.sessionAttributionMode).toBe("related");
+  });
+
+  it("normalizes invalid session attribution mode to related", async () => {
+    getAppSettingsMock.mockResolvedValue({
+      sessionAttributionMode: "invalid",
+    } as unknown as AppSettings);
+
+    const { result } = renderHook(() => useAppSettings());
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.settings.sessionAttributionMode).toBe("related");
+  });
+
+  it("preserves workspace-only session attribution mode", async () => {
+    getAppSettingsMock.mockResolvedValue({
+      sessionAttributionMode: "workspace-only",
+    } as AppSettings);
+
+    const { result } = renderHook(() => useAppSettings());
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.settings.sessionAttributionMode).toBe(
+      "workspace-only",
+    );
   });
 
   it("preserves explicitly enabled performance compatibility mode", async () => {

@@ -8,6 +8,7 @@ import {
   listWorkspaceSessions,
 } from "../../../../../services/tauri";
 import {
+  SESSION_CATALOG_PAGE_SIZE,
   buildWorkspaceSessionSelectionKey,
   useWorkspaceSessionCatalog,
   type WorkspaceSessionCatalogFilters,
@@ -101,9 +102,10 @@ describe("useWorkspaceSessionCatalog", () => {
           engine: null,
           status: "active",
           folderId: null,
+          sessionAttributionMode: "related",
         },
         cursor: null,
-        limit: 9_999,
+        limit: SESSION_CATALOG_PAGE_SIZE,
       });
     });
 
@@ -146,8 +148,8 @@ describe("useWorkspaceSessionCatalog", () => {
         },
       ],
       nextCursor: "stable:next",
-      requestedLimit: 9_999,
-      effectiveLimit: 9_999,
+      requestedLimit: SESSION_CATALOG_PAGE_SIZE,
+      effectiveLimit: SESSION_CATALOG_PAGE_SIZE,
       limitCapped: false,
       partialSource: null,
     });
@@ -163,12 +165,216 @@ describe("useWorkspaceSessionCatalog", () => {
     await waitFor(() => {
       expect(result.current.entries).toHaveLength(1);
     });
-    expect(result.current.nextCursor).toBeNull();
+    expect(result.current.nextCursor).toBe("stable:next");
     expect(result.current.pageLimit).toEqual({
-      requestedLimit: 9_999,
-      effectiveLimit: 9_999,
+      requestedLimit: SESSION_CATALOG_PAGE_SIZE,
+      effectiveLimit: SESSION_CATALOG_PAGE_SIZE,
       limitCapped: false,
     });
+  });
+
+  it("dedupes equivalent in-flight catalog page requests", async () => {
+    vi.mocked(listWorkspaceSessions).mockResolvedValueOnce({
+      data: [
+        {
+          sessionId: "codex:shared",
+          workspaceId: "ws-1",
+          engine: "codex",
+          title: "Shared result",
+          updatedAt: 1,
+          threadKind: "native",
+        },
+      ],
+      nextCursor: "cursor:next",
+      partialSource: null,
+    });
+
+    const { result: firstResult } = renderHook(() =>
+      useWorkspaceSessionCatalog({
+        mode: "project",
+        workspaceId: "ws-1",
+        filters: DEFAULT_FILTERS,
+        source: "strict",
+      }),
+    );
+    const { result: secondResult } = renderHook(() =>
+      useWorkspaceSessionCatalog({
+        mode: "project",
+        workspaceId: "ws-1",
+        filters: { ...DEFAULT_FILTERS },
+        source: "strict",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(firstResult.current.entries[0]?.sessionId).toBe("codex:shared");
+      expect(secondResult.current.entries[0]?.sessionId).toBe("codex:shared");
+    });
+
+    expect(listWorkspaceSessions).toHaveBeenCalledTimes(1);
+    expect(firstResult.current.nextCursor).toBe("cursor:next");
+    expect(secondResult.current.nextCursor).toBe("cursor:next");
+  });
+
+  it("does not dedupe catalog requests across attribution modes or filters", async () => {
+    vi.mocked(listWorkspaceSessions).mockResolvedValue({
+      data: [],
+      nextCursor: null,
+      partialSource: null,
+    });
+
+    renderHook(() =>
+      useWorkspaceSessionCatalog({
+        mode: "project",
+        workspaceId: "ws-1",
+        filters: DEFAULT_FILTERS,
+        sessionAttributionMode: "workspace-only",
+        source: "strict",
+      }),
+    );
+    renderHook(() =>
+      useWorkspaceSessionCatalog({
+        mode: "project",
+        workspaceId: "ws-1",
+        filters: { ...DEFAULT_FILTERS, keyword: "agent" },
+        sessionAttributionMode: "workspace-only",
+        source: "strict",
+      }),
+    );
+    renderHook(() =>
+      useWorkspaceSessionCatalog({
+        mode: "project",
+        workspaceId: "ws-1",
+        filters: DEFAULT_FILTERS,
+        sessionAttributionMode: "related",
+        source: "strict",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(listWorkspaceSessions).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  it("passes workspace-only attribution mode into project catalog queries", async () => {
+    vi.mocked(listWorkspaceSessions).mockResolvedValueOnce({
+      data: [],
+      nextCursor: null,
+      partialSource: null,
+    });
+
+    renderHook(() =>
+      useWorkspaceSessionCatalog({
+        mode: "project",
+        workspaceId: "ws-1",
+        filters: DEFAULT_FILTERS,
+        sessionAttributionMode: "workspace-only",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(listWorkspaceSessions).toHaveBeenCalledWith("ws-1", {
+        query: {
+          keyword: null,
+          engine: null,
+          status: "active",
+          folderId: null,
+          sessionAttributionMode: "workspace-only",
+        },
+        cursor: null,
+        limit: SESSION_CATALOG_PAGE_SIZE,
+      });
+    });
+  });
+
+  it("ignores stale responses when filters change before the first request resolves", async () => {
+    const pendingResponses: Array<
+      (value: {
+        data: Array<{
+          sessionId: string;
+          workspaceId: string;
+          engine: string;
+          title: string;
+          updatedAt: number;
+          threadKind: string;
+        }>;
+        nextCursor: string | null;
+        partialSource: string | null;
+      }) => void
+    > = [];
+
+    vi.mocked(listWorkspaceSessions).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          pendingResponses.push(resolve);
+        }),
+    );
+
+    const { result, rerender } = renderHook(
+      ({ filters }) =>
+        useWorkspaceSessionCatalog({
+          mode: "project",
+          workspaceId: "ws-1",
+          filters,
+        }),
+      {
+        initialProps: {
+          filters: { ...DEFAULT_FILTERS, keyword: "old" },
+        },
+      },
+    );
+
+    await waitFor(() => {
+      expect(listWorkspaceSessions).toHaveBeenCalledTimes(1);
+    });
+
+    rerender({ filters: { ...DEFAULT_FILTERS, keyword: "new" } });
+
+    await waitFor(() => {
+      expect(listWorkspaceSessions).toHaveBeenCalledTimes(2);
+    });
+
+    await act(async () => {
+      pendingResponses[1]?.({
+        data: [
+          {
+            sessionId: "session-new",
+            workspaceId: "ws-1",
+            engine: "codex",
+            title: "New result",
+            updatedAt: 2,
+            threadKind: "native",
+          },
+        ],
+        nextCursor: null,
+        partialSource: null,
+      });
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(result.current.entries[0]?.sessionId).toBe("session-new");
+    });
+
+    await act(async () => {
+      pendingResponses[0]?.({
+        data: [
+          {
+            sessionId: "session-old",
+            workspaceId: "ws-1",
+            engine: "codex",
+            title: "Old stale result",
+            updatedAt: 1,
+            threadKind: "native",
+          },
+        ],
+        nextCursor: null,
+        partialSource: null,
+      });
+      await Promise.resolve();
+    });
+
+    expect(result.current.entries[0]?.sessionId).toBe("session-new");
   });
 
   it("groups batch archive requests by owner workspace", async () => {
@@ -413,9 +619,10 @@ describe("useWorkspaceSessionCatalog", () => {
           engine: "claude",
           status: "active",
           folderId: null,
+          sessionAttributionMode: "related",
         },
         cursor: null,
-        limit: 9_999,
+        limit: SESSION_CATALOG_PAGE_SIZE,
       });
     });
 
@@ -497,9 +704,10 @@ describe("useWorkspaceSessionCatalog", () => {
           engine: null,
           status: "active",
           folderId: null,
+          sessionAttributionMode: "related",
         },
         cursor: null,
-        limit: 9_999,
+        limit: SESSION_CATALOG_PAGE_SIZE,
       });
     });
 
@@ -544,9 +752,10 @@ describe("useWorkspaceSessionCatalog", () => {
           engine: "claude",
           status: "active",
           folderId: null,
+          sessionAttributionMode: "related",
         },
         cursor: null,
-        limit: 9_999,
+        limit: SESSION_CATALOG_PAGE_SIZE,
       });
     });
 

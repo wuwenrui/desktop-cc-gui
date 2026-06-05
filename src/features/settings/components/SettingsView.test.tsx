@@ -1982,9 +1982,10 @@ describe("SettingsView Session management", () => {
           engine: null,
           status: "active",
           folderId: null,
+          sessionAttributionMode: "related",
         },
         cursor: null,
-        limit: 9_999,
+        limit: 100,
       });
     });
   });
@@ -2059,9 +2060,10 @@ describe("SettingsView Session management", () => {
           engine: null,
           status: "active",
           folderId: null,
+          sessionAttributionMode: "related",
         },
         cursor: null,
-        limit: 9_999,
+        limit: 100,
       });
     });
     expect(await screen.findByText("Session A")).toBeTruthy();

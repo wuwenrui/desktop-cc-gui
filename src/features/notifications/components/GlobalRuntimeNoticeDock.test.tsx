@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { GlobalRuntimeNoticeDock } from "./GlobalRuntimeNoticeDock";
 
 describe("GlobalRuntimeNoticeDock", () => {
-  it("renders the minimized entry as a compact exclamation trigger when notices exist", () => {
+  it("renders the minimized entry as a compact exclamation trigger when error notices exist", () => {
     const onExpand = vi.fn();
 
     render(
@@ -12,7 +12,7 @@ describe("GlobalRuntimeNoticeDock", () => {
         notices={[
           {
             id: "notice-1",
-            severity: "info",
+            severity: "error",
             category: "bootstrap",
             messageKey: "runtimeNotice.bootstrap.starting",
             messageParams: {},
@@ -22,7 +22,7 @@ describe("GlobalRuntimeNoticeDock", () => {
           },
         ]}
         visibility="minimized"
-        status="streaming"
+        status="has-error"
         onExpand={onExpand}
         onMinimize={vi.fn()}
         onClear={vi.fn()}
@@ -155,7 +155,7 @@ describe("GlobalRuntimeNoticeDock", () => {
     expect(onMinimize).toHaveBeenCalledTimes(1);
   });
 
-  it("renders startup loading notices with the expanded dock surface", () => {
+  it("filters non-error startup loading notices from the expanded dock surface", () => {
     render(
       <GlobalRuntimeNoticeDock
         notices={[
@@ -183,8 +183,11 @@ describe("GlobalRuntimeNoticeDock", () => {
     );
 
     expect(
-      screen.getByText("后台加载开始：Load active workspace threads（active-workspace / ws-1）"),
-    ).toBeTruthy();
+      screen.queryByText("后台加载开始：Load active workspace threads（active-workspace / ws-1）"),
+    ).toBeNull();
+    expect(screen.queryByText("运行中")).toBeNull();
+    expect(screen.getByText("空闲")).toBeTruthy();
+    expect(screen.getByText("暂无运行时提示")).toBeTruthy();
     expect(document.querySelector(".global-runtime-notice-dock")).toBeTruthy();
   });
 });

@@ -38,9 +38,25 @@ export type TaskRunBrowserEvidenceRef = {
   redactedKinds?: string[];
   codeCandidates?: Array<{
     filePath: string;
-    reason: "route_match" | "visible_text_match" | "landmark_match" | "manual_hint";
+    reason:
+      | "route_match"
+      | "file_name_match"
+      | "visible_text_match"
+      | "heading_match"
+      | "button_label_match"
+      | "form_label_match"
+      | "aria_label_match"
+      | "test_id_match"
+      | "component_symbol_match"
+      | "manual_hint";
     confidence: "high" | "medium" | "low";
     matchedText?: string | null;
+    sourceEvidence?: string[];
+    explanation?: string;
+    openAction?: {
+      kind: "open_file";
+      filePath: string;
+    } | null;
   }>;
 };
 
@@ -53,15 +69,17 @@ export type TaskRunRecoveryAction =
 
 export type TaskRunDefinitionRef = {
   taskId: string;
-  source: "kanban";
+  source: "kanban" | "orchestration";
   workspaceId: string;
   title?: string | null;
+  orchestrationTaskId?: string | null;
 };
 
 export type TaskRunRecord = {
   runId: string;
   task: TaskRunDefinitionRef;
   engine: Extract<EngineType, "claude" | "codex" | "gemini">;
+  model?: string | null;
   status: TaskRunStatus;
   trigger: TaskRunTrigger;
   linkedThreadId?: string | null;
@@ -90,6 +108,7 @@ export type KanbanLatestRunSummary = {
   status: TaskRunStatus;
   trigger: TaskRunTrigger;
   engine: Extract<EngineType, "claude" | "codex" | "gemini">;
+  model?: string | null;
   linkedThreadId?: string | null;
   latestOutputSummary?: string | null;
   blockedReason?: string | null;
@@ -103,7 +122,10 @@ export type CreateTaskRunInput = {
   taskId: string;
   workspaceId: string;
   taskTitle?: string | null;
+  taskSource?: TaskRunDefinitionRef["source"];
+  orchestrationTaskId?: string | null;
   engine: EngineType;
+  model?: string | null;
   trigger: TaskRunTrigger;
   linkedThreadId?: string | null;
   parentRunId?: string | null;

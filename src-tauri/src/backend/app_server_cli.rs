@@ -436,7 +436,7 @@ pub fn resolve_safe_opencode_binary(custom_bin: Option<&str>) -> Result<PathBuf,
     Ok(candidate)
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, test))]
 fn prefer_windows_executable_variant(path: PathBuf) -> PathBuf {
     let ext = path
         .extension()
@@ -1345,6 +1345,27 @@ mod tests {
         assert!(launch_context_uses_command_wrapper(&bat_wrapper));
         assert!(launch_context_uses_command_wrapper(&ps1_wrapper));
         assert!(!launch_context_uses_command_wrapper(&exe_binary));
+    }
+
+    #[test]
+    fn prefer_windows_executable_variant_prefers_stable_wrapper_before_ps1() {
+        let root =
+            std::env::temp_dir().join(format!("ccgui-wrapper-preference-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).expect("create temp dir");
+        let base = root.join("claude");
+        let cmd_path = root.join("claude.cmd");
+        let exe_path = root.join("claude.exe");
+        let ps1_path = root.join("claude.ps1");
+        std::fs::write(&ps1_path, "").expect("write ps1");
+        std::fs::write(&exe_path, "").expect("write exe");
+        std::fs::write(&cmd_path, "").expect("write cmd");
+
+        assert_eq!(prefer_windows_executable_variant(base), cmd_path);
+        assert_eq!(
+            prefer_windows_executable_variant(ps1_path.clone()),
+            ps1_path
+        );
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

@@ -1,6 +1,11 @@
 import { useCallback } from "react";
 import type { Dispatch, MutableRefObject } from "react";
-import type { DebugEntry, ThreadSummary, WorkspaceInfo } from "../../../types";
+import type {
+  DebugEntry,
+  ThreadSummary,
+  WorkspaceInfo,
+  WorkspaceSessionAttributionMode,
+} from "../../../types";
 import type { WorkspaceSessionCatalogPage } from "../../../services/tauri";
 import {
   listThreadTitles as listThreadTitlesService,
@@ -64,6 +69,7 @@ type UseLoadOlderThreadsForWorkspaceOptions = {
     workspaceId: string,
     titles: Record<string, string>,
   ) => void;
+  sessionAttributionMode: WorkspaceSessionAttributionMode;
   threadListCursorByWorkspace: ThreadState["threadListCursorByWorkspace"];
   threadsByWorkspace: ThreadState["threadsByWorkspace"];
   workspacePathsByIdRef: MutableRefObject<Record<string, string>>;
@@ -80,6 +86,7 @@ export function useLoadOlderThreadsForWorkspace({
   loadArchivedSessionMap,
   onDebug,
   onThreadTitleMappingsLoaded,
+  sessionAttributionMode,
   threadListCursorByWorkspace,
   threadsByWorkspace,
   workspacePathsByIdRef,
@@ -137,7 +144,7 @@ export function useLoadOlderThreadsForWorkspace({
           const response: WorkspaceSessionCatalogPage | null =
             await withTimeout(
               listWorkspaceSessionsService(workspace.id, {
-                query: { status: "active" },
+                query: { status: "active", sessionAttributionMode },
                 cursor: cursorState.cursor,
                 limit: SESSION_CATALOG_PAGE_SIZE,
               }),
@@ -349,6 +356,7 @@ export function useLoadOlderThreadsForWorkspace({
       loadArchivedSessionMap,
       onDebug,
       onThreadTitleMappingsLoaded,
+      sessionAttributionMode,
       threadListCursorByWorkspace,
       threadsByWorkspace,
       workspacePathsByIdRef,

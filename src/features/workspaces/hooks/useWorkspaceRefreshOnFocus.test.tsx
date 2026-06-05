@@ -89,6 +89,7 @@ describe("useWorkspaceRefreshOnFocus", () => {
         preserveState: true,
         includeOpenCodeSessions: false,
         recoverySource: "focus-refresh",
+        allowRuntimeReconnect: false,
       },
     );
     expect(listThreadsForWorkspace).toHaveBeenNthCalledWith(
@@ -98,6 +99,7 @@ describe("useWorkspaceRefreshOnFocus", () => {
         preserveState: true,
         includeOpenCodeSessions: false,
         recoverySource: "focus-refresh",
+        allowRuntimeReconnect: false,
       },
     );
   });

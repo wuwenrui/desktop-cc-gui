@@ -9,6 +9,7 @@ import {
 } from "../../startup-orchestration/utils/startupTrace";
 import {
   clearGlobalRuntimeNotices,
+  filterVisibleGlobalRuntimeNoticeDockItems,
   pushGlobalRuntimeNotice,
   subscribeGlobalRuntimeNotices,
   type GlobalRuntimeNotice,
@@ -397,7 +398,6 @@ export function useGlobalRuntimeNoticeDock(workspaces: readonly WorkspaceInfo[] 
       getClientStoreSync("app", GLOBAL_RUNTIME_NOTICE_DOCK_VISIBILITY_KEY),
     ),
   );
-  const [statusNowMs, setStatusNowMs] = useState(() => Date.now());
   const runtimeStateByWorkspaceRef = useRef(new Map<string, RuntimeSignalToken>());
   const workspaceLabelById = useMemo(() => {
     const labelById = new Map<string, string>();
@@ -442,23 +442,10 @@ export function useGlobalRuntimeNoticeDock(workspaces: readonly WorkspaceInfo[] 
     writeClientStoreValue("app", GLOBAL_RUNTIME_NOTICE_DOCK_VISIBILITY_KEY, visibility);
   }, [visibility]);
 
-  useEffect(() => {
-    const latestNotice = notices[notices.length - 1];
-    if (!latestNotice || notices.some((notice) => notice.severity === "error")) {
-      return;
-    }
-    const remainingMs =
-      latestNotice.timestampMs + GLOBAL_RUNTIME_NOTICE_STREAMING_WINDOW_MS - Date.now();
-    if (remainingMs <= 0) {
-      return;
-    }
-    const timeoutId = window.setTimeout(() => {
-      setStatusNowMs(Date.now());
-    }, remainingMs + 16);
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [notices]);
+  const visibleNotices = useMemo(
+    () => filterVisibleGlobalRuntimeNoticeDockItems(notices),
+    [notices],
+  );
 
   useEffect(() => {
     let disposed = false;
@@ -496,9 +483,9 @@ export function useGlobalRuntimeNoticeDock(workspaces: readonly WorkspaceInfo[] 
     };
   }, []);
 
-  const status = useMemo(
-    () => resolveGlobalRuntimeNoticeDockStatus(notices, statusNowMs),
-    [notices, statusNowMs],
+  const status = useMemo<GlobalRuntimeNoticeDockStatus>(
+    () => (visibleNotices.length > 0 ? "has-error" : "idle"),
+    [visibleNotices],
   );
 
   const expand = useCallback(() => {
@@ -514,7 +501,7 @@ export function useGlobalRuntimeNoticeDock(workspaces: readonly WorkspaceInfo[] 
   }, []);
 
   return {
-    notices,
+    notices: visibleNotices,
     visibility,
     status,
     runtimeRows,

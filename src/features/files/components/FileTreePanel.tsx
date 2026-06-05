@@ -20,9 +20,11 @@ import FileIcon from "../../../components/FileIcon";
 import type { PanelTabId } from "../../layout/components/PanelTabs";
 import {
   createWorkspaceDirectory,
-  copyWorkspaceItem,
+  duplicateWorkspaceItem,
   getWorkspaceDirectoryChildren,
+  pasteWorkspaceItem,
   readWorkspaceFile,
+  renameWorkspaceItem,
   trashWorkspaceItem,
   writeWorkspaceFile,
   type WorkspaceDirectoryEntry,
@@ -40,6 +42,17 @@ import {
   DETACHED_FILE_TREE_DRAG_BRIDGE_EVENT,
   type DetachedFileTreeDragBridgePayload,
 } from "../detachedFileTreeDragBridge";
+import {
+  bindChatDropTargetsForTreeDrag,
+  clearFileTreeDragBridge,
+  createWindowsFileTreeDragImage,
+  CROSS_WINDOW_TREE_DRAG_REBROADCAST_THROTTLE_MS,
+  insertPathsIntoChat,
+  isWindowsDragPreviewRuntime,
+  setFileTreeDragBridge,
+  setFileTreeDragPosition,
+  triggerChatInputInsertFromTreeDrag,
+} from "../utils/fileTreeDragBridge";
 import { FilePreviewPopover } from "./FilePreviewPopover";
 import { FileTreeRootActions } from "./FileTreeRootActions";
 import {
@@ -75,6 +88,25 @@ type VisibleFileTreeRow =
       state: "loading" | "error" | "empty";
       error: string | null;
     };
+
+type FileTreeClipboardItem = {
+  workspaceId: string;
+  path: string;
+  kind: "file" | "folder";
+  name: string;
+};
+
+type FileTreeOperationNotice = {
+  id: string;
+  tone: "success" | "error" | "info";
+  message: string;
+};
+
+type RenamePromptState = {
+  path: string;
+  kind: "file" | "folder";
+  currentName: string;
+};
 
 type FileTreePanelProps = {
   workspaceId: string;
@@ -164,324 +196,144 @@ const SPECIAL_BUILD_ARTIFACT_DIRECTORIES = new Set([
   ".tox",
   ".dart_tool",
 ]);
-const CROSS_WINDOW_TREE_DRAG_REBROADCAST_THROTTLE_MS = 120;
 const EMPTY_DIRECTORY_METADATA: WorkspaceDirectoryEntry[] = [];
 const FILE_TREE_VIRTUALIZATION_THRESHOLD = 250;
 
-function setFileTreeDragBridge(paths: string[]) {
-  if (typeof window === "undefined") {
-    return;
-  }
-  document.documentElement.classList.add("file-tree-dragging");
-  window.__fileTreeDragPaths = paths;
-  window.__fileTreeDragStamp = Date.now();
-  window.__fileTreeDragActive = true;
-  window.__fileTreeDragOverChat = false;
-  window.__fileTreeDragDropped = false;
+function isSameOrDescendantFileTreePath(path: string, rootPath: string) {
+  return path === rootPath || path.startsWith(`${rootPath}/`);
 }
 
-function setFileTreeDragPosition(x: number, y: number) {
-  if (typeof window === "undefined") {
-    return;
+function isSuppressedFileTreePath(path: string, suppressedPaths: Set<string>) {
+  for (const suppressedPath of suppressedPaths) {
+    if (isSameOrDescendantFileTreePath(path, suppressedPath)) {
+      return true;
+    }
   }
-  if (!Number.isFinite(x) || !Number.isFinite(y) || (x === 0 && y === 0)) {
-    return;
-  }
-  window.__fileTreeDragPosition = { x, y };
+  return false;
 }
 
-const CHAT_DROP_ZONE_SELECTORS = [
-  ".chat-input-box",
-  ".input-editable-wrapper",
-  ".composer-input-area",
-];
-
-function getChatDropZones() {
-  const zones: HTMLElement[] = [];
-  const seen = new Set<HTMLElement>();
-  CHAT_DROP_ZONE_SELECTORS.forEach((selector) => {
-    const elements = document.querySelectorAll(selector);
-    elements.forEach((element) => {
-      if (!(element instanceof HTMLElement)) {
-        return;
-      }
-      const container = element.closest(".chat-input-box");
-      const zone = container instanceof HTMLElement ? container : element;
-      if (seen.has(zone)) {
-        return;
-      }
-      seen.add(zone);
-      zones.push(zone);
-    });
+function filterSuppressedFileTreePaths(paths: Set<string>, suppressedPaths: Set<string>) {
+  if (suppressedPaths.size === 0 || paths.size === 0) {
+    return paths;
+  }
+  let changed = false;
+  const next = new Set<string>();
+  paths.forEach((path) => {
+    if (isSuppressedFileTreePath(path, suppressedPaths)) {
+      changed = true;
+      return;
+    }
+    next.add(path);
   });
-  return zones;
+  return changed ? next : paths;
 }
 
-function getChatInputContainerFromElement(element: Element | null): HTMLElement | null {
-  if (!element) {
-    return null;
+function filterDeletedFileTreePathFromSet(paths: Set<string>, deletedPath: string) {
+  if (paths.size === 0) {
+    return paths;
   }
-  const container = element.closest(".chat-input-box");
-  return container instanceof HTMLElement ? container : null;
-}
-
-function getSingleChatInputContainer() {
-  const containers = Array.from(document.querySelectorAll(".chat-input-box"))
-    .filter((element): element is HTMLElement => element instanceof HTMLElement);
-  if (containers.length !== 1) {
-    return null;
-  }
-  return containers[0];
-}
-
-function clearChatDropTargetHighlight() {
-  const highlighted = document.querySelectorAll(".chat-input-box.file-tree-drop-target-active");
-  highlighted.forEach((element) => {
-    element.classList.remove("file-tree-drop-target-active");
+  let changed = false;
+  const next = new Set<string>();
+  paths.forEach((path) => {
+    if (isSameOrDescendantFileTreePath(path, deletedPath)) {
+      changed = true;
+      return;
+    }
+    next.add(path);
   });
+  return changed ? next : paths;
 }
 
-function applyChatDropTargetHighlight(target: HTMLElement | null) {
-  clearChatDropTargetHighlight();
-  if (!target) {
-    return;
+function filterDeletedFileTreePathFromMap<T>(valuesByPath: Map<string, T>, deletedPath: string) {
+  if (valuesByPath.size === 0) {
+    return valuesByPath;
   }
-  const container = getChatInputContainerFromElement(target);
-  if (container) {
-    container.classList.add("file-tree-drop-target-active");
-    return;
-  }
-  if (target.classList.contains("chat-input-box")) {
-    target.classList.add("file-tree-drop-target-active");
-  }
-}
-
-function resolveChatDropTargetFromPoint(point: { x: number; y: number } | null) {
-  if (!point) {
-    return null;
-  }
-
-  const points = normalizePointCandidates(point);
-  if (typeof document.elementFromPoint === "function") {
-    for (const candidate of points) {
-      const hovered = document.elementFromPoint(candidate.x, candidate.y);
-      const container = getChatInputContainerFromElement(hovered);
-      if (container) {
-        return container;
-      }
-    }
-  }
-
-  const zones = getChatDropZones();
-  for (const candidate of points) {
-    for (const zone of zones) {
-      const rect = zone.getBoundingClientRect();
-      if (
-        candidate.x >= rect.left &&
-        candidate.x <= rect.right &&
-        candidate.y >= rect.top &&
-        candidate.y <= rect.bottom
-      ) {
-        return zone;
-      }
-    }
-  }
-  return null;
-}
-
-function resolveChatDropTargetFromDragEvent(event: globalThis.DragEvent) {
-  const eventTarget = event.target instanceof Element ? event.target : null;
-  const byTarget = getChatInputContainerFromElement(eventTarget);
-  if (byTarget) {
-    return byTarget;
-  }
-  if (
-    Number.isFinite(event.clientX) &&
-    Number.isFinite(event.clientY) &&
-    !(event.clientX === 0 && event.clientY === 0)
-  ) {
-    return resolveChatDropTargetFromPoint({ x: event.clientX, y: event.clientY });
-  }
-  return null;
-}
-
-function bindChatDropTargetsForTreeDrag(paths: string[]) {
-  const onDocumentDragEnterOrOver = (event: globalThis.DragEvent) => {
-    if (typeof window === "undefined" || window.__fileTreeDragActive !== true) {
+  let changed = false;
+  const next = new Map<string, T>();
+  valuesByPath.forEach((value, path) => {
+    if (isSameOrDescendantFileTreePath(path, deletedPath)) {
+      changed = true;
       return;
     }
-    setFileTreeDragPosition(event.clientX, event.clientY);
-    const target = resolveChatDropTargetFromDragEvent(event);
-    const visualTarget = target ?? getSingleChatInputContainer() ?? null;
-    const isOverChat = Boolean(target);
-    window.__fileTreeDragOverChat = isOverChat;
-    applyChatDropTargetHighlight(visualTarget);
-    if (isOverChat) {
-      event.preventDefault();
-    }
-  };
-
-  const onDocumentDragLeave = (event: globalThis.DragEvent) => {
-    if (typeof window === "undefined" || window.__fileTreeDragActive !== true) {
-      return;
-    }
-    const related = event.relatedTarget instanceof Element ? event.relatedTarget : null;
-    if (related && isChatInputElement(related)) {
-      return;
-    }
-    const target = resolveChatDropTargetFromDragEvent(event);
-    if (target) {
-      window.__fileTreeDragOverChat = true;
-      applyChatDropTargetHighlight(target);
-      return;
-    }
-    window.__fileTreeDragOverChat = false;
-    clearChatDropTargetHighlight();
-  };
-
-  const onDocumentDrop = (event: globalThis.DragEvent) => {
-    if (typeof window === "undefined" || window.__fileTreeDragActive !== true) {
-      return;
-    }
-    setFileTreeDragPosition(event.clientX, event.clientY);
-    const target = resolveChatDropTargetFromDragEvent(event) ??
-      resolveChatDropTargetFromPoint(window.__fileTreeDragPosition ?? null);
-    window.__fileTreeDragOverChat = Boolean(target);
-    if (!target) {
-      clearFileTreeDragBridge();
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    if (insertPathsIntoChat(paths)) {
-      window.__fileTreeDragDropped = true;
-    }
-    clearFileTreeDragBridge();
-  };
-
-  document.addEventListener("dragenter", onDocumentDragEnterOrOver, true);
-  document.addEventListener("dragover", onDocumentDragEnterOrOver, true);
-  document.addEventListener("dragleave", onDocumentDragLeave, true);
-  document.addEventListener("drop", onDocumentDrop, true);
-
-  return () => {
-    document.removeEventListener("dragenter", onDocumentDragEnterOrOver, true);
-    document.removeEventListener("dragover", onDocumentDragEnterOrOver, true);
-    document.removeEventListener("dragleave", onDocumentDragLeave, true);
-    document.removeEventListener("drop", onDocumentDrop, true);
-    clearChatDropTargetHighlight();
-  };
+    next.set(path, value);
+  });
+  return changed ? next : valuesByPath;
 }
 
-function isChatInputElement(node: Element | null) {
-  if (!node) {
-    return false;
-  }
-  return CHAT_DROP_ZONE_SELECTORS.some((selector) => Boolean(node.closest(selector)));
+function getFileTreePathLeaf(path: string) {
+  return path.split("/").filter(Boolean).pop() ?? path;
 }
 
-function normalizePointCandidates(point: { x: number; y: number }) {
-  const candidates = [{ x: point.x, y: point.y }];
-  const scale = window.devicePixelRatio || 1;
-  if (scale !== 1) {
-    candidates.push({ x: point.x / scale, y: point.y / scale });
-  }
-  return candidates;
-}
-
-function isPointInsideChatInput(point: { x: number; y: number }) {
-  const zones = getChatDropZones();
-  if (zones.length === 0) {
-    return false;
-  }
-  const points = normalizePointCandidates(point);
-  if (typeof document.elementFromPoint === "function") {
-    for (const candidate of points) {
-      const hovered = document.elementFromPoint(candidate.x, candidate.y);
-      if (isChatInputElement(hovered)) {
-        return true;
-      }
-    }
-  }
-  return points.some((candidate) =>
-    zones.some((zone) => {
-      const rect = zone.getBoundingClientRect();
-      return (
-        candidate.x >= rect.left &&
-        candidate.x <= rect.right &&
-        candidate.y >= rect.top &&
-        candidate.y <= rect.bottom
-      );
-    }),
-  );
-}
-
-function insertPathsIntoChat(paths: string[]) {
-  if (typeof window === "undefined" || !window.handleFilePathFromJava) {
-    return false;
-  }
-  if (!Array.isArray(paths) || paths.length === 0) {
-    return false;
-  }
-  if (paths.length === 1) {
-    window.handleFilePathFromJava(paths[0] ?? "");
+function isDirectlyGitignoredFolderPath(path: string, ignoredDirectories: Set<string>) {
+  if (ignoredDirectories.has(path)) {
     return true;
   }
-  window.handleFilePathFromJava(paths);
-  return true;
+  const pathLeaf = getFileTreePathLeaf(path);
+  for (const ignoredDirectory of ignoredDirectories) {
+    if (!ignoredDirectory) {
+      continue;
+    }
+    const ignoredLeaf = getFileTreePathLeaf(ignoredDirectory);
+    if (
+      pathLeaf === ignoredDirectory ||
+      pathLeaf === ignoredLeaf
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
-function triggerChatInputInsertFromTreeDrag(
-  event: DragEvent<HTMLButtonElement>,
-  fallbackPaths: string[],
+function isGitignoredFileTreeNode(
+  node: FileTreeNode,
+  ignoredFiles: Set<string>,
+  ignoredDirectories: Set<string>,
+  memo: Map<string, boolean>,
+): boolean {
+  const memoized = memo.get(node.path);
+  if (memoized !== undefined) {
+    return memoized;
+  }
+  if (node.type === "file") {
+    const ignored = ignoredFiles.has(node.path) ||
+      Array.from(ignoredDirectories).some((ignoredDirectory) =>
+        isSameOrDescendantFileTreePath(node.path, ignoredDirectory),
+      );
+    memo.set(node.path, ignored);
+    return ignored;
+  }
+  if (isDirectlyGitignoredFolderPath(node.path, ignoredDirectories)) {
+    memo.set(node.path, true);
+    return true;
+  }
+  const ignored = node.children.length > 0 &&
+    node.children.every((child) =>
+      isGitignoredFileTreeNode(child, ignoredFiles, ignoredDirectories, memo),
+    );
+  memo.set(node.path, ignored);
+  return ignored;
+}
+
+function getGitignoredFolderAncestorPaths(
+  folderPaths: Set<string>,
+  ignoredDirectories: Set<string>,
 ) {
-  const paths = window.__fileTreeDragPaths ?? fallbackPaths;
-  if (!Array.isArray(paths) || paths.length === 0) return false;
-  if (window.__fileTreeDragOverChat === true) {
-    return insertPathsIntoChat(paths);
+  const ancestors = new Set<string>();
+  if (folderPaths.size === 0 || ignoredDirectories.size === 0) {
+    return ancestors;
   }
-  const pointer = (
-    Number.isFinite(event.clientX) &&
-    Number.isFinite(event.clientY) &&
-    !(event.clientX === 0 && event.clientY === 0)
-  )
-    ? { x: event.clientX, y: event.clientY }
-    : window.__fileTreeDragPosition;
-  if (pointer) {
-    if (!isPointInsideChatInput(pointer)) {
-      return false;
-    }
-  } else {
-    const activeElement = document.activeElement instanceof Element
-      ? document.activeElement
-      : null;
-    if (!isChatInputElement(activeElement)) {
-      return false;
-    }
-  }
-  return insertPathsIntoChat(paths);
-}
 
-function clearFileTreeDragBridge() {
-  if (typeof window === "undefined") {
-    return;
-  }
-  document.documentElement.classList.remove("file-tree-dragging");
-  if (typeof window.__fileTreeDragCleanup === "function") {
-    try {
-      window.__fileTreeDragCleanup();
-    } catch {
-      // ignore cleanup errors
+  folderPaths.forEach((folderPath) => {
+    if (!isDirectlyGitignoredFolderPath(folderPath, ignoredDirectories)) {
+      return;
     }
-  }
-  delete window.__fileTreeDragPaths;
-  delete window.__fileTreeDragStamp;
-  delete window.__fileTreeDragActive;
-  delete window.__fileTreeDragPosition;
-  delete window.__fileTreeDragOverChat;
-  delete window.__fileTreeDragDropped;
-  delete window.__fileTreeDragCleanup;
-  clearChatDropTargetHighlight();
+    const parts = folderPath.split("/").filter(Boolean);
+    for (let index = 1; index < parts.length; index += 1) {
+      ancestors.add(parts.slice(0, index).join("/"));
+    }
+  });
+
+  return ancestors;
 }
 
 function isSpecialDirectoryPath(path: string) {
@@ -672,83 +524,6 @@ function resolveWorkspaceRootLabel(workspacePath: string, workspaceName?: string
   return segments.at(-1) || normalizedPath || "workspace";
 }
 
-function isWindowsDragPreviewRuntime() {
-  if (typeof navigator === "undefined") {
-    return false;
-  }
-  const platform = (
-    (
-      navigator as Navigator & {
-        userAgentData?: { platform?: string };
-      }
-    ).userAgentData?.platform ??
-    navigator.platform ??
-    ""
-  ).toLowerCase();
-  return platform.includes("win");
-}
-
-function getDragPreviewLeafLabel(path: string) {
-  const segments = path.split(/[\\/]/).filter(Boolean);
-  return segments.at(-1) || path;
-}
-
-function createWindowsFileTreeDragImage(
-  primaryPath: string,
-  totalCount: number,
-  isFolder: boolean,
-) {
-  if (typeof document === "undefined") {
-    return null;
-  }
-  const dragImage = document.createElement("div");
-  dragImage.setAttribute("aria-hidden", "true");
-  dragImage.style.position = "fixed";
-  dragImage.style.top = "-9999px";
-  dragImage.style.left = "-9999px";
-  dragImage.style.pointerEvents = "none";
-  dragImage.style.display = "inline-flex";
-  dragImage.style.alignItems = "center";
-  dragImage.style.gap = "8px";
-  dragImage.style.maxWidth = "420px";
-  dragImage.style.padding = "8px 12px";
-  dragImage.style.borderRadius = "12px";
-  dragImage.style.border = "1px solid rgba(37, 99, 235, 0.26)";
-  dragImage.style.background = "rgba(23, 27, 36, 0.94)";
-  dragImage.style.boxShadow = "0 10px 30px rgba(15, 23, 42, 0.34)";
-  dragImage.style.color = "#e5eefc";
-  dragImage.style.fontSize = "12px";
-  dragImage.style.fontWeight = "600";
-  dragImage.style.lineHeight = "1.2";
-  dragImage.style.fontFamily =
-    '"SF Pro Text", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif';
-
-  const icon = document.createElement("span");
-  icon.textContent = isFolder ? "[DIR]" : "[FILE]";
-  icon.style.fontSize = "11px";
-  icon.style.flexShrink = "0";
-  icon.style.color = "#93c5fd";
-
-  const text = document.createElement("span");
-  const primaryLabel = getDragPreviewLeafLabel(primaryPath);
-  text.textContent =
-    totalCount > 1 ? `${primaryLabel} +${totalCount - 1}` : primaryLabel;
-  text.style.whiteSpace = "nowrap";
-  text.style.overflow = "hidden";
-  text.style.textOverflow = "ellipsis";
-  text.style.maxWidth = "340px";
-
-  dragImage.append(icon, text);
-  document.body.appendChild(dragImage);
-
-  return {
-    element: dragImage,
-    cleanup: () => {
-      dragImage.remove();
-    },
-  };
-}
-
 export function FileTreePanel({
   workspaceId,
   workspaceName,
@@ -809,6 +584,12 @@ export function FileTreePanel({
   const [selectedNodePaths, setSelectedNodePaths] = useState<Set<string>>(new Set());
   const [fileTreeContextMenu, setFileTreeContextMenu] =
     useState<RendererContextMenuState | null>(null);
+  const [fileTreeClipboardItem, setFileTreeClipboardItem] =
+    useState<FileTreeClipboardItem | null>(null);
+  const [operationNotice, setOperationNotice] = useState<FileTreeOperationNotice | null>(null);
+  const [renamePrompt, setRenamePrompt] = useState<RenamePromptState | null>(null);
+  const [renameDraftName, setRenameDraftName] = useState("");
+  const renameInputRef = useRef<HTMLInputElement | null>(null);
   const selectionAnchorPathRef = useRef<string | null>(null);
   const activeCrossWindowDragPathsRef = useRef<string[]>([]);
   const lastCrossWindowDragBroadcastRef = useRef(0);
@@ -834,6 +615,7 @@ export function FileTreePanel({
   const [lazyDirectoryLoadErrors, setLazyDirectoryLoadErrors] = useState<Map<string, string>>(
     new Map(),
   );
+  const [suppressedDeletedPaths, setSuppressedDeletedPaths] = useState<Set<string>>(new Set());
   const loadedLazyDirectoriesRef = useRef<Set<string>>(new Set());
   const loadingLazyDirectoriesRef = useRef<Set<string>>(new Set());
 
@@ -859,35 +641,37 @@ export function FileTreePanel({
   const mergedFiles = useMemo(() => {
     const next = new Set<string>(files);
     lazyFiles.forEach((path) => next.add(path));
-    return Array.from(next);
-  }, [files, lazyFiles]);
+    return Array.from(next).filter((path) => !isSuppressedFileTreePath(path, suppressedDeletedPaths));
+  }, [files, lazyFiles, suppressedDeletedPaths]);
   const mergedDirectories = useMemo(() => {
     const next = new Set<string>(directoryEntries);
     lazyDirectories.forEach((path) => next.add(path));
-    return Array.from(next);
-  }, [directoryEntries, lazyDirectories]);
+    return Array.from(next).filter((path) => !isSuppressedFileTreePath(path, suppressedDeletedPaths));
+  }, [directoryEntries, lazyDirectories, suppressedDeletedPaths]);
   const mergedGitignoredFiles = useMemo(() => {
     const next = new Set<string>(ignoredFileEntries);
     lazyGitignoredFiles.forEach((path) => next.add(path));
-    return next;
-  }, [ignoredFileEntries, lazyGitignoredFiles]);
+    return filterSuppressedFileTreePaths(next, suppressedDeletedPaths);
+  }, [ignoredFileEntries, lazyGitignoredFiles, suppressedDeletedPaths]);
   const mergedGitignoredDirectories = useMemo(() => {
     const next = new Set<string>(ignoredDirectoryEntries);
     lazyGitignoredDirectories.forEach((path) => next.add(path));
-    return next;
-  }, [ignoredDirectoryEntries, lazyGitignoredDirectories]);
+    return filterSuppressedFileTreePaths(next, suppressedDeletedPaths);
+  }, [ignoredDirectoryEntries, lazyGitignoredDirectories, suppressedDeletedPaths]);
   const directoryMetadataByPath = useMemo(() => {
     const next = new Map<string, WorkspaceDirectoryEntry>();
     directoryMetadata.forEach((entry) => {
-      if (entry.path) {
+      if (entry.path && !isSuppressedFileTreePath(entry.path, suppressedDeletedPaths)) {
         next.set(entry.path, entry);
       }
     });
     lazyDirectoryMetadata.forEach((entry, path) => {
-      next.set(path, entry);
+      if (!isSuppressedFileTreePath(path, suppressedDeletedPaths)) {
+        next.set(path, entry);
+      }
     });
     return next;
-  }, [directoryMetadata, lazyDirectoryMetadata]);
+  }, [directoryMetadata, lazyDirectoryMetadata, suppressedDeletedPaths]);
   const seededLazyLoadableDirectories = useMemo(() => {
     const result = new Set<string>();
     mergedDirectories.forEach((path) => {
@@ -944,6 +728,34 @@ export function FileTreePanel({
       mergedFiles,
     ],
   );
+  const gitignoredTreeNodeMap = useMemo(() => {
+    const memo = new Map<string, boolean>();
+    nodes.forEach((node) => {
+      isGitignoredFileTreeNode(
+        node,
+        mergedGitignoredFiles,
+        mergedGitignoredDirectories,
+        memo,
+      );
+    });
+    return memo;
+  }, [mergedGitignoredDirectories, mergedGitignoredFiles, nodes]);
+  const gitignoredFolderAncestorPaths = useMemo(
+    () => getGitignoredFolderAncestorPaths(folderPaths, mergedGitignoredDirectories),
+    [folderPaths, mergedGitignoredDirectories],
+  );
+  const effectiveExpandedFolders = useMemo(() => {
+    if (gitignoredFolderAncestorPaths.size === 0) {
+      return expandedFolders;
+    }
+    const next = new Set(expandedFolders);
+    gitignoredFolderAncestorPaths.forEach((path) => {
+      if (folderPaths.has(path)) {
+        next.add(path);
+      }
+    });
+    return next;
+  }, [expandedFolders, folderPaths, gitignoredFolderAncestorPaths]);
   const folderGitStatusMap = useMemo(() => {
     if (!gitStatusFiles || gitStatusFiles.length === 0) {
       return new Map<string, string>();
@@ -998,7 +810,7 @@ export function FileTreePanel({
     const entries: VisibleTreeNodeEntry[] = [{ path: "", type: "root", depth: 0, node: null }];
     const visit = (node: FileTreeNode, depth: number) => {
       entries.push({ path: node.path, type: node.type, depth, node });
-      if (node.type === "folder" && expandedFolders.has(node.path)) {
+      if (node.type === "folder" && effectiveExpandedFolders.has(node.path)) {
         node.children.forEach((child) => visit(child, depth + 1));
       }
     };
@@ -1006,7 +818,7 @@ export function FileTreePanel({
       nodes.forEach((node) => visit(node, 1));
     }
     return entries;
-  }, [expandedFolders, nodes, rootExpanded]);
+  }, [effectiveExpandedFolders, nodes, rootExpanded]);
   const visibleFileTreeRows = useMemo(() => {
     const rows: VisibleFileTreeRow[] = [];
     for (const entry of visibleTreeNodeEntries) {
@@ -1016,7 +828,7 @@ export function FileTreePanel({
       rows.push({ kind: "node", entry: entry as VisibleTreeNodeEntry & { node: FileTreeNode } });
       const node = entry.node;
       const isLazyFolder = node.type === "folder" && (node.isLazyLoadable ?? false);
-      const isExpanded = expandedFolders.has(node.path);
+      const isExpanded = effectiveExpandedFolders.has(node.path);
       if (!isLazyFolder || !isExpanded || node.children.length > 0) {
         continue;
       }
@@ -1035,7 +847,7 @@ export function FileTreePanel({
     }
     return rows;
   }, [
-    expandedFolders,
+    effectiveExpandedFolders,
     lazyDirectoryLoadErrors,
     loadingLazyDirectories,
     visibleTreeNodeEntries,
@@ -1143,6 +955,24 @@ export function FileTreePanel({
   }, [folderPaths]);
 
   useEffect(() => {
+    if (gitignoredFolderAncestorPaths.size === 0) {
+      return;
+    }
+    setExpandedFolders((prev) => {
+      let changed = false;
+      const next = new Set(prev);
+      gitignoredFolderAncestorPaths.forEach((path) => {
+        if (!folderPaths.has(path) || next.has(path)) {
+          return;
+        }
+        next.add(path);
+        changed = true;
+      });
+      return changed ? next : prev;
+    });
+  }, [folderPaths, gitignoredFolderAncestorPaths]);
+
+  useEffect(() => {
     setSelectedNodePaths((prev) => {
       if (prev.size === 0) {
         return prev;
@@ -1208,6 +1038,7 @@ export function FileTreePanel({
     setNewFileName("");
     setNewFolderParent(null);
     setNewFolderName("");
+    setSuppressedDeletedPaths(new Set());
     setRootExpanded(true);
     setSelectedNodePath(null);
     setSelectedNodeType(null);
@@ -1587,6 +1418,116 @@ export function FileTreePanel({
     [resolvePath],
   );
 
+  const normalizeOperationError = useCallback((error: unknown) => {
+    return error instanceof Error ? error.message : String(error);
+  }, []);
+
+  const showOperationNotice = useCallback((tone: FileTreeOperationNotice["tone"], message: string) => {
+    setOperationNotice({
+      id: `${Date.now()}-${tone}`,
+      tone,
+      message,
+    });
+  }, []);
+
+  useEffect(() => {
+    setSuppressedDeletedPaths((prev) => {
+      if (prev.size === 0) {
+        return prev;
+      }
+      let changed = false;
+      const next = new Set(prev);
+      prev.forEach((deletedPath) => {
+        const stillPresent =
+          files.some((path) => isSameOrDescendantFileTreePath(path, deletedPath)) ||
+          directoryEntries.some((path) => isSameOrDescendantFileTreePath(path, deletedPath)) ||
+          Array.from(lazyFiles).some((path) => isSameOrDescendantFileTreePath(path, deletedPath)) ||
+          Array.from(lazyDirectories).some((path) =>
+            isSameOrDescendantFileTreePath(path, deletedPath),
+          );
+        if (!stillPresent) {
+          next.delete(deletedPath);
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [directoryEntries, files, lazyDirectories, lazyFiles]);
+
+  const purgeDeletedFileTreePath = useCallback(
+    (deletedPath: string) => {
+      setSuppressedDeletedPaths((prev) => {
+        if (prev.has(deletedPath)) {
+          return prev;
+        }
+        return new Set(prev).add(deletedPath);
+      });
+      setExpandedFolders((prev) => filterDeletedFileTreePathFromSet(prev, deletedPath));
+      setLazyFiles((prev) => filterDeletedFileTreePathFromSet(prev, deletedPath));
+      setLazyDirectories((prev) => filterDeletedFileTreePathFromSet(prev, deletedPath));
+      setLazyGitignoredFiles((prev) => filterDeletedFileTreePathFromSet(prev, deletedPath));
+      setLazyGitignoredDirectories((prev) => filterDeletedFileTreePathFromSet(prev, deletedPath));
+      setLazyLoadableDirectories((prev) => filterDeletedFileTreePathFromSet(prev, deletedPath));
+      setLazyDirectoryMetadata((prev) => filterDeletedFileTreePathFromMap(prev, deletedPath));
+      setLoadedLazyDirectories((prev) => filterDeletedFileTreePathFromSet(prev, deletedPath));
+      setLoadingLazyDirectories((prev) => filterDeletedFileTreePathFromSet(prev, deletedPath));
+      setLazyDirectoryLoadErrors((prev) => filterDeletedFileTreePathFromMap(prev, deletedPath));
+      loadedLazyDirectoriesRef.current = filterDeletedFileTreePathFromSet(
+        loadedLazyDirectoriesRef.current,
+        deletedPath,
+      );
+      loadingLazyDirectoriesRef.current = filterDeletedFileTreePathFromSet(
+        loadingLazyDirectoriesRef.current,
+        deletedPath,
+      );
+      setSelectedNodePaths((prev) => {
+        const next = filterDeletedFileTreePathFromSet(prev, deletedPath);
+        if (next === prev) {
+          return prev;
+        }
+        const nextPrimaryPath =
+          selectedNodePath && next.has(selectedNodePath)
+            ? selectedNodePath
+            : visibleTreePathOrder.find((path) => next.has(path)) ?? null;
+        setSelectedNodePath(nextPrimaryPath);
+        setSelectedNodeType(
+          nextPrimaryPath
+            ? (visibleTreePathTypeMap.get(nextPrimaryPath) === "file" ? "file" : "folder")
+            : null,
+        );
+        if (
+          selectionAnchorPathRef.current &&
+          isSameOrDescendantFileTreePath(selectionAnchorPathRef.current, deletedPath)
+        ) {
+          selectionAnchorPathRef.current = nextPrimaryPath;
+        }
+        return next;
+      });
+      setFileTreeClipboardItem((prev) =>
+        prev && isSameOrDescendantFileTreePath(prev.path, deletedPath) ? null : prev,
+      );
+      setRenamePrompt((prev) =>
+        prev && isSameOrDescendantFileTreePath(prev.path, deletedPath) ? null : prev,
+      );
+      setNewFileParent((prev) =>
+        prev && isSameOrDescendantFileTreePath(prev, deletedPath) ? null : prev,
+      );
+      setNewFolderParent((prev) =>
+        prev && isSameOrDescendantFileTreePath(prev, deletedPath) ? null : prev,
+      );
+      if (previewPath && isSameOrDescendantFileTreePath(previewPath, deletedPath)) {
+        closePreview();
+      }
+    },
+    [
+      closePreview,
+      previewPath,
+      selectedNodePath,
+      visibleTreePathOrder,
+      visibleTreePathTypeMap,
+    ],
+  );
+
   const trashItem = useCallback(
     async (relativePath: string, isFolder: boolean) => {
       const name = relativePath.split("/").pop() ?? relativePath;
@@ -1607,45 +1548,144 @@ export function FileTreePanel({
 
       try {
         await trashWorkspaceItem(workspaceId, relativePath);
-        setSelectedNodePaths((prev) => {
-          if (!prev.has(relativePath)) {
-            return prev;
-          }
-          const next = new Set(prev);
-          next.delete(relativePath);
-          const nextPrimaryPath = next.size > 0
-            ? visibleTreePathOrder.find((path) => next.has(path)) ?? null
-            : null;
-          setSelectedNodePath(nextPrimaryPath);
-          setSelectedNodeType(
-            nextPrimaryPath
-              ? (visibleTreePathTypeMap.get(nextPrimaryPath) === "file" ? "file" : "folder")
-              : null,
-          );
-          if (selectionAnchorPathRef.current === relativePath) {
-            selectionAnchorPathRef.current = nextPrimaryPath;
-          }
-          return next;
-        });
+        purgeDeletedFileTreePath(relativePath);
+        showOperationNotice("success", t("files.trashComplete"));
         onRefreshFiles?.();
-      } catch {
-        // trash operation failed
+      } catch (error) {
+        showOperationNotice("error", t("files.trashFailed", { message: normalizeOperationError(error) }));
       }
     },
-    [onRefreshFiles, t, visibleTreePathOrder, visibleTreePathTypeMap, workspaceId],
+    [
+      normalizeOperationError,
+      onRefreshFiles,
+      purgeDeletedFileTreePath,
+      showOperationNotice,
+      t,
+      workspaceId,
+    ],
+  );
+
+  const getFileTreeItemName = useCallback((relativePath: string) => {
+    if (!relativePath) {
+      return workspaceRootLabel;
+    }
+    return relativePath.split("/").filter(Boolean).pop() ?? relativePath;
+  }, [workspaceRootLabel]);
+
+  const copyFileTreeItem = useCallback(
+    (relativePath: string, kind: "file" | "folder") => {
+      setFileTreeClipboardItem({
+        workspaceId,
+        path: relativePath,
+        kind,
+        name: getFileTreeItemName(relativePath),
+      });
+      showOperationNotice("info", t("files.copyReady"));
+    },
+    [getFileTreeItemName, showOperationNotice, t, workspaceId],
+  );
+
+  const pasteFileTreeItem = useCallback(
+    async (targetDirectory: string) => {
+      if (!fileTreeClipboardItem) {
+        showOperationNotice("error", t("files.pasteUnavailable"));
+        return;
+      }
+      if (fileTreeClipboardItem.workspaceId !== workspaceId) {
+        showOperationNotice("error", t("files.pasteWorkspaceMismatch"));
+        return;
+      }
+      try {
+        const result = await pasteWorkspaceItem(
+          workspaceId,
+          fileTreeClipboardItem.path,
+          targetDirectory,
+        );
+        setSelectedNodePath(result.path);
+        setSelectedNodeType(result.kind === "folder" ? "folder" : "file");
+        setSelectedNodePaths(new Set([result.path]));
+        showOperationNotice("success", t("files.pasteComplete"));
+        onRefreshFiles?.();
+      } catch (error) {
+        showOperationNotice("error", t("files.pasteFailed", { message: normalizeOperationError(error) }));
+      }
+    },
+    [
+      fileTreeClipboardItem,
+      normalizeOperationError,
+      onRefreshFiles,
+      showOperationNotice,
+      t,
+      workspaceId,
+    ],
   );
 
   const duplicateItem = useCallback(
     async (relativePath: string) => {
       try {
-        await copyWorkspaceItem(workspaceId, relativePath);
+        const result = await duplicateWorkspaceItem(workspaceId, relativePath);
+        setSelectedNodePath(result.path);
+        setSelectedNodeType(result.kind === "folder" ? "folder" : "file");
+        setSelectedNodePaths(new Set([result.path]));
+        showOperationNotice("success", t("files.duplicateComplete"));
         onRefreshFiles?.();
-      } catch {
-        // copy operation failed
+      } catch (error) {
+        showOperationNotice("error", t("files.duplicateFailed", { message: normalizeOperationError(error) }));
       }
     },
-    [workspaceId, onRefreshFiles],
+    [normalizeOperationError, onRefreshFiles, showOperationNotice, t, workspaceId],
   );
+
+  const openRenamePrompt = useCallback(
+    (relativePath: string, kind: "file" | "folder") => {
+      const currentName = getFileTreeItemName(relativePath);
+      setRenamePrompt({
+        path: relativePath,
+        kind,
+        currentName,
+      });
+      setRenameDraftName(currentName);
+      requestAnimationFrame(() => {
+        renameInputRef.current?.focus();
+        renameInputRef.current?.select();
+      });
+    },
+    [getFileTreeItemName],
+  );
+
+  const cancelRename = useCallback(() => {
+    setRenamePrompt(null);
+    setRenameDraftName("");
+  }, []);
+
+  const confirmRename = useCallback(async () => {
+    const prompt = renamePrompt;
+    const name = renameDraftName.trim();
+    if (!prompt || !name) {
+      showOperationNotice("error", t("files.renameInvalidName"));
+      return;
+    }
+    try {
+      const result = await renameWorkspaceItem(workspaceId, prompt.path, name);
+      setSelectedNodePath(result.path);
+      setSelectedNodeType(result.kind === "folder" ? "folder" : "file");
+      setSelectedNodePaths(new Set([result.path]));
+      setRenamePrompt(null);
+      setRenameDraftName("");
+      showOperationNotice("success", t("files.renameComplete"));
+      onRefreshFiles?.();
+    } catch (error) {
+      showOperationNotice("error", t("files.renameFailed", { message: normalizeOperationError(error) }));
+    }
+  }, [
+    normalizeOperationError,
+    onRefreshFiles,
+    renameDraftName,
+    renamePrompt,
+    showOperationNotice,
+    t,
+    workspaceId,
+  ]);
 
   const openNewFilePrompt = useCallback(
     (parentFolder: string) => {
@@ -1668,13 +1708,22 @@ export function FileTreePanel({
     const relativePath = newFileParent ? `${newFileParent}/${name}` : name;
     try {
       await writeWorkspaceFile(workspaceId, relativePath, "");
+      showOperationNotice("success", t("files.createFileComplete"));
       onRefreshFiles?.();
-    } catch {
-      // create file failed
+    } catch (error) {
+      showOperationNotice("error", t("files.createFileFailed", { message: normalizeOperationError(error) }));
     }
     setNewFileParent(null);
     setNewFileName("");
-  }, [newFileName, newFileParent, workspaceId, onRefreshFiles]);
+  }, [
+    newFileName,
+    newFileParent,
+    workspaceId,
+    onRefreshFiles,
+    showOperationNotice,
+    t,
+    normalizeOperationError,
+  ]);
 
   const cancelNewFile = useCallback(() => {
     setNewFileParent(null);
@@ -1702,13 +1751,22 @@ export function FileTreePanel({
     const relativePath = newFolderParent ? `${newFolderParent}/${name}` : name;
     try {
       await createWorkspaceDirectory(workspaceId, relativePath);
+      showOperationNotice("success", t("files.createFolderComplete"));
       onRefreshFiles?.();
-    } catch {
-      // create folder failed
+    } catch (error) {
+      showOperationNotice("error", t("files.createFolderFailed", { message: normalizeOperationError(error) }));
     }
     setNewFolderParent(null);
     setNewFolderName("");
-  }, [newFolderName, newFolderParent, workspaceId, onRefreshFiles]);
+  }, [
+    newFolderName,
+    newFolderParent,
+    workspaceId,
+    onRefreshFiles,
+    showOperationNotice,
+    t,
+    normalizeOperationError,
+  ]);
 
   const cancelNewFolder = useCallback(() => {
     setNewFolderParent(null);
@@ -1785,6 +1843,8 @@ export function FileTreePanel({
       event.stopPropagation();
 
       const parentFolder = resolveParentFolderForNode(relativePath, isFolder ? "folder" : "file");
+      const isRootActionTarget = relativePath.length === 0;
+      const itemKind = isFolder ? "folder" : "file";
 
       const menuItems: RendererContextMenuItem[] = [
         {
@@ -1805,14 +1865,49 @@ export function FileTreePanel({
             openNewFolderPrompt(parentFolder);
           },
         },
+        ...(isRootActionTarget
+          ? []
+          : [
+              {
+                type: "item" as const,
+                id: "copy-item",
+                label: t("files.copyItem"),
+                onSelect: () => {
+                  setFileTreeContextMenu(null);
+                  copyFileTreeItem(relativePath, itemKind);
+                },
+              },
+            ]),
         {
           type: "item",
-          id: "duplicate",
-          label: t("files.duplicateItem"),
+          id: "paste-item",
+          label: t("files.pasteItem"),
           onSelect: async () => {
-            await duplicateItem(relativePath);
+            setFileTreeContextMenu(null);
+            await pasteFileTreeItem(parentFolder);
           },
         },
+        ...(isRootActionTarget
+          ? []
+          : [
+              {
+                type: "item" as const,
+                id: "duplicate",
+                label: t("files.duplicateItem"),
+                onSelect: async () => {
+                  await duplicateItem(relativePath);
+                },
+              },
+              {
+                type: "item" as const,
+                id: "rename",
+                label: t("files.renameItem"),
+                onSelect: () => {
+                  setFileTreeContextMenu(null);
+                  openRenamePrompt(relativePath, itemKind);
+                },
+              },
+            ]),
         {
           type: "item",
           id: "copy-path",
@@ -1849,16 +1944,20 @@ export function FileTreePanel({
               },
             ]
           : []),
-        {
-          type: "item",
-          id: "delete",
-          label: t("files.deleteItem"),
-          tone: "danger",
-          onSelect: async () => {
-            setFileTreeContextMenu(null);
-            await trashItem(relativePath, isFolder);
-          },
-        },
+        ...(isRootActionTarget
+          ? []
+          : [
+              {
+                type: "item" as const,
+                id: "delete",
+                label: t("files.deleteItem"),
+                tone: "danger" as const,
+                onSelect: async () => {
+                  setFileTreeContextMenu(null);
+                  await trashItem(relativePath, isFolder);
+                },
+              },
+            ]),
       ];
 
       const position = clampRendererContextMenuPosition(event.clientX, event.clientY);
@@ -1872,8 +1971,11 @@ export function FileTreePanel({
       resolvePath,
       copyPath,
       trashItem,
+      copyFileTreeItem,
       duplicateItem,
+      pasteFileTreeItem,
       onInsertText,
+      openRenamePrompt,
       openNewFilePrompt,
       openNewFolderPrompt,
       resolveParentFolderForNode,
@@ -1969,7 +2071,8 @@ export function FileTreePanel({
       ? ` git-${fileGitStatus.toLowerCase()}`
       : "";
     const isGitignored = isFolder
-      ? mergedGitignoredDirectories.has(node.path)
+      ? isDirectlyGitignoredFolderPath(node.path, mergedGitignoredDirectories) ||
+        gitignoredTreeNodeMap.get(node.path) === true
       : mergedGitignoredFiles.has(node.path);
     const isSelected = selectedNodePaths.has(node.path);
     const isPrimarySelection = selectedNodePath === node.path;
@@ -2154,7 +2257,8 @@ export function FileTreePanel({
       ? ` git-${fileGitStatus.toLowerCase()}`
       : "";
     const isGitignored = isFolder
-      ? mergedGitignoredDirectories.has(node.path)
+      ? isDirectlyGitignoredFolderPath(node.path, mergedGitignoredDirectories) ||
+        gitignoredTreeNodeMap.get(node.path) === true
       : mergedGitignoredFiles.has(node.path);
     const isSelected = selectedNodePaths.has(node.path);
     const isPrimarySelection = selectedNodePath === node.path;
@@ -2511,6 +2615,50 @@ export function FileTreePanel({
           className="renderer-context-menu file-tree-context-menu"
         />
       ) : null}
+      {operationNotice ? (
+        <div
+          className={`file-tree-operation-notice is-${operationNotice.tone}`}
+          role={operationNotice.tone === "error" ? "alert" : "status"}
+        >
+          {operationNotice.message}
+        </div>
+      ) : null}
+      {renamePrompt !== null && (
+        <div className="new-file-prompt" role="dialog" aria-modal="true">
+          <div className="new-file-prompt-backdrop" onClick={cancelRename} />
+          <div className="new-file-prompt-card">
+            <div className="new-file-prompt-title">{t("files.renameItem")}</div>
+            <div className="new-file-prompt-path">{renamePrompt.currentName}</div>
+            <input
+              id="rename-file-tree-item"
+              ref={renameInputRef}
+              className="new-file-prompt-input"
+              value={renameDraftName}
+              onChange={(event) => setRenameDraftName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void confirmRename();
+                }
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  cancelRename();
+                }
+              }}
+              placeholder={t("files.renameNamePlaceholder")}
+              aria-label={t("files.renameNamePlaceholder")}
+            />
+            <div className="new-file-prompt-actions">
+              <button type="button" onClick={cancelRename}>
+                {t("files.cancel")}
+              </button>
+              <button type="button" onClick={() => void confirmRename()}>
+                {t("files.renameItem")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {newFileParent !== null && (
         <div className="new-file-prompt" role="dialog" aria-modal="true">
           <div className="new-file-prompt-backdrop" onClick={cancelNewFile} />

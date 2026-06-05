@@ -1,60 +1,60 @@
 {
   "schemaVersion": "1.0",
-  "generatedAt": "2026-05-20T01:00:39.264Z",
+  "generatedAt": "2026-06-04T15:34:06.599Z",
   "source": "long-list",
   "metrics": [
     {
       "scenario": "S-LL-200",
       "metric": "commitDurationP50",
-      "value": 14.15,
+      "value": 17.6,
       "unit": "ms"
     },
     {
       "scenario": "S-LL-200",
       "metric": "commitDurationP95",
-      "value": 14.15,
+      "value": 17.6,
       "unit": "ms"
     },
     {
       "scenario": "S-LL-200",
       "metric": "firstPaintAfterMount",
-      "value": 40.01,
+      "value": 54.54,
       "unit": "ms"
     },
     {
       "scenario": "S-LL-500",
       "metric": "commitDurationP50",
-      "value": 20.08,
+      "value": 170.66,
       "unit": "ms"
     },
     {
       "scenario": "S-LL-500",
       "metric": "commitDurationP95",
-      "value": 20.08,
+      "value": 170.66,
       "unit": "ms"
     },
     {
       "scenario": "S-LL-500",
       "metric": "firstPaintAfterMount",
-      "value": 41.12,
+      "value": 195.04,
       "unit": "ms"
     },
     {
       "scenario": "S-LL-1000",
       "metric": "commitDurationP50",
-      "value": 18.71,
+      "value": 34.47,
       "unit": "ms"
     },
     {
       "scenario": "S-LL-1000",
       "metric": "commitDurationP95",
-      "value": 18.71,
+      "value": 34.47,
       "unit": "ms"
     },
     {
       "scenario": "S-LL-1000",
       "metric": "firstPaintAfterMount",
-      "value": 39.5,
+      "value": 58.43,
       "unit": "ms"
     },
     {

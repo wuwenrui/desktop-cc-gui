@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { TaskCenterView } from "./TaskCenterView";
 import type { TaskRunRecord } from "../types";
+import { dispatchOpenTaskRunEvent } from "../../agent-orchestration/utils/navigationEvents";
 
 function makeRun(overrides: Partial<TaskRunRecord> = {}): TaskRunRecord {
   return {
@@ -89,6 +90,56 @@ describe("TaskCenterView", () => {
     expect(run.status).toBe("running");
   });
 
+  it("opens the linked orchestration task for orchestration runs", () => {
+    const onOpenOrchestrationTask = vi.fn();
+    const run = makeRun({
+      task: {
+        taskId: "orchestration-task-1",
+        source: "orchestration",
+        workspaceId: "/repo",
+        title: "Review orchestration output",
+        orchestrationTaskId: "orchestration-task-1",
+      },
+    });
+
+    render(
+      <TaskCenterView
+        runs={[run]}
+        onOpenOrchestrationTask={onOpenOrchestrationTask}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("taskCenter.action.openOrchestrationTask"));
+
+    expect(onOpenOrchestrationTask).toHaveBeenCalledWith("orchestration-task-1");
+  });
+
+  it("selects a linked run when orchestration center dispatches an open-run event", () => {
+    render(
+      <TaskCenterView
+        workspaceId="/repo"
+        runs={[
+          makeRun({ runId: "run-1", currentStep: "First run step", updatedAt: 30 }),
+          makeRun({ runId: "run-2", currentStep: "Second run step", updatedAt: 10 }),
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("First run step")).toBeTruthy();
+
+    act(() => {
+      dispatchOpenTaskRunEvent("run-2");
+    });
+
+    expect(screen.getByText("Second run step")).toBeTruthy();
+  });
+
+  it("keeps orchestration navigation disabled for Kanban runs", () => {
+    render(<TaskCenterView runs={[makeRun()]} />);
+
+    expect(screen.queryByText("taskCenter.action.openOrchestrationTask")).toBeNull();
+  });
+
   it("renders linked browser evidence state without treating it as completion", () => {
     const run = makeRun({
       browserEvidence: {
@@ -132,8 +183,8 @@ describe("TaskCenterView", () => {
     );
 
     fireEvent.click(screen.getAllByText("Build release")[1]!);
-    expect(screen.getByText("taskCenter.action.retry")).toHaveProperty("disabled", true);
-    expect(screen.getByText("taskCenter.action.fork")).toHaveProperty("disabled", true);
+    expect(screen.queryByText("taskCenter.action.retry")).toBeNull();
+    expect(screen.queryByText("taskCenter.action.fork")).toBeNull();
   });
 
   it("sorts attention-needing runs ahead of lower-priority active runs", () => {
@@ -178,9 +229,9 @@ describe("TaskCenterView", () => {
       />,
     );
 
-    expect(screen.getByText("taskCenter.action.retry")).toHaveProperty("disabled", true);
-    expect(screen.getByText("taskCenter.action.resume")).toHaveProperty("disabled", true);
-    expect(screen.getByText("taskCenter.action.cancel")).toHaveProperty("disabled", true);
+    expect(screen.queryByText("taskCenter.action.retry")).toBeNull();
+    expect(screen.queryByText("taskCenter.action.resume")).toBeNull();
+    expect(screen.queryByText("taskCenter.action.cancel")).toBeNull();
     expect(screen.getByText("taskCenter.action.fork")).toHaveProperty("disabled", false);
   });
 });

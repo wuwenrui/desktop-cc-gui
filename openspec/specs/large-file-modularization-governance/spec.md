@@ -97,7 +97,8 @@ The system SHALL provide CI sentry checks that enforce domain-aware hard gates a
 - **AND** file matching and path output MUST remain platform-neutral
 
 ### Requirement: Completion Criteria for Governance Milestones
-The system SHALL define measurable completion criteria for the Deferred + JIT governance mode and for staged P0/P1 modularization batches.
+
+The system SHALL define measurable completion criteria for the Deferred + JIT governance mode, retained hard-debt elimination, and staged P0/P1 modularization batches.
 
 #### Scenario: Deferred strategy review
 - **WHEN** governance review is performed
@@ -110,6 +111,12 @@ The system SHALL define measurable completion criteria for the Deferred + JIT go
 - **AND** each P0 file MUST either be reduced below warn threshold or retain at least 150 lines of fail-threshold headroom with a recorded follow-up split rationale
 - **AND** each P1 file MUST retain at least 200 lines of fail-threshold headroom unless an explicit risk acceptance is documented
 - **AND** no batch MAY be marked complete if it introduces new large-file hard debt
+
+#### Scenario: Retained hard-debt elimination
+- **WHEN** a retained fail-scope baseline entry is selected for cleanup
+- **THEN** the cleanup MUST reduce the source file below its matched fail threshold through boundary-driven modularization
+- **AND** the baseline MUST be regenerated only after the retained source no longer exceeds the fail threshold
+- **AND** the cleanup MUST preserve public facades, selector contracts, command names, payload shapes, and persisted fields for the same batch
 
 ### Requirement: Large-File Governance MUST Favor Boundary-Driven Splits
 第一阶段 large-file 治理 MUST 优先执行 boundary-driven split，而不是只按行数机械切分。
@@ -137,4 +144,25 @@ Large-file cleanup recommendations MUST rank near-threshold files by hot-path ri
 - **WHEN** a near-threshold file is recommended for splitting
 - **THEN** the recommendation MUST state the public facade or compatibility boundary to preserve
 - **AND** unrelated hot paths MUST NOT be grouped into one split solely because they are near threshold
+
+### Requirement: Large File Gate SHALL Distinguish Known Debt From New Regressions
+
+The large-file gate SHALL record known hard-debt files in the baseline when immediate safe splitting is not part of the current change.
+
+#### Scenario: known hard debt is baseline tracked
+
+- **WHEN** a file remains above its hard-fail threshold after the safe refactor scope is complete
+- **THEN** the file MAY be recorded in the large-file baseline
+- **AND** future line-count growth SHALL be treated as a regression
+- **AND** the baseline SHALL NOT be used to hide newly introduced large files without explicit review
+
+### Requirement: Style Surface Splits SHALL Preserve Selector Contracts
+
+Feature stylesheet splits SHALL preserve selector contracts when cohesive style regions are extracted to lower gate pressure.
+
+#### Scenario: Project Map inspector styles are extracted
+
+- **WHEN** Project Map inspector/detail styles grow the main stylesheet beyond the style hard-fail threshold
+- **THEN** those styles MAY move to a feature-local imported stylesheet
+- **AND** existing class names and component markup SHALL remain compatible
 

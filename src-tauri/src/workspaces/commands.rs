@@ -15,16 +15,17 @@ use super::external_changes::{
     DetachedExternalMonitorStatus,
 };
 use super::files::{
-    copy_workspace_item_inner, create_workspace_directory_inner,
+    copy_workspace_item_inner, create_workspace_directory_inner, duplicate_workspace_item_inner,
     list_external_absolute_directory_children_inner, list_external_spec_tree_inner,
     list_workspace_directory_children_inner, list_workspace_files_inner,
+    paste_external_workspace_items_inner, paste_workspace_item_inner,
     read_external_absolute_file_inner, read_external_spec_file_inner, read_workspace_file_inner,
-    resolve_external_absolute_preview_handle_inner, resolve_external_spec_preview_handle_inner,
-    resolve_workspace_preview_handle_inner, search_workspace_text_inner,
-    trash_workspace_item_inner, write_external_absolute_file_inner, write_external_spec_file_inner,
-    write_workspace_file_inner, ExternalSpecFileResponse, WorkspaceFileResponse,
-    WorkspaceFilesResponse, WorkspacePreviewHandleResponse, WorkspaceTextSearchOptions,
-    WorkspaceTextSearchResponse,
+    rename_workspace_item_inner, resolve_external_absolute_preview_handle_inner,
+    resolve_external_spec_preview_handle_inner, resolve_workspace_preview_handle_inner,
+    search_workspace_text_inner, trash_workspace_item_inner, write_external_absolute_file_inner,
+    write_external_spec_file_inner, write_workspace_file_inner, ExternalSpecFileResponse,
+    WorkspaceFileOperationResult, WorkspaceFileResponse, WorkspaceFilesResponse,
+    WorkspacePreviewHandleResponse, WorkspaceTextSearchOptions, WorkspaceTextSearchResponse,
 };
 use super::git::{
     git_branch_exists, git_find_remote_for_branch, git_get_origin_url, git_remote_branch_exists,
@@ -966,6 +967,94 @@ pub(crate) async fn copy_workspace_item(
         &workspace_id,
         &path,
         |root, rel_path| copy_workspace_item_inner(root, rel_path),
+    )
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn duplicate_workspace_item(
+    workspace_id: String,
+    path: String,
+    state: State<'_, AppState>,
+    _app: AppHandle,
+) -> Result<WorkspaceFileOperationResult, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return Err("duplicate_workspace_item is not supported in remote mode yet.".to_string());
+    }
+
+    workspaces_core::duplicate_workspace_item_core(
+        &state.workspaces,
+        &workspace_id,
+        &path,
+        |root, rel_path| duplicate_workspace_item_inner(root, rel_path),
+    )
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn paste_workspace_item(
+    workspace_id: String,
+    source_path: String,
+    target_directory: String,
+    state: State<'_, AppState>,
+    _app: AppHandle,
+) -> Result<WorkspaceFileOperationResult, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return Err("paste_workspace_item is not supported in remote mode yet.".to_string());
+    }
+
+    workspaces_core::paste_workspace_item_core(
+        &state.workspaces,
+        &workspace_id,
+        &source_path,
+        &target_directory,
+        |root, rel_path, target| paste_workspace_item_inner(root, rel_path, target),
+    )
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn rename_workspace_item(
+    workspace_id: String,
+    path: String,
+    new_name: String,
+    state: State<'_, AppState>,
+    _app: AppHandle,
+) -> Result<WorkspaceFileOperationResult, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return Err("rename_workspace_item is not supported in remote mode yet.".to_string());
+    }
+
+    workspaces_core::rename_workspace_item_core(
+        &state.workspaces,
+        &workspace_id,
+        &path,
+        &new_name,
+        |root, rel_path, name| rename_workspace_item_inner(root, rel_path, name),
+    )
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn paste_external_workspace_items(
+    workspace_id: String,
+    source_paths: Vec<String>,
+    target_directory: String,
+    state: State<'_, AppState>,
+    _app: AppHandle,
+) -> Result<Vec<WorkspaceFileOperationResult>, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return Err(
+            "paste_external_workspace_items is not supported in remote mode yet.".to_string(),
+        );
+    }
+
+    workspaces_core::paste_external_workspace_items_core(
+        &state.workspaces,
+        &workspace_id,
+        &source_paths,
+        &target_directory,
+        |root, sources, target| paste_external_workspace_items_inner(root, sources, target),
     )
     .await
 }

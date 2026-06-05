@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
-import type { CustomPromptOption, DebugEntry, WorkspaceInfo } from "../../../types";
+import type {
+  CustomPromptOption,
+  DebugEntry,
+  WorkspaceInfo,
+  WorkspaceSessionAttributionMode,
+} from "../../../types";
 import { useAppServerEvents } from "../../app/hooks/useAppServerEvents";
 import { subscribeWebServiceReconnect } from "../../../services/events";
 import { createInitialThreadState, threadReducer } from "./useThreadsReducer";
@@ -46,6 +51,7 @@ import {
   type ThreadDeleteErrorCode,
 } from "../utils/threadDelete";
 import {
+  collectCanonicalActiveThreadRebindings,
   makeCustomNameKey,
   saveCustomName,
 } from "../utils/threadStorage";
@@ -136,6 +142,7 @@ type UseThreadsOptions = {
   activeEngine?: "claude" | "codex" | "gemini" | "opencode";
   useNormalizedRealtimeAdapters?: boolean;
   useUnifiedHistoryLoader?: boolean;
+  sessionAttributionMode?: WorkspaceSessionAttributionMode;
   resolveOpenCodeAgent?: (threadId: string | null) => string | null;
   resolveOpenCodeVariant?: (threadId: string | null) => string | null;
   resolveCollaborationUiMode?: (
@@ -186,6 +193,7 @@ export function useThreads({
   activeEngine = "claude",
   useNormalizedRealtimeAdapters = true,
   useUnifiedHistoryLoader = false,
+  sessionAttributionMode = "related",
   resolveOpenCodeAgent,
   resolveOpenCodeVariant,
   resolveCollaborationUiMode,
@@ -721,6 +729,7 @@ export function useThreads({
     onRenameThreadTitleMapping: (workspaceId, oldThreadId, _newThreadId) => {
       clearAutoTitlePending(workspaceId, oldThreadId);
     },
+    sessionAttributionMode,
     useUnifiedHistoryLoader,
   });
 
@@ -899,14 +908,10 @@ export function useThreads({
   );
 
   useEffect(() => {
-    Object.entries(state.activeThreadIdByWorkspace).forEach(([workspaceId, threadId]) => {
-      if (!threadId) {
-        return;
-      }
-      const canonicalThreadId = resolveCanonicalThreadId(threadId);
-      if (canonicalThreadId === threadId) {
-        return;
-      }
+    collectCanonicalActiveThreadRebindings(
+      state.activeThreadIdByWorkspace,
+      resolveCanonicalThreadId,
+    ).forEach(({ workspaceId, canonicalThreadId }) => {
       dispatch({
         type: "setActiveThreadId",
         workspaceId,

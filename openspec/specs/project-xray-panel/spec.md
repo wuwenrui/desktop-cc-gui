@@ -901,3 +901,663 @@ Project Map Auto Ingestion SHALL evaluate scheduling from the active workspace l
 - **THEN** the consumed message hashes SHALL NOT be added to `memoryCursor.processedMessages`
 - **AND** the messages SHALL remain eligible for retry after the interval gate allows another scan
 
+### Requirement: Project Map SHALL Prioritize The Knowledge Canvas
+
+The Project Map surface SHALL present the graph canvas as the primary user focus, with navigation and secondary workflow affordances arranged around it.
+
+#### Scenario: graph canvas is visually primary
+
+- **WHEN** the user opens Project Map with a valid dataset
+- **THEN** the graph canvas SHALL be the dominant surface
+- **AND** search, tour, path, repair, evidence, and task controls SHALL NOT visually compete as equal primary panels
+
+#### Scenario: graph command bar groups navigation primitives
+
+- **WHEN** search, guided tour, path finder, lens selection, graph health, or task status are available
+- **THEN** Project Map SHALL expose them as a compact graph navigation command surface
+- **AND** each command SHALL preserve its existing behavior or clearly indicate why it is unavailable
+
+### Requirement: Node Inspector SHALL Explain Understanding, Evidence, Relations, And Actions
+
+The selected node detail area SHALL be structured around the user's graph-understanding workflow.
+
+#### Scenario: selected node explains trust and relation context
+
+- **WHEN** user selects a node
+- **THEN** the inspector SHALL show the node summary, key facts, key logic, risk signals, evidence refs, confidence/stale context, incoming/outgoing relations, and bounded actions in a clear hierarchy
+- **AND** relation and evidence entries SHOULD remain navigable when existing callbacks support navigation
+
+#### Scenario: dead or future-only actions are not primary
+
+- **WHEN** an action is not wired to a reliable end-to-end behavior
+- **THEN** the UI SHALL hide it or render it disabled with an explicit reason
+- **AND** the action SHALL NOT be styled as a primary completed workflow
+
+### Requirement: Graph Health And Work Queue SHALL Be Secondary Affordances
+
+Graph repair and Work Queue SHALL remain accessible without dominating the graph experience.
+
+#### Scenario: graph repair is compact by default
+
+- **WHEN** graph integrity issues or repair actions exist
+- **THEN** Project Map SHALL summarize them through a compact health affordance
+- **AND** detailed repair information SHALL be available on demand
+
+#### Scenario: Work Queue is downgraded
+
+- **WHEN** orchestration or task affordances are available from Project Map
+- **THEN** Project Map SHALL present them as secondary actions or compact status
+- **AND** unfinished Work Queue controls SHALL NOT dominate the first-screen Project Map experience
+
+### Requirement: Existing Project Map Data Contracts SHALL Remain Compatible
+
+The experience pass SHALL reuse the current Project Map model and utilities unless a later change explicitly expands the schema.
+
+#### Scenario: no schema migration is required
+
+- **WHEN** an existing Project Map dataset is loaded
+- **THEN** the redesigned surface SHALL render using the existing nodes, relations, tours, evidence, repair summary, and view state
+- **AND** no dataset migration SHALL be required for this change
+
+### Requirement: Project Map node explain pack
+The Project X-Ray panel SHALL allow users to inspect a Project Map node through an explain pack that includes the selected node, evidence, related nodes, confidence/stale risk indicators, and related artifacts without requiring a full map regeneration.
+
+#### Scenario: Selected node exposes explain context
+- **WHEN** a user selects a Project Map node that has evidence and related nodes
+- **THEN** the panel displays an explain pack or explain action containing the node summary, evidence sources, related nodes, confidence/stale indicators, and related artifacts
+
+#### Scenario: Legacy dataset without relations still explains node
+- **WHEN** a user selects a Project Map node from a dataset that has no relation graph
+- **THEN** the panel still builds the explain pack from existing children, parent, sources, and related artifacts
+
+### Requirement: Project Map impact overlay
+The Project X-Ray panel SHALL support an impact view that distinguishes directly changed nodes, affected nodes, affected lenses, unmapped changed files, and risk summary when changed file paths are provided.
+
+#### Scenario: Changed files map to Project Map nodes
+- **WHEN** changed file paths match Project Map node sources or file references
+- **THEN** the panel marks those nodes as directly changed and shows related affected nodes when relationships or hierarchy indicate an impact
+
+#### Scenario: Changed files are not mapped
+- **WHEN** one or more changed file paths cannot be mapped to Project Map nodes
+- **THEN** the panel reports those files as unmapped instead of silently ignoring them
+
+### Requirement: Project Map git impact source
+The Project X-Ray panel SHALL derive Project Map impact input from the active workspace git status when no explicit changed-file input is supplied.
+
+#### Scenario: Active workspace has changed git files
+- **WHEN** Project Map is opened for an active workspace and git status returns changed files
+- **THEN** the Project Map impact view uses those changed file paths to compute changed, affected, unmapped, and ignored nodes
+
+#### Scenario: Explicit changed files are supplied
+- **WHEN** Project Map receives explicit changed file paths from a caller
+- **THEN** the explicit changed file paths take precedence over git-derived paths
+
+#### Scenario: Git status unavailable
+- **WHEN** git status fails or the workspace is not a git repository
+- **THEN** Project Map remains usable and does not show a git-derived impact overlay
+
+### Requirement: Project Map impact source metadata
+The Project X-Ray panel SHALL indicate whether the current impact analysis comes from explicit input, git status, or no source.
+
+#### Scenario: Git status supplies impact files
+- **WHEN** Project Map impact files are derived from git status
+- **THEN** the panel can show source metadata indicating git status and the number of input files
+
+### Requirement: Project Map guided tour navigation
+The Project X-Ray panel SHALL allow users to follow guided Project Map tour steps and focus the nodes referenced by each step.
+
+#### Scenario: User starts a guided tour
+- **WHEN** a guided tour is available and the user starts it
+- **THEN** Project Map focuses the first step nodes and shows step title, summary, and navigation controls
+
+### Requirement: Project Map path finder
+The Project X-Ray panel SHALL allow users to find an available path between two Project Map nodes using hierarchy and relation data.
+
+#### Scenario: Path exists between two nodes
+- **WHEN** the user selects a source and target node with a discoverable path
+- **THEN** Project Map displays the ordered path and highlights the path nodes
+
+#### Scenario: No path exists between two nodes
+- **WHEN** the user selects two nodes without a discoverable path
+- **THEN** Project Map displays a clear no-path result
+
+### Requirement: Project Map code/spec/task relationships
+The Project X-Ray panel SHALL surface deterministic relationships between Project Map code nodes and related specs, tasks, and documents when those relationships are available.
+
+#### Scenario: Code node has spec evidence
+- **WHEN** a selected Project Map node has related OpenSpec evidence
+- **THEN** the inspector shows the related capability or scenario evidence
+
+### Requirement: Project Map stale reason display
+The Project X-Ray panel SHALL display stale reasons and refresh recommendations for Project Map nodes or maps when available.
+
+#### Scenario: Node has stale reason
+- **WHEN** a Project Map node is stale with a known reason
+- **THEN** the inspector shows the reason and an appropriate refresh recommendation
+
+### Requirement: Project Map repair result display
+The Project X-Ray panel SHALL display graph validation and deterministic repair results when validation finds issues.
+
+#### Scenario: Graph repair removes invalid relation
+- **WHEN** deterministic repair removes or quarantines an invalid relation
+- **THEN** Project Map shows a user-visible repair summary
+
+### Requirement: Project Map SHALL Expose Evidence Files Explorer
+
+Project Map SHALL provide an evidence-file explorer that groups file-backed evidence by workspace-relative file path and keeps non-file evidence explainable.
+
+#### Scenario: file-backed evidence is grouped by file
+
+- **WHEN** a loaded Project Map dataset contains node sources, related artifacts, relations, or governance links with workspace file paths
+- **THEN** Project Map SHALL group those evidence references by normalized workspace-relative file path
+- **AND** each file entry SHALL expose related node count and evidence count
+- **AND** the grouping SHALL NOT mutate Project Map semantic data
+
+#### Scenario: file entry shows related nodes
+
+- **WHEN** user selects an evidence file entry
+- **THEN** Project Map SHALL show the related nodes that reference that file
+- **AND** each related node link SHALL expose enough label or id information to identify the node
+- **AND** missing nodes SHALL render as degraded references rather than crashing the panel
+
+#### Scenario: file entry can focus map nodes
+
+- **WHEN** user activates a related node from the selected evidence file detail
+- **THEN** Project Map SHALL focus or select that node in the graph when it still exists
+- **AND** Project Map MAY highlight other nodes related to the same file
+- **AND** the highlight SHALL be clearable without modifying the dataset
+
+#### Scenario: evidence file can open in editor
+
+- **WHEN** user activates a file-backed evidence entry with a concrete workspace path
+- **THEN** the system SHALL route the open-file action through the existing Project Map evidence navigation path
+- **AND** available line references SHALL be preserved as 1-based line targets
+- **AND** unsupported or missing file refs SHALL show an explainable disabled/degraded state
+
+#### Scenario: non-file evidence is not faked as a file link
+
+- **WHEN** evidence contains only a hash, conversation id, task id, spec id, package name, or free-text label without a concrete workspace file path
+- **THEN** Project Map SHALL keep that evidence in a non-file or degraded evidence bucket
+- **AND** the UI SHALL NOT render it as a clickable file link
+
+#### Scenario: evidence explorer remains read-only
+
+- **WHEN** user browses, filters, highlights, focuses, or opens evidence from the Evidence Files explorer
+- **THEN** Project Map SHALL NOT rewrite node content, relations, governance artifacts, source files, or provider artifacts
+
+### Requirement: Project Map SHALL Expose Relation Inspector
+
+Project Map SHALL expose typed relations as inspectable read-only graph evidence instead of only using them for background context or path finding.
+
+#### Scenario: selected node shows incoming and outgoing relations
+
+- **WHEN** a user selects a Project Map node and the dataset contains relations for that node
+- **THEN** Project Map SHALL show outgoing relations from that node
+- **AND** Project Map SHALL show incoming relations to that node
+- **AND** each relation item SHALL identify the other endpoint when available
+
+#### Scenario: relation item shows explainable metadata
+
+- **WHEN** Project Map renders a relation item
+- **THEN** the item SHALL show relation type
+- **AND** the item SHALL show source kind or degraded source state when available
+- **AND** the item SHALL expose confidence, stale, or degraded markers when available
+
+#### Scenario: relation endpoint can be focused
+
+- **WHEN** user activates an available source or target endpoint from a relation item
+- **THEN** Project Map SHALL focus or select that endpoint node
+- **AND** if the endpoint is missing, the UI SHALL show an explainable missing-endpoint state
+
+### Requirement: Project Map SHALL Provide Relation Filters And Legend
+
+Project Map SHALL allow users to control relation visibility and graph density without mutating persisted relations.
+
+#### Scenario: user filters relations by type or source kind
+
+- **WHEN** user applies a relation type or source-kind filter
+- **THEN** Project Map SHALL update visible or highlighted relations according to the filter
+- **AND** the underlying relation records SHALL remain unchanged
+
+#### Scenario: relation legend displays visible relation counts
+
+- **WHEN** relations are available in the current dataset
+- **THEN** Project Map SHALL show a legend or equivalent summary of visible relation types and counts
+- **AND** sparse or absent relations SHALL render a clear empty state
+
+#### Scenario: path finder labels relation-backed path segments
+
+- **WHEN** Path Finder returns a path segment backed by a typed relation
+- **THEN** the segment SHALL expose relation type and source kind when available
+- **AND** hierarchy fallback segments SHALL be distinguishable from typed relation segments
+
+#### Scenario: legacy datasets without relations remain usable
+
+- **WHEN** a Project Map dataset has no persisted relation records
+- **THEN** Project Map SHALL continue rendering graph, inspector, search, tour, and path UI without crashing
+- **AND** relation controls SHALL show empty or unavailable states rather than errors
+
+### Requirement: Project Map SHALL Maintain Focused Regression Coverage For Core Derived Behavior
+
+Project Map core derived projections SHALL have focused regression coverage so navigation, evidence, relation, impact, governance, freshness, and graph integrity behavior remains stable across future changes.
+
+#### Scenario: navigation utilities have deterministic coverage
+
+- **WHEN** Project Map navigation utilities are changed
+- **THEN** focused tests SHALL cover guided tour generation, node search, shortest path, hierarchy fallback, and no-path results
+
+#### Scenario: impact and governance projections have evidence coverage
+
+- **WHEN** Project Map impact or governance graph utilities are changed
+- **THEN** focused tests SHALL cover changed-file impact matching, no-impact fallback, OpenSpec metadata extraction, Trellis task metadata extraction, and Agent Task context source refs
+
+#### Scenario: freshness and integrity helpers cover degraded states
+
+- **WHEN** Project Map freshness or graph integrity utilities are changed
+- **THEN** focused tests SHALL cover stale reasons, missing evidence, missing relation endpoints, duplicate relation ids, and repair summaries
+
+#### Scenario: persistence normalization covers legacy relation data
+
+- **WHEN** Project Map relation persistence or normalization is changed
+- **THEN** focused tests SHALL cover relation payload roundtrip and legacy datasets without relation payloads where practical
+
+#### Scenario: tests use portable compact fixtures
+
+- **WHEN** Project Map focused tests create dataset fixtures
+- **THEN** fixtures SHALL use compact representative nodes and workspace-relative paths
+- **AND** fixtures SHALL NOT rely on user-local absolute paths
+
+### Requirement: Project Map Nodes SHALL Create Orchestration Task Drafts
+
+Project Map SHALL allow users to create orchestration task drafts from map nodes without automatically starting agent execution.
+
+#### Scenario: create task draft from selected node
+
+- **WHEN** user triggers create-task from a Project Map node
+- **THEN** the system SHALL create an orchestration task draft
+- **AND** the draft SHALL reference the selected node id and node label
+- **AND** execution SHALL NOT start until user confirms dispatch in Orchestration Center
+
+#### Scenario: node evidence is carried into task draft
+
+- **WHEN** a Project Map node has source files, specs, commits, tests, conversations, or other evidence refs
+- **THEN** the task draft SHALL include those evidence refs where available
+- **AND** missing evidence SHALL be represented as unavailable rather than invented
+
+#### Scenario: stale or uncertain node creates risk-marked task
+
+- **WHEN** a Project Map node is stale, candidate-only, low-confidence, or unknown-confidence
+- **THEN** the created task draft SHALL expose that risk marker
+- **AND** Orchestration Center SHALL require user review before marking the task ready
+
+### Requirement: Project Map SHALL Link Back From Orchestration Tasks
+
+Project Map SHALL support navigation from orchestration task details back to the source node when the node is still available.
+
+#### Scenario: task opens source node
+
+- **WHEN** user opens a Project Map source reference from an orchestration task
+- **THEN** the system SHALL open the Project Map panel focused on the referenced node when it exists
+- **AND** if the node no longer exists, the system SHALL show an explainable missing-source state
+
+### Requirement: Project Map Work Queue SHALL Not Re-Own Graph Capability Expansion
+
+Project Map graph primitives borrowed from Understand-Anything SHALL remain scoped to the dedicated Project Map changes, not this orchestration change.
+
+#### Scenario: graph navigation capabilities are already covered by Project Map changes
+
+- **WHEN** relation graph, guided tour, path finder, impact overlay, Evidence Files, staleness repair, or graph-focused tests are discussed
+- **THEN** this orchestration change SHALL refer to the completed Project Map changes as dependencies
+- **AND** this change SHALL only specify the execution bridge from Project Map evidence/candidates into OrchestrationTask, TaskRun, and review gate
+
+### Requirement: Project Map graph SHALL remain the primary surface
+
+Project Map SHALL keep the structure graph as the primary visual surface while query, recent activity, association explanation, and evidence navigation are presented as lightweight overlays or collapsible panels.
+
+#### Scenario: Project Map opens to the graph
+
+- **WHEN** the user opens Project Map for a workspace with persisted map data
+- **THEN** the graph SHALL remain the primary visible surface
+- **AND** newly added query, recent activity, association explanation, and evidence navigation surfaces SHALL NOT replace the graph as the default view
+
+#### Scenario: Auxiliary surfaces are collapsible
+
+- **WHEN** query results, recent activity, association explanation, evidence navigation, or quick filters are available
+- **THEN** Project Map SHALL expose them through compact controls, overlays, or collapsible sections
+- **AND** the user SHALL be able to collapse or clear those surfaces without mutating Project Map data
+
+### Requirement: Project Map SHALL provide unified project query
+
+Project Map SHALL provide a unified query surface that can search Project Map nodes, evidence files, relations, governance links, stale reasons, and recent activity while preserving graph focus.
+
+#### Scenario: Query matches nodes
+
+- **WHEN** a query matches a node title, summary, node kind, lens, source path, related artifact, or detail text
+- **THEN** Project Map SHALL show matching node results with enough matched-field context to explain why they matched
+- **AND** selecting a node result SHALL focus or select that node on the graph
+- **AND** matching nodes SHALL be highlighted without changing graph layout
+
+#### Scenario: Query matches non-node context
+
+- **WHEN** a query matches an evidence file, relation, spec link, task link, stale reason, or recent activity item
+- **THEN** Project Map SHALL show that result in a grouped non-node result section
+- **AND** the result SHALL link to relevant nodes or relations when available
+- **AND** unmapped results SHALL be shown as degraded or non-node context rather than being silently ignored
+
+#### Scenario: Query searches only dataset-backed artifact references
+
+- **WHEN** Project Map searches spec, task, governance, or artifact context
+- **THEN** it SHALL only search references already present in Project Map dataset fields such as node sources, related artifacts, relation evidence, evidence records, or run metadata
+- **AND** it SHALL NOT require hard-coded OpenSpec, Trellis, Codex, Claude, or user-local path conventions to produce those query results
+
+### Requirement: Project Map SHALL provide recent activity overlay
+
+Project Map SHALL provide a collapsible recent activity overlay that projects recent workspace activity onto Project Map nodes, files, relations, and risk summaries.
+
+#### Scenario: Recent file changes map to graph nodes
+
+- **WHEN** recent changed files are available from git status or explicit Project Map impact input
+- **THEN** Project Map SHALL identify directly changed nodes, affected nodes, affected lenses, unmapped files, and risk summary
+- **AND** directly changed and affected nodes SHALL be visually distinguishable on the graph
+
+#### Scenario: Changed-file input is unavailable
+
+- **WHEN** Project Map does not have changed-file or impact input available through the current frontend contract
+- **THEN** Project Map SHALL show an honest empty or degraded changed-file activity state
+- **AND** it MAY still summarize map-derived activity from runs, stale nodes, candidates, and evidence records
+- **AND** it SHALL NOT present map-derived activity as a live git or complete chronological feed
+
+#### Scenario: Recent activity includes map state
+
+- **WHEN** the dataset contains stale nodes, candidate nodes, pending review candidates, or recent Project Map runs
+- **THEN** Project Map SHALL be able to summarize those items in recent activity
+- **AND** activity items that map to nodes SHALL allow the user to focus those nodes
+- **AND** the activity UI SHALL distinguish changed-file input from map-derived run, stale, candidate, and evidence state
+
+#### Scenario: Unmapped activity remains visible
+
+- **WHEN** a recent activity item or changed file cannot be mapped to a Project Map node
+- **THEN** Project Map SHALL show it as unmapped or degraded context
+- **AND** Project Map SHALL NOT create fake graph nodes for that unmapped context
+
+### Requirement: Project Map SHALL provide quick graph filter chips
+
+Project Map SHALL provide lightweight filter chips for high-signal graph states without replacing the current graph view.
+
+#### Scenario: User filters high-signal states
+
+- **WHEN** the user activates a quick filter such as Changed, Affected, Stale, Candidate, Low Confidence, or Inferred Relations
+- **THEN** Project Map SHALL highlight matching nodes or relations on the existing graph
+- **AND** the filter SHALL be clearable
+- **AND** activating the filter SHALL NOT mutate semantic map data or reset saved node layout
+
+#### Scenario: Multiple graph overlays are active
+
+- **WHEN** selected node, selected relation, path result, search result, recent activity, quick filter, and base graph state overlap on the same graph item
+- **THEN** Project Map SHALL render highlight priority deterministically as selected state, path state, search state, recent activity state, quick filter state, then base graph state
+- **AND** each overlay SHALL be clearable independently
+- **AND** clearing one overlay SHALL NOT reset saved graph layout or mutate Project Map semantic data
+
+### Requirement: Project Map SHALL explain selected-node associations
+
+Project Map SHALL expose association context for a selected node through collapsible detail sections.
+
+#### Scenario: Selected node has relation context
+
+- **WHEN** the selected node has incoming or outgoing relations
+- **THEN** Project Map SHALL show relation type, source kind, direction, confidence, stale state, and evidence count
+- **AND** activating a related node SHALL focus that node on the graph
+
+#### Scenario: Selected node has inferred or low-confidence relation
+
+- **WHEN** a selected node relation is AI-inferred, low-confidence, unknown-confidence, or stale
+- **THEN** Project Map SHALL visibly mark the relation state
+- **AND** Project Map SHALL NOT present that relation as deterministic verified truth
+
+#### Scenario: Selected node has recent activity
+
+- **WHEN** recent activity maps to the selected node
+- **THEN** Project Map SHALL show that activity in the selected-node detail context
+- **AND** the section SHALL be collapsible or compact by default
+
+### Requirement: Project Map SHALL explain paths between nodes
+
+Project Map SHALL extend path finding with an evidence-aware explanation of why two nodes are related.
+
+#### Scenario: Path exists between selected nodes
+
+- **WHEN** the user selects a source and target node with a discoverable hierarchy or relation path
+- **THEN** Project Map SHALL show the ordered path
+- **AND** Project Map SHALL highlight path nodes and path edges on the graph
+- **AND** Project Map SHALL explain each step using relation metadata or hierarchy fallback context
+
+#### Scenario: Path step has relation metadata
+
+- **WHEN** a path step uses a typed relation
+- **THEN** the explanation SHALL include relation type, source kind, confidence, stale state, and evidence count
+- **AND** inferred or low-confidence relation steps SHALL be clearly labeled
+
+#### Scenario: No path exists between selected nodes
+
+- **WHEN** no path exists between the selected source and target nodes
+- **THEN** Project Map SHALL show a clear no-path result
+- **AND** the graph SHALL remain usable
+
+### Requirement: Project Map SHALL enhance evidence-file navigation
+
+Project Map SHALL enhance evidence-file navigation so file-backed evidence can be used to reverse lookup related nodes, relations, recent changes, and editor targets.
+
+#### Scenario: Evidence file maps to nodes and relations
+
+- **WHEN** a file is referenced by node sources, related artifacts, relations, or governance links
+- **THEN** Project Map SHALL show related nodes, related relations, evidence counts, stale count, and low-confidence count for that file
+- **AND** selecting a related node SHALL focus or select it in the graph when it still exists
+
+#### Scenario: Evidence file is recently changed
+
+- **WHEN** an evidence file is included in recent changed files or impact input
+- **THEN** Project Map SHALL mark the file as recently changed or impact-relevant
+- **AND** the file detail SHALL distinguish mapped and unmapped impact when possible
+
+#### Scenario: User opens evidence file
+
+- **WHEN** the user activates a concrete workspace file reference
+- **THEN** Project Map SHALL route the request through the existing evidence file open path
+- **AND** available one-based line references SHALL be preserved
+
+### Requirement: Project Map SHALL provide local advisor hints inspired by Understand-Anything
+
+Project Map SHALL borrow useful Understand-Anything agent and skill logic as local Project Map advisor projections without requiring the Understand-Anything plugin, graph schema, dashboard, or `.understand-anything` files at runtime.
+
+#### Scenario: Advisor hints are derived locally
+
+- **WHEN** Project Map produces diff-impact, query-neighborhood, node-explain, guide-topology, or graph-health hints
+- **THEN** those hints SHALL be derived from `ProjectMapDataset`, Project Map relations, evidence indexes, impact analysis, graph integrity data, and current UI inputs
+- **AND** Project Map SHALL NOT shell out to Understand-Anything skills or agents
+- **AND** Project Map SHALL NOT require a `.understand-anything/knowledge-graph.json` file
+
+#### Scenario: Diff-impact advisor explains recent changes
+
+- **WHEN** changed-file or impact input is available
+- **THEN** Project Map SHALL be able to summarize changed nodes, affected nodes, affected lenses, impacted relations, unmapped files, and risk hints
+- **AND** advisor output SHALL be focusable on the graph when mapped nodes or relations exist
+
+#### Scenario: Query-neighborhood advisor explains search context
+
+- **WHEN** a user query matches Project Map nodes or non-node context
+- **THEN** Project Map SHALL be able to show bounded one-hop neighborhood hints around the matched context
+- **AND** the hints SHALL include relevant nodes, relations, lenses, artifacts, or degraded references when available
+- **AND** the hints SHALL respect result caps and large-file safeguards
+
+#### Scenario: Node-explain advisor summarizes selected node context
+
+- **WHEN** a node is selected
+- **THEN** Project Map SHALL be able to summarize children, incoming/outgoing relations, evidence, recent activity, stale/candidate state, and risk flags from existing Project Map data
+- **AND** the summary SHALL distinguish deterministic evidence from inferred, degraded, or review-needed context
+
+#### Scenario: Guide-topology advisor suggests next inspection targets
+
+- **WHEN** Project Map has enough graph topology to infer useful next steps
+- **THEN** Project Map SHALL be able to suggest next nodes or walkthrough hints using signals such as entry candidates, fan-in, fan-out, path traversal, clusters, or existing tour steps
+- **AND** suggestions SHALL focus the existing graph rather than opening a separate dashboard
+
+#### Scenario: Graph-health advisor surfaces review warnings
+
+- **WHEN** Project Map detects graph integrity issues, dangling or degraded references, stale nodes, low-confidence relations, inferred relations, empty evidence, or path normalization issues
+- **THEN** Project Map SHALL surface those as reviewable warnings
+- **AND** warnings SHALL NOT automatically mutate semantic Project Map data
+- **AND** warnings SHALL be clearable or collapsible from the UI
+
+### Requirement: Project Map SHALL handle file paths across supported platforms
+
+Project Map SHALL compare, display, and open file-backed evidence in a way that is compatible with Windows, macOS, and Linux path formats.
+
+#### Scenario: File references use different platform separators
+
+- **WHEN** Project Map compares node sources, related artifacts, relation evidence, changed files, or evidence records that use Windows `\` separators or POSIX `/` separators
+- **THEN** Project Map SHALL normalize paths for matching
+- **AND** it SHALL preserve the original user-facing display path when useful
+- **AND** matching SHALL NOT rely on hard-coded path separators
+
+#### Scenario: File reference includes editor line information
+
+- **WHEN** a workspace file reference includes a one-based line number
+- **THEN** Project Map SHALL preserve the one-based line reference when routing the file open request
+- **AND** path normalization SHALL NOT drop or reinterpret the line reference
+
+#### Scenario: File reference cannot be safely resolved
+
+- **WHEN** a file reference is absolute, outside the workspace, uses an unsupported platform shape, or cannot be resolved against the active workspace
+- **THEN** Project Map SHALL show it as degraded file context
+- **AND** it SHALL NOT silently discard the reference
+- **AND** it SHALL NOT treat user-local absolute path details as portable semantic project facts
+
+### Requirement: Project Map SHALL handle large files responsibly
+
+Project Map SHALL avoid full-content scanning or full-content rendering for large files and large evidence sets in query, activity, evidence navigation, and local context explanation.
+
+#### Scenario: Query or evidence navigation touches a large file
+
+- **WHEN** a query result, evidence record, recent activity item, or file reverse lookup points to a large or unavailable file
+- **THEN** Project Map SHALL represent that file through metadata, matched fields, available evidence snippets, capped previews, counts, or degraded content markers
+- **AND** it SHALL NOT require reading or rendering the full file content inside the Project Map panel
+
+#### Scenario: Result groups are large
+
+- **WHEN** query, activity, relation, or evidence result groups contain many items
+- **THEN** Project Map SHALL cap or collapse visible results by default
+- **AND** it SHALL keep the graph-first view responsive
+- **AND** it SHALL provide summarized counts so hidden items are not mistaken for missing data
+
+#### Scenario: Local explain-context uses evidence from large files
+
+- **WHEN** the user activates local explain-context and the selected node references large or unavailable files
+- **THEN** Project Map SHALL summarize from existing node metadata, relation metadata, evidence records, snippets, and risk flags
+- **AND** it SHALL mark missing or oversized content as degraded context
+- **AND** it SHALL NOT start a new AI generation run or full-file read to compensate
+
+### Requirement: Project Map SHALL provide lightweight query history
+
+Project Map SHALL provide lightweight query and navigation history to reduce disorientation in large maps.
+
+#### Scenario: Query history is available
+
+- **WHEN** the user performs project queries or focuses nodes from query results
+- **THEN** Project Map SHALL be able to show recent query or navigation chips with a small bounded count
+- **AND** selecting a chip SHALL restore the query or focus context
+- **AND** the user SHALL be able to clear the visible history
+
+### Requirement: Project Map SHALL explain node context locally
+
+Project Map SHALL provide a lightweight "explain this node context" action derived from existing Project Map data without requiring a new AI generation run.
+
+#### Scenario: User asks to explain selected node context
+
+- **WHEN** the user activates the explain-context action for a selected node
+- **THEN** Project Map SHALL summarize the selected node, related nodes, relation highlights, evidence sources, recent activity, stale/candidate state, and risk flags from existing dataset context
+- **AND** the explanation SHALL distinguish deterministic evidence from inferred or degraded context
+
+### Requirement: Project Map SHALL Use Priority-Based View Information Architecture
+
+Project Map SHALL organize its primary view around map understanding and current user focus instead of rendering all available tools as equal-weight always-expanded sections.
+
+#### Scenario: default view shows primary map understanding first
+
+- **WHEN** a user opens Project Map for a loaded workspace
+- **THEN** the default view SHALL prioritize project/profile identity, current map or lens focus, health/risk summary, and primary navigation affordances
+- **AND** raw utility controls, filters, diagnostics, and secondary investigation surfaces SHALL NOT visually dominate the first-read area
+- **AND** existing navigation, evidence, relation, and repair summaries MAY remain visible only as compact intent affordances
+
+#### Scenario: utility surfaces do not compete as default full peers
+
+- **WHEN** Evidence Files, Relations, Tour, Path Finder, Impact Overlay, or Graph Repair capabilities are available
+- **THEN** Project Map SHALL keep each capability reachable through a clear affordance
+- **AND** Project Map SHALL NOT render Evidence Files and Relations as simultaneous large always-expanded peer sections in the default state unless the user has explicitly selected or expanded them
+- **AND** mode expansion SHALL be driven by explicit user action or by an active contextual subject such as selected evidence file, selected relation, active path, active search, active tour, or active repair attention
+
+#### Scenario: empty and sparse sections collapse into meaningful affordances
+
+- **WHEN** a secondary Project Map section has no data or only sparse data
+- **THEN** the view SHALL show a concise empty, unavailable, or count-based affordance
+- **AND** the section SHALL NOT consume disproportionate vertical space merely to show absence of data
+
+### Requirement: Project Map SHALL Separate Contextual Focus From Supporting Investigation Surfaces
+
+Project Map SHALL make one contextual subject dominant at a time and keep evidence, relation, navigation, and diagnostic details as supporting surfaces unless the user selects them.
+
+#### Scenario: selected node becomes the contextual focus
+
+- **WHEN** a user selects a Project Map node
+- **THEN** the selected node SHALL become the dominant contextual subject
+- **AND** node explanation, local evidence summary, risk/confidence/stale state, and primary node actions SHALL be presented before unrelated global controls
+- **AND** relation and evidence details MAY be summarized or collapsed until expanded
+
+#### Scenario: selected evidence file becomes the contextual focus
+
+- **WHEN** a user selects an Evidence Files entry
+- **THEN** the selected file SHALL become the contextual subject
+- **AND** related nodes and file-backed evidence refs SHALL be shown with node focus actions
+- **AND** the graph MAY highlight related nodes without mutating Project Map semantic data
+
+#### Scenario: selected relation becomes the contextual focus
+
+- **WHEN** a user selects a Project Map relation
+- **THEN** the selected relation SHALL become the contextual subject
+- **AND** the view SHALL show source node, target node, relation type, source kind, confidence, stale or degraded markers, and available evidence refs
+- **AND** endpoint navigation SHALL remain available when endpoints exist
+
+### Requirement: Project Map SHALL Escalate Repair And Diagnostics Only When Attention Is Needed
+
+Project Map SHALL treat graph repair and degraded diagnostics as health/attention signals rather than primary content in healthy or empty states.
+
+#### Scenario: healthy graph keeps repair low noise
+
+- **WHEN** graph integrity checks find no invalid records, dangling endpoints, repair candidates, or stale evidence requiring attention
+- **THEN** Graph Repair SHALL render as a compact health cue or secondary affordance
+- **AND** it SHALL NOT appear as a prominent warning-like block
+- **AND** normal zero-issue state SHALL be visually distinguishable from repair-required state
+
+#### Scenario: graph issues escalate repair visibility
+
+- **WHEN** graph integrity checks find invalid records, dangling relation endpoints, repair candidates, or degraded evidence that requires user attention
+- **THEN** Project Map SHALL escalate Graph Repair or diagnostics visibility with an explainable attention cue
+- **AND** the cue SHALL identify the issue category and preserve access to the repair details
+- **AND** the attention cue SHALL not require the user to inspect raw relation or evidence filters to understand that repair is needed
+
+### Requirement: Project Map View State SHALL Remain Non-Mutating
+
+Project Map SHALL keep information architecture state, section expansion, active mode, filters, and visual highlights separate from persisted semantic Project Map data.
+
+#### Scenario: section and mode changes do not mutate semantic data
+
+- **WHEN** a user switches Project Map mode, expands or collapses sections, filters relation visibility, focuses evidence, or highlights a path
+- **THEN** Project Map SHALL update only view state
+- **AND** persisted nodes, relations, evidence records, candidates, runs, and generated map facts SHALL remain unchanged
+- **AND** existing node layout persistence SHALL remain limited to graph layout/pinning semantics rather than becoming a storage channel for semantic facts
+
+#### Scenario: completed capabilities remain reachable after refactor
+
+- **WHEN** the view information architecture refactor is applied
+- **THEN** existing Project Map search, guided tour, path finder, impact overlay, evidence file reverse navigation, relation inspector, relation filters, and graph repair flows SHALL remain reachable
+- **AND** legacy datasets without relations, evidence files, tour metadata, or repair candidates SHALL continue rendering usable fallback states
+

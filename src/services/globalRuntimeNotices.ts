@@ -182,6 +182,12 @@ export function getGlobalRuntimeNoticesSnapshot(): readonly GlobalRuntimeNotice[
   return cloneSnapshot();
 }
 
+export function filterVisibleGlobalRuntimeNoticeDockItems(
+  inputNotices: readonly GlobalRuntimeNotice[],
+): GlobalRuntimeNotice[] {
+  return inputNotices.filter((notice) => notice.severity === "error");
+}
+
 export function pushGlobalRuntimeNotice(
   input: GlobalRuntimeNoticeInput,
 ): GlobalRuntimeNotice {

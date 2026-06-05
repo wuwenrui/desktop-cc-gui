@@ -14,10 +14,10 @@ function readRuleBody(selector: string): string {
 
 describe("project map layout css", () => {
   it("keeps the graph canvas in the flexible stage row when the task banner is absent", () => {
-    expect(readRuleBody(".project-map-task-banner")).toContain("grid-row: 1");
-    expect(readRuleBody(".project-map-lens-shell")).toContain("grid-row: 2");
-    expect(readRuleBody(".project-map-graph-canvas")).toContain("grid-row: 3");
-    expect(readRuleBody(".project-map-empty-state")).toContain("grid-row: 3");
+    expect(readRuleBody(".project-map-task-banner")).toBe("");
+    expect(readRuleBody(".project-map-lens-shell")).toContain("grid-row: 1");
+    expect(readRuleBody(".project-map-graph-canvas")).toContain("grid-row: 2");
+    expect(readRuleBody(".project-map-empty-state")).toContain("grid-row: 2");
   });
 
   it("keeps project map surfaces wired to theme tokens instead of hardcoded light colors", () => {

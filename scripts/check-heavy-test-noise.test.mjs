@@ -73,6 +73,18 @@ Failed to load git status Error: boom
   assert.equal(report.stderrPayloads[0]?.context, "src/features/git/hooks/useGitStatus.test.tsx > useGitStatus > example");
 });
 
+test("does not carry stale stream context across runner boundaries", () => {
+  const report = analyzeHeavyTestNoise(`
+stdout | src/features/threads/hooks/useThreadMessaging.test.tsx > useThreadMessaging > example
+[model/resolve/send] { threadId: "t-1" }
+ Test Files  1 passed (1)
+orphan payload after the test already ended
+`);
+
+  assert.equal(report.stdoutPayloads.length, 1);
+  assert.equal(report.stdoutPayloads[0]?.line, "[model/resolve/send] { threadId: \"t-1\" }");
+});
+
 test("ignores ANSI-colored runner lines and normalizes payload contexts", () => {
   const report = analyzeHeavyTestNoise(`
 \u001b[32m RUN \u001b[39m v3.2.4 /repo

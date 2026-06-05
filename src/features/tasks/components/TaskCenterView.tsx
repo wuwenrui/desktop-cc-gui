@@ -1,6 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TaskRunRecord, TaskRunStatus } from "../types";
+import {
+  OPEN_TASK_RUN_EVENT,
+  dispatchOpenOrchestrationTaskEvent,
+  readOpenTaskRunEvent,
+} from "../../agent-orchestration/utils/navigationEvents";
 import { hasActiveRunConflict } from "../utils/taskRunProjection";
 import {
   compareTaskRunSurfacePriority,
@@ -15,6 +20,7 @@ type TaskCenterViewProps = {
   onResumeRun?: (run: TaskRunRecord) => void;
   onCancelRun?: (run: TaskRunRecord) => void;
   onForkRun?: (run: TaskRunRecord) => void;
+  onOpenOrchestrationTask?: (taskId: string) => void;
 };
 
 const STATUS_ORDER: TaskRunStatus[] = [
@@ -43,10 +49,12 @@ export function TaskCenterView({
   onResumeRun,
   onCancelRun,
   onForkRun,
+  onOpenOrchestrationTask,
 }: TaskCenterViewProps) {
   const { t } = useTranslation();
   const [statusFilter, setStatusFilter] = useState<TaskRunStatus | "all">("all");
   const [engineFilter, setEngineFilter] = useState<TaskRunRecord["engine"] | "all">("all");
+  const [openedFromRunLink, setOpenedFromRunLink] = useState(false);
   const workspaceRuns = useMemo(
     () =>
       runs
@@ -62,6 +70,21 @@ export function TaskCenterView({
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const selectedRun =
     filteredRuns.find((run) => run.runId === selectedRunId) ?? filteredRuns[0] ?? null;
+  useEffect(() => {
+    const handleOpenTaskRun = (event: Event) => {
+      const runId = readOpenTaskRunEvent(event);
+      if (!runId || !workspaceRuns.some((run) => run.runId === runId)) {
+        return;
+      }
+      setSelectedRunId(runId);
+      setOpenedFromRunLink(true);
+    };
+
+    window.addEventListener(OPEN_TASK_RUN_EVENT, handleOpenTaskRun);
+    return () => {
+      window.removeEventListener(OPEN_TASK_RUN_EVENT, handleOpenTaskRun);
+    };
+  }, [workspaceRuns]);
   const hasDuplicateConflict = selectedRun
     ? hasActiveRunConflict(workspaceRuns, selectedRun.task.taskId, selectedRun.runId)
     : false;
@@ -73,6 +96,11 @@ export function TaskCenterView({
   const canCancel = Boolean(selectedRun && onCancelRun && availableActions.has("cancel"));
   const canFork =
     Boolean(selectedRun && onForkRun && availableActions.has("fork_new_run")) && !hasDuplicateConflict;
+  const orchestrationTaskId =
+    selectedRun?.task.source === "orchestration"
+      ? selectedRun.task.orchestrationTaskId ?? selectedRun.task.taskId
+      : null;
+  const canOpenOrchestrationTask = Boolean(orchestrationTaskId);
   const selectedRunSurface = selectedRun ? describeTaskRunSurface(selectedRun) : null;
   const highlightedRuns = filteredRuns.filter((run) => describeTaskRunSurface(run).needsAttention).length;
 
@@ -121,6 +149,12 @@ export function TaskCenterView({
         </div>
       </header>
 
+      {openedFromRunLink && selectedRun ? (
+        <p className="task-center__context-banner" role="status">
+          {t("taskCenter.openedFromProjectMap")}
+        </p>
+      ) : null}
+
       <div className="task-center__body">
         <div className="task-center__list">
           {filteredRuns.length === 0 ? (
@@ -135,7 +169,10 @@ export function TaskCenterView({
                     key={run.runId}
                     type="button"
                     className={`task-center__run task-center__run--${surface.severity} ${selectedRun?.runId === run.runId ? "is-selected" : ""}`}
-                    onClick={() => setSelectedRunId(run.runId)}
+                    onClick={() => {
+                      setSelectedRunId(run.runId);
+                      setOpenedFromRunLink(false);
+                    }}
                   >
                     <span className="task-center__run-topline">
                       <span className="task-center__run-title">{run.task.title || run.task.taskId}</span>
@@ -224,37 +261,55 @@ export function TaskCenterView({
               </div>
             </dl>
             <div className="task-center__actions">
-              <button
-                type="button"
-                disabled={!canOpenConversation}
-                onClick={() => {
-                  if (selectedRun.linkedThreadId) {
-                    onOpenConversation?.(selectedRun.linkedThreadId);
-                  }
-                }}
-              >
-                {t("taskCenter.action.openConversation")}
-              </button>
-              <button
-                type="button"
-                disabled={!canRetry}
-                onClick={() => onRetryRun?.(selectedRun)}
-              >
-                {t("taskCenter.action.retry")}
-              </button>
-              <button type="button" disabled={!canResume} onClick={() => onResumeRun?.(selectedRun)}>
-                {t("taskCenter.action.resume")}
-              </button>
-              <button type="button" disabled={!canCancel} onClick={() => onCancelRun?.(selectedRun)}>
-                {t("taskCenter.action.cancel")}
-              </button>
-              <button
-                type="button"
-                disabled={!canFork}
-                onClick={() => onForkRun?.(selectedRun)}
-              >
-                {t("taskCenter.action.fork")}
-              </button>
+              {canOpenConversation ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (selectedRun.linkedThreadId) {
+                      onOpenConversation?.(selectedRun.linkedThreadId);
+                    }
+                  }}
+                >
+                  {t("taskCenter.action.openConversation")}
+                </button>
+              ) : null}
+              {canOpenOrchestrationTask ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!orchestrationTaskId) {
+                      return;
+                    }
+                    if (onOpenOrchestrationTask) {
+                      onOpenOrchestrationTask(orchestrationTaskId);
+                      return;
+                    }
+                    dispatchOpenOrchestrationTaskEvent(orchestrationTaskId);
+                  }}
+                >
+                  {t("taskCenter.action.openOrchestrationTask")}
+                </button>
+              ) : null}
+              {canRetry ? (
+                <button type="button" onClick={() => onRetryRun?.(selectedRun)}>
+                  {t("taskCenter.action.retry")}
+                </button>
+              ) : null}
+              {canResume ? (
+                <button type="button" onClick={() => onResumeRun?.(selectedRun)}>
+                  {t("taskCenter.action.resume")}
+                </button>
+              ) : null}
+              {canCancel ? (
+                <button type="button" onClick={() => onCancelRun?.(selectedRun)}>
+                  {t("taskCenter.action.cancel")}
+                </button>
+              ) : null}
+              {canFork ? (
+                <button type="button" onClick={() => onForkRun?.(selectedRun)}>
+                  {t("taskCenter.action.fork")}
+                </button>
+              ) : null}
             </div>
           </article>
         ) : null}

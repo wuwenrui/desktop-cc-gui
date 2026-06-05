@@ -1,6 +1,9 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import type { GlobalRuntimeNotice } from "../../../services/globalRuntimeNotices";
+import {
+  filterVisibleGlobalRuntimeNoticeDockItems,
+  type GlobalRuntimeNotice,
+} from "../../../services/globalRuntimeNotices";
 import type {
   GlobalRuntimeNoticeDockStatus,
   GlobalRuntimeNoticeDockVisibility,
@@ -70,20 +73,25 @@ function resolveMinimizedIndicatorState(
 export function GlobalRuntimeNoticeDock({
   notices,
   visibility,
-  status,
   onExpand,
   onMinimize,
   onClear,
 }: GlobalRuntimeNoticeDockProps) {
   const { t } = useTranslation();
-  const statusLabel = resolveStatusLabel(t, status);
   const isMinimized = visibility === "minimized";
-  const hasNoticeItems = notices.length > 0;
-  const minimizedIndicatorState = resolveMinimizedIndicatorState(status);
+  const visibleNotices = useMemo(
+    () => filterVisibleGlobalRuntimeNoticeDockItems(notices),
+    [notices],
+  );
+  const hasNoticeItems = visibleNotices.length > 0;
+  const effectiveStatus: GlobalRuntimeNoticeDockStatus =
+    visibleNotices.length > 0 ? "has-error" : "idle";
+  const statusLabel = resolveStatusLabel(t, effectiveStatus);
+  const minimizedIndicatorState = resolveMinimizedIndicatorState(effectiveStatus);
 
   const renderedRows = useMemo(
     () =>
-      notices.map((notice) => {
+      visibleNotices.map((notice) => {
         const translatedMessage = t(notice.messageKey, notice.messageParams);
         const severityLabel = resolveSeverityLabel(t, notice.severity);
         const timestampLabel = formatNoticeTimestamp(notice.timestampMs);
@@ -97,7 +105,7 @@ export function GlobalRuntimeNoticeDock({
           ariaLabel: `${severityLabel} ${messageLabel} ${timestampLabel}`,
         };
       }),
-    [notices, t],
+    [visibleNotices, t],
   );
 
   return (
@@ -129,7 +137,7 @@ export function GlobalRuntimeNoticeDock({
               <span className="global-runtime-notice-dock-title">
                 {t("runtimeNotice.title")}
               </span>
-              <span className={`global-runtime-notice-dock-status is-${status}`}>
+              <span className={`global-runtime-notice-dock-status is-${effectiveStatus}`}>
                 {statusLabel}
               </span>
             </div>

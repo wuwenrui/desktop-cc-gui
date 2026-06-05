@@ -1326,6 +1326,7 @@ pub async fn engine_send_message(
             // overwritten by reasoning snapshots in the normalized assembler path.
             let turn_id = format!("claude-turn-{}", uuid::Uuid::new_v4());
             let thread_id = thread_id.unwrap_or_else(|| turn_id.clone());
+            session.register_turn_thread_id(&turn_id, &thread_id);
             let assistant_item_id = format!("claude-item-{}", uuid::Uuid::new_v4());
             let reasoning_item_id = format!("claude-reasoning-{}", uuid::Uuid::new_v4());
 

@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
+import {
+  startTransition,
+  useCallback,
+  useEffect,
+  useRef,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import { writeClientStoreValue } from "../services/clientStorage";
 import { setNotificationActionHandler } from "../services/systemNotification";
 import { useRenameWorktreePrompt } from "../features/workspaces/hooks/useRenameWorktreePrompt";
@@ -28,6 +35,11 @@ type PendingClaudeTuiOpen = {
   workspaceId: string;
   terminalId: string;
   command: string;
+};
+
+type ThreadSwitchScope = {
+  workspaceId: string;
+  threadId: string;
 };
 
 type WorkspaceShellSettings = Pick<AppSettings, "workspaceGroups"> &
@@ -192,6 +204,40 @@ export function useAppShellWorkspaceFlowsSection(
   );
 
   const pendingClaudeTuiOpenRef = useRef<PendingClaudeTuiOpen | null>(null);
+  const threadSwitchRequestSeqRef = useRef(0);
+  const latestThreadSwitchScopeRef = useRef<ThreadSwitchScope | null>(
+    activeWorkspaceId && activeThreadId
+      ? { workspaceId: activeWorkspaceId, threadId: activeThreadId }
+      : null,
+  );
+
+  useEffect(() => {
+    latestThreadSwitchScopeRef.current =
+      activeWorkspaceId && activeThreadId
+        ? { workspaceId: activeWorkspaceId, threadId: activeThreadId }
+        : null;
+  }, [activeThreadId, activeWorkspaceId]);
+
+  const runLatestThreadSwitchWork = useCallback(
+    async <T,>(
+      scope: ThreadSwitchScope,
+      work: () => Promise<T> | T,
+      apply: (value: T) => void,
+    ) => {
+      const requestId = threadSwitchRequestSeqRef.current;
+      const value = await work();
+      const latestScope = latestThreadSwitchScopeRef.current;
+      const isLatest =
+        requestId === threadSwitchRequestSeqRef.current &&
+        latestScope?.workspaceId === scope.workspaceId &&
+        latestScope?.threadId === scope.threadId;
+      if (isLatest) {
+        apply(value);
+      }
+      return isLatest;
+    },
+    [],
+  );
 
   const handleOpenClaudeTui = useCallback(
     (input: { workspaceId: string; workspacePath: string; sessionId: string }) => {
@@ -360,6 +406,8 @@ export function useAppShellWorkspaceFlowsSection(
       } = {},
     ) => {
       const { collapseRightPanel: shouldCollapseRightPanel = true } = options;
+      threadSwitchRequestSeqRef.current += 1;
+      latestThreadSwitchScopeRef.current = { workspaceId, threadId };
       const preserveEditor = shouldPreserveEditorOnThreadSelect({
         isCompact,
         centerMode,
@@ -367,21 +415,6 @@ export function useAppShellWorkspaceFlowsSection(
         targetWorkspaceId: workspaceId,
         activeEditorFilePath,
       });
-      if (!preserveEditor) {
-        exitDiffView();
-      }
-      setAppMode("chat");
-      setActiveTab("codex");
-      setHomeOpen(false);
-      if (
-        shouldCollapseRightPanelOnThreadSelect({
-          preserveEditor,
-          requestedCollapse: shouldCollapseRightPanel,
-        })
-      ) {
-        collapseRightPanel();
-      }
-      setSelectedKanbanTaskId(null);
       selectWorkspace(workspaceId);
       setActiveThreadId(threadId, workspaceId);
       const threads = threadsByWorkspace[workspaceId] ?? [];
@@ -389,6 +422,23 @@ export function useAppShellWorkspaceFlowsSection(
       if (targetThread?.engineSource) {
         setActiveEngine(targetThread.engineSource);
       }
+      startTransition(() => {
+        if (!preserveEditor) {
+          exitDiffView();
+        }
+        setAppMode("chat");
+        setActiveTab("codex");
+        setHomeOpen(false);
+        if (
+          shouldCollapseRightPanelOnThreadSelect({
+            preserveEditor,
+            requestedCollapse: shouldCollapseRightPanel,
+          })
+        ) {
+          collapseRightPanel();
+        }
+        setSelectedKanbanTaskId(null);
+      });
     },
     [
       activeEditorFilePath,
@@ -556,6 +606,7 @@ export function useAppShellWorkspaceFlowsSection(
     handleWorktreeCreated,
     resolveCloneProjectContext,
     handleSelectOpenAppId,
+    runLatestThreadSwitchWork,
     navigateToThread,
     handleOpenClaudeTui,
     handleSelectStatusPanelSubagent,

@@ -173,6 +173,7 @@ async fn build_workspace_scope_catalog_data(
     storage_path: &Path,
     workspace_id: &str,
     scan_mode: SessionCatalogScanMode,
+    attribution_mode: WorkspaceSessionAttributionMode,
 ) -> Result<WorkspaceScopeCatalogData, String> {
     let workspace_scope = catalog_workspace_scope(workspaces, workspace_id).await?;
     let workspaces_snapshot = workspaces.lock().await.clone();
@@ -285,15 +286,30 @@ async fn build_workspace_scope_catalog_data(
             }
         }
 
-        match engine::claude_history::list_claude_session_source_facts_for_attribution_scopes_with_config(
-            &owner_workspace_path,
-            build_claude_attribution_scopes(workspace),
-            Some(scan_mode.limit()),
-            claude_config.as_ref(),
-            claude_source_fact_cache_dir.as_deref(),
-        )
-        .await
-        {
+        let claude_source_facts_result = match attribution_mode {
+            WorkspaceSessionAttributionMode::Related => {
+                engine::claude_history::list_claude_session_source_facts_for_attribution_scopes_with_config(
+                    &owner_workspace_path,
+                    build_claude_attribution_scopes(workspace),
+                    Some(scan_mode.limit()),
+                    claude_config.as_ref(),
+                    claude_source_fact_cache_dir.as_deref(),
+                )
+                .await
+            }
+            WorkspaceSessionAttributionMode::WorkspaceOnly => {
+                engine::claude_history::list_workspace_only_claude_session_source_facts_for_attribution_scopes_with_config(
+                    &owner_workspace_path,
+                    build_claude_attribution_scopes(workspace),
+                    Some(scan_mode.limit()),
+                    claude_config.as_ref(),
+                    claude_source_fact_cache_dir.as_deref(),
+                )
+                .await
+            }
+        };
+
+        match claude_source_facts_result {
             Ok(claude_source_facts) => {
                 let claude_session_count = claude_source_facts.facts.len();
                 if claude_session_count == 0 {
@@ -316,7 +332,8 @@ async fn build_workspace_scope_catalog_data(
                         if entry.attribution_status.as_deref()
                             == Some(SessionCatalogAttributionStatus::Unassigned.as_str())
                         {
-                            unresolved_diagnostics.push(unresolved_catalog_entry_to_diagnostic(&entry));
+                            unresolved_diagnostics
+                                .push(unresolved_catalog_entry_to_diagnostic(&entry));
                             return None;
                         }
                         if !owner_workspace_ids.contains(&entry.workspace_id) {

@@ -15,6 +15,8 @@ const SOURCE_TYPE_KEYS = [
   "file",
   "symbol",
   "spec",
+  "task",
+  "document",
   "commit",
   "test",
   "conversation",

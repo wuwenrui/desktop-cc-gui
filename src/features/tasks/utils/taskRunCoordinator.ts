@@ -1,5 +1,10 @@
 import type { KanbanTask, KanbanTaskExecutionSource } from "../../kanban/types";
-import type { TaskRunRecord, TaskRunStoreData, TaskRunTrigger } from "../types";
+import type {
+  TaskRunDefinitionRef,
+  TaskRunRecord,
+  TaskRunStoreData,
+  TaskRunTrigger,
+} from "../types";
 import {
   createTaskRunRecord,
   findActiveRunForTask,
@@ -20,6 +25,17 @@ export type BeginTaskRunResult =
       activeRun?: TaskRunRecord;
       store: TaskRunStoreData;
     };
+
+export type BeginTaskRunDefinition = {
+  taskId: string;
+  workspaceId: string;
+  title?: string | null;
+  source?: TaskRunDefinitionRef["source"];
+  orchestrationTaskId?: string | null;
+  engine: TaskRunRecord["engine"];
+  model?: string | null;
+  linkedThreadId?: string | null;
+};
 
 export function beginTaskRun(params: {
   store: TaskRunStoreData;
@@ -48,7 +64,33 @@ export function beginTaskRunWithTrigger(params: {
   parentRun?: TaskRunRecord | null;
   upstreamRun?: TaskRunRecord | null;
 }): BeginTaskRunResult {
-  const activeRun = findActiveRunForTask(params.store.runs, params.task.id);
+  return beginTaskRunFromDefinition({
+    store: params.store,
+    task: {
+      taskId: params.task.id,
+      workspaceId: params.task.workspaceId,
+      title: params.task.title,
+      source: "kanban",
+      engine: params.task.engineType as TaskRunRecord["engine"],
+      model: params.task.modelId,
+      linkedThreadId: params.task.threadId,
+    },
+    trigger: params.trigger,
+    now: params.now,
+    parentRun: params.parentRun,
+    upstreamRun: params.upstreamRun,
+  });
+}
+
+export function beginTaskRunFromDefinition(params: {
+  store: TaskRunStoreData;
+  task: BeginTaskRunDefinition;
+  trigger: TaskRunTrigger;
+  now?: number;
+  parentRun?: TaskRunRecord | null;
+  upstreamRun?: TaskRunRecord | null;
+}): BeginTaskRunResult {
+  const activeRun = findActiveRunForTask(params.store.runs, params.task.taskId);
   if (activeRun) {
     return {
       ok: false,
@@ -70,12 +112,15 @@ export function beginTaskRunWithTrigger(params: {
   }
   try {
     const run = createTaskRunRecord({
-      taskId: params.task.id,
+      taskId: params.task.taskId,
       workspaceId: params.task.workspaceId,
       taskTitle: params.task.title,
-      engine: params.task.engineType,
+      taskSource: params.task.source,
+      orchestrationTaskId: params.task.orchestrationTaskId,
+      engine: params.task.engine,
+      model: params.task.model,
       trigger: params.trigger,
-      linkedThreadId: params.task.threadId,
+      linkedThreadId: params.task.linkedThreadId,
       parentRunId: params.parentRun?.runId ?? null,
       upstreamRunId: params.upstreamRun?.runId ?? null,
       now: params.now,

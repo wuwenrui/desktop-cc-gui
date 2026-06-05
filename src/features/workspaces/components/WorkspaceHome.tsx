@@ -94,7 +94,7 @@ export function WorkspaceHome({
   const { prefix: pathPrefix, name: pathName } = splitWorkspacePath(workspace.path, workspace.name);
 
   return (
-    <section className="workspace-home workspace-home-minimal">
+    <section className={`workspace-home workspace-home-minimal ${highlightedRun ? "workspace-home--task-mode" : ""}`}>
       <div className="workspace-home-shell">
         <div className="workspace-home-stack">
           <header className="workspace-home-hero">

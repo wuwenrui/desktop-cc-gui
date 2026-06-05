@@ -1,4 +1,46 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
+
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum WorkspaceSessionAttributionMode {
+    Related,
+    WorkspaceOnly,
+}
+
+impl Default for WorkspaceSessionAttributionMode {
+    fn default() -> Self {
+        Self::Related
+    }
+}
+
+impl WorkspaceSessionAttributionMode {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Related => "related",
+            Self::WorkspaceOnly => "workspace-only",
+        }
+    }
+
+    fn from_persisted_value(value: &str) -> Self {
+        match value.trim() {
+            "workspace-only" => Self::WorkspaceOnly,
+            _ => Self::Related,
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for WorkspaceSessionAttributionMode {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        Ok(match value {
+            serde_json::Value::String(value) => Self::from_persisted_value(&value),
+            _ => Self::default(),
+        })
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub(crate) struct GitFileStatus {
@@ -848,6 +890,8 @@ pub(crate) struct AppSettings {
     pub(crate) gemini_enabled: bool,
     #[serde(default = "default_opencode_enabled", rename = "opencodeEnabled")]
     pub(crate) opencode_enabled: bool,
+    #[serde(default, rename = "sessionAttributionMode")]
+    pub(crate) session_attribution_mode: WorkspaceSessionAttributionMode,
     #[serde(default, rename = "backendMode")]
     pub(crate) backend_mode: BackendMode,
     #[serde(default = "default_remote_backend_host", rename = "remoteBackendHost")]
@@ -1632,6 +1676,7 @@ impl Default for AppSettings {
             terminal_shell_path: None,
             gemini_enabled: default_engine_enabled(),
             opencode_enabled: default_opencode_enabled(),
+            session_attribution_mode: WorkspaceSessionAttributionMode::Related,
             backend_mode: BackendMode::Local,
             remote_backend_host: default_remote_backend_host(),
             remote_backend_token: None,
@@ -1792,7 +1837,7 @@ pub(crate) struct CodexProviderConfig {
 mod tests {
     use super::{
         AppSettings, BackendMode, EmailSenderProvider, EmailSenderSecurity, WorkspaceEntry,
-        WorkspaceGroup, WorkspaceKind, WorkspaceSettings,
+        WorkspaceGroup, WorkspaceKind, WorkspaceSessionAttributionMode, WorkspaceSettings,
     };
 
     #[test]
@@ -1807,6 +1852,10 @@ mod tests {
         assert!(settings.custom_skill_directories.is_empty());
         assert!(!settings.system_proxy_enabled);
         assert!(!settings.opencode_enabled);
+        assert_eq!(
+            settings.session_attribution_mode,
+            WorkspaceSessionAttributionMode::Related
+        );
         assert!(settings.system_proxy_url.is_none());
         assert_eq!(settings.default_access_mode, "full-access");
         assert_eq!(
@@ -1952,6 +2001,40 @@ mod tests {
         assert_eq!(
             decoded.workspace_groups[0].copies_folder.as_deref(),
             Some("/tmp/group-copies")
+        );
+    }
+
+    #[test]
+    fn app_settings_round_trip_preserves_session_attribution_mode() {
+        let mut settings = AppSettings::default();
+        settings.session_attribution_mode = WorkspaceSessionAttributionMode::WorkspaceOnly;
+
+        let json = serde_json::to_string(&settings).expect("serialize settings");
+        assert!(json.contains(r#""sessionAttributionMode":"workspace-only""#));
+        let decoded: AppSettings = serde_json::from_str(&json).expect("deserialize settings");
+
+        assert_eq!(
+            decoded.session_attribution_mode,
+            WorkspaceSessionAttributionMode::WorkspaceOnly
+        );
+    }
+
+    #[test]
+    fn app_settings_defaults_invalid_session_attribution_mode_to_related() {
+        let decoded: AppSettings = serde_json::from_str(r#"{"sessionAttributionMode":"invalid"}"#)
+            .expect("deserialize settings");
+
+        assert_eq!(
+            decoded.session_attribution_mode,
+            WorkspaceSessionAttributionMode::Related
+        );
+
+        let decoded: AppSettings = serde_json::from_str(r#"{"sessionAttributionMode":123}"#)
+            .expect("deserialize settings");
+
+        assert_eq!(
+            decoded.session_attribution_mode,
+            WorkspaceSessionAttributionMode::Related
         );
     }
 

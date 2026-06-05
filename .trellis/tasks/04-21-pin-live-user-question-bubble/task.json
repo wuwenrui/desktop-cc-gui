@@ -3,7 +3,7 @@
   "name": "pin-live-user-question-bubble",
   "title": "Pin live user question bubble",
   "description": "",
-  "status": "planning",
+  "status": "completed",
   "dev_type": "frontend",
   "scope": "messages-live-ui",
   "package": null,
@@ -11,11 +11,11 @@
   "creator": "chenxiangning",
   "assignee": "chenxiangning",
   "createdAt": "2026-04-21",
-  "completedAt": null,
+  "completedAt": "2026-06-05",
   "branch": null,
   "base_branch": "feature/f-v0.4.6",
   "worktree_path": null,
-  "current_phase": 0,
+  "current_phase": 6,
   "next_action": [
     {
       "phase": 1,
@@ -42,12 +42,24 @@
       "action": "record-session"
     }
   ],
-  "commit": null,
+  "commit": "3f6157fc66198ebbeedde4d1dbe34983b5236851",
   "pr_url": null,
   "subtasks": [],
   "children": [],
   "parent": null,
-  "relatedFiles": [],
-  "notes": "",
+  "relatedFiles": [
+    "openspec/changes/archive/2026-04-21-pin-live-user-question-bubble/",
+    "openspec/changes/archive/2026-06-05-pin-live-user-question-bubble/",
+    "openspec/specs/conversation-live-user-bubble-pinning/spec.md",
+    "openspec/specs/conversation-render-surface-stability/spec.md",
+    "src/features/messages/components/Messages.tsx",
+    "src/features/messages/components/MessagesTimeline.tsx",
+    "src/features/messages/components/messagesLiveWindow.ts",
+    "src/features/messages/components/messagesUserPresentation.ts",
+    "src/features/messages/components/Messages.live-behavior.test.tsx",
+    "src/features/messages/components/messagesUserPresentation.test.ts",
+    "src/styles/messages.css"
+  ],
+  "notes": "Original implementation completed in commit 3f6157fc66198ebbeedde4d1dbe34983b5236851. OpenSpec archives cover live user-question sticky anchoring, bounded live-window preservation of the latest ordinary user question, restored-history exclusion, shared sticky header alignment, and display-only contract boundaries. PRD acceptance criteria are already complete.",
   "meta": {}
 }

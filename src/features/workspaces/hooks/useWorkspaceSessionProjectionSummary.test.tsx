@@ -36,7 +36,13 @@ describe("useWorkspaceSessionProjectionSummary", () => {
     });
 
     expect(getWorkspaceSessionProjectionSummary).toHaveBeenCalledWith("ws-1", {
-      query: { keyword: "bugfix", engine: "codex", status: "active" },
+      query: {
+        keyword: "bugfix",
+        engine: "codex",
+        status: "active",
+        folderId: null,
+        sessionAttributionMode: "related",
+      },
     });
   });
 
@@ -71,7 +77,13 @@ describe("useWorkspaceSessionProjectionSummary", () => {
 
     await waitFor(() => {
       expect(getWorkspaceSessionProjectionSummary).toHaveBeenCalledWith("ws-1", {
-        query: { keyword: null, engine: null, status: "active" },
+        query: {
+          keyword: null,
+          engine: null,
+          status: "active",
+          folderId: null,
+          sessionAttributionMode: "related",
+        },
       });
     });
 
@@ -112,7 +124,13 @@ describe("useWorkspaceSessionProjectionSummary", () => {
     });
 
     expect(getWorkspaceSessionProjectionSummary).toHaveBeenCalledWith("ws-1", {
-      query: { keyword: "archive", engine: "codex", status: "all" },
+      query: {
+        keyword: "archive",
+        engine: "codex",
+        status: "all",
+        folderId: null,
+        sessionAttributionMode: "related",
+      },
     });
     expect(result.current.summary).toBeNull();
     expect(result.current.isLoading).toBe(false);

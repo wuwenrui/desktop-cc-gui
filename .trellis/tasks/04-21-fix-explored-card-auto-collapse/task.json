@@ -3,19 +3,19 @@
   "name": "fix-explored-card-auto-collapse",
   "title": "Fix Explored card auto collapse after non-explore stage (OpenSpec: fix-explored-card-auto-collapse-after-stage)",
   "description": "",
-  "status": "planning",
-  "dev_type": null,
-  "scope": null,
+  "status": "completed",
+  "dev_type": "frontend",
+  "scope": "messages",
   "package": null,
   "priority": "P2",
   "creator": "chenxiangning",
   "assignee": "chenxiangning",
   "createdAt": "2026-04-21",
-  "completedAt": null,
+  "completedAt": "2026-06-05",
   "branch": null,
   "base_branch": "feature/f-v0.4.6",
   "worktree_path": null,
-  "current_phase": 0,
+  "current_phase": 6,
   "next_action": [
     {
       "phase": 1,
@@ -47,7 +47,14 @@
   "subtasks": [],
   "children": [],
   "parent": null,
-  "relatedFiles": [],
-  "notes": "",
+  "relatedFiles": [
+    "openspec/changes/archive/2026-04-21-fix-explored-card-auto-collapse-after-stage/proposal.md",
+    "openspec/changes/archive/2026-04-21-fix-explored-card-auto-collapse-after-stage/design.md",
+    "openspec/changes/archive/2026-04-21-fix-explored-card-auto-collapse-after-stage/tasks.md",
+    "openspec/specs/conversation-stream-activity-presence/spec.md",
+    "src/features/messages/components/Messages.explore.test.tsx",
+    "src/features/messages/components/messagesLiveWindow.ts"
+  ],
+  "notes": "Closed continuity debt: OpenSpec change fix-explored-card-auto-collapse-after-stage was already archived and current implementation/tests satisfy Explore auto-collapse after non-explore stage. Verified Messages.explore, messagesLiveWindow, typecheck, and OpenSpec strict workspace validation on 2026-06-05.",
   "meta": {}
 }

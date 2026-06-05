@@ -490,6 +490,22 @@ fn source_fact_cache_namespace(
     format!("{:x}", hasher.finalize())
 }
 
+fn workspace_only_source_fact_cache_namespace(
+    base_dir: &Path,
+    attribution_scopes: &[ClaudeSessionAttributionScope],
+) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(b"workspace-only\0");
+    hasher.update(base_dir.to_string_lossy().as_bytes());
+    for scope in attribution_scopes {
+        hasher.update(b"\0scope\0");
+        hasher.update(scope.reason.as_bytes());
+        hasher.update(b"\0path\0");
+        hasher.update(scope.path.to_string_lossy().as_bytes());
+    }
+    format!("{:x}", hasher.finalize())
+}
+
 fn source_fact_cache_path(
     cache_dir: &Path,
     namespace: &str,
@@ -1039,6 +1055,187 @@ pub(crate) async fn list_claude_session_source_facts_for_attribution_scopes_with
         cache_dir,
     )
     .await
+}
+
+pub(crate) async fn list_workspace_only_claude_session_source_facts_for_attribution_scopes_with_config(
+    workspace_path: &Path,
+    attribution_scopes: Vec<ClaudeSessionAttributionScope>,
+    limit: Option<usize>,
+    config: Option<&EngineConfig>,
+    cache_dir: Option<&Path>,
+) -> Result<ClaudeSessionSourceFactList, String> {
+    let base_dir = claude_projects_dir(config).ok_or("Cannot determine Claude home directory")?;
+    list_workspace_only_claude_session_source_facts_from_base_dir(
+        &base_dir,
+        workspace_path,
+        &attribution_scopes,
+        limit,
+        cache_dir,
+    )
+    .await
+}
+
+pub(crate) async fn list_workspace_only_claude_session_source_facts_from_base_dir(
+    base_dir: &Path,
+    workspace_path: &Path,
+    attribution_scopes: &[ClaudeSessionAttributionScope],
+    limit: Option<usize>,
+    cache_dir: Option<&Path>,
+) -> Result<ClaudeSessionSourceFactList, String> {
+    timeout(LOCAL_SESSION_SCAN_TIMEOUT, async {
+        let cache_namespace =
+            workspace_only_source_fact_cache_namespace(base_dir, attribution_scopes);
+        let project_dirs = claude_project_dirs_for_path(base_dir, workspace_path);
+        let mut jsonl_paths: Vec<(PathBuf, bool)> = Vec::new();
+        let mut subagent_jsonl_paths: Vec<(PathBuf, String, bool)> = Vec::new();
+        let mut seen_paths = HashSet::new();
+        let mut diagnostics = Vec::new();
+        let mut found_dir = false;
+
+        for project_dir in project_dirs {
+            if !project_dir.exists() {
+                continue;
+            }
+            found_dir = true;
+            let mut entries = match fs::read_dir(&project_dir).await {
+                Ok(entries) => entries,
+                Err(_) => {
+                    diagnostics.push(build_scan_diagnostic(
+                        ClaudeSessionScanDiagnosticCode::UnreadableFile,
+                        &project_dir,
+                        None,
+                        None,
+                    ));
+                    continue;
+                }
+            };
+
+            while let Ok(Some(entry)) = entries.next_entry().await {
+                let path = entry.path();
+                let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+                    continue;
+                };
+                if name.ends_with(".jsonl") && !name.starts_with("agent-") {
+                    if seen_paths.insert(path.clone()) {
+                        jsonl_paths.push((path.clone(), true));
+                    }
+                    let parent_session_id = name.trim_end_matches(".jsonl").to_string();
+                    let subagents_dir = path.with_extension("").join("subagents");
+                    if subagents_dir.exists() {
+                        let mut subagent_entries = match fs::read_dir(&subagents_dir).await {
+                            Ok(entries) => entries,
+                            Err(_) => {
+                                diagnostics.push(build_scan_diagnostic(
+                                    ClaudeSessionScanDiagnosticCode::UnreadableFile,
+                                    &subagents_dir,
+                                    Some(parent_session_id.clone()),
+                                    None,
+                                ));
+                                continue;
+                            }
+                        };
+                        while let Ok(Some(subagent_entry)) = subagent_entries.next_entry().await {
+                            let subagent_path = subagent_entry.path();
+                            let Some(subagent_name) =
+                                subagent_path.file_name().and_then(|n| n.to_str())
+                            else {
+                                continue;
+                            };
+                            if subagent_name.starts_with("agent-")
+                                && subagent_name.ends_with(".jsonl")
+                                && seen_paths.insert(subagent_path.clone())
+                            {
+                                subagent_jsonl_paths.push((
+                                    subagent_path,
+                                    parent_session_id.clone(),
+                                    true,
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if !found_dir {
+            return Ok(ClaudeSessionSourceFactList {
+                facts: Vec::new(),
+                diagnostics: Vec::new(),
+                scanned_candidates: 0,
+                skipped_candidates: 0,
+                scan_cap_reached: false,
+                cache_metrics: ClaudeSessionSourceFactCacheMetrics::default(),
+            });
+        }
+
+        jsonl_paths.sort_by(|left, right| left.0.cmp(&right.0));
+        subagent_jsonl_paths.sort_by(|left, right| left.0.cmp(&right.0));
+        let scanned_candidates = jsonl_paths.len() + subagent_jsonl_paths.len();
+        let mut facts = Vec::new();
+        let mut cache_metrics = ClaudeSessionSourceFactCacheMetrics::default();
+
+        for (path, allow_fallback) in jsonl_paths {
+            let outcome = scan_session_source_file_with_cache(
+                &path,
+                attribution_scopes,
+                allow_fallback,
+                cache_dir,
+                Some(&cache_namespace),
+                &mut cache_metrics,
+            )
+            .await;
+            diagnostics.extend(outcome.diagnostics);
+            if let Some(fact) = outcome.fact {
+                facts.push(fact);
+            }
+        }
+        for (path, parent_session_id, allow_fallback) in subagent_jsonl_paths {
+            let outcome = scan_subagent_source_file(
+                &path,
+                &parent_session_id,
+                attribution_scopes,
+                allow_fallback,
+                cache_dir,
+                Some(&cache_namespace),
+                &mut cache_metrics,
+            )
+            .await;
+            diagnostics.extend(outcome.diagnostics);
+            if let Some(fact) = outcome.fact {
+                facts.push(fact);
+            }
+        }
+
+        facts.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+        let limited_facts =
+            limit_claude_source_facts_preserving_relationships(facts, limit.unwrap_or(200));
+
+        let skipped_candidates = diagnostics
+            .iter()
+            .filter(|diagnostic| {
+                matches!(
+                    diagnostic.code,
+                    ClaudeSessionScanDiagnosticCode::CwdOutsideAttributionScope
+                        | ClaudeSessionScanDiagnosticCode::MissingCwdWithoutFallback
+                        | ClaudeSessionScanDiagnosticCode::EmptyTranscript
+                        | ClaudeSessionScanDiagnosticCode::MalformedTranscript
+                        | ClaudeSessionScanDiagnosticCode::MissingSessionId
+                        | ClaudeSessionScanDiagnosticCode::UnreadableFile
+                )
+            })
+            .count();
+
+        Ok(ClaudeSessionSourceFactList {
+            facts: limited_facts,
+            diagnostics,
+            scanned_candidates,
+            skipped_candidates,
+            scan_cap_reached: scanned_candidates > limit.unwrap_or(200),
+            cache_metrics,
+        })
+    })
+    .await
+    .map_err(|_| "Claude workspace-only session source fact scan timed out".to_string())?
 }
 
 pub(crate) async fn list_claude_session_source_facts_from_base_dir(

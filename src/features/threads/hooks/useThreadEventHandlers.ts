@@ -13,8 +13,7 @@ import { useThreadApprovalEvents } from "./useThreadApprovalEvents";
 import { useThreadItemEvents } from "./useThreadItemEvents";
 import { useThreadTurnEvents } from "./useThreadTurnEvents";
 import { useThreadUserInputEvents } from "./useThreadUserInputEvents";
-import { parseFirstPacketTimeoutSeconds, stripBackendErrorPrefix } from "../utils/networkErrors";
-import { captureClaudeMcpRuntimeSnapshotFromRaw } from "../utils/claudeMcpRuntimeSnapshot";
+import { parseFirstPacketTimeoutSeconds } from "../utils/networkErrors";
 import { buildThreadDebugCorrelation } from "../utils/threadDebugCorrelation";
 import type {
   ConversationEngine,
@@ -42,13 +41,7 @@ import {
   domainEventFactories,
 } from "../domain-events";
 import type { ThreadEventHandlersOptions } from "./threadEventHandlerTypes";
-import {
-  FOREGROUND_TERMINAL_EVENT_METHODS,
-  extractTerminalEventResultTextLength,
-  extractTerminalEventThreadId,
-  extractTerminalEventTurnId,
-  normalizeRuntimeEndedCount,
-} from "./threadTerminalEventHelpers";
+import { handleThreadAppServerEventDiagnostics } from "./threadAppServerEventDiagnostics";
 import {
   TURN_FIRST_DELTA_WARNING_MS,
   TURN_STALL_WARNING_MS,
@@ -64,12 +57,10 @@ import {
   inferThreadEngine,
   isExecutionItemType,
   isRequestUserInputModeBlocked,
-  isThreadSessionMirrorEnabled,
   isTurnDiagnosticVerboseEnabled,
   listActiveExecutionItemTypes,
   listDeferredCompletionBlockers,
   resolveAgentMessageSnapshotText,
-  shouldEmitServerDebugEntry,
   type CodexQuarantinedTurn,
   type DeferredCompletionFlushSource,
   type ThreadLifecycleSnapshot,
@@ -234,6 +225,106 @@ export function useThreadEventHandlers({
     },
     [],
   );
+  const settleForegroundTurnResidue = useCallback(
+    (input: {
+      workspaceId: string;
+      threadId: string;
+      turnId: string | null;
+      engine: ConversationEngine;
+      lifecycle: ThreadLifecycleSnapshot;
+      source: "three-evidence-query-skipped" | "three-evidence-query-resolved" | "watchdog-interrupted";
+      decisionAction: string;
+      decisionReason: string;
+      scopeMatch: Record<string, unknown>;
+      acceptedEvidence: Record<string, unknown>;
+      boundedReason: string | null;
+      status?: TurnReconciliationRuntimeStatus | null;
+      statusSource?: string | null;
+      lastProgressAgeMs?: number | null;
+      allowAbandonedActiveTurn?: boolean;
+    }) => {
+      const activeTurnId = input.lifecycle.activeTurnId;
+      const turnMatches =
+        activeTurnId === input.turnId ||
+        (input.allowAbandonedActiveTurn === true && activeTurnId === null);
+      const scopeMatched = input.scopeMatch.matched === true;
+      const terminalAccepted = input.acceptedEvidence.terminal === true;
+      const stateAccepted = input.acceptedEvidence.state === true;
+      const cleanupAllowed =
+        input.decisionAction === "cleanup-residue" &&
+        input.lifecycle.isProcessing &&
+        turnMatches &&
+        (input.source === "watchdog-interrupted" ||
+          (scopeMatched && terminalAccepted && stateAccepted));
+
+      if (!cleanupAllowed) {
+        emitTurnDiagnostic("three-evidence-reconciliation-cleanup-skipped", {
+          workspaceId: input.workspaceId,
+          threadId: input.threadId,
+          turnId: input.turnId,
+          engine: input.engine,
+          diagnosticCategory: "three-evidence-reconciliation",
+          cleanupSource: input.source,
+          skipReason: !input.lifecycle.isProcessing
+            ? "not-processing"
+            : !turnMatches
+              ? "active-turn-mismatch"
+              : input.decisionAction !== "cleanup-residue"
+                ? "decision-not-cleanup-residue"
+                : input.source !== "watchdog-interrupted" && !scopeMatched
+                  ? "scope-mismatch"
+                  : input.source !== "watchdog-interrupted" &&
+                      (!terminalAccepted || !stateAccepted)
+                    ? "evidence-not-accepted"
+                    : "guard-rejected",
+          status: input.status ?? null,
+          statusSource: input.statusSource ?? null,
+          decisionAction: input.decisionAction,
+          decisionReason: input.decisionReason,
+          scopeMatch: input.scopeMatch,
+          acceptedEvidence: input.acceptedEvidence,
+          boundedReason: input.boundedReason,
+          lastProgressAgeMs: input.lastProgressAgeMs ?? null,
+          isProcessing: input.lifecycle.isProcessing,
+          activeTurnId,
+          activeThreadId,
+        }, { force: true });
+        return false;
+      }
+
+      threadLifecycleSnapshotRef.current.set(input.threadId, {
+        ...input.lifecycle,
+        isProcessing: false,
+        activeTurnId: null,
+      });
+      dispatch({ type: "clearCodexSilentSuspected", threadId: input.threadId });
+      markProcessing(input.threadId, false);
+      setActiveTurnId(input.threadId, null);
+      emitTurnDiagnostic("three-evidence-reconciliation-cleanup-applied", {
+        workspaceId: input.workspaceId,
+        threadId: input.threadId,
+        turnId: input.turnId,
+        engine: input.engine,
+        diagnosticCategory: "three-evidence-reconciliation",
+        cleanupSource: input.source,
+        status: input.status ?? null,
+        statusSource: input.statusSource ?? null,
+        decisionAction: input.decisionAction,
+        decisionReason: input.decisionReason,
+        scopeMatch: input.scopeMatch,
+        acceptedEvidence: input.acceptedEvidence,
+        boundedReason: input.boundedReason,
+        lastProgressAgeMs: input.lastProgressAgeMs ?? null,
+        wasProcessing: input.lifecycle.isProcessing,
+        previousActiveTurnId: activeTurnId,
+        clearedProcessing: true,
+        clearedActiveTurn: activeTurnId !== null,
+        activeThreadId,
+      }, { force: true });
+      return true;
+    },
+    [activeThreadId, dispatch, emitTurnDiagnostic, markProcessing, setActiveTurnId],
+  );
   const emitThreeEvidenceDryRunDiagnostic = useCallback(
     (input: {
       workspaceId: string;
@@ -350,6 +441,22 @@ export function useThreadEventHandlers({
           progressSequence: input.diagnostic?.progressSequence ?? null,
           activeThreadId,
         }, { force: decision.action !== "settle" });
+        if (decision.action === "cleanup-residue") {
+          settleForegroundTurnResidue({
+            workspaceId: input.workspaceId,
+            threadId: input.threadId,
+            turnId: input.turnId || null,
+            engine,
+            lifecycle: input.lifecycle,
+            source: "three-evidence-query-skipped",
+            decisionAction: decision.action,
+            decisionReason: decision.reason,
+            scopeMatch: decision.scopeMatch,
+            acceptedEvidence: decision.acceptedEvidence,
+            boundedReason: decision.diagnostics.boundedReason,
+            lastProgressAgeMs,
+          });
+        }
         return;
       }
 
@@ -517,7 +624,24 @@ export function useThreadEventHandlers({
               activeTurnId: latestLifecycle.activeTurnId,
               activeThreadId,
             }, { force: true });
+            return;
           }
+          settleForegroundTurnResidue({
+            workspaceId: input.workspaceId,
+            threadId: input.threadId,
+            turnId: input.turnId || null,
+            engine,
+            lifecycle: latestLifecycle,
+            source: "three-evidence-query-resolved",
+            decisionAction: responseDecision.action,
+            decisionReason: responseDecision.reason,
+            scopeMatch: responseDecision.scopeMatch,
+            acceptedEvidence: responseDecision.acceptedEvidence,
+            boundedReason: responseDecision.diagnostics.boundedReason,
+            status: response.status,
+            statusSource: response.statusSource,
+            lastProgressAgeMs: responseLastProgressAgeMs,
+          });
         })
         .catch((error: unknown) => {
           const latestLifecycle = getThreadLifecycleSnapshot(input.threadId);
@@ -547,6 +671,7 @@ export function useThreadEventHandlers({
       buildReconciliationQueryKey,
       emitTurnDiagnostic,
       getThreadLifecycleSnapshot,
+      settleForegroundTurnResidue,
       terminalKindFromReconciliationStatus,
     ],
   );
@@ -740,12 +865,45 @@ export function useThreadEventHandlers({
           return;
         }
         if (interruptedThreadsRef.current.has(threadId)) {
+          settleForegroundTurnResidue({
+            workspaceId: latestDiagnostic.workspaceId,
+            threadId,
+            turnId: latestDiagnostic.turnId,
+            engine: inferThreadEngine(threadId),
+            lifecycle,
+            source: "watchdog-interrupted",
+            decisionAction: "cleanup-residue",
+            decisionReason: "interrupted",
+            scopeMatch: {
+              matched:
+                lifecycle.activeTurnId === latestDiagnostic.turnId ||
+                lifecycle.activeTurnId === null,
+              workspace: true,
+              engine: true,
+              thread: true,
+              turn:
+                lifecycle.activeTurnId === latestDiagnostic.turnId ||
+                lifecycle.activeTurnId === null,
+              foregroundOwner: true,
+              runtimeLease: null,
+            },
+            acceptedEvidence: {
+              terminal: true,
+              state: lifecycle.isProcessing,
+              progress: false,
+              reconciliation: false,
+            },
+            boundedReason: "watchdog skipped because turn was interrupted",
+            lastProgressAgeMs: elapsedSinceProgressMs,
+            allowAbandonedActiveTurn: true,
+          });
           emitCodexNoProgressWatchdogDiagnostic("skipped", {
             threadId,
             diagnostic: latestDiagnostic,
             reason: "interrupted",
             timeoutMs,
             elapsedSinceProgressMs,
+            lifecycle,
           });
           return;
         }
@@ -799,6 +957,7 @@ export function useThreadEventHandlers({
       getThreadLifecycleSnapshot,
       interruptedThreadsRef,
       markCodexNoProgressSuspected,
+      settleForegroundTurnResidue,
     ],
   );
 
@@ -1311,34 +1470,6 @@ export function useThreadEventHandlers({
       reconciliationQueryInFlight.clear();
     };
   }, []);
-
-  const isReasoningRawDebugEnabled = () => {
-    if (import.meta.env?.DEV) {
-      try {
-        const value = window.localStorage.getItem("ccgui.debug.reasoning.raw");
-        if (!value) {
-          return true;
-        }
-        const normalized = value.trim().toLowerCase();
-        return !(normalized === "0" || normalized === "false" || normalized === "off");
-      } catch {
-        return true;
-      }
-    }
-    if (typeof window === "undefined") {
-      return false;
-    }
-    try {
-      const value = window.localStorage.getItem("ccgui.debug.reasoning.raw");
-      if (!value) {
-        return false;
-      }
-      const normalized = value.trim().toLowerCase();
-      return normalized === "1" || normalized === "true" || normalized === "on";
-    } catch {
-      return false;
-    }
-  };
 
   const onApprovalRequest = useThreadApprovalEvents({
     dispatch,
@@ -2514,203 +2645,15 @@ export function useThreadEventHandlers({
 
   const onAppServerEvent = useCallback(
     (event: AppServerEvent) => {
-      const method = String(event.message?.method ?? "");
-      const params = (event.message?.params as Record<string, unknown> | undefined) ?? {};
-      const inferredSource = method === "codex/stderr" ? "stderr" : "event";
-      const mirrorEnabled = isThreadSessionMirrorEnabled();
-      if (onDebug && (mirrorEnabled || shouldEmitServerDebugEntry(method))) {
-        onDebug({
-          id: `${Date.now()}-server-event`,
-          timestamp: Date.now(),
-          source: inferredSource,
-          label: method || "event",
-          payload: mirrorEnabled
-            ? event
-            : {
-                workspaceId: event.workspace_id,
-                method: method || "event",
-                threadId: String(params.threadId ?? params.thread_id ?? ""),
-                turnId: String(params.turnId ?? params.turn_id ?? ""),
-              },
-        });
-      }
-
-      if (FOREGROUND_TERMINAL_EVENT_METHODS.has(method)) {
-        const threadId = extractTerminalEventThreadId(params);
-        const turnId = extractTerminalEventTurnId(params);
-        const lifecycle = threadId ? getThreadLifecycleSnapshot(threadId) : null;
-        emitForegroundSettlementDiagnostic("terminal-event-received", {
-          workspaceId: event.workspace_id,
-          threadId: threadId || null,
-          turnId: turnId || null,
-          eventType: method,
-          resultTextLength:
-            method === "turn/completed"
-              ? extractTerminalEventResultTextLength(params)
-              : null,
-          affectedThreadCount:
-            method === "runtime/ended"
-              ? normalizeRuntimeEndedCount(
-                  params.affectedThreadIds ?? params.affected_thread_ids,
-                )
-              : null,
-          affectedTurnCount:
-            method === "runtime/ended"
-              ? normalizeRuntimeEndedCount(
-                  params.affectedTurnIds ?? params.affected_turn_ids,
-                )
-              : null,
-          pendingRequestCount:
-            method === "runtime/ended"
-              ? Number(params.pendingRequestCount ?? params.pending_request_count ?? 0)
-              : null,
-          hadActiveLease:
-            method === "runtime/ended"
-              ? Boolean(params.hadActiveLease ?? params.had_active_lease ?? false)
-              : null,
-          isProcessing: lifecycle?.isProcessing ?? null,
-          activeTurnId: lifecycle?.activeTurnId ?? null,
-          reason: "terminal-event-reached-frontend-handler",
-          ...(threadId ? buildThreadStreamCorrelationDimensions(threadId) : {}),
-        });
-      }
-
-      if (method === "codex/stderr") {
-        const rawMessage = String(params.message ?? "").trim();
-        if (onDebug && isReasoningRawDebugEnabled() && rawMessage) {
-          onDebug({
-            id: `${Date.now()}-stderr-raw`,
-            timestamp: Date.now(),
-            source: "stderr",
-            label: "stderr/raw",
-            payload: stripBackendErrorPrefix(rawMessage),
-          });
-        }
-      }
-
-      if (
-        method === "thread/status/changed" ||
-        method === "runtime/status/changed" ||
-        method === "thread/status"
-      ) {
-        const threadId = asString(params.threadId ?? params.thread_id).trim();
-        const eventTurnId = asString(params.turnId ?? params.turn_id).trim();
-        const status = asString(params.status ?? params.state ?? params.phase)
-          .trim()
-          .toLowerCase();
-        const diagnosticTurnId = turnDiagnosticsRef.current.get(threadId)?.turnId ?? null;
-        const activeTurnId = getThreadLifecycleSnapshot(threadId).activeTurnId;
-        const expectedTurnId = diagnosticTurnId ?? activeTurnId;
-        if (
-          threadId &&
-          eventTurnId &&
-          expectedTurnId === eventTurnId &&
-          (
-            status === "active" ||
-            status === "running" ||
-            status === "processing" ||
-            status === "alive"
-          )
-        ) {
-          noteCodexTurnProgressEvidence(threadId, `status:${status}`);
-        }
-      }
-
-      if (method === "claude/raw") {
-        const snapshot = captureClaudeMcpRuntimeSnapshotFromRaw(
-          event.workspace_id,
-          params,
-        );
-        if (snapshot && onDebug) {
-          onDebug({
-            id: `${Date.now()}-claude-mcp-snapshot`,
-            timestamp: Date.now(),
-            source: "event",
-            label: "claude/mcp-runtime-snapshot",
-            payload: {
-              workspaceId: snapshot.workspaceId,
-              sessionId: snapshot.sessionId,
-              capturedAt: snapshot.capturedAt,
-              toolsCount: snapshot.tools.length,
-              servers: snapshot.mcpServers,
-            },
-          });
-        }
-      }
-
-      if (!onDebug || !isReasoningRawDebugEnabled()) {
-        return;
-      }
-
-      if (
-        method !== "item/started" &&
-        method !== "item/updated" &&
-        method !== "item/completed" &&
-        method !== "item/reasoning/summaryTextDelta" &&
-        method !== "item/reasoning/summaryPartAdded" &&
-        method !== "item/reasoning/textDelta" &&
-        method !== "item/reasoning/delta" &&
-        method !== "response.reasoning_summary_text.delta" &&
-        method !== "response.reasoning_summary_text.done" &&
-        method !== "response.reasoning_summary.delta" &&
-        method !== "response.reasoning_summary.done" &&
-        method !== "response.reasoning_summary_part.added" &&
-        method !== "response.reasoning_summary_part.done" &&
-        method !== "response.reasoning_text.delta" &&
-        method !== "response.reasoning_text.done"
-      ) {
-        return;
-      }
-
-      if (
-        method === "item/reasoning/summaryTextDelta" ||
-        method === "item/reasoning/summaryPartAdded" ||
-        method === "item/reasoning/textDelta" ||
-        method === "item/reasoning/delta" ||
-        method === "response.reasoning_summary_text.delta" ||
-        method === "response.reasoning_summary_text.done" ||
-        method === "response.reasoning_summary.delta" ||
-        method === "response.reasoning_summary.done" ||
-        method === "response.reasoning_summary_part.added" ||
-        method === "response.reasoning_summary_part.done" ||
-        method === "response.reasoning_text.delta" ||
-        method === "response.reasoning_text.done"
-      ) {
-        onDebug({
-          id: `${Date.now()}-reasoning-raw`,
-          timestamp: Date.now(),
-          source: "event",
-          label: `reasoning/raw:${method}`,
-          payload: {
-            workspaceId: event.workspace_id,
-            threadId: String(params.threadId ?? params.thread_id ?? ""),
-            itemId: String(params.itemId ?? params.item_id ?? ""),
-            delta: params.delta ?? null,
-            summaryIndex: params.summaryIndex ?? params.summary_index ?? null,
-            params,
-          },
-        });
-        return;
-      }
-      const item = (params.item as Record<string, unknown> | undefined) ?? {};
-      if (String(item.type ?? "") !== "reasoning") {
-        return;
-      }
-
-      onDebug({
-        id: `${Date.now()}-reasoning-raw`,
-        timestamp: Date.now(),
-        source: "event",
-        label: `reasoning/raw:${method}`,
-        payload: {
-          workspaceId: event.workspace_id,
-          threadId: String(params.threadId ?? params.thread_id ?? ""),
-          itemId: String(item.id ?? ""),
-          summary: item.summary ?? null,
-          content: item.content ?? null,
-          text: item.text ?? null,
-          rawItem: item,
-        },
+      handleThreadAppServerEventDiagnostics({
+        event,
+        onDebug,
+        getThreadLifecycleSnapshot,
+        getExpectedTurnId: (threadId) =>
+          turnDiagnosticsRef.current.get(threadId)?.turnId ??
+          getThreadLifecycleSnapshot(threadId).activeTurnId,
+        emitForegroundSettlementDiagnostic,
+        noteCodexTurnProgressEvidence,
       });
     },
     [

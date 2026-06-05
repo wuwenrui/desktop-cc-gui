@@ -102,7 +102,7 @@ import {
   resolveCodexAcceptedTurnFact,
   shouldDeferCodexActivityUntilTurnAccepted,
 } from "../utils/codexConversationLiveness";
-import { formatBrowserContextPrompt } from "../../browser-agent";
+import { formatBrowserContextPromptOnce } from "../../browser-agent";
 
 type SendMessageOptions = {
   skipPromptExpansion?: boolean;
@@ -628,7 +628,10 @@ export function useThreadMessaging({
         clearPendingClaudeMcpOutputNotice(workspace.id, threadId);
       }
       if (options?.browserContextAttachment) {
-        finalText = `${formatBrowserContextPrompt(options.browserContextAttachment)}\n\n${finalText}`;
+        finalText = formatBrowserContextPromptOnce(
+          finalText,
+          options.browserContextAttachment,
+        );
       }
       if (injectionResult.injectedCount > 0 && injectionResult.previewText) {
         dispatch({

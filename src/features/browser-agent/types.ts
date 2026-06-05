@@ -141,6 +141,109 @@ export type BrowserSnapshotFreshness =
   | "expired"
   | "degraded";
 
+export type BrowserObservationState =
+  | "available"
+  | "degraded"
+  | "stale"
+  | "expired"
+  | "unsupported";
+
+export type BrowserObservationStaleReason =
+  | "active_tab_changed"
+  | "renderer_mismatch"
+  | "url_changed"
+  | "title_changed"
+  | "scroll_changed"
+  | "dom_fingerprint_changed"
+  | "ttl_expired"
+  | "browser_dock_closed"
+  | "session_closed"
+  | "workspace_mismatch"
+  | "capture_degraded";
+
+export type BrowserObservationTransport =
+  | "webview_dom"
+  | "metadata_fallback"
+  | "screenshot_ocr"
+  | "external_provider"
+  | "unavailable";
+
+export type BrowserObservationRendererBinding =
+  | "matched"
+  | "mismatched"
+  | "unavailable";
+
+export type BrowserObservationDiagnostic = {
+  diagnosticId: string;
+  severity: "info" | "warning" | "error";
+  userMessage: string;
+  aiMessage: string;
+};
+
+export type BrowserObservation = {
+  schemaVersion: 1;
+  observationId: string;
+  browserSessionId: string;
+  workspaceId: string;
+  capturedAt: number;
+  state: BrowserObservationState;
+  staleReasons: BrowserObservationStaleReason[];
+  transport: BrowserObservationTransport;
+  rendererBinding: BrowserObservationRendererBinding;
+  source: Pick<
+    BrowserSnapshotSource,
+    "url" | "normalizedUrl" | "origin" | "title" | "tabLabel" | "workspaceLocalAllowed"
+  >;
+  budget: BrowserSnapshotBudget;
+  privacy: BrowserPrivacyReport;
+  diagnostics: BrowserObservationDiagnostic[];
+  omittedCapabilities: string[];
+};
+
+export type BrowserUserAnnotationAnchorType =
+  | "point"
+  | "region"
+  | "element"
+  | "text_range";
+
+export type BrowserUserAnnotationRegion = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export type BrowserUserAnnotationNearestElement = {
+  role: string;
+  label: string | null;
+  placeholder: string | null;
+  hrefOrigin: string | null;
+  selectorHint: string | null;
+  sensitive: boolean;
+};
+
+export type BrowserUserAnnotation = {
+  annotationId: string;
+  observationId: string;
+  browserSessionId: string;
+  workspaceId: string;
+  createdAt: number;
+  url: string;
+  title: string | null;
+  anchor: BrowserUserAnnotationAnchorType;
+  userNote: string;
+  viewport: Pick<
+    BrowserViewportState,
+    "width" | "height" | "scrollX" | "scrollY" | "devicePixelRatio"
+  >;
+  region: BrowserUserAnnotationRegion | null;
+  nearbyText: string | null;
+  nearestElement: BrowserUserAnnotationNearestElement | null;
+  privacy: BrowserPrivacyReport;
+  staleReasons: BrowserObservationStaleReason[];
+  diagnostics: BrowserObservationDiagnostic[];
+};
+
 export type BrowserSnapshotSource = {
   url: string;
   normalizedUrl: string;
@@ -327,13 +430,53 @@ export type BrowserVisualEvidence = {
   sensitive: boolean;
 };
 
+export type BrowserScreenshotReference = {
+  refId: string;
+  browserSessionId: string;
+  snapshotId: string;
+  capturedAt: number;
+  kind: "thumbnail_reference";
+  storage: "metadata_only" | "ephemeral_ref";
+  modelPayloadAllowed: boolean;
+  diagnostic?: BrowserObservationDiagnostic | null;
+};
+
+export type BrowserOcrTextSupplement = {
+  refId: string;
+  screenshotRefId: string;
+  text: string;
+  capturedAt: number;
+  charBudget: number;
+  truncated: boolean;
+  redactedKinds: string[];
+  modelPayloadAllowed: boolean;
+};
+
+export type BrowserCodeCandidateReason =
+  | "route_match"
+  | "file_name_match"
+  | "visible_text_match"
+  | "heading_match"
+  | "button_label_match"
+  | "form_label_match"
+  | "aria_label_match"
+  | "test_id_match"
+  | "component_symbol_match"
+  | "manual_hint";
+
 export type BrowserCodeCandidate = {
   candidateId: string;
   filePath: string;
   symbolName?: string | null;
-  reason: "route_match" | "visible_text_match" | "landmark_match" | "manual_hint";
+  reason: BrowserCodeCandidateReason;
   confidence: "high" | "medium" | "low";
   matchedText?: string | null;
+  sourceEvidence?: string[];
+  explanation?: string;
+  openAction?: {
+    kind: "open_file";
+    filePath: string;
+  } | null;
 };
 
 export type BrowserDiagnostic = {
@@ -413,6 +556,7 @@ export type BrowserContextSnapshot = {
     screenshotRef?: string | null;
     htmlExcerptRef?: string | null;
   };
+  omittedCapabilities?: string[];
   privacy: BrowserPrivacyReport;
   budget: BrowserSnapshotBudget;
   availability: "available" | "partial" | "expired" | "deleted" | "unsupported";
@@ -429,6 +573,7 @@ export type BrowserContextAttachment = {
   capturedAt: number;
   stale: boolean;
   freshness: BrowserSnapshotFreshness;
+  observation: BrowserObservation;
   summary: string;
   visibleTextExcerpt: string;
   pageType?: BrowserPageType;
@@ -436,6 +581,9 @@ export type BrowserContextAttachment = {
   readableBlocks?: BrowserReadableBlock[];
   noiseDiagnostics?: BrowserNoiseDiagnostic[];
   visualEvidence?: BrowserVisualEvidence[];
+  screenshotRefs?: BrowserScreenshotReference[];
+  ocrTextSupplements?: BrowserOcrTextSupplement[];
+  annotations?: BrowserUserAnnotation[];
   elementCounts: {
     headings: number;
     links: number;
@@ -445,6 +593,7 @@ export type BrowserContextAttachment = {
     codeCandidates: number;
     readableBlocks?: number;
     visualEvidence?: number;
+    annotations?: number;
   };
   diagnostics: BrowserDiagnostic[];
   budget: BrowserSnapshotBudget;
@@ -466,6 +615,49 @@ export type BrowserActionRequest = {
   value?: string | null;
   reason: string;
   requestedBy: "user" | "ai" | "task_run";
+  confirmed?: boolean;
+};
+
+export type BrowserActionKind = BrowserActionRequest["action"];
+
+export type BrowserActionRiskLevel = "low" | "medium" | "high";
+
+export type BrowserActionGateReason =
+  | "settings_disabled"
+  | "platform_unsupported"
+  | "mutating_action_blocked_by_default"
+  | "requires_user_confirmation"
+  | "not_confirmed";
+
+export type BrowserActionGateResolution = {
+  allowed: boolean;
+  blockedReasons: BrowserActionGateReason[];
+};
+
+export type BrowserActionPreview = {
+  actionId: string;
+  browserSessionId: string;
+  action: BrowserActionKind;
+  targetDescription: string;
+  valuePreview: string | null;
+  reason: string;
+  riskLevel: BrowserActionRiskLevel;
+  requiresUserConfirmation: boolean;
+  blockedByDefault: boolean;
+  beforeSnapshotId: string | null;
+  afterSnapshotId?: string | null;
+  expectedEffect: string;
+  privacyNotice: string;
+  gate: BrowserActionGateResolution;
+};
+
+export type BrowserVisualEvidenceGate = {
+  state: BrowserCapabilityState;
+  requiresExplicitConfirmation: boolean;
+  modelPayloadAllowed: boolean;
+  degradedReasons: string[];
+  unsupportedReasons: string[];
+  privacyNotice: string;
 };
 
 export type BrowserActionAuditEntry = {
@@ -479,16 +671,12 @@ export type BrowserActionAuditEntry = {
   diagnosticMessage?: string | null;
   beforeSnapshotId?: string | null;
   afterSnapshotId?: string | null;
-};
-
-export type BrowserActionPreview = {
-  action: BrowserActionRequest["action"];
-  targetId?: string | null;
-  targetDescription?: string | null;
-  valuePreview?: string | null;
-  reason: string;
-  requiresUserConfirmation: boolean;
-  blockedByDefault: boolean;
+  comparison?: {
+    beforeSnapshotId: string | null;
+    afterSnapshotId: string | null;
+    state: "available" | "degraded" | "failed";
+    diagnostics: string[];
+  } | null;
 };
 
 export type BrowserActionResult = {

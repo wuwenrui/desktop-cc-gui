@@ -12,37 +12,6 @@ import {
 } from "../utils/display";
 import type { ProjectMapNode, ProjectMapRunMetadata } from "../types";
 
-export function ProjectMapGenerationQueueBanner({
-  activeRun,
-  queuedCount,
-}: {
-  activeRun: ProjectMapRunMetadata;
-  queuedCount: number;
-}) {
-  const { t } = useTranslation();
-
-  return (
-    <section className="project-map-task-banner" aria-label={t("projectMap.tasks.bannerAria")}>
-      <div>
-        <span className="project-map-task-state">
-          {activeRun.status === "running"
-            ? t("projectMap.tasks.running")
-            : t("projectMap.tasks.activeSlot")}
-        </span>
-        <strong>{t("projectMap.tasks.bannerTitle")}</strong>
-        <p>
-          {t("projectMap.tasks.bannerBody", {
-            engine: activeRun.engine,
-            model: activeRun.model,
-            queued: queuedCount,
-          })}
-        </p>
-      </div>
-      <code>{activeRun.writePath ?? "-"}</code>
-    </section>
-  );
-}
-
 export function ProjectMapGenerationTaskDrawer({
   activeRun,
   queuedRuns,

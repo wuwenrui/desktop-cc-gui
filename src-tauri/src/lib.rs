@@ -1,22 +1,95 @@
+use serde::Serialize;
 use std::sync::Mutex;
 #[cfg(target_os = "macos")]
 use tauri::utils::config::BackgroundThrottlingPolicy;
 use tauri::webview::WebviewWindowBuilder;
 #[cfg(not(target_os = "macos"))]
 use tauri::RunEvent;
-use tauri::{Emitter, Manager};
+use tauri::{DragDropEvent, Emitter, Manager, Webview, WebviewEvent};
 #[cfg(target_os = "macos")]
 use tauri::{RunEvent, WindowEvent};
+
+const MAIN_WINDOW_DRAG_DROP_FORWARD_EVENT: &str = "main-window://drag-drop";
 
 /// Stores paths that were passed to the app on launch (via drag-drop or CLI)
 /// Frontend can retrieve these paths after it's ready
 static PENDING_OPEN_PATHS: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+#[derive(Clone, Serialize)]
+struct ForwardedDragDropPosition {
+    x: f64,
+    y: f64,
+}
+
+#[derive(Clone, Serialize)]
+struct ForwardedDragDropPayload {
+    #[serde(rename = "type")]
+    event_type: &'static str,
+    position: ForwardedDragDropPosition,
+    paths: Option<Vec<String>>,
+}
 
 /// Get and clear any pending paths that were passed to the app on launch
 #[tauri::command]
 fn get_pending_open_paths() -> Vec<String> {
     let mut paths = PENDING_OPEN_PATHS.lock().unwrap();
     std::mem::take(&mut *paths)
+}
+
+fn forwarded_drag_drop_position<R: tauri::Runtime>(
+    webview: &Webview<R>,
+    position: &tauri::PhysicalPosition<f64>,
+) -> ForwardedDragDropPosition {
+    let offset = if webview.label() == "main" {
+        None
+    } else {
+        webview.position().ok()
+    };
+    ForwardedDragDropPosition {
+        x: position.x + offset.map(|point| point.x as f64).unwrap_or(0.0),
+        y: position.y + offset.map(|point| point.y as f64).unwrap_or(0.0),
+    }
+}
+
+fn forwarded_drag_drop_paths(paths: &[std::path::PathBuf]) -> Vec<String> {
+    paths
+        .iter()
+        .map(|path| path.to_string_lossy().into_owned())
+        .collect()
+}
+
+fn forward_webview_drag_drop_to_main<R: tauri::Runtime>(
+    webview: &Webview<R>,
+    event: &WebviewEvent,
+) {
+    let event = match event {
+        WebviewEvent::DragDrop(event) => event,
+        _ => return,
+    };
+    let payload = match event {
+        DragDropEvent::Enter { paths, position } => Some(ForwardedDragDropPayload {
+            event_type: "enter",
+            position: forwarded_drag_drop_position(webview, position),
+            paths: Some(forwarded_drag_drop_paths(paths)),
+        }),
+        DragDropEvent::Over { position } => Some(ForwardedDragDropPayload {
+            event_type: "over",
+            position: forwarded_drag_drop_position(webview, position),
+            paths: None,
+        }),
+        DragDropEvent::Drop { paths, position } => Some(ForwardedDragDropPayload {
+            event_type: "drop",
+            position: forwarded_drag_drop_position(webview, position),
+            paths: Some(forwarded_drag_drop_paths(paths)),
+        }),
+        DragDropEvent::Leave => None,
+        _ => None,
+    };
+    if let (Some(payload), Some(main_window)) =
+        (payload, webview.window().get_webview_window("main"))
+    {
+        let _ = main_window.emit(MAIN_WINDOW_DRAG_DROP_FORWARD_EVENT, payload);
+    }
 }
 
 mod agents;
@@ -126,6 +199,7 @@ pub fn run() {
         .manage(menu::MenuItemRegistry::<tauri::Wry>::default())
         .menu(menu::build_menu)
         .on_menu_event(menu::handle_menu_event)
+        .on_webview_event(forward_webview_drag_drop_to_main)
         .on_window_event(|window, event| {
             if window.label() != "main" {
                 return;
@@ -178,8 +252,7 @@ pub fn run() {
                     .title("ccgui")
                     .inner_size(1300.0, 800.0)
                     .min_inner_size(800.0, 600.0)
-                    .devtools(true)
-                    .transparent(true);
+                    .devtools(true);
 
             #[cfg(target_os = "windows")]
             {
@@ -191,7 +264,8 @@ pub fn run() {
                 win_builder = win_builder
                     .background_throttling(BackgroundThrottlingPolicy::Disabled)
                     .title_bar_style(tauri::TitleBarStyle::Overlay)
-                    .hidden_title(true);
+                    .hidden_title(true)
+                    .transparent(false);
             }
 
             win_builder = win_builder.on_navigation(|url: &tauri::Url| {

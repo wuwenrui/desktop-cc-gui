@@ -5,6 +5,7 @@ import type {
   WorkspaceSessionCatalogQuery,
   WorkspaceSessionCatalogSourceStatus,
 } from "../../../services/tauri";
+import type { WorkspaceSessionAttributionMode } from "../../../types";
 import { withTimeout } from "./useThreadActions.helpers";
 import {
   CODEX_SESSION_CATALOG_FETCH_TIMEOUT_MS,
@@ -139,6 +140,7 @@ export function useThreadActionsSessionCatalog({
   const loadActiveProjectCatalogSessions = useCallback(
     async (
       workspaceId: string,
+      sessionAttributionMode: WorkspaceSessionAttributionMode = "related",
     ): Promise<{
       sessions: ProjectCatalogSessionSummary[];
       partialSource: string | null;
@@ -150,7 +152,7 @@ export function useThreadActionsSessionCatalog({
       }
       const response: WorkspaceSessionCatalogPage | null = await withTimeout(
         listWorkspaceSessionsService(workspaceId, {
-          query: { status: "active" },
+          query: { status: "active", sessionAttributionMode },
           cursor: null,
           limit: SESSION_CATALOG_PAGE_SIZE,
         }),

@@ -672,3 +672,1295 @@ Commit: e22c9b1b fix(browser-agent): 收窄浏览器自动打开触发
 ### Next Steps
 
 - None - task complete
+
+
+## Session 667: 关联 Browser Dock Phase 3 提案文档
+
+**Date**: 2026-06-01
+**Task**: 关联 Browser Dock Phase 3 提案文档
+**Branch**: `feature/v0.5.5`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## Summary
+
+- Completed Browser Dock Phase 3 documentation linkage across OpenSpec proposal, design, task breakdown, spec delta, implementation plan, and Trellis execution task.
+- Created planning task `06-01-browser-dock-phase3-observation-core` as the implementation container for the first trusted observation slice.
+- Preserved scope boundary: no implementation started, no code behavior changed, and browser actions/visual evidence execution remain out of scope.
+
+## Validation
+
+- `openspec validate advance-browser-dock-trusted-observation-and-code-bridge --strict --no-interactive` passed.
+
+## Commits
+
+- `80f3ada6 docs(browser-dock): 关联 Phase 3 提案文档`
+- `3ec81734 docs(browser-dock): 补充 Phase 3 OpenSpec 元数据`
+
+## Notes
+
+- Existing unrelated working tree changes were left untouched.
+- Wait for owner instruction before starting implementation.
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `80f3ada6` | (see git log) |
+| `3ec81734` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 668: Phase2b 前台残留清理收口
+
+**Date**: 2026-06-01
+**Task**: Phase2b 前台残留清理收口
+**Branch**: `feature/v0.5.5`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| Area | Summary |
+|------|---------|
+| OpenSpec | Created `fix-foreground-turn-settlement-phase2b` with proposal, design, tasks, and delta specs for `codex-stalled-recovery-contract` and `engine-runtime-contract`. |
+| Runtime lifecycle | Added guarded foreground residue cleanup for accepted scoped `cleanup-residue` decisions from three-evidence reconciliation. |
+| Watchdog/interruption | Routed interrupted Codex watchdog skip through the same cleanup helper so matching busy residue clears deterministically. |
+| Diagnostics | Persisted bounded `three-evidence-reconciliation-cleanup-applied` evidence while preserving sensitive payload redaction. |
+| Tests | Updated `useThreadEventHandlers` regression coverage for query-skipped cleanup, terminal status cleanup, running no-cleanup, and successor-turn scope mismatch no-cleanup. |
+
+Validation performed before commit:
+- `openspec validate fix-foreground-turn-settlement-phase2b --strict --no-interactive`
+- `npx vitest run src/features/threads/hooks/useThreadEventHandlers.test.ts`
+- `npm run typecheck`
+- `npm run lint`
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6e69a6e5` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 669: 增强文件树文件管理能力
+
+**Date**: 2026-06-02
+**Task**: 增强文件树文件管理能力
+**Branch**: `feature/v0.5.5`
+
+### Summary
+
+实现文件树复制、粘贴、重命名、创建副本能力，补齐边界校验与跨平台验证，并拆分线程事件诊断模块解除 large-file hard gate。
+
+### Main Changes
+
+- OpenSpec change: enhance-file-tree-management-actions
+- 实现 backend duplicate/paste/rename Tauri commands 与 service wrappers。
+- FileTreePanel 增加内部 clipboard、Paste/Rename/Duplicate UI、可见 operation notice、root 安全操作。
+- Rust workspace file operations 增加路径逃逸、.git、self/descendant copy、Windows reserved basename 等边界校验。
+- 修复 paste 命名语义：目标目录无冲突时保留原名，冲突时使用 copy suffix；duplicate 始终使用 copy suffix。
+- 抽出 threadAppServerEventDiagnostics，解除 useThreadEventHandlers large-file hard gate。
+- 验证通过：typecheck、focused FileTreePanel Vitest、cargo test workspace_item、large-file gate、heavy-test-noise、runtime-contracts、OpenSpec strict validate。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8cbb022b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 670: 文件树删除残留清理收口
+
+**Date**: 2026-06-02
+**Task**: 文件树删除残留清理收口
+**Branch**: `feature/v0.5.5`
+
+### Summary
+
+修复文件夹删除后文件树仍显示旧节点的问题，并将外部文件树导入从本轮范围移除以避免拖拽链路回归。
+
+### Main Changes
+
+## 本次收口
+- 修复 FileTreePanel 删除成功后只刷新父级、未清理本地 tree/lazy/selection 状态导致的残留节点问题。
+- 增加删除文件夹子树后立即从可见树移除的回归测试。
+- Review 发现外部 import 后端/API/i18n 残留与已撤回的文件树外部拖拽入口冲突，已从代码范围撤掉。
+- OpenSpec design/tasks 同步为外部文件树 import 本轮延期，避免规范与实现不一致。
+
+## 验证
+- git diff --check: pass
+- npm run typecheck: pass
+- npx vitest run src/features/files/components/FileTreePanel.run.test.tsx: 36 tests pass
+- npx openspec validate enhance-file-tree-management-actions --strict --no-interactive: pass
+
+## 注意
+- 未提交无关脏文件：src-tauri/src/browser_agent/mod.rs、src-tauri/src/browser_agent/platform.rs。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `884f3251` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 671: 修复多 WebView 外部拖拽断链
+
+**Date**: 2026-06-02
+**Task**: 修复多 WebView 外部拖拽断链
+**Branch**: `feature/v0.5.5`
+
+### Summary
+
+恢复外部文件/文件夹拖入 Composer：新增 child WebView drag-drop 转发到 main 的桥接链路，并回写 OpenSpec/Trellis 契约。
+
+### Main Changes
+
+## 完成内容
+
+- 修复 Browser Agent child WebView 截获 OS 文件/文件夹 drop 后 main Composer 收不到路径的问题。
+- 在 Rust 全局 `on_webview_event` 中只转发非 main WebView 的 drag/drop payload 到 `main-window://drag-drop`。
+- 在 `src/services/dragDrop.ts` 中统一消费 main native `onDragDropEvent` 与 forwarded drag-drop event。
+- 保留透明窗口能力，避免通过牺牲 WebView drag/drop handler 来修复。
+- 回写 `.trellis/spec/frontend/desktop-drag-drop.md`、frontend index、cross-layer guide、composer drag-drop OpenSpec，以及 Browser Agent proposal/design。
+
+## 验证事实
+
+- 用户在 macOS 上实测外部拖拽恢复可用。
+- 本回合未主动运行自动化测试。
+
+## 后续建议
+
+- 后续补充 `src/services/dragDrop.ts` listener cleanup 与 forwarded event 的 focused unit test。
+- Windows / Linux 需要按 Desktop Drag-Drop Contract 做 Explorer / file manager 手测。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `695b64de` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 672: OpenSpec 文件树管理范围校准
+
+**Date**: 2026-06-02
+**Task**: OpenSpec 文件树管理范围校准
+**Branch**: `feature/v0.5.5`
+
+### Summary
+
+以当前代码为基准校准 enhance-file-tree-management-actions，明确外部文件树导入延期且不做主 spec 同步。
+
+### Main Changes
+
+## 本次记录
+- 按用户要求以当前代码为事实源校准 `enhance-file-tree-management-actions`。
+- 未执行主 specs 同步/归档，仅调整 change 内 proposal/design/tasks/delta specs。
+- 将 external file-tree import 从已交付/目标能力降级为：当前仅保留 unsupported command/service contract，文件树 UI 不注册外部导入入口。
+- 明确未来 external import 需另立变更，并验证 composer 外部文件 drop 与 Windows/macOS/Linux 兼容性。
+
+## 验证
+- `npx openspec validate enhance-file-tree-management-actions --strict --no-interactive`: pass
+
+## 注意
+- 本次提交只包含 OpenSpec change 文档。
+- 按用户选择保留未提交代码脏改：`src/features/files/components/FileTreePanel.tsx`、`src/features/files/components/FileTreePanel.run.test.tsx`。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b2688517` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 673: 修复文件树 ignored 文件夹置灰
+
+**Date**: 2026-06-02
+**Task**: 修复文件树 ignored 文件夹置灰
+**Branch**: `feature/v0.5.5`
+
+### Summary
+
+修复文件树中 gitignored 文件夹的灰显投影语义：目录自身 ignored 或全部可见子项 ignored 时才置灰，避免部分 ignored 子目录导致父目录误置灰。
+
+### Main Changes
+
+- 修改 `src/features/files/components/FileTreePanel.tsx`，新增 bottom-up ignored 状态预计算，统一供虚拟列表和普通渲染路径消费。
+- 保留 `.file-tree-row.is-gitignored` 样式契约，不新增 CSS 或依赖。
+- 修改 `src/features/files/components/FileTreePanel.run.test.tsx`，覆盖 `node_modules` / `.idea` 置灰，以及 `src-tauri` 混合目录不置灰。
+- 验证：本回合未运行测试；用户要求提交收口，按 focused test 变更记录测试覆盖点。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0841d893` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 674: 记录主 WebView 拖拽转发回归修复
+
+**Date**: 2026-06-02
+**Task**: 记录主 WebView 拖拽转发回归修复
+**Branch**: `feature/v0.5.5`
+
+### Summary
+
+修复错误加固导致的外部拖拽回归：恢复 main WebView 转发，将重复 drop 去重放到前端 service，并补充 OpenSpec/Trellis 事故契约。
+
+### Main Changes
+
+## 完成内容
+
+- 撤销 Rust bridge 中跳过 `webview.label() == "main"` 的错误加固。
+- 在 `src/services/dragDrop.ts` 增加短窗口重复 `drop` payload 去重，避免 main native listener 与 forwarded bridge 双路重复插入。
+- 更新 `.trellis/spec/frontend/desktop-drag-drop.md`，明确当前实测契约：所有 WebView drag/drop 必须统一 forward，不能在 Rust 层排除 main。
+- 更新 `openspec/specs/composer-drag-drop-file-reference/spec.md` 与 Browser Agent proposal/design，记录 2026-06-02 错误加固导致回归的事实和防复发规则。
+
+## 验证事实
+
+- 用户在 macOS 上再次实测外部拖拽恢复可用。
+- 本回合未主动运行自动化测试。
+
+## 防复发规则
+
+- 不要假设 `getCurrentWindow().onDragDropEvent` 与 `Builder::on_webview_event` 在当前 runtime 下完全等价。
+- 不要在 Rust bridge 中用 `webview.label() == "main"` 过滤 main WebView drop。
+- 重复 drop 的治理边界在 frontend dragDrop service，而不是 backend event bridge。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f18b38df` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 675: 归档已验证 OpenSpec 变更
+
+**Date**: 2026-06-02
+**Task**: 归档已验证 OpenSpec 变更
+**Branch**: `feature/v0.5.5`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+完成 OpenSpec 批量归档：同步 5 个已验证变更的 delta specs 到主 specs，并将变更目录移动到 archive/2026-06-02-*。
+
+归档变更：
+- add-vibecoding-browser-agent
+- enhance-browser-agent-page-understanding
+- enhance-file-tree-management-actions
+- fix-foreground-turn-settlement-phase2b
+- harden-model-structured-output-normalization
+
+主 specs 同步：
+- 新增 agent-task-orchestration-center、browser-agent-page-understanding、model-structured-output-normalization、vibecoding-browser-agent、workspace-filetree-management-actions 等主 spec。
+- 更新 agent-task-center、conversation-lifecycle-contract、engine-runtime-contract、workspace-filetree-root-node 等既有 spec。
+
+验证：
+- 未运行 openspec validate 或测试；本次为用户确认后的归档提交。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e3ac6a9a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 676: 修复 DMG 安装引导布局回退
+
+**Date**: 2026-06-02
+**Task**: 修复 DMG 安装引导布局回退
+**Branch**: `feature/v0.5.5`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| 项目 | 内容 |
+|------|------|
+| 问题 | 最新 DMG 打开后退回 Finder 白底默认布局，未显示拖拽到 Applications 的安装引导背景。 |
+| 根因 | `scripts/create-dmg.sh` 将 Finder AppleScript layout 失败降级为 warning，导致背景图与图标坐标未写入时仍可发布产物。 |
+| 修复 | 默认阻断 AppleScript layout 失败，新增 `ALLOW_DMG_LAYOUT_FALLBACK=1` 作为显式降级开关，并检查 `.background/background.png` 与 `.DS_Store`。 |
+| 影响 | macOS DMG 发布流程会在安装引导布局无法持久化时失败，避免继续发布回退样式安装包。 |
+| 验证 | 本次未运行完整 macOS build；提交前检查了 diff 与提交状态。 |
+
+**Updated Files**:
+- `scripts/create-dmg.sh`
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e0ec07c6` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 677: 优化 Browser Dock Phase 3 提案中文可读性
+
+**Date**: 2026-06-02
+**Task**: 优化 Browser Dock Phase 3 提案中文可读性
+**Branch**: `feature/v0.5.5`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## Summary
+
+- Updated Browser Dock Phase 3 OpenSpec and Trellis planning documents to use Chinese-first explanations with English technical terms preserved.
+- Clarified `BrowserUserAnnotation` in Chinese: Phase 3 sends structured text evidence, while annotated screenshots, image overlays, vision payloads, and annotation-guided actions remain out of scope/future phase.
+- Preserved OpenSpec contract structure and implementation field names to avoid ambiguity.
+
+## Validation
+
+- `openspec validate advance-browser-dock-trusted-observation-and-code-bridge --strict --no-interactive` passed before commit.
+
+## Commit
+
+- `d9da91f7 docs(browser-dock): 优化 Phase 3 提案中文可读性`
+
+## Notes
+
+- No code implementation was started.
+- Working tree was clean after the documentation commit.
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d9da91f7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 678: 收敛 stale cleanup runtime ended 事件
+
+**Date**: 2026-06-02
+**Task**: 收敛 stale cleanup runtime ended 事件
+**Branch**: `feature/v0.5.5`
+
+### Summary
+
+修复 stale_reuse_cleanup 被 manual_shutdown 早退吞掉导致 Codex 生成态偶发残留的问题。
+
+### Main Changes
+
+## Work Summary
+
+- Investigated 2026-06-02 client error log and source path for occasional Codex session/runtime non-settlement.
+- Identified frontend routing gap: `runtime/ended` with `reasonCode=manual_shutdown` returned before `onTurnError`, even when backend shutdown source was `stale_reuse_cleanup` or active lease/pending work existed.
+- Changed `useAppServerEvents` to only ignore benign manual shutdowns with no active lease, no pending request, no affected thread/turn, and no stale/internal shutdown source.
+- Added focused regression coverage for stale cleanup manual shutdowns and active-lease manual shutdowns.
+
+## Verification
+
+- `npx vitest run src/features/app/hooks/useAppServerEvents.runtime-ended.test.tsx` passed: 6 tests.
+- `npm run lint` passed.
+- `npm run typecheck` passed.
+- `git diff --check` passed.
+
+## Impact
+
+- Runtime cleanup events that affect an active Codex turn now route to `onTurnError`, allowing UI processing state to settle instead of remaining in `正在生成响应...`.
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0dae096c` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 679: 记录 Browser Dock 可见性开关提交
+
+**Date**: 2026-06-02
+**Task**: 记录 Browser Dock 可见性开关提交
+**Branch**: `feature/v0.5.5`
+
+### Summary
+
+补齐顶部工具区 Browser Dock icon 的设置页可见性控制，并完成 focused review、typecheck 与 client-ui-visibility focused tests。
+
+### Main Changes
+
+## 本次记录
+
+- 提交：`3f66098a fix(settings): 接入 Browser Dock 可见性开关`
+- 范围：只记录顶部工具区 Browser Dock 可见性开关补齐。
+- 改动：新增 `topTool.browserDock` registry、顶部按钮 visibility gate、中英文设置文案。
+- 验证：`npm run typecheck` 通过；`npx vitest run src/features/client-ui-visibility/utils/clientUiVisibility.test.ts src/features/client-ui-visibility/hooks/useClientUiVisibility.test.tsx` 通过，2 个文件 12 条用例。
+- 隔离：工作区存在其他 Browser Agent 相关未提交改动，本次业务提交与 session record 不纳入这些改动。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3f66098a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 680: 修复被动读取拉起 Codex 进程
+
+**Date**: 2026-06-02
+**Task**: 修复被动读取拉起 Codex 进程
+**Branch**: `feature/v0.5.5`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| Area | Summary |
+|------|---------|
+| OpenSpec | Created `prevent-passive-runtime-acquisition` proposal/design/spec/tasks for passive runtime acquisition regression. |
+| Frontend | Marked passive workspace hydration, focus refresh, and restore thread-list refresh as `allowRuntimeReconnect: false`. |
+| Backend | Removed implicit runtime acquisition from Codex helper reads; daemon/direct commands return degraded fallback when no session exists. |
+| Validation | `openspec validate --all --strict --no-interactive`, `npm run typecheck`, and `cargo check --manifest-path src-tauri/Cargo.toml` passed. |
+
+**Code Commit**: `20e17a52 fix(runtime): 阻止被动读取拉起 Codex 进程`
+
+**Notes**:
+- Existing explicit runtime actions such as send, resume, and manual reconnect remain runtime-acquiring paths.
+- Unrelated browser-agent working tree changes were intentionally excluded from the code commit.
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `20e17a52` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 681: 回滚 DMG 创建脚本到 v0.5.4
+
+**Date**: 2026-06-02
+**Task**: 回滚 DMG 创建脚本到 v0.5.4
+**Branch**: `feature/v0.5.5`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+提交 scripts/create-dmg.sh 单文件回滚，将 DMG 创建脚本恢复到 v0.5.4 行为。
+
+主要改动：
+- 移除今天新增的 DMG layout hard gate。
+- 恢复 AppleScript layout 失败仅 warning、不阻断的旧行为。
+- 未修改其他工作区变更。
+
+验证：
+- 未运行打包验证；按用户要求仅提交单文件。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `862fb673` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 682: Browser Agent 浏览器上下文收口
+
+**Date**: 2026-06-03
+**Task**: Browser Agent 浏览器上下文收口
+**Branch**: `feature/v0.5.5`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+本次会话完成 Browser Dock / Browser Agent 阶段性收口并提交。
+
+提交：e05159c7 feat(browser-agent): 收口浏览器上下文关联与证据桥接
+
+主要内容：
+- 收口 detached Browser Agent window、Browser Dock 多 tab toolbar、read-only capture、visual evidence、action audit、code bridge 与 context attachment 数据流。
+- 修复 toolbar session/workspace 关联边界，通过 toolbar URL 显式携带 sessionId/workspaceId/locale，避免多 tab 时旧 session 闭包导致关联错位。
+- 补齐 toolbar 与 Browser Dock 相关 i18n，Tauri command 支持 locale 可选传递。
+- 拆分 src-tauri/src/browser_agent/mod.rs 中 toolbar bridge 到 toolbar.rs，解除 browser_agent/mod.rs 的 large-file hard gate 风险。
+- 修复 FileTreePanel 对 gitignored 子目录的祖先展开边界。
+- 修正 workspace restore/focus runtime reconnect contract，启动恢复可按模式重连，focus refresh 明确不重连。
+- 补齐 Client Documentation 中 topTool.browserDock 控制项。
+- 回写 OpenSpec/Trellis proposal、design、tasks、implementation evidence、verification 与阶段计划。
+
+验证：
+- npm run typecheck 通过。
+- browser-agent/client-doc/file-tree 聚焦 vitest：14 个测试文件、79 个测试通过。
+- cargo test --manifest-path src-tauri/Cargo.toml browser_agent 通过：7 个测试通过。
+- npm run check:heavy-test-noise 通过：580 个测试文件完成，act warnings/stdout payload/stderr payload 均为 0。
+- large-file browser_agent/mod.rs 硬门禁已解除；全局 large-file gate 仍被非本次浏览器范围的 src-tauri/src/bin/cc_gui_daemon/daemon_state.rs 历史超限阻塞。
+
+后续注意：
+- 若要让 large-file gate 全绿，需要单独处理 daemon_state.rs 的拆分或 baseline 策略。
+- Browser Agent change 可进入最终 verify/archive 前的人测确认阶段。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e05159c7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 683: Project Map 图谱体系与大文件治理批量收口
+
+**Date**: 2026-06-03
+**Task**: Project Map 图谱体系与大文件治理批量收口
+**Branch**: `feature/v0.5.5`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## 本次批量收口
+
+| Commit | 主题 | 内容 |
+|--------|------|------|
+| e672301c | feat(agent-task): 接入任务编排中心运行队列 | 新增 agent orchestration providers、task run lifecycle/storage/coordinator、Task Center 行为校准与测试。 |
+| c1ecd630 | feat(project-map): 重塑图谱优先知识地图体验 | 重塑 Project Map graph-first surface，补齐导航、关系、证据、刷新、graph repair、UA 借鉴点文档与主 spec 校准。 |
+| 1e7123c3 | refactor(governance): 清理大文件基线硬债 | 拆分 ProjectMapPanel surface 与 cc_gui_daemon local thread helper，large-file gate fail scope 清零。 |
+| 66929982 | chore(openspec): 归档 Project Map 收口变更 | 归档已完成 OpenSpec changes，保留提案与验证记录。 |
+
+## 验证
+
+- npm run lint: passed
+- npm run typecheck: passed
+- npm run test: passed, 600 test files completed
+- npm run check:large-files:gate: passed, found=0
+- cargo test --manifest-path src-tauri/Cargo.toml --no-run: passed
+- openspec validate --all --strict --no-interactive: passed, 320 passed / 0 failed
+
+## 已知非阻断噪音
+
+- npm 输出 Unknown user config electron_mirror warning。
+- useLayoutNodes.client-ui-visibility.test.tsx 仍存在 React act(...) warning，但测试通过。
+- npm run test 默认排除 heavy integration suites。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e672301c` | (see git log) |
+| `c1ecd630` | (see git log) |
+| `1e7123c3` | (see git log) |
+| `66929982` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 684: 校准 Project Map 视图交互与门禁噪音
+
+**Date**: 2026-06-03
+**Task**: 校准 Project Map 视图交互与门禁噪音
+**Branch**: `feature/v0.5.5`
+
+### Summary
+
+完成 Project Map 视图信息架构、导航/关系/健康语义校准，并修复相关 CI gate 噪音与 branding 残留。
+
+### Main Changes
+
+- 重构 Project Map 顶部视图层：移除低价值 Guided Tour 和主视图 Evidence Files 面板，将导航、关系、健康问题收敛为 secondary investigation actions。
+- 压缩导航和关系区域，去除胶囊/重边框/彩色渐变，改为更克制的主题自适应极简分区。
+- 修复节点点击后的上下文同步：路径查找起点跟随当前选中节点，typed/hierarchy relations 在全部方向下收敛到当前节点相关关系，顶部关系数字显示过滤后数量。
+- 校准 Graph Repair 语义：健康入口改为未解决问题数，修复动作区分可确定清理与缺证据标记，并显示清理/标记结果。
+- 修复 CI gate：useLayoutNodes client UI visibility 测试统一 flush renderHook 后异步更新，降低 heavy-test-noise act warning；heavy-test-noise runner boundary 不再携带 stale stream context。
+- 修复 doctor:win branding：shipping surface 中的 mossx 事件前缀、默认 copy、browser toolbar host/path 改为 ccgui。
+- 未在本回合运行完整 typecheck、doctor:win 或全量测试；相关 OpenSpec validation/typecheck/focused tests 仍按 tasks.md 保持待执行状态。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0ed9db03` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 685: 修复打包构建阻断与治理边界
+
+**Date**: 2026-06-03
+**Task**: 修复打包构建阻断与治理边界
+**Branch**: `feature/v0.5.5`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| Area | Summary |
+|------|---------|
+| Build | 修复 mac-arm64 打包前端构建阶段的 TS6133 阻断，移除 Project Map relation panel 已失效 unused prop contract。 |
+| Packaging | 为 build-platform 子进程增加隔离 npm userconfig，并清理 legacy electron mirror npm config env，降低嵌套 npm run build/tauri 的 warning 噪声。 |
+| Governance | 补齐 large-file governance 输出路径边界校验，禁止治理报告写出仓库根目录。 |
+| Tests | 增加 large-file CLI 越界输出路径回归测试。 |
+| Verification | npm run build 通过；npm run build:mac-arm64 -- --skip-sign 通过并生成 release-local/ccgui_0.5.5_aarch64.dmg；node --check scripts/build-platform.mjs 通过；隔离 npm userconfig 下 electron_mirror 为 undefined。 |
+
+**Updated Files**:
+- `scripts/build-platform.mjs`
+- `scripts/check-large-files.mjs`
+- `scripts/check-large-files.test.mjs`
+- `src/styles/browser-agent-window.css`
+
+**Notes**:
+- 顶层 npm warning `Unknown user config "electron_mirror"` 来自用户级 `/Users/chenxiangning/.npmrc`，仓库脚本只能隔离子进程，不能在 npm 启动前消除顶层 warning。
+- 完整 mac-arm64 打包已成功生成 DMG，本地 release artifact 未纳入提交。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `63b5ef57` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 686: 归档已验证 OpenSpec 提案并同步主规范
+
+**Date**: 2026-06-03
+**Task**: 归档已验证 OpenSpec 提案并同步主规范
+**Branch**: `feature/v0.5.6`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| 项目 | 内容 |
+|------|------|
+| 工作类型 | OpenSpec 归档与主规范同步 |
+| 主提交 | `36463247 docs(openspec): 归档已验证提案并同步主规范` |
+| 归档范围 | 将 11 个已完成 OpenSpec changes 移动到 `openspec/changes/archive/2026-06-03-*` |
+| Spec 同步 | 将 59 个 delta requirements 合并进 13 个主 capability specs |
+| 保留 Active | `refactor-project-map-view-information-architecture` 仍保留 active，因为 typecheck 与 focused Vitest 验证任务未完成 |
+| 验证 | `openspec validate --all --strict --no-interactive` 通过，结果为 309 passed / 0 failed |
+| 工作区隔离 | `CHANGELOG.md` 是既有未暂存改动，未纳入本次 OpenSpec 提交 |
+
+## 归档的 Changes
+
+- `prevent-passive-runtime-acquisition`
+- `advance-browser-dock-trusted-observation-and-code-bridge`
+- `improve-project-map-context-and-impact-navigation`
+- `complete-project-map-relation-persistence-and-impact-sources`
+- `add-project-map-guided-tour-and-path-navigation`
+- `extend-project-map-code-spec-task-knowledge-graph`
+- `add-project-map-staleness-refresh-and-graph-repair`
+- `add-project-map-evidence-file-explorer`
+- `improve-project-map-relation-ux`
+- `add-project-map-focused-tests`
+- `add-agent-task-orchestration-center`
+
+## 更新的主 Specs
+
+- `openspec/specs/agent-task-center/spec.md`
+- `openspec/specs/agent-task-orchestration-center/spec.md`
+- `openspec/specs/agent-task-run-history/spec.md`
+- `openspec/specs/browser-agent-page-understanding/spec.md`
+- `openspec/specs/conversation-lifecycle-contract/spec.md`
+- `openspec/specs/dynamic-project-governance-evidence/spec.md`
+- `openspec/specs/git-operations/spec.md`
+- `openspec/specs/openspec-trellis-status-panel-bridge/spec.md`
+- `openspec/specs/project-map-incremental-generation/spec.md`
+- `openspec/specs/project-xray-panel/spec.md`
+- `openspec/specs/spec-hub-adapter-openspec/spec.md`
+- `openspec/specs/spec-hub-workbench-ui/spec.md`
+- `openspec/specs/workspace-session-catalog-projection/spec.md`
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `36463247` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 687: 补充 v0.5.5 发布说明
+
+**Date**: 2026-06-03
+**Task**: 补充 v0.5.5 发布说明
+**Branch**: `feature/v0.5.6`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| 项目 | 内容 |
+|------|------|
+| 工作类型 | Changelog 文档更新 |
+| 主提交 | `b05258de docs(changelog): 补充 v0.5.5 发布说明` |
+| 更新范围 | `CHANGELOG.md` |
+| 内容摘要 | 新增 2026-06-03 v0.5.5 中英文发布说明，覆盖文件树能力、Browser Agent、Agent Task 编排、Project Map、运行态修复、DMG 发布路径与打包治理边界 |
+| 验证 | 文档-only 改动，提交前确认暂存区仅包含 `CHANGELOG.md`，未运行代码测试 |
+
+## 备注
+
+该提交在 OpenSpec 归档提交之后独立完成，避免发布说明与 OpenSpec 归档记录混在同一个 commit 中。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b05258de` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 688: Project Map 查询关联工作台
+
+**Date**: 2026-06-04
+**Task**: Project Map 查询关联工作台
+**Branch**: `feature/v0.5.6`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+本次提交完成 OpenSpec change `deepen-project-map-query-and-association-workbench` 的实现与验证。
+
+主要改动：
+- 新增 Project Map 统一查询、近期活动投影、Advisor Hints、关联解释、快速过滤和本地历史能力，保持 graph-first 视图不被列表替代。
+- 新增 `activityProjection`、`advisorProjections`、`highlightProjection`、`projectionGuards` 等 Project Map runtime projection helpers，并扩展 `navigation` 的 grouped query 与 path explanation。
+- 新增 `ProjectMapWorkbenchPanels` 与 overlay 样式，增强 detail/evidence surfaces 的折叠展示、证据反查、节点聚焦和图上高亮。
+- 修复边界 review 发现的问题：absolute/degraded path 不再参与 workspace-relative 匹配；line/limit/preview limit 做 finite sanitize；证据 chip 去重按完整 path/ref/hash，避免同名异目录文件被折叠。
+
+验证结果：
+- `npx vitest run src/features/project-map/utils/projectionGuards.test.ts src/features/project-map/components/ProjectMapPanel.test.tsx` 通过，2 files / 59 tests。
+- Project Map focused utils tests 通过，5 files / 20 tests。
+- `npm run typecheck` 通过。
+- `npm run lint` 通过。
+- `npm run check:large-files` 通过，found=0。
+- `npm run check:heavy-test-noise` 通过，607 test files，breachCount=0。
+- `npx openspec validate deepen-project-map-query-and-association-workbench --strict --no-interactive` 通过。
+
+后续建议：
+- 若继续扩展 Project Map UI，优先拆分 `ProjectMapPanel.tsx` 编排逻辑，避免接近 large-file hard gate。
+- OpenSpec change 已实现并 strict valid，后续可进入 verify/sync/archive 决策。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6fffd914` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 689: 增加工作区会话拉取模式切换
+
+**Date**: 2026-06-04
+**Task**: 增加工作区会话拉取模式切换
+**Branch**: `feature/v0.5.6`
+
+### Summary
+
+新增项目会话归因模式设置，保留默认相关会话模式，并提供当前工作区窄拉取模式；补齐后端扫描、前端设置、线程列表、分页加载、投影摘要和测试门禁。
+
+### Main Changes
+
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `649ef387` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 690: Fix Claude argv prompt shell escaping
+
+**Date**: 2026-06-04
+**Task**: Fix Claude argv prompt shell escaping
+**Branch**: `feature/v0.5.6`
+
+### Summary
+
+修复 Claude 提示词通过 argv 传递导致 Windows shell metacharacter/skill 调用失败的问题，改为默认使用 stream-json stdin 传递用户 prompt，并补充 OpenSpec 记录和回归测试。
+
+### Main Changes
+
+| Area | Change |
+|------|--------|
+| Claude command contract | 非空用户 prompt 默认走 `--input-format stream-json` stdin，避免 `.cmd/.bat` wrapper 或 shell metacharacter 解析 prompt argv。 |
+| Compatibility | 保留 `build_command(..., use_stream_json_input=false, ...)` fallback，仅生产路径通过 `should_use_stream_json_input` 选择 stdin。 |
+| Boundary preservation | `build_message_content` 继续用 trim 判断空文本，但 text payload 保留首尾 whitespace，避免从 argv 切到 stdin 后改变用户输入字节。 |
+| Regression coverage | 新增单行文本、特殊字符 prompt 不进入 argv、边界 whitespace 保真测试；保留 multiline/image stream-json 行为。 |
+| OpenSpec | 新增 `fix-claude-argv-prompt-shell-escaping` proposal/design/spec/tasks，记录根因、方案取舍、兼容边界和验收标准。 |
+
+**Validation**:
+- `cargo test --manifest-path src-tauri/Cargo.toml claude::tests_stream`
+- `cargo test --manifest-path src-tauri/Cargo.toml claude::tests_command`
+- `cargo test --manifest-path src-tauri/Cargo.toml claude_message_content`
+- `openspec validate fix-claude-argv-prompt-shell-escaping --strict --no-interactive`
+
+**Known residual**:
+- `cargo fmt --manifest-path src-tauri/Cargo.toml --check` 之前被无关既有文件 `src-tauri/src/browser_agent/toolbar.rs` 格式问题阻断，未纳入本次原子修复提交。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `512b9e6b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 691: 归档运行时交互卡顿优化提案
+
+**Date**: 2026-06-04
+**Task**: 归档运行时交互卡顿优化提案
+**Branch**: `feature/v0.5.6`
+
+### Summary
+
+归档 OpenSpec 提案 fix-client-runtime-interaction-jank，提交客户端运行时交互卡顿优化、性能证据和规范同步。
+
+### Main Changes
+
+## 完成内容
+
+- 归档 OpenSpec change：`fix-client-runtime-interaction-jank` -> `openspec/changes/archive/2026-06-04-fix-client-runtime-interaction-jank/`。
+- 同步 5 个主 specs：`conversation-realtime-client-performance`、`long-list-virtualization-performance`、`runtime-performance-evidence-gates`、`workspace-session-catalog-projection`、`workspace-session-radar-overview`。
+- 提交客户端运行时交互卡顿优化：Composer advisory props 稳定、StatusPanel scoped projection、Messages streaming 控制即时路径、Foreground-first thread switching、Sidebar/session folder projection cache、Session catalog bounded paging/dedupe/stale guards、Radar/prewarm staging。
+- 更新性能证据：`docs/perf/baseline.*`、`docs/perf/runtime-evidence-gates.*`、`docs/perf/history/v0.5.6-baseline.*`、提案内 `performance-evidence-report.md`。
+
+## 验证
+
+- `npm run check:heavy-test-noise`：通过，608 个 test files 完成，act warnings 0，stdout/stderr payload noise 0。
+- `node scripts/check-heavy-test-noise.mjs --input .artifacts/heavy-test-noise.log --mode report`：通过，0 breaches。
+- `npm run typecheck`：通过。
+- `openspec validate --all --strict --no-interactive`：通过，312 items passed。
+- `npm run perf:baseline:all`：通过。
+- `npm run check:runtime-evidence-gates`：通过。
+- `git diff --check`：通过。
+
+## 残余边界
+
+- 当前自动化证据包含 proxy baseline、runtime evidence gate、browser scroll measured evidence；真实 Tauri/WebView streaming typing React Profiler/PerformanceObserver 采样仍属于 release qualifier，不能据此夸大为完整真实用户环境性能结论。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `980a7b57ac9b07804455e31f8a1eab133677b4bc` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 692: 修复 WebView2 消息图片内存压力
+
+**Date**: 2026-06-05
+**Task**: 修复 WebView2 消息图片内存压力
+**Branch**: `feature/v0.5.6`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| Area | Summary |
+|------|---------|
+| Root cause | Windows WebView2 renderer memory pressure from long-lived inline `data:image` payloads, deferred Claude image hydration, and image-heavy message timelines. |
+| Frontend | Added transient object URL rendering for inline message images and lightbox previews while preserving fallback display behavior. |
+| Deferred images | Added explicit `blob:` ownership and release handling for normal unmount, state overwrite, hydration failure, and async late resolve after unmount. |
+| Virtualization | Added render-density based virtualization for image-heavy timelines without changing the old row-count streaming guard. |
+| Regression coverage | Added tests for deferred image resource release and deferred image updates on an existing message row. |
+
+**Updated Files**:
+- `src/features/messages/components/MessageMediaBlocks.tsx`
+- `src/features/messages/components/MessagesRows.tsx`
+- `src/features/messages/components/MessagesTimeline.tsx`
+- `src/features/messages/components/messagesTimelineVirtualization.ts`
+- `src/features/messages/components/Messages.rich-content.test.tsx`
+- `src/features/messages/components/messagesTimelineVirtualization.test.ts`
+- `openspec/changes/fix-webview2-message-image-memory-pressure/**`
+- `.trellis/tasks/archive/2026-06/06-04-fix-webview2-message-image-memory-pressure/**`
+
+**Validation**:
+- `pnpm typecheck` passed.
+- `pnpm vitest run src/features/messages/components/Messages.rich-content.test.tsx src/features/messages/components/messagesTimelineVirtualization.test.ts` passed: 2 files, 25 tests.
+
+**Code Commit**:
+- `63d6e8b8 fix(messages): 修复 WebView2 图片内存压力`
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `63d6e8b8` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 693: 运行时提示仅显示错误消息
+
+**Date**: 2026-06-05
+**Task**: 运行时提示仅显示错误消息
+**Branch**: `feature/v0.5.6`
+
+### Summary
+
+将运行时提示 dock 的可见消息收敛为 error 级别，保留内部诊断 buffer。
+
+### Main Changes
+
+- 将 runtime notice 可见过滤函数沉淀到 `src/services/globalRuntimeNotices.ts`。
+- `useGlobalRuntimeNoticeDock` 对外只返回 error 级 notices，dock 状态基于可见 error 派生。
+- `GlobalRuntimeNoticeDock` 组件增加防御过滤，即使直接传入 info/warning 也不会显示正常日志或 streaming 状态。
+- 更新 hook/component 单测，覆盖内部 buffer 保留 info/warning、用户可见 dock 只显示 error。
+- 验证：`npm exec vitest -- run src/features/notifications/hooks/useGlobalRuntimeNoticeDock.test.tsx src/features/notifications/components/GlobalRuntimeNoticeDock.test.tsx`，16 tests passed。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c585cc14` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

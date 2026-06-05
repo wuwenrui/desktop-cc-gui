@@ -73,6 +73,27 @@ describe("taskRunStorage", () => {
     expect(run.engine).toBe("codex");
   });
 
+  it("creates orchestration-linked runs without pretending they are Kanban tasks", () => {
+    const run = createTaskRunRecord({
+      taskId: "orchestration-task-1",
+      taskSource: "orchestration",
+      orchestrationTaskId: "orchestration-task-1",
+      workspaceId: "/repo",
+      taskTitle: "Project Map task",
+      engine: "codex",
+      trigger: "manual",
+      now: 100,
+    });
+
+    expect(run.task).toMatchObject({
+      taskId: "orchestration-task-1",
+      source: "orchestration",
+      orchestrationTaskId: "orchestration-task-1",
+      workspaceId: "/repo",
+      title: "Project Map task",
+    });
+  });
+
   it("persists task runs under an independent app-store key", () => {
     const run = createTaskRunRecord({
       taskId: "task-1",
@@ -114,6 +135,49 @@ describe("taskRunStorage", () => {
 
     expect(normalized.runs[0]?.parentRunId).toBe("run-parent");
     expect(normalized.runs[0]?.upstreamRunId).toBe("run-upstream");
+  });
+
+  it("keeps legacy Kanban runs readable and preserves orchestration linkage", () => {
+    const normalized = normalizeTaskRunStore({
+      version: 1,
+      runs: [
+        {
+          runId: "legacy-kanban",
+          task: { taskId: "task-1", workspaceId: "/repo" },
+          engine: "codex",
+          status: "queued",
+          trigger: "manual",
+          artifacts: [],
+          availableRecoveryActions: [],
+          updatedAt: 100,
+        },
+        {
+          runId: "orchestration-run",
+          task: {
+            taskId: "orchestration-task-1",
+            source: "orchestration",
+            workspaceId: "/repo",
+            title: "Project Map task",
+            orchestrationTaskId: "orchestration-task-1",
+          },
+          engine: "codex",
+          status: "queued",
+          trigger: "manual",
+          artifacts: [],
+          availableRecoveryActions: [],
+          updatedAt: 200,
+        },
+      ],
+    });
+
+    expect(normalized.runs.find((run) => run.runId === "legacy-kanban")?.task).toMatchObject({
+      source: "kanban",
+      orchestrationTaskId: null,
+    });
+    expect(normalized.runs.find((run) => run.runId === "orchestration-run")?.task).toMatchObject({
+      source: "orchestration",
+      orchestrationTaskId: "orchestration-task-1",
+    });
   });
 
   it("finds the newest active run deterministically", () => {

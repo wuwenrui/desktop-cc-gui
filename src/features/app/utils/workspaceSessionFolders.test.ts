@@ -4,6 +4,8 @@ import {
   WORKSPACE_SESSION_SYSTEM_AUTO_FOLDER_ID,
   buildWorkspaceSessionFolderMoveTargets,
   buildWorkspaceSessionFolderProjection,
+  buildWorkspaceSessionFolderWorkspaceProjection,
+  getCachedWorkspaceSessionFolderWorkspaceProjection,
 } from "./workspaceSessionFolders";
 
 describe("buildWorkspaceSessionFolderProjection", () => {
@@ -244,6 +246,162 @@ describe("buildWorkspaceSessionFolderProjection", () => {
       { folderId: null, label: "Project root" },
       { folderId: "folder-a", label: "A" },
       { folderId: "folder-b", label: "B" },
+    ]);
+  });
+
+  it("builds workspace-scoped projection from rows, folders, and local overrides", () => {
+    const folders = [
+      {
+        id: "folder-a",
+        workspaceId: "ws-1",
+        parentId: null,
+        name: "Planning",
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    ];
+    const projection = buildWorkspaceSessionFolderWorkspaceProjection({
+      folders,
+      rootLabel: "Project root",
+      rows: [
+        {
+          thread: { id: "thread-root", name: "Root", updatedAt: 3 },
+          depth: 0,
+        },
+        {
+          thread: { id: "thread-moved", name: "Moved", updatedAt: 2 },
+          depth: 0,
+        },
+      ],
+      folderOverrides: {
+        "thread-moved": "folder-a",
+      },
+    });
+
+    expect(projection.folderProjection.rootRows.map((row) => row.thread.id)).toEqual([
+      "thread-root",
+    ]);
+    expect(projection.folderProjection.folders[0]?.rows.map((row) => row.thread.id)).toEqual([
+      "thread-moved",
+    ]);
+    expect(projection.projectedRows[1]?.thread.folderId).toBe("folder-a");
+    expect(projection.folderMoveTargets).toEqual([
+      { folderId: null, label: "Project root" },
+      { folderId: "folder-a", label: "Planning" },
+    ]);
+  });
+
+  it("reuses cached projection per workspace until that workspace inputs change", () => {
+    const cache = new Map();
+    const folders = [
+      {
+        id: "folder-a",
+        workspaceId: "ws-a",
+        parentId: null,
+        name: "Planning",
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    ];
+    const rowsA = [
+      { thread: { id: "thread-a", name: "A", updatedAt: 1 }, depth: 0 },
+    ];
+    const rowsB = [
+      { thread: { id: "thread-b", name: "B", updatedAt: 1 }, depth: 0 },
+    ];
+    const overrides = {};
+
+    const firstA = getCachedWorkspaceSessionFolderWorkspaceProjection(
+      cache,
+      "ws-a",
+      {
+        folders,
+        rows: rowsA,
+        folderOverrides: overrides,
+        rootLabel: "Project root",
+      },
+    );
+    const firstB = getCachedWorkspaceSessionFolderWorkspaceProjection(
+      cache,
+      "ws-b",
+      {
+        folders,
+        rows: rowsB,
+        folderOverrides: overrides,
+        rootLabel: "Project root",
+      },
+    );
+    const secondB = getCachedWorkspaceSessionFolderWorkspaceProjection(
+      cache,
+      "ws-b",
+      {
+        folders,
+        rows: rowsB,
+        folderOverrides: overrides,
+        rootLabel: "Project root",
+      },
+    );
+    const nextA = getCachedWorkspaceSessionFolderWorkspaceProjection(
+      cache,
+      "ws-a",
+      {
+        folders,
+        rows: [...rowsA],
+        folderOverrides: overrides,
+        rootLabel: "Project root",
+      },
+    );
+
+    expect(secondB).toBe(firstB);
+    expect(nextA).not.toBe(firstA);
+    expect(cache.get("ws-b")?.projection).toBe(firstB);
+  });
+
+  it("rebuilds cached projection when mutable input contents change under the same identities", () => {
+    const cache = new Map();
+    const folders = [
+      {
+        id: "folder-a",
+        workspaceId: "ws-a",
+        parentId: null,
+        name: "Planning",
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    ];
+    const rows = [
+      { thread: { id: "thread-a", name: "A", updatedAt: 1 }, depth: 0 },
+    ];
+    const overrides: Record<string, string | null | undefined> = {};
+
+    const first = getCachedWorkspaceSessionFolderWorkspaceProjection(
+      cache,
+      "ws-a",
+      {
+        folders,
+        rows,
+        folderOverrides: overrides,
+        rootLabel: "Project root",
+      },
+    );
+
+    overrides["thread-a"] = "folder-a";
+
+    const next = getCachedWorkspaceSessionFolderWorkspaceProjection(
+      cache,
+      "ws-a",
+      {
+        folders,
+        rows,
+        folderOverrides: overrides,
+        rootLabel: "Project root",
+      },
+    );
+
+    expect(next).not.toBe(first);
+    expect(next.folderProjection.rootRows).toHaveLength(0);
+    expect(next.folderProjection.folders[0]?.rows.map((row) => row.thread.id)).toEqual([
+      "thread-a",
     ]);
   });
 });

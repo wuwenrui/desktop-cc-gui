@@ -95,8 +95,50 @@ describe("browser attachment utilities", () => {
       url: "https://example.com/page",
       stale: false,
       pageType: "article",
+      observation: {
+        state: "available",
+        staleReasons: [],
+        rendererBinding: "matched",
+        transport: "webview_dom",
+      },
     });
     expect(stripBrowserContextPrompt(`${prompt}\n\nUser request`)).toBe("User request");
+  });
+
+  it("includes trusted observation state in browser context attachments", () => {
+    const attachment = buildBrowserContextAttachment(makeSnapshot(), {
+      now: 1100,
+      staleAfterMs: 5000,
+    });
+
+    expect(attachment.observation).toMatchObject({
+      schemaVersion: 1,
+      observationId: "browser-observation-snapshot-1",
+      state: "available",
+      staleReasons: [],
+      rendererBinding: "matched",
+      transport: "webview_dom",
+    });
+  });
+
+  it("records explicit stale reasons for expired and degraded observations", () => {
+    const expiredAttachment = buildBrowserContextAttachment(makeSnapshot(), {
+      now: 10_000,
+      staleAfterMs: 5000,
+    });
+    const degradedAttachment = buildBrowserContextAttachment(
+      makeSnapshot({
+        freshness: "degraded",
+        availability: "partial",
+      }),
+      { now: 1100, staleAfterMs: 5000 },
+    );
+
+    expect(expiredAttachment.observation.state).toBe("expired");
+    expect(expiredAttachment.observation.staleReasons).toContain("ttl_expired");
+    expect(degradedAttachment.observation.state).toBe("degraded");
+    expect(degradedAttachment.observation.staleReasons).toContain("capture_degraded");
+    expect(degradedAttachment.observation.transport).toBe("metadata_fallback");
   });
 
   it("prioritizes primary content, readable blocks, and visual clues over body fallback", () => {
@@ -159,5 +201,62 @@ describe("browser attachment utilities", () => {
     expect(parsed?.visualEvidence?.[0]?.label).toBe("error screenshot");
     expect(parsed?.visualEvidence?.[0]?.altText).toBe("stack trace screenshot");
     expect(parsed?.elementCounts?.visualEvidence).toBe(1);
+  });
+
+  it("formats and parses annotations as structured text evidence without image payloads", () => {
+    const attachment = buildBrowserContextAttachment(makeSnapshot(), {
+      now: 1100,
+      staleAfterMs: 5000,
+    });
+    attachment.annotations = [
+      {
+        annotationId: "annotation-1",
+        observationId: attachment.observation.observationId,
+        browserSessionId: attachment.browserSessionId,
+        workspaceId: attachment.workspaceId,
+        createdAt: 1200,
+        url: attachment.url,
+        title: attachment.title,
+        anchor: "region",
+        userNote: "这里按钮文案不对",
+        viewport: {
+          width: 1280,
+          height: 720,
+          scrollX: 0,
+          scrollY: 0,
+          devicePixelRatio: 2,
+        },
+        region: {
+          x: 420,
+          y: 180,
+          width: 160,
+          height: 48,
+        },
+        nearbyText: "Start your first task",
+        nearestElement: {
+          role: "button",
+          label: "Start",
+          placeholder: null,
+          hrefOrigin: null,
+          selectorHint: "button[data-testid=start]",
+          sensitive: false,
+        },
+        privacy: attachment.privacy,
+        staleReasons: ["capture_degraded"],
+        diagnostics: [],
+      },
+    ];
+
+    const prompt = formatBrowserContextPrompt(attachment);
+    const parsed = parseBrowserContextPrompt(`${prompt}\n\nUser request`);
+
+    expect(prompt).toContain("annotations:");
+    expect(prompt).toContain("structured");
+    expect(prompt).not.toContain("image binary");
+    expect(parsed?.annotations?.[0]).toMatchObject({
+      anchor: "region",
+      userNote: "这里按钮文案不对",
+      staleReasons: ["capture_degraded"],
+    });
   });
 });

@@ -54,6 +54,7 @@ import {
 import { buildTimelineProjectionRows, groupedEntryContainsItemId } from "./messagesTimelineProjection";
 import {
   estimateTimelineProjectionRowSize,
+  estimateTimelineProjectionRenderWeight,
   observeTimelineElementOffset,
   shouldVirtualizeTimelineRows,
 } from "./messagesTimelineVirtualization";
@@ -285,6 +286,10 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   const shouldVirtualizeTimeline = shouldVirtualizeTimelineRows({
     isThinking,
     rowCount: timelineProjectionRows.length,
+    renderWeight: timelineProjectionRows.reduce(
+      (total, row) => total + estimateTimelineProjectionRenderWeight(row),
+      0,
+    ),
   });
   const timelineVirtualizer = useVirtualizer({
     count: shouldVirtualizeTimeline ? timelineProjectionRows.length : 0,

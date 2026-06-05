@@ -323,10 +323,50 @@ fn should_use_stream_json_input_for_multiline_text_without_images() {
 }
 
 #[test]
-fn should_not_use_stream_json_input_for_single_line_text_without_images() {
+fn should_use_stream_json_input_for_single_line_text_without_images() {
     let mut params = SendMessageParams::default();
     params.text = "single line".to_string();
-    assert!(!ClaudeSession::should_use_stream_json_input(&params));
+    assert!(ClaudeSession::should_use_stream_json_input(&params));
+}
+
+#[test]
+fn build_command_uses_stream_json_for_single_line_text() {
+    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+    let mut params = SendMessageParams::default();
+    params.text = "single line".to_string();
+
+    let use_stream_json_input = ClaudeSession::should_use_stream_json_input(&params);
+    let command = session.build_command(&params, use_stream_json_input, true);
+    let args: Vec<String> = command
+        .as_std()
+        .get_args()
+        .map(|arg| arg.to_string_lossy().to_string())
+        .collect();
+
+    assert!(args
+        .windows(2)
+        .any(|window| { window[0] == "--input-format" && window[1] == "stream-json" }));
+    assert!(args.iter().all(|arg| arg != "single line"));
+}
+
+#[test]
+fn build_command_keeps_special_character_prompt_out_of_argv() {
+    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+    let mut params = SendMessageParams::default();
+    params.text = "run skill /review & echo %PATH% | more > out (test)!".to_string();
+
+    let use_stream_json_input = ClaudeSession::should_use_stream_json_input(&params);
+    let command = session.build_command(&params, use_stream_json_input, true);
+    let args: Vec<String> = command
+        .as_std()
+        .get_args()
+        .map(|arg| arg.to_string_lossy().to_string())
+        .collect();
+
+    assert!(args
+        .windows(2)
+        .any(|window| { window[0] == "--input-format" && window[1] == "stream-json" }));
+    assert!(args.iter().all(|arg| arg != &params.text));
 }
 
 #[test]
@@ -373,6 +413,170 @@ fn build_resume_command_uses_stream_json_for_multiline_answer() {
         .windows(2)
         .any(|window| { window[0] == "--input-format" && window[1] == "stream-json" }));
     assert!(args.iter().all(|arg| arg != "line1\r\nline2"));
+}
+
+#[test]
+fn claude_cli_binary_diagnostics_classifies_configured_wrapper() {
+    let session = ClaudeSession::new(
+        "test-workspace".to_string(),
+        test_workspace_path(),
+        Some(EngineConfig {
+            bin_path: Some("C:/tools/claude.ps1".to_string()),
+            home_dir: None,
+            custom_args: None,
+            default_model: None,
+        }),
+    );
+
+    let (bin, wrapper_kind) = session.cli_binary_diagnostics();
+
+    assert_eq!(bin, "C:/tools/claude.ps1");
+    assert_eq!(wrapper_kind, "ps1-wrapper");
+}
+
+#[test]
+fn ask_user_question_response_summary_does_not_require_answer_text() {
+    let result = json!({
+        "answers": {
+            "q-0": { "answers": ["secret selection"] },
+            "q-1": { "answers": [] }
+        },
+        "skippedQuestionIds": ["q-1"]
+    });
+
+    let (answer_count, non_empty_answer_count, has_skipped_questions) =
+        ClaudeSession::summarize_user_input_response(&result);
+
+    assert_eq!(answer_count, 2);
+    assert_eq!(non_empty_answer_count, 1);
+    assert!(has_skipped_questions);
+}
+
+#[tokio::test]
+async fn ask_user_question_resume_fails_explicitly_without_session_id() {
+    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+    #[cfg(windows)]
+    let script = "@echo off\r\nping -n 6 127.0.0.1 > nul\r\n";
+    #[cfg(not(windows))]
+    let script = "#!/bin/sh\nsleep 5\n";
+    let (root, workspace_path, script_path) = create_fake_claude_script(script);
+    let child = Command::new(script_path)
+        .current_dir(workspace_path)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("fake active Claude child should spawn");
+    {
+        let mut active = session.active_processes.lock().await;
+        active.insert("turn-missing-session".to_string(), child);
+    }
+    if let Ok(mut pending) = session.pending_user_inputs.lock() {
+        pending.insert(
+            "request-missing-session".to_string(),
+            "turn-missing-session".to_string(),
+        );
+    }
+    session
+        .respond_to_user_input(
+            json!("request-missing-session"),
+            json!({ "answers": { "q-0": { "answers": ["answer"] } } }),
+        )
+        .await
+        .expect("response should be accepted before resume");
+
+    let params = SendMessageParams::default();
+    let error = session
+        .handle_ask_user_question_resume("turn-missing-session", &params, &None, true)
+        .await
+        .expect_err("missing session id should fail explicitly");
+
+    assert!(error.contains("no Claude session_id"));
+    assert!(error.contains("wrapper_kind="));
+    assert!(
+        session.active_process_ids().await.is_empty(),
+        "missing-session resume failure should remove the active child"
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[tokio::test]
+async fn ask_user_question_resume_spawn_failure_includes_wrapper_context() {
+    let missing_bin = std::env::temp_dir()
+        .join(format!("missing-claude-{}", uuid::Uuid::new_v4()))
+        .to_string_lossy()
+        .to_string();
+    let session = ClaudeSession::new(
+        "test-workspace".to_string(),
+        test_workspace_path(),
+        Some(EngineConfig {
+            bin_path: Some(missing_bin),
+            home_dir: None,
+            custom_args: None,
+            default_model: None,
+        }),
+    );
+    let diagnostics = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let diagnostics_for_sink = std::sync::Arc::clone(&diagnostics);
+    session.set_ask_user_question_resume_diagnostic_sink(Some(std::sync::Arc::new(
+        move |diagnostic| {
+            diagnostics_for_sink
+                .lock()
+                .expect("diagnostic sink should lock")
+                .push(diagnostic);
+        },
+    )));
+    session.register_turn_thread_id("turn-spawn-failure", "thread-spawn-failure");
+    if let Ok(mut pending) = session.pending_user_inputs.lock() {
+        pending.insert(
+            "request-spawn-failure".to_string(),
+            "turn-spawn-failure".to_string(),
+        );
+    }
+    session
+        .respond_to_user_input(
+            json!("request-spawn-failure"),
+            json!({ "answers": { "q-0": { "answers": ["answer"] } } }),
+        )
+        .await
+        .expect("response should be accepted before resume");
+
+    let mut params = SendMessageParams::default();
+    params.session_id = Some("33333333-3333-4333-8333-333333333333".to_string());
+    params.continue_session = true;
+    let error = session
+        .handle_ask_user_question_resume(
+            "turn-spawn-failure",
+            &params,
+            &Some("33333333-3333-4333-8333-333333333333".to_string()),
+            true,
+        )
+        .await
+        .expect_err("missing resume binary should fail spawn");
+
+    assert!(error.contains("Failed to spawn AskUserQuestion resume process"));
+    assert!(error.contains("wrapper_kind="));
+    assert!(error.contains("bin="));
+    let captured = diagnostics.lock().expect("diagnostic list should lock");
+    let diagnostic = captured
+        .last()
+        .expect("spawn failure should emit a resume diagnostic");
+    assert_eq!(diagnostic.workspace_id, "test-workspace");
+    assert_eq!(
+        diagnostic.thread_id.as_deref(),
+        Some("thread-spawn-failure")
+    );
+    assert_eq!(diagnostic.turn_id, "turn-spawn-failure");
+    assert_eq!(
+        diagnostic.request_id.as_deref(),
+        Some("request-spawn-failure")
+    );
+    assert!(!diagnostic.succeeded);
+    assert!(diagnostic
+        .error
+        .as_deref()
+        .unwrap_or_default()
+        .contains("Failed to spawn AskUserQuestion resume process"));
 }
 
 #[test]

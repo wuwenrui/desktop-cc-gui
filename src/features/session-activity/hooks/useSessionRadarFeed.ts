@@ -92,6 +92,21 @@ function buildRecentCompletionId(workspaceId: string, threadId: string) {
   return `${workspaceId}:${threadId}`;
 }
 
+function compareRadarEntriesByFreshness(
+  left: SessionRadarEntry,
+  right: SessionRadarEntry,
+) {
+  const updatedAtDiff = right.updatedAt - left.updatedAt;
+  if (updatedAtDiff !== 0) {
+    return updatedAtDiff;
+  }
+  const completedAtDiff = (right.completedAt ?? 0) - (left.completedAt ?? 0);
+  if (completedAtDiff !== 0) {
+    return completedAtDiff;
+  }
+  return left.id.localeCompare(right.id);
+}
+
 function resolveLatestUserMessage(items: ConversationItem[] | undefined) {
   if (!Array.isArray(items) || items.length === 0) {
     return "";
@@ -311,7 +326,13 @@ function readPersistedRecentSessions(): PersistedRecentSessionRef[] {
   }
   return Array.from(dedupedById.values())
     .filter((item): item is PersistedRecentSessionRef => Boolean(item))
-    .sort((a, b) => b.completedAt - a.completedAt);
+    .sort((left, right) => {
+      const completedAtDiff = right.completedAt - left.completedAt;
+      if (completedAtDiff !== 0) {
+        return completedAtDiff;
+      }
+      return left.id.localeCompare(right.id);
+    });
 }
 
 function readRecentHistorySnapshot(): RecentHistorySnapshot {
@@ -377,7 +398,7 @@ function mergeRecentSessions(
     }
   }
   return Array.from(mergedById.values())
-    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .sort(compareRadarEntriesByFreshness)
     .slice(0, recentLimit);
 }
 
@@ -427,8 +448,8 @@ export function buildSessionRadarFeed(input: BuildSessionRadarFeedInput): Sessio
     }
   }
 
-  runningSessions.sort((a, b) => b.updatedAt - a.updatedAt);
-  recentCompletedSessions.sort((a, b) => b.updatedAt - a.updatedAt);
+  runningSessions.sort(compareRadarEntriesByFreshness);
+  recentCompletedSessions.sort(compareRadarEntriesByFreshness);
 
   return {
     runningSessions: runningSessions.slice(0, runningLimit),
@@ -584,7 +605,7 @@ export function useSessionRadarFeed(input: UseSessionRadarFeedInput): SessionRad
       }
 
       cachedLiveThreadEntriesRef.current = nextCachedEntries;
-      runningSessions.sort((a, b) => b.updatedAt - a.updatedAt);
+      runningSessions.sort(compareRadarEntriesByFreshness);
 
       return {
         runningSessions: runningSessions.slice(0, runningLimit ?? DEFAULT_RUNNING_LIMIT),

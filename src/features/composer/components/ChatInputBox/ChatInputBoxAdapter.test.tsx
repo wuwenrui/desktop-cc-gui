@@ -7,6 +7,7 @@ import {
   clearPromptUsageForTests,
   recordPromptUsage,
 } from '../../../prompts/promptUsage';
+import { composerInputFixture100ime } from '../../../../test-fixtures/perf/composerInputFixture100ime';
 
 const mockState = vi.hoisted(() => ({
   latestProps: null as Record<string, unknown> | null,
@@ -406,6 +407,19 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
         compactionSource: null,
         usageSyncPendingAfterCompaction: false,
       },
+      claudeContextUsage: {
+        usedTokens: 256,
+        contextWindow: 8192,
+        totalTokens: 768,
+        inputTokens: 512,
+        cachedInputTokens: 128,
+        outputTokens: 128,
+        usedPercent: 3.125,
+        remainingPercent: 96.875,
+        freshness: 'live',
+        source: 'runtime',
+        hasUsage: true,
+      },
       accountRateLimits: {
         primary: {
           usedPercent: 12,
@@ -421,6 +435,8 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
         planType: 'pro',
       },
       selectedManualMemoryIds: ['memory-1', 'memory-2'],
+      selectedNoteCardIds: ['note-1', 'note-2'],
+      customSkillDirectories: ['/repo/.codex/skills', '/repo/.agents/skills'],
     };
 
     const view = render(<ChatInputBoxAdapter {...stableProps} />);
@@ -440,6 +456,19 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
           compactionSource: null,
           usageSyncPendingAfterCompaction: false,
         }}
+        claudeContextUsage={{
+          usedTokens: 256,
+          contextWindow: 8192,
+          totalTokens: 768,
+          inputTokens: 512,
+          cachedInputTokens: 128,
+          outputTokens: 128,
+          usedPercent: 3.125,
+          remainingPercent: 96.875,
+          freshness: 'live',
+          source: 'runtime',
+          hasUsage: true,
+        }}
         accountRateLimits={{
           primary: {
             usedPercent: 12,
@@ -455,10 +484,148 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
           planType: 'pro',
         }}
         selectedManualMemoryIds={['memory-1', 'memory-2']}
+        selectedNoteCardIds={['note-1', 'note-2']}
+        customSkillDirectories={['/repo/.codex/skills', '/repo/.agents/skills']}
       />,
     );
 
     expect(mockState.renderCount).toBe(1);
+  });
+
+  it('avoids rerendering ChatInputBox when advisory lists are structurally unchanged', async () => {
+    const stableProps: ComponentProps<typeof ChatInputBoxAdapter> = {
+      text: '',
+      isProcessing: true,
+      canStop: false,
+      selectedModelId: 'claude-sonnet-4-6',
+      onSend: () => {},
+      onStop: () => {},
+      onTextChange: () => {},
+      selectedEngine: 'codex',
+      selectedContextChips: [
+        {
+          type: 'skill',
+          name: 'perf-audit',
+          description: 'Performance audit',
+          path: '/skills/perf-audit',
+          source: 'workspace',
+        },
+      ],
+      queuedMessages: [
+        {
+          id: 'queued-1',
+          text: 'queued text',
+          createdAt: 123,
+        },
+      ],
+      commands: [
+        {
+          name: 'review',
+          path: '/commands/review.md',
+          description: 'Review command',
+          argumentHint: '<target>',
+          content: 'review content',
+          source: 'workspace',
+        },
+      ],
+      prompts: [
+        {
+          name: 'summarize',
+          path: '/prompts/summarize.md',
+          description: 'Summarize prompt',
+          argumentHint: '<input>',
+          content: 'summarize content',
+          scope: 'workspace',
+        },
+      ],
+    };
+
+    const view = render(<ChatInputBoxAdapter {...stableProps} />);
+    await waitFor(() => expect(mockState.latestProps).toBeTruthy());
+    expect(mockState.renderCount).toBe(1);
+
+    view.rerender(
+      <ChatInputBoxAdapter
+        {...stableProps}
+        selectedContextChips={[
+          {
+            type: 'skill',
+            name: 'perf-audit',
+            description: 'Performance audit',
+            path: '/skills/perf-audit',
+            source: 'workspace',
+          },
+        ]}
+        queuedMessages={[
+          {
+            id: 'queued-1',
+            text: 'queued text',
+            createdAt: 123,
+          },
+        ]}
+        commands={[
+          {
+            name: 'review',
+            path: '/commands/review.md',
+            description: 'Review command',
+            argumentHint: '<target>',
+            content: 'review content',
+            source: 'workspace',
+          },
+        ]}
+        prompts={[
+          {
+            name: 'summarize',
+            path: '/prompts/summarize.md',
+            description: 'Summarize prompt',
+            argumentHint: '<input>',
+            content: 'summarize content',
+            scope: 'workspace',
+          },
+        ]}
+      />,
+    );
+
+    expect(mockState.renderCount).toBe(1);
+  });
+
+  it('rerenders ChatInputBox when advisory list content changes', async () => {
+    const stableProps: ComponentProps<typeof ChatInputBoxAdapter> = {
+      text: '',
+      isProcessing: true,
+      canStop: false,
+      selectedModelId: 'claude-sonnet-4-6',
+      onSend: () => {},
+      onStop: () => {},
+      onTextChange: () => {},
+      selectedEngine: 'codex',
+      queuedMessages: [
+        {
+          id: 'queued-1',
+          text: 'queued text',
+          createdAt: 123,
+        },
+      ],
+    };
+
+    const view = render(<ChatInputBoxAdapter {...stableProps} />);
+    await waitFor(() => expect(mockState.latestProps).toBeTruthy());
+    expect(mockState.renderCount).toBe(1);
+
+    view.rerender(
+      <ChatInputBoxAdapter
+        {...stableProps}
+        queuedMessages={[
+          {
+            id: 'queued-1',
+            text: 'changed queued text',
+            createdAt: 123,
+          },
+        ]}
+      />,
+    );
+
+    expect(mockState.renderCount).toBe(2);
   });
 
   it('rerenders ChatInputBox when custom commands are loaded after mount', async () => {
@@ -876,6 +1043,127 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
       "fresh child snapshot",
       ["data:image/png;base64,ZmFrZS1pbWFnZQ=="],
     );
+  });
+
+  it("keeps streaming IME draft and submit payload on the immediate child snapshot path", async () => {
+    const onSend = vi.fn();
+    const finalizedImeDraft = composerInputFixture100ime
+      .filter((step) => step.kind === "input")
+      .map((step) => step.value)
+      .join("");
+    const stableProps: ComponentProps<typeof ChatInputBoxAdapter> = {
+      text: "",
+      isProcessing: true,
+      streamActivityPhase: "waiting",
+      canStop: true,
+      selectedModelId: "codex-gpt-5",
+      onSend,
+      onStop: () => {},
+      onTextChange: () => {},
+      selectedEngine: "codex",
+      contextUsage: { used: 512, total: 8192 },
+      dualContextUsage: {
+        usedTokens: 512,
+        contextWindow: 8192,
+        percent: 6.25,
+        hasUsage: true,
+        compactionState: "idle",
+        compactionSource: null,
+        usageSyncPendingAfterCompaction: false,
+      },
+      accountRateLimits: {
+        primary: {
+          usedPercent: 12,
+          windowDurationMins: 5,
+          resetsAt: 123456789,
+        },
+        secondary: null,
+        credits: {
+          hasCredits: true,
+          unlimited: false,
+          balance: "42",
+        },
+        planType: "pro",
+      },
+      attachments: ["file:///tmp/immediate-before.png"],
+      queuedMessages: [
+        {
+          id: "queued-1",
+          text: "advisory queue",
+          createdAt: 123,
+        },
+      ],
+    };
+
+    const view = render(<ChatInputBoxAdapter {...stableProps} />);
+    await waitFor(() => expect(mockState.latestProps).toBeTruthy());
+
+    view.rerender(
+      <ChatInputBoxAdapter
+        {...stableProps}
+        streamActivityPhase="ingress"
+        contextUsage={{ used: 512, total: 8192 }}
+        dualContextUsage={{
+          usedTokens: 512,
+          contextWindow: 8192,
+          percent: 6.25,
+          hasUsage: true,
+          compactionState: "idle",
+          compactionSource: null,
+          usageSyncPendingAfterCompaction: false,
+        }}
+        accountRateLimits={{
+          primary: {
+            usedPercent: 12,
+            windowDurationMins: 5,
+            resetsAt: 123456789,
+          },
+          secondary: null,
+          credits: {
+            hasCredits: true,
+            unlimited: false,
+            balance: "42",
+          },
+          planType: "pro",
+        }}
+        attachments={["file:///tmp/immediate-after.png"]}
+        queuedMessages={[
+          {
+            id: "queued-1",
+            text: "advisory queue",
+            createdAt: 123,
+          },
+        ]}
+      />,
+    );
+
+    const latest = mockState.latestProps as {
+      onSubmit?: (
+        content: string,
+        attachments?: Array<{
+          id: string;
+          fileName: string;
+          mediaType: string;
+          data: string;
+        }>,
+      ) => void;
+    };
+
+    act(() => {
+      latest.onSubmit?.(finalizedImeDraft, [
+        {
+          id: "att-ime",
+          fileName: "ime.png",
+          mediaType: "image/png",
+          data: "ZmFrZS1pbWU=",
+        },
+      ]);
+    });
+
+    expect(finalizedImeDraft).toContain("ime baseline");
+    expect(onSend).toHaveBeenCalledWith(finalizedImeDraft, [
+      "data:image/png;base64,ZmFrZS1pbWU=",
+    ]);
   });
 
   it("falls back to external attachments when submit callback omits attachments", async () => {

@@ -15,7 +15,7 @@
   "branch": null,
   "base_branch": "feature/f-v0.4.6",
   "worktree_path": null,
-  "current_phase": 0,
+  "current_phase": 6,
   "next_action": [
     {
       "phase": 1,
@@ -48,12 +48,13 @@
   "children": [],
   "parent": null,
   "relatedFiles": [
-    "openspec/changes/fix-realtime-completion-sound-once/proposal.md",
-    "openspec/changes/fix-realtime-completion-sound-once/design.md",
-    "openspec/changes/fix-realtime-completion-sound-once/specs/conversation-completion-notification-sound/spec.md",
+    "openspec/changes/archive/2026-04-21-fix-realtime-completion-sound-once/proposal.md",
+    "openspec/changes/archive/2026-04-21-fix-realtime-completion-sound-once/design.md",
+    "openspec/changes/archive/2026-04-21-fix-realtime-completion-sound-once/tasks.md",
+    "openspec/specs/conversation-completion-notification-sound/spec.md",
     "src/features/notifications/hooks/useAgentSoundNotifications.ts",
     "src/features/notifications/hooks/useAgentSoundNotifications.test.tsx"
   ],
-  "notes": "Implemented OpenSpec change fix-realtime-completion-sound-once: notification sounds now trigger only on terminal turn completion with per-turn dedupe.",
+  "notes": "Closed continuity debt: OpenSpec change fix-realtime-completion-sound-once is archived and current implementation/tests satisfy terminal turn completion sound semantics. Verified useAgentSoundNotifications, typecheck, and OpenSpec strict workspace validation on 2026-06-05.",
   "meta": {}
 }

@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { EngineType, ThreadTokenUsage } from "../../../types";
 import { Composer } from "./Composer";
@@ -27,12 +27,16 @@ vi.mock("../../opencode/components/OpenCodeControlPanel", () => ({
 
 vi.mock("./ChatInputBox/ChatInputBoxAdapter", () => ({
   ChatInputBoxAdapter: ({
+    text,
     contextUsage,
     contextDualViewEnabled,
     dualContextUsage,
     claudeContextUsage,
+    onTextChange,
     onRequestContextCompaction,
   }: {
+    text?: string;
+    onTextChange?: (next: string, cursor: number | null) => void;
     contextUsage?: { used: number; total: number } | null;
     contextDualViewEnabled?: boolean;
     dualContextUsage?: {
@@ -82,7 +86,15 @@ vi.mock("./ChatInputBox/ChatInputBoxAdapter", () => ({
       data-claude-freshness={String(claudeContextUsage?.freshness ?? "")}
       data-claude-source={String(claudeContextUsage?.source ?? "")}
       data-claude-has-usage={String(claudeContextUsage?.hasUsage ?? "")}
+      data-text={text ?? ""}
     >
+      <button
+        type="button"
+        data-testid="type-draft"
+        onClick={() => onTextChange?.("typing", 6)}
+      >
+        type
+      </button>
       <button
         type="button"
         data-testid="compact-now"
@@ -290,6 +302,85 @@ describe("Composer dual context usage model", () => {
     expect(adapter.getAttribute("data-dual-percent")).toBe("30");
     expect(adapter.getAttribute("data-dual-has-usage")).toBe("true");
     expect(adapter.getAttribute("data-dual-state")).toBe("idle");
+  });
+
+  it("converges deferred advisory context usage after typing becomes idle without changing draft text", async () => {
+    vi.useFakeTimers();
+    const initialContextUsage: ThreadTokenUsage = {
+      total: {
+        totalTokens: 220_000,
+        inputTokens: 140_000,
+        cachedInputTokens: 40_000,
+        outputTokens: 40_000,
+        reasoningOutputTokens: 0,
+      },
+      last: {
+        totalTokens: 80_000,
+        inputTokens: 50_000,
+        cachedInputTokens: 10_000,
+        outputTokens: 20_000,
+        reasoningOutputTokens: 0,
+      },
+      modelContextWindow: 200_000,
+    };
+    const latestContextUsage: ThreadTokenUsage = {
+      total: {
+        totalTokens: 260_000,
+        inputTokens: 170_000,
+        cachedInputTokens: 50_000,
+        outputTokens: 40_000,
+        reasoningOutputTokens: 0,
+      },
+      last: {
+        totalTokens: 110_000,
+        inputTokens: 70_000,
+        cachedInputTokens: 20_000,
+        outputTokens: 20_000,
+        reasoningOutputTokens: 0,
+      },
+      modelContextWindow: 200_000,
+    };
+
+    try {
+      const view = render(
+        <ComposerHarness
+          selectedEngine="codex"
+          contextDualViewEnabled={true}
+          isProcessing={true}
+          contextUsage={initialContextUsage}
+        />,
+      );
+
+      let adapter = screen.getByTestId("chat-input-box-adapter");
+      expect(adapter.getAttribute("data-text")).toBe("");
+      expect(adapter.getAttribute("data-legacy-used")).toBe("220000");
+      expect(adapter.getAttribute("data-dual-used")).toBe("60000");
+
+      fireEvent.click(screen.getByTestId("type-draft"));
+
+      adapter = screen.getByTestId("chat-input-box-adapter");
+      expect(adapter.getAttribute("data-text")).toBe("typing");
+
+      view.rerender(
+        <ComposerHarness
+          selectedEngine="codex"
+          contextDualViewEnabled={true}
+          isProcessing={true}
+          contextUsage={latestContextUsage}
+        />,
+      );
+
+      await act(async () => {
+        vi.advanceTimersByTime(321);
+      });
+
+      adapter = screen.getByTestId("chat-input-box-adapter");
+      expect(adapter.getAttribute("data-text")).toBe("typing");
+      expect(adapter.getAttribute("data-legacy-used")).toBe("260000");
+      expect(adapter.getAttribute("data-dual-used")).toBe("90000");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("does not fallback dual usage to cumulative totals when last snapshot is empty", () => {

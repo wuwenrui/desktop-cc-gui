@@ -26,11 +26,35 @@ import { WorkspaceSearchPanel } from "../../search/components/WorkspaceSearchPan
 import { PromptPanel } from "../../prompts/components/PromptPanel";
 import { ProjectMemoryPanel } from "../../project-memory/components/ProjectMemoryPanel";
 import { ProjectMapPanel, type ProjectMapDatasetController } from "../../project-map";
+import { buildGitStatusProjectMapImpactInput } from "../../project-map/utils/impactSources";
+import {
+  OrchestrationCenterView,
+  applyOrchestrationReviewAction,
+  archiveOrchestrationTask,
+  collectCoreOrchestrationProviderSnapshots,
+  createManualOrchestrationTaskDraft,
+  projectLinkedTaskRunsToOrchestrationStore,
+  OPEN_ORCHESTRATION_TASK_EVENT,
+  patchOrchestrationTask,
+  readOpenOrchestrationTaskEvent,
+  readSpecHubOrchestrationCandidates,
+  saveOrchestrationTaskStore,
+  upsertOrchestrationTask,
+  useOrchestrationTaskStore,
+} from "../../agent-orchestration";
+import type {
+  OrchestrationCancelRunRequest,
+  OrchestrationDispatchConfirmation,
+  OrchestrationManualTaskDraftRequest,
+  OrchestrationReviewActionRequest,
+  OrchestrationSourceRef,
+  OrchestrationTask,
+} from "../../agent-orchestration";
+import { useTaskRunStore } from "../../tasks/hooks/useTaskRunStore";
+import { patchTaskRun, saveTaskRunStore } from "../../tasks/utils/taskRunStorage";
 import { WorkspaceNoteCardPanel } from "../../note-cards/components/WorkspaceNoteCardPanel";
 import { WorkspaceSessionActivityPanel } from "../../session-activity/components/WorkspaceSessionActivityPanel";
 import { WorkspaceSessionRadarPanel } from "../../session-activity/components/WorkspaceSessionRadarPanel";
-import { BrowserDock } from "../../browser-agent/components/BrowserDock";
-import { requestBrowserContextAttachment } from "../../browser-agent/state/browserContextAttachmentCommands";
 import { DebugPanel } from "../../debug/components/DebugPanel";
 import { PanelTabs } from "../components/PanelTabs";
 import { TabBar } from "../../app/components/TabBar";
@@ -40,6 +64,8 @@ import { TerminalPanel } from "../../terminal/components/TerminalPanel";
 import { StatusPanel } from "../../status-panel/components/StatusPanel";
 import { useStatusPanelData } from "../../status-panel/hooks/useStatusPanelData";
 import { useGlobalRuntimeNoticeDock } from "../../notifications/hooks/useGlobalRuntimeNoticeDock";
+import { buildSpecWorkspaceSnapshot } from "../../../lib/spec-core/runtime";
+import type { SpecWorkspaceSnapshot } from "../../../lib/spec-core/types";
 import type { AgentTaskScrollRequest } from "../../messages/types";
 import type { SubagentInfo, TabType } from "../../status-panel/types";
 import type {
@@ -698,6 +724,9 @@ type LayoutNodesOptions = {
   selectedModelId: string | null;
   projectMapDatasetController?: ProjectMapDatasetController;
   onSelectModel: (id: string | null) => void;
+  onDispatchOrchestrationTask?: (
+    confirmation: OrchestrationDispatchConfirmation,
+  ) => Promise<{ ok: boolean; taskId?: string | null; reason?: string }> | { ok: boolean; taskId?: string | null; reason?: string };
   reasoningOptions: string[];
   selectedEffort: string | null;
   onSelectEffort: (effort: string | null) => void;
@@ -2504,7 +2533,234 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       </Suspense>
     ) : null;
 
-  const projectMapPanelNode = (
+  const projectMapImpactInput = useMemo(
+    () => buildGitStatusProjectMapImpactInput(options.gitStatus.files),
+    [options.gitStatus.files],
+  );
+  const orchestrationTaskStore = useOrchestrationTaskStore();
+  const taskRunStore = useTaskRunStore();
+  const [isOrchestrationCenterOpen, setIsOrchestrationCenterOpen] = useState(false);
+  const [selectedOrchestrationTaskId, setSelectedOrchestrationTaskId] = useState<string | null>(null);
+  const [projectMapSourceFocusNodeId, setProjectMapSourceFocusNodeId] = useState<string | null>(null);
+  const projectMapDataset = options.projectMapDatasetController?.dataset ?? null;
+  const orchestrationWorkspaceId =
+    options.activeWorkspace?.id ??
+    projectMapDataset?.manifest.storageKey ??
+    null;
+  const persistedOrchestrationTasks = orchestrationTaskStore.tasks;
+  const [specWorkspaceSnapshot, setSpecWorkspaceSnapshot] = useState<SpecWorkspaceSnapshot | null>(null);
+  useEffect(() => {
+    if (!orchestrationWorkspaceId) {
+      setSpecWorkspaceSnapshot(null);
+      return;
+    }
+    let cancelled = false;
+    buildSpecWorkspaceSnapshot({
+      workspaceId: orchestrationWorkspaceId,
+      files: options.files,
+      directories: options.directories,
+      customSpecRoot: activeWorkspaceCustomSpecRoot,
+    })
+      .then((snapshot) => {
+        if (!cancelled) {
+          setSpecWorkspaceSnapshot(snapshot);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.warn("[agent-orchestration] Failed to build SpecHub provider snapshot", error);
+          setSpecWorkspaceSnapshot(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeWorkspaceCustomSpecRoot,
+    orchestrationWorkspaceId,
+    options.directories,
+    options.files,
+  ]);
+  const orchestrationProviderSnapshots = useMemo(
+    () => {
+      if (!orchestrationWorkspaceId) {
+        return [];
+      }
+      const coreSnapshots = collectCoreOrchestrationProviderSnapshots({
+        workspaceId: orchestrationWorkspaceId,
+        projectMapDataset,
+        taskRuns: taskRunStore.runs,
+      });
+      if (
+        !specWorkspaceSnapshot ||
+        (specWorkspaceSnapshot.provider === "unknown" && specWorkspaceSnapshot.specRoot?.source !== "custom")
+      ) {
+        return coreSnapshots;
+      }
+      return [
+        ...coreSnapshots,
+        readSpecHubOrchestrationCandidates({
+          workspaceId: orchestrationWorkspaceId,
+          snapshot: specWorkspaceSnapshot,
+        }),
+      ];
+    },
+    [
+      orchestrationWorkspaceId,
+      projectMapDataset,
+      specWorkspaceSnapshot,
+      taskRunStore.runs,
+    ],
+  );
+  useEffect(() => {
+    if (orchestrationTaskStore.tasks.length === 0 || taskRunStore.runs.length === 0) {
+      return;
+    }
+
+    const projectedStore = projectLinkedTaskRunsToOrchestrationStore({
+      orchestrationStore: orchestrationTaskStore,
+      taskRuns: taskRunStore.runs,
+    });
+    if (projectedStore !== orchestrationTaskStore) {
+      saveOrchestrationTaskStore(projectedStore);
+    }
+  }, [orchestrationTaskStore, taskRunStore.runs]);
+  const handleOpenOrchestrationTask = useCallback((taskId: string) => {
+    setSelectedOrchestrationTaskId(taskId);
+    setIsOrchestrationCenterOpen(true);
+  }, []);
+  useEffect(() => {
+    const handleOpenOrchestrationTaskEvent = (event: Event) => {
+      const taskId = readOpenOrchestrationTaskEvent(event);
+      if (taskId) {
+        handleOpenOrchestrationTask(taskId);
+      }
+    };
+
+    window.addEventListener(OPEN_ORCHESTRATION_TASK_EVENT, handleOpenOrchestrationTaskEvent);
+    return () => {
+      window.removeEventListener(OPEN_ORCHESTRATION_TASK_EVENT, handleOpenOrchestrationTaskEvent);
+    };
+  }, [handleOpenOrchestrationTask]);
+  const handleBackToProjectMapFromOrchestration = useCallback(() => {
+    setIsOrchestrationCenterOpen(false);
+  }, []);
+  const handleOpenOrchestrationSourceRef = useCallback(
+    (input: { task: OrchestrationTask; sourceRef: OrchestrationSourceRef }) => {
+      const { sourceRef } = input;
+      if (sourceRef.providerId === "project-map" && sourceRef.kind === "project_map_node") {
+        setProjectMapSourceFocusNodeId(sourceRef.id);
+        setIsOrchestrationCenterOpen(false);
+        return;
+      }
+
+      const sourcePath = sourceRef.workspaceRelativePath ?? sourceRef.path;
+      if (sourcePath) {
+        handleOpenProjectMapEvidenceFile(sourcePath);
+      }
+    },
+    [handleOpenProjectMapEvidenceFile],
+  );
+  const handleConfirmOrchestrationDispatch = useCallback(
+    async (confirmation: OrchestrationDispatchConfirmation) => {
+      const result = await options.onDispatchOrchestrationTask?.(confirmation);
+      if (result?.taskId) {
+        setSelectedOrchestrationTaskId(result.taskId);
+      }
+    },
+    [options],
+  );
+  const handleCancelOrchestrationRun = useCallback(
+    (request: OrchestrationCancelRunRequest) => {
+      const now = Date.now();
+      const nextTaskRunStore = patchTaskRun(taskRunStore, request.run.runId, {
+        status: "canceled",
+        currentStep: "canceled_before_runtime_start",
+        latestOutputSummary: "Dispatch canceled before runtime start.",
+        availableRecoveryActions: ["retry", "fork_new_run"],
+        finishedAt: now,
+        now,
+      });
+      const nextOrchestrationTaskStore = patchOrchestrationTask(
+        orchestrationTaskStore,
+        request.task.taskId,
+        {
+          status: "planned",
+          now: new Date(now).toISOString(),
+        },
+      );
+      saveTaskRunStore(nextTaskRunStore);
+      saveOrchestrationTaskStore(nextOrchestrationTaskStore);
+      setSelectedOrchestrationTaskId(request.task.taskId);
+    },
+    [orchestrationTaskStore, taskRunStore],
+  );
+  const handleOrchestrationReviewAction = useCallback(
+    (request: OrchestrationReviewActionRequest) => {
+      const result = applyOrchestrationReviewAction(request);
+      setSelectedOrchestrationTaskId(result.followUpTask?.taskId ?? result.task.taskId);
+    },
+    [],
+  );
+  const handleArchiveOrchestrationTask = useCallback(
+    (task: OrchestrationTask) => {
+      const nextStore = archiveOrchestrationTask(orchestrationTaskStore, task.taskId);
+      saveOrchestrationTaskStore(nextStore);
+      setSelectedOrchestrationTaskId(null);
+    },
+    [orchestrationTaskStore],
+  );
+  const handleCreateManualOrchestrationTask = useCallback(
+    (request: OrchestrationManualTaskDraftRequest) => {
+      if (!orchestrationWorkspaceId) {
+        return null;
+      }
+      const task = createManualOrchestrationTaskDraft({
+        workspaceId: orchestrationWorkspaceId,
+        title: request.title,
+        scopeSummary: request.scopeSummary,
+        acceptanceSummary: request.acceptanceSummary,
+        promptSummary: request.promptSummary || null,
+        preferredEngine: request.preferredEngine,
+      });
+      const nextStore = upsertOrchestrationTask(orchestrationTaskStore, task);
+      saveOrchestrationTaskStore(nextStore);
+      setSelectedOrchestrationTaskId(task.taskId);
+      return task;
+    },
+    [orchestrationTaskStore, orchestrationWorkspaceId],
+  );
+  const handleOpenOrchestrationSession = useCallback(
+    (_task: OrchestrationTask, sessionId: string) => {
+      if (!options.activeWorkspace) {
+        return;
+      }
+      options.onSelectThread(options.activeWorkspace.id, sessionId);
+    },
+    [options],
+  );
+
+  const projectMapPanelNode = isOrchestrationCenterOpen ? (
+    <OrchestrationCenterView
+      key={`${options.activeWorkspace?.id ?? "no-workspace"}:orchestration`}
+      workspaceId={orchestrationWorkspaceId}
+      workspaceName={options.activeWorkspace?.name ?? null}
+      persistedTasks={persistedOrchestrationTasks}
+      providerSnapshots={orchestrationProviderSnapshots}
+      selectedTaskId={selectedOrchestrationTaskId}
+      onOpenSourceRef={handleOpenOrchestrationSourceRef}
+      onConfirmDispatch={handleConfirmOrchestrationDispatch}
+      onCreateManualTask={handleCreateManualOrchestrationTask}
+      onCancelRun={handleCancelOrchestrationRun}
+      onReviewAction={handleOrchestrationReviewAction}
+      onArchiveTask={handleArchiveOrchestrationTask}
+      onOpenSession={handleOpenOrchestrationSession}
+      taskRuns={taskRunStore.runs}
+      modelOptions={options.models}
+      defaultModelId={options.selectedModelId}
+      onBackToProjectMap={handleBackToProjectMapFromOrchestration}
+    />
+  ) : (
     <ProjectMapPanel
       key={options.activeWorkspace?.id ?? "no-workspace"}
       activeWorkspace={options.activeWorkspace ?? null}
@@ -2513,7 +2769,11 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       selectedModelId={options.selectedModelId}
       models={options.models}
       datasetController={options.projectMapDatasetController}
+      changedFilePaths={projectMapImpactInput.filePaths}
+      changedFileSource={projectMapImpactInput.source}
+      sourceFocusNodeId={projectMapSourceFocusNodeId}
       onOpenEvidenceFile={handleOpenProjectMapEvidenceFile}
+      onOpenOrchestrationTask={handleOpenOrchestrationTask}
     />
   );
 
@@ -2646,60 +2906,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       <span className="workspace-title">{t("workspace.diff")}</span>
     </div>
   );
-  const browserDockNode = options.browserDockOpen ? (
-    <section
-      className="browser-agent-center-panel"
-      aria-label={t("browserAgent.dock.panelTitle")}
-    >
-      <div className="browser-agent-center-panel-header">
-        <div className="browser-agent-center-panel-heading">
-          <div className="browser-agent-center-panel-title">
-            {t("browserAgent.dock.panelTitle")}
-          </div>
-          <div className="browser-agent-center-panel-kicker">
-            {t("browserAgent.dock.panelKicker")}
-          </div>
-        </div>
-        <div className="browser-agent-center-panel-actions">
-          <button
-            type="button"
-            className="browser-agent-center-panel-attach"
-            onClick={() =>
-              requestBrowserContextAttachment({
-                workspaceId: options.activeWorkspaceId,
-              })
-            }
-            disabled={!options.activeWorkspaceId}
-            aria-label={t("browserAgent.composer.attach")}
-            title={t("browserAgent.composer.attach")}
-            data-tauri-drag-region="false"
-          >
-            {t("browserAgent.composer.attach")}
-          </button>
-          <button
-            type="button"
-            className="browser-agent-center-panel-close"
-            onClick={options.onCloseBrowserDock}
-            aria-label={t("browserAgent.dock.closePanel")}
-            data-tauri-drag-region="false"
-          >
-            ×
-          </button>
-        </div>
-      </div>
-      {options.activeWorkspaceId ? (
-        <BrowserDock
-          workspaceId={options.activeWorkspaceId}
-          ownerSurface="main-split-browser-dock"
-          className="browser-agent-center-panel-dock"
-        />
-      ) : (
-        <div className="browser-agent-center-panel-empty">
-          {t("browserAgent.dock.noWorkspace")}
-        </div>
-      )}
-    </section>
-  ) : null;
+  const browserDockNode = null;
 
   return {
     codeAnnotationBridgeProps,

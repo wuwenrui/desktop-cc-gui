@@ -40,7 +40,10 @@ import {
   remarkFileLinks,
   toFileLink,
 } from "../../../utils/remarkFileLinks";
-import { normalizeOutsideMarkdownCode } from "../../../utils/markdownCodeRegions";
+import {
+  getMarkdownInlineCodeInfo,
+  normalizeOutsideMarkdownCode,
+} from "../../../utils/markdownCodeRegions";
 import { highlightLine } from "../../../utils/syntax";
 import { detectCodexLeadMarker, type CodexLeadMarkerConfig } from "../constants/codexLeadMarkers";
 import { parseToolCallBlocks, type Block } from "../utils/toolCallBlocks";
@@ -113,6 +116,7 @@ const MARKDOWN_ALERT_TONE_SET = new Set([
   "warning",
   "caution",
 ]);
+const TOOL_CALL_XML_CANDIDATE_REGEX = /<\s*(?:antml:)?(?:function_calls|invoke)\b/i;
 
 function stableToolCallHash(value: string) {
   let hash = 5381;
@@ -1992,7 +1996,13 @@ export const Markdown = memo(function Markdown({
   );
 
   const renderMarkdownContent = useCallback((nextContent: string) => {
-    if (liveRenderMode === "lightweight") {
+    const hasSyntaxIncompleteInlineCode =
+      getMarkdownInlineCodeInfo(nextContent).hasUnclosedInlineCode;
+    const shouldUseStreamingInlineCodeFallback =
+      streamingThrottleMs !== undefined &&
+      hasSyntaxIncompleteInlineCode &&
+      TOOL_CALL_XML_CANDIDATE_REGEX.test(nextContent);
+    if (liveRenderMode === "lightweight" || shouldUseStreamingInlineCodeFallback) {
       return (
         <LightweightMarkdown
           value={nextContent}
@@ -2016,6 +2026,7 @@ export const Markdown = memo(function Markdown({
     rehypePluginsMemo,
     remarkPluginsMemo,
     renderLightweightLink,
+    streamingThrottleMs,
     urlTransform,
   ]);
 

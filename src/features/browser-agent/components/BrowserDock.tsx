@@ -12,7 +12,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import type {
   BrowserSession,
-  BrowserWebviewBounds,
   BrowserWebviewEvent,
 } from "../types";
 import {
@@ -24,10 +23,8 @@ import {
   createBrowserAgentSession,
   getAppSettings,
   getBrowserAgentStatus,
-  hideBrowserAgentWebview,
   listBrowserAgentSessions,
-  mountBrowserAgentWebview,
-  syncBrowserAgentWebviewBounds,
+  openBrowserAgentWindow,
   updateBrowserAgentSession,
   updateAppSettings,
   validateBrowserAgentUrl,
@@ -100,7 +97,7 @@ export function BrowserDock({
   className,
   onSessionChange,
 }: BrowserDockProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [statusEnabled, setStatusEnabled] = useState(false);
   const [urlDraft, setUrlDraft] = useState("");
   const [sessions, setSessions] = useState<BrowserSession[]>([]);
@@ -108,9 +105,6 @@ export function BrowserDock({
   const [notice, setNotice] = useState<BrowserDockNotice | null>(null);
   const [busy, setBusy] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
-  const webviewHostRef = useRef<HTMLDivElement | null>(null);
-  const mountedSessionIdsRef = useRef<Set<string>>(new Set());
-  const rendererSessionIdRef = useRef<string | null>(null);
   const activeSessionRef = useRef<BrowserSession | null>(null);
   const onSessionChangeRef = useRef(onSessionChange);
 
@@ -205,8 +199,6 @@ export function BrowserDock({
         return;
       }
       const payload = event.payload;
-      mountedSessionIdsRef.current.add(payload.browserSessionId);
-      rendererSessionIdRef.current = payload.browserSessionId;
       setSessions((current) =>
         current.map((session) =>
           session.browserSessionId === payload.browserSessionId
@@ -247,9 +239,7 @@ export function BrowserDock({
             lastActivatedAt: payload.occurredAt,
           };
           setActiveBrowserContextSession(nextActiveSession, { rendererBound: true });
-          onSessionChangeRef.current?.({
-            ...nextActiveSession,
-          });
+          onSessionChangeRef.current?.({ ...nextActiveSession });
         }
         return current;
       });
@@ -274,122 +264,23 @@ export function BrowserDock({
     };
   }, []);
 
-  const readWebviewBounds = useCallback((): BrowserWebviewBounds | null => {
-    const element = webviewHostRef.current;
-    if (!element) {
-      return null;
-    }
-    const rect = element.getBoundingClientRect();
-    if (rect.width < 40 || rect.height < 40) {
-      return null;
-    }
-    return {
-      x: rect.left,
-      y: rect.top,
-      width: rect.width,
-      height: rect.height,
-    };
-  }, []);
-
-  const hideBrowserRenderer = useCallback(() => {
-    const boundSessionId = rendererSessionIdRef.current;
-    if (boundSessionId) {
-      void hideBrowserAgentWebview(boundSessionId);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!resolvedEnabled || !activeSessionId) {
-      hideBrowserRenderer();
-      clearActiveBrowserContextSession();
-      return;
-    }
-    let disposed = false;
-    let frameHandle = 0;
-    const sessionId = activeSessionId;
-    let rendererBoundToSession = rendererSessionIdRef.current === sessionId;
-
-    const syncWebview = () => {
-      window.cancelAnimationFrame(frameHandle);
-      frameHandle = window.requestAnimationFrame(() => {
-        const bounds = readWebviewBounds();
-        if (!bounds || disposed) {
-          return;
-        }
-        const task = rendererBoundToSession
-          ? syncBrowserAgentWebviewBounds(sessionId, bounds).then(() => null)
-          : mountBrowserAgentWebview({
-              browserSessionId: sessionId,
-              bounds,
-            }).then((session) => {
-              rendererBoundToSession = true;
-              rendererSessionIdRef.current = session.browserSessionId;
-              mountedSessionIdsRef.current.add(session.browserSessionId);
-              setActiveBrowserContextSession(session, { rendererBound: true });
-              return session;
-            });
-        void task
-          .then((session) => {
-            if (!session || disposed) {
-              return;
-            }
-            setSessions((current) =>
-              current.map((item) =>
-                item.browserSessionId === session.browserSessionId ? session : item,
-              ),
-            );
-            onSessionChangeRef.current?.(session);
-          })
-          .catch((error) => {
-            if (!disposed) {
-              mountedSessionIdsRef.current.delete(sessionId);
-              if (rendererSessionIdRef.current === sessionId) {
-                rendererSessionIdRef.current = null;
-              }
-              setNotice({
-                kind: "error",
-                message: error instanceof Error ? error.message : String(error),
-              });
-              void updateBrowserAgentSession({
-                browserSessionId: sessionId,
-                status: "failed",
-                diagnosticMessage: error instanceof Error ? error.message : String(error),
-              }).then((failedSession) => {
-                setSessions((current) =>
-                  current.map((item) =>
-                    item.browserSessionId === failedSession.browserSessionId ? failedSession : item,
-                  ),
-                );
-                if (activeSessionId === sessionId) {
-                  clearActiveBrowserContextSession(sessionId);
-                  onSessionChangeRef.current?.(null);
-                }
-              });
-            }
-          });
+  const openSessionWindow = useCallback(async (session: BrowserSession) => {
+    try {
+      const openedSession = await openBrowserAgentWindow(session.browserSessionId, i18n.language);
+      setActiveBrowserContextSession(openedSession, { rendererBound: true });
+      return openedSession;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const failedSession = await updateBrowserAgentSession({
+        browserSessionId: session.browserSessionId,
+        status: "failed",
+        errorCode: "browser_window_open_failed",
+        diagnosticMessage: message,
       });
-    };
-
-    syncWebview();
-    const resizeObserver = new ResizeObserver(syncWebview);
-    if (webviewHostRef.current) {
-      resizeObserver.observe(webviewHostRef.current);
+      setActiveBrowserContextSession(failedSession, { rendererBound: false });
+      throw error;
     }
-    window.addEventListener("resize", syncWebview);
-
-    return () => {
-      disposed = true;
-      window.cancelAnimationFrame(frameHandle);
-      resizeObserver.disconnect();
-      window.removeEventListener("resize", syncWebview);
-      void hideBrowserAgentWebview(sessionId);
-    };
-  }, [
-    activeSessionId,
-    hideBrowserRenderer,
-    readWebviewBounds,
-    resolvedEnabled,
-  ]);
+  }, [i18n.language]);
 
   const handleOpen = useCallback(async (nextUrl?: string) => {
     if (!resolvedEnabled || busy) {
@@ -414,7 +305,7 @@ export function BrowserDock({
         return;
       }
       if (activeSession && nextUrl === undefined) {
-        const updatedSession = await updateBrowserAgentSession({
+        const preparedSession = await updateBrowserAgentSession({
           browserSessionId: activeSession.browserSessionId,
           workspaceId,
           url: validation.normalizedUrl,
@@ -422,37 +313,30 @@ export function BrowserDock({
           diagnosticMessage: null,
           errorCode: null,
         });
-        setActiveSessionId(updatedSession.browserSessionId);
-        setActiveBrowserContextSession(updatedSession, { rendererBound: false });
+        const openedSession = await openSessionWindow(preparedSession);
+        setActiveSessionId(openedSession.browserSessionId);
         setUrlDraft(validation.normalizedUrl);
         setSessions((current) =>
           current.map((item) =>
-            item.browserSessionId === updatedSession.browserSessionId
-              ? updatedSession
+            item.browserSessionId === openedSession.browserSessionId
+              ? openedSession
               : item,
           ),
         );
-        const bounds = readWebviewBounds();
-        if (bounds) {
-          void mountBrowserAgentWebview({
-            browserSessionId: updatedSession.browserSessionId,
-            bounds,
-          });
-        }
         setNotice({ kind: "info", message: t("browserAgent.dock.opened") });
         return;
       }
-      const session = await createBrowserAgentSession({
+      const preparedSession = await createBrowserAgentSession({
         workspaceId,
         url: validation.normalizedUrl,
         ownerSurface,
       });
-      setActiveSessionId(session.browserSessionId);
-      setActiveBrowserContextSession(session, { rendererBound: false });
+      const openedSession = await openSessionWindow(preparedSession);
+      setActiveSessionId(openedSession.browserSessionId);
       setUrlDraft(validation.normalizedUrl);
       setSessions((current) => [
-        session,
-        ...current.filter((item) => item.browserSessionId !== session.browserSessionId),
+        openedSession,
+        ...current.filter((item) => item.browserSessionId !== openedSession.browserSessionId),
       ]);
       setNotice({ kind: "info", message: t("browserAgent.dock.opened") });
     } catch (error) {
@@ -467,7 +351,7 @@ export function BrowserDock({
     activeSession,
     busy,
     ownerSurface,
-    readWebviewBounds,
+    openSessionWindow,
     resolvedEnabled,
     t,
     urlDraft,
@@ -536,15 +420,30 @@ export function BrowserDock({
       setUrlDraft(session.normalizedUrl);
       setNotice(null);
       setActiveBrowserContextSession(session, {
-        rendererBound: rendererSessionIdRef.current === session.browserSessionId,
+        rendererBound: false,
       });
-      onSessionChangeRef.current?.(
-        rendererSessionIdRef.current === session.browserSessionId
-          ? session
-          : null,
-      );
+      onSessionChangeRef.current?.(session);
+      if (resolvedEnabled && session.status !== "closed") {
+        void openSessionWindow(session)
+          .then((openedSession) => {
+            setSessions((current) =>
+              current.map((item) =>
+                item.browserSessionId === openedSession.browserSessionId
+                  ? openedSession
+                  : item,
+              ),
+            );
+            onSessionChangeRef.current?.(openedSession);
+          })
+          .catch((error) => {
+            setNotice({
+              kind: "error",
+              message: error instanceof Error ? error.message : String(error),
+            });
+          });
+      }
     },
-    [],
+    [openSessionWindow, resolvedEnabled],
   );
 
   const handleCloseSession = useCallback(async (sessionId: string) => {
@@ -554,7 +453,6 @@ export function BrowserDock({
     setBusy(true);
     try {
       const closed = await closeBrowserAgentSession(sessionId);
-      mountedSessionIdsRef.current.delete(sessionId);
       clearActiveBrowserContextSession(sessionId);
       setSessions((current) =>
         current.map((session) =>
@@ -564,6 +462,7 @@ export function BrowserDock({
       const nextActive = openSessions.find(
         (session) => session.browserSessionId !== sessionId,
       ) ?? null;
+      const shouldOpenNextSession = activeSessionId === sessionId && nextActive !== null;
       setActiveSessionId((current) => {
         if (current !== sessionId) {
           return current;
@@ -571,16 +470,31 @@ export function BrowserDock({
         setUrlDraft(nextActive?.normalizedUrl ?? "");
         if (nextActive) {
           setActiveBrowserContextSession(nextActive, {
-            rendererBound: rendererSessionIdRef.current === nextActive.browserSessionId,
+            rendererBound: false,
           });
         }
-        onSessionChangeRef.current?.(
-          nextActive && rendererSessionIdRef.current === nextActive.browserSessionId
-            ? nextActive
-            : null,
-        );
+        onSessionChangeRef.current?.(nextActive);
         return nextActive?.browserSessionId ?? null;
       });
+      if (shouldOpenNextSession) {
+        void openSessionWindow(nextActive)
+          .then((openedSession) => {
+            setSessions((current) =>
+              current.map((session) =>
+                session.browserSessionId === openedSession.browserSessionId
+                  ? openedSession
+                  : session,
+              ),
+            );
+            onSessionChangeRef.current?.(openedSession);
+          })
+          .catch((error) => {
+            setNotice({
+              kind: "error",
+              message: error instanceof Error ? error.message : String(error),
+            });
+          });
+      }
       setNotice({ kind: "info", message: t("browserAgent.dock.closed") });
     } catch (error) {
       setNotice({
@@ -590,7 +504,7 @@ export function BrowserDock({
     } finally {
       setBusy(false);
     }
-  }, [busy, openSessions, t]);
+  }, [activeSessionId, busy, openSessionWindow, openSessions, t]);
 
   const handleCloseActiveSession = useCallback(async () => {
     if (!activeSession) {
@@ -690,14 +604,10 @@ export function BrowserDock({
           </Button>
         </div>
         {activeSession && resolvedEnabled ? (
-          <div
-            ref={webviewHostRef}
-            className="browser-agent-webview-frame"
-            data-browser-agent-webview-host="true"
-          >
+          <div className="browser-agent-webview-frame" data-browser-agent-window-status="true">
             <div className="browser-agent-webview-placeholder">
               <Globe size={18} aria-hidden />
-              <span>{t("browserAgent.dock.rendering")}</span>
+              <span>{t("browserAgent.dock.windowOpened")}</span>
             </div>
           </div>
         ) : (

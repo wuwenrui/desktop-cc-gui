@@ -12,7 +12,7 @@ import {
   collectSucceededWorkspaceIds,
   SessionManagementSection,
 } from "./SessionManagementSection";
-import type { WorkspaceInfo } from "../../../../../types";
+import type { AppSettings, WorkspaceInfo } from "../../../../../types";
 import {
   archiveWorkspaceSessions,
   deleteWorkspaceSessions,
@@ -59,6 +59,10 @@ const worktree: WorkspaceInfo = {
   parentId: "ws-1",
   settings: { sidebarCollapsed: false },
 };
+
+const relatedAppSettings = {
+  sessionAttributionMode: "related",
+} as AppSettings;
 
 function getEnabledButtonByName(name: string) {
   const button = screen
@@ -130,6 +134,109 @@ describe("SessionManagementSection", () => {
   afterEach(() => {
     cleanup();
     vi.useRealTimers();
+  });
+
+  it("renders and persists workspace session attribution mode", async () => {
+    const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <SessionManagementSection
+        title="Session Management"
+        description="Manage sessions"
+        appSettings={relatedAppSettings}
+        onUpdateAppSettings={onUpdateAppSettings}
+        workspaces={[workspace]}
+        groupedWorkspaces={[{ id: null, name: "Ungrouped", workspaces: [workspace] }]}
+        initialWorkspaceId="ws-1"
+      />,
+    );
+
+    expect(
+      screen.getByText("settings.sessionAttributionModeCurrent"),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("radio", { name: /settings.sessionAttributionModeRelated/ })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+
+    fireEvent.click(
+      screen.getByRole("radio", {
+        name: /settings.sessionAttributionModeWorkspaceOnly/,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(onUpdateAppSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sessionAttributionMode: "workspace-only",
+        }),
+      );
+    });
+  });
+
+  it("shows an error when workspace session attribution mode save fails", async () => {
+    const onUpdateAppSettings = vi
+      .fn()
+      .mockRejectedValue(new Error("settings save failed"));
+
+    render(
+      <SessionManagementSection
+        title="Session Management"
+        description="Manage sessions"
+        appSettings={relatedAppSettings}
+        onUpdateAppSettings={onUpdateAppSettings}
+        workspaces={[workspace]}
+        groupedWorkspaces={[{ id: null, name: "Ungrouped", workspaces: [workspace] }]}
+        initialWorkspaceId="ws-1"
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("radio", {
+        name: /settings.sessionAttributionModeWorkspaceOnly/,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("settings save failed")).toBeTruthy();
+    });
+  });
+
+  it("passes workspace-only attribution mode into project catalog queries", async () => {
+    render(
+      <SessionManagementSection
+        title="Session Management"
+        description="Manage sessions"
+        appSettings={{
+          sessionAttributionMode: "workspace-only",
+        } as AppSettings}
+        onUpdateAppSettings={vi.fn().mockResolvedValue(undefined)}
+        workspaces={[workspace]}
+        groupedWorkspaces={[{ id: null, name: "Ungrouped", workspaces: [workspace] }]}
+        initialWorkspaceId="ws-1"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(listWorkspaceSessions).toHaveBeenCalledWith(
+        "ws-1",
+        expect.objectContaining({
+          query: expect.objectContaining({
+            sessionAttributionMode: "workspace-only",
+          }),
+        }),
+      );
+      expect(getWorkspaceSessionProjectionSummary).toHaveBeenCalledWith(
+        "ws-1",
+        expect.objectContaining({
+          query: expect.objectContaining({
+            sessionAttributionMode: "workspace-only",
+          }),
+        }),
+      );
+    });
+    expect(listProjectRelatedSessions).not.toHaveBeenCalled();
   });
 
   it("renders owner workspace label for aggregated project entries", async () => {
@@ -975,8 +1082,8 @@ describe("SessionManagementSection", () => {
         threadKind: "native",
       })),
       nextCursor: "offset:3",
-      requestedLimit: 9_999,
-      effectiveLimit: 9_999,
+      requestedLimit: 100,
+      effectiveLimit: 100,
       limitCapped: true,
       partialSource: null,
     });

@@ -216,6 +216,7 @@
             engine: Some("claude".to_string()),
             status: Some("active".to_string()),
             folder_id: Some("__all__".to_string()),
+            ..Default::default()
         }));
 
         assert_eq!(query.keyword.as_deref(), Some("feature"));

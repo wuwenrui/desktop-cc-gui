@@ -30,6 +30,12 @@ describe("Messages rich content", () => {
   });
 
   beforeAll(() => {
+    if (!URL.createObjectURL) {
+      URL.createObjectURL = vi.fn(() => "blob:mock-image");
+    }
+    if (!URL.revokeObjectURL) {
+      URL.revokeObjectURL = vi.fn();
+    }
     if (!HTMLElement.prototype.scrollIntoView) {
       HTMLElement.prototype.scrollIntoView = vi.fn();
     }
@@ -124,8 +130,180 @@ describe("Messages rich content", () => {
         locator,
       );
     });
-    const hydratedImage = container.querySelector(".message-deferred-image-preview img");
-    expect(hydratedImage?.getAttribute("src")).toBe("data:image/png;base64,BBBB");
+    await waitFor(() => {
+      const hydratedImage = container.querySelector(".message-deferred-image-preview img");
+      expect(hydratedImage?.getAttribute("src")).toMatch(/^blob:/);
+    });
+  });
+
+  it("releases hydrated deferred Claude image resource on unmount", async () => {
+    const revokeSpy = vi.spyOn(URL, "revokeObjectURL");
+    const locator = {
+      sessionId: "session-1",
+      lineIndex: 2,
+      blockIndex: 1,
+      mediaType: "image/png",
+    };
+    vi.mocked(hydrateClaudeDeferredImage).mockResolvedValueOnce({
+      src: "data:image/png;base64,CCCC",
+      mediaType: "image/png",
+      byteSize: 3,
+      locator,
+    });
+    const items: ConversationItem[] = [
+      {
+        id: "msg-deferred-release",
+        kind: "message",
+        role: "user",
+        text: "",
+        deferredImages: [
+          {
+            workspacePath: "/tmp/workspace",
+            mediaType: "image/png",
+            estimatedByteSize: 700000,
+            reason: "large-inline-image",
+            locator,
+          },
+        ],
+      },
+    ];
+
+    const rendered = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Load image" }));
+    await waitFor(() => {
+      expect(rendered.container.querySelector(".message-deferred-image-preview img")).toBeTruthy();
+    });
+    rendered.unmount();
+
+    expect(revokeSpy).toHaveBeenCalledWith(expect.stringMatching(/^blob:/));
+  });
+
+  it("releases deferred Claude image resource when hydration resolves after unmount", async () => {
+    const revokeSpy = vi.spyOn(URL, "revokeObjectURL");
+    const createObjectUrlSpy = vi
+      .spyOn(URL, "createObjectURL")
+      .mockReturnValueOnce("blob:late-hydrated-image");
+    let resolveHydration: (
+      value: Awaited<ReturnType<typeof hydrateClaudeDeferredImage>>,
+    ) => void = () => {};
+    const locator = {
+      sessionId: "session-1",
+      lineIndex: 2,
+      blockIndex: 1,
+      mediaType: "image/png",
+    };
+    vi.mocked(hydrateClaudeDeferredImage).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveHydration = resolve;
+      }),
+    );
+    const items: ConversationItem[] = [
+      {
+        id: "msg-deferred-late-release",
+        kind: "message",
+        role: "user",
+        text: "",
+        deferredImages: [
+          {
+            workspacePath: "/tmp/workspace",
+            mediaType: "image/png",
+            estimatedByteSize: 700000,
+            reason: "large-inline-image",
+            locator,
+          },
+        ],
+      },
+    ];
+
+    const rendered = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Load image" }));
+    rendered.unmount();
+    resolveHydration({
+      src: "data:image/png;base64,DDDD",
+      mediaType: "image/png",
+      byteSize: 3,
+      locator,
+    });
+
+    await waitFor(() => {
+      expect(revokeSpy).toHaveBeenCalledWith("blob:late-hydrated-image");
+    });
+    createObjectUrlSpy.mockRestore();
+  });
+
+  it("renders deferred Claude image placeholder added to an existing message", () => {
+    const locator = {
+      sessionId: "session-1",
+      lineIndex: 2,
+      blockIndex: 1,
+      mediaType: "image/png",
+    };
+    const baseItem: ConversationItem = {
+      id: "msg-deferred-update",
+      kind: "message",
+      role: "user",
+      text: "Context stays",
+    };
+
+    const rendered = render(
+      <Messages
+        items={[baseItem]}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(
+      screen.queryByText("Claude history image available on demand"),
+    ).toBeNull();
+    rendered.rerender(
+      <Messages
+        items={[
+          {
+            ...baseItem,
+            deferredImages: [
+              {
+                workspacePath: "/tmp/workspace",
+                mediaType: "image/png",
+                estimatedByteSize: 700000,
+                reason: "large-inline-image",
+                locator,
+              },
+            ],
+          },
+        ]}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(screen.getByText("Claude history image available on demand")).toBeTruthy();
   });
 
   it("keeps deferred Claude image placeholder visible when hydration fails", async () => {

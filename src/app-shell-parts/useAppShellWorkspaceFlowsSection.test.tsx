@@ -160,6 +160,14 @@ function createContext(overrides: Partial<Parameters<typeof useAppShellWorkspace
   };
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((nextResolve) => {
+    resolve = nextResolve;
+  });
+  return { promise, resolve };
+}
+
 describe("useAppShellWorkspaceFlowsSection", () => {
   const setNotificationActionHandlerMock = vi.mocked(
     systemNotification.setNotificationActionHandler,
@@ -209,6 +217,9 @@ describe("useAppShellWorkspaceFlowsSection", () => {
     expect(context.selectWorkspace).toHaveBeenCalledWith("ws-1");
     expect(context.setActiveThreadId).toHaveBeenCalledWith("thread-1", "ws-1");
     expect(context.setActiveEngine).toHaveBeenCalledWith("codex");
+    expect(vi.mocked(context.setActiveThreadId).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(context.collapseRightPanel).mock.invocationCallOrder[0],
+    );
   });
 
   it("keeps the desktop editor visible when notification switches within the same workspace", async () => {
@@ -233,6 +244,51 @@ describe("useAppShellWorkspaceFlowsSection", () => {
     expect(context.collapseRightPanel).not.toHaveBeenCalled();
     expect(context.setActiveThreadId).toHaveBeenCalledWith("thread-2", "ws-1");
     expect(context.setActiveEngine).toHaveBeenCalledWith("codex");
+  });
+
+  it("drops stale thread switch work after a rapid foreground navigation", async () => {
+    const context = createContext({
+      threadsByWorkspace: {
+        "ws-1": [
+          { id: "thread-1", engineSource: "codex" },
+          { id: "thread-2", engineSource: "claude" },
+        ],
+      },
+    });
+    const { result } = renderHook(() =>
+      useAppShellWorkspaceFlowsSection(context),
+    );
+    const staleWork = createDeferred<string>();
+    const freshWork = createDeferred<string>();
+    const applyStale = vi.fn();
+    const applyFresh = vi.fn();
+
+    const staleResultPromise = result.current.runLatestThreadSwitchWork(
+      { workspaceId: "ws-1", threadId: "thread-1" },
+      () => staleWork.promise,
+      applyStale,
+    );
+
+    act(() => {
+      result.current.navigateToThread("ws-1", "thread-2");
+    });
+
+    const freshResultPromise = result.current.runLatestThreadSwitchWork(
+      { workspaceId: "ws-1", threadId: "thread-2" },
+      () => freshWork.promise,
+      applyFresh,
+    );
+
+    await act(async () => {
+      staleWork.resolve("late A");
+      freshWork.resolve("current B");
+      await Promise.all([staleResultPromise, freshResultPromise]);
+    });
+
+    await expect(staleResultPromise).resolves.toBe(false);
+    await expect(freshResultPromise).resolves.toBe(true);
+    expect(applyStale).not.toHaveBeenCalled();
+    expect(applyFresh).toHaveBeenCalledWith("current B");
   });
 
   it("archives the active thread and clears draft/image state after success", async () => {

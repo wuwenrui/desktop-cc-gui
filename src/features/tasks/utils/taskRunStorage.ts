@@ -169,19 +169,28 @@ function normalizeBrowserEvidence(value: unknown): TaskRunBrowserEvidenceRef | n
             const filePath = normalizeNullableString(candidate.filePath);
             const reason = candidate.reason;
             const confidence = candidate.confidence;
+            const normalizedReasonValue = reason === "landmark_match"
+              ? "button_label_match"
+              : reason;
             if (
               !filePath ||
               (
-                reason !== "route_match" &&
-                reason !== "visible_text_match" &&
-                reason !== "landmark_match" &&
-                reason !== "manual_hint"
+                normalizedReasonValue !== "route_match" &&
+                normalizedReasonValue !== "file_name_match" &&
+                normalizedReasonValue !== "visible_text_match" &&
+                normalizedReasonValue !== "heading_match" &&
+                normalizedReasonValue !== "button_label_match" &&
+                normalizedReasonValue !== "form_label_match" &&
+                normalizedReasonValue !== "aria_label_match" &&
+                normalizedReasonValue !== "test_id_match" &&
+                normalizedReasonValue !== "component_symbol_match" &&
+                normalizedReasonValue !== "manual_hint"
               ) ||
               (confidence !== "high" && confidence !== "medium" && confidence !== "low")
             ) {
               return null;
             }
-            const normalizedReason = reason as NonNullable<
+            const normalizedReason = normalizedReasonValue as NonNullable<
               TaskRunBrowserEvidenceRef["codeCandidates"]
             >[number]["reason"];
             const normalizedConfidence = confidence as NonNullable<
@@ -192,6 +201,26 @@ function normalizeBrowserEvidence(value: unknown): TaskRunBrowserEvidenceRef | n
               reason: normalizedReason,
               confidence: normalizedConfidence,
               matchedText: normalizeNullableString(candidate.matchedText),
+              sourceEvidence: Array.isArray(candidate.sourceEvidence)
+                ? candidate.sourceEvidence
+                    .map((entry) => normalizeNullableString(entry))
+                    .filter((entry): entry is string => Boolean(entry))
+                : [],
+              explanation: normalizeNullableString(candidate.explanation) ?? undefined,
+              openAction: (() => {
+                const openAction = candidate.openAction;
+                if (!openAction || typeof openAction !== "object") {
+                  return null;
+                }
+                const openActionInput = openAction as Record<string, unknown>;
+                const openActionFilePath = normalizeNullableString(openActionInput.filePath);
+                return openActionInput.kind === "open_file" && openActionFilePath
+                  ? {
+                      kind: "open_file" as const,
+                      filePath: openActionFilePath,
+                    }
+                  : null;
+              })(),
             };
           })
           .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
@@ -230,6 +259,8 @@ function normalizeRun(raw: unknown): TaskRunRecord | null {
   const status = normalizeStatus(input.status);
   const trigger = normalizeTrigger(input.trigger);
   const updatedAt = normalizeFiniteNumber(input.updatedAt);
+  const taskSource = taskInput.source === "orchestration" ? "orchestration" : "kanban";
+  const orchestrationTaskId = normalizeNullableString(taskInput.orchestrationTaskId);
   if (
     !runId ||
     !taskId ||
@@ -245,11 +276,13 @@ function normalizeRun(raw: unknown): TaskRunRecord | null {
     runId,
     task: {
       taskId,
-      source: "kanban",
+      source: taskSource,
       workspaceId,
       title: normalizeNullableString(taskInput.title),
+      orchestrationTaskId: taskSource === "orchestration" ? orchestrationTaskId ?? taskId : null,
     },
     engine,
+    model: normalizeNullableString(input.model),
     status,
     trigger,
     linkedThreadId: normalizeNullableString(input.linkedThreadId),
@@ -342,11 +375,16 @@ export function createTaskRunRecord(input: CreateTaskRunInput): TaskRunRecord {
     runId: makeRunId(input.taskId, now),
     task: {
       taskId: input.taskId,
-      source: "kanban",
+      source: input.taskSource ?? "kanban",
       workspaceId: input.workspaceId,
       title: input.taskTitle ?? null,
+      orchestrationTaskId:
+        (input.taskSource ?? "kanban") === "orchestration"
+          ? input.orchestrationTaskId ?? input.taskId
+          : null,
     },
     engine: input.engine,
+    model: normalizeNullableString(input.model),
     status: "queued",
     trigger: input.trigger,
     linkedThreadId: input.linkedThreadId ?? null,
@@ -386,6 +424,9 @@ export function buildTaskRunBrowserEvidenceRef(
         reason: candidate.reason,
         confidence: candidate.confidence,
         matchedText: candidate.matchedText ?? null,
+        sourceEvidence: candidate.sourceEvidence ?? [],
+        explanation: candidate.explanation,
+        openAction: candidate.openAction ?? null,
       })) ?? [],
   };
 }
@@ -419,6 +460,7 @@ export function patchTaskRun(
     runId: run.runId,
     task: run.task,
     engine: run.engine,
+    model: patch.model === undefined ? run.model : patch.model,
     trigger: run.trigger,
     artifacts: patch.artifacts ?? run.artifacts,
     browserEvidence:

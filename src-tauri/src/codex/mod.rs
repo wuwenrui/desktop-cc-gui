@@ -1015,10 +1015,23 @@ pub(crate) async fn collaboration_mode_list(
         .await;
     }
 
-    // Ensure Codex session exists before fetching collaboration modes
-    ensure_codex_session(&workspace_id, &state, &app).await?;
-
-    codex_core::collaboration_mode_list_core(&state.sessions, workspace_id).await
+    match codex_core::collaboration_mode_list_core(&state.sessions, workspace_id.clone()).await {
+        Ok(response) => Ok(response),
+        Err(error) if error == "workspace not connected" => {
+            log::debug!(
+                "[codex:collaboration_mode_list] passive collaborationMode/list skipped runtime acquisition for {}: {}",
+                workspace_id,
+                error
+            );
+            Ok(json!({
+                "data": [],
+                "degraded": true,
+                "runtimeAvailable": false,
+                "reason": "workspace not connected",
+            }))
+        }
+        Err(error) => Err(error),
+    }
 }
 
 #[tauri::command]
@@ -1158,10 +1171,23 @@ pub(crate) async fn model_list(
         .await;
     }
 
-    // Ensure Codex session exists before fetching model list
-    ensure_codex_session(&workspace_id, &state, &app).await?;
-
-    codex_core::model_list_core(&state.sessions, workspace_id).await
+    match codex_core::model_list_core(&state.sessions, workspace_id.clone()).await {
+        Ok(response) => Ok(response),
+        Err(error) if error == "workspace not connected" => {
+            log::debug!(
+                "[codex:model_list] passive model/list skipped runtime acquisition for {}: {}",
+                workspace_id,
+                error
+            );
+            Ok(json!({
+                "data": [],
+                "degraded": true,
+                "runtimeAvailable": false,
+                "reason": "workspace not connected",
+            }))
+        }
+        Err(error) => Err(error),
+    }
 }
 
 #[tauri::command]
@@ -1180,10 +1206,23 @@ pub(crate) async fn account_rate_limits(
         .await;
     }
 
-    // Ensure Codex session exists before fetching rate limits
-    ensure_codex_session(&workspace_id, &state, &app).await?;
-
-    codex_core::account_rate_limits_core(&state.sessions, workspace_id).await
+    match codex_core::account_rate_limits_core(&state.sessions, workspace_id.clone()).await {
+        Ok(response) => Ok(response),
+        Err(error) if error == "workspace not connected" => {
+            log::debug!(
+                "[codex:account_rate_limits] passive account/rateLimits read skipped runtime acquisition for {}: {}",
+                workspace_id,
+                error
+            );
+            Ok(json!({
+                "rateLimits": null,
+                "degraded": true,
+                "runtimeAvailable": false,
+                "reason": "workspace not connected",
+            }))
+        }
+        Err(error) => Err(error),
+    }
 }
 
 #[tauri::command]

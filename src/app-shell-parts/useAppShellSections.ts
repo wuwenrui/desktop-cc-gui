@@ -37,7 +37,16 @@ import {
 import {
   buildTaskRunBrowserEvidenceRef,
   loadTaskRunStore,
+  patchTaskRun,
+  saveTaskRunStore,
 } from "../features/tasks/utils/taskRunStorage";
+import {
+  beginOrchestrationTaskDispatch,
+  buildOrchestrationDispatchPrompt,
+  patchOrchestrationTask,
+  saveOrchestrationTaskStore,
+  upsertOrchestrationTask,
+} from "../features/agent-orchestration";
 import {
   buildBrowserContextAttachment,
   getActiveBrowserContext,
@@ -1054,6 +1063,143 @@ export function useAppShellSections(ctx: any) {
       });
     },
     [persistComposerSelectionForThread, resolveComposerSelectionForThread],
+  );
+
+  const handleDispatchOrchestrationTask = useCallback(
+    async (confirmation: any): Promise<{ ok: boolean; taskId?: string | null; reason?: string }> => {
+      const taskId = confirmation?.task?.taskId ?? null;
+      const validEngines = new Set(["codex", "claude", "gemini"]);
+      const validThreadStrategies = new Set(["new_thread", "reuse_active_thread", "choose_thread"]);
+      if (
+        !confirmation?.task ||
+        typeof confirmation.workspaceId !== "string" ||
+        !validEngines.has(confirmation.engine) ||
+        !validThreadStrategies.has(confirmation.threadStrategy)
+      ) {
+        return { ok: false, taskId, reason: "invalid_dispatch_confirmation" };
+      }
+
+      const initial = beginOrchestrationTaskDispatch({
+        ...confirmation,
+        persist: false,
+      });
+      if (!initial.ok) {
+        return { ok: false, taskId, reason: initial.reason };
+      }
+      saveTaskRunStore(initial.taskRunStore);
+      saveOrchestrationTaskStore(initial.orchestrationTaskStore);
+
+      const startedAt = Date.now();
+      let threadId: string | null = null;
+      try {
+        const workspace =
+          activeWorkspace?.id === confirmation.workspaceId
+            ? activeWorkspace
+            : workspaces.find((entry: WorkspaceInfo) => entry.id === confirmation.workspaceId) ?? null;
+        if (!workspace) {
+          throw new Error("workspace_not_found");
+        }
+
+        await connectWorkspace(workspace);
+        await setActiveEngine(confirmation.engine);
+        threadId =
+          confirmation.threadStrategy === "reuse_active_thread"
+            ? confirmation.task.linkedSessionIds[0] ?? null
+            : null;
+        if (!threadId) {
+          threadId = await startThreadForWorkspace(workspace.id, {
+            engine: confirmation.engine,
+            activate: true,
+          });
+        }
+        if (!threadId) {
+          throw new Error("thread_create_failed");
+        }
+
+        if (confirmation.model) {
+          const currentSelection = resolveComposerSelectionForThread(workspace.id, threadId);
+          persistComposerSelectionForThread(workspace.id, threadId, {
+            modelId: confirmation.model,
+            effort: currentSelection?.effort ?? null,
+          });
+        }
+
+        setActiveThreadId(threadId, workspace.id);
+        await sendUserMessageToThread(
+          workspace,
+          threadId,
+          buildOrchestrationDispatchPrompt(confirmation),
+          [],
+          confirmation.model ? { model: confirmation.model } : undefined,
+        );
+
+        const nextTaskRunStore = patchTaskRun(initial.taskRunStore, initial.run.runId, {
+          status: "running",
+          model: confirmation.model ?? null,
+          linkedThreadId: threadId,
+          currentStep: "first_message_sent",
+          latestOutputSummary: "Task prompt sent to session.",
+          startedAt,
+          now: startedAt,
+        });
+        const nextOrchestrationTaskStore = patchOrchestrationTask(
+          upsertOrchestrationTask(initial.orchestrationTaskStore, confirmation.task),
+          confirmation.task.taskId,
+          {
+            status: "running",
+            preferredEngine: confirmation.engine,
+            preferredModel: confirmation.model ?? null,
+            linkedSessionIds: [...new Set([...confirmation.task.linkedSessionIds, threadId])],
+            now: new Date(startedAt).toISOString(),
+          },
+        );
+        saveTaskRunStore(nextTaskRunStore);
+        saveOrchestrationTaskStore(nextOrchestrationTaskStore);
+        return { ok: true, taskId: confirmation.task.taskId };
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        const failedAt = Date.now();
+        const linkedSessionIds = threadId
+          ? [...new Set([...(confirmation.task.linkedSessionIds ?? []), threadId])]
+          : confirmation.task.linkedSessionIds ?? [];
+        const nextTaskRunStore = patchTaskRun(initial.taskRunStore, initial.run.runId, {
+          status: "failed",
+          model: confirmation.model ?? null,
+          linkedThreadId: threadId ?? initial.run.linkedThreadId ?? null,
+          currentStep: "runtime_start_failed",
+          latestOutputSummary: reason,
+          failureReason: reason,
+          availableRecoveryActions: ["open_conversation", "retry", "fork_new_run"],
+          finishedAt: failedAt,
+          now: failedAt,
+        });
+        const nextOrchestrationTaskStore = patchOrchestrationTask(
+          initial.orchestrationTaskStore,
+          confirmation.task.taskId,
+          {
+            status: "blocked",
+            preferredEngine: confirmation.engine,
+            preferredModel: confirmation.model ?? null,
+            linkedSessionIds,
+            now: new Date(failedAt).toISOString(),
+          },
+        );
+        saveTaskRunStore(nextTaskRunStore);
+        saveOrchestrationTaskStore(nextOrchestrationTaskStore);
+        return { ok: false, taskId: confirmation.task.taskId, reason };
+      }
+    },
+    [
+      activeWorkspace,
+      connectWorkspace,
+      persistComposerSelectionForThread,
+      resolveComposerSelectionForThread,
+      sendUserMessageToThread,
+      setActiveEngine,
+      setActiveThreadId,
+      startThreadForWorkspace,
+      workspaces,
+    ],
   );
 
   const launchKanbanTaskExecution = useCallback(
@@ -2624,6 +2770,7 @@ export function useAppShellSections(ctx: any) {
     handleForkTaskRun,
     handleCloseTaskConversation,
     handleKanbanCreateTask,
+    handleDispatchOrchestrationTask,
     taskProcessingMap,
     handleDragToInProgress,
     handleMoveWorkspace,

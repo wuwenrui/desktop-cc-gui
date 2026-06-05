@@ -139,6 +139,7 @@ const defaultSettings: AppSettings = {
   terminalShellPath: null,
   geminiEnabled: true,
   opencodeEnabled: false,
+  sessionAttributionMode: "related",
   backendMode: "local",
   remoteBackendHost: "127.0.0.1:4732",
   remoteBackendToken: null,
@@ -317,6 +318,10 @@ function normalizeAppSettings(
       : null,
     geminiEnabled: settings.geminiEnabled !== false,
     opencodeEnabled: settings.opencodeEnabled === true,
+    sessionAttributionMode:
+      settings.sessionAttributionMode === "workspace-only"
+        ? "workspace-only"
+        : "related",
     webServicePort: normalizeWebServicePort(settings.webServicePort),
     webServiceToken: normalizeWebServiceToken(settings.webServiceToken),
     systemProxyUrl: settings.systemProxyUrl?.trim()

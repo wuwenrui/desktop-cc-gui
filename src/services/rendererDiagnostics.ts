@@ -279,6 +279,66 @@ export function appendRendererPerfDiagnostic(
   appendRendererDiagnostic(label, payload);
 }
 
+export type ClientInteractionPerfEvidenceKind =
+  | "measured"
+  | "proxy"
+  | "manual-only"
+  | "unsupported";
+
+export type ClientInteractionPerfDiagnosticInput = {
+  area:
+    | "typing"
+    | "streaming-controls"
+    | "thread-switch"
+    | "sidebar-projection"
+    | "catalog-hydration";
+  evidenceKind: ClientInteractionPerfEvidenceKind;
+  workspaceId?: string | null;
+  threadId?: string | null;
+  engine?: string | null;
+  turnId?: string | null;
+  inputEventCount?: number | null;
+  renderCount?: number | null;
+  commitDurationMs?: number | null;
+  longTaskCount?: number | null;
+  requestCount?: number | null;
+  foregroundLatencyMs?: number | null;
+  hydrationLatencyMs?: number | null;
+  notes?: string | null;
+};
+
+function toFiniteDiagnosticNumber(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.max(0, value)
+    : null;
+}
+
+function toBoundedDiagnosticString(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed.slice(0, 120) : null;
+}
+
+export function appendClientInteractionPerfDiagnostic(
+  input: ClientInteractionPerfDiagnosticInput,
+) {
+  appendRendererDiagnostic("perf.client-interaction", {
+    area: input.area,
+    evidenceKind: input.evidenceKind,
+    workspaceId: toBoundedDiagnosticString(input.workspaceId),
+    threadId: toBoundedDiagnosticString(input.threadId),
+    engine: toBoundedDiagnosticString(input.engine),
+    turnId: toBoundedDiagnosticString(input.turnId),
+    inputEventCount: toFiniteDiagnosticNumber(input.inputEventCount),
+    renderCount: toFiniteDiagnosticNumber(input.renderCount),
+    commitDurationMs: toFiniteDiagnosticNumber(input.commitDurationMs),
+    longTaskCount: toFiniteDiagnosticNumber(input.longTaskCount),
+    requestCount: toFiniteDiagnosticNumber(input.requestCount),
+    foregroundLatencyMs: toFiniteDiagnosticNumber(input.foregroundLatencyMs),
+    hydrationLatencyMs: toFiniteDiagnosticNumber(input.hydrationLatencyMs),
+    notes: toBoundedDiagnosticString(input.notes),
+  });
+}
+
 export function stopRendererBlankScreenWatchdog() {
   if (blankWatchdogTimer === null || typeof window === "undefined") {
     blankWatchdogTimer = null;

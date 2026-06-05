@@ -3,19 +3,19 @@
   "name": "align-live-sticky-with-history-header",
   "title": "Align live sticky with history header (OpenSpec: align-live-sticky-with-history-header)",
   "description": "",
-  "status": "planning",
-  "dev_type": null,
-  "scope": null,
+  "status": "completed",
+  "dev_type": "frontend",
+  "scope": "messages",
   "package": null,
   "priority": "P2",
   "creator": "chenxiangning",
   "assignee": "chenxiangning",
   "createdAt": "2026-04-22",
-  "completedAt": null,
+  "completedAt": "2026-06-05",
   "branch": null,
   "base_branch": "feature/v-0.4.7",
   "worktree_path": null,
-  "current_phase": 0,
+  "current_phase": 6,
   "next_action": [
     {
       "phase": 1,
@@ -42,12 +42,21 @@
       "action": "record-session"
     }
   ],
-  "commit": null,
+  "commit": "daab536b8115d8e84f66c0d306d7207fafa7c8f6",
   "pr_url": null,
   "subtasks": [],
   "children": [],
   "parent": null,
-  "relatedFiles": [],
-  "notes": "",
+  "relatedFiles": [
+    "openspec/changes/archive/2026-04-22-align-live-sticky-with-history-header/",
+    "openspec/specs/conversation-live-user-bubble-pinning/spec.md",
+    "src/features/messages/components/Messages.tsx",
+    "src/features/messages/components/MessagesTimeline.tsx",
+    "src/features/messages/components/messagesLiveWindow.ts",
+    "src/features/messages/components/Messages.live-behavior.test.tsx",
+    "src/styles/messages.css",
+    "src/styles/messages.history-sticky.css"
+  ],
+  "notes": "Implementation and OpenSpec archive were completed in commit daab536b8115d8e84f66c0d306d7207fafa7c8f6. Archive tasks show realtime wrapper-sticky rendering replaced by the shared condensed sticky header path, history-style physical handoff preserved, live-window trimming compatibility retained, obsolete realtime sticky CSS contract removed, focused live-behavior coverage updated, typecheck and strict OpenSpec validation completed.",
   "meta": {}
 }

@@ -8,11 +8,11 @@ import {
   TooltipPopup,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import type { CSSProperties, KeyboardEvent, MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 
-import type { ThreadSummary } from "../../../types";
+import type { EngineType, ThreadSummary } from "../../../types";
 import type { ThreadMoveFolderTarget } from "../hooks/useSidebarMenus";
 import { ProxyStatusBadge } from "../../../components/ProxyStatusBadge";
 import { EngineIcon } from "../../engine/components/EngineIcon";
@@ -29,6 +29,58 @@ type ThreadRow = {
   thread: ThreadSummary;
   depth: number;
   hasChildren?: boolean;
+};
+
+type ShowThreadMenuHandler = (
+  event: MouseEvent,
+  workspaceId: string,
+  threadId: string,
+  canPin: boolean,
+  sizeBytes?: number,
+  moveFolderTargets?: ThreadMoveFolderTarget[],
+  currentFolderId?: string | null,
+  canArchive?: boolean,
+  workspacePath?: string,
+) => void;
+
+type ThreadRowItemProps = {
+  canArchive: boolean;
+  canPin: boolean;
+  contextMenuMoveFolderTargets?: ThreadMoveFolderTarget[];
+  deleteConfirmBusy: boolean;
+  engineTitle: string;
+  engineSource: EngineType;
+  hasChildren: boolean;
+  indentPx: number | null;
+  isActiveSubagentGroup: boolean;
+  isActiveSubagentParent: boolean;
+  isActiveThread: boolean;
+  isAutoNaming: boolean;
+  isDeleteConfirmOpen: boolean;
+  isPendingSubagent: boolean;
+  isPinned: boolean;
+  isProcessing: boolean;
+  isSharedThread: boolean;
+  isSubagentParent: boolean;
+  isSubagentParentCollapsed: boolean;
+  isSubagentThread: boolean;
+  nestedWorkspaceId: string;
+  onCancelDeleteConfirm?: () => void;
+  onConfirmDeleteConfirm?: () => void;
+  onSelectThread: (workspaceId: string, threadId: string) => void;
+  onShowThreadMenu: ShowThreadMenuHandler;
+  onToggleThreadPin?: (workspaceId: string, threadId: string) => void;
+  relativeTime: string | null;
+  selectTargetThreadId: string;
+  showProxyBadge: boolean;
+  statusClass: string;
+  subagentTreeToggleLabel: string;
+  systemProxyUrl: string | null;
+  thread: ThreadSummary;
+  toggleSubagentParent: (event: MouseEvent, threadId: string) => void;
+  handleSubagentParentKeyDown: (event: KeyboardEvent, threadId: string) => void;
+  t: (key: string, options?: Record<string, unknown>) => string;
+  workspacePath: string;
 };
 
 function isPendingSubagentThread(thread: ThreadSummary) {
@@ -63,6 +115,203 @@ function filterCollapsedThreadRows(
   return visibleRows;
 }
 
+const ThreadRowItem = memo(function ThreadRowItem({
+  canArchive,
+  canPin,
+  contextMenuMoveFolderTargets,
+  deleteConfirmBusy,
+  engineTitle,
+  engineSource,
+  hasChildren,
+  indentPx,
+  isActiveSubagentGroup,
+  isActiveSubagentParent,
+  isActiveThread,
+  isAutoNaming,
+  isDeleteConfirmOpen,
+  isPendingSubagent,
+  isPinned,
+  isProcessing,
+  isSharedThread,
+  isSubagentParent,
+  isSubagentParentCollapsed,
+  isSubagentThread,
+  nestedWorkspaceId,
+  onCancelDeleteConfirm,
+  onConfirmDeleteConfirm,
+  onSelectThread,
+  onShowThreadMenu,
+  onToggleThreadPin,
+  relativeTime,
+  selectTargetThreadId,
+  showProxyBadge,
+  statusClass,
+  subagentTreeToggleLabel,
+  systemProxyUrl,
+  thread,
+  toggleSubagentParent,
+  handleSubagentParentKeyDown,
+  t,
+  workspacePath,
+}: ThreadRowItemProps) {
+  const indentStyle =
+    indentPx !== null
+      ? ({ "--thread-indent": `${indentPx}px` } as CSSProperties)
+      : undefined;
+  const engineIconType = engineSource as EngineType;
+  return (
+    <Popover
+      open={isDeleteConfirmOpen}
+      onOpenChange={(open) => {
+        if (!open) {
+          onCancelDeleteConfirm?.();
+        }
+      }}
+    >
+      <Tooltip>
+        <PopoverAnchor asChild>
+          <TooltipTrigger
+            delay={450}
+            className={`thread-row ${
+              isActiveThread ? "active" : ""
+            }${isDeleteConfirmOpen ? " has-delete-confirm" : ""}${
+              canPin ? " has-pin-toggle" : ""
+            }${hasChildren ? " has-child-threads" : ""}${
+              isSubagentParent ? " is-subagent-parent" : ""
+            }${isActiveSubagentParent ? " is-active-subagent-parent" : ""}${
+              isSubagentThread ? " is-subagent" : ""
+            }${isActiveSubagentGroup ? " is-active-subagent-group" : ""}${
+              isPendingSubagent ? " is-pending-subagent" : ""
+            }${thread.isDegraded ? " is-degraded" : ""}`}
+            style={indentStyle}
+            aria-expanded={
+              isSubagentParent ? !isSubagentParentCollapsed : undefined
+            }
+            onClick={() => {
+              onSelectThread(nestedWorkspaceId, selectTargetThreadId);
+            }}
+            onContextMenu={(event) => {
+              if (isPendingSubagent) {
+                event.preventDefault();
+                event.stopPropagation();
+                return;
+              }
+              onShowThreadMenu(
+                event,
+                nestedWorkspaceId,
+                thread.id,
+                canPin,
+                thread.sizeBytes,
+                contextMenuMoveFolderTargets,
+                thread.folderId ?? null,
+                canArchive,
+                workspacePath,
+              );
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onSelectThread(nestedWorkspaceId, selectTargetThreadId);
+              }
+            }}
+          >
+            <span className={`thread-status ${statusClass}`} aria-hidden />
+            {canPin && onToggleThreadPin && (
+              <span
+                className={`thread-pin-toggle${isPinned ? " is-pinned" : ""}`}
+                role="button"
+                aria-label={isPinned ? t("threads.unpin") : t("threads.pin")}
+                title={isPinned ? t("threads.unpin") : t("threads.pin")}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onToggleThreadPin(nestedWorkspaceId, thread.id);
+                }}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+              >
+                <span className="thread-pin-toggle-icon" aria-hidden />
+              </span>
+            )}
+            <span
+              className={`thread-engine-badge ${
+                isSharedThread ? "thread-engine-shared" : `thread-engine-${engineSource}`
+              }${isProcessing ? " is-processing" : ""}`}
+              title={engineTitle}
+            >
+              {isSharedThread ? (
+                <SharedSessionIcon size={12} />
+              ) : (
+                <EngineIcon engine={engineIconType} size={12} />
+              )}
+            </span>
+            {showProxyBadge && (
+              <ProxyStatusBadge
+                proxyUrl={systemProxyUrl}
+                label={t("threads.proxyBadge")}
+                variant="compact"
+                className="thread-proxy-badge"
+              />
+            )}
+            <span className="thread-name">{thread.name}</span>
+            <div className="thread-meta">
+              {isSubagentParent && (
+                <span
+                  className={`thread-tree-expander${
+                    isSubagentParentCollapsed ? " is-collapsed" : ""
+                  }`}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={subagentTreeToggleLabel}
+                  title={subagentTreeToggleLabel}
+                  onClick={(event) => toggleSubagentParent(event, thread.id)}
+                  onKeyDown={(event) => handleSubagentParentKeyDown(event, thread.id)}
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                  }}
+                />
+              )}
+              {isAutoNaming && (
+                <span className="thread-auto-naming">{t("threads.autoNaming")}</span>
+              )}
+              {relativeTime ? <span className="thread-time">{relativeTime}</span> : null}
+            </div>
+          </TooltipTrigger>
+        </PopoverAnchor>
+        <TooltipPopup
+          side="top"
+          align="start"
+          sideOffset={4}
+          className="max-w-[400px] break-words"
+        >
+          {thread.isDegraded && thread.degradedReason
+            ? `${thread.name} · ${thread.degradedReason}`
+            : thread.name}
+        </TooltipPopup>
+      </Tooltip>
+      {isDeleteConfirmOpen && (
+        <PopoverContent
+          side="right"
+          align="start"
+          sideOffset={10}
+          className="thread-delete-popover-shell"
+          onOpenAutoFocus={(event) => event.preventDefault()}
+        >
+          <ThreadDeleteConfirmBubble
+            threadName={thread.name}
+            isDeleting={deleteConfirmBusy}
+            onCancel={() => onCancelDeleteConfirm?.()}
+            onConfirm={() => onConfirmDeleteConfirm?.()}
+          />
+        </PopoverContent>
+      )}
+    </Popover>
+  );
+});
+
 export type ThreadListProps = {
   workspaceId: string;
   workspacePath: string;
@@ -89,17 +338,7 @@ export type ThreadListProps = {
   onToggleExpanded: (workspaceId: string) => void;
   onLoadOlderThreads: (workspaceId: string) => void;
   onSelectThread: (workspaceId: string, threadId: string) => void;
-  onShowThreadMenu: (
-    event: MouseEvent,
-    workspaceId: string,
-    threadId: string,
-    canPin: boolean,
-    sizeBytes?: number,
-    moveFolderTargets?: ThreadMoveFolderTarget[],
-    currentFolderId?: string | null,
-    canArchive?: boolean,
-    workspacePath?: string,
-  ) => void;
+  onShowThreadMenu: ShowThreadMenuHandler;
   deleteConfirmThreadId?: string | null;
   deleteConfirmWorkspaceId?: string | null;
   deleteConfirmBusy?: boolean;
@@ -232,10 +471,7 @@ export function ThreadList({
     const relativeTime = getThreadTime(thread);
     const isActiveThread =
       workspaceId === activeWorkspaceId && thread.id === activeThreadId;
-    const indentStyle =
-      depth > 0
-        ? ({ "--thread-indent": `${depth * indentUnit}px` } as CSSProperties)
-        : undefined;
+    const indentPx = depth > 0 ? depth * indentUnit : null;
     const status = threadStatusById[thread.id];
     const statusClass = status?.isReviewing
       ? "reviewing"
@@ -251,18 +487,18 @@ export function ThreadList({
     const showProxyBadge = systemProxyEnabled && isProcessing;
     const isSharedThread = thread.threadKind === "shared";
     const isSubagentThread = depth > 0;
+    const isSubagentParent = depth === 0 && hasChildren;
     const isActiveSubagentGroup =
       isSubagentThread &&
       workspaceId === activeWorkspaceId &&
       (thread.parentThreadId === activeThreadId || thread.parentThreadId === activeThreadParentId);
     const isActiveSubagentParent =
-      depth === 0 &&
-      hasChildren &&
+      isSubagentParent &&
       workspaceId === activeWorkspaceId &&
       (thread.id === activeThreadId || thread.id === activeThreadParentId);
     const isPendingSubagent = isPendingSubagentThread(thread);
     const isSubagentParentCollapsed =
-      hasChildren && collapsedParentThreadIds.has(thread.id);
+      isSubagentParent && collapsedParentThreadIds.has(thread.id);
     const subagentTreeToggleLabel = isSubagentParentCollapsed
       ? t("threads.subagentTreeExpand")
       : t("threads.subagentTreeCollapse");
@@ -270,7 +506,7 @@ export function ThreadList({
       isPendingSubagent && thread.parentThreadId ? thread.parentThreadId : thread.id;
     const canArchive =
       !isPendingSubagent && !isSharedThread && !thread.id.startsWith("shared:");
-    const engineSource = thread.engineSource ?? "codex";
+    const engineSource: EngineType = thread.engineSource ?? "codex";
     const baseEngineTitle =
       engineSource === "claude"
         ? "Claude Code"
@@ -288,154 +524,46 @@ export function ThreadList({
       deleteConfirmWorkspaceId === workspaceId && deleteConfirmThreadId === thread.id;
 
     return (
-      <Popover
+      <ThreadRowItem
         key={thread.id}
-        open={isDeleteConfirmOpen}
-        onOpenChange={(open) => {
-          if (!open) {
-            onCancelDeleteConfirm?.();
-          }
-        }}
-      >
-        <Tooltip>
-          <PopoverAnchor asChild>
-            <TooltipTrigger
-              delay={450}
-              className={`thread-row ${
-                isActiveThread ? "active" : ""
-              }${isDeleteConfirmOpen ? " has-delete-confirm" : ""}${
-                canPin ? " has-pin-toggle" : ""
-              }${hasChildren ? " has-child-threads" : ""}${
-                depth === 0 && hasChildren ? " is-subagent-parent" : ""
-              }${isActiveSubagentParent ? " is-active-subagent-parent" : ""}${
-                isSubagentThread ? " is-subagent" : ""
-              }${isActiveSubagentGroup ? " is-active-subagent-group" : ""}${
-                isPendingSubagent ? " is-pending-subagent" : ""
-              }${thread.isDegraded ? " is-degraded" : ""}`}
-              style={indentStyle}
-              aria-expanded={hasChildren ? !isSubagentParentCollapsed : undefined}
-              onClick={() => {
-                onSelectThread(workspaceId, selectTargetThreadId);
-              }}
-              onContextMenu={(event) => {
-                if (isPendingSubagent) {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  return;
-                }
-                onShowThreadMenu(
-                  event,
-                  workspaceId,
-                  thread.id,
-                  canPin,
-                  thread.sizeBytes,
-                  contextMenuMoveFolderTargets,
-                  thread.folderId ?? null,
-                  canArchive,
-                  workspacePath,
-                );
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  onSelectThread(workspaceId, selectTargetThreadId);
-                }
-              }}
-            >
-              <span className={`thread-status ${statusClass}`} aria-hidden />
-              {canPin && onToggleThreadPin && (
-                <span
-                  className={`thread-pin-toggle${isPinned ? " is-pinned" : ""}`}
-                  role="button"
-                  aria-label={isPinned ? t("threads.unpin") : t("threads.pin")}
-                  title={isPinned ? t("threads.unpin") : t("threads.pin")}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    onToggleThreadPin(workspaceId, thread.id);
-                  }}
-                  onMouseDown={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                  }}
-                >
-                  <span className="thread-pin-toggle-icon" aria-hidden />
-                </span>
-              )}
-              <span
-                className={`thread-engine-badge ${
-                  isSharedThread ? "thread-engine-shared" : `thread-engine-${engineSource}`
-                }${isProcessing ? " is-processing" : ""}`}
-                title={engineTitle}
-              >
-                {isSharedThread ? (
-                  <SharedSessionIcon size={12} />
-                ) : (
-                  <EngineIcon engine={engineSource} size={12} />
-                )}
-              </span>
-              {showProxyBadge && (
-                <ProxyStatusBadge
-                  proxyUrl={systemProxyUrl}
-                  label={t("threads.proxyBadge")}
-                  variant="compact"
-                  className="thread-proxy-badge"
-                />
-              )}
-              <span className="thread-name">{thread.name}</span>
-              <div className="thread-meta">
-                {hasChildren && depth === 0 && (
-                  <span
-                    className={`thread-tree-expander${
-                      isSubagentParentCollapsed ? " is-collapsed" : ""
-                    }`}
-                    role="button"
-                    tabIndex={0}
-                    aria-label={subagentTreeToggleLabel}
-                    title={subagentTreeToggleLabel}
-                    onClick={(event) => toggleSubagentParent(event, thread.id)}
-                    onKeyDown={(event) => handleSubagentParentKeyDown(event, thread.id)}
-                    onMouseDown={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                    }}
-                  />
-                )}
-                {isAutoNaming && (
-                  <span className="thread-auto-naming">{t("threads.autoNaming")}</span>
-                )}
-                {relativeTime ? <span className="thread-time">{relativeTime}</span> : null}
-              </div>
-            </TooltipTrigger>
-          </PopoverAnchor>
-          <TooltipPopup
-            side="top"
-            align="start"
-            sideOffset={4}
-            className="max-w-[400px] break-words"
-          >
-            {thread.isDegraded && thread.degradedReason
-              ? `${thread.name} · ${thread.degradedReason}`
-              : thread.name}
-          </TooltipPopup>
-        </Tooltip>
-        {isDeleteConfirmOpen && (
-          <PopoverContent
-            side="right"
-            align="start"
-            sideOffset={10}
-            className="thread-delete-popover-shell"
-            onOpenAutoFocus={(event) => event.preventDefault()}
-          >
-            <ThreadDeleteConfirmBubble
-              threadName={thread.name}
-              isDeleting={deleteConfirmBusy}
-              onCancel={() => onCancelDeleteConfirm?.()}
-              onConfirm={() => onConfirmDeleteConfirm?.()}
-            />
-          </PopoverContent>
-        )}
-      </Popover>
+        canArchive={canArchive}
+        canPin={canPin}
+        contextMenuMoveFolderTargets={contextMenuMoveFolderTargets}
+        deleteConfirmBusy={deleteConfirmBusy}
+        engineSource={engineSource}
+        engineTitle={engineTitle}
+        hasChildren={hasChildren}
+        indentPx={indentPx}
+        isActiveSubagentGroup={isActiveSubagentGroup}
+        isActiveSubagentParent={isActiveSubagentParent}
+        isActiveThread={isActiveThread}
+        isAutoNaming={isAutoNaming}
+        isDeleteConfirmOpen={isDeleteConfirmOpen}
+        isPendingSubagent={isPendingSubagent}
+        isPinned={isPinned}
+        isProcessing={isProcessing}
+        isSharedThread={isSharedThread}
+        isSubagentParent={isSubagentParent}
+        isSubagentParentCollapsed={isSubagentParentCollapsed}
+        isSubagentThread={isSubagentThread}
+        nestedWorkspaceId={workspaceId}
+        onCancelDeleteConfirm={onCancelDeleteConfirm}
+        onConfirmDeleteConfirm={onConfirmDeleteConfirm}
+        onSelectThread={onSelectThread}
+        onShowThreadMenu={onShowThreadMenu}
+        onToggleThreadPin={onToggleThreadPin}
+        relativeTime={relativeTime}
+        selectTargetThreadId={selectTargetThreadId}
+        showProxyBadge={showProxyBadge}
+        statusClass={statusClass}
+        subagentTreeToggleLabel={subagentTreeToggleLabel}
+        systemProxyUrl={systemProxyUrl}
+        thread={thread}
+        toggleSubagentParent={toggleSubagentParent}
+        handleSubagentParentKeyDown={handleSubagentParentKeyDown}
+        t={t}
+        workspacePath={workspacePath}
+      />
     );
   };
 

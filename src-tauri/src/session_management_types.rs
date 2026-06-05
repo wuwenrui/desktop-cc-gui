@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde::{Deserialize, Serialize};
 
+use crate::types::WorkspaceSessionAttributionMode;
+
 pub(crate) const SESSION_CATALOG_DEFAULT_LIMIT: usize = 50;
 pub(crate) const SESSION_CATALOG_MAX_LIMIT: usize = 9_999;
 pub(crate) const SESSION_CATALOG_SCAN_LOOKAHEAD: usize = 1;
@@ -27,6 +29,12 @@ pub(crate) const SESSION_DELETE_CODE_ALREADY_MISSING_CLEANED: &str = "ALREADY_MI
 pub(crate) const SESSION_DELETE_CODE_DELETE_FAILED: &str = "DELETE_FAILED";
 pub(crate) const SESSION_DELETE_CODE_UNSUPPORTED: &str = "UNSUPPORTED";
 pub(crate) const SESSION_ASSIGN_CODE_FOLDER_ASSIGNED: &str = "FOLDER_ASSIGNED";
+
+impl WorkspaceSessionAttributionMode {
+    pub(crate) fn from_query(query: &WorkspaceSessionCatalogQuery) -> Self {
+        query.session_attribution_mode.unwrap_or_default()
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -151,6 +159,8 @@ pub(crate) struct WorkspaceSessionCatalogQuery {
     pub(crate) status: Option<String>,
     #[serde(default)]
     pub(crate) folder_id: Option<String>,
+    #[serde(default)]
+    pub(crate) session_attribution_mode: Option<WorkspaceSessionAttributionMode>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -524,6 +534,7 @@ pub(crate) fn catalog_query_fingerprint(query: &WorkspaceSessionCatalogQuery) ->
         engine: Option<String>,
         status: String,
         folder_id: Option<String>,
+        session_attribution_mode: String,
     }
 
     let status = match parse_status_filter(query.status.as_deref()) {
@@ -539,6 +550,9 @@ pub(crate) fn catalog_query_fingerprint(query: &WorkspaceSessionCatalogQuery) ->
         engine: normalize_cursor_query_component(query.engine.as_deref(), true),
         status,
         folder_id,
+        session_attribution_mode: WorkspaceSessionAttributionMode::from_query(query)
+            .as_str()
+            .to_string(),
     };
     serde_json::to_string(&payload).unwrap_or_else(|_| "{}".to_string())
 }

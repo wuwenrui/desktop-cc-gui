@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkspaceInfo } from "../types";
 import {
   getStartupTraceSnapshot,
   resetStartupTraceForTests,
 } from "../features/startup-orchestration/utils/startupTrace";
 import { useWorkspaceThreadListHydration } from "./useWorkspaceThreadListHydration";
+
+let restoreIdleCallbackForTest: (() => void) | null = null;
 
 function createWorkspace(id: string): WorkspaceInfo {
   return {
@@ -26,12 +28,42 @@ function createDeferred() {
   return { promise, resolve };
 }
 
+function installImmediateIdleCallback() {
+  restoreIdleCallbackForTest?.();
+  const previousRequestIdleCallback = window.requestIdleCallback;
+  const previousCancelIdleCallback = window.cancelIdleCallback;
+  window.requestIdleCallback = ((callback: IdleRequestCallback) => {
+    const timeoutId = window.setTimeout(() => {
+      callback({
+        didTimeout: false,
+        timeRemaining: () => 50,
+      });
+    }, 0);
+    return timeoutId;
+  }) as typeof window.requestIdleCallback;
+  window.cancelIdleCallback = ((handle: number) => {
+    window.clearTimeout(handle);
+  }) as typeof window.cancelIdleCallback;
+  restoreIdleCallbackForTest = () => {
+    window.requestIdleCallback = previousRequestIdleCallback;
+    window.cancelIdleCallback = previousCancelIdleCallback;
+    restoreIdleCallbackForTest = null;
+  };
+  return restoreIdleCallbackForTest;
+}
+
 describe("useWorkspaceThreadListHydration", () => {
   beforeEach(() => {
+    vi.useRealTimers();
     resetStartupTraceForTests();
   });
 
+  afterEach(() => {
+    restoreIdleCallbackForTest?.();
+  });
+
   it("progresses to the next background workspace after the current hydration attempt settles", async () => {
+    const restoreIdleCallback = installImmediateIdleCallback();
     const workspaces = [createWorkspace("ws-1"), createWorkspace("ws-2")];
     const deferredFirst = createDeferred();
     const listThreadsForWorkspace = vi
@@ -61,23 +93,28 @@ describe("useWorkspaceThreadListHydration", () => {
       }),
     );
 
+    expect(listThreadsForWorkspace).not.toHaveBeenCalled();
+
     await waitFor(() => {
       expect(listThreadsForWorkspace).toHaveBeenCalledTimes(1);
-      expect(listThreadsForWorkspace).toHaveBeenCalledWith(
-        workspaces[0],
-        expect.objectContaining({
-          preserveState: true,
-          startupHydrationMode: "full-catalog",
-        }),
-      );
     });
-
+    expect(listThreadsForWorkspace).toHaveBeenCalledWith(
+      workspaces[0],
+      expect.objectContaining({
+        preserveState: true,
+        startupHydrationMode: "full-catalog",
+      }),
+    );
     expect(listThreadsForWorkspace).not.toHaveBeenCalledWith(
       workspaces[1],
       expect.anything(),
     );
 
     deferredFirst.resolve();
+
+    await act(async () => {
+      await deferredFirst.promise;
+    });
 
     await waitFor(() => {
       expect(listThreadsForWorkspace).toHaveBeenCalledTimes(2);
@@ -90,6 +127,7 @@ describe("useWorkspaceThreadListHydration", () => {
         }),
       );
     });
+    restoreIdleCallback();
   });
 
   it("routes active workspace hydration as full catalog before idle background hydration", async () => {
@@ -231,6 +269,7 @@ describe("useWorkspaceThreadListHydration", () => {
   });
 
   it("prioritizes active full-catalog hydration before unrelated idle workspaces", async () => {
+    const restoreIdleCallback = installImmediateIdleCallback();
     const workspaces = [createWorkspace("ws-older"), createWorkspace("ws-active")];
     const listThreadsForWorkspace = vi.fn<
       (
@@ -255,18 +294,23 @@ describe("useWorkspaceThreadListHydration", () => {
     );
 
     await waitFor(() => {
-      expect(listThreadsForWorkspace).toHaveBeenCalledTimes(2);
+      expect(listThreadsForWorkspace).toHaveBeenCalledTimes(1);
     });
     expect(listThreadsForWorkspace).toHaveBeenNthCalledWith(
       1,
       workspaces[1],
       expect.objectContaining({ startupHydrationMode: "full-catalog" }),
     );
+
+    await waitFor(() => {
+      expect(listThreadsForWorkspace).toHaveBeenCalledTimes(2);
+    });
     expect(listThreadsForWorkspace).toHaveBeenNthCalledWith(
       2,
       workspaces[0],
       expect.objectContaining({ startupHydrationMode: "full-catalog" }),
     );
+    restoreIdleCallback();
   });
 
   it("retries full-catalog hydration when the previous result was discarded as stale", async () => {
@@ -311,6 +355,7 @@ describe("useWorkspaceThreadListHydration", () => {
   });
 
   it("routes session radar prewarm as an idle full-catalog task", async () => {
+    const restoreIdleCallback = installImmediateIdleCallback();
     const workspaces = [createWorkspace("ws-1")];
     const listThreadsForWorkspace = vi.fn<
       (
@@ -335,6 +380,7 @@ describe("useWorkspaceThreadListHydration", () => {
     );
 
     result.current.prewarmSessionRadarForWorkspace("ws-1");
+    expect(listThreadsForWorkspace).not.toHaveBeenCalled();
 
     await waitFor(() => {
       expect(listThreadsForWorkspace).toHaveBeenCalledWith(
@@ -352,6 +398,7 @@ describe("useWorkspaceThreadListHydration", () => {
         event.type === "task" && event.taskId === "thread-list:session-radar:ws-1",
     );
     expect(taskEvents.some((event) => event.phase === "idle-prewarm")).toBe(true);
+    restoreIdleCallback();
   });
 
   it("does not start session radar prewarm while workspace hydration is in flight", async () => {

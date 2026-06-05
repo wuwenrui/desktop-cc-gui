@@ -275,8 +275,13 @@ describe("GitHistoryWorktreePanel", () => {
     render(<GitHistoryWorktreePanel workspaceId="w1" listView="tree" />);
 
     await waitFor(() => {
-      expect(screen.getByText("1 file selected for commit")).toBeTruthy();
+      expect(mockGetGitStatus).toHaveBeenCalledWith("w1");
     });
+    await act(async () => {
+      await mockGetGitStatus.mock.results[0]?.value;
+    });
+
+    expect(screen.getByText("1 file selected for commit")).toBeTruthy();
   });
 
   it("toggles unstaged file selection and commits only the scoped file", async () => {

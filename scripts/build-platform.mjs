@@ -28,6 +28,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = join(__dirname, "..");
 const RELEASE_DIR = join(ROOT_DIR, "release-local");
 const TAURI_DIR = join(ROOT_DIR, "src-tauri");
+const BUILD_NPM_USERCONFIG = join(ROOT_DIR, ".npmrc.build-platform");
+const LEGACY_NPM_CONFIG_ENV_KEYS = [
+  "npm_config_electron_mirror",
+  "npm_config_electron-mirror",
+];
 
 // Configuration
 const CONFIG = {
@@ -105,13 +110,25 @@ export const buildPlatformInternals = {
 };
 
 // Execute command with logging
+function createChildProcessEnv(overrides = {}) {
+  const childEnv = { ...process.env, ...overrides };
+  childEnv.NPM_CONFIG_USERCONFIG = BUILD_NPM_USERCONFIG;
+  childEnv.npm_config_userconfig = BUILD_NPM_USERCONFIG;
+  for (const key of LEGACY_NPM_CONFIG_ENV_KEYS) {
+    delete childEnv[key];
+  }
+  return childEnv;
+}
+
 function exec(cmd, options = {}) {
   console.log(`\n> ${cmd}\n`);
+  const { env, ignoreError, ...execOptions } = options;
   try {
     execSync(cmd, {
       stdio: "inherit",
       cwd: ROOT_DIR,
-      ...options,
+      env: createChildProcessEnv(env),
+      ...execOptions,
     });
     return true;
   } catch (error) {
@@ -126,7 +143,7 @@ function exec(cmd, options = {}) {
       console.log("\n(Build completed - TAURI_SIGNING_PRIVATE_KEY warning only affects auto-updates)\n");
       return true;
     }
-    if (options.ignoreError) {
+    if (ignoreError) {
       return false;
     }
     throw error;

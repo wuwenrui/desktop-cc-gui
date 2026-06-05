@@ -53,11 +53,20 @@ export type ProjectMapSourceType =
   | "file"
   | "symbol"
   | "spec"
+  | "task"
+  | "document"
   | "commit"
   | "test"
   | "conversation";
 
-export type ProjectMapEvidencePriority = "code" | "spec" | "tests" | "commit" | "memory";
+export type ProjectMapEvidencePriority =
+  | "code"
+  | "spec"
+  | "task"
+  | "document"
+  | "tests"
+  | "commit"
+  | "memory";
 
 export type ProjectMapGeneratedBy = {
   engine: string;
@@ -134,6 +143,7 @@ export type ProjectMapNode = {
   sources: ProjectMapSource[];
   confidence: ProjectMapConfidence;
   stale: boolean;
+  staleReasons?: ProjectMapStaleReason[];
   candidate: boolean;
   lastGeneratedAt: string;
   generatedBy: ProjectMapGeneratedBy;
@@ -159,6 +169,28 @@ export type ProjectMapViewState = {
   layoutPreset: ProjectMapLayoutPreset;
   nodeLayouts: Record<string, ProjectMapNodeLayout>;
   updatedAt?: string;
+};
+
+export type ProjectMapTourPurpose =
+  | "onboarding"
+  | "architecture-review"
+  | "risk-review"
+  | "task-planning"
+  | string;
+
+export type ProjectMapTourStep = {
+  id: string;
+  purpose: ProjectMapTourPurpose;
+  title: string;
+  summary: string;
+  nodeIds: string[];
+  priority?: number;
+};
+
+export type ProjectMapTourMetadata = {
+  steps: ProjectMapTourStep[];
+  updatedAt?: string;
+  generatedBy?: ProjectMapGeneratedBy;
 };
 
 export type ProjectMapDetectedFramework = {
@@ -383,6 +415,10 @@ export type ProjectMapDataset = {
   profile: ProjectMapProfile;
   lenses: ProjectMapLens[];
   nodes: ProjectMapNode[];
+  relations?: ProjectMapRelation[];
+  tours?: ProjectMapTourMetadata;
+  refreshState?: ProjectMapRefreshSummary;
+  graphRepair?: ProjectMapGraphRepairSummary;
   viewState?: ProjectMapViewState;
   runs: ProjectMapRunMetadata[];
   candidates?: ProjectMapCandidate[];
@@ -390,4 +426,425 @@ export type ProjectMapDataset = {
   diagramDocuments?: ProjectMapDiagramDocument[];
   autoIngestionSettings: ProjectMapAutoIngestionSettings;
   memoryCursor: ProjectMapMemoryIngestionCursor;
+};
+
+export type ProjectMapRelationType =
+  | "contains"
+  | "depends_on"
+  | "calls"
+  | "configures"
+  | "documents"
+  | "tested_by"
+  | "implements"
+  | "specified_by"
+  | "validated_by"
+  | "changed_by"
+  | "generated_from"
+  | "serves"
+  | "triggers"
+  | "reads_from"
+  | "writes_to"
+  | "risk_affects"
+  | "evidence_for"
+  | "task_candidate_for"
+  | "related"
+  | string;
+
+export type ProjectMapRelationSourceKind =
+  | "deterministic"
+  | "spec-link"
+  | "task-link"
+  | "doc-link"
+  | "git-diff"
+  | "llm-inferred"
+  | "manual"
+  | string;
+
+export type ProjectMapRelation = {
+  id: string;
+  sourceNodeId: string;
+  targetNodeId: string;
+  type: ProjectMapRelationType;
+  direction: "forward" | "backward" | "bidirectional";
+  confidence: ProjectMapConfidence;
+  stale?: boolean;
+  weight?: number;
+  label?: string;
+  sourceKind: ProjectMapRelationSourceKind;
+  evidence: ProjectMapEvidenceRecord[];
+  generatedBy?: ProjectMapGeneratedBy;
+};
+
+export type ProjectMapContextRiskFlag = {
+  id: string;
+  severity: "info" | "warning" | "critical";
+  label: string;
+  nodeId?: string;
+};
+
+export type ProjectMapGovernanceArtifactKind = "spec" | "task" | "document";
+
+export type ProjectMapOpenSpecMetadata = {
+  capabilityId: string;
+  requirementTitle?: string;
+  scenarioTitle?: string;
+  changeId?: string;
+  path: string;
+  line?: number;
+  summary?: string;
+};
+
+export type ProjectMapTrellisTaskMetadata = {
+  taskId: string;
+  title: string;
+  status?: string;
+  path: string;
+  openspecChangeId?: string;
+  summary?: string;
+};
+
+export type ProjectMapGovernanceLink = {
+  id: string;
+  kind: ProjectMapGovernanceArtifactKind;
+  label: string;
+  path?: string;
+  line?: number;
+  ref?: string;
+  nodeId?: string;
+  relationId?: string;
+  relationType?: ProjectMapRelationType;
+  sourceKind: ProjectMapRelationSourceKind;
+  confidence: ProjectMapConfidence;
+  deterministic: boolean;
+};
+
+export type ProjectMapIgnoredPath = {
+  path: string;
+  reason: string;
+};
+
+export type ProjectMapIgnoreSummary = {
+  inputCount: number;
+  keptPaths: string[];
+  ignoredPaths: ProjectMapIgnoredPath[];
+};
+
+export type ProjectMapContextPack = {
+  id: string;
+  query?: string;
+  selectedNode: ProjectMapNode | null;
+  matchedNodes: ProjectMapNode[];
+  relatedNodes: ProjectMapNode[];
+  relations: ProjectMapRelation[];
+  evidenceSources: ProjectMapSource[];
+  evidenceRecords: ProjectMapEvidenceRecord[];
+  relatedArtifacts: ProjectMapRelatedArtifact[];
+  governanceEvidence: ProjectMapGovernanceLink[];
+  riskFlags: ProjectMapContextRiskFlag[];
+  ignored?: ProjectMapIgnoreSummary;
+};
+
+export type ProjectMapAgentTaskContext = {
+  contextPackId: string;
+  selectedNodeId: string | null;
+  nodeIds: string[];
+  relationIds: string[];
+  deterministicGovernanceEvidence: ProjectMapGovernanceLink[];
+  inferredGovernanceEvidence: ProjectMapGovernanceLink[];
+  evidenceSources: ProjectMapSource[];
+  riskFlags: ProjectMapContextRiskFlag[];
+};
+
+export type ProjectMapRefreshClassification =
+  | "skip"
+  | "partial-refresh"
+  | "architecture-refresh"
+  | "full-refresh-suggested";
+
+export type ProjectMapRefreshReasonKind =
+  | "ignored"
+  | "cosmetic"
+  | "source-changed"
+  | "spec-changed"
+  | "task-changed"
+  | "architecture-changed"
+  | "fingerprint-matched"
+  | "unknown";
+
+export type ProjectMapChangedFileFingerprint = {
+  path: string;
+  currentHash?: string | null;
+};
+
+export type ProjectMapStaleReason = {
+  id: string;
+  kind: ProjectMapRefreshReasonKind;
+  label: string;
+  path?: string;
+  nodeId?: string;
+  relationId?: string;
+  observedHash?: string | null;
+  currentHash?: string | null;
+  recommendation: ProjectMapRefreshClassification;
+};
+
+export type ProjectMapRefreshSummary = {
+  classification: ProjectMapRefreshClassification;
+  label: string;
+  changedPaths: string[];
+  ignoredPaths: ProjectMapIgnoredPath[];
+  staleReasons: ProjectMapStaleReason[];
+  evaluatedAt: string;
+};
+
+export type ProjectMapGraphIntegrityIssueKind =
+  | "duplicate-node-id"
+  | "missing-parent"
+  | "missing-child"
+  | "missing-relation-source"
+  | "missing-relation-target"
+  | "duplicate-relation-id"
+  | "missing-node-evidence"
+  | "stale-relation";
+
+export type ProjectMapGraphIntegrityIssue = {
+  id: string;
+  kind: ProjectMapGraphIntegrityIssueKind;
+  severity: "info" | "warning" | "critical";
+  label: string;
+  nodeId?: string;
+  relationId?: string;
+};
+
+export type ProjectMapGraphRepairActionKind =
+  | "remove-invalid-relation"
+  | "remove-missing-child-reference"
+  | "clear-missing-parent"
+  | "quarantine-evidence-gap";
+
+export type ProjectMapGraphRepairAction = {
+  id: string;
+  kind: ProjectMapGraphRepairActionKind;
+  label: string;
+  nodeId?: string;
+  relationId?: string;
+};
+
+export type ProjectMapGraphRepairSummary = {
+  issues: ProjectMapGraphIntegrityIssue[];
+  actions: ProjectMapGraphRepairAction[];
+  repairedAt?: string;
+};
+
+export type ProjectMapExplainPack = ProjectMapContextPack & {
+  focusNode: ProjectMapNode;
+  childNodes: ProjectMapNode[];
+  parentNode: ProjectMapNode | null;
+};
+
+export type ProjectMapImpactNode = {
+  node: ProjectMapNode;
+  reason: string;
+  relationIds: string[];
+};
+
+export type ProjectMapImpactRiskSummary = {
+  changedCount: number;
+  affectedCount: number;
+  staleCount: number;
+  lowConfidenceCount: number;
+  unmappedCount: number;
+  ignoredCount: number;
+};
+
+export type ProjectMapImpactResult = {
+  inputFiles: string[];
+  source?: ProjectMapImpactSourceMetadata;
+  changedNodes: ProjectMapImpactNode[];
+  affectedNodes: ProjectMapImpactNode[];
+  affectedLensIds: string[];
+  unmappedFiles: string[];
+  ignored: ProjectMapIgnoreSummary;
+  riskSummary: ProjectMapImpactRiskSummary;
+};
+
+export type ProjectMapImpactSourceKind = "none" | "explicit" | "git-status" | "agent-patch";
+
+export type ProjectMapImpactSourceMetadata = {
+  kind: ProjectMapImpactSourceKind;
+  label: string;
+  fileCount: number;
+};
+
+export type ProjectMapActivityKind =
+  | "git-change"
+  | "project-map-run"
+  | "candidate"
+  | "stale"
+  | "evidence"
+  | "manual";
+
+export type ProjectMapActivitySourceCategory =
+  | "changed-files"
+  | "map-runs"
+  | "stale-state"
+  | "candidate-state"
+  | "evidence-state"
+  | "degraded";
+
+export type ProjectMapActivityItem = {
+  id: string;
+  kind: ProjectMapActivityKind;
+  sourceCategory: ProjectMapActivitySourceCategory;
+  title: string;
+  summary: string;
+  occurredAt: string;
+  nodeIds: string[];
+  relationIds: string[];
+  filePaths: string[];
+  lensIds: string[];
+  confidence: ProjectMapConfidence;
+  sourceRefs: ProjectMapSource[];
+  deterministic: boolean;
+  degraded?: boolean;
+};
+
+export type ProjectMapActivityGroup = {
+  id: ProjectMapActivitySourceCategory;
+  title: string;
+  items: ProjectMapActivityItem[];
+  degraded?: boolean;
+};
+
+export type ProjectMapActivityProjection = {
+  groups: ProjectMapActivityGroup[];
+  items: ProjectMapActivityItem[];
+  changedNodeIds: Set<string>;
+  affectedNodeIds: Set<string>;
+  relationIds: Set<string>;
+  filePaths: Set<string>;
+  degraded: boolean;
+};
+
+export type ProjectMapQueryGroup =
+  | "nodes"
+  | "evidence-files"
+  | "relations"
+  | "artifact-references"
+  | "stale-reasons"
+  | "activity";
+
+export type ProjectMapQueryResult = {
+  id: string;
+  group: ProjectMapQueryGroup;
+  title: string;
+  summary: string;
+  matchedFields: string[];
+  nodeIds: string[];
+  relationIds: string[];
+  filePaths: string[];
+  score: number;
+  preview?: string;
+  degraded?: boolean;
+};
+
+export type ProjectMapGroupedQueryResults = {
+  query: string;
+  groups: Array<{
+    group: ProjectMapQueryGroup;
+    title: string;
+    results: ProjectMapQueryResult[];
+    capped: boolean;
+    totalCount: number;
+  }>;
+  nodeIds: Set<string>;
+  relationIds: Set<string>;
+  filePaths: Set<string>;
+};
+
+export type ProjectMapAssociationExplanationReason = {
+  label: string;
+  relationId?: string;
+  sourceKind?: ProjectMapRelationSourceKind;
+  confidence: ProjectMapConfidence;
+  stale: boolean;
+  evidenceCount: number;
+  deterministic: boolean;
+  degraded?: boolean;
+};
+
+export type ProjectMapAssociationExplanation = {
+  sourceNodeId: string;
+  targetNodeId: string;
+  status: "idle" | "found" | "not-found";
+  steps: Array<{
+    nodeId: string;
+    title: string;
+    via: "hierarchy" | "relation" | "self";
+    relationId?: string;
+  }>;
+  reasons: ProjectMapAssociationExplanationReason[];
+};
+
+export type ProjectMapQuickFilterId =
+  | "changed"
+  | "affected"
+  | "stale"
+  | "candidate"
+  | "low-confidence"
+  | "inferred-relations";
+
+export type ProjectMapHighlightSource =
+  | "selected"
+  | "path"
+  | "search"
+  | "activity-changed"
+  | "activity-affected"
+  | "advisor"
+  | "filter"
+  | "base";
+
+export type ProjectMapHighlightItemState = {
+  id: string;
+  primary: ProjectMapHighlightSource;
+  sources: ProjectMapHighlightSource[];
+  priority: number;
+};
+
+export type ProjectMapHighlightProjection = {
+  selectedNodeIds: Set<string>;
+  selectedRelationIds: Set<string>;
+  pathNodeIds: Set<string>;
+  pathRelationIds: Set<string>;
+  searchNodeIds: Set<string>;
+  activityChangedNodeIds: Set<string>;
+  activityAffectedNodeIds: Set<string>;
+  advisorNodeIds: Set<string>;
+  advisorRelationIds: Set<string>;
+  filterNodeIds: Set<string>;
+  filterRelationIds: Set<string>;
+  baseNodeIds: Set<string>;
+  baseRelationIds: Set<string>;
+  nodeStates: Map<string, ProjectMapHighlightItemState>;
+  relationStates: Map<string, ProjectMapHighlightItemState>;
+};
+
+export type ProjectMapAdvisorKind =
+  | "diff-impact"
+  | "query-neighborhood"
+  | "node-explain"
+  | "guide-topology"
+  | "graph-health";
+
+export type ProjectMapAdvisorHint = {
+  id: string;
+  kind: ProjectMapAdvisorKind;
+  title: string;
+  summary: string;
+  nodeIds: string[];
+  relationIds: string[];
+  filePaths: string[];
+  severity?: "info" | "warning" | "risk";
+  deterministic: boolean;
+  degraded?: boolean;
 };

@@ -3,19 +3,19 @@
   "name": "show-codex-history-loading-state",
   "title": "Show Codex history loading state",
   "description": "",
-  "status": "planning",
+  "status": "completed",
   "dev_type": "frontend",
-  "scope": null,
+  "scope": "messages",
   "package": null,
   "priority": "P2",
   "creator": "chenxiangning",
   "assignee": "chenxiangning",
   "createdAt": "2026-04-24",
-  "completedAt": null,
+  "completedAt": "2026-06-05",
   "branch": null,
   "base_branch": "feature/v0.4.9",
   "worktree_path": null,
-  "current_phase": 0,
+  "current_phase": 6,
   "next_action": [
     {
       "phase": 1,
@@ -42,12 +42,17 @@
       "action": "record-session"
     }
   ],
-  "commit": null,
+  "commit": "b0e18b4fa1f87fb7079db1d93ce61971d0e5463a",
   "pr_url": null,
   "subtasks": [],
   "children": [],
   "parent": null,
-  "relatedFiles": [],
-  "notes": "",
+  "relatedFiles": [
+    "openspec/changes/archive/2026-06-05-show-codex-history-loading-state-continuity/",
+    "openspec/specs/conversation-realtime-history-parity/spec.md",
+    "src/features/messages/components/Messages.history-loading.test.tsx",
+    "src/features/threads/hooks/useThreads.sidebar-cache.test.tsx"
+  ],
+  "notes": "Implementation and OpenSpec archive were completed in commit b0e18b4fa1f87fb7079db1d93ce61971d0e5463a. Verified Codex history loading presentation-state coverage with Messages.history-loading and useThreads sidebar-cache regression tests, typecheck, and full OpenSpec validation.",
   "meta": {}
 }

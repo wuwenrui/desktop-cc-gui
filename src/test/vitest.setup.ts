@@ -326,8 +326,10 @@ vi.mock("react-i18next", () => ({
         "browserAgent.dock.noWorkspace":
           "Select a workspace before opening Browser Dock.",
         "browserAgent.dock.noPage":
-          "Open an allowed http/https page to render it here.",
-        "browserAgent.dock.rendering": "Rendering page in Browser Dock...",
+          "Open an allowed http/https page to launch the Browser Agent window.",
+        "browserAgent.dock.rendering": "Rendering page in Browser Agent window...",
+        "browserAgent.dock.windowOpened":
+          "The page is open in a separate Browser Agent window.",
         "browserAgent.dock.closePanel": "Close Browser Dock",
         "browserAgent.dock.close": "Close Browser Agent session",
         "browserAgent.dock.info": "Show Browser Agent details",
@@ -1126,6 +1128,11 @@ vi.mock("../services/clientStorage", () => {
     }),
     getClientStoreFullSync: vi.fn((store: string) => {
       return cache[store];
+    }),
+    resetClientStorageForTests: vi.fn(() => {
+      Object.keys(cache).forEach((store) => {
+        delete cache[store];
+      });
     }),
     writeClientStoreValue: vi.fn((store: string, key: string, value: unknown) => {
       if (!cache[store]) cache[store] = {};

@@ -115,3 +115,9 @@ Profile facts, adapter ids, evidence ids, source paths, and artifact paths MUST 
 - **WHEN** configuration or task files use CRLF on Windows and LF on Unix-like systems
 - **THEN** profile detection and evidence emission MUST produce equivalent semantic results
 
+### Requirement: Project Map freshness can surface as governance evidence
+Dynamic project governance evidence SHALL be able to include Project Map freshness and repair evidence when available.
+
+#### Scenario: Project Map freshness evidence exists
+- **WHEN** Project Map reports stale or repaired graph state
+- **THEN** governance evidence can surface the state without requiring automatic refresh

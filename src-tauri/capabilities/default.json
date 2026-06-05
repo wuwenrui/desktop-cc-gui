@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capability for the main window",
-  "windows": ["main", "about", "file-explorer", "file-explorer-*", "spec-hub"],
+  "windows": ["main", "about", "file-explorer", "file-explorer-*", "spec-hub", "browser-agent-window", "browser-agent-dock"],
   "permissions": [
     "core:default",
     "core:event:allow-emit-to",

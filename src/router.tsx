@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react";
 import { useWindowLabel } from "./features/layout/hooks/useWindowLabel";
 import { isDetachedFileExplorerWindowLabel } from "./features/files/detachedFileExplorer";
+import { isBrowserAgentDockWindowLabel } from "./features/browser-agent/browserAgentDockWindow";
 import { AppShell } from "./app-shell";
 
 const AboutView = lazy(() =>
@@ -24,6 +25,12 @@ const DetachedSpecHubWindow = lazy(() =>
 const ClientDocumentationWindow = lazy(() =>
   import("./features/client-documentation/components/ClientDocumentationWindow").then((module) => ({
     default: module.ClientDocumentationWindow,
+  })),
+);
+
+const DetachedBrowserAgentWindow = lazy(() =>
+  import("./features/browser-agent/components/DetachedBrowserAgentWindow").then((module) => ({
+    default: module.DetachedBrowserAgentWindow,
   })),
 );
 
@@ -54,6 +61,13 @@ export function AppRouter() {
     return (
       <Suspense fallback={null}>
         <ClientDocumentationWindow />
+      </Suspense>
+    );
+  }
+  if (isBrowserAgentDockWindowLabel(windowLabel)) {
+    return (
+      <Suspense fallback={null}>
+        <DetachedBrowserAgentWindow />
       </Suspense>
     );
   }

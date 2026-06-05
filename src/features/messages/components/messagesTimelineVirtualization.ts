@@ -1,13 +1,72 @@
 import type { Virtualizer } from "@tanstack/react-virtual";
+import type { ConversationItem } from "../../../types";
 import type { TimelineProjectionRow } from "./messagesTimelineProjection";
 
 export const TIMELINE_VIRTUALIZATION_MIN_ROWS = 200;
+export const TIMELINE_VIRTUALIZATION_MIN_RENDER_WEIGHT = 96;
 
 export function shouldVirtualizeTimelineRows(input: {
   isThinking: boolean;
   rowCount: number;
+  renderWeight?: number;
 }) {
+  const hasHighRenderDensity =
+    typeof input.renderWeight === "number" &&
+    input.renderWeight >= TIMELINE_VIRTUALIZATION_MIN_RENDER_WEIGHT &&
+    input.renderWeight > input.rowCount * 2;
+  if (hasHighRenderDensity) {
+    return true;
+  }
   return input.rowCount >= TIMELINE_VIRTUALIZATION_MIN_ROWS && !input.isThinking;
+}
+
+function estimateConversationItemRenderWeight(
+  item: ConversationItem,
+) {
+  if (item.kind === "message") {
+    const imageWeight = (item.images ?? []).reduce((total, image) => {
+      const inlineDataWeight = image.toLowerCase().startsWith("data:image/")
+        ? Math.min(160, Math.ceil(image.length / 32_768))
+        : 0;
+      return total + 28 + inlineDataWeight;
+    }, 0);
+    const deferredImageWeight = (item.deferredImages?.length ?? 0) * 18;
+    const textWeight = Math.min(24, Math.floor(item.text.length / 2_000));
+    return 1 + imageWeight + deferredImageWeight + textWeight;
+  }
+  if (item.kind === "generatedImage") {
+    const imageWeight = item.images.reduce((total, image) => {
+      const inlineDataWeight = image.src.toLowerCase().startsWith("data:image/")
+        ? Math.min(160, Math.ceil(image.src.length / 32_768))
+        : 0;
+      return total + 28 + inlineDataWeight;
+    }, 0);
+    return 24 + imageWeight;
+  }
+  if (item.kind === "reasoning") {
+    return 1 + Math.min(18, Math.floor((item.summary.length + item.content.length) / 2_000));
+  }
+  if (item.kind === "tool") {
+    return 1 + Math.min(16, Math.floor((item.output?.length ?? 0) / 2_000));
+  }
+  if (item.kind === "diff" || item.kind === "review") {
+    const textLength = item.kind === "diff" ? item.diff.length : item.text.length;
+    return 1 + Math.min(20, Math.floor(textLength / 2_000));
+  }
+  return 1;
+}
+
+export function estimateTimelineProjectionRenderWeight(row: TimelineProjectionRow) {
+  if (row.kind !== "entry") {
+    return row.kind === "bottomAnchor" ? 0 : 1;
+  }
+  if (row.entry.kind === "item") {
+    return estimateConversationItemRenderWeight(row.entry.item);
+  }
+  return row.entry.items.reduce(
+    (total, item) => total + estimateConversationItemRenderWeight(item),
+    0,
+  );
 }
 
 export function estimateTimelineProjectionRowSize(row: TimelineProjectionRow) {

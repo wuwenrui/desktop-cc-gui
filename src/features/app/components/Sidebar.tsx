@@ -65,9 +65,10 @@ import {
 import { normalizeVisibleThreadRootCount } from "../constants";
 import { getExitedSessionRowVisibility } from "../utils/exitedSessionRows";
 import {
-  WORKSPACE_SESSION_SYSTEM_AUTO_FOLDER_ID,
   buildWorkspaceSessionFolderMoveTargets,
-  buildWorkspaceSessionFolderProjection,
+  getCachedWorkspaceSessionFolderWorkspaceProjection,
+  type WorkspaceSessionFolderWorkspaceProjection,
+  type WorkspaceSessionFolderWorkspaceProjectionCacheEntry,
 } from "../utils/workspaceSessionFolders";
 import {
   assignWorkspaceSessionFolders,
@@ -104,6 +105,8 @@ type ThreadFolderMovePickerState = {
 };
 
 const SESSION_FOLDER_COLLAPSED_STATE_KEY = "workspaceSessionFolders.collapsedByWorkspaceId";
+const EMPTY_SESSION_FOLDERS: WorkspaceSessionFolder[] = [];
+const EMPTY_SESSION_FOLDER_OVERRIDES: Record<string, string | null | undefined> = {};
 
 function readPersistedCollapsedSessionFolderIds(): Record<string, string[]> {
   const stored = getClientStoreSync<Record<string, unknown>>(
@@ -594,6 +597,9 @@ export function Sidebar({
   const pendingSessionFolderAssignInFlightRef = useRef<Set<string>>(new Set());
   const [folderMovePicker, setFolderMovePicker] =
     useState<ThreadFolderMovePickerState | null>(null);
+  const sessionFolderProjectionCacheByWorkspaceIdRef = useRef(
+    new Map<string, WorkspaceSessionFolderWorkspaceProjectionCacheEntry>(),
+  );
   const [folderMovePickerQuery, setFolderMovePickerQuery] = useState("");
   const { isExitedSessionsHidden, toggleExitedSessionsHidden } =
     useExitedSessionVisibility();
@@ -1744,6 +1750,31 @@ export function Sidebar({
     return targetsByWorkspaceId;
   }, [sessionFoldersByWorkspaceId, t]);
 
+  const getWorkspaceSessionFolderProjection = useCallback(
+    (
+      workspaceId: string,
+      rows: WorkspaceThreadRows["unpinnedRows"],
+    ): WorkspaceSessionFolderWorkspaceProjection => {
+      const folders =
+        sessionFoldersByWorkspaceId[workspaceId] ?? EMPTY_SESSION_FOLDERS;
+      const folderOverrides =
+        sessionFolderOverrideByWorkspaceId[workspaceId] ??
+        EMPTY_SESSION_FOLDER_OVERRIDES;
+      const rootLabel = t("threads.moveToProjectRoot");
+      return getCachedWorkspaceSessionFolderWorkspaceProjection(
+        sessionFolderProjectionCacheByWorkspaceIdRef.current,
+        workspaceId,
+        {
+          folders,
+          rows,
+          folderOverrides,
+          rootLabel,
+        },
+      );
+    },
+    [sessionFolderOverrideByWorkspaceId, sessionFoldersByWorkspaceId, t],
+  );
+
   const renderWorkspaceEntry = useCallback((entry: WorkspaceInfo) => {
     const threads = threadsByWorkspace[entry.id] ?? [];
     const isCollapsed = entry.settings.sidebarCollapsed;
@@ -1785,53 +1816,14 @@ export function Sidebar({
         return !status?.isProcessing && !status?.isReviewing;
       },
     });
-    const sessionFolders = sessionFoldersByWorkspaceId[entry.id] ?? [];
+    const sessionFolders = sessionFoldersByWorkspaceId[entry.id] ?? EMPTY_SESSION_FOLDERS;
     const collapsedSessionFolderIds = new Set(
       collapsedSessionFolderIdsByWorkspaceId[entry.id] ?? [],
     );
     const rootFolderDraftRequestKey =
       rootSessionFolderDraftRequestByWorkspaceId[entry.id] ?? 0;
-    const folderOverrides = sessionFolderOverrideByWorkspaceId[entry.id] ?? {};
-    const folderIdBySessionId = new Map<string, string | null>();
-    unpinnedRows.forEach((row) => {
-      if (row.thread.autoSession?.visibility === "hidden") {
-        return;
-      }
-      if (row.thread.autoSession?.visibility === "system-auto") {
-        folderIdBySessionId.set(row.thread.id, WORKSPACE_SESSION_SYSTEM_AUTO_FOLDER_ID);
-        return;
-      }
-      if (Object.hasOwn(folderOverrides, row.thread.id)) {
-        const folderId = folderOverrides[row.thread.id]?.trim();
-        folderIdBySessionId.set(row.thread.id, folderId ? folderId : null);
-        return;
-      }
-      const folderId = row.thread.folderId?.trim();
-      if (folderId) {
-        folderIdBySessionId.set(row.thread.id, folderId);
-      }
-    });
-    const projectedRows = unpinnedRows.map((row) => {
-      if (!Object.hasOwn(folderOverrides, row.thread.id)) {
-        return row;
-      }
-      return {
-        ...row,
-        thread: {
-          ...row.thread,
-          folderId: folderOverrides[row.thread.id],
-        },
-      };
-    });
-    const folderProjection = buildWorkspaceSessionFolderProjection({
-      folders: sessionFolders,
-      rows: projectedRows,
-      folderIdBySessionId,
-    });
-    const folderMoveTargets = buildWorkspaceSessionFolderMoveTargets({
-      folders: sessionFolders,
-      rootLabel: t("threads.moveToProjectRoot"),
-    });
+    const { folderMoveTargets, folderProjection } =
+      getWorkspaceSessionFolderProjection(entry.id, unpinnedRows);
     const hasVisibleFolderTree =
       sessionFolders.length > 0 || folderProjection.rootRows.length > 0;
     const hasRootFolderDraftRequest = rootFolderDraftRequestKey > 0;
@@ -2014,6 +2006,7 @@ export function Sidebar({
     handleRenameSessionFolder,
     handleDeleteSessionFolder,
     handleToggleSessionFolderCollapsed,
+    getWorkspaceSessionFolderProjection,
     hasDegradedThreadList,
     isThreadAutoNaming,
     isThreadPinned,
@@ -2039,7 +2032,6 @@ export function Sidebar({
     sessionFolderErrorByWorkspaceId,
     sessionFoldersByWorkspaceId,
     rootSessionFolderDraftRequestByWorkspaceId,
-    sessionFolderOverrideByWorkspaceId,
     t,
     threadListCursorByWorkspace,
     threadListPagingByWorkspace,

@@ -13,6 +13,7 @@ vi.mock("../../../services/clientStorage", () => ({
 import {
   buildClearedThreadAliases,
   buildUpdatedThreadAliases,
+  collectCanonicalActiveThreadRebindings,
   loadThreadAliases,
   resolveCanonicalThreadAlias,
   saveThreadAliases,
@@ -124,5 +125,33 @@ describe("threadStorage aliases", () => {
     expect(aliases).toEqual({
       "thread-old": "thread-recovered",
     });
+  });
+
+  it("collects active thread map rebindings before lifecycle consumers use stale ids", () => {
+    const aliases = buildUpdatedThreadAliases(
+      {
+        "codex:old": "codex:middle",
+        "codex:middle": "codex:current",
+      },
+      "codex:current",
+      "codex:latest",
+    );
+
+    expect(
+      collectCanonicalActiveThreadRebindings(
+        {
+          "ws-codex": " codex:old ",
+          "ws-current": "codex:latest",
+          "ws-empty": null,
+        },
+        (threadId) => resolveCanonicalThreadAlias(aliases, threadId),
+      ),
+    ).toEqual([
+      {
+        workspaceId: "ws-codex",
+        threadId: "codex:old",
+        canonicalThreadId: "codex:latest",
+      },
+    ]);
   });
 });

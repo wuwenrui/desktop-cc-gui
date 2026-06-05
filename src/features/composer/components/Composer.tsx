@@ -596,34 +596,6 @@ export const Composer = memo(function Composer({
     selectedEngine === "claude" ||
     selectedEngine === "codex" ||
     selectedEngine === "gemini";
-  const { todoTotal, subagentTotal, fileChanges, commandTotal } =
-    useStatusPanelData(performanceScopedItems, {
-      isCodexEngine,
-      activeThreadId,
-      itemsByThread: threadItemsByThread,
-      threadParentById,
-      threadStatusById,
-    });
-  const hasStatusPanelActivity = useMemo(() => {
-    const hasLegacyActivity =
-      todoTotal > 0 ||
-      subagentTotal > 0 ||
-      fileChanges.length > 0 ||
-      isPlanMode ||
-      Boolean(plan);
-    if (isCodexEngine) {
-      return hasLegacyActivity || commandTotal > 0;
-    }
-    return hasLegacyActivity;
-  }, [
-    commandTotal,
-    fileChanges.length,
-    isCodexEngine,
-    isPlanMode,
-    plan,
-    subagentTotal,
-    todoTotal,
-  ]);
   const [text, setText] = useState(draftText);
   const [selectionStart, setSelectionStart] = useState<number | null>(null);
   const [selectedSkillNames, setSelectedSkillNames] = useState<string[]>([]);
@@ -645,8 +617,6 @@ export const Composer = memo(function Composer({
   const contextLedgerSessionKey = `${activeWorkspaceId ?? "__no_workspace__"}::${activeThreadId ?? "__no_thread__"}`;
   const onClearCodeAnnotationsRef = useRef(onClearCodeAnnotations);
   const [isComposerCollapsed, setIsComposerCollapsed] = useState(false);
-  const [statusPanelExpanded, setStatusPanelExpanded] = useState(hasStatusPanelActivity);
-  const previousStatusPanelActivityRef = useRef(hasStatusPanelActivity);
   const [dismissedActiveFileReference, setDismissedActiveFileReference] =
     useState<string | null>(null);
   const [openCodeProviderTone, _setOpenCodeProviderTone] = useState<"is-ok" | "is-runtime" | "is-fail">("is-fail");
@@ -659,6 +629,39 @@ export const Composer = memo(function Composer({
   const lastExpandedHeightRef = useRef(Math.max(textareaHeight, COMPOSER_EXPAND_HEIGHT));
   const composerInputInteractionTimerRef = useRef<number | null>(null);
   const [isComposerInputInteractionActive, setIsComposerInputInteractionActive] = useState(false);
+  const shouldDeferStatusSummary =
+    isProcessing && isComposerInputInteractionActive;
+  const { todoTotal, subagentTotal, fileChanges, commandTotal } =
+    useStatusPanelData(performanceScopedItems, {
+      isCodexEngine,
+      activeThreadId,
+      itemsByThread: threadItemsByThread,
+      threadParentById,
+      threadStatusById,
+      deferSummary: shouldDeferStatusSummary,
+    });
+  const hasStatusPanelActivity = useMemo(() => {
+    const hasLegacyActivity =
+      todoTotal > 0 ||
+      subagentTotal > 0 ||
+      fileChanges.length > 0 ||
+      isPlanMode ||
+      Boolean(plan);
+    if (isCodexEngine) {
+      return hasLegacyActivity || commandTotal > 0;
+    }
+    return hasLegacyActivity;
+  }, [
+    commandTotal,
+    fileChanges.length,
+    isCodexEngine,
+    isPlanMode,
+    plan,
+    subagentTotal,
+    todoTotal,
+  ]);
+  const [statusPanelExpanded, setStatusPanelExpanded] = useState(hasStatusPanelActivity);
+  const previousStatusPanelActivityRef = useRef(hasStatusPanelActivity);
   const internalRef = useRef<HTMLTextAreaElement | null>(null);
   const textareaRef = externalTextareaRef ?? internalRef;
   const chatInputRef = useRef<ChatInputBoxHandle>(null);

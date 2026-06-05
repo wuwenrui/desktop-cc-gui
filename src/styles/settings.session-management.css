@@ -51,6 +51,122 @@
   background: color-mix(in srgb, var(--surface-muted) 26%, transparent);
 }
 
+.settings-project-sessions-attribution-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--project-session-border) 72%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface-muted) 28%, transparent);
+}
+
+.settings-project-sessions-attribution-copy {
+  min-width: 0;
+}
+
+.settings-project-sessions-attribution-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.settings-project-sessions-attribution-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-default);
+}
+
+.settings-project-sessions-attribution-current {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid color-mix(in srgb, var(--project-session-accent-text) 46%, transparent);
+  border-radius: 999px;
+  padding: 2px 8px;
+  background: color-mix(in srgb, var(--project-session-accent) 12%, transparent);
+  color: color-mix(in srgb, var(--project-session-accent-text) 88%, var(--text-default));
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.settings-project-sessions-attribution-copy p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.settings-project-sessions-attribution-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.settings-project-sessions-attribution-toggle [role="radio"] {
+  height: auto;
+  min-height: 58px;
+  justify-content: flex-start;
+  gap: 9px;
+  padding: 9px 11px;
+  text-align: left;
+}
+
+.settings-project-sessions-attribution-toggle [role="radio"][aria-checked="true"] {
+  border-color: color-mix(in srgb, var(--project-session-accent-text) 68%, var(--project-session-border));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--project-session-accent-text) 34%, transparent),
+    0 10px 24px color-mix(in srgb, var(--project-session-accent) 12%, transparent);
+}
+
+.settings-project-sessions-attribution-radio {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  border: 2px solid currentColor;
+  border-radius: 999px;
+  opacity: 0.72;
+}
+
+.settings-project-sessions-attribution-toggle [role="radio"][aria-checked="true"]
+  .settings-project-sessions-attribution-radio {
+  opacity: 1;
+}
+
+.settings-project-sessions-attribution-toggle [role="radio"][aria-checked="true"]
+  .settings-project-sessions-attribution-radio::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: inherit;
+  background: currentColor;
+}
+
+.settings-project-sessions-attribution-option-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.25;
+}
+
+.settings-project-sessions-attribution-option-title {
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.settings-project-sessions-attribution-option-description {
+  max-width: 220px;
+  color: color-mix(in srgb, currentColor 72%, var(--text-muted));
+  font-size: 11px;
+  font-weight: 500;
+  white-space: normal;
+}
+
 .settings-project-sessions-shell {
   display: grid;
   grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
@@ -543,6 +659,20 @@
 
   .settings-project-sessions-header-actions {
     justify-content: space-between;
+  }
+
+  .settings-project-sessions-attribution-panel {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .settings-project-sessions-attribution-toggle {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .settings-project-sessions-attribution-toggle [role="radio"] {
+    flex: 1 1 220px;
   }
 
   .settings-project-sessions-filterbar {

@@ -1,6 +1,44 @@
 use super::*;
 
 impl ClaudeSession {
+    pub(super) fn summarize_user_input_response(result: &Value) -> (usize, usize, bool) {
+        let answer_count = result
+            .get("answers")
+            .and_then(|answers| answers.as_object())
+            .map(|answers| answers.len())
+            .unwrap_or(0);
+        let non_empty_answer_count = result
+            .get("answers")
+            .and_then(|answers| answers.as_object())
+            .map(|answers| {
+                answers
+                    .values()
+                    .filter(|entry| {
+                        entry
+                            .get("answers")
+                            .and_then(|answers| answers.as_array())
+                            .map(|values| {
+                                values.iter().any(|value| {
+                                    value
+                                        .as_str()
+                                        .map(|text| !text.trim().is_empty())
+                                        .unwrap_or(false)
+                                })
+                            })
+                            .unwrap_or(false)
+                    })
+                    .count()
+            })
+            .unwrap_or(0);
+        let has_skipped_questions = result
+            .get("skippedQuestionIds")
+            .or_else(|| result.get("skipped_question_ids"))
+            .and_then(|value| value.as_array())
+            .map(|values| !values.is_empty())
+            .unwrap_or(false);
+        (answer_count, non_empty_answer_count, has_skipped_questions)
+    }
+
     async fn stop_child_after_resume_failure(
         &self,
         turn_id: &str,
@@ -16,6 +54,28 @@ impl ClaudeSession {
             );
         }
         message
+    }
+
+    async fn terminate_active_child_for_resume_failure(
+        &self,
+        turn_id: &str,
+        context: &str,
+    ) -> Result<(), String> {
+        let mut existing_child = {
+            let mut active = self.active_processes.lock().await;
+            active.remove(turn_id)
+        };
+        if let Some(mut child) = existing_child.take() {
+            self.terminate_child_process(turn_id, &mut child)
+                .await
+                .map_err(|error| {
+                    format!(
+                        "{}; additionally failed to terminate active Claude process: {}",
+                        context, error
+                    )
+                })?;
+        }
+        Ok(())
     }
 
     fn get_or_create_user_input_notify(&self, turn_id: &str) -> Arc<Notify> {
@@ -54,6 +114,15 @@ impl ClaudeSession {
         }
         if let Ok(mut answers) = self.user_input_answer_by_turn.lock() {
             answers.remove(turn_id);
+        }
+        if let Ok(mut request_ids) = self.user_input_request_id_by_turn.lock() {
+            request_ids.remove(turn_id);
+        }
+        if let Ok(mut diagnostics) = self.pending_user_input_resume_diagnostic_by_turn.lock() {
+            diagnostics.remove(turn_id);
+        }
+        if let Ok(mut thread_ids) = self.thread_id_by_turn.lock() {
+            thread_ids.remove(turn_id);
         }
         if let Ok(mut notifies) = self.approval_notify_by_turn.lock() {
             notifies.remove(turn_id);
@@ -415,16 +484,39 @@ impl ClaudeSession {
             Some(a) => a,
             None => return Ok(None),
         };
+        let resume_request_id = self.take_user_input_request_id_for_turn(turn_id);
+
+        let (resume_bin, resume_wrapper_kind) = self.cli_binary_diagnostics();
+        log::info!(
+            "Claude engine: AskUserQuestion resume checkpoint (turn_id={}, wrapper_kind={}, bin={})",
+            turn_id,
+            resume_wrapper_kind,
+            resume_bin
+        );
 
         // We need a session_id for --resume
         let sid = match new_session_id.clone() {
             Some(s) => s,
             None => {
-                log::warn!(
-                    "No session_id available for --resume, \
-                     continuing with original output"
+                let mut error = format!(
+                    "AskUserQuestion answer accepted but no Claude session_id is available for --resume (turn_id={}, wrapper_kind={}, bin={})",
+                    turn_id,
+                    resume_wrapper_kind,
+                    resume_bin
                 );
-                return Ok(None);
+                if let Err(termination_error) = self
+                    .terminate_active_child_for_resume_failure(turn_id, &error)
+                    .await
+                {
+                    error = termination_error;
+                }
+                self.emit_ask_user_question_resume_diagnostic(
+                    turn_id,
+                    resume_request_id.clone(),
+                    false,
+                    Some(error.clone()),
+                );
+                return Err(error);
             }
         };
 
@@ -439,13 +531,34 @@ impl ClaudeSession {
             let mut active = self.active_processes.lock().await;
             active.remove(turn_id)
         };
+        let parent_pid = existing_child
+            .as_ref()
+            .and_then(|child| child.id())
+            .map(|pid| pid.to_string())
+            .unwrap_or_else(|| "none".to_string());
+        log::info!(
+            "Claude engine: terminating AskUserQuestion parent before resume (turn_id={}, parent_pid={}, wrapper_kind={})",
+            turn_id,
+            parent_pid,
+            resume_wrapper_kind
+        );
         if let Some(mut child) = existing_child.take() {
             if let Err(error) = self.terminate_child_process(turn_id, &mut child).await {
-                log::debug!(
-                    "[claude] Failed to terminate AskUserQuestion parent process (turn={}): {}",
+                let failure = format!(
+                    "Failed to terminate AskUserQuestion parent process before resume (turn_id={}, parent_pid={}, wrapper_kind={}, bin={}): {}",
                     turn_id,
+                    parent_pid,
+                    resume_wrapper_kind,
+                    resume_bin,
                     error
                 );
+                self.emit_ask_user_question_resume_diagnostic(
+                    turn_id,
+                    resume_request_id.clone(),
+                    false,
+                    Some(failure.clone()),
+                );
+                return Err(failure);
             }
         }
 
@@ -456,9 +569,15 @@ impl ClaudeSession {
         resume_params.session_id = Some(sid);
         resume_params.images = None;
         if self.is_disposed() {
-            return Err(
-                "Claude session disposed; refusing AskUserQuestion resume spawn".to_string(),
+            let error =
+                "Claude session disposed; refusing AskUserQuestion resume spawn".to_string();
+            self.emit_ask_user_question_resume_diagnostic(
+                turn_id,
+                resume_request_id.clone(),
+                false,
+                Some(error.clone()),
             );
+            return Err(error);
         }
         let use_stream_json_input = Self::should_use_stream_json_input(&resume_params);
 
@@ -482,6 +601,12 @@ impl ClaudeSession {
                                         ),
                                     )
                                     .await;
+                                self.emit_ask_user_question_resume_diagnostic(
+                                    turn_id,
+                                    resume_request_id.clone(),
+                                    false,
+                                    Some(failure.clone()),
+                                );
                                 return Err(failure);
                             }
                         };
@@ -498,6 +623,12 @@ impl ClaudeSession {
                                         ),
                                     )
                                     .await;
+                                self.emit_ask_user_question_resume_diagnostic(
+                                    turn_id,
+                                    resume_request_id.clone(),
+                                    false,
+                                    Some(failure.clone()),
+                                );
                                 return Err(failure);
                             }
                         };
@@ -512,6 +643,12 @@ impl ClaudeSession {
                                     ),
                                 )
                                 .await;
+                            self.emit_ask_user_question_resume_diagnostic(
+                                turn_id,
+                                resume_request_id.clone(),
+                                false,
+                                Some(failure.clone()),
+                            );
                             return Err(failure);
                         }
                         if let Err(error) = stdin.write_all(b"\n").await {
@@ -525,6 +662,12 @@ impl ClaudeSession {
                                     ),
                                 )
                                 .await;
+                            self.emit_ask_user_question_resume_diagnostic(
+                                turn_id,
+                                resume_request_id.clone(),
+                                false,
+                                Some(failure.clone()),
+                            );
                             return Err(failure);
                         }
                         drop(stdin);
@@ -536,6 +679,12 @@ impl ClaudeSession {
                                 "Resume process missing stdin in stream-json mode".to_string(),
                             )
                             .await;
+                        self.emit_ask_user_question_resume_diagnostic(
+                            turn_id,
+                            resume_request_id.clone(),
+                            false,
+                            Some(failure.clone()),
+                        );
                         return Err(failure);
                     }
                 } else {
@@ -543,10 +692,25 @@ impl ClaudeSession {
                     drop(new_child.stdin.take());
                 }
 
-                let new_lines = new_child
-                    .stdout
-                    .take()
-                    .map(|stdout| BufReader::new(stdout).lines());
+                let new_lines = match new_child.stdout.take() {
+                    Some(stdout) => BufReader::new(stdout).lines(),
+                    None => {
+                        let failure = self
+                            .stop_child_after_resume_failure(
+                                turn_id,
+                                new_child,
+                                "AskUserQuestion resume process missing stdout".to_string(),
+                            )
+                            .await;
+                        self.emit_ask_user_question_resume_diagnostic(
+                            turn_id,
+                            resume_request_id.clone(),
+                            false,
+                            Some(failure.clone()),
+                        );
+                        return Err(failure);
+                    }
+                };
 
                 // Capture stderr of new process
                 // (old stderr task will finish on its own)
@@ -570,19 +734,46 @@ impl ClaudeSession {
                 }
                 if let Some(mut child) = spawned_child.take() {
                     let _ = self.terminate_child_process(turn_id, &mut child).await;
-                    return Err(
+                    let error =
                         "Claude session disposed during AskUserQuestion resume; terminated pending child process"
-                            .to_string(),
+                            .to_string();
+                    self.emit_ask_user_question_resume_diagnostic(
+                        turn_id,
+                        resume_request_id.clone(),
+                        false,
+                        Some(error.clone()),
                     );
+                    return Err(error);
                 }
 
-                log::info!("Resumed Claude with user's answer");
-                Ok(new_lines)
+                log::info!(
+                    "Resumed Claude with AskUserQuestion answer (turn_id={}, wrapper_kind={}, bin={})",
+                    turn_id,
+                    resume_wrapper_kind,
+                    resume_bin
+                );
+                self.remember_pending_ask_user_question_resume_diagnostic(
+                    turn_id,
+                    resume_request_id.clone(),
+                );
+                Ok(Some(new_lines))
             }
-            Err(e) => Err(format!(
-                "Failed to spawn AskUserQuestion resume process: {}",
-                e
-            )),
+            Err(e) => {
+                let error = format!(
+                    "Failed to spawn AskUserQuestion resume process (turn_id={}, wrapper_kind={}, bin={}): {}",
+                    turn_id,
+                    resume_wrapper_kind,
+                    resume_bin,
+                    e
+                );
+                self.emit_ask_user_question_resume_diagnostic(
+                    turn_id,
+                    resume_request_id.clone(),
+                    false,
+                    Some(error.clone()),
+                );
+                Err(error)
+            }
         }
     }
 
@@ -617,14 +808,21 @@ impl ClaudeSession {
 
         // Format the answer and store it for the target turn only.
         let answer_text = format_ask_user_answer(&result);
+        let (answer_count, non_empty_answer_count, has_skipped_questions) =
+            Self::summarize_user_input_response(&result);
         log::info!(
-            "Claude engine: AskUserQuestion response (request_id={}, turn_id={}): {}",
+            "Claude engine: AskUserQuestion response accepted (request_id={}, turn_id={}, answer_count={}, non_empty_answer_count={}, has_skipped_questions={})",
             request_id_key,
             turn_id,
-            answer_text
+            answer_count,
+            non_empty_answer_count,
+            has_skipped_questions
         );
         if let Ok(mut map) = self.user_input_answer_by_turn.lock() {
             map.insert(turn_id.clone(), answer_text);
+        }
+        if let Ok(mut map) = self.user_input_request_id_by_turn.lock() {
+            map.insert(turn_id.clone(), request_id_key);
         }
 
         // Signal only the matching turn's stdout loop to resume.

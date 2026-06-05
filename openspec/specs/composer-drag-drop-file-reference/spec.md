@@ -39,6 +39,25 @@ The system SHALL accept drag-drop of files and folders from external file manage
 - **THEN** system SHALL insert the absolute folder path as a file reference token
 - **AND** Composer input SHALL remain editable and submittable after insertion
 
+#### Scenario: Drag external file while Browser Dock child WebView exists
+- **GIVEN** the client has one or more native child WebViews mounted, such as Browser Agent renderer WebViews
+- **WHEN** an external file-system drag-drop event is captured by a child WebView instead of the main application WebView
+- **THEN** the system SHALL forward the file paths to the main Composer drag-drop service
+- **AND** Composer SHALL preserve the same insert-or-ignore target boundary as a main WebView drop
+- **AND** the child WebView MUST NOT silently consume the external file or folder drop
+
+#### Scenario: Main WebView drop remains forwarded
+- **WHEN** an external file-system drag-drop event is captured by the main application WebView
+- **THEN** the backend WebView drag-drop bridge SHALL still forward the payload to the main Composer drag-drop service
+- **AND** the frontend service SHALL deduplicate duplicate `drop` payloads if the same event also arrives through the native window listener
+- **AND** the backend MUST NOT skip forwarding solely because `webview.label() == "main"`
+
+#### Scenario: Drag external folder while Browser Dock child WebView exists
+- **GIVEN** Browser Dock is open in the main workspace surface
+- **WHEN** user drags a folder from Finder, Windows Explorer, or a Linux file manager into Composer input area
+- **THEN** Composer SHALL insert the absolute folder path as a single folder reference token
+- **AND** Browser Dock WebView routing, navigation policy, or renderer lifecycle SHALL NOT block the Composer drop contract
+
 ### Requirement: Drag-Drop Reference Insertion SHALL Reuse Existing Mention Pipeline
 The system SHALL reuse the existing file-reference insertion pipeline so that drag-drop and `+` insertion produce consistent token/render/update semantics.
 
@@ -92,7 +111,7 @@ The system SHALL render drag-hover overlay feedback when drag source is potentia
 - **AND** overlay visibility SHALL NOT depend on one-time-only event ordering
 
 ### Requirement: Win/macOS Compatibility SHALL Be Deterministic For Drag-Drop Paths
-The system SHALL normalize drag-drop paths for Win/macOS differences before reference insertion and SHALL keep insertion behavior stable across both platforms.
+The system SHALL normalize drag-drop paths for Win/macOS/Linux differences before reference insertion and SHALL keep insertion behavior stable across supported desktop platforms.
 
 #### Scenario: Windows path normalization and matching
 - **WHEN** dropped path uses Windows style separators or drive-letter casing variants
@@ -104,3 +123,7 @@ The system SHALL normalize drag-drop paths for Win/macOS differences before refe
 - **THEN** system SHALL insert a valid absolute-path reference token
 - **AND** paths containing spaces SHALL remain intact after insertion
 
+#### Scenario: Linux external drag path remains insertable
+- **WHEN** user drags file or folder from a Linux file manager into Composer input area under the supported WebKitGTK runtime
+- **THEN** system SHALL insert a valid absolute-path reference token
+- **AND** Linux native window opacity support SHALL NOT be required for drag-drop insertion

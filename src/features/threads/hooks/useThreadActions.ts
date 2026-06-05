@@ -125,6 +125,7 @@ export function useThreadActions({
   clearThreadAlias,
   resolveWorkspacePath,
   useUnifiedHistoryLoader = false,
+  sessionAttributionMode = "related",
 }: UseThreadActionsOptions) {
   const { historyLoadingByThreadId, setThreadHistoryLoading } =
     useThreadHistoryLoadingState();
@@ -709,7 +710,7 @@ export function useThreadActions({
               [] as Awaited<ReturnType<typeof getOpenCodeSessionListService>>,
             );
         const projectCatalogSessionsPromise = canListWorkspaceSessions
-          ? loadActiveProjectCatalogSessions(workspace.id)
+          ? loadActiveProjectCatalogSessions(workspace.id, sessionAttributionMode)
           : Promise.resolve(null);
         const [claudeResult, opencodeResult, projectCatalogResult] =
           await Promise.allSettled([
@@ -1343,6 +1344,7 @@ export function useThreadActions({
       onThreadTitleMappingsLoaded,
       rememberLastGoodThreadSummariesByEngine,
       removeThreadFromCachedSummaries,
+      sessionAttributionMode,
       activeThreadIdByWorkspace,
       threadActivityRef,
       threadsByWorkspace,
@@ -1360,6 +1362,7 @@ export function useThreadActions({
     loadArchivedSessionMap,
     onDebug,
     onThreadTitleMappingsLoaded,
+    sessionAttributionMode,
     threadListCursorByWorkspace,
     threadsByWorkspace,
     workspacePathsByIdRef,

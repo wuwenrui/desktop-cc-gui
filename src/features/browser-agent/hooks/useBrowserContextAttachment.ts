@@ -7,6 +7,7 @@ import {
 } from "../utils";
 import {
   getActiveBrowserContext,
+  subscribeActiveBrowserContextBridge,
   subscribeActiveBrowserContext,
   type ActiveBrowserContextState,
 } from "../state/activeBrowserContext";
@@ -50,21 +51,52 @@ function reconcileAttachmentFreshness(
     return null;
   }
   const timedOut = isBrowserContextAttachmentStale(attachment);
-  const activeMismatch =
-    !activeContext ||
-    activeContext.browserSessionId !== attachment.browserSessionId ||
-    activeContext.session.normalizedUrl !== attachment.url ||
-    !activeContext.rendererBound;
+  const staleReasons = new Set(attachment.observation.staleReasons);
+  if (timedOut) {
+    staleReasons.add("ttl_expired");
+  }
+  if (!activeContext) {
+    staleReasons.add("browser_dock_closed");
+  } else {
+    if (activeContext.browserSessionId !== attachment.browserSessionId) {
+      staleReasons.add("active_tab_changed");
+    }
+    if (activeContext.workspaceId !== attachment.workspaceId) {
+      staleReasons.add("workspace_mismatch");
+    }
+    if (activeContext.session.normalizedUrl !== attachment.url) {
+      staleReasons.add("url_changed");
+    }
+    if ((activeContext.session.title ?? null) !== (attachment.title ?? null)) {
+      staleReasons.add("title_changed");
+    }
+    if (!activeContext.rendererBound) {
+      staleReasons.add("renderer_mismatch");
+    }
+    if (activeContext.session.status === "closed") {
+      staleReasons.add("session_closed");
+    }
+  }
+  const activeMismatch = staleReasons.size > attachment.observation.staleReasons.length;
   if (!timedOut && !activeMismatch) {
     return attachment;
   }
-  if (attachment.stale && attachment.freshness === "stale") {
+  if (
+    attachment.stale &&
+    attachment.freshness === "stale" &&
+    staleReasons.size === attachment.observation.staleReasons.length
+  ) {
     return attachment;
   }
   return {
     ...attachment,
     stale: true,
     freshness: "stale",
+    observation: {
+      ...attachment.observation,
+      state: timedOut ? "expired" : "stale",
+      staleReasons: Array.from(staleReasons),
+    },
   };
 }
 
@@ -86,6 +118,8 @@ export function useBrowserContextAttachment(
       }),
     [],
   );
+
+  useEffect(() => subscribeActiveBrowserContextBridge(), []);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -118,6 +152,25 @@ export function useBrowserContextAttachment(
     }
   }, [busy, capture]);
 
+  const attachBrowserSession = useCallback(
+    async (browserSessionId: string) => {
+      if (busy) {
+        return;
+      }
+      setBusy(true);
+      setError(null);
+      try {
+        const snapshot = await captureBrowserAgentSnapshot(browserSessionId);
+        setAttachment(buildBrowserContextAttachment(snapshot));
+      } catch (captureError) {
+        setError(normalizeError(captureError));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [busy],
+  );
+
   useEffect(
     () =>
       subscribeBrowserContextAttachmentRequests((request) => {
@@ -126,9 +179,14 @@ export function useBrowserContextAttachment(
         if (requestedWorkspaceId && requestedWorkspaceId !== currentWorkspaceId) {
           return;
         }
+        const requestedBrowserSessionId = request.browserSessionId?.trim();
+        if (requestedBrowserSessionId) {
+          void attachBrowserSession(requestedBrowserSessionId);
+          return;
+        }
         void attach();
       }),
-    [attach, workspaceId],
+    [attach, attachBrowserSession, workspaceId],
   );
 
   const refresh = useCallback(async () => {

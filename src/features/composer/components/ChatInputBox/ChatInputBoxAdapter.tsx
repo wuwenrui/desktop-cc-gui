@@ -156,6 +156,110 @@ function areStringArraysEqual(
   return true;
 }
 
+function areContextSelectionChipsEqual(
+  left: readonly ContextSelectionChip[] | undefined,
+  right: readonly ContextSelectionChip[] | undefined,
+): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right || left.length !== right.length) {
+    return false;
+  }
+  for (let index = 0; index < left.length; index += 1) {
+    const leftChip = left[index];
+    const rightChip = right[index];
+    if (
+      leftChip?.type !== rightChip?.type ||
+      leftChip?.name !== rightChip?.name ||
+      leftChip?.description !== rightChip?.description ||
+      leftChip?.path !== rightChip?.path ||
+      leftChip?.source !== rightChip?.source
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function areQueuedMessagesEqual(
+  left: readonly ComposerQueuedMessage[] | undefined,
+  right: readonly ComposerQueuedMessage[] | undefined,
+): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right || left.length !== right.length) {
+    return false;
+  }
+  for (let index = 0; index < left.length; index += 1) {
+    const leftMessage = left[index];
+    const rightMessage = right[index];
+    if (
+      leftMessage?.id !== rightMessage?.id ||
+      leftMessage?.text !== rightMessage?.text ||
+      leftMessage?.createdAt !== rightMessage?.createdAt
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function areCustomCommandsEqual(
+  left: readonly CustomCommandOption[] | undefined,
+  right: readonly CustomCommandOption[] | undefined,
+): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right || left.length !== right.length) {
+    return false;
+  }
+  for (let index = 0; index < left.length; index += 1) {
+    const leftCommand = left[index];
+    const rightCommand = right[index];
+    if (
+      leftCommand?.name !== rightCommand?.name ||
+      leftCommand?.path !== rightCommand?.path ||
+      leftCommand?.description !== rightCommand?.description ||
+      leftCommand?.argumentHint !== rightCommand?.argumentHint ||
+      leftCommand?.content !== rightCommand?.content ||
+      leftCommand?.source !== rightCommand?.source
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function areCustomPromptsEqual(
+  left: readonly CustomPromptOption[] | undefined,
+  right: readonly CustomPromptOption[] | undefined,
+): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right || left.length !== right.length) {
+    return false;
+  }
+  for (let index = 0; index < left.length; index += 1) {
+    const leftPrompt = left[index];
+    const rightPrompt = right[index];
+    if (
+      leftPrompt?.name !== rightPrompt?.name ||
+      leftPrompt?.path !== rightPrompt?.path ||
+      leftPrompt?.description !== rightPrompt?.description ||
+      leftPrompt?.argumentHint !== rightPrompt?.argumentHint ||
+      leftPrompt?.content !== rightPrompt?.content ||
+      leftPrompt?.scope !== rightPrompt?.scope
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function areContextUsageEqual(
   left: ChatInputBoxAdapterProps['contextUsage'],
   right: ChatInputBoxAdapterProps['contextUsage'],
@@ -282,6 +386,30 @@ function areChatInputBoxAdapterPropsEqual(
     }
     if (propKey === 'accountRateLimits') {
       if (!areAccountRateLimitsEqual(previousProps.accountRateLimits, nextProps.accountRateLimits)) {
+        return false;
+      }
+      continue;
+    }
+    if (propKey === 'selectedContextChips') {
+      if (!areContextSelectionChipsEqual(previousProps.selectedContextChips, nextProps.selectedContextChips)) {
+        return false;
+      }
+      continue;
+    }
+    if (propKey === 'queuedMessages') {
+      if (!areQueuedMessagesEqual(previousProps.queuedMessages, nextProps.queuedMessages)) {
+        return false;
+      }
+      continue;
+    }
+    if (propKey === 'commands') {
+      if (!areCustomCommandsEqual(previousProps.commands, nextProps.commands)) {
+        return false;
+      }
+      continue;
+    }
+    if (propKey === 'prompts') {
+      if (!areCustomPromptsEqual(previousProps.prompts, nextProps.prompts)) {
         return false;
       }
       continue;

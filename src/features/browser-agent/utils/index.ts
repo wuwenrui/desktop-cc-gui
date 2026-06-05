@@ -1,6 +1,9 @@
 export {
+  buildBrowserObservation,
   buildBrowserContextAttachment,
+  deriveBrowserObservationStaleReasons,
   formatBrowserContextPrompt,
+  formatBrowserContextPromptOnce,
   isBrowserContextAttachmentStale,
   parseBrowserContextPrompt,
   stripBrowserContextPrompt,

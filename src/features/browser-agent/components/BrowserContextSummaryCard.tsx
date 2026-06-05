@@ -1,6 +1,11 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { BrowserContextAttachment, BrowserDiagnostic } from "../types";
+import {
+  buildBrowserEvidenceCopyText,
+  buildBrowserEvidenceViewModel,
+  type BrowserEvidenceViewModelSection,
+} from "../evidence";
 
 type BrowserContextSummaryDiagnostic = Pick<
   BrowserDiagnostic,
@@ -66,28 +71,6 @@ function hasDiagnostics(
   return Array.isArray(diagnostics) && diagnostics.length > 0;
 }
 
-function buildCopyableBrowserSummary(attachment: BrowserContextSummaryCardAttachment): string {
-  const lines = [
-    `Browser context: ${attachment.title || attachment.url}`,
-    `URL: ${attachment.url}`,
-    `Captured: ${new Date(attachment.capturedAt).toISOString()}`,
-    `State: ${attachment.stale ? "stale" : "available"}`,
-    `Page type: ${attachment.pageType ?? "unknown"}`,
-    "Primary content:",
-    attachment.primaryContent || attachment.visibleTextExcerpt || attachment.summary,
-  ];
-  const visualEvidence = attachment.visualEvidence ?? [];
-  if (visualEvidence.length > 0) {
-    lines.push(
-      "Visual clues:",
-      ...visualEvidence.map((item) =>
-        `- ${item.kind}: ${item.label}${item.altText ? `; alt=${item.altText}` : ""}`,
-      ),
-    );
-  }
-  return lines.filter(Boolean).join("\n");
-}
-
 export function BrowserContextSummaryCard({
   attachment,
 }: BrowserContextSummaryCardProps) {
@@ -95,6 +78,10 @@ export function BrowserContextSummaryCard({
   const [expanded, setExpanded] = useState(false);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const counts = attachment.elementCounts;
+  const evidenceViewModel = useMemo(
+    () => buildBrowserEvidenceViewModel(attachment),
+    [attachment],
+  );
   const diagnostics = attachment.diagnostics?.slice(0, 2) ?? [];
   const summary = useMemo(
     () =>
@@ -109,14 +96,17 @@ export function BrowserContextSummaryCard({
     counts ||
     attachment.privacy ||
     attachment.budget ||
+    evidenceViewModel.observationState !== "available" ||
     hasDiagnostics(attachment.diagnostics) ||
     attachment.readableBlocks?.length ||
     attachment.visualEvidence?.length ||
     attachment.codeCandidates?.length,
   );
-  const copyBrowserSummary = async () => {
+  const copyBrowserSummary = async (section?: BrowserEvidenceViewModelSection) => {
     try {
-      await navigator.clipboard.writeText(buildCopyableBrowserSummary(attachment));
+      await navigator.clipboard.writeText(
+        section?.copySafeText || buildBrowserEvidenceCopyText(evidenceViewModel),
+      );
       setCopyState("copied");
     } catch {
       setCopyState("failed");
@@ -129,10 +119,12 @@ export function BrowserContextSummaryCard({
         <div className="browser-context-summary-kicker">
           {t("messages.browserContextSummary")}
         </div>
-        <span className={`browser-context-summary-state ${attachment.stale ? "is-stale" : "is-available"}`}>
-          {attachment.stale
+        <span className={`browser-context-summary-state ${evidenceViewModel.observationState === "available" ? "is-available" : "is-stale"}`}>
+          {evidenceViewModel.observationState === "available"
+            ? t("messages.browserContextState.available")
+            : evidenceViewModel.observationState === "stale"
             ? t("messages.browserContextState.stale")
-            : t("messages.browserContextState.available")}
+            : evidenceViewModel.observationState}
         </span>
       </div>
       <div className="browser-context-summary-title-line" title={attachment.title ?? attachment.url}>
@@ -200,70 +192,70 @@ export function BrowserContextSummaryCard({
               })}
             </div>
           ) : null}
-          {attachment.primaryContent ? (
+          <section className="browser-context-summary-section">
+            <div className="browser-context-summary-section-title">
+              {evidenceViewModel.overview.title}
+            </div>
+            <button
+              type="button"
+              className="browser-context-summary-copy"
+              onClick={() => void copyBrowserSummary(evidenceViewModel.overview)}
+            >
+              {t("messages.browserContextCopySection", "Copy section")}
+            </button>
+            <p>{compactDetailText(evidenceViewModel.overview.copySafeText, 1_000)}</p>
+          </section>
+          {evidenceViewModel.primaryContent.items.length > 0 ? (
             <section className="browser-context-summary-section">
               <div className="browser-context-summary-section-title">
                 {t("messages.browserContextPrimaryContent")}
               </div>
-              <p>{compactDetailText(attachment.primaryContent, 1_200)}</p>
+              <p>{compactDetailText(evidenceViewModel.primaryContent.items[0] ?? "", 1_200)}</p>
             </section>
           ) : null}
-          {attachment.readableBlocks && attachment.readableBlocks.length > 0 ? (
+          {evidenceViewModel.readableBlocks.items.length > 0 ? (
             <section className="browser-context-summary-section">
               <div className="browser-context-summary-section-title">
                 {t("messages.browserContextReadableBlocks", {
-                  count: attachment.readableBlocks.length,
+                  count: evidenceViewModel.readableBlocks.items.length,
                 })}
               </div>
               <ol className="browser-context-summary-evidence-list">
-                {attachment.readableBlocks.slice(0, 8).map((block) => (
-                  <li key={block.blockId}>
-                    <span className="browser-context-summary-evidence-label">
-                      {block.role} · score {block.score}
-                    </span>
-                    <p>{compactDetailText(block.text)}</p>
+                {evidenceViewModel.readableBlocks.items.slice(0, 8).map((item, index) => (
+                  <li key={`readable-${index}`}>
+                    <p>{compactDetailText(item)}</p>
                   </li>
                 ))}
               </ol>
             </section>
           ) : null}
-          {attachment.visualEvidence && attachment.visualEvidence.length > 0 ? (
+          {evidenceViewModel.visualEvidence.items.length > 0 ? (
             <section className="browser-context-summary-section">
               <div className="browser-context-summary-section-title">
                 {t("messages.browserContextVisualEvidence", {
-                  count: attachment.visualEvidence.length,
+                  count: evidenceViewModel.visualEvidence.items.length,
                 })}
               </div>
               <ul className="browser-context-summary-evidence-list">
-                {attachment.visualEvidence.slice(0, 12).map((item) => (
-                  <li key={item.evidenceId}>
-                    <span className="browser-context-summary-evidence-label">
-                      {item.kind} · {item.label}
-                    </span>
-                    {item.altText ? <p>alt: {compactDetailText(item.altText, 260)}</p> : null}
-                    {item.nearbyText ? <p>{compactDetailText(item.nearbyText, 520)}</p> : null}
-                    {item.srcOrigin ? (
-                      <p className="browser-context-summary-evidence-origin">{item.srcOrigin}</p>
-                    ) : null}
+                {evidenceViewModel.visualEvidence.items.slice(0, 12).map((item, index) => (
+                  <li key={`visual-${index}`}>
+                    <p>{compactDetailText(item, 520)}</p>
                   </li>
                 ))}
               </ul>
             </section>
           ) : null}
-          {attachment.codeCandidates && attachment.codeCandidates.length > 0 ? (
+          {evidenceViewModel.codeCandidates.items.length > 0 ? (
             <section className="browser-context-summary-section">
               <div className="browser-context-summary-section-title">
                 {t("messages.browserContextCodeCandidateCount", {
-                  count: attachment.codeCandidates.length,
+                  count: evidenceViewModel.codeCandidates.items.length,
                 })}
               </div>
               <ul className="browser-context-summary-evidence-list">
-                {attachment.codeCandidates.map((candidate) => (
-                  <li key={candidate.candidateId}>
-                    <span className="browser-context-summary-evidence-label">
-                      {candidate.filePath}
-                    </span>
-                    <p>{candidate.reason} · {candidate.confidence}</p>
+                {evidenceViewModel.codeCandidates.items.map((item, index) => (
+                  <li key={`candidate-${index}`}>
+                    <p>{item}</p>
                   </li>
                 ))}
               </ul>

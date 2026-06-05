@@ -120,6 +120,7 @@ export {
   listBrowserAgentEvidence,
   listBrowserAgentSessions,
   mountBrowserAgentWebview,
+  openBrowserAgentWindow,
   refreshBrowserAgentSnapshot,
   routeBrowserAgentProvider,
   runBrowserAgentAction,
@@ -1665,8 +1666,55 @@ export async function trashWorkspaceItem(workspaceId: string, path: string): Pro
   return invoke("trash_workspace_item", { workspaceId, path });
 }
 
+export type WorkspaceFileItemKind = "file" | "folder";
+
+export type WorkspaceFileOperationResult = {
+  path: string;
+  kind: WorkspaceFileItemKind;
+};
+
 export async function copyWorkspaceItem(workspaceId: string, path: string): Promise<string> {
   return invoke("copy_workspace_item", { workspaceId, path });
+}
+
+export async function duplicateWorkspaceItem(workspaceId: string, path: string): Promise<WorkspaceFileOperationResult> {
+  return invoke<WorkspaceFileOperationResult>("duplicate_workspace_item", { workspaceId, path });
+}
+
+export async function pasteWorkspaceItem(
+  workspaceId: string,
+  sourcePath: string,
+  targetDirectory: string,
+): Promise<WorkspaceFileOperationResult> {
+  return invoke<WorkspaceFileOperationResult>("paste_workspace_item", {
+    workspaceId,
+    sourcePath,
+    targetDirectory,
+  });
+}
+
+export async function renameWorkspaceItem(
+  workspaceId: string,
+  path: string,
+  newName: string,
+): Promise<WorkspaceFileOperationResult> {
+  return invoke<WorkspaceFileOperationResult>("rename_workspace_item", {
+    workspaceId,
+    path,
+    newName,
+  });
+}
+
+export async function pasteExternalWorkspaceItems(
+  workspaceId: string,
+  sourcePaths: string[],
+  targetDirectory: string,
+): Promise<WorkspaceFileOperationResult[]> {
+  return invoke<WorkspaceFileOperationResult[]>("paste_external_workspace_items", {
+    workspaceId,
+    sourcePaths,
+    targetDirectory,
+  });
 }
 
 export async function configureDetachedExternalChangeMonitor(

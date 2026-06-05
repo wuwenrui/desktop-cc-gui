@@ -150,6 +150,60 @@ describe("rendererDiagnostics", () => {
     expect(persistedEntries.some((entry) => entry.payload.index === 1000 && entry.label === "perf.web-vital")).toBe(true);
   });
 
+  it("records content-safe client interaction performance diagnostics", async () => {
+    clientStorageMocks.isPreloaded.mockReturnValue(true);
+    clientStorageMocks.getClientStoreSync.mockReturnValue([]);
+    const diagnostics = await import("./rendererDiagnostics");
+
+    diagnostics.appendClientInteractionPerfDiagnostic({
+      area: "typing",
+      evidenceKind: "proxy",
+      workspaceId: "workspace-1",
+      threadId: "thread-1",
+      engine: "codex",
+      turnId: "turn-1",
+      inputEventCount: 50,
+      renderCount: 3,
+      commitDurationMs: 12.5,
+      longTaskCount: 0,
+      requestCount: 1,
+      foregroundLatencyMs: 16,
+      hydrationLatencyMs: 44,
+      notes: "prompt text and assistant text must not be included",
+      // @ts-expect-error content-bearing fields are intentionally rejected.
+      promptText: "secret prompt body",
+      assistantText: "secret assistant body",
+      toolOutput: "secret tool output",
+    });
+
+    const [, , persistedValue] =
+      clientStorageMocks.writeClientStoreValue.mock.calls[0] ?? [];
+    expect(Array.isArray(persistedValue)).toBe(true);
+    const [entry] = persistedValue as Array<{
+      label: string;
+      payload: Record<string, unknown>;
+    }>;
+    expect(entry.label).toBe("perf.client-interaction");
+    expect(entry.payload).toMatchObject({
+      area: "typing",
+      evidenceKind: "proxy",
+      workspaceId: "workspace-1",
+      threadId: "thread-1",
+      engine: "codex",
+      turnId: "turn-1",
+      inputEventCount: 50,
+      renderCount: 3,
+      commitDurationMs: 12.5,
+      longTaskCount: 0,
+      requestCount: 1,
+      foregroundLatencyMs: 16,
+      hydrationLatencyMs: 44,
+    });
+    expect(entry.payload).not.toHaveProperty("promptText");
+    expect(entry.payload).not.toHaveProperty("assistantText");
+    expect(entry.payload).not.toHaveProperty("toolOutput");
+  });
+
   it("falls back to an empty diagnostics list when persisted cache is malformed", async () => {
     clientStorageMocks.isPreloaded.mockReturnValue(true);
     clientStorageMocks.getClientStoreSync.mockReturnValue({ broken: true });

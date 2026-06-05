@@ -1,21 +1,21 @@
 {
   "schemaVersion": "1.0",
-  "generatedAt": "2026-05-20T01:00:38.178Z",
+  "generatedAt": "2026-06-04T15:35:24.231Z",
   "source": "cold-start",
   "metrics": [
     {
       "scenario": "S-CS-COLD",
       "metric": "bundleSizeMain",
-      "value": 1128218,
+      "value": 1284244,
       "unit": "bytes",
-      "notes": "App-GaIGSlNJ.js"
+      "notes": "App-CiaJ8_Ht.js"
     },
     {
       "scenario": "S-CS-COLD",
       "metric": "bundleSizeVendor",
-      "value": 672902,
+      "value": 672901,
       "unit": "bytes",
-      "notes": "vendor-mermaid-DpHPKkXo.js"
+      "notes": "vendor-mermaid-BczYtMM2.js"
     },
     {
       "scenario": "S-CS-COLD",

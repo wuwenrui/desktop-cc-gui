@@ -229,6 +229,7 @@ export type ReviewTarget =
 
 export type AccessMode = "default" | "read-only" | "current" | "full-access";
 export type BackendMode = "local" | "remote";
+export type WorkspaceSessionAttributionMode = "related" | "workspace-only";
 export type ThemeAppearance = "light" | "dark";
 export type ThemePreference = "system" | "light" | "dark" | "dim" | "custom";
 export type LightThemePresetId =
@@ -742,6 +743,7 @@ export type AppSettings = {
   terminalShellPath: string | null;
   geminiEnabled: boolean;
   opencodeEnabled: boolean;
+  sessionAttributionMode?: WorkspaceSessionAttributionMode;
   backendMode: BackendMode;
   remoteBackendHost: string;
   remoteBackendToken: string | null;
@@ -1007,6 +1009,16 @@ export type RuntimePoolSnapshot = {
     lastRuntimeEndAtMs?: number | null;
     lastRuntimeEndWorkspaceId?: string | null;
     lastRuntimeEndEngine?: string | null;
+    claudeAskUserQuestionResumeAttemptCount?: number;
+    claudeAskUserQuestionResumeSuccessCount?: number;
+    claudeAskUserQuestionResumeFailureCount?: number;
+    lastClaudeAskUserQuestionResumeAtMs?: number | null;
+    lastClaudeAskUserQuestionResumeWorkspaceId?: string | null;
+    lastClaudeAskUserQuestionResumeThreadId?: string | null;
+    lastClaudeAskUserQuestionResumeTurnId?: string | null;
+    lastClaudeAskUserQuestionResumeRequestId?: string | null;
+    lastClaudeAskUserQuestionResumeStatus?: string | null;
+    lastClaudeAskUserQuestionResumeError?: string | null;
   };
   engineObservability: RuntimeEngineObservability[];
 };
@@ -1848,6 +1860,25 @@ export type BrowserContextSendAttachment = {
     visible: boolean;
     sensitive: boolean;
   }>;
+  screenshotRefs?: Array<{
+    refId: string;
+    browserSessionId: string;
+    snapshotId: string;
+    capturedAt: number;
+    kind: "thumbnail_reference";
+    storage: "metadata_only" | "ephemeral_ref";
+    modelPayloadAllowed: boolean;
+  }>;
+  ocrTextSupplements?: Array<{
+    refId: string;
+    screenshotRefId: string;
+    text: string;
+    capturedAt: number;
+    charBudget: number;
+    truncated: boolean;
+    redactedKinds: string[];
+    modelPayloadAllowed: boolean;
+  }>;
   elementCounts?: {
     headings: number;
     links: number;
@@ -1857,6 +1888,7 @@ export type BrowserContextSendAttachment = {
     codeCandidates: number;
     readableBlocks?: number;
     visualEvidence?: number;
+    annotations?: number;
   };
   diagnostics?: Array<{
     diagnosticId: string;
@@ -1880,9 +1912,25 @@ export type BrowserContextSendAttachment = {
     candidateId: string;
     filePath: string;
     symbolName?: string | null;
-    reason: "route_match" | "visible_text_match" | "landmark_match" | "manual_hint";
+    reason:
+      | "route_match"
+      | "file_name_match"
+      | "visible_text_match"
+      | "heading_match"
+      | "button_label_match"
+      | "form_label_match"
+      | "aria_label_match"
+      | "test_id_match"
+      | "component_symbol_match"
+      | "manual_hint";
     confidence: "high" | "medium" | "low";
     matchedText?: string | null;
+    sourceEvidence?: string[];
+    explanation?: string;
+    openAction?: {
+      kind: "open_file";
+      filePath: string;
+    } | null;
   }>;
   privacy: {
     redactionApplied: boolean;

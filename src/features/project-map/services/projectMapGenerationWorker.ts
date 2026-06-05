@@ -91,6 +91,8 @@ const SUPPORTED_SOURCE_TYPES = new Set<ProjectMapSource["type"]>([
   "file",
   "symbol",
   "spec",
+  "task",
+  "document",
   "commit",
   "test",
   "conversation",

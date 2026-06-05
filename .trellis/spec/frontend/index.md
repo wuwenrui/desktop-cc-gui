@@ -18,6 +18,7 @@
 | [Computer Use Bridge](./computer-use-bridge.md) | Computer Use 状态面板、hook 与 bridge service contract | Active |
 | [Claude Context Usage Display](./claude-context-usage-display.md) | Claude context usage view model、tooltip layout、pending/estimated/live display contract | Active |
 | [Model Structured Output Contract](./model-structured-output.md) | AI model JSON / structured payload normalization、validator、bounded repair contract | Active |
+| [Desktop Drag-Drop Contract](./desktop-drag-drop.md) | Tauri multi-WebView 外部文件/文件夹拖入 Composer 的跨层事件契约 | Active |
 | [Hook Guidelines](./hook-guidelines.md) | hook 编排、async safety、bridge 调用约束 | Active |
 | [State Management](./state-management.md) | local/global/persistent/runtime state 边界 | Active |
 | [Quality Guidelines](./quality-guidelines.md) | 禁止项、必做项、review checklist | Active |
@@ -35,6 +36,7 @@
   - `../guides/code-reuse-thinking-guide.md`
 - 涉及 Claude 上下文用量窗体、`ThreadTokenUsage` 或 token indicator 时，额外读 [Claude Context Usage Display](./claude-context-usage-display.md)。
 - 涉及 AI model JSON、structured output、`Return pure JSON only` prompt、`JSON.parse(response.text)` 或模型输出 repair 时，额外读 [Model Structured Output Contract](./model-structured-output.md)。
+- 涉及 Tauri window/webview builder、Browser Agent child WebView、`src/services/dragDrop.ts` 或 Composer 外部文件/文件夹拖拽时，额外读 [Desktop Drag-Drop Contract](./desktop-drag-drop.md)。
 
 ## 项目事实基线（Project Facts）
 
