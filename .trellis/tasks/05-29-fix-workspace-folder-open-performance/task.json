@@ -4,8 +4,8 @@
   "title": "Fix workspace folder open performance",
   "description": "",
   "status": "completed",
-  "dev_type": null,
-  "scope": null,
+  "dev_type": "backend",
+  "scope": "workspace",
   "package": null,
   "priority": "P2",
   "creator": "chenxiangning",
@@ -42,12 +42,20 @@
       "action": "record-session"
     }
   ],
-  "commit": null,
+  "commit": "bb510fc7b9675cb91bc6fbb47e139802348ab17c",
   "pr_url": null,
   "subtasks": [],
   "children": [],
   "parent": null,
-  "relatedFiles": [],
-  "notes": "",
+  "relatedFiles": [
+    "openspec/changes/archive/2026-05-29-fix-workspace-folder-open-performance/",
+    "openspec/specs/workspace-filetree-progressive-scan-protocol/spec.md",
+    "openspec/specs/workspace-session-folder-tree/spec.md",
+    "src-tauri/src/workspaces/commands.rs",
+    "src-tauri/src/bin/cc_gui_daemon/file_access.rs",
+    "src-tauri/src/session_management.rs",
+    "src-tauri/src/shared/workspaces_core.rs"
+  ],
+  "notes": "Implementation and OpenSpec archive were completed in commit bb510fc7b9675cb91bc6fbb47e139802348ab17c. Archive tasks show workspace listing and directory-child scans moved behind blocking-task boundaries, daemon file-access listing parity, remote session-folder forwarding, non-macOS GUI open compatibility, focused Rust validation, and strict OpenSpec validation completed.",
   "meta": {}
 }

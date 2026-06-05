@@ -14,11 +14,11 @@ Improve perceived speed when opening a workspace folder and expanding folders, w
 
 ## Acceptance Criteria
 
-- [ ] Workspace file listing uses a blocking-task boundary for local desktop mode.
-- [ ] Directory child listing uses a blocking-task boundary for local desktop mode.
-- [ ] Daemon file listing paths use the same blocking-task boundary.
-- [ ] Session folder commands forward to daemon in remote backend mode.
-- [ ] OpenSpec validation passes.
+- [x] Workspace file listing uses a blocking-task boundary for local desktop mode.
+- [x] Directory child listing uses a blocking-task boundary for local desktop mode.
+- [x] Daemon file listing paths use the same blocking-task boundary.
+- [x] Session folder commands forward to daemon in remote backend mode.
+- [x] OpenSpec validation passes.
 
 ## Technical Notes
 
