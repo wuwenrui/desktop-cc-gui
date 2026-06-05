@@ -363,3 +363,95 @@
 - 产出文件：
 - 失败回退：
 - 验收标准：
+
+## Corrective Phase 13：File Relationship Explorer 重构修复（2026-06-05）
+
+### 中文导读
+
+本阶段来自真实项目 smoke test 反馈：原 Dashboard 虽然能扫描，但默认展示过于抽象，刷新可信度不足，i18n 不完整，并且没有围绕“文件链路 / 方法调用链 / evidence line”组织体验。
+本阶段目标是把关系视图从 `Relationship Dashboard` 校准为 `File Relationship Explorer`。
+
+- [x] Task 13C.1：修复 refresh scope 语义，`full refresh` 不再继续携带 partial stale scope，避免刷新后仍被旧 changed scope 误导。
+- [x] Task 13C.2：把 unmapped changed file 从 stale blocking reason 中拆为 `scan-scope-warning`，避免 ignored / out-of-scope 文件让 full refresh 看起来永远不生效。
+- [x] Task 13C.3：补全 relationship i18n 文案，中文采用中文 + English 专业词汇混合，避免界面英文裸露。
+- [x] Task 13C.4：重构默认 UI 为三栏 Explorer：左侧文件选择，中间 file/method chain，右侧 evidence inspector。
+- [x] Task 13C.5：把 Impact / Hotspot / Agent Read Plan 从默认主视觉降级，不再抢占文件链路阅读。
+- [x] Task 13C.6：增加通用 `calls` relation type，并优先展示 method/function call 关系。
+- [x] Task 13C.7：实现通用 lightweight symbol/call extractor，覆盖 Java、JS/TS/Vue/Svelte、Python、Go、C/C++、Rust 等语言的基础符号与调用证据，不把 Java 作为唯一中心。
+- [x] Task 13C.8：新增 symbols artifact 写入，为后续更强 method-level graph 和 chain reasoning 留出 mossx-native 扩展点。
+
+## Corrective Phase 13D：Chain-first Explorer 体验闭环（2026-06-05）
+
+### 中文导读
+
+用户重新扫描后确认：13C 虽然开始改名为 `File Relationship Explorer`，但默认体验仍容易停留在 Board/统计看板，刷新语义也会被 changed scope 误导。
+本阶段把验收标准进一步收紧为：扫描后默认进入 `Chain`，普通扫描必须是 full scan，主视图必须围绕文件链路、方法调用候选和 evidence inspector。
+
+- [x] Task 13D.1：修复普通 `Scan Relationships` 默认携带 `changedFilePaths` 的问题，普通按钮恢复为 full workspace scan；只有 stale suggestion 为 `partial` 时才携带 paths/changedFiles。
+- [x] Task 13D.2：扫描成功与读取最新 snapshot 后强制回到 `Chain` 主视图，避免旧 React UI state 继续停在 Board。
+- [x] Task 13D.3：调整视图切换顺序为 `Chain -> Board -> List`，明确 Board 是辅助节点看板，不是默认关系阅读入口。
+- [x] Task 13D.4：在 relation row 与 evidence inspector 中展示 `call candidate`，让 `calls` relation 至少暴露 method/function candidate，而不是只显示 file -> file。
+- [x] Task 13D.5：压缩 scan metrics 视觉权重，扩大三栏 Chain Explorer 的阅读空间，降低统计噪音。
+- [x] Task 13D.6：补充中英 i18n 文案，覆盖 Chain-first、Node Board、call candidate 等新 UI 语义。
+- [x] Task 13D.7：调整 Chain relation 排序为 `calls -> outgoing -> incoming -> other priority`，确保方法/函数调用链优先于 imports/docs/config 等辅助关系展示。
+- [x] Task 13D.8：将 Chain 列表升级为 `Calls / Outgoing / Incoming / Other` 分组阅读，减少混排噪音，让方法调用和文件依赖的阅读路径更清楚。
+
+## Corrective Phase 13E：UA-like Graph Dashboard 图形化闭环（2026-06-05）
+
+### 中文导读
+
+用户明确反馈：关系视图不应继续走 list-first / chain-first，期望更接近 Understand-Anything 的图形化 dashboard。
+本阶段将默认体验改为 `Graph-first`：文件是节点，关系是边，左侧文件导航辅助定位，右侧 Inspector 解释当前节点或边。
+13D 的 Chain 分组保留为辅助视图，但不再作为默认主体验。
+
+- [x] Task 13E.1：新增 `Graph 图谱` 视图并放到视图切换第一位，扫描成功与读取 latest snapshot 后默认进入 Graph。
+- [x] Task 13E.2：把 scan snapshot 投影为 mossx-native graph view model，不引入 UA schema，不改变 `project-map-relations` artifact。
+- [x] Task 13E.3：实现 UA-like 文件节点卡片：role color bar、type badge、basename、language/layer、in/out/all 统计、selected/neighbor/secondary 状态。
+- [x] Task 13E.4：实现关系边可视化：SVG edge、arrow marker、edge label、calls 高亮、选中边高亮。
+- [x] Task 13E.5：实现左侧文件导航 rail，点击文件后图谱聚焦该文件的一跳邻域。
+- [x] Task 13E.6：实现右侧 Relationship Inspector，选中边时展示 source/target/call candidate/evidence，未选边时展示选中文件摘要。
+- [x] Task 13E.7：保留 Board/List/Chain 作为辅助视图，Board 点击文件后回到 Graph，而不是继续进入 list-style Chain。
+- [x] Task 13E.8：补充 Graph-first 中英 i18n 文案。
+- [x] Task 13E.9：补充 proposal/design 中对 UA-like Graph Dashboard 的详细产品契约、复刻映射、验收标准和剩余 follow-up。
+- [x] Task 13E.10：补充 graph lane labels 与 relation legend，让图谱方向和边类型更接近 UA 的图形化阅读体验。
+- [x] Task 13E.11：补充 lightweight MiniMap，让图形化 dashboard 更接近 UA 的空间导航体验，同时不引入 ReactFlow 或 UA schema。
+- [x] Task 13E.12：实现高密度关系降噪，限制每侧可见邻居节点并用 `+N incoming/outgoing` 聚合节点表示被折叠关系，避免大项目图谱变成线团。
+
+## Corrective Phase 13F：Graph Fidelity / 图谱拟真度补强（2026-06-05）
+
+### 中文导读
+
+用户继续校准：当前关系视图需要更像 UA 的图形化 dashboard，而不是“节点边的静态截图”。
+本阶段把 graph 聚合点、legend、density control 做成可操作控件，让用户在图上完成探索，而不是频繁回到列表或下拉框。
+
+- [x] Task 13F.1：补充 proposal/design 对 `Graph Fidelity` 的产品契约，明确 aggregate node 与 relation legend 的交互语义。
+- [x] Task 13F.2：实现 aggregate node 展开/折叠，`+N incoming/outgoing` 可控制对应方向的 visible neighborhood density。
+- [x] Task 13F.3：实现 relation legend 过滤入口，点击 `All / calls / imports / tested_by` 直接复用现有 type filter。
+- [x] Task 13F.4：补齐 Graph Fidelity i18n 文案，中文保持中文 + English professional terms。
+- [x] Task 13F.5：补齐 Graph Fidelity CSS 状态，确保 aggregate control、legend active state、expanded hint 在视觉上清楚但不制造噪音。
+- [x] Task 13F.6：选中关系 edge 时高亮 source/target endpoint nodes，并同步到 lightweight MiniMap，形成 `edge -> nodes -> inspector` 的阅读闭环。
+
+## Corrective Phase 13G：Graph Workspace Layout / 图谱工作台布局（2026-06-05）
+
+### 中文导读
+
+用户确认 Graph-first 方向正确，但当前 UI 空间被辅助模块挤压，图谱看不全。
+本阶段补齐“图谱工作台”基本能力：模块折叠、自适应视口、视图内拖拽平移。
+
+- [x] Task 13G.1：补充 proposal/design 对 Graph Workspace Layout 的产品契约，明确 collapse、auto-fit、drag-to-pan 的边界。
+- [x] Task 13G.2：实现 File Tree 与 Inspector 模块折叠，折叠后 graph canvas 自动回收空间。
+- [x] Task 13G.3：实现 relationship graph canvas 的 presentation-only pan state，支持空白区域拖拽平移。
+- [x] Task 13G.4：实现 graph content responsive wrapper，让 logical graph 在可用空间内自适应展示。
+- [x] Task 13G.5：补齐 Graph Workspace Layout i18n 文案。
+- [x] Task 13G.6：补齐折叠、拖拽、自适应相关 CSS，减少视觉噪音并扩大图谱可读区域。
+- [x] Task 13G.7：将 graph layout controls 调整为单行 `icon + 文案` ghost action，避免按钮换行和视觉抢占。
+- [x] Task 13G.8：将 graph layout controls 从 canvas header 移到 Graph Dashboard 上方独立 toolbar，避免与标题、聚焦文案和画布内容重叠。
+- [x] Task 13G.9：将 Graph view switch row 与 layout controls 合并为同一视觉行，左侧切换视图、右侧控制 Files/Inspector/Reset，减少空白占位。
+- [x] Task 13G.10：为 scan status / explorer rule / search-filter chrome 增加折叠控制，折叠后保留 compact summary，进一步释放 Graph canvas 空间。
+- [x] Task 13G.11：将 Graph 视图下的 scan chrome 默认设为折叠 mini-header，并在 stale 时保留轻量 refresh 入口，确保释放画布空间但不隐藏关键恢复动作。
+- [x] Task 13G.12：扩大 relationship graph logical canvas 到 `1320x760`，让 dense project 节点有足够布局空间。
+- [x] Task 13G.13：重写 incoming/outgoing lane 的 Y 坐标计算，按 lane 可用高度分配节点间距，并把 aggregate node 放入底部保留区。
+- [x] Task 13G.14：收紧 expanded side visible limit，避免点击展开后立即出现节点重叠，剩余关系继续通过 `+N` aggregate 表达。
+- [x] Task 13G.15：强化 drag-to-pan：空白画布拖拽移动 graph stage，edge/node/legend/control click 不触发 pan，并增加 panning 视觉反馈。
+- [x] Task 13G.16：将 file search 提升到 Graph toolbar 常驻入口，并在搜索命中时自动聚焦首个匹配文件，修复“列表过滤但图谱不变”的体验问题。
+- [x] Task 13G.17：新增 Graph zoom in / zoom out / reset controls，使用 `auto-fit scale * user zoom` 模型，保留响应式自适应同时支持手动缩放。

@@ -151,6 +151,17 @@ struct ModuleSummary {
     relation_count: usize,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RelationshipSymbol {
+    id: String,
+    file_id: String,
+    name: String,
+    kind: String,
+    language: String,
+    line: usize,
+}
+
 fn sanitize_project_name(value: &str) -> String {
     let mut slug = String::new();
     for character in value.trim().chars() {
@@ -554,7 +565,8 @@ fn language_for_project_file(path: &str, extension: &str) -> &'static str {
         "cs" => "csharp",
         "php" => "php",
         "rb" => "ruby",
-        "c" | "cc" | "cpp" | "cxx" | "h" | "hpp" | "hh" => "cpp",
+        "c" => "c",
+        "cc" | "cpp" | "cxx" | "h" | "hpp" | "hh" => "cpp",
         "swift" => "swift",
         "dart" => "dart",
         "vue" => "vue",
@@ -926,7 +938,10 @@ fn resolve_relative_import(
     let raw = base.join(specifier);
     let mut candidates = Vec::new();
     candidates.push(raw.clone());
-    for extension in ["ts", "tsx", "js", "jsx", "mjs", "cjs", "json", "css", "rs"] {
+    for extension in [
+        "ts", "tsx", "js", "jsx", "mjs", "cjs", "json", "css", "rs", "vue",
+        "svelte", "py", "go", "java", "kt", "c", "cc", "cpp", "cxx", "h", "hpp",
+    ] {
         candidates.push(raw.with_extension(extension));
     }
     for index_file in [
@@ -934,6 +949,9 @@ fn resolve_relative_import(
         "index.tsx",
         "index.js",
         "index.jsx",
+        "index.vue",
+        "index.svelte",
+        "__init__.py",
         "mod.rs",
     ] {
         candidates.push(raw.join(index_file));
@@ -1022,6 +1040,297 @@ fn resolve_java_import(
     java_file_by_type: &HashMap<String, String>,
 ) -> Option<String> {
     java_file_by_type.get(import_name).cloned()
+}
+
+fn canonical_symbol_key(value: &str) -> String {
+    value
+        .chars()
+        .filter(|character| character.is_ascii_alphanumeric() || *character == '_')
+        .flat_map(|character| character.to_lowercase())
+        .collect()
+}
+
+fn symbol_name_after_keyword(line: &str, keyword: &str) -> Option<String> {
+    let (_, tail) = line.split_once(keyword)?;
+    let candidate = tail.trim_start_matches(|character: char| {
+        character.is_whitespace() || matches!(character, '*' | '&' | '<')
+    });
+    let name = candidate
+        .chars()
+        .take_while(|character| character.is_ascii_alphanumeric() || *character == '_')
+        .collect::<String>();
+    if name.is_empty() { None } else { Some(name) }
+}
+
+fn declaration_name_before_paren(line: &str) -> Option<String> {
+    let paren_index = line.find('(')?;
+    let before = line[..paren_index].trim_end();
+    let name = before
+        .chars()
+        .rev()
+        .take_while(|character| character.is_ascii_alphanumeric() || *character == '_')
+        .collect::<String>()
+        .chars()
+        .rev()
+        .collect::<String>();
+    if name.is_empty() || is_call_keyword(&name) {
+        None
+    } else {
+        Some(name)
+    }
+}
+
+fn declared_symbol_name_for_line(line: &str, language: &str) -> Option<(String, &'static str)> {
+    let trimmed = line.trim();
+    if trimmed.is_empty()
+        || trimmed.starts_with("//")
+        || trimmed.starts_with('#')
+        || trimmed.starts_with('*')
+        || trimmed.starts_with("/*")
+    {
+        return None;
+    }
+    for keyword in ["class ", "interface ", "enum ", "record ", "struct ", "trait "] {
+        if let Some(name) = symbol_name_after_keyword(trimmed, keyword) {
+            return Some((name, "type"));
+        }
+    }
+    if matches!(language, "typescript" | "javascript" | "vue" | "svelte") {
+        if let Some(name) = symbol_name_after_keyword(trimmed, "function ") {
+            return Some((name, "function"));
+        }
+        for keyword in ["const ", "let ", "var "] {
+            if let Some(name) = symbol_name_after_keyword(trimmed, keyword) {
+                if trimmed.contains("=>") || trimmed.contains("function") || trimmed.contains('(') {
+                    return Some((name, "function"));
+                }
+            }
+        }
+    }
+    if language == "python" {
+        if let Some(name) = symbol_name_after_keyword(trimmed, "def ") {
+            return Some((name, "function"));
+        }
+    }
+    if language == "go" {
+        if let Some(after_func) = trimmed.strip_prefix("func ") {
+            let function_tail = if after_func.trim_start().starts_with('(') {
+                after_func.split_once(')').map(|(_, tail)| tail.trim_start()).unwrap_or(after_func)
+            } else {
+                after_func
+            };
+            let name = function_tail
+                .chars()
+                .take_while(|character| character.is_ascii_alphanumeric() || *character == '_')
+                .collect::<String>();
+            if !name.is_empty() {
+                return Some((name, "function"));
+            }
+        }
+    }
+    if language == "rust" {
+        if let Some(name) = rust_fn_name(trimmed) {
+            return Some((name, "function"));
+        }
+    }
+    if matches!(language, "c" | "cpp" | "csharp" | "java" | "kotlin" | "swift" | "php" | "ruby") {
+        if let Some(name) = declaration_name_before_paren(trimmed) {
+            if trimmed.ends_with('{') || trimmed.ends_with(';') || trimmed.contains(" throws ") {
+                return Some((name, "function"));
+            }
+        }
+    }
+    None
+}
+
+fn relationship_symbols_for_file(file: &ScannedFile, content: &str) -> Vec<RelationshipSymbol> {
+    let mut symbols = Vec::new();
+    let mut seen = HashSet::new();
+    for (line_index, line) in content.lines().enumerate() {
+        let Some((name, kind)) = declared_symbol_name_for_line(line, &file.language) else {
+            continue;
+        };
+        let key = format!("{}:{name}:{kind}", file.id);
+        if !seen.insert(key.clone()) {
+            continue;
+        }
+        symbols.push(RelationshipSymbol {
+            id: format!("sym-{}", stable_hash(&key)),
+            file_id: file.id.clone(),
+            name,
+            kind: kind.to_string(),
+            language: file.language.clone(),
+            line: line_index + 1,
+        });
+    }
+    symbols
+}
+
+fn insert_symbol_alias(index: &mut HashMap<String, String>, alias: &str, file_id: &str) {
+    let key = canonical_symbol_key(alias);
+    if !key.is_empty() {
+        index.entry(key).or_insert_with(|| file_id.to_string());
+    }
+}
+
+fn build_symbol_file_index(files: &[ScannedFile], symbols: &[RelationshipSymbol]) -> HashMap<String, String> {
+    let mut index = HashMap::new();
+    for file in files {
+        let stem = project_file_stem(&file.basename);
+        insert_symbol_alias(&mut index, &stem, &file.id);
+        insert_symbol_alias(&mut index, &file.basename, &file.id);
+        if stem.ends_with("serviceimpl") {
+            insert_symbol_alias(&mut index, stem.trim_end_matches("impl"), &file.id);
+        }
+    }
+    for symbol in symbols {
+        insert_symbol_alias(&mut index, &symbol.name, &symbol.file_id);
+    }
+    index
+}
+
+fn is_call_keyword(value: &str) -> bool {
+    matches!(
+        value,
+        "if" | "for" | "while" | "switch" | "catch" | "return" | "throw" | "new" |
+        "sizeof" | "typeof" | "await" | "async" | "function" | "fn" | "def" | "func" |
+        "class" | "interface" | "struct" | "enum" | "record" | "match" | "loop" | "select"
+    )
+}
+
+fn call_candidates_for_line(line: &str) -> Vec<String> {
+    let code = line
+        .split("//")
+        .next()
+        .unwrap_or(line)
+        .split('#')
+        .next()
+        .unwrap_or(line);
+    let characters = code.char_indices().collect::<Vec<_>>();
+    let mut candidates = Vec::new();
+    for (index, character) in &characters {
+        if *character != '(' {
+            continue;
+        }
+        let before = code[..*index].trim_end();
+        let token = before
+            .chars()
+            .rev()
+            .take_while(|character| {
+                character.is_ascii_alphanumeric()
+                    || matches!(*character, '_' | '.' | ':' | '-' | '>')
+            })
+            .collect::<String>()
+            .chars()
+            .rev()
+            .collect::<String>();
+        let token = token.trim_matches(|character| matches!(character, '.' | ':' | '-' | '>'));
+        if token.is_empty() || token.len() < 3 || is_call_keyword(token) {
+            continue;
+        }
+        if token.contains('.') || token.contains("::") || token.contains("->") || token.contains('_') {
+            candidates.push(token.to_string());
+            continue;
+        }
+        if token.chars().next().is_some_and(|character| character.is_ascii_uppercase()) {
+            candidates.push(token.to_string());
+        }
+    }
+    candidates.sort();
+    candidates.dedup();
+    candidates
+}
+
+fn call_candidate_keys(candidate: &str) -> Vec<String> {
+    let normalized = candidate.replace("->", ".").replace("::", ".");
+    let mut keys = Vec::new();
+    keys.push(canonical_symbol_key(&normalized));
+    for part in normalized.split('.') {
+        if part.len() >= 3 {
+            keys.push(canonical_symbol_key(part));
+        }
+    }
+    if let Some((prefix, _)) = normalized.split_once('_') {
+        if prefix.len() >= 3 {
+            keys.push(canonical_symbol_key(prefix));
+        }
+    }
+    keys.retain(|key| !key.is_empty());
+    keys.dedup();
+    keys
+}
+
+fn resolve_call_target(
+    candidate: &str,
+    source_file_id: &str,
+    symbol_file_by_key: &HashMap<String, String>,
+) -> Option<String> {
+    for key in call_candidate_keys(candidate) {
+        let Some(target_file_id) = symbol_file_by_key.get(&key) else {
+            continue;
+        };
+        if target_file_id != source_file_id {
+            return Some(target_file_id.clone());
+        }
+    }
+    None
+}
+
+fn c_include_specifier(line: &str) -> Option<String> {
+    let trimmed = line.trim();
+    if !trimmed.starts_with("#include") {
+        return None;
+    }
+    first_quoted_value(trimmed)
+}
+
+fn python_import_specifiers(line: &str) -> Vec<String> {
+    let trimmed = line.trim();
+    if let Some(rest) = trimmed.strip_prefix("from ") {
+        return rest
+            .split_whitespace()
+            .next()
+            .filter(|value| !value.is_empty())
+            .map(|value| vec![value.to_string()])
+            .unwrap_or_default();
+    }
+    if let Some(rest) = trimmed.strip_prefix("import ") {
+        return rest
+            .split(',')
+            .filter_map(|value| value.trim().split_whitespace().next())
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+            .collect();
+    }
+    Vec::new()
+}
+
+fn resolve_python_import(
+    root: &Path,
+    source_path: &str,
+    specifier: &str,
+    path_to_file_id: &HashMap<String, String>,
+) -> Option<String> {
+    let mut base = Path::new(source_path)
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_default();
+    let mut rest = specifier.trim();
+    while let Some(next) = rest.strip_prefix('.') {
+        rest = next;
+        base = base.parent().map(Path::to_path_buf).unwrap_or_default();
+    }
+    if rest.is_empty() {
+        return None;
+    }
+    let module_path = rest.replace('.', "/");
+    [
+        base.join(&module_path).with_extension("py"),
+        base.join(&module_path).join("__init__.py"),
+    ]
+    .into_iter()
+    .filter_map(|candidate| normalized_candidate(root, root.join(candidate)))
+    .find(|candidate| path_to_file_id.contains_key(candidate))
 }
 
 fn evidence(path: &str, line: usize, excerpt: &str, observed_at: &str) -> RelationEvidence {
@@ -1553,6 +1862,7 @@ fn summarize_relationship_stale_state(
         .map(str::to_string);
     let (_, current_commit_hash) = git_metadata(scan_root);
     let mut reasons = Vec::new();
+    let mut scope_warnings = Vec::new();
 
     if let (Some(previous), Some(current)) = (&manifest_commit_hash, &current_commit_hash) {
         if previous != current {
@@ -1581,9 +1891,9 @@ fn summarize_relationship_stale_state(
     for path in &changed_paths {
         let Some(file) = file_by_path.get(path) else {
             unmapped_paths.push(path.clone());
-            reasons.push(relationship_stale_reason(
-                "unmapped-changed-file",
-                format!("Changed file is not present in latest relationship scan: {path}"),
+            scope_warnings.push(relationship_stale_reason(
+                "scan-scope-warning",
+                format!("Changed file is outside the latest relationship scan scope: {path}"),
                 Some(path.clone()),
                 None,
                 None,
@@ -1620,6 +1930,7 @@ fn summarize_relationship_stale_state(
     }
 
     reasons.truncate(40);
+    scope_warnings.truncate(20);
     let refresh_mode = if unmapped_paths.is_empty() && stale_paths.is_empty() {
         if reasons.is_empty() {
             "ignore-only"
@@ -1632,12 +1943,13 @@ fn summarize_relationship_stale_state(
         "full"
     };
     let is_fresh = reasons.is_empty();
+    let all_reasons = reasons.into_iter().chain(scope_warnings).collect::<Vec<_>>();
 
     json!({
         "schemaVersion": 1,
         "generatedAt": generated_at,
         "isFresh": is_fresh,
-        "reasons": reasons,
+        "reasons": all_reasons,
         "staleFileCount": stale_paths.len(),
         "changedFiles": changed_paths,
         "refreshSuggestion": if is_fresh {
@@ -1858,6 +2170,7 @@ fn scan_workspace(
         .collect::<HashMap<_, _>>();
     let mut java_file_by_type = HashMap::new();
     let mut command_file_by_name = HashMap::new();
+    let mut relationship_symbols = Vec::new();
     for (file, content) in &file_contents {
         if file.language == "java" {
             if let Some(type_name) = java_declared_type(content) {
@@ -1872,13 +2185,15 @@ fn scan_workspace(
                 command_file_by_name.insert(command_name, file.id.clone());
             }
         }
+        relationship_symbols.extend(relationship_symbols_for_file(file, content));
     }
+    let symbol_file_by_key = build_symbol_file_index(&files, &relationship_symbols);
 
     let mut relations = Vec::new();
     for (file, content) in &file_contents {
         for (line_index, line) in content.lines().enumerate() {
             let line_number = line_index + 1;
-            if matches!(file.language.as_str(), "typescript" | "javascript") {
+            if matches!(file.language.as_str(), "typescript" | "javascript" | "vue" | "svelte") {
                 for specifier in import_specifiers(line) {
                     if let Some(target_path) =
                         resolve_relative_import(&scan_root, &file.path, &specifier, &path_to_file_id)
@@ -1919,6 +2234,42 @@ fn scan_workspace(
                             "medium",
                             evidence(&file.path, line_number, line, &generated_at),
                         );
+                    }
+                }
+            }
+            if matches!(file.language.as_str(), "c" | "cpp") {
+                if let Some(specifier) = c_include_specifier(line) {
+                    if let Some(target_path) =
+                        resolve_relative_import(&scan_root, &file.path, &specifier, &path_to_file_id)
+                    {
+                        if let Some(target_file_id) = path_to_file_id.get(&target_path) {
+                            push_relation(
+                                &mut relations,
+                                "imports",
+                                &file.id,
+                                target_file_id,
+                                "high",
+                                evidence(&file.path, line_number, line, &generated_at),
+                            );
+                        }
+                    }
+                }
+            }
+            if file.language == "python" {
+                for specifier in python_import_specifiers(line) {
+                    if let Some(target_path) =
+                        resolve_python_import(&scan_root, &file.path, &specifier, &path_to_file_id)
+                    {
+                        if let Some(target_file_id) = path_to_file_id.get(&target_path) {
+                            push_relation(
+                                &mut relations,
+                                "imports",
+                                &file.id,
+                                target_file_id,
+                                "medium",
+                                evidence(&file.path, line_number, line, &generated_at),
+                            );
+                        }
                     }
                 }
             }
@@ -1968,6 +2319,24 @@ fn scan_workspace(
                             &target_file_id,
                             "high",
                             evidence(&file.path, line_number, line, &generated_at),
+                        );
+                    }
+                }
+            }
+            if !matches!(file.language.as_str(), "markdown" | "json" | "toml" | "yaml" | "xml" | "properties" | "text") {
+                for call_candidate in call_candidates_for_line(line) {
+                    if let Some(target_file_id) = resolve_call_target(
+                        &call_candidate,
+                        &file.id,
+                        &symbol_file_by_key,
+                    ) {
+                        push_relation(
+                            &mut relations,
+                            "calls",
+                            &file.id,
+                            &target_file_id,
+                            "medium",
+                            evidence(&file.path, line_number, &format!("calls {call_candidate}"), &generated_at),
                         );
                     }
                 }
@@ -2183,6 +2552,20 @@ fn scan_workspace(
             relative_path: "files/chunks-000.json".to_string(),
             content: serde_json::to_string_pretty(&files)
                 .map_err(|err| format!("Failed to serialize relationship files chunk: {err}"))?,
+        },
+        ProjectMapRelationshipWriteFile {
+            relative_path: "symbols/manifest.json".to_string(),
+            content: serde_json::to_string_pretty(&json!({
+                "schemaVersion": 1,
+                "chunkCount": 1,
+                "symbolCount": relationship_symbols.len()
+            }))
+            .map_err(|err| format!("Failed to serialize relationship symbols manifest: {err}"))?,
+        },
+        ProjectMapRelationshipWriteFile {
+            relative_path: "symbols/chunks-000.json".to_string(),
+            content: serde_json::to_string_pretty(&relationship_symbols)
+                .map_err(|err| format!("Failed to serialize relationship symbols chunk: {err}"))?,
         },
         ProjectMapRelationshipWriteFile {
             relative_path: "relations/latest.json".to_string(),

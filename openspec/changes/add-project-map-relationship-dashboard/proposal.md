@@ -183,3 +183,165 @@
 - Fresh / 最新可用
 - Stale / 过期
 - Incremental Generation / 增量生成
+
+## Corrective stage update：Dashboard -> Explorer（2026-06-05）
+
+### 中文导读
+
+用户真实测试后确认：仅展示扫描统计、hotspot、impact、read plan 不足以支撑代码理解。
+本提案的产品目标已校准为：先让用户看懂“文件和文件之间、方法和方法之间为什么有关”，再谈高级 impact / guided read / domain lens。
+
+### Updated acceptance focus
+
+- 用户点击刷新后，应能看到新的 scanRunId 和 fresh relationship snapshot；若文件不在扫描范围，应显示 scope warning，而不是 stale blocking banner。
+- 默认视图应回答：这个文件调用谁、谁调用它、证据在哪一行。
+- UI 文案必须完整 i18n；中文界面使用中文 + English professional terms。
+- scanner 必须是 universal project scanner，不得绑定 Java / Spring Boot。
+- Java、C/C++、JS/TS/Vue/Svelte、Python、Go、Rust 等语言都应先进入 inventory，并尽可能产出 imports / calls / includes / symbol relations。
+
+## Stage correction：Chain-first closure（2026-06-05）
+
+### 中文导读
+
+本轮根据重新扫描后的用户反馈继续校准：`File Relationship Explorer` 不能只是改标题，必须让默认体验从统计 dashboard 切到文件链路阅读。
+因此 acceptance focus 更新为：扫描后默认 Chain、刷新默认 full、方法调用候选可见、Board 降级为辅助视图。
+
+### Updated acceptance checklist
+
+- 普通扫描按钮必须执行 full workspace scan，不应隐式携带 `changedFiles` partial scope。
+- 扫描成功或读取 latest snapshot 后，默认打开 `Chain` 主视图。
+- 主视图展示 file-to-file chain，并在 `calls` relation 上显示 method/function `call candidate`。
+- Evidence Inspector 展示 source、target、call candidate、evidence line/excerpt。
+- Board/List 保留，但作为辅助定位视图。
+- 统计 metrics 只能作为轻量状态，不再占用主要信息层。
+
+## Stage correction：UA-like Graph Dashboard（2026-06-05）
+
+### 中文导读
+
+用户重新校准：期望关系 dashboard 更接近 Understand-Anything 的图形化表达，而不是列表化 Explorer。
+因此本提案最终验收更新为 `Graph-first`：文件节点 + 关系边 + 选中高亮 + Inspector。Chain/List/Board 作为辅助，不作为默认主视图。
+
+### Updated acceptance checklist
+
+- 扫描完成后默认进入 `Graph 图谱`。
+- Dashboard 第一视觉必须是文件节点和关系边，而不是关系列表。
+- 点击文件节点后显示该文件一跳邻域。
+- 点击关系边后展示 source、target、call candidate、evidence line/excerpt。
+- 左侧文件导航只作为定位辅助。
+- Board/List/Chain 保留为辅助视图。
+- 不引入 UA schema，不引入第三方 graph storage，不污染现有 Project Map semantic graph。
+
+## Proposal supplement：UA-like Graph Dashboard detailed contract（2026-06-05）
+
+### 中文导读
+
+这段是对 13E 的补强说明：用户目标不是“多一个 graph tab”，而是把文件关系 dashboard 的默认认知方式改成 Understand-Anything 风格。
+也就是说，用户打开关系扫描结果时，应该先看到“节点、边、聚焦、关系证据”的图形化结构，而不是统计、列表或纯链路文本。
+
+### Problem correction / 问题纠偏
+
+- 13C 解决了 refresh、i18n、calls extractor，但默认仍像扫描结果面板。
+- 13D 解决了 chain readability，但把产品带到了 list-first 方向。
+- 用户明确偏好 UA 的 graph-first dashboard，因此 13E MUST replace list-first as default UX。
+- Chain/List/Board 仍有价值，但它们只能作为辅助视图，不能作为第一视觉。
+
+### UA-like product contract / 产品契约
+
+- Default surface：`Graph 图谱`。
+- Left rail：文件导航 / role navigation，用于定位节点。
+- Center canvas：文件节点 + 关系边 + 背景网格 + selected-neighborhood focus。
+- Right inspector：解释当前选中的 file node 或 relation edge。
+- Edge labels：优先显示 call candidate；没有 candidate 时显示 relation type。
+- Visual hierarchy：`calls` > `imports` > `tested_by` > docs/config/other。
+- De-noise rule：默认只展示 selected file 的 one-hop neighborhood + high-signal files，不全量铺开所有边。
+- Source boundary：图形投影只消费 `project-map-relations` snapshot，不写回主 Project Map semantic graph。
+
+### UA reference mapping / UA 复刻映射
+
+| UA element | mossx mapping | 说明 |
+|---|---|---|
+| `GraphView` canvas | `Graph 图谱` center canvas | 复刻图形为第一视觉，不复用 UA schema。 |
+| `CustomNode` | file node card | role color bar、badge、selected ring、neighbor state。 |
+| `NodeInfo` | Relationship Inspector | 解释 selected node/edge、证据与连接。 |
+| `FileExplorer` | left file rail | 文件定位辅助，不抢主视觉。 |
+| `FilterPanel` | search/type/role controls | 控制图谱可见范围。 |
+| `edgeAggregation` | capped one-hop projection | 先做降噪投影，后续可扩展聚合容器。 |
+
+### Acceptance update / 新验收标准
+
+- 重新扫描后，默认打开 Graph，而不是 Chain/List/Board。
+- Graph 必须有明确的节点、边、箭头、edge label、selected/neighbor/faded 状态。
+- Graph 必须有 relation legend，让用户知道不同颜色边代表什么。
+- Graph 必须有 lane/region label，让用户理解 incoming/current/outgoing 的空间结构。
+- Inspector 必须同时支持 node summary 和 edge evidence。
+- 不得引入 UA schema；不得污染主 Project Map；不得全量渲染大项目所有边。
+
+### Remaining follow-up / 后续仍需推进
+
+- 更接近 UA 的 minimap / controls。
+- role/layer aggregation container。
+- edge bundling 或 relation count aggregation。
+- method/function symbol node expansion。
+- graph interaction smoke test。
+
+## Corrective stage update：Graph Fidelity / 图谱拟真度补强（2026-06-05）
+
+### 中文导读
+
+用户继续校准：当前实现已经从 list-first 拉回到 `Graph-first`，但还不够像 Understand-Anything 的“可探索图谱”。
+问题不在于有没有节点和边，而在于图谱还缺少可操作的 exploration affordance：聚合点不能展开、legend 不能作为过滤入口、高密度关系只能被动折叠。
+
+本阶段目标是把 `File Relationship Graph Dashboard` 从“图谱截图”推进为“图谱工作台”：
+
+- 用户先看图，不先读列表。
+- 用户点击聚合点即可展开 incoming / outgoing dense neighborhood。
+- 用户点击 relation legend 即可按 `calls / imports / tested_by` 过滤图谱。
+- Graph 仍只消费 `project-map-relations` snapshot，不写回 Project Map semantic graph。
+- Board / List / Chain 继续保留为辅助视图，但不重新抢占默认主视觉。
+
+### Updated acceptance checklist
+
+- Graph aggregate node MUST be interactive；`+N incoming/outgoing` 不是静态提示，而是可展开/折叠的 graph control。
+- Relation legend SHOULD double as visual filter；用户不需要回到下拉框才能筛选 `calls/imports/tested_by`。
+- Graph high-density de-noise MUST preserve readability；默认 capped one-hop，用户显式展开后才增加节点密度。
+- Graph UI copy MUST remain localized；中文界面使用中文 + English professional terms。
+- Graph interaction MUST remain universal；不得假设 Java/Spring 项目，calls/imports/includes/docs/config 等关系都来自通用扫描层。
+
+## Corrective stage update：Graph Workspace Layout / 图谱工作台布局（2026-06-05）
+
+### 中文导读
+
+用户测试后确认方向正确，但 Graph Dashboard 的可视空间仍被左侧 File Tree、右侧 Inspector、底部 Project Map 主图挤压。
+本阶段目标不是继续增加数据，而是把图谱变成可操作 workspace：辅助模块可折叠、画布可自适应、视图内可拖拽平移。
+
+### Updated acceptance checklist
+
+- Graph Dashboard MUST provide module collapse controls for file rail and inspector.
+- Collapsing auxiliary modules MUST give graph canvas more space instead of leaving empty columns.
+- Graph canvas SHOULD auto-fit its logical graph surface to the available visible area.
+- Graph canvas MUST support drag-to-pan inside the relationship view.
+- Pan behavior MUST NOT steal clicks from file nodes, edge labels, legend filters, aggregate controls, or inspector buttons.
+- These layout controls are presentation-only and MUST NOT mutate relationship storage or Project Map semantic graph.
+
+### Latest UI calibration / 最新 UI 校准
+
+- In Graph view, the scan control chrome SHOULD default to collapsed mini-header to maximize graph canvas space.
+- The collapsed mini-header MUST still expose scan freshness summary, including file count, relation count, and `fresh/stale` state.
+- If the snapshot is stale, the collapsed mini-header SHOULD keep a lightweight refresh action, so space optimization does not hide the most important recovery path.
+- Search/filter controls remain available after expanding the chrome area; they are secondary to graph exploration by default.
+
+### Collision avoidance calibration / 防重叠校准
+
+- Graph projection MUST leave enough vertical gap between visible file nodes.
+- Expanded incoming/outgoing sides SHOULD still be capped; expansion means revealing more context, not rendering every relation.
+- The logical graph canvas SHOULD be larger than the visible viewport, with drag-to-pan for exploration.
+- Drag-to-pan MUST be visible and predictable: empty canvas drags move the graph, while node/edge/legend clicks remain selection actions.
+- Aggregate nodes MUST sit in reserved space and MUST NOT overlap visible file nodes.
+
+### Graph navigation polish / 图谱导航打磨
+
+- File search SHOULD be directly available in the Graph toolbar even when advanced chrome is collapsed.
+- Searching files SHOULD update the graph focus to the first matched file instead of only filtering the side list.
+- Graph view SHOULD provide explicit zoom in / zoom out / reset controls in addition to drag-to-pan.
+- Zoom controls MUST be presentation-only and MUST NOT mutate relationship storage, evidence, or Project Map semantic graph.

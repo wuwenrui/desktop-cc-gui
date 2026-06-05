@@ -486,6 +486,7 @@ export type ProjectMapRelationshipLanguage =
   | "csharp"
   | "php"
   | "ruby"
+  | "c"
   | "cpp"
   | "swift"
   | "dart"
@@ -546,6 +547,7 @@ export type ProjectMapRelationshipParseStatus = "parsed" | "parse-failed" | "ski
 export type ProjectMapRelationshipRelationType =
   | "imports"
   | "exports"
+  | "calls"
   | "contains"
   | "tested_by"
   | "styled_by"
@@ -690,7 +692,8 @@ export type ProjectMapRelationshipStaleReasonKind =
   | "git-commit-changed"
   | "fingerprint-changed"
   | "unmapped-changed-file"
-  | "file-read-failed";
+  | "file-read-failed"
+  | "scan-scope-warning";
 
 export type ProjectMapRelationshipRefreshMode = "full" | "partial" | "ignore-only";
 
