@@ -16,10 +16,10 @@ OpenSpec change: `fix-realtime-completion-sound-once`
 
 ## Acceptance Criteria
 
-- [ ] 流式输出过程中不要反复触发声音提示。
-- [ ] 每轮对话结束后只触发一次声音提示。
-- [ ] 不影响现有实时对话的流式输出体验。
-- [ ] Hook-level regression tests 覆盖 streaming silence、duplicate completion dedupe、consecutive turns、disabled sounds。
+- [x] 流式输出过程中不要反复触发声音提示。
+- [x] 每轮对话结束后只触发一次声音提示。
+- [x] 不影响现有实时对话的流式输出体验。
+- [x] Hook-level regression tests 覆盖 streaming silence、duplicate completion dedupe、consecutive turns、disabled sounds。
 
 ## Technical Notes
 
