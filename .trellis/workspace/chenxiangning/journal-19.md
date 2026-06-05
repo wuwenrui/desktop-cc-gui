@@ -1252,3 +1252,64 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 721: 收口文件关系图谱工作台
+
+**Date**: 2026-06-06
+**Task**: 收口文件关系图谱工作台
+**Branch**: `feature/v0.5.7`
+
+### Summary
+
+完成文件关系 Explorer 聚焦视图、图谱导航语义、Open Target 行跳转闪烁反馈，并回写 OpenSpec 提案与 API contract change。
+
+### Main Changes
+
+本次收口范围：
+- 文件关系 Explorer 进入聚焦态后替换左侧总览信息，隐藏旧节点/候选摘要，合并顶部信息为单排，并去掉重复边框与重复扫描入口。
+- 图谱节点点击只负责切换右侧 Inspector；节点右侧跳转 icon 负责进入链路视角，同时同步 Inspector。
+- 关系边增加方向箭头，保留 edge 选择与证据详情联动。
+- Inspector 的 Open Target 通过关系 symbols 定位目标方法定义行；Open Source 继续使用 evidence/source fallback。
+- 文件打开后目标行增加 2 秒 3 次单行背景闪烁，方便定位跳转结果。
+- 补齐文件关系视图 i18n 与 dark/light/custom theme token 适配。
+- 将关系视图相关样式拆入 project-map.relationship.css，避免 project-map.css 再次触发大文件治理红线。
+
+OpenSpec 回写：
+- 更新 add-project-map-relationship-dashboard 的 proposal/design/tasks，记录 Explorer chrome、图谱导航、Inspector 打开目标、行闪烁反馈、i18n/theme/跨平台边界。
+- 新增 add-project-map-api-contract-view change，作为后续 API contract discovery/view/incremental generation 的 proposal/design/tasks/specs，不引入运行时代码。
+
+边界与兼容：
+- Rust 仅在既有 Project Map relationship read 响应中补充 symbols 读取，路径由 PathBuf join 组合，避免硬编码 OS 分隔符。
+- 前端 evidence/path 匹配延续现有 workspace-relative 路径语义，未新增平台专属逻辑。
+- CodeMirror line flash 使用扩展和 theme token，不依赖 macOS-only API。
+- 自定义主题通过 CSS variables 走现有主题系统，避免写死 dark-only/light-only 颜色。
+
+验证结果：
+- openspec validate add-project-map-relationship-dashboard --strict --no-interactive：通过。
+- openspec validate add-project-map-api-contract-view --strict --no-interactive：通过。
+- git diff --check：通过。
+- cargo check --manifest-path src-tauri/Cargo.toml：通过。
+- npm run typecheck：通过。
+- npm run lint：通过；仅剩既有 unrelated react-hooks/exhaustive-deps warnings。
+- npm run check:large-files：通过。
+- npm run test：605 个 test files 全部通过。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6a0bdbb3` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
