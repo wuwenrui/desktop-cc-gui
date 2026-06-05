@@ -511,3 +511,47 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 705: 收口完成提示音任务
+
+**Date**: 2026-06-05
+**Task**: 收口完成提示音任务
+**Branch**: `feature/v0.5.6`
+
+### Summary
+
+收口 fix-realtime-completion-sound-once Trellis metadata 和 PRD：确认 OpenSpec 已归档、实现和回归测试已存在；验证 useAgentSoundNotifications、typecheck、OpenSpec strict workspace validation 均通过。
+
+### Main Changes
+
+本次完成 fix-realtime-completion-sound-once 的债务收口：
+- 未改生产代码。
+- 确认 OpenSpec change `fix-realtime-completion-sound-once` 已归档，主 spec `conversation-completion-notification-sound` 已包含 turn-completion-scoped notification sound contract。
+- 当前实现通过 `useAgentSoundNotifications` 只监听 `onTurnCompleted`，并用 workspace/thread/turn identity 做 per-turn dedupe；agent message completion 不触发声音。
+- 更新 `.trellis/tasks/04-21-fix-realtime-completion-sound-once/prd.md` 验收项为完成。
+- 更新 `.trellis/tasks/04-21-fix-realtime-completion-sound-once/task.json` current_phase、archive related files 和验证 notes。
+验证：
+- npm exec vitest run src/features/notifications/hooks/useAgentSoundNotifications.test.tsx
+- npm run typecheck
+- openspec validate --all --strict --no-interactive
+注意：未触碰外部正在处理的 harden-windows-ask-user-question-resume 相关 dirty 文件。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `64f2e89be3f9501ea9068628dbb314672faf8cb3` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
