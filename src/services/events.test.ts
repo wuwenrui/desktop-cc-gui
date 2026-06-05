@@ -5,6 +5,7 @@ import type { AppServerEvent } from "../types";
 import {
   subscribeAppServerEvents,
   subscribeCliInstallerEvents,
+  subscribeEnvironmentInstallerEvents,
   subscribeMenuCycleCollaborationMode,
   subscribeMenuCycleModel,
   subscribeMenuNewAgent,
@@ -117,6 +118,38 @@ describe("events subscriptions", () => {
 
     listener({
       event: "cli-installer-event",
+      id: 1,
+      payload,
+    });
+    expect(onEvent).toHaveBeenCalledWith(payload);
+
+    cleanup();
+  });
+
+  it("delivers environment installer progress events to subscribers", async () => {
+    let listener: EventCallback<any> = () => {};
+    const unlisten = vi.fn();
+
+    vi.mocked(listen).mockImplementation((_event, handler) => {
+      listener = handler as EventCallback<any>;
+      return Promise.resolve(unlisten);
+    });
+
+    const onEvent = vi.fn();
+    const cleanup = subscribeEnvironmentInstallerEvents(onEvent);
+    const payload = {
+      runId: "env-run-1",
+      stepId: "install-homebrew",
+      dependencyId: "homebrew",
+      phase: "stdout",
+      stream: "stdout",
+      message: "installing",
+      exitCode: null,
+      durationMs: null,
+    };
+
+    listener({
+      event: "environment-installer-event",
       id: 1,
       payload,
     });

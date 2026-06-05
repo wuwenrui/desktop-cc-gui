@@ -89,6 +89,9 @@ import {
   runClaudeDoctor,
   getCliInstallPlan,
   runCliInstaller,
+  getEnvironmentDoctor,
+  getEnvironmentInstallPlan,
+  runEnvironmentInstaller,
   setOpenCodeMcpToggle,
   switchEngine,
   readExternalSpecFile,
@@ -420,6 +423,28 @@ describe("tauri invoke wrappers", () => {
       action: "updateLatest",
       strategy: "npmGlobal",
       runId: "run-1",
+    });
+    expect(
+      invokeMock.mock.calls.flatMap(([, payload]) =>
+        Object.keys(payload ?? {}),
+      ),
+    ).not.toContain("command");
+  });
+
+  it("invokes environment installer commands without shell command payloads", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({ platform: "macos", dependencies: [] });
+    invokeMock.mockResolvedValueOnce({ canRun: true, steps: [] });
+    invokeMock.mockResolvedValueOnce({ ok: true });
+
+    await getEnvironmentDoctor();
+    await getEnvironmentInstallPlan();
+    await runEnvironmentInstaller("env-run-1");
+
+    expect(invokeMock).toHaveBeenCalledWith("environment_doctor");
+    expect(invokeMock).toHaveBeenCalledWith("environment_install_plan");
+    expect(invokeMock).toHaveBeenCalledWith("environment_install_run", {
+      runId: "env-run-1",
     });
     expect(
       invokeMock.mock.calls.flatMap(([, payload]) =>

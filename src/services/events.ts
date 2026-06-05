@@ -4,7 +4,10 @@ import type {
   DictationEvent,
   DictationModelStatus,
 } from "../types";
-import type { CliInstallProgressEvent } from "../types";
+import type {
+  CliInstallProgressEvent,
+  EnvironmentInstallProgressEvent,
+} from "../types";
 import type { RuntimeLogSessionSnapshot } from "./tauri";
 
 export type Unsubscribe = () => void;
@@ -116,6 +119,10 @@ const runtimeLogExitedHub = createEventHub<RuntimeLogSessionSnapshot>(
 const cliInstallerHub = createEventHub<CliInstallProgressEvent>(
   "cli-installer-event",
 );
+const environmentInstallerHub =
+  createEventHub<EnvironmentInstallProgressEvent>(
+    "environment-installer-event",
+  );
 const detachedExternalFileChangeHub =
   createEventHub<DetachedExternalFileChangeEvent>(
     "detached-external-file-change",
@@ -224,6 +231,13 @@ export function subscribeCliInstallerEvents(
   options?: SubscriptionOptions,
 ): Unsubscribe {
   return cliInstallerHub.subscribe(onEvent, options);
+}
+
+export function subscribeEnvironmentInstallerEvents(
+  onEvent: (event: EnvironmentInstallProgressEvent) => void,
+  options?: SubscriptionOptions,
+): Unsubscribe {
+  return environmentInstallerHub.subscribe(onEvent, options);
 }
 
 export function subscribeRuntimeLogExited(

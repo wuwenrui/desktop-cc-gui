@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { render, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ModelOption, WorkspaceInfo } from "./types";
 import { getThreadComposerSelectionStorageKey } from "./app-shell-parts/selectedComposerSession";
@@ -246,6 +247,12 @@ vi.mock("./app-shell-parts/useSelectedComposerSession", () => ({
       resolveComposerSelectionForThread,
     };
   },
+}));
+
+vi.mock("./features/setup/EnvironmentBootstrapGate", () => ({
+  EnvironmentBootstrapGate: ({ children }: { children: ReactNode }) => (
+    <>{children}</>
+  ),
 }));
 
 vi.mock("./services/tauri", () => ({

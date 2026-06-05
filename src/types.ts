@@ -1197,6 +1197,77 @@ export type CliInstallProgressEvent = {
   durationMs: number | null;
 };
 
+export type EnvironmentPlatform = "macos" | "windows" | "linux" | "unknown";
+export type EnvironmentDependencyId =
+  | "xcodeCommandLineTools"
+  | "homebrew"
+  | "cmake"
+  | "openssl3"
+  | "nodeJs"
+  | "claudeCli"
+  | "codexCli";
+
+export type EnvironmentDependencyStatus = {
+  id: EnvironmentDependencyId;
+  label: string;
+  installed: boolean;
+  required: boolean;
+  version: string | null;
+  details: string | null;
+  installable: boolean;
+};
+
+export type EnvironmentDoctorResult = {
+  platform: EnvironmentPlatform;
+  dependencies: EnvironmentDependencyStatus[];
+};
+
+export type EnvironmentInstallStep = {
+  id: string;
+  dependencyId: EnvironmentDependencyId;
+  label: string;
+  commandPreview: string[];
+  environment: [string, string][];
+  manualFallback: string | null;
+  warnings: string[];
+};
+
+export type EnvironmentInstallPlan = {
+  platform: EnvironmentPlatform;
+  canRun: boolean;
+  blockers: string[];
+  warnings: string[];
+  steps: EnvironmentInstallStep[];
+};
+
+export type EnvironmentInstallProgressPhase =
+  | "started"
+  | "stdout"
+  | "stderr"
+  | "verifying"
+  | "finished"
+  | "error";
+export type EnvironmentInstallOutputStream = "stdout" | "stderr";
+
+export type EnvironmentInstallProgressEvent = {
+  runId: string;
+  stepId: string | null;
+  dependencyId: EnvironmentDependencyId | null;
+  phase: EnvironmentInstallProgressPhase;
+  stream: EnvironmentInstallOutputStream | null;
+  message: string | null;
+  exitCode: number | null;
+  durationMs: number | null;
+};
+
+export type EnvironmentInstallResult = {
+  ok: boolean;
+  exitCode: number | null;
+  details: string | null;
+  durationMs: number;
+  doctorResult: EnvironmentDoctorResult;
+};
+
 export type ApprovalRequest = {
   workspace_id: string;
   request_id: number | string;

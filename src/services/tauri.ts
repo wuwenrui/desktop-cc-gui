@@ -159,6 +159,11 @@ export type {
 } from "../features/browser-agent/types";
 export { previewCodexLaunchProfile, runClaudeDoctor, runCodexDoctor } from "./tauri/doctor";
 export { getCliInstallPlan, runCliInstaller } from "./tauri/cliInstaller";
+export {
+  getEnvironmentDoctor,
+  getEnvironmentInstallPlan,
+  runEnvironmentInstaller,
+} from "./tauri/environmentInstaller";
 export type {
   ComputerUseActivationFailureKind,
   ComputerUseActivationOutcome,
