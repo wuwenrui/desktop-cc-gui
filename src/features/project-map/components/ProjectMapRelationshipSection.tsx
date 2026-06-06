@@ -638,10 +638,7 @@ export function ProjectMapRelationshipSection({
     }
     if (inspectedRelationshipFileId) {
       const inspectedFile = relationshipDashboardFileIndex.get(inspectedRelationshipFileId);
-      const inspectedFileStillVisible = relationshipDashboardMatchingFiles.some((file) => (
-        file.id === inspectedRelationshipFileId
-      ));
-      if (inspectedFile && inspectedFileStillVisible) {
+      if (inspectedFile) {
         return inspectedFile;
       }
     }
@@ -650,7 +647,6 @@ export function ProjectMapRelationshipSection({
     inspectedRelationshipFileId,
     relationshipDashboardData,
     relationshipDashboardFileIndex,
-    relationshipDashboardMatchingFiles,
     selectedRelationshipFile,
   ]);
 
@@ -2069,6 +2065,9 @@ export function ProjectMapRelationshipSection({
                                       })}
                                       onClick={(event) => {
                                         event.stopPropagation();
+                                        if (isProjectMapRelationshipNoiseFile(node.file)) {
+                                          setShowRelationshipNoiseFiles(true);
+                                        }
                                         setSelectedRelationshipFileId(node.file.id);
                                         setInspectedRelationshipFileId(node.file.id);
                                         setSelectedRelationshipRelationId(null);
