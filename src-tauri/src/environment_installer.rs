@@ -561,10 +561,14 @@ fn build_windows_nodejs_step() -> EnvironmentInstallStep {
             "install".to_string(),
             "OpenJS.NodeJS.LTS".to_string(),
             "--silent".to_string(),
+            "--accept-source-agreements".to_string(),
+            "--accept-package-agreements".to_string(),
+            "--source".to_string(),
+            "winget".to_string(),
         ],
         environment: Vec::new(),
         manual_fallback: Some(
-            "winget install OpenJS.NodeJS.LTS --silent --accept-source-agreements --accept-package-agreements"
+            "winget install OpenJS.NodeJS.LTS --silent --accept-source-agreements --accept-package-agreements --source winget"
                 .to_string(),
         ),
         warnings: vec![
@@ -723,6 +727,12 @@ async fn run_install_step(
                     "--silent",
                     "--accept-source-agreements",
                     "--accept-package-agreements",
+                    // Pin to the community "winget" source. Without this, winget
+                    // also refreshes the "msstore" source, which requires the
+                    // machine's geographic region + terms agreement and fails
+                    // with 0x8a15000f ("missing source data"), aborting install.
+                    "--source",
+                    "winget",
                 ],
                 &step.environment,
                 run_id,
@@ -1118,6 +1128,9 @@ mod tests {
         let preview = step.command_preview.join(" ");
         assert!(preview.contains("winget"));
         assert!(preview.contains("OpenJS.NodeJS.LTS"));
+        // Pin to the winget source so msstore terms/region failures cannot abort it.
+        assert!(preview.contains("--source winget"));
+        assert!(preview.contains("--accept-source-agreements"));
     }
 
     #[test]
