@@ -1,4 +1,18 @@
 import type {
+  ProjectMapApiCallChain,
+  ProjectMapApiConfidence,
+  ProjectMapApiContractGraph,
+  ProjectMapApiEndpoint,
+  ProjectMapApiEvidence,
+  ProjectMapApiGroup,
+  ProjectMapApiGroupLevel,
+  ProjectMapApiParameter,
+  ProjectMapApiParameterLocation,
+  ProjectMapApiParserSource,
+  ProjectMapApiProtocol,
+  ProjectMapApiRequestBody,
+  ProjectMapApiResponse,
+  ProjectMapApiSchemaRef,
   ProjectMapFileRelation,
   ProjectMapRelationshipAgentReadPlan,
   ProjectMapRelationshipHotspot,
@@ -21,6 +35,7 @@ export type ProjectMapRelationshipDashboardData = {
   hotspots: ProjectMapRelationshipHotspot[];
   impactSummary: ProjectMapRelationshipImpactSummary | null;
   contextPack: ProjectMapRelationshipAgentReadPlan | null;
+  apiContracts: ProjectMapApiContractGraph | null;
   staleSummary: ProjectMapRelationshipStaleSummary | null;
   repairIssues: ProjectMapRelationshipRepairIssue[];
   readErrors: Array<{ path: string; message: string }>;
@@ -127,6 +142,16 @@ function readProjectMapRelationshipStringArray(
     return [];
   }
   return field.filter((item): item is string => typeof item === "string");
+}
+
+const PROJECT_MAP_API_SECRET_VALUE_PATTERN =
+  /(authorization|cookie|token|password|passwd|secret|api[-_ ]?key|private[-_ ]?key|credential)(\s*[:=]\s*)(["']?)[^\s"',;}]+/gi;
+
+export function redactProjectMapApiEvidenceText(value: string): string {
+  return value.replace(
+    PROJECT_MAP_API_SECRET_VALUE_PATTERN,
+    (_match, key: string, separator: string, quote: string) => `${key}${separator}${quote}[REDACTED]`,
+  );
 }
 
 function normalizeProjectMapRelationshipConfidence(
@@ -465,6 +490,308 @@ function normalizeProjectMapRelationshipStaleSummary(value: unknown): ProjectMap
   };
 }
 
+function normalizeProjectMapApiProtocol(value: unknown): ProjectMapApiProtocol {
+  switch (value) {
+    case "http":
+    case "grpc":
+    case "graphql":
+    case "rpc":
+    case "c-abi":
+      return value;
+    default:
+      return "unknown";
+  }
+}
+
+function normalizeProjectMapApiConfidence(value: unknown): ProjectMapApiConfidence {
+  switch (value) {
+    case "spec":
+    case "high":
+    case "medium":
+    case "low":
+      return value;
+    default:
+      return "low";
+  }
+}
+
+function normalizeProjectMapApiParserSource(value: unknown): ProjectMapApiParserSource {
+  switch (value) {
+    case "schema-parser":
+    case "compiler-api":
+    case "syntax-tree-parser":
+    case "descriptor":
+    case "fallback-pattern":
+      return value;
+    default:
+      return "unknown";
+  }
+}
+
+function normalizeProjectMapApiParameterLocation(value: unknown): ProjectMapApiParameterLocation {
+  switch (value) {
+    case "path":
+    case "query":
+    case "header":
+    case "cookie":
+      return value;
+    default:
+      return "query";
+  }
+}
+
+function normalizeProjectMapApiGroupLevel(value: unknown): ProjectMapApiGroupLevel {
+  switch (value) {
+    case "protocol":
+    case "module":
+    case "namespace":
+    case "controller":
+    case "endpoint":
+      return value;
+    default:
+      return "module";
+  }
+}
+
+function normalizeProjectMapApiEvidence(value: unknown): ProjectMapApiEvidence[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((item) => {
+    if (!isProjectMapRelationshipRecord(item)) {
+      return [];
+    }
+    const path = readProjectMapRelationshipString(item, "path");
+    if (!path) {
+      return [];
+    }
+    const excerpt = readProjectMapRelationshipString(item, "excerpt");
+    const redactedExcerpt = excerpt ? redactProjectMapApiEvidenceText(excerpt) : undefined;
+    const wasRedacted = typeof item.redacted === "boolean" ? item.redacted : false;
+    return [{
+      path,
+      line: readProjectMapRelationshipNumber(item, "line") || undefined,
+      excerpt: redactedExcerpt,
+      parserSource: normalizeProjectMapApiParserSource(item.parserSource),
+      extractorVersion: readProjectMapRelationshipString(item, "extractorVersion") ?? undefined,
+      observedAt: readProjectMapRelationshipString(item, "observedAt") ?? undefined,
+      redacted: wasRedacted || (excerpt ? redactedExcerpt !== excerpt : false) || undefined,
+    }];
+  });
+}
+
+function normalizeProjectMapApiSchemaRef(value: unknown): ProjectMapApiSchemaRef | undefined {
+  if (!isProjectMapRelationshipRecord(value)) {
+    return undefined;
+  }
+  const id = readProjectMapRelationshipString(value, "id");
+  const name = readProjectMapRelationshipString(value, "name");
+  if (!id || !name) {
+    return undefined;
+  }
+  return {
+    id,
+    name,
+    language: (readProjectMapRelationshipString(value, "language") ?? undefined) as ProjectMapApiSchemaRef["language"],
+    sourceFile: readProjectMapRelationshipString(value, "sourceFile") ?? undefined,
+    evidence: normalizeProjectMapApiEvidence(value.evidence),
+  };
+}
+
+function normalizeProjectMapApiParameters(value: unknown): ProjectMapApiParameter[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((item) => {
+    if (!isProjectMapRelationshipRecord(item)) {
+      return [];
+    }
+    const name = readProjectMapRelationshipString(item, "name");
+    if (!name) {
+      return [];
+    }
+    const example = readProjectMapRelationshipString(item, "example");
+    return [{
+      name,
+      location: normalizeProjectMapApiParameterLocation(item.location),
+      required: typeof item.required === "boolean" ? item.required : undefined,
+      schema: normalizeProjectMapApiSchemaRef(item.schema),
+      defaultValue: readProjectMapRelationshipString(item, "defaultValue") ?? undefined,
+      example: example ? redactProjectMapApiEvidenceText(example) : undefined,
+      evidence: normalizeProjectMapApiEvidence(item.evidence),
+    }];
+  });
+}
+
+function normalizeProjectMapApiRequestBody(value: unknown): ProjectMapApiRequestBody | undefined {
+  if (!isProjectMapRelationshipRecord(value)) {
+    return undefined;
+  }
+  return {
+    contentType: readProjectMapRelationshipString(value, "contentType") ?? undefined,
+    required: typeof value.required === "boolean" ? value.required : undefined,
+    schema: normalizeProjectMapApiSchemaRef(value.schema),
+    examples: readProjectMapRelationshipStringArray(value, "examples")
+      .map(redactProjectMapApiEvidenceText),
+    evidence: normalizeProjectMapApiEvidence(value.evidence),
+  };
+}
+
+function normalizeProjectMapApiResponses(value: unknown): ProjectMapApiResponse[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((item) => {
+    if (!isProjectMapRelationshipRecord(item)) {
+      return [];
+    }
+    return [{
+      statusCode: readProjectMapRelationshipString(item, "statusCode") ?? undefined,
+      contentType: readProjectMapRelationshipString(item, "contentType") ?? undefined,
+      schema: normalizeProjectMapApiSchemaRef(item.schema),
+      examples: readProjectMapRelationshipStringArray(item, "examples")
+        .map(redactProjectMapApiEvidenceText),
+      isError: typeof item.isError === "boolean" ? item.isError : undefined,
+      evidence: normalizeProjectMapApiEvidence(item.evidence),
+    }];
+  });
+}
+
+function normalizeProjectMapApiCountMap(value: unknown): Record<string, number> | undefined {
+  if (!isProjectMapRelationshipRecord(value)) {
+    return undefined;
+  }
+  const entries = Object.entries(value).flatMap(([key, count]) => {
+    if (typeof count !== "number" || !Number.isFinite(count)) {
+      return [];
+    }
+    return [[key, count] as const];
+  });
+  return entries.length ? Object.fromEntries(entries) : undefined;
+}
+
+function normalizeProjectMapApiEndpoints(value: unknown): ProjectMapApiEndpoint[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((item) => {
+    if (!isProjectMapRelationshipRecord(item)) {
+      return [];
+    }
+    const id = readProjectMapRelationshipString(item, "id");
+    const sourceFile = readProjectMapRelationshipString(item, "sourceFile");
+    if (!id || !sourceFile) {
+      return [];
+    }
+    return [{
+      id,
+      protocol: normalizeProjectMapApiProtocol(item.protocol),
+      language: (readProjectMapRelationshipString(item, "language") ?? "unknown") as ProjectMapApiEndpoint["language"],
+      framework: readProjectMapRelationshipString(item, "framework") ?? undefined,
+      method: readProjectMapRelationshipString(item, "method") ?? undefined,
+      path: readProjectMapRelationshipString(item, "path") ?? undefined,
+      operationName: readProjectMapRelationshipString(item, "operationName") ?? undefined,
+      handlerSymbol: readProjectMapRelationshipString(item, "handlerSymbol") ?? undefined,
+      sourceFile,
+      parameters: normalizeProjectMapApiParameters(item.parameters),
+      requestBody: normalizeProjectMapApiRequestBody(item.requestBody),
+      responses: normalizeProjectMapApiResponses(item.responses),
+      requestSchema: normalizeProjectMapApiSchemaRef(item.requestSchema),
+      responseSchema: normalizeProjectMapApiSchemaRef(item.responseSchema),
+      description: readProjectMapRelationshipString(item, "description") ?? undefined,
+      usageScenario: readProjectMapRelationshipString(item, "usageScenario") ?? undefined,
+      groupIds: readProjectMapRelationshipStringArray(item, "groupIds"),
+      callChainIds: readProjectMapRelationshipStringArray(item, "callChainIds"),
+      confidence: normalizeProjectMapApiConfidence(item.confidence),
+      evidence: normalizeProjectMapApiEvidence(item.evidence),
+    }];
+  });
+}
+
+function normalizeProjectMapApiGroups(value: unknown): ProjectMapApiGroup[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((item) => {
+    if (!isProjectMapRelationshipRecord(item)) {
+      return [];
+    }
+    const id = readProjectMapRelationshipString(item, "id");
+    const label = readProjectMapRelationshipString(item, "label");
+    if (!id || !label) {
+      return [];
+    }
+    return [{
+      id,
+      label,
+      level: normalizeProjectMapApiGroupLevel(item.level),
+      parentId: readProjectMapRelationshipString(item, "parentId") ?? undefined,
+      endpointIds: readProjectMapRelationshipStringArray(item, "endpointIds"),
+      childGroupIds: readProjectMapRelationshipStringArray(item, "childGroupIds"),
+      protocolCounts: normalizeProjectMapApiCountMap(item.protocolCounts),
+      languageCounts: normalizeProjectMapApiCountMap(item.languageCounts),
+      confidenceCounts: normalizeProjectMapApiCountMap(item.confidenceCounts),
+    }];
+  });
+}
+
+function normalizeProjectMapApiCallChains(value: unknown): ProjectMapApiCallChain[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((item) => {
+    if (!isProjectMapRelationshipRecord(item)) {
+      return [];
+    }
+    const id = readProjectMapRelationshipString(item, "id");
+    const endpointId = readProjectMapRelationshipString(item, "endpointId");
+    if (!id || !endpointId) {
+      return [];
+    }
+    return [{
+      id,
+      endpointId,
+      edges: [],
+      maxDepth: readProjectMapRelationshipNumber(item, "maxDepth") || 4,
+      truncatedReason: readProjectMapRelationshipString(item, "truncatedReason") ?? undefined,
+    }];
+  });
+}
+
+function normalizeProjectMapApiContractGraph(value: unknown): ProjectMapApiContractGraph | null {
+  if (!isProjectMapRelationshipRecord(value)) {
+    return null;
+  }
+  const generatedAt = readProjectMapRelationshipString(value, "generatedAt");
+  if (!generatedAt) {
+    return null;
+  }
+  return {
+    schemaVersion: 1,
+    generatedAt,
+    storageKey: readProjectMapRelationshipString(value, "storageKey") ?? undefined,
+    scanRunId: readProjectMapRelationshipString(value, "scanRunId") ?? undefined,
+    endpoints: normalizeProjectMapApiEndpoints(value.endpoints),
+    groups: normalizeProjectMapApiGroups(value.groups),
+    schemas: Array.isArray(value.schemas)
+      ? value.schemas.flatMap((item) => normalizeProjectMapApiSchemaRef(item) ?? [])
+      : [],
+    callChains: normalizeProjectMapApiCallChains(value.callChains),
+    skipped: Array.isArray(value.skipped)
+      ? value.skipped.flatMap((item) => {
+          if (!isProjectMapRelationshipRecord(item)) {
+            return [];
+          }
+          const reason = readProjectMapRelationshipString(item, "reason");
+          if (!reason) {
+            return [];
+          }
+          return [{ reason, count: readProjectMapRelationshipNumber(item, "count") }];
+        })
+      : undefined,
+  };
+}
+
 function normalizeProjectMapRelationshipRepairIssues(
   value: unknown,
 ): ProjectMapRelationshipRepairIssue[] {
@@ -504,6 +831,7 @@ export function normalizeProjectMapRelationshipDashboardData(
     hotspots: normalizeProjectMapRelationshipHotspots(response.modules),
     impactSummary: normalizeProjectMapRelationshipImpactSummary(response.impact),
     contextPack: normalizeProjectMapRelationshipContextPack(response.contextPack),
+    apiContracts: normalizeProjectMapApiContractGraph(response.apiContracts),
     staleSummary: normalizeProjectMapRelationshipStaleSummary(response.stale),
     repairIssues: normalizeProjectMapRelationshipRepairIssues(response.repair),
     readErrors: response.readErrors ?? [],

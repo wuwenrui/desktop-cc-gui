@@ -38,6 +38,18 @@ The API contract scanner SHALL respect workspace scope, ignore rules, generated-
 
 The system SHALL discover API contracts through a pluggable adapter contract that supports strong contract sources and language-specific source inference.
 
+#### Scenario: Language parsing uses mature parser sources
+
+- **WHEN** an adapter needs to inspect source code semantics
+- **THEN** the adapter SHALL prefer mature parser, compiler API, syntax tree, or descriptor sources for that language
+- **AND** the adapter SHALL NOT implement a full programming-language parser with handwritten string scanning
+
+#### Scenario: Regex fallback stays localized
+
+- **WHEN** an adapter uses regular expressions for route or symbol recognition
+- **THEN** that regex SHALL be a localized fallback or confirmation step
+- **AND** the adapter SHALL keep confidence and evidence boundaries explicit
+
 #### Scenario: Strong contract sources are discovered first
 
 - **WHEN** a workspace contains OpenAPI, Swagger, protobuf, gRPC, or GraphQL schema files
@@ -57,6 +69,12 @@ The system SHALL discover API contracts through a pluggable adapter contract tha
 - **WHEN** a declared first-stage language adapter cannot identify a concrete endpoint in a source file
 - **THEN** the adapter SHALL still report an explicit unsupported or no-candidate reason for that file family
 - **AND** Java, Kotlin, Python, Go, C, C++, TypeScript, JavaScript, C#, and Rust SHALL NOT be completely absent from the adapter registry
+
+#### Scenario: Parser source is recorded
+
+- **WHEN** an adapter emits endpoint or handler candidates
+- **THEN** the evidence SHALL identify whether the candidate came from a schema parser, compiler API, syntax tree parser, descriptor, or fallback pattern
+- **AND** candidates from fallback patterns SHALL NOT be presented as compiler-grade AST evidence
 
 #### Scenario: Weak semantic languages keep confidence boundaries
 

@@ -335,6 +335,44 @@
   gap: 5px;
 }
 
+.project-map-relationship-graph-file-group,
+.project-map-relationship-graph-file-module {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.project-map-relationship-graph-file-group {
+  border: 1px solid color-mix(in srgb, var(--project-map-border) 54%, transparent);
+  border-radius: 10px;
+  padding: 6px;
+  background: color-mix(in srgb, var(--project-map-surface) 56%, transparent);
+}
+
+.project-map-relationship-graph-file-group > header,
+.project-map-relationship-graph-file-module > header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.project-map-relationship-graph-file-group > header {
+  padding: 0 1px 1px;
+}
+
+.project-map-relationship-graph-file-module > header {
+  border-left: 2px solid color-mix(in srgb, var(--project-map-accent) 36%, transparent);
+  padding-left: 6px;
+}
+
+.project-map-relationship-graph-file-modules,
+.project-map-relationship-graph-file-module > div {
+  display: grid;
+  gap: 5px;
+}
+
 .project-map-relationship-graph-file-list button {
   display: grid;
   grid-template-columns: 8px minmax(0, 1fr);
@@ -348,9 +386,27 @@
   cursor: pointer;
 }
 
+.project-map-relationship-graph-file-list button.project-map-relationship-graph-file-group-toggle,
+.project-map-relationship-graph-file-list button.project-map-relationship-graph-file-module-toggle {
+  display: flex;
+  min-width: 0;
+  grid-template-columns: none;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--project-map-text-strong);
+}
+
 .project-map-relationship-graph-file-list button.is-active {
   border-color: color-mix(in srgb, var(--project-map-accent) 58%, transparent);
   background: color-mix(in srgb, var(--project-map-accent) 12%, var(--project-map-surface));
+}
+
+.project-map-relationship-graph-file-list button.project-map-relationship-graph-file-more {
+  background: color-mix(in srgb, var(--project-map-accent) 8%, var(--project-map-surface));
 }
 
 .project-map-relationship-graph-file-list button > span {
@@ -358,6 +414,765 @@
   width: 4px;
   border-radius: 999px;
   background: var(--relationship-node-color);
+}
+
+.project-map-relationship-graph-file-list button.project-map-relationship-graph-file-group-toggle > span,
+.project-map-relationship-graph-file-list button.project-map-relationship-graph-file-module-toggle > span {
+  grid-row: auto;
+  width: auto;
+  border-radius: 0;
+  background: transparent;
+  color: var(--project-map-accent);
+}
+
+.project-map-relationship-graph-file-list strong,
+.project-map-relationship-graph-file-list em {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-map-relationship-graph-file-list strong {
+  color: var(--project-map-text-strong);
+  font-size: 10.5px;
+}
+
+.project-map-relationship-graph-file-list em {
+  font-size: 9.5px;
+  font-style: normal;
+}
+
+.project-map-relationship-graph-canvas {
+  position: relative;
+  overflow: hidden;
+  min-height: 590px;
+  background:
+    radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--project-map-accent) 10%, transparent), transparent 34%),
+    linear-gradient(color-mix(in srgb, var(--project-map-border) 18%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--project-map-border) 18%, transparent) 1px, transparent 1px),
+    color-mix(in srgb, var(--project-map-surface) 94%, transparent);
+  background-size: auto, 28px 28px, 28px 28px, auto;
+}
+
+.project-map-relationship-graph-canvas-header {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  left: 12px;
+  z-index: 4;
+  border: 1px solid color-mix(in srgb, var(--project-map-border) 58%, transparent);
+  border-radius: 10px;
+  padding: 8px 9px;
+  background: color-mix(in srgb, var(--project-map-surface-strong) 78%, transparent);
+  backdrop-filter: blur(12px);
+}
+
+.project-map-relationship-graph-lane-label {
+  position: absolute;
+  z-index: 3;
+  transform: translateX(-50%);
+  border: 1px solid color-mix(in srgb, var(--project-map-border) 52%, transparent);
+  border-radius: 999px;
+  padding: 4px 9px;
+  background: color-mix(in srgb, var(--project-map-surface-strong) 68%, transparent);
+  color: var(--project-map-text-muted);
+  font-size: 9px;
+  font-weight: 820;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  backdrop-filter: blur(10px);
+}
+
+.project-map-relationship-graph-lane-label.is-incoming {
+  top: 68px;
+  left: 15%;
+}
+
+.project-map-relationship-graph-lane-label.is-current {
+  top: 68px;
+  left: 50%;
+  border-color: color-mix(in srgb, var(--project-map-accent) 34%, transparent);
+  color: var(--project-map-text-strong);
+}
+
+.project-map-relationship-graph-lane-label.is-outgoing {
+  top: 68px;
+  left: 85%;
+}
+
+.project-map-relationship-graph-legend {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 4;
+  display: flex;
+  max-width: calc(100% - 24px);
+  flex-wrap: wrap;
+  gap: 5px;
+  border: 1px solid color-mix(in srgb, var(--project-map-border) 54%, transparent);
+  border-radius: 999px;
+  padding: 5px;
+  background: color-mix(in srgb, var(--project-map-surface-strong) 74%, transparent);
+  backdrop-filter: blur(12px);
+}
+
+.project-map-relationship-graph-legend span,
+.project-map-relationship-graph-legend button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  border-radius: 999px;
+  padding: 3px 7px;
+  background: transparent;
+  color: var(--project-map-text-muted);
+  font-size: 9px;
+  font-weight: 760;
+  font-family: inherit;
+}
+
+.project-map-relationship-graph-legend button {
+  cursor: pointer;
+}
+
+.project-map-relationship-graph-legend button:hover,
+.project-map-relationship-graph-legend button.is-active {
+  background: color-mix(in srgb, var(--project-map-accent) 14%, transparent);
+  color: var(--project-map-text-strong);
+}
+
+.project-map-relationship-graph-legend span::before,
+.project-map-relationship-graph-legend button::before {
+  width: 12px;
+  height: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--project-map-text-muted) 44%, transparent);
+  content: "";
+}
+
+.project-map-relationship-graph-legend span.is-calls::before,
+.project-map-relationship-graph-legend button.is-calls::before {
+  background: color-mix(in srgb, var(--project-map-accent) 72%, var(--project-map-relation-calls));
+}
+
+.project-map-relationship-graph-legend span.is-imports::before,
+.project-map-relationship-graph-legend button.is-imports::before {
+  background: var(--project-map-relation-imports);
+}
+
+.project-map-relationship-graph-legend span.is-tests::before,
+.project-map-relationship-graph-legend button.is-tests::before {
+  background: var(--project-map-relation-tests);
+}
+
+.project-map-relationship-graph-minimap {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  z-index: 4;
+  width: 148px;
+  height: 92px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--project-map-border) 56%, transparent);
+  border-radius: 10px;
+  background:
+    radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--project-map-accent) 10%, transparent), transparent 56%),
+    color-mix(in srgb, var(--project-map-surface-strong) 70%, transparent);
+  backdrop-filter: blur(12px);
+}
+
+.project-map-relationship-graph-minimap::before {
+  position: absolute;
+  inset: 9px;
+  border: 1px solid color-mix(in srgb, var(--project-map-accent) 26%, transparent);
+  border-radius: 7px;
+  content: "";
+}
+
+.project-map-relationship-graph-minimap span {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  transform: translate(-50%, -50%);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--relationship-node-color) 80%, var(--project-map-text-muted));
+  opacity: 0.72;
+}
+
+.project-map-relationship-graph-minimap span.is-neighbor {
+  opacity: 0.92;
+}
+
+.project-map-relationship-graph-minimap span.is-selected {
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--project-map-accent);
+  background: var(--project-map-accent);
+  opacity: 1;
+}
+
+.project-map-relationship-graph-minimap span.is-edge-endpoint {
+  width: 7px;
+  height: 7px;
+  background: color-mix(in srgb, var(--project-map-accent) 78%, var(--project-map-relation-calls));
+  opacity: 1;
+}
+
+.project-map-relationship-graph-svg {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+}
+
+.project-map-relationship-graph-svg marker path {
+  fill: color-mix(in srgb, var(--project-map-accent) 62%, var(--project-map-text-muted));
+}
+
+.project-map-relationship-graph-edge {
+  color: color-mix(in srgb, var(--project-map-text-muted) 42%, transparent);
+  cursor: pointer;
+}
+
+.project-map-relationship-graph-edge line {
+  stroke: currentColor;
+  stroke-width: 1.4;
+  vector-effect: non-scaling-stroke;
+}
+
+.project-map-relationship-graph-edge-arrow {
+  fill: currentColor;
+  opacity: 0.92;
+  pointer-events: none;
+}
+
+.project-map-relationship-graph-edge.is-calls {
+  color: color-mix(in srgb, var(--project-map-accent) 72%, var(--project-map-relation-calls));
+}
+
+.project-map-relationship-graph-edge.is-imports {
+  color: var(--project-map-relation-imports);
+}
+
+.project-map-relationship-graph-edge.is-tests {
+  color: var(--project-map-relation-tests);
+}
+
+.project-map-relationship-graph-edge.is-selected {
+  color: var(--project-map-accent);
+}
+
+.project-map-relationship-graph-edge.is-selected line {
+  stroke-width: 2.6;
+}
+
+.project-map-relationship-graph-aggregate-edge {
+  color: color-mix(in srgb, var(--project-map-text-muted) 34%, transparent);
+}
+
+.project-map-relationship-graph-aggregate-edge line {
+  stroke: currentColor;
+  stroke-width: 1.2;
+  stroke-dasharray: 6 6;
+  vector-effect: non-scaling-stroke;
+}
+
+.project-map-relationship-graph-aggregate-edge .project-map-relationship-graph-edge-arrow {
+  opacity: 0.64;
+}
+
+.project-map-relationship-graph-edge-label {
+  position: absolute;
+  z-index: 3;
+  transform: translate(-50%, -50%);
+  max-width: min(420px, 42vw);
+  overflow: visible;
+  border: 1px solid color-mix(in srgb, var(--project-map-border) 62%, transparent);
+  border-radius: 999px;
+  padding: 3px 7px;
+  background: color-mix(in srgb, var(--project-map-surface-strong) 82%, transparent);
+  color: var(--project-map-text-muted);
+  font-size: 9px;
+  line-height: 1.22;
+  overflow-wrap: anywhere;
+  text-align: center;
+  white-space: normal;
+  cursor: pointer;
+}
+
+.project-map-relationship-graph-edge-label.is-calls {
+  border-color: color-mix(in srgb, var(--project-map-accent) 44%, transparent);
+  color: var(--project-map-text-strong);
+}
+
+.project-map-relationship-graph-edge-label.is-imports {
+  border-color: color-mix(in srgb, var(--project-map-relation-imports) 44%, transparent);
+  color: color-mix(in srgb, var(--project-map-relation-imports) 78%, var(--project-map-text-strong));
+}
+
+.project-map-relationship-graph-edge-label.is-tests {
+  border-color: color-mix(in srgb, var(--project-map-relation-tests) 44%, transparent);
+  color: color-mix(in srgb, var(--project-map-relation-tests) 78%, var(--project-map-text-strong));
+}
+
+.project-map-relationship-graph-edge-label.is-selected {
+  background: color-mix(in srgb, var(--project-map-accent) 18%, var(--project-map-surface));
+  color: var(--project-map-text-strong);
+}
+
+.project-map-relationship-graph-node {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  width: 172px;
+  min-height: 84px;
+  gap: 3px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--project-map-border) 70%, transparent);
+  border-radius: 11px;
+  padding: 9px 34px 9px 15px;
+  background:
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--relationship-node-color) 10%, var(--project-map-surface-strong)),
+      color-mix(in srgb, var(--project-map-surface) 88%, transparent)
+    );
+  color: var(--project-map-text-muted);
+  font: inherit;
+  text-align: left;
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--project-map-shadow) 20%, transparent);
+  cursor: pointer;
+}
+
+.project-map-relationship-graph-node i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 4px;
+  background: var(--relationship-node-color);
+}
+
+.project-map-relationship-graph-node span {
+  width: fit-content;
+  max-width: 100%;
+  border-radius: 999px;
+  padding: 2px 6px;
+  background: color-mix(in srgb, var(--relationship-node-color) 16%, transparent);
+  color: var(--relationship-node-color);
+  font-size: 9px;
+  font-weight: 820;
+  text-transform: uppercase;
+}
+
+.project-map-relationship-graph-node strong,
+.project-map-relationship-graph-node em,
+.project-map-relationship-graph-node small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-map-relationship-graph-node strong {
+  color: var(--project-map-text-strong);
+  font-size: 12px;
+}
+
+.project-map-relationship-graph-node em,
+.project-map-relationship-graph-node small {
+  font-size: 10px;
+  font-style: normal;
+}
+
+.project-map-relationship-graph-node.is-selected {
+  border-color: color-mix(in srgb, var(--project-map-accent) 70%, transparent);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--project-map-accent) 24%, transparent),
+    0 18px 36px color-mix(in srgb, var(--project-map-accent) 16%, transparent);
+}
+
+.project-map-relationship-graph-node.is-inspected {
+  border-color: color-mix(in srgb, var(--project-map-relation-calls) 74%, var(--project-map-accent));
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--project-map-relation-calls) 20%, transparent),
+    0 16px 32px color-mix(in srgb, var(--project-map-relation-calls) 12%, transparent);
+}
+
+.project-map-relationship-graph-node.is-neighbor {
+  border-color: color-mix(in srgb, var(--relationship-node-color) 45%, var(--project-map-border));
+}
+
+.project-map-relationship-graph-node.is-edge-endpoint {
+  border-color: color-mix(in srgb, var(--project-map-accent) 74%, var(--project-map-relation-calls));
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--project-map-accent) 18%, transparent),
+    0 16px 34px color-mix(in srgb, var(--project-map-accent) 12%, transparent);
+}
+
+.project-map-relationship-graph-node.is-secondary {
+  opacity: 0.64;
+}
+
+.project-map-relationship-graph-node-jump {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 21px;
+  height: 21px;
+  border: 1px solid color-mix(in srgb, var(--relationship-node-color) 46%, transparent);
+  border-radius: 999px;
+  padding: 0;
+  background: color-mix(in srgb, var(--project-map-surface-strong) 80%, transparent);
+  color: color-mix(in srgb, var(--relationship-node-color) 78%, var(--project-map-text-strong));
+  cursor: pointer;
+  opacity: 0.78;
+}
+
+.project-map-relationship-graph-node-jump svg {
+  width: 12px;
+  height: 12px;
+}
+
+.project-map-relationship-graph-node:hover .project-map-relationship-graph-node-jump,
+.project-map-relationship-graph-node-jump:focus-visible {
+  opacity: 1;
+}
+
+.project-map-relationship-graph-aggregate-node {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  width: 172px;
+  min-height: 68px;
+  place-items: center;
+  gap: 3px;
+  transform: translateY(0);
+  border: 1px dashed color-mix(in srgb, var(--project-map-border) 74%, transparent);
+  border-radius: 999px;
+  padding: 10px 14px;
+  background:
+    radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--project-map-accent) 10%, transparent), transparent 60%),
+    color-mix(in srgb, var(--project-map-surface-strong) 68%, transparent);
+  color: var(--project-map-text-muted);
+  font-family: inherit;
+  text-align: center;
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--project-map-shadow) 14%, transparent);
+  cursor: pointer;
+}
+
+.project-map-relationship-graph-aggregate-node:hover,
+.project-map-relationship-graph-aggregate-node.is-expanded {
+  border-style: solid;
+  background:
+    radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--project-map-accent) 18%, transparent), transparent 60%),
+    color-mix(in srgb, var(--project-map-surface-strong) 80%, transparent);
+  color: var(--project-map-text-strong);
+}
+
+.project-map-relationship-graph-aggregate-node strong {
+  color: var(--project-map-text-strong);
+  font-size: 15px;
+  font-weight: 860;
+}
+
+.project-map-relationship-graph-aggregate-node span {
+  color: var(--project-map-text-muted);
+  font-size: 10px;
+  font-weight: 760;
+}
+
+.project-map-relationship-graph-aggregate-node.is-incoming {
+  border-color: color-mix(in srgb, var(--project-map-relation-imports) 42%, transparent);
+}
+
+.project-map-relationship-graph-aggregate-node.is-outgoing {
+  border-color: color-mix(in srgb, var(--project-map-accent) 42%, transparent);
+}
+
+.project-map-relationship-graph-dashboard {
+  grid-template-columns: minmax(240px, 280px) minmax(760px, 1fr) minmax(300px, 360px);
+  height: clamp(660px, 74vh, 900px);
+}
+
+.project-map-relationship-graph-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  min-height: 24px;
+  margin: -2px 6px 6px 0;
+  padding: 0;
+  pointer-events: none;
+}
+
+.project-map-relationship-graph-toolbar .project-map-relationship-graph-layout-controls {
+  pointer-events: auto;
+}
+
+.project-map-relationship-graph-dashboard.is-rail-collapsed {
+  grid-template-columns: minmax(760px, 1fr) minmax(300px, 360px);
+}
+
+.project-map-relationship-graph-dashboard.is-inspector-collapsed {
+  grid-template-columns: minmax(240px, 280px) minmax(760px, 1fr);
+}
+
+.project-map-relationship-graph-dashboard.is-rail-collapsed.is-inspector-collapsed {
+  grid-template-columns: minmax(760px, 1fr);
+}
+
+.project-map-relationship-graph-rail,
+.project-map-relationship-graph-inspector,
+.project-map-relationship-graph-canvas {
+  min-height: 0;
+  height: 100%;
+}
+
+.project-map-relationship-graph-canvas {
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+}
+
+.project-map-relationship-graph-canvas:active {
+  cursor: grabbing;
+}
+
+.project-map-relationship-graph-canvas.is-panning {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.project-map-relationship-graph-stage {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 1;
+  width: 1320px;
+  height: 760px;
+  transform:
+    translate(-50%, -50%)
+    translate(var(--relationship-graph-pan-x, 0px), var(--relationship-graph-pan-y, 0px))
+    scale(var(--relationship-graph-scale, 1));
+  transform-origin: center;
+  will-change: transform;
+}
+
+.project-map-relationship-graph-layout-controls {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: max-content;
+  white-space: nowrap;
+}
+
+.project-map-relationship-graph-layout-controls button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--project-map-text-muted);
+  font-size: 10px;
+  font-weight: 800;
+  font-family: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.project-map-relationship-graph-layout-controls button::before {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border: 1.5px solid currentColor;
+  border-radius: 3px;
+  opacity: 0.9;
+  content: "";
+}
+
+.project-map-relationship-graph-layout-controls button.is-files::before {
+  box-shadow: inset 3px 0 0 color-mix(in srgb, currentColor 58%, transparent);
+}
+
+.project-map-relationship-graph-layout-controls button.is-inspector::before {
+  box-shadow: inset -3px 0 0 color-mix(in srgb, currentColor 58%, transparent);
+}
+
+.project-map-relationship-graph-layout-controls button.is-reset::before {
+  border-radius: 999px;
+}
+
+.project-map-relationship-graph-layout-controls button.is-zoom-in::before,
+.project-map-relationship-graph-layout-controls button.is-zoom-out::before {
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.project-map-relationship-graph-layout-controls button.is-zoom-in::before {
+  content: "+";
+}
+
+.project-map-relationship-graph-layout-controls button.is-zoom-out::before {
+  content: "-";
+}
+
+.project-map-relationship-graph-layout-controls button:hover,
+.project-map-relationship-graph-layout-controls button.is-active {
+  color: var(--project-map-accent);
+}
+
+.project-map-relationship-layout-preset {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--project-map-text-muted);
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.project-map-relationship-layout-preset select {
+  min-width: 112px;
+  border: 1px solid color-mix(in srgb, var(--project-map-border) 82%, transparent);
+  border-radius: 7px;
+  padding: 5px 8px;
+  background: color-mix(in srgb, var(--project-map-surface-strong) 76%, transparent);
+  color: var(--project-map-text-strong);
+  font-size: 10px;
+  font-weight: 760;
+  font-family: inherit;
+}
+
+.project-map-relationship-graph-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  color: var(--project-map-text-muted);
+  font-size: 11px;
+}
+
+.project-map-relationship-graph-inspector h5 {
+  color: var(--project-map-text-strong);
+  font-size: 11px;
+  font-weight: 820;
+}
+
+.project-map-relationship-graph-rail header span,
+.project-map-relationship-graph-canvas-header span {
+  overflow: hidden;
+  color: var(--project-map-text-muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-map-relationship-graph-file-list {
+  display: grid;
+  gap: 5px;
+}
+
+.project-map-relationship-graph-file-group,
+.project-map-relationship-graph-file-module {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.project-map-relationship-graph-file-group {
+  border: 1px solid color-mix(in srgb, var(--project-map-border) 54%, transparent);
+  border-radius: 10px;
+  padding: 6px;
+  background: color-mix(in srgb, var(--project-map-surface) 56%, transparent);
+}
+
+.project-map-relationship-graph-file-group > header,
+.project-map-relationship-graph-file-module > header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.project-map-relationship-graph-file-group > header {
+  padding: 0 1px 1px;
+}
+
+.project-map-relationship-graph-file-module > header {
+  border-left: 2px solid color-mix(in srgb, var(--project-map-accent) 36%, transparent);
+  padding-left: 6px;
+}
+
+.project-map-relationship-graph-file-modules,
+.project-map-relationship-graph-file-module > div {
+  display: grid;
+  gap: 5px;
+}
+
+.project-map-relationship-graph-file-list button {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr);
+  gap: 2px 7px;
+  border: 1px solid color-mix(in srgb, var(--project-map-border) 60%, transparent);
+  border-radius: 8px;
+  padding: 7px;
+  background: color-mix(in srgb, var(--project-map-surface-strong) 58%, transparent);
+  color: var(--project-map-text-muted);
+  text-align: left;
+  cursor: pointer;
+}
+
+.project-map-relationship-graph-file-list button.project-map-relationship-graph-file-group-toggle,
+.project-map-relationship-graph-file-list button.project-map-relationship-graph-file-module-toggle {
+  display: flex;
+  min-width: 0;
+  grid-template-columns: none;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--project-map-text-strong);
+}
+
+.project-map-relationship-graph-file-list button.is-active {
+  border-color: color-mix(in srgb, var(--project-map-accent) 58%, transparent);
+  background: color-mix(in srgb, var(--project-map-accent) 12%, var(--project-map-surface));
+}
+
+.project-map-relationship-graph-file-list button.project-map-relationship-graph-file-more {
+  background: color-mix(in srgb, var(--project-map-accent) 8%, var(--project-map-surface));
+}
+
+.project-map-relationship-graph-file-list button > span {
+  grid-row: 1 / span 2;
+  width: 4px;
+  border-radius: 999px;
+  background: var(--relationship-node-color);
+}
+
+.project-map-relationship-graph-file-list button.project-map-relationship-graph-file-group-toggle > span,
+.project-map-relationship-graph-file-list button.project-map-relationship-graph-file-module-toggle > span {
+  grid-row: auto;
+  width: auto;
+  border-radius: 0;
+  background: transparent;
+  color: var(--project-map-accent);
 }
 
 .project-map-relationship-graph-file-list strong,
@@ -1853,719 +2668,4 @@ button.project-map-relationship-edge-row {
   margin: 0;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.project-map-relationship-scope-warning {
-  display: grid;
-  gap: 4px;
-  border: 1px solid color-mix(in srgb, var(--project-map-warning) 36%, var(--project-map-border));
-  border-radius: 8px;
-  padding: 7px;
-  background: color-mix(in srgb, var(--project-map-warning) 8%, var(--project-map-surface));
-}
-
-.project-map-relationship-scope-warning strong,
-.project-map-relationship-scope-warning span {
-  overflow: hidden;
-  color: var(--project-map-text-muted);
-  font-size: 10px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.project-map-relationship-scope-warning strong {
-  color: var(--project-map-warning);
-}
-
-.project-map-relationship-repair-strip {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  gap: 6px;
-  color: var(--project-map-text-muted);
-  font-size: 10px;
-}
-
-.project-map-relationship-repair-strip strong,
-.project-map-relationship-repair-strip span {
-  border: 1px solid color-mix(in srgb, var(--project-map-border) 72%, transparent);
-  border-radius: 999px;
-  padding: 4px 7px;
-}
-
-.project-map-relationship-workspace-header {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  border: 1px solid color-mix(in srgb, var(--project-map-border) 68%, transparent);
-  border-radius: 12px;
-  padding: 10px 12px;
-  background:
-    linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--project-map-surface-strong) 82%, transparent),
-      color-mix(in srgb, var(--project-map-surface) 92%, transparent)
-    );
-}
-
-.project-map-relationship-workspace-header div {
-  display: grid;
-  min-width: 0;
-  gap: 3px;
-}
-
-.project-map-relationship-workspace-header strong {
-  color: var(--project-map-text-strong);
-  font-size: 13px;
-  font-weight: 840;
-}
-
-.project-map-relationship-workspace-header span {
-  overflow: hidden;
-  color: var(--project-map-text-muted);
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.project-map-relationship-file-workspace,
-.project-map-relationship-read-workspace {
-  min-height: min(68vh, 760px);
-}
-
-.project-map-relationship-file-workspace {
-  display: grid;
-  gap: 10px;
-  min-height: 0;
-}
-
-.project-map-relationship-file-tree {
-  display: grid;
-  height: clamp(440px, calc(100vh - 390px), 680px);
-  max-height: clamp(440px, calc(100vh - 390px), 680px);
-  min-height: 440px;
-  overflow: auto;
-  padding-right: 4px;
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--project-map-accent) 52%, transparent) transparent;
-}
-
-.project-map-relationship-file-tree-zoom {
-  display: grid;
-  align-content: start;
-  width: calc(100% / var(--relationship-files-scale, 1));
-  gap: 10px;
-  transform: scale(var(--relationship-files-scale, 1));
-  transform-origin: top left;
-}
-
-.project-map-relationship-file-tree-group {
-  display: grid;
-  align-content: start;
-  gap: 7px;
-  border: 1px solid color-mix(in srgb, var(--project-map-border) 70%, transparent);
-  border-radius: 12px;
-  padding: 9px;
-  background:
-    linear-gradient(
-      145deg,
-      color-mix(in srgb, var(--project-map-surface-strong) 64%, transparent),
-      color-mix(in srgb, var(--project-map-surface) 88%, transparent)
-    );
-}
-
-.project-map-relationship-file-tree-group > header {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.project-map-relationship-file-tree-group > header strong {
-  overflow: hidden;
-  color: var(--project-map-text-strong);
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.project-map-relationship-file-tree-group > header span {
-  flex: none;
-  color: var(--project-map-text-muted);
-  font-size: 10px;
-}
-
-.project-map-relationship-file-tree-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  align-items: start;
-  gap: 7px;
-}
-
-.project-map-relationship-file-tree.is-layout-tree .project-map-relationship-file-tree-list {
-  grid-template-columns: 1fr;
-}
-
-.project-map-relationship-file-tree.is-layout-force .project-map-relationship-file-tree-list {
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 5px;
-}
-
-.project-map-relationship-file-tree.is-layout-force .project-map-relationship-file-tree-group {
-  padding: 7px;
-}
-
-.project-map-relationship-file-tree.is-layout-force .project-map-relationship-file-tree-row {
-  gap: 6px;
-  padding: 7px;
-}
-
-.project-map-relationship-file-tree.is-layout-force .project-map-relationship-file-tree-row em {
-  display: none;
-}
-
-.project-map-relationship-file-tree-row {
-  display: grid;
-  height: 76px;
-  min-width: 0;
-  grid-template-columns: 4px minmax(0, 1fr);
-  gap: 8px;
-  align-items: center;
-  border: 1px solid color-mix(in srgb, var(--project-map-border) 68%, transparent);
-  border-radius: 10px;
-  padding: 9px;
-  background: color-mix(in srgb, var(--project-map-surface-strong) 68%, transparent);
-  color: var(--project-map-text-muted);
-  text-align: left;
-  cursor: pointer;
-}
-
-.project-map-relationship-file-tree-row > span {
-  width: 4px;
-  height: 100%;
-  min-height: 38px;
-  border-radius: 999px;
-  background: var(--relationship-node-color, var(--project-map-accent));
-  box-shadow: 0 0 12px color-mix(in srgb, var(--relationship-node-color, var(--project-map-accent)) 40%, transparent);
-}
-
-.project-map-relationship-file-tree-row div {
-  display: grid;
-  min-width: 0;
-  gap: 3px;
-}
-
-.project-map-relationship-file-tree-row strong,
-.project-map-relationship-file-tree-row em,
-.project-map-relationship-file-tree-row small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.project-map-relationship-file-tree-row strong {
-  color: var(--project-map-text-strong);
-  font-size: 12px;
-}
-
-.project-map-relationship-file-tree-row em,
-.project-map-relationship-file-tree-row small {
-  color: var(--project-map-text-muted);
-  font-size: 10px;
-  font-style: normal;
-}
-
-.project-map-relationship-file-tree-row small {
-  grid-column: 2;
-}
-
-.project-map-relationship-file-tree-row.is-active {
-  border-color: color-mix(in srgb, var(--project-map-accent) 58%, transparent);
-  background:
-    linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--project-map-accent) 14%, var(--project-map-surface)),
-      color-mix(in srgb, var(--project-map-surface-strong) 76%, transparent)
-    );
-}
-
-.project-map-relationship-read-workspace {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.42fr);
-  gap: 12px;
-}
-
-.project-map-relationship-read-main,
-.project-map-relationship-read-side {
-  display: grid;
-  min-width: 0;
-  align-content: start;
-  gap: 10px;
-}
-
-.project-map-relationship-read-profile,
-.project-map-relationship-read-side > section,
-.project-map-relationship-read-relation-groups {
-  display: grid;
-  min-width: 0;
-  gap: 8px;
-  border: 1px solid color-mix(in srgb, var(--project-map-border) 70%, transparent);
-  border-radius: 12px;
-  padding: 10px;
-  background:
-    linear-gradient(
-      145deg,
-      color-mix(in srgb, var(--project-map-surface-strong) 70%, transparent),
-      color-mix(in srgb, var(--project-map-surface) 92%, transparent)
-    );
-}
-
-.project-map-relationship-read-profile > span,
-.project-map-relationship-read-relation-groups h5,
-.project-map-relationship-read-side h5,
-.project-map-relationship-read-chip-list strong {
-  margin: 0;
-  color: var(--project-map-accent);
-  font-size: 10px;
-  font-weight: 820;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.project-map-relationship-read-profile strong {
-  overflow: hidden;
-  color: var(--project-map-text-strong);
-  font-size: 17px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.project-map-relationship-read-profile p {
-  overflow: hidden;
-  margin: 0;
-  color: var(--project-map-text-muted);
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.project-map-relationship-read-profile div,
-.project-map-relationship-read-metrics {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.project-map-relationship-read-profile small,
-.project-map-relationship-read-metrics span,
-.project-map-relationship-read-chip-list span {
-  border: 1px solid color-mix(in srgb, var(--project-map-border) 68%, transparent);
-  border-radius: 999px;
-  padding: 4px 7px;
-  color: var(--project-map-text-muted);
-  font-size: 10px;
-}
-
-.project-map-relationship-read-relation-group {
-  display: grid;
-  gap: 6px;
-  border: 1px solid color-mix(in srgb, var(--project-map-border) 58%, transparent);
-  border-radius: 10px;
-  padding: 8px;
-  background: color-mix(in srgb, var(--project-map-surface-strong) 46%, transparent);
-}
-
-.project-map-relationship-read-relation-group > header {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  color: var(--project-map-text-muted);
-  font-size: 10px;
-}
-
-.project-map-relationship-read-relation-group > header strong {
-  color: var(--project-map-text-strong);
-}
-
-.project-map-relationship-read-edge-row {
-  display: grid;
-  min-width: 0;
-  gap: 4px;
-  border: 1px solid color-mix(in srgb, var(--project-map-border) 64%, transparent);
-  border-radius: 9px;
-  padding: 8px;
-  background: color-mix(in srgb, var(--project-map-surface-strong) 72%, transparent);
-  color: var(--project-map-text-muted);
-  text-align: left;
-  cursor: pointer;
-}
-
-.project-map-relationship-read-edge-row.is-active {
-  border-color: color-mix(in srgb, var(--project-map-accent) 58%, transparent);
-  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--project-map-accent) 72%, transparent);
-}
-
-.project-map-relationship-read-edge-row span,
-.project-map-relationship-read-edge-row strong,
-.project-map-relationship-read-edge-row em,
-.project-map-relationship-read-edge-row small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.project-map-relationship-read-edge-row span {
-  color: var(--project-map-accent);
-  font-size: 10px;
-  font-weight: 800;
-}
-
-.project-map-relationship-read-edge-row strong {
-  color: var(--project-map-text-strong);
-  font-size: 12px;
-}
-
-.project-map-relationship-read-edge-row em,
-.project-map-relationship-read-edge-row small {
-  color: var(--project-map-text-muted);
-  font-size: 10px;
-  font-style: normal;
-}
-
-.project-map-relationship-read-chip-list {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.project-map-relationship-read-chip-list strong {
-  width: 100%;
-}
-
-.project-map-relationship-read-chip-list span {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.project-map-relationship-read-chip-list.is-risk span,
-.project-map-relationship-read-chip-list.is-warning span {
-  border-color: color-mix(in srgb, var(--project-map-warning) 40%, var(--project-map-border));
-  color: var(--project-map-warning);
-}
-
-.project-map-stage.is-file-relations-focused .project-map-relationship-dashboard {
-  min-height: 0;
-}
-
-.project-map-stage.is-file-relations-focused .project-map-relationship-graph-dashboard {
-  min-height: min(74vh, 820px);
-  grid-template-columns: minmax(210px, 0.28fr) minmax(720px, 1fr) minmax(300px, 0.34fr);
-}
-
-.project-map-stage.is-file-relations-focused .project-map-relationship-graph-rail,
-.project-map-stage.is-file-relations-focused .project-map-relationship-graph-inspector {
-  max-height: min(74vh, 820px);
-}
-
-.project-map-stage.is-file-relations-focused .project-map-relationship-graph-canvas {
-  min-height: min(74vh, 820px);
-}
-
-@media (max-width: 1180px) {
-  .project-map-relationship-read-workspace,
-  .project-map-stage.is-file-relations-focused .project-map-relationship-graph-dashboard {
-    grid-template-columns: 1fr;
-  }
-}
-
-.project-map-semantic-relations-panel {
-  display: grid;
-  gap: 8px;
-  border: 1px solid color-mix(in srgb, var(--project-map-border) 80%, transparent);
-  border-radius: 10px;
-  padding: 9px;
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--project-map-surface) 88%, transparent),
-      color-mix(in srgb, var(--project-map-surface-strong) 62%, transparent)
-    );
-}
-
-.project-map-semantic-relations-panel.is-collapsed {
-  background: color-mix(in srgb, var(--project-map-surface) 82%, transparent);
-}
-
-.project-map-semantic-relations-header {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  border-bottom: 1px solid color-mix(in srgb, var(--project-map-border) 72%, transparent);
-  padding-bottom: 7px;
-}
-
-.project-map-semantic-relations-header div {
-  display: grid;
-  min-width: 0;
-  gap: 2px;
-}
-
-.project-map-semantic-relations-header strong {
-  color: var(--project-map-text-strong);
-  font-size: 11px;
-  font-weight: 800;
-}
-
-.project-map-semantic-relations-header p {
-  overflow: hidden;
-  margin: 0;
-  color: var(--project-map-text-muted);
-  font-size: 10px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.project-map-semantic-relations-header > span {
-  flex: 0 0 auto;
-  border: 1px solid color-mix(in srgb, var(--project-map-border) 74%, transparent);
-  border-radius: 999px;
-  padding: 4px 7px;
-  color: var(--project-map-text-muted);
-  font-size: 10px;
-  font-weight: 720;
-}
-
-.project-map-semantic-relations-actions {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 6px;
-}
-
-.project-map-semantic-relations-actions span,
-.project-map-semantic-relations-actions button {
-  flex: 0 0 auto;
-  border: 1px solid color-mix(in srgb, var(--project-map-border) 74%, transparent);
-  border-radius: 999px;
-  padding: 4px 7px;
-  color: var(--project-map-text-muted);
-  font-size: 10px;
-  font-weight: 720;
-}
-
-.project-map-semantic-relations-actions button {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: color-mix(in srgb, var(--project-map-surface-strong) 68%, transparent);
-  cursor: pointer;
-}
-
-.project-map-semantic-relations-actions button:hover {
-  color: var(--project-map-text-strong);
-}
-
-@media (max-width: 900px) {
-  .project-map-relationship-dashboard-controls,
-  .project-map-relationship-dashboard-grid,
-  .project-map-relationship-insight-grid,
-  .project-map-relationship-graph-dashboard {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .project-map-relationship-graph-rail,
-  .project-map-relationship-graph-inspector,
-  .project-map-relationship-graph-canvas {
-    max-height: none;
-  }
-
-  .project-map-relationship-inspector {
-    position: static;
-  }
-}
-
-.project-map-stage.is-file-relations-focused
-  .project-map-relationship-graph-dashboard:not(.is-rail-collapsed):not(.is-inspector-collapsed) {
-  grid-template-columns: minmax(240px, 280px) minmax(760px, 1fr) minmax(300px, 360px);
-}
-
-.project-map-stage.is-file-relations-focused
-  .project-map-relationship-graph-dashboard.is-rail-collapsed:not(.is-inspector-collapsed) {
-  grid-template-columns: minmax(760px, 1fr) minmax(300px, 360px);
-}
-
-.project-map-stage.is-file-relations-focused
-  .project-map-relationship-graph-dashboard:not(.is-rail-collapsed).is-inspector-collapsed {
-  grid-template-columns: minmax(240px, 280px) minmax(760px, 1fr);
-}
-
-.project-map-stage.is-file-relations-focused
-  .project-map-relationship-graph-dashboard.is-rail-collapsed.is-inspector-collapsed {
-  grid-template-columns: minmax(760px, 1fr);
-}
-
-.project-map-relationship-inline-summary {
-  display: flex;
-  flex: 1 1 460px;
-  align-items: center;
-  gap: 8px;
-  min-width: min(100%, 420px);
-  max-width: 100%;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--project-map-accent) 28%, var(--project-map-border));
-  border-radius: 9px;
-  padding: 5px 8px;
-  background: color-mix(in srgb, var(--project-map-surface) 90%, transparent);
-}
-
-.project-map-relationship-inline-summary > svg {
-  flex: 0 0 auto;
-  width: 15px;
-  height: 15px;
-  color: var(--project-map-accent);
-}
-
-.project-map-relationship-inline-copy {
-  display: grid;
-  flex: 1 1 220px;
-  min-width: 0;
-  gap: 1px;
-}
-
-.project-map-relationship-inline-copy strong {
-  overflow: hidden;
-  color: var(--project-map-text-strong);
-  font-size: 12px;
-  line-height: 1.15;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.project-map-relationship-inline-copy span {
-  overflow: hidden;
-  color: var(--project-map-text-muted);
-  font-size: 10px;
-  line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.project-map-relationship-inline-metrics {
-  display: flex;
-  flex: 0 1 auto;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.project-map-relationship-inline-metrics span {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 4px;
-  height: 20px;
-  border: 1px solid color-mix(in srgb, var(--project-map-border) 70%, transparent);
-  border-radius: 999px;
-  padding: 0 7px;
-  background: color-mix(in srgb, var(--project-map-surface-strong) 72%, transparent);
-  color: var(--project-map-text-muted);
-  font-size: 10px;
-  white-space: nowrap;
-}
-
-.project-map-relationship-inline-metrics strong {
-  color: var(--project-map-text-strong);
-  font-size: 11px;
-}
-
-.project-map-stage.is-file-relations-focused {
-  display: flex;
-  flex-direction: column;
-}
-
-.project-map-stage.is-file-relations-focused .project-map-lens-shell {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-height: 0;
-  margin-bottom: 0;
-}
-
-.project-map-stage.is-file-relations-focused .project-map-relationship-scan-panel {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-height: 0;
-  max-height: none;
-}
-
-.project-map-stage.is-file-relations-focused .project-map-relationship-scan-panel > header {
-  display: none;
-}
-
-.project-map-stage.is-file-relations-focused .project-map-stage-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.project-map-stage.is-file-relations-focused .project-map-breadcrumb {
-  flex: 1 1 640px;
-  min-width: 360px;
-  max-width: none;
-  overflow: hidden;
-}
-
-.project-map-stage.is-file-relations-focused .project-map-breadcrumb.is-file-relations-summary {
-  display: flex;
-  align-items: center;
-}
-
-.project-map-stage.is-file-relations-focused .project-map-breadcrumb.is-file-relations-summary
-  .project-map-relationship-inline-summary {
-  width: 100%;
-  min-width: 0;
-  border: 0;
-  padding: 0;
-  background: transparent;
-}
-
-.project-map-stage.is-file-relations-focused .project-map-stage-stats {
-  display: none;
-}
-
-.project-map-stage.is-file-relations-focused .project-map-investigation-strip {
-  display: flex;
-  flex: 0 1 auto;
-  flex-wrap: nowrap;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.project-map-stage.is-file-relations-focused .project-map-investigation-mode {
-  flex: 0 0 auto;
-}
-
-.project-map-stage.is-file-relations-focused .project-map-relationship-inline-summary {
-  flex: 1 1 auto;
-  min-width: 0;
-  max-width: none;
-}
-
-.project-map-stage.is-file-relations-focused .project-map-graph-canvas {
-  display: none;
 }

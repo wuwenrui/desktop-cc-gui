@@ -1142,7 +1142,7 @@ export const MessageRow = memo(function MessageRow({
       URL.revokeObjectURL(objectUrl);
     });
     deferredImageObjectUrlsRef.current.clear();
-  }, []);
+  }, [revokeTrackedDeferredImageState]);
   const hideCopyButton = (
     !hasText
     && imageItems.length === 0

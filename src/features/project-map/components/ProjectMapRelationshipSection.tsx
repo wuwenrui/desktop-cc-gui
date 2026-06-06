@@ -24,6 +24,8 @@ import {
   scanProjectMapRelationships,
 } from "../services/projectMapPersistence";
 import type {
+  ProjectMapApiGroup,
+  ProjectMapApiEndpoint,
   ProjectMapFileRelation,
   ProjectMapRelationshipScanResponse,
   ProjectMapRelationshipSymbol,
@@ -37,7 +39,7 @@ export type ProjectMapRelationshipSummaryState =
   | { status: "failed"; message: string };
 
 type ProjectMapRelationshipScanState = ProjectMapRelationshipSummaryState;
-type ProjectMapRelationshipDashboardViewMode = "graph" | "files" | "read";
+type ProjectMapRelationshipDashboardViewMode = "graph" | "files" | "read" | "api";
 type ProjectMapRelationshipLayoutPreset = "radial" | "tree" | "force";
 
 type ProjectMapRelationshipScanScope = {
@@ -52,12 +54,38 @@ type ProjectMapRelationshipFileTreeGroup = {
   relationCount: number;
 };
 
+type ProjectMapRelationshipTopFileModuleGroup = {
+  id: string;
+  label: string;
+  files: ProjectMapScannedFile[];
+  relationCount: number;
+};
+
+type ProjectMapRelationshipTopFileRoleGroup = {
+  id: string;
+  label: string;
+  files: ProjectMapScannedFile[];
+  relationCount: number;
+  moduleGroups: ProjectMapRelationshipTopFileModuleGroup[];
+};
+
 type ProjectMapRelationshipGraphPanStart = {
   pointerId: number;
   startX: number;
   startY: number;
   originX: number;
   originY: number;
+};
+
+type ProjectMapApiGroupWithCount = ProjectMapApiGroup & {
+  endpointCount: number;
+};
+
+type ProjectMapApiEndpointSection = {
+  id: string;
+  title: string;
+  hint: string;
+  endpoints: ProjectMapApiEndpoint[];
 };
 
 type ProjectMapRelationshipSectionProps = {
@@ -71,7 +99,9 @@ type ProjectMapRelationshipSectionProps = {
 };
 
 const PROJECT_MAP_RELATION_FILTER_ALL = "all";
-const PROJECT_MAP_RELATIONSHIP_LIST_LIMIT = 120;
+const PROJECT_MAP_RELATIONSHIP_TOP_FILE_LIMIT = 120;
+const PROJECT_MAP_RELATIONSHIP_GRAPH_GROUP_LIMIT = 6;
+const PROJECT_MAP_RELATIONSHIP_EXPLORER_GROUP_LIMIT = 80;
 const PROJECT_MAP_RELATIONSHIP_EDGE_LIMIT = 80;
 const PROJECT_MAP_RELATIONSHIP_GRAPH_WIDTH = 1320;
 const PROJECT_MAP_RELATIONSHIP_GRAPH_HEIGHT = 760;
@@ -85,6 +115,7 @@ const PROJECT_MAP_RELATIONSHIP_VIEW_ORDER: ProjectMapRelationshipDashboardViewMo
   "graph",
   "files",
   "read",
+  "api",
 ];
 
 function getProjectMapRelationshipTimestamp(value: string): number | null {
@@ -190,6 +221,15 @@ export function ProjectMapRelationshipSection({
   const [selectedRelationshipFileId, setSelectedRelationshipFileId] = useState<string | null>(null);
   const [inspectedRelationshipFileId, setInspectedRelationshipFileId] = useState<string | null>(null);
   const [selectedRelationshipRelationId, setSelectedRelationshipRelationId] = useState<string | null>(null);
+  const [expandedRelationshipTopRoleGroups, setExpandedRelationshipTopRoleGroups] = useState<Set<string>>(() => new Set());
+  const [collapsedRelationshipTopRoleGroups, setCollapsedRelationshipTopRoleGroups] = useState<Set<string>>(() => new Set());
+  const [expandedRelationshipTopModuleGroups, setExpandedRelationshipTopModuleGroups] = useState<Set<string>>(() => new Set());
+  const [collapsedRelationshipTopModuleGroups, setCollapsedRelationshipTopModuleGroups] = useState<Set<string>>(() => new Set());
+  const [expandedRelationshipTopFileGroups, setExpandedRelationshipTopFileGroups] = useState<Set<string>>(() => new Set());
+  const [expandedRelationshipFileGroups, setExpandedRelationshipFileGroups] = useState<Set<string>>(() => new Set());
+  const [selectedApiGroupId, setSelectedApiGroupId] = useState<string | null>(null);
+  const [selectedApiEndpointId, setSelectedApiEndpointId] = useState<string | null>(null);
+  const [expandedApiModuleGroupIds, setExpandedApiModuleGroupIds] = useState<Set<string>>(() => new Set());
   const relationshipGraphCanvasRef = useRef<HTMLDivElement | null>(null);
   const relationshipGraphPanRef = useRef<ProjectMapRelationshipGraphPanStart | null>(null);
   const lastHandledScanRequestIdRef = useRef(0);
@@ -252,6 +292,7 @@ export function ProjectMapRelationshipSection({
     }
     const scopedChangedFiles = scope?.changedFiles ?? [];
     const scopedPaths = scope?.paths?.filter((path) => path.trim().length > 0);
+    const shouldStayInApiView = relationshipDashboardViewMode === "api";
 
     setRelationshipScanState({ status: "running" });
     void scanProjectMapRelationships({
@@ -279,7 +320,9 @@ export function ProjectMapRelationshipSection({
           setSelectedRelationshipFileId(null);
           setInspectedRelationshipFileId(null);
           setSelectedRelationshipRelationId(null);
-          setRelationshipDashboardViewMode("graph");
+          setSelectedApiGroupId(null);
+          setSelectedApiEndpointId(null);
+          setRelationshipDashboardViewMode(shouldStayInApiView ? "api" : "graph");
           await reloadRelationshipContext();
         } catch {
           setRelationshipDashboardData(null);
@@ -295,6 +338,7 @@ export function ProjectMapRelationshipSection({
     activeWorkspaceId,
     activeReadLocation,
     reloadRelationshipContext,
+    relationshipDashboardViewMode,
     relationshipScanState.status,
   ]);
 
@@ -327,6 +371,8 @@ export function ProjectMapRelationshipSection({
       setSelectedRelationshipFileId(null);
       setInspectedRelationshipFileId(null);
       setSelectedRelationshipRelationId(null);
+      setSelectedApiGroupId(null);
+      setSelectedApiEndpointId(null);
       return;
     }
 
@@ -442,7 +488,7 @@ export function ProjectMapRelationshipSection({
     ));
   }, [relationshipDashboardData, showRelationshipNoiseFiles]);
 
-  const relationshipDashboardFilteredFiles = useMemo(() => {
+  const relationshipDashboardMatchingFiles = useMemo(() => {
     if (!relationshipDashboardData) {
       return [];
     }
@@ -480,7 +526,7 @@ export function ProjectMapRelationshipSection({
         }
         return left.path.localeCompare(right.path);
       });
-    return filtered.slice(0, PROJECT_MAP_RELATIONSHIP_LIST_LIMIT);
+    return filtered;
   }, [
     relationshipDashboardData,
     relationshipDashboardModuleByFileId,
@@ -490,38 +536,67 @@ export function ProjectMapRelationshipSection({
     showRelationshipNoiseFiles,
   ]);
 
-  const relationshipDashboardVisibleFileTotal = useMemo(() => {
-    if (!relationshipDashboardData) {
-      return 0;
-    }
-    const query = relationshipDashboardQuery.trim().toLowerCase();
-    return relationshipDashboardData.files
-      .filter((file) => showRelationshipNoiseFiles || !isProjectMapRelationshipNoiseFile(file))
-      .filter((file) => (
-        relationshipDashboardRoleFilter === PROJECT_MAP_RELATION_FILTER_ALL
-        || file.role === relationshipDashboardRoleFilter
-      ))
-      .filter((file) => {
-        if (!query) {
-          return true;
-        }
-        const moduleLabel = relationshipDashboardModuleByFileId.get(file.id) ?? "";
-        return [
-          file.path,
-          file.basename,
-          file.language,
-          file.layer,
-          file.role,
-          moduleLabel,
-        ].some((value) => value.toLowerCase().includes(query));
-      }).length;
+  const relationshipDashboardFilteredFiles = useMemo(() => (
+    relationshipDashboardMatchingFiles.slice(0, PROJECT_MAP_RELATIONSHIP_TOP_FILE_LIMIT)
+  ), [relationshipDashboardMatchingFiles]);
+
+  const relationshipDashboardTopFileGroups = useMemo<ProjectMapRelationshipTopFileRoleGroup[]>(() => {
+    const roleGroups = new Map<string, ProjectMapRelationshipTopFileRoleGroup>();
+    relationshipDashboardFilteredFiles.forEach((file) => {
+      const relationCount = relationshipDashboardRelationCountByFile.get(file.id) ?? 0;
+      const roleId = file.role || "unknown";
+      const roleGroup = roleGroups.get(roleId) ?? {
+        id: roleId,
+        label: roleId,
+        files: [],
+        relationCount: 0,
+        moduleGroups: [],
+      };
+      roleGroup.files.push(file);
+      roleGroup.relationCount += relationCount;
+
+      const moduleLabel =
+        relationshipDashboardModuleByFileId.get(file.id)
+        ?? file.path.split("/").find((part) => part.length > 0)
+        ?? file.layer
+        ?? "root";
+      const moduleId = `${roleId}:${moduleLabel}`;
+      let moduleGroup = roleGroup.moduleGroups.find((group) => group.id === moduleId);
+      if (!moduleGroup) {
+        moduleGroup = {
+          id: moduleId,
+          label: moduleLabel,
+          files: [],
+          relationCount: 0,
+        };
+        roleGroup.moduleGroups.push(moduleGroup);
+      }
+      moduleGroup.files.push(file);
+      moduleGroup.relationCount += relationCount;
+      roleGroups.set(roleId, roleGroup);
+    });
+
+    return Array.from(roleGroups.values())
+      .map((group) => ({
+        ...group,
+        moduleGroups: group.moduleGroups.sort((left, right) => (
+          right.relationCount - left.relationCount
+          || right.files.length - left.files.length
+          || left.label.localeCompare(right.label)
+        )),
+      }))
+      .sort((left, right) => (
+        getProjectMapRelationshipRoleRank(left.id) - getProjectMapRelationshipRoleRank(right.id)
+        || right.relationCount - left.relationCount
+        || left.label.localeCompare(right.label)
+      ));
   }, [
-    relationshipDashboardData,
+    relationshipDashboardFilteredFiles,
     relationshipDashboardModuleByFileId,
-    relationshipDashboardQuery,
-    relationshipDashboardRoleFilter,
-    showRelationshipNoiseFiles,
+    relationshipDashboardRelationCountByFile,
   ]);
+
+  const relationshipDashboardVisibleFileTotal = relationshipDashboardMatchingFiles.length;
 
   const selectedRelationshipFile = useMemo(() => {
     if (!relationshipDashboardData?.files.length) {
@@ -529,18 +604,19 @@ export function ProjectMapRelationshipSection({
     }
     if (selectedRelationshipFileId) {
       const selectedFile = relationshipDashboardFileIndex.get(selectedRelationshipFileId);
-      const selectedFileStillVisible = relationshipDashboardFilteredFiles.some((file) => (
+      const selectedFileStillVisible = relationshipDashboardMatchingFiles.some((file) => (
         file.id === selectedRelationshipFileId
       ));
       if (selectedFile && selectedFileStillVisible) {
         return selectedFile;
       }
     }
-    return relationshipDashboardFilteredFiles[0] ?? null;
+    return relationshipDashboardFilteredFiles[0] ?? relationshipDashboardMatchingFiles[0] ?? null;
   }, [
     relationshipDashboardData,
     relationshipDashboardFileIndex,
     relationshipDashboardFilteredFiles,
+    relationshipDashboardMatchingFiles,
     selectedRelationshipFileId,
   ]);
 
@@ -562,7 +638,7 @@ export function ProjectMapRelationshipSection({
     }
     if (inspectedRelationshipFileId) {
       const inspectedFile = relationshipDashboardFileIndex.get(inspectedRelationshipFileId);
-      const inspectedFileStillVisible = relationshipDashboardFilteredFiles.some((file) => (
+      const inspectedFileStillVisible = relationshipDashboardMatchingFiles.some((file) => (
         file.id === inspectedRelationshipFileId
       ));
       if (inspectedFile && inspectedFileStillVisible) {
@@ -574,13 +650,13 @@ export function ProjectMapRelationshipSection({
     inspectedRelationshipFileId,
     relationshipDashboardData,
     relationshipDashboardFileIndex,
-    relationshipDashboardFilteredFiles,
+    relationshipDashboardMatchingFiles,
     selectedRelationshipFile,
   ]);
 
   const relationshipDashboardFileTreeGroups = useMemo<ProjectMapRelationshipFileTreeGroup[]>(() => {
     const groups = new Map<string, ProjectMapScannedFile[]>();
-    relationshipDashboardFilteredFiles.forEach((file) => {
+    relationshipDashboardMatchingFiles.forEach((file) => {
       const moduleLabel = relationshipDashboardModuleByFileId.get(file.id);
       const pathParts = file.path.split("/").filter((part) => part.length > 0);
       const firstPathSegment = pathParts[0] ?? file.layer ?? file.role ?? "root";
@@ -600,10 +676,86 @@ export function ProjectMapRelationshipSection({
         ), 0),
       }));
   }, [
-    relationshipDashboardFilteredFiles,
+    relationshipDashboardMatchingFiles,
     relationshipDashboardModuleByFileId,
     relationshipDashboardRelationCountByFile,
   ]);
+
+  const relationshipDashboardExplorerRenderedFileCount = useMemo(() => (
+    relationshipDashboardFileTreeGroups.reduce((total, group) => (
+      total + (
+        expandedRelationshipFileGroups.has(group.id)
+          ? group.files.length
+          : Math.min(group.files.length, PROJECT_MAP_RELATIONSHIP_EXPLORER_GROUP_LIMIT)
+      )
+    ), 0)
+  ), [expandedRelationshipFileGroups, relationshipDashboardFileTreeGroups]);
+
+  const toggleRelationshipTopRoleGroup = useCallback((groupId: string, isExpanded: boolean) => {
+    setExpandedRelationshipTopRoleGroups((current) => {
+      const next = new Set(current);
+      if (isExpanded) {
+        next.delete(groupId);
+      } else {
+        next.add(groupId);
+      }
+      return next;
+    });
+    setCollapsedRelationshipTopRoleGroups((current) => {
+      const next = new Set(current);
+      if (isExpanded) {
+        next.add(groupId);
+      } else {
+        next.delete(groupId);
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleRelationshipTopModuleGroup = useCallback((groupId: string, isExpanded: boolean) => {
+    setExpandedRelationshipTopModuleGroups((current) => {
+      const next = new Set(current);
+      if (isExpanded) {
+        next.delete(groupId);
+      } else {
+        next.add(groupId);
+      }
+      return next;
+    });
+    setCollapsedRelationshipTopModuleGroups((current) => {
+      const next = new Set(current);
+      if (isExpanded) {
+        next.add(groupId);
+      } else {
+        next.delete(groupId);
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleRelationshipTopFileGroup = useCallback((groupId: string) => {
+    setExpandedRelationshipTopFileGroups((current) => {
+      const next = new Set(current);
+      if (next.has(groupId)) {
+        next.delete(groupId);
+      } else {
+        next.add(groupId);
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleRelationshipFileTreeGroup = useCallback((groupId: string) => {
+    setExpandedRelationshipFileGroups((current) => {
+      const next = new Set(current);
+      if (next.has(groupId)) {
+        next.delete(groupId);
+      } else {
+        next.add(groupId);
+      }
+      return next;
+    });
+  }, []);
 
   const resolveRelationshipRelationsForFile = useCallback((file: ProjectMapScannedFile | null) => {
     if (!relationshipDashboardData || !file) {
@@ -944,8 +1096,192 @@ export function ProjectMapRelationshipSection({
     ) ?? []
   ), [relationshipDashboardData?.staleSummary?.reasons]);
 
+  const apiEndpointById = useMemo(() => {
+    const index = new Map<string, ProjectMapApiEndpoint>();
+    relationshipDashboardData?.apiContracts?.endpoints.forEach((endpoint) => {
+      index.set(endpoint.id, endpoint);
+    });
+    return index;
+  }, [relationshipDashboardData?.apiContracts?.endpoints]);
+
+  const apiGroups = useMemo<ProjectMapApiGroupWithCount[]>(() => {
+    const apiContracts = relationshipDashboardData?.apiContracts;
+    if (!apiContracts) {
+      return [];
+    }
+    const endpointCounts = new Map<string, number>();
+    apiContracts.endpoints.forEach((endpoint) => {
+      endpoint.groupIds.forEach((groupId) => {
+        endpointCounts.set(groupId, (endpointCounts.get(groupId) ?? 0) + 1);
+      });
+    });
+    return apiContracts.groups
+      .map((group) => ({
+        ...group,
+        endpointCount: endpointCounts.get(group.id) ?? group.endpointIds.length,
+      }))
+      .sort((left, right) => (
+        left.level.localeCompare(right.level)
+        || right.endpointCount - left.endpointCount
+        || left.label.localeCompare(right.label)
+      ));
+  }, [relationshipDashboardData?.apiContracts]);
+
+  const apiGroupById = useMemo(() => {
+    const index = new Map<string, ProjectMapApiGroupWithCount>();
+    apiGroups.forEach((group) => {
+      index.set(group.id, group);
+    });
+    return index;
+  }, [apiGroups]);
+
+  const apiModuleGroups = useMemo(() => {
+    const modules = apiGroups.filter((group) => group.level === "module");
+    return modules.length ? modules : apiGroups.filter((group) => group.level !== "endpoint");
+  }, [apiGroups]);
+
+  const selectedApiModuleGroup = useMemo(() => {
+    if (!apiModuleGroups.length) {
+      return null;
+    }
+    if (selectedApiGroupId) {
+      const selected = apiGroupById.get(selectedApiGroupId);
+      if (selected?.level === "module") {
+        return selected;
+      }
+      const parent = selected?.parentId ? apiGroupById.get(selected.parentId) : null;
+      if (parent?.level === "module") {
+        return parent;
+      }
+    }
+    return apiModuleGroups[0] ?? null;
+  }, [apiGroupById, apiModuleGroups, selectedApiGroupId]);
+
+  const apiControllerGroups = useMemo(() => {
+    if (!selectedApiModuleGroup) {
+      return apiGroups.filter((group) => group.level === "controller");
+    }
+    const childGroups = selectedApiModuleGroup.childGroupIds
+      .map((groupId) => apiGroupById.get(groupId))
+      .filter((group): group is ProjectMapApiGroupWithCount => Boolean(group))
+      .filter((group) => group.level === "controller");
+    if (childGroups.length) {
+      return childGroups.sort((left, right) => (
+        right.endpointCount - left.endpointCount || left.label.localeCompare(right.label)
+      ));
+    }
+    return apiGroups
+      .filter((group) => group.parentId === selectedApiModuleGroup.id)
+      .sort((left, right) => (
+        right.endpointCount - left.endpointCount || left.label.localeCompare(right.label)
+      ));
+  }, [apiGroupById, apiGroups, selectedApiModuleGroup]);
+
+  const apiControllerGroupsByModuleId = useMemo(() => {
+    const index = new Map<string, ProjectMapApiGroupWithCount[]>();
+    apiModuleGroups.forEach((moduleGroup) => {
+      const controllers = moduleGroup.childGroupIds
+        .map((groupId) => apiGroupById.get(groupId))
+        .filter((group): group is ProjectMapApiGroupWithCount => Boolean(group))
+        .filter((group) => group.level === "controller")
+        .sort((left, right) => (
+          right.endpointCount - left.endpointCount || left.label.localeCompare(right.label)
+        ));
+      index.set(moduleGroup.id, controllers);
+    });
+    return index;
+  }, [apiGroupById, apiModuleGroups]);
+
+  useEffect(() => {
+    if (!apiModuleGroups.length) {
+      setExpandedApiModuleGroupIds((current) => (current.size ? new Set() : current));
+      return;
+    }
+    setExpandedApiModuleGroupIds((current) => {
+      const next = new Set<string>();
+      current.forEach((groupId) => {
+        if (apiGroupById.has(groupId)) {
+          next.add(groupId);
+        }
+      });
+      if (!next.size) {
+        next.add(apiModuleGroups[0].id);
+      }
+      if (next.size === current.size && Array.from(next).every((groupId) => current.has(groupId))) {
+        return current;
+      }
+      return next;
+    });
+  }, [apiGroupById, apiModuleGroups]);
+
+  const selectedApiGroup = useMemo(() => {
+    if (!apiGroups.length) {
+      return null;
+    }
+    if (selectedApiGroupId) {
+      const selected = apiGroups.find((group) => group.id === selectedApiGroupId);
+      if (selected) {
+        return selected;
+      }
+    }
+    return apiControllerGroups[0] ?? selectedApiModuleGroup ?? apiGroups[0] ?? null;
+  }, [apiControllerGroups, apiGroups, selectedApiGroupId, selectedApiModuleGroup]);
+
+  const selectedApiGroupEndpoints = useMemo(() => {
+    const endpoints = relationshipDashboardData?.apiContracts?.endpoints ?? [];
+    if (!selectedApiGroup) {
+      return endpoints.slice(0, 30);
+    }
+    const groupEndpointIds = new Set(selectedApiGroup.endpointIds);
+    return endpoints.filter((endpoint) => (
+      groupEndpointIds.has(endpoint.id) || endpoint.groupIds.includes(selectedApiGroup.id)
+    ));
+  }, [relationshipDashboardData?.apiContracts?.endpoints, selectedApiGroup]);
+
+  const apiEndpointSections = useMemo<ProjectMapApiEndpointSection[]>(() => {
+    const sectionMap = new Map<string, ProjectMapApiEndpoint[]>();
+    selectedApiGroupEndpoints.forEach((endpoint) => {
+      const sectionKey = (endpoint.method ?? endpoint.protocol ?? "api").toUpperCase();
+      const endpoints = sectionMap.get(sectionKey) ?? [];
+      endpoints.push(endpoint);
+      sectionMap.set(sectionKey, endpoints);
+    });
+    return Array.from(sectionMap.entries())
+      .sort(([left], [right]) => {
+        const priority = ["GET", "POST", "PUT", "PATCH", "DELETE"];
+        const leftRank = priority.indexOf(left);
+        const rightRank = priority.indexOf(right);
+        return (leftRank === -1 ? 99 : leftRank) - (rightRank === -1 ? 99 : rightRank)
+          || left.localeCompare(right);
+      })
+      .map(([title, endpoints]) => ({
+        id: title,
+        title,
+        hint: t("projectMap.relationship.apiEndpointSectionHint", { count: endpoints.length }),
+        endpoints: endpoints.sort((left, right) => (
+          (left.path ?? left.operationName ?? left.handlerSymbol ?? left.id)
+            .localeCompare(right.path ?? right.operationName ?? right.handlerSymbol ?? right.id)
+        )),
+      }));
+  }, [selectedApiGroupEndpoints, t]);
+
+  const selectedApiEndpoint = useMemo(() => {
+    if (selectedApiEndpointId) {
+      const selected = apiEndpointById.get(selectedApiEndpointId);
+      if (selected) {
+        return selected;
+      }
+    }
+    return apiEndpointSections[0]?.endpoints[0] ?? null;
+  }, [apiEndpointById, apiEndpointSections, selectedApiEndpointId]);
+
+  const apiEndpointCount = relationshipDashboardData?.apiContracts?.endpoints.length ?? 0;
+  const apiContractScanExists = Boolean(relationshipDashboardData?.apiContracts);
+  const apiGraphMode =
+    apiEndpointCount > 50 ? "group-only" : apiEndpointCount > 30 ? "selected-group" : "endpoint-direct";
+
   const supportsRelationshipDashboardZoom =
-    relationshipDashboardViewMode === "graph" || relationshipDashboardViewMode === "files";
+    relationshipDashboardViewMode === "graph" || relationshipDashboardViewMode === "files" || relationshipDashboardViewMode === "api";
 
   const handleRelationshipDashboardZoomOut = useCallback(() => {
     if (relationshipDashboardViewMode === "files") {
@@ -1329,41 +1665,149 @@ export function ProjectMapRelationshipSection({
                               <header>
                                 <strong>{t("projectMap.relationship.graphFiles")}</strong>
                                 <span>{t("projectMap.relationship.graphTopFiles", {
-                                  count: Math.min(relationshipDashboardFilteredFiles.length, 32),
+                                  top: relationshipDashboardFilteredFiles.length,
+                                  matching: relationshipDashboardVisibleFileTotal,
+                                  scanned: relationshipDashboardData.files.length,
                                 })}</span>
                               </header>
                               <div className="project-map-relationship-graph-file-list">
-                                {relationshipDashboardFilteredFiles.slice(0, 32).map((file) => {
-                                  const directionCount =
-                                    relationshipDashboardDirectionCountByFile.get(file.id)
-                                    ?? { incoming: 0, outgoing: 0 };
+                                {relationshipDashboardTopFileGroups.map((roleGroup, roleGroupIndex) => {
+                                  const selectedFileInRole = Boolean(
+                                    selectedRelationshipFile
+                                    && roleGroup.files.some((file) => file.id === selectedRelationshipFile.id),
+                                  );
+                                  const isDefaultRoleExpanded = roleGroupIndex === 0;
+                                  const isRoleExpanded =
+                                    selectedFileInRole
+                                    || expandedRelationshipTopRoleGroups.has(roleGroup.id)
+                                    || (
+                                      isDefaultRoleExpanded
+                                      && !collapsedRelationshipTopRoleGroups.has(roleGroup.id)
+                                    );
                                   return (
-                                    <button
-                                      key={file.id}
-                                      type="button"
-                                      className={cn(
-                                        selectedRelationshipFile?.id === file.id && "is-active",
-                                      )}
-                                      onClick={() => {
-                                        setSelectedRelationshipFileId(file.id);
-                                        setInspectedRelationshipFileId(file.id);
-                                        setSelectedRelationshipRelationId(null);
-                                      }}
+                                    <section
+                                      key={roleGroup.id}
+                                      className="project-map-relationship-graph-file-group"
                                     >
-                                      <span
-                                        style={{
-                                          "--relationship-node-color": getProjectMapRelationshipRoleColor(file.role),
-                                        } as CSSProperties}
-                                      />
-                                      <strong>{file.basename}</strong>
-                                      <em>
-                                        {t("projectMap.relationship.graphFileDirectionSummary", {
-                                          role: file.role,
-                                          incoming: directionCount.incoming,
-                                          outgoing: directionCount.outgoing,
-                                        })}
-                                      </em>
-                                    </button>
+                                      <header>
+                                        <button
+                                          type="button"
+                                          className="project-map-relationship-graph-file-group-toggle"
+                                          aria-expanded={isRoleExpanded}
+                                          onClick={() => toggleRelationshipTopRoleGroup(roleGroup.id, isRoleExpanded)}
+                                        >
+                                          <span aria-hidden>{isRoleExpanded ? "▾" : "▸"}</span>
+                                          <strong>{roleGroup.label}</strong>
+                                        </button>
+                                        <span>{t("projectMap.relationship.graphFileGroupStats", {
+                                          files: roleGroup.files.length,
+                                          relations: roleGroup.relationCount,
+                                        })}</span>
+                                      </header>
+                                      {isRoleExpanded ? (
+                                        <div className="project-map-relationship-graph-file-modules">
+                                          {roleGroup.moduleGroups.map((moduleGroup, moduleGroupIndex) => {
+                                            const selectedFileInModule = Boolean(
+                                              selectedRelationshipFile
+                                              && moduleGroup.files.some((file) => file.id === selectedRelationshipFile.id),
+                                            );
+                                            const isDefaultModuleExpanded = roleGroupIndex === 0 && moduleGroupIndex === 0;
+                                            const isModuleExpanded =
+                                              selectedFileInModule
+                                              || expandedRelationshipTopModuleGroups.has(moduleGroup.id)
+                                              || (
+                                                isDefaultModuleExpanded
+                                                && !collapsedRelationshipTopModuleGroups.has(moduleGroup.id)
+                                              );
+                                            const isGroupExpanded = expandedRelationshipTopFileGroups.has(moduleGroup.id);
+                                            const visibleFiles = isGroupExpanded
+                                              ? moduleGroup.files
+                                              : moduleGroup.files.slice(0, PROJECT_MAP_RELATIONSHIP_GRAPH_GROUP_LIMIT);
+                                            return (
+                                              <section
+                                                key={moduleGroup.id}
+                                                className="project-map-relationship-graph-file-module"
+                                              >
+                                                <header>
+                                                  <button
+                                                    type="button"
+                                                    className="project-map-relationship-graph-file-module-toggle"
+                                                    aria-expanded={isModuleExpanded}
+                                                    onClick={() => toggleRelationshipTopModuleGroup(moduleGroup.id, isModuleExpanded)}
+                                                  >
+                                                    <span aria-hidden>{isModuleExpanded ? "▾" : "▸"}</span>
+                                                    <strong>{moduleGroup.label}</strong>
+                                                  </button>
+                                                  <span>
+                                                    {isModuleExpanded
+                                                      ? t("projectMap.relationship.graphFileModuleStats", {
+                                                          rendered: visibleFiles.length,
+                                                          files: moduleGroup.files.length,
+                                                        })
+                                                      : t("projectMap.relationship.graphFileModuleCollapsedStats", {
+                                                          files: moduleGroup.files.length,
+                                                        })}
+                                                  </span>
+                                                </header>
+                                                {isModuleExpanded ? (
+                                                  <div>
+                                                    {visibleFiles.map((file) => {
+                                                      const directionCount =
+                                                        relationshipDashboardDirectionCountByFile.get(file.id)
+                                                        ?? { incoming: 0, outgoing: 0 };
+                                                      return (
+                                                        <button
+                                                          key={file.id}
+                                                          type="button"
+                                                          className={cn(
+                                                            selectedRelationshipFile?.id === file.id && "is-active",
+                                                          )}
+                                                          onClick={() => {
+                                                            setSelectedRelationshipFileId(file.id);
+                                                            setInspectedRelationshipFileId(file.id);
+                                                            setSelectedRelationshipRelationId(null);
+                                                          }}
+                                                        >
+                                                          <span
+                                                            style={{
+                                                              "--relationship-node-color": getProjectMapRelationshipRoleColor(file.role),
+                                                            } as CSSProperties}
+                                                          />
+                                                          <strong>{file.basename}</strong>
+                                                          <em>
+                                                            {t("projectMap.relationship.graphFileDirectionSummary", {
+                                                              role: file.role,
+                                                              incoming: directionCount.incoming,
+                                                              outgoing: directionCount.outgoing,
+                                                            })}
+                                                          </em>
+                                                        </button>
+                                                      );
+                                                    })}
+                                                    {moduleGroup.files.length > PROJECT_MAP_RELATIONSHIP_GRAPH_GROUP_LIMIT ? (
+                                                      <button
+                                                        type="button"
+                                                        className="project-map-relationship-graph-file-more"
+                                                        onClick={() => toggleRelationshipTopFileGroup(moduleGroup.id)}
+                                                      >
+                                                        <strong>
+                                                          {isGroupExpanded
+                                                            ? t("projectMap.relationship.graphFileGroupCollapse")
+                                                            : t("projectMap.relationship.graphFileGroupMore", {
+                                                                count: moduleGroup.files.length - PROJECT_MAP_RELATIONSHIP_GRAPH_GROUP_LIMIT,
+                                                              })}
+                                                        </strong>
+                                                        <em>{t("projectMap.relationship.graphFileGroupSearchHint")}</em>
+                                                      </button>
+                                                    ) : null}
+                                                  </div>
+                                                ) : null}
+                                              </section>
+                                            );
+                                          })}
+                                        </div>
+                                      ) : null}
+                                    </section>
                                   );
                                 })}
                               </div>
@@ -1895,14 +2339,362 @@ export function ProjectMapRelationshipSection({
                           </div>
                         </>
                       ) : null}
+                      {relationshipDashboardViewMode === "api" ? (
+                        <div
+                          className={cn(
+                            "project-map-api-contract-workspace",
+                            `is-layout-${relationshipDashboardLayoutPreset}`,
+                          )}
+                          style={{ "--relationship-graph-scale": relationshipGraphZoom } as CSSProperties}
+                        >
+                          <header className="project-map-relationship-workspace-header">
+                            <div>
+                              <strong>{t("projectMap.relationship.apiWorkspaceTitle")}</strong>
+                              <span>{t("projectMap.relationship.apiWorkspaceSummary", {
+                                endpoints: apiEndpointCount,
+                                groups: apiGroups.length,
+                                mode: t(`projectMap.relationship.apiGraphMode.${apiGraphMode}`),
+                              })}</span>
+                            </div>
+                            <button
+                              type="button"
+                              className="project-map-toolbar-action"
+                              onClick={handleRelationshipScanClick}
+                              disabled={!activeWorkspaceId || relationshipScanState.status === "running"}
+                            >
+                              <RefreshCw aria-hidden />
+                              {relationshipScanState.status === "running"
+                                ? t("projectMap.relationship.scanning")
+                                : t("projectMap.relationship.apiScan")}
+                            </button>
+                          </header>
+                          {relationshipDashboardData.apiContracts && apiEndpointCount > 0 ? (
+                            <div className="project-map-api-contract-grid">
+                              <section className="project-map-api-contract-group-rail">
+                                <header>
+                                  <strong>{t("projectMap.relationship.apiModulesTitle")}</strong>
+                                  <span>{t("projectMap.relationship.apiModulesHint")}</span>
+                                </header>
+                                <div className="project-map-api-contract-module-tree">
+                                  {apiModuleGroups.slice(0, 42).map((moduleGroup) => (
+                                    <section
+                                      key={moduleGroup.id}
+                                      className={cn(
+                                        "project-map-api-contract-module-branch",
+                                        selectedApiModuleGroup?.id === moduleGroup.id && "is-active",
+                                      )}
+                                    >
+                                      <button
+                                        type="button"
+                                        className="project-map-api-contract-module-button"
+                                        aria-expanded={expandedApiModuleGroupIds.has(moduleGroup.id)}
+                                        onClick={() => {
+                                          setSelectedApiGroupId(moduleGroup.id);
+                                          setSelectedApiEndpointId(null);
+                                          setExpandedApiModuleGroupIds((current) => {
+                                            const next = new Set(current);
+                                            if (next.has(moduleGroup.id)) {
+                                              next.delete(moduleGroup.id);
+                                            } else {
+                                              next.add(moduleGroup.id);
+                                            }
+                                            return next;
+                                          });
+                                        }}
+                                      >
+                                        <b aria-hidden>
+                                          {expandedApiModuleGroupIds.has(moduleGroup.id) ? "−" : "+"}
+                                        </b>
+                                        <span>{moduleGroup.level}</span>
+                                        <strong>{moduleGroup.label}</strong>
+                                        <em>{t("projectMap.relationship.apiGroupStats", {
+                                          endpoints: moduleGroup.endpointCount,
+                                          children: moduleGroup.childGroupIds.length,
+                                        })}</em>
+                                      </button>
+                                      {expandedApiModuleGroupIds.has(moduleGroup.id) ? (
+                                        <div className="project-map-api-contract-controller-list">
+                                          {(apiControllerGroupsByModuleId.get(moduleGroup.id) ?? []).slice(0, 32).map((controllerGroup) => (
+                                            <button
+                                              key={controllerGroup.id}
+                                              type="button"
+                                              className={cn(selectedApiGroup?.id === controllerGroup.id && "is-active")}
+                                              onClick={() => {
+                                                setSelectedApiGroupId(controllerGroup.id);
+                                                setSelectedApiEndpointId(null);
+                                              }}
+                                            >
+                                              <span>{controllerGroup.level}</span>
+                                              <strong>{controllerGroup.label}</strong>
+                                              <em>{t("projectMap.relationship.apiGroupStats", {
+                                                endpoints: controllerGroup.endpointCount,
+                                                children: controllerGroup.childGroupIds.length,
+                                              })}</em>
+                                            </button>
+                                          ))}
+                                        </div>
+                                      ) : null}
+                                    </section>
+                                  ))}
+                                </div>
+                              </section>
+                              <section className="project-map-api-contract-stage">
+                                <div className="project-map-api-contract-breadcrumb">
+                                  <span>{t("projectMap.relationship.apiBreadcrumbRoot")}</span>
+                                  {selectedApiModuleGroup ? <strong>{selectedApiModuleGroup.label}</strong> : null}
+                                  {selectedApiGroup && selectedApiGroup.id !== selectedApiModuleGroup?.id
+                                    ? <strong>{selectedApiGroup.label}</strong>
+                                    : null}
+                                </div>
+                                <div className="project-map-api-contract-stage-summary">
+                                  <strong>
+                                    {selectedApiGroup?.label
+                                      ?? selectedApiModuleGroup?.label
+                                      ?? t("projectMap.relationship.apiBreadcrumbRoot")}
+                                  </strong>
+                                  <span>{t("projectMap.relationship.apiStageEndpointSummary", {
+                                    endpoints: selectedApiGroupEndpoints.length,
+                                    sections: apiEndpointSections.length,
+                                  })}</span>
+                                </div>
+                                {apiEndpointSections.length ? (
+                                  <div className="project-map-api-contract-node-layer is-endpoints">
+                                    {apiEndpointSections.slice(0, 8).map((section) => (
+                                      <section key={section.id} className="project-map-api-contract-endpoint-section">
+                                        <header>
+                                          <strong>{section.title}</strong>
+                                          <span>{section.hint}</span>
+                                        </header>
+                                        <div className="project-map-api-contract-endpoint-grid">
+                                          {section.endpoints.slice(0, 36).map((endpoint) => {
+                                            const endpointTitle = endpoint.path
+                                              ?? endpoint.operationName
+                                              ?? endpoint.handlerSymbol
+                                              ?? endpoint.sourceFile;
+                                            return (
+                                              <button
+                                                key={`endpoint:${endpoint.id}`}
+                                                type="button"
+                                                className={cn(
+                                                  "project-map-api-contract-endpoint-node",
+                                                  selectedApiEndpoint?.id === endpoint.id && "is-active",
+                                                )}
+                                                onClick={() => setSelectedApiEndpointId(endpoint.id)}
+                                              >
+                                                <span>{endpoint.method ?? endpoint.protocol}</span>
+                                                <strong>{endpointTitle}</strong>
+                                                <em>{endpoint.handlerSymbol ?? endpoint.operationName ?? endpoint.framework ?? endpoint.sourceFile}</em>
+                                                <small>{endpoint.confidence} · {endpoint.language} · {endpoint.framework ?? "source"}</small>
+                                              </button>
+                                            );
+                                          })}
+                                        </div>
+                                      </section>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <p className="project-map-api-contract-stage-empty">
+                                    {t("projectMap.relationship.apiNoEndpointsInGroup")}
+                                  </p>
+                                )}
+                              </section>
+                              <aside className="project-map-api-contract-inspector">
+                                <header>
+                                  <span>{t("projectMap.relationship.apiInspectorTitle")}</span>
+                                  <strong>
+                                    {selectedApiEndpoint?.path
+                                      ?? selectedApiEndpoint?.operationName
+                                      ?? selectedApiGroup?.label
+                                      ?? t("projectMap.relationship.apiInspectorEmpty")}
+                                  </strong>
+                                </header>
+                                {selectedApiEndpoint ? (
+                                  <>
+                                    <article className="project-map-api-contract-swagger-card">
+                                      <div className="project-map-api-contract-operation-line">
+                                        <span>{selectedApiEndpoint.method ?? selectedApiEndpoint.protocol}</span>
+                                        <strong>
+                                          {selectedApiEndpoint.path
+                                            ?? selectedApiEndpoint.operationName
+                                            ?? selectedApiEndpoint.handlerSymbol
+                                            ?? selectedApiEndpoint.sourceFile}
+                                        </strong>
+                                      </div>
+                                      <p>
+                                        {selectedApiEndpoint.description
+                                          ?? selectedApiEndpoint.usageScenario
+                                          ?? selectedApiEndpoint.handlerSymbol
+                                          ?? selectedApiEndpoint.sourceFile}
+                                      </p>
+                                    </article>
+                                    <div className="project-map-api-contract-tags">
+                                      <span>{selectedApiEndpoint.protocol}</span>
+                                      <span>{selectedApiEndpoint.confidence}</span>
+                                      <span>{selectedApiEndpoint.language}</span>
+                                      {selectedApiEndpoint.framework ? <span>{selectedApiEndpoint.framework}</span> : null}
+                                    </div>
+                                    <dl className="project-map-api-contract-detail-list">
+                                      <div>
+                                        <dt>{t("projectMap.relationship.apiEndpointHandler")}</dt>
+                                        <dd>{selectedApiEndpoint.handlerSymbol ?? "-"}</dd>
+                                      </div>
+                                      <div>
+                                        <dt>{t("projectMap.relationship.apiEndpointSource")}</dt>
+                                        <dd>{selectedApiEndpoint.sourceFile}</dd>
+                                      </div>
+                                      <div>
+                                        <dt>{t("projectMap.relationship.apiEndpointParams")}</dt>
+                                        <dd>{selectedApiEndpoint.parameters.length}</dd>
+                                      </div>
+                                      <div>
+                                        <dt>{t("projectMap.relationship.apiEndpointResponses")}</dt>
+                                        <dd>{selectedApiEndpoint.responses.map((response) => response.statusCode ?? response.contentType ?? "response").join(", ") || "-"}</dd>
+                                      </div>
+                                    </dl>
+                                    <section className="project-map-api-contract-inspector-section">
+                                      <h5>{t("projectMap.relationship.apiEndpointParams")}</h5>
+                                      {selectedApiEndpoint.parameters.length ? (
+                                        <div className="project-map-api-contract-schema-table">
+                                          <span>{t("projectMap.relationship.apiParamColumnName")}</span>
+                                          <span>{t("projectMap.relationship.apiParamColumnIn")}</span>
+                                          <span>{t("projectMap.relationship.apiParamColumnRequired")}</span>
+                                          <span>{t("projectMap.relationship.apiParamColumnSchema")}</span>
+                                          {selectedApiEndpoint.parameters.slice(0, 12).flatMap((parameter) => [
+                                            <strong key={`${parameter.location}:${parameter.name}:name`}>
+                                              {parameter.name}
+                                            </strong>,
+                                            <em key={`${parameter.location}:${parameter.name}:location`}>
+                                              {parameter.location}
+                                            </em>,
+                                            <em key={`${parameter.location}:${parameter.name}:required`}>
+                                              {parameter.required ? "true" : "false"}
+                                            </em>,
+                                            <em key={`${parameter.location}:${parameter.name}:schema`}>
+                                              {parameter.schema?.name ?? parameter.defaultValue ?? parameter.example ?? "-"}
+                                            </em>,
+                                          ])}
+                                        </div>
+                                      ) : (
+                                        <p>{t("projectMap.relationship.apiNoParameters")}</p>
+                                      )}
+                                    </section>
+                                    <section className="project-map-api-contract-inspector-section">
+                                      <h5>{t("projectMap.relationship.apiRequestBody")}</h5>
+                                      {selectedApiEndpoint.requestBody ? (
+                                        <div className="project-map-api-contract-schema-card">
+                                          <strong>{selectedApiEndpoint.requestBody.contentType ?? "body"}</strong>
+                                          <span>{selectedApiEndpoint.requestBody.schema?.name ?? t("projectMap.relationship.apiSchemaUnknown")}</span>
+                                          {selectedApiEndpoint.requestBody.examples?.slice(0, 2).map((example, index) => (
+                                            <em key={`${example}:${index}`}>{example}</em>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <p>{t("projectMap.relationship.apiNoRequestBody")}</p>
+                                      )}
+                                    </section>
+                                    <section className="project-map-api-contract-inspector-section">
+                                      <h5>{t("projectMap.relationship.apiEndpointResponses")}</h5>
+                                      {selectedApiEndpoint.responses.length ? (
+                                        <div className="project-map-api-contract-response-list">
+                                          {selectedApiEndpoint.responses.slice(0, 8).map((response, index) => (
+                                            <article key={`${response.statusCode ?? "response"}:${response.contentType ?? index}`}>
+                                              <strong>{response.statusCode ?? "response"}</strong>
+                                              <span>{response.contentType ?? t("projectMap.relationship.apiContentTypeUnknown")}</span>
+                                              <em>{response.schema?.name ?? (response.isError ? "error" : t("projectMap.relationship.apiSchemaUnknown"))}</em>
+                                            </article>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <p>{t("projectMap.relationship.apiNoResponses")}</p>
+                                      )}
+                                    </section>
+                                    {selectedApiEndpoint.description || selectedApiEndpoint.usageScenario ? (
+                                      <section className="project-map-api-contract-inspector-section">
+                                        <h5>{t("projectMap.relationship.apiEndpointDescription")}</h5>
+                                        {selectedApiEndpoint.description ? <p>{selectedApiEndpoint.description}</p> : null}
+                                        {selectedApiEndpoint.usageScenario ? <p>{selectedApiEndpoint.usageScenario}</p> : null}
+                                      </section>
+                                    ) : null}
+                                    <section className="project-map-api-contract-evidence">
+                                      <h5>{t("projectMap.relationship.apiEvidenceTitle")}</h5>
+                                      {selectedApiEndpoint.evidence.slice(0, 4).map((evidence) => (
+                                        <button
+                                          key={`${evidence.path}:${evidence.line ?? 0}:${evidence.parserSource}`}
+                                          type="button"
+                                          onClick={() => openProjectMapRelationshipPath(evidence.path, evidence.line)}
+                                        >
+                                          <span>{evidence.parserSource}{evidence.redacted ? " · redacted" : ""}</span>
+                                          <strong>{evidence.path}{evidence.line ? `:${evidence.line}` : ""}</strong>
+                                          {evidence.excerpt ? <em>{evidence.excerpt}</em> : null}
+                                        </button>
+                                      ))}
+                                      {!selectedApiEndpoint.evidence.length ? (
+                                        <p>{t("projectMap.relationship.apiEvidenceEmpty")}</p>
+                                      ) : null}
+                                    </section>
+                                  </>
+                                ) : selectedApiGroup ? (
+                                  <div className="project-map-api-contract-group-summary">
+                                    <span>{selectedApiGroup.level}</span>
+                                    <strong>{selectedApiGroup.label}</strong>
+                                    <p>{t("projectMap.relationship.apiGroupInspectorSummary", {
+                                      endpoints: selectedApiGroup.endpointCount,
+                                      children: selectedApiGroup.childGroupIds.length,
+                                    })}</p>
+                                    <div className="project-map-api-contract-distribution">
+                                      <h5>{t("projectMap.relationship.apiDistributionProtocol")}</h5>
+                                      <div className="project-map-api-contract-chip-list">
+                                        {Object.entries(selectedApiGroup.protocolCounts ?? {}).map(([key, value]) => (
+                                          <span key={`protocol:${key}`}>{key} · {value}</span>
+                                        ))}
+                                      </div>
+                                      <h5>{t("projectMap.relationship.apiDistributionLanguage")}</h5>
+                                      <div className="project-map-api-contract-chip-list">
+                                        {Object.entries(selectedApiGroup.languageCounts ?? {}).map(([key, value]) => (
+                                          <span key={`language:${key}`}>{key} · {value}</span>
+                                        ))}
+                                      </div>
+                                      <h5>{t("projectMap.relationship.apiDistributionConfidence")}</h5>
+                                      <div className="project-map-api-contract-chip-list">
+                                        {Object.entries(selectedApiGroup.confidenceCounts ?? {}).map(([key, value]) => (
+                                          <span key={`confidence:${key}`}>{key} · {value}</span>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ) : null}
+                              </aside>
+                            </div>
+                          ) : (
+                            <div className="project-map-api-contract-empty">
+                              <strong>
+                                {apiContractScanExists
+                                  ? t("projectMap.relationship.apiEmptyScannedTitle")
+                                  : t("projectMap.relationship.apiEmptyTitle")}
+                              </strong>
+                              <p>
+                                {apiContractScanExists
+                                  ? t("projectMap.relationship.apiEmptyScannedBody")
+                                  : t("projectMap.relationship.apiEmptyBody")}
+                              </p>
+                              <small>
+                                {apiContractScanExists
+                                  ? t("projectMap.relationship.apiEmptyScannedHint")
+                                  : t("projectMap.relationship.apiEmptyHint")}
+                              </small>
+                            </div>
+                          )}
+                        </div>
+                      ) : null}
                       {relationshipDashboardViewMode === "files" ? (
                         <div className="project-map-relationship-file-workspace">
                           <header className="project-map-relationship-workspace-header">
                             <div>
                               <strong>{t("projectMap.relationship.filesWorkspaceTitle")}</strong>
                               <span>{t("projectMap.relationship.filesWorkspaceSummary", {
-                                visible: relationshipDashboardFilteredFiles.length,
-                                total: relationshipDashboardVisibleFileTotal,
+                                rendered: relationshipDashboardExplorerRenderedFileCount,
+                                matching: relationshipDashboardVisibleFileTotal,
+                                scanned: relationshipDashboardData.files.length,
                               })}</span>
                             </div>
                             <button
@@ -1927,12 +2719,18 @@ export function ProjectMapRelationshipSection({
                                     <header>
                                       <strong>{group.label}</strong>
                                       <span>{t("projectMap.relationship.filesTreeGroupStats", {
+                                        rendered: expandedRelationshipFileGroups.has(group.id)
+                                          ? group.files.length
+                                          : Math.min(group.files.length, PROJECT_MAP_RELATIONSHIP_EXPLORER_GROUP_LIMIT),
                                         files: group.files.length,
                                         relations: group.relationCount,
                                       })}</span>
                                     </header>
                                     <div className="project-map-relationship-file-tree-list">
-                                      {group.files.map((file) => {
+                                      {(expandedRelationshipFileGroups.has(group.id)
+                                        ? group.files
+                                        : group.files.slice(0, PROJECT_MAP_RELATIONSHIP_EXPLORER_GROUP_LIMIT)
+                                      ).map((file) => {
                                         const directionCount =
                                           relationshipDashboardDirectionCountByFile.get(file.id)
                                           ?? { incoming: 0, outgoing: 0 };
@@ -1972,6 +2770,22 @@ export function ProjectMapRelationshipSection({
                                           </button>
                                         );
                                       })}
+                                      {group.files.length > PROJECT_MAP_RELATIONSHIP_EXPLORER_GROUP_LIMIT ? (
+                                        <button
+                                          type="button"
+                                          className="project-map-relationship-file-tree-row"
+                                          onClick={() => toggleRelationshipFileTreeGroup(group.id)}
+                                        >
+                                          <strong>
+                                            {expandedRelationshipFileGroups.has(group.id)
+                                              ? t("projectMap.relationship.filesTreeGroupCollapse")
+                                              : t("projectMap.relationship.filesTreeGroupMore", {
+                                                  count: group.files.length - PROJECT_MAP_RELATIONSHIP_EXPLORER_GROUP_LIMIT,
+                                                })}
+                                          </strong>
+                                          <em>{t("projectMap.relationship.filesTreeGroupSearchHint")}</em>
+                                        </button>
+                                      ) : null}
                                     </div>
                                   </section>
                                 ))

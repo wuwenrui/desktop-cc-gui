@@ -745,6 +745,145 @@ export type ProjectMapRelationshipAgentReadPlan = {
   staleReasons?: ProjectMapRelationshipStaleReason[];
 };
 
+export type ProjectMapApiProtocol = "http" | "grpc" | "graphql" | "rpc" | "c-abi" | "unknown";
+
+export type ProjectMapApiConfidence = "spec" | "high" | "medium" | "low";
+
+export type ProjectMapApiParserSource =
+  | "schema-parser"
+  | "compiler-api"
+  | "syntax-tree-parser"
+  | "descriptor"
+  | "fallback-pattern"
+  | "unknown";
+
+export type ProjectMapApiParameterLocation = "path" | "query" | "header" | "cookie";
+
+export type ProjectMapApiGroupLevel = "protocol" | "module" | "namespace" | "controller" | "endpoint";
+
+export type ProjectMapApiEvidence = {
+  path: string;
+  line?: number;
+  excerpt?: string;
+  parserSource: ProjectMapApiParserSource;
+  extractorVersion?: string;
+  observedAt?: string;
+  redacted?: boolean;
+};
+
+export type ProjectMapApiSchemaRef = {
+  id: string;
+  name: string;
+  language?: ProjectMapRelationshipLanguage;
+  sourceFile?: string;
+  evidence?: ProjectMapApiEvidence[];
+};
+
+export type ProjectMapApiParameter = {
+  name: string;
+  location: ProjectMapApiParameterLocation;
+  required?: boolean;
+  schema?: ProjectMapApiSchemaRef;
+  defaultValue?: string;
+  example?: string;
+  evidence: ProjectMapApiEvidence[];
+};
+
+export type ProjectMapApiRequestBody = {
+  contentType?: string;
+  required?: boolean;
+  schema?: ProjectMapApiSchemaRef;
+  examples?: string[];
+  evidence: ProjectMapApiEvidence[];
+};
+
+export type ProjectMapApiResponse = {
+  statusCode?: string;
+  contentType?: string;
+  schema?: ProjectMapApiSchemaRef;
+  examples?: string[];
+  isError?: boolean;
+  evidence: ProjectMapApiEvidence[];
+};
+
+export type ProjectMapApiEndpoint = {
+  id: string;
+  protocol: ProjectMapApiProtocol;
+  language: ProjectMapRelationshipLanguage | "unknown";
+  framework?: string;
+  method?: string;
+  path?: string;
+  operationName?: string;
+  handlerSymbol?: string;
+  sourceFile: string;
+  parameters: ProjectMapApiParameter[];
+  requestBody?: ProjectMapApiRequestBody;
+  responses: ProjectMapApiResponse[];
+  requestSchema?: ProjectMapApiSchemaRef;
+  responseSchema?: ProjectMapApiSchemaRef;
+  description?: string;
+  usageScenario?: string;
+  groupIds: string[];
+  callChainIds: string[];
+  confidence: ProjectMapApiConfidence;
+  evidence: ProjectMapApiEvidence[];
+};
+
+export type ProjectMapApiGroup = {
+  id: string;
+  label: string;
+  level: ProjectMapApiGroupLevel;
+  parentId?: string;
+  endpointIds: string[];
+  childGroupIds: string[];
+  protocolCounts?: Record<string, number>;
+  languageCounts?: Record<string, number>;
+  confidenceCounts?: Record<string, number>;
+};
+
+export type ProjectMapApiCallChainEdgeKind =
+  | "handler"
+  | "service"
+  | "repository"
+  | "model"
+  | "outbound-http"
+  | "rpc"
+  | "event"
+  | "unknown";
+
+export type ProjectMapApiCallChainEdge = {
+  id: string;
+  sourceSymbol: string;
+  targetSymbol: string;
+  sourceFile: string;
+  line?: number;
+  excerpt?: string;
+  direction: "forward" | "backward";
+  kind: ProjectMapApiCallChainEdgeKind;
+  confidence: ProjectMapApiConfidence;
+  evidence: ProjectMapApiEvidence[];
+};
+
+export type ProjectMapApiCallChain = {
+  id: string;
+  endpointId: string;
+  edges: ProjectMapApiCallChainEdge[];
+  maxDepth: number;
+  truncatedReason?: string;
+};
+
+export type ProjectMapApiContractGraph = {
+  schemaVersion: 1;
+  generatedAt: string;
+  storageKey?: string;
+  scanRunId?: string;
+  endpoints: ProjectMapApiEndpoint[];
+  groups: ProjectMapApiGroup[];
+  schemas: ProjectMapApiSchemaRef[];
+  callChains: ProjectMapApiCallChain[];
+  skipped?: Array<{ reason: string; count: number }>;
+};
+
 export type ProjectMapRelationshipReadResponse = {
   storageKey: string;
   storageDir: string;
@@ -762,6 +901,7 @@ export type ProjectMapRelationshipReadResponse = {
   modules?: unknown;
   impact?: unknown;
   contextPack?: unknown;
+  apiContracts?: unknown;
   stale?: unknown;
   repair?: unknown;
   readErrors?: Array<{
@@ -785,6 +925,8 @@ export type ProjectMapRelationshipScanResponse = {
   scannedRoot: string;
   fileCount: number;
   relationCount: number;
+  apiEndpointCount?: number;
+  apiGroupCount?: number;
   ignoredCount: number;
   repairIssueCount: number;
 };

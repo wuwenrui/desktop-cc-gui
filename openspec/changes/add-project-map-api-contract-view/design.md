@@ -109,6 +109,29 @@ Alternatives considered:
 
 选择统一模型，因为它把多语言复杂性限制在 adapter 层。
 
+### Decision 2.2: 成熟 parser 负责语法树，自研层负责 contract graph
+
+The implementation SHALL NOT hand-write full programming-language parsers. Language adapters SHALL prefer mature parsers, compiler APIs, or schema parsers:
+
+- OpenAPI / Swagger: mature OpenAPI schema parser.
+- protobuf / gRPC: protoc descriptor / Buf-compatible parser flow.
+- Python: official `ast`.
+- Go: official `go/parser` and `go/ast`.
+- TypeScript / JavaScript: TypeScript Compiler API or equivalent AST parser.
+- Java / Kotlin: JavaParser / Kotlin compiler PSI / tree-sitter level parser.
+- C / C++: libclang or tree-sitter level parser.
+- C#: Roslyn.
+- Rust: syn / rust-analyzer ecosystem parser or tree-sitter.
+
+Mossx-owned logic SHALL start after syntax/descriptor extraction: adapter contract, framework semantic matching, endpoint identity, evidence/confidence, method chain candidate, artifact storage, and UI graph. Regex MAY be used only as a localized fallback for simple pattern confirmation, not as the primary parser for a language family.
+
+Alternatives considered:
+
+- 手写多语言 parser：不可维护，且边界错误会非常多。
+- 直接持久化外部 parser schema：短期省事，但会把 mossx storage 绑定到第三方工具。
+
+选择 mature parser + mossx contract graph，因为它把底层语法复杂性交给成熟生态，同时保留产品语义的稳定控制权。
+
 ### Decision 2.1: endpoint identity 使用 protocol-specific canonical key
 
 Endpoint merge SHALL use protocol-specific canonical identity:

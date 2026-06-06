@@ -46,15 +46,23 @@ The API contract view SHALL use hierarchical group-first rendering and SHALL NOT
 - **THEN** the view SHALL reveal the next hierarchy level or endpoint nodes within that group
 - **AND** unrelated endpoint groups SHALL remain collapsed unless selected, searched, or filtered
 
+#### Scenario: Controller hierarchy stays in the left navigator
+
+- **WHEN** the API contract view renders a selected service or module
+- **THEN** service or module groups and controller/router groups SHALL appear in a collapsible left hierarchy navigator
+- **AND** the center stage SHALL render endpoint cards grouped by API type or method
+- **AND** the center stage SHALL NOT render controller cards as a separate redundant grid
+
 ### Requirement: API graph controls
 
 The API contract view SHALL support graph navigation controls consistent with the relationship graph.
 
-#### Scenario: API graph supports zoom and reset
+#### Scenario: API graph supports explicit zoom and reset
 
 - **WHEN** the API tab is selected
 - **THEN** the user SHALL be able to zoom in, zoom out, and reset the API graph view
-- **AND** mouse wheel zoom SHALL affect the API graph canvas when the pointer is over the graph area
+- **AND** mouse wheel interaction SHALL preserve page or panel scrolling
+- **AND** mouse wheel interaction SHALL NOT zoom the API graph canvas
 
 #### Scenario: API graph supports layout selection
 

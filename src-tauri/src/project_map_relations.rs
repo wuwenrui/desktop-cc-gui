@@ -11,6 +11,7 @@ use tauri::State;
 use uuid::Uuid;
 
 use crate::app_paths;
+use crate::project_map_api_contracts::build_api_contract_artifact;
 use crate::state::AppState;
 use crate::storage::{with_storage_lock, write_string_atomically};
 use crate::types::WorkspaceEntry;
@@ -34,6 +35,7 @@ pub(crate) struct ProjectMapRelationshipReadResponse {
     modules: Option<Value>,
     impact: Option<Value>,
     context_pack: Option<Value>,
+    api_contracts: Option<Value>,
     stale: Option<Value>,
     repair: Option<Value>,
     read_errors: Vec<ProjectMapRelationshipReadError>,
@@ -72,24 +74,26 @@ pub(crate) struct ProjectMapRelationshipScanResponse {
     scanned_root: String,
     file_count: usize,
     relation_count: usize,
+    api_endpoint_count: usize,
+    api_group_count: usize,
     ignored_count: usize,
     repair_issue_count: usize,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct ScannedFile {
-    id: String,
-    path: String,
-    basename: String,
-    extension: String,
-    language: String,
-    layer: String,
-    role: String,
-    size_bytes: u64,
-    line_count: usize,
-    content_hash: String,
-    parse_status: String,
+pub(crate) struct ScannedFile {
+    pub(crate) id: String,
+    pub(crate) path: String,
+    pub(crate) basename: String,
+    pub(crate) extension: String,
+    pub(crate) language: String,
+    pub(crate) layer: String,
+    pub(crate) role: String,
+    pub(crate) size_bytes: u64,
+    pub(crate) line_count: usize,
+    pub(crate) content_hash: String,
+    pub(crate) parse_status: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -329,6 +333,10 @@ fn validate_relative_relationship_path(path: &str) -> Result<PathBuf, String> {
         }
         [dir, file] if dir == "context-packs" => file == "latest.json",
         [dir, file] if dir == "repair" => file == "latest.json",
+        [dir, file] if dir == "api-contracts" => matches!(
+            file.as_str(),
+            "latest.json" | "manifest.json" | "endpoints.json" | "groups.json" | "schemas.json" | "chains.json"
+        ),
         [dir, file] => is_safe_relationship_segment(dir) && is_safe_json_file(file),
         _ => false,
     };
@@ -399,6 +407,12 @@ fn backup_relationship_files(root: &Path) -> Result<(), String> {
         "modules/latest.json",
         "impact/latest.json",
         "context-packs/latest.json",
+        "api-contracts/latest.json",
+        "api-contracts/manifest.json",
+        "api-contracts/endpoints.json",
+        "api-contracts/groups.json",
+        "api-contracts/schemas.json",
+        "api-contracts/chains.json",
         "repair/latest.json",
     ] {
         let source = root.join(relative);
@@ -2481,6 +2495,39 @@ fn scan_workspace(
         &scan_run_id,
         &generated_at,
     );
+    let api_contract_artifact = build_api_contract_artifact(
+        &file_contents,
+        storage_key,
+        &scan_run_id,
+        &generated_at,
+        &ignored_paths,
+    );
+    let api_endpoint_count = api_contract_artifact
+        .get("endpoints")
+        .and_then(Value::as_array)
+        .map(Vec::len)
+        .unwrap_or(0);
+    let api_group_count = api_contract_artifact
+        .get("groups")
+        .and_then(Value::as_array)
+        .map(Vec::len)
+        .unwrap_or(0);
+    let api_endpoints = api_contract_artifact
+        .get("endpoints")
+        .cloned()
+        .unwrap_or_else(|| Value::Array(Vec::new()));
+    let api_groups = api_contract_artifact
+        .get("groups")
+        .cloned()
+        .unwrap_or_else(|| Value::Array(Vec::new()));
+    let api_schemas = api_contract_artifact
+        .get("schemas")
+        .cloned()
+        .unwrap_or_else(|| Value::Array(Vec::new()));
+    let api_chains = api_contract_artifact
+        .get("callChains")
+        .cloned()
+        .unwrap_or_else(|| Value::Array(Vec::new()));
     let manifest = json!({
         "schemaVersion": 1,
         "storageKey": storage_key,
@@ -2494,6 +2541,8 @@ fn scan_workspace(
         "scanRunId": scan_run_id,
         "fileCount": files.len(),
         "relationCount": relations.len(),
+        "apiEndpointCount": api_endpoint_count,
+        "apiGroupCount": api_group_count,
         "ignoredCount": ignored_paths.len(),
         "repairIssueCount": repair_issues.len(),
         "source": "deterministic-scan"
@@ -2522,6 +2571,8 @@ fn scan_workspace(
                 "completedAt": generated_at,
                 "fileCount": files.len(),
                 "relationCount": relations.len(),
+                "apiEndpointCount": api_endpoint_count,
+                "apiGroupCount": api_group_count,
                 "ignoredCount": ignored_paths.len()
             }))
             .map_err(|err| format!("Failed to serialize relationship run: {err}"))?,
@@ -2604,6 +2655,47 @@ fn scan_workspace(
             .map_err(|err| format!("Failed to serialize relationship context pack: {err}"))?,
         },
         ProjectMapRelationshipWriteFile {
+            relative_path: "api-contracts/latest.json".to_string(),
+            content: serde_json::to_string_pretty(&api_contract_artifact)
+            .map_err(|err| format!("Failed to serialize API contract artifact: {err}"))?,
+        },
+        ProjectMapRelationshipWriteFile {
+            relative_path: "api-contracts/manifest.json".to_string(),
+            content: serde_json::to_string_pretty(&json!({
+                "schemaVersion": 1,
+                "storageKey": storage_key,
+                "workspaceId": entry.id,
+                "scanRunId": scan_run_id,
+                "generatedAt": generated_at,
+                "endpointCount": api_endpoint_count,
+                "groupCount": api_group_count,
+                "schemaCount": api_schemas.as_array().map(Vec::len).unwrap_or(0),
+                "chainCount": api_chains.as_array().map(Vec::len).unwrap_or(0),
+                "source": "project-map-api-contract-scan"
+            }))
+            .map_err(|err| format!("Failed to serialize API contract manifest: {err}"))?,
+        },
+        ProjectMapRelationshipWriteFile {
+            relative_path: "api-contracts/endpoints.json".to_string(),
+            content: serde_json::to_string_pretty(&api_endpoints)
+            .map_err(|err| format!("Failed to serialize API endpoint index: {err}"))?,
+        },
+        ProjectMapRelationshipWriteFile {
+            relative_path: "api-contracts/groups.json".to_string(),
+            content: serde_json::to_string_pretty(&api_groups)
+            .map_err(|err| format!("Failed to serialize API group index: {err}"))?,
+        },
+        ProjectMapRelationshipWriteFile {
+            relative_path: "api-contracts/schemas.json".to_string(),
+            content: serde_json::to_string_pretty(&api_schemas)
+            .map_err(|err| format!("Failed to serialize API schema index: {err}"))?,
+        },
+        ProjectMapRelationshipWriteFile {
+            relative_path: "api-contracts/chains.json".to_string(),
+            content: serde_json::to_string_pretty(&api_chains)
+            .map_err(|err| format!("Failed to serialize API chain index: {err}"))?,
+        },
+        ProjectMapRelationshipWriteFile {
             relative_path: "repair/latest.json".to_string(),
             content: serde_json::to_string_pretty(&json!({
                 "schemaVersion": 1,
@@ -2623,6 +2715,8 @@ fn scan_workspace(
         scanned_root: normalize_path(&scan_root),
         file_count: files.len(),
         relation_count: relations.len(),
+        api_endpoint_count,
+        api_group_count,
         ignored_count: ignored_paths.len(),
         repair_issue_count: repair_issues.len(),
     })
@@ -2672,6 +2766,7 @@ pub(crate) async fn project_map_relationship_read(
     let modules = read_json_with_errors(&root, "modules/latest.json", &mut read_errors);
     let impact = read_json_with_errors(&root, "impact/latest.json", &mut read_errors);
     let context_pack = read_json_with_errors(&root, "context-packs/latest.json", &mut read_errors);
+    let api_contracts = read_json_with_errors(&root, "api-contracts/latest.json", &mut read_errors);
     let stale = exists.then(|| {
         summarize_relationship_stale_state(Path::new(&entry.path), &manifest, &files)
     });
@@ -2695,6 +2790,7 @@ pub(crate) async fn project_map_relationship_read(
         modules,
         impact,
         context_pack,
+        api_contracts,
         stale,
         repair,
         read_errors,
@@ -2753,6 +2849,12 @@ mod tests {
         assert!(validate_relative_relationship_path("modules/latest.json").is_ok());
         assert!(validate_relative_relationship_path("impact/latest.json").is_ok());
         assert!(validate_relative_relationship_path("context-packs/latest.json").is_ok());
+        assert!(validate_relative_relationship_path("api-contracts/latest.json").is_ok());
+        assert!(validate_relative_relationship_path("api-contracts/manifest.json").is_ok());
+        assert!(validate_relative_relationship_path("api-contracts/endpoints.json").is_ok());
+        assert!(validate_relative_relationship_path("api-contracts/groups.json").is_ok());
+        assert!(validate_relative_relationship_path("api-contracts/schemas.json").is_ok());
+        assert!(validate_relative_relationship_path("api-contracts/chains.json").is_ok());
         assert!(validate_relative_relationship_path("repair/latest.json").is_ok());
         assert!(validate_relative_relationship_path("../manifest.json").is_err());
         assert!(validate_relative_relationship_path("files/../../manifest.json").is_err());

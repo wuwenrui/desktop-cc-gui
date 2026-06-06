@@ -118,6 +118,7 @@ mod local_usage;
 mod menu;
 mod note_cards;
 mod project_map;
+mod project_map_api_contracts;
 mod project_map_relations;
 mod project_memory;
 mod prompts;
