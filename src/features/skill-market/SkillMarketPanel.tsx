@@ -127,7 +127,7 @@ export function SkillMarketPanel() {
           className="skill-market-baseurl"
           value={baseUrlDraft}
           onChange={(e) => setBaseUrlDraft(e.target.value)}
-          placeholder="http://47.239.143.243:8100"
+          placeholder="http://47.239.143.243"
         />
         <button type="button" onClick={handleApplyBaseUrl}>
           应用地址
