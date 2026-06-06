@@ -14,8 +14,6 @@ import TerminalSquare from "lucide-react/dist/esm/icons/terminal-square";
 import FileText from "lucide-react/dist/esm/icons/file-text";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 import FlaskConical from "lucide-react/dist/esm/icons/flask-conical";
-import { getVersion } from "@tauri-apps/api/app";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import Globe from "lucide-react/dist/esm/icons/globe";
 import Monitor from "lucide-react/dist/esm/icons/monitor";
 import Cog from "lucide-react/dist/esm/icons/cog";
@@ -38,7 +36,6 @@ import type {
   WorkspaceGroup,
   WorkspaceInfo,
 } from "../../../types";
-import wxqImage from "../../../assets/wxq.png";
 import {
   buildShortcutValue,
   getDefaultInterruptShortcut,
@@ -76,7 +73,6 @@ import Server from "lucide-react/dist/esm/icons/server";
 import Shield from "lucide-react/dist/esm/icons/shield";
 import BarChart3 from "lucide-react/dist/esm/icons/bar-chart-3";
 import MoreHorizontalIcon from "lucide-react/dist/esm/icons/more-horizontal";
-import Users from "lucide-react/dist/esm/icons/users";
 import {
   normalizeHexColor,
   HEX_COLOR_PATTERN,
@@ -394,7 +390,6 @@ export function SettingsView({
   >("runtime-pool");
   const [commitPrompt, setCommitPrompt] = useState("");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [appVersion, setAppVersion] = useState<string | null>(null);
   const [claudePathDraft, setClaudePathDraft] = useState(
     appSettings.claudeBin ?? "",
   );
@@ -724,19 +719,6 @@ export function SettingsView({
     () => projects.some((workspace) => workspace.settings.codexHome != null),
     [projects],
   );
-  useEffect(() => {
-    let active = true;
-    void getVersion()
-      .then((v) => {
-        if (active) setAppVersion(v);
-      })
-      .catch(() => {
-        if (active) setAppVersion(null);
-      });
-    return () => {
-      active = false;
-    };
-  }, [t]);
   useEffect(() => {
     let active = true;
     void listLocalUiFonts()
@@ -1854,15 +1836,6 @@ export function SettingsView({
           )}
           <button
             type="button"
-            className={`settings-nav ${activeSection === "community" ? "active" : ""}`}
-            onClick={() => setActiveSection("community")}
-            title={sidebarCollapsed ? t("settings.sidebarCommunity") : ""}
-          >
-            <Users aria-hidden />
-            {!sidebarCollapsed && t("settings.sidebarCommunity")}
-          </button>
-          <button
-            type="button"
             className="settings-sidebar-toggle"
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
             aria-label={
@@ -2420,40 +2393,6 @@ export function SettingsView({
               <EnvironmentDependenciesSection
                 active={runtimeEnvironmentSubTab === "environment-dependencies"}
               />
-            </section>
-          )}
-          {activeSection === "community" && (
-            <section className="settings-section settings-about-section">
-              <div className="settings-about-name">
-                ccgui
-                {appVersion && (
-                  <span className="settings-about-version">{appVersion}</span>
-                )}
-              </div>
-              <div className="settings-about-tagline">{t("about.tagline")}</div>
-              <div className="settings-about-links">
-                <button
-                  type="button"
-                  className="ghost"
-                  onClick={() =>
-                    void openUrl(
-                      "https://github.com/zhukunpenglinyutong/desktop-cc-gui",
-                    )
-                  }
-                >
-                  {t("about.github")}
-                </button>
-              </div>
-              <div className="settings-about-wechat">
-                <div className="settings-about-wechat-label">
-                  {t("about.wechatGroupTitle")}
-                </div>
-                <img
-                  className="settings-about-wechat-qr"
-                  src={wxqImage}
-                  alt={t("about.wechatGroupTitle")}
-                />
-              </div>
             </section>
           )}
           <ComposerSection
