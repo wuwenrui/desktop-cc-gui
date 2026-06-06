@@ -10,6 +10,7 @@ import type {
 import {
   getEnvironmentDoctor,
   getEnvironmentInstallPlan,
+  retryEnvironmentInstallerStep,
   runEnvironmentInstaller,
 } from "@/services/tauri";
 import { subscribeEnvironmentInstallerEvents } from "@/services/events";
@@ -18,6 +19,7 @@ import { EnvironmentBootstrapGate } from "../EnvironmentBootstrapGate";
 vi.mock("@/services/tauri", () => ({
   getEnvironmentDoctor: vi.fn(),
   getEnvironmentInstallPlan: vi.fn(),
+  retryEnvironmentInstallerStep: vi.fn(),
   runEnvironmentInstaller: vi.fn(),
 }));
 
@@ -67,9 +69,7 @@ describe("EnvironmentBootstrapGate", () => {
       progressHandler = handler;
       return vi.fn();
     });
-    vi.mocked(getEnvironmentDoctor)
-      .mockResolvedValueOnce(doctorMissingHomebrew())
-      .mockResolvedValueOnce(doctorReady());
+    vi.mocked(getEnvironmentDoctor).mockResolvedValue(doctorMissingHomebrew());
     vi.mocked(getEnvironmentInstallPlan).mockResolvedValue(planMissingHomebrew());
     let resolveInstall: (result: EnvironmentInstallResult) => void = () => {};
     vi.mocked(runEnvironmentInstaller).mockImplementation(
@@ -114,7 +114,7 @@ describe("EnvironmentBootstrapGate", () => {
     await waitFor(() => expect(screen.getByText("APP_READY")).toBeTruthy());
   });
 
-  it("shows retry when installation fails", async () => {
+  it("shows retry-all and re-check when installation fails", async () => {
     vi.mocked(getEnvironmentDoctor).mockResolvedValue(doctorMissingHomebrew());
     vi.mocked(getEnvironmentInstallPlan).mockResolvedValue(planMissingHomebrew());
     vi.mocked(runEnvironmentInstaller).mockResolvedValue({
@@ -134,7 +134,78 @@ describe("EnvironmentBootstrapGate", () => {
     fireEvent.click(await screen.findByRole("button", { name: "开始安装" }));
 
     expect(await screen.findByText("Homebrew mirror unreachable")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "重试" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "全部重试" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "重新检测" })).toBeTruthy();
+  });
+
+  it("renders a terminal hint for steps that require a TTY", async () => {
+    vi.mocked(getEnvironmentDoctor).mockResolvedValue(doctorMissingHomebrew());
+    vi.mocked(getEnvironmentInstallPlan).mockResolvedValue(planMissingHomebrew());
+
+    render(
+      <EnvironmentBootstrapGate>
+        <div>APP_READY</div>
+      </EnvironmentBootstrapGate>,
+    );
+
+    expect(await screen.findByText(/在终端输入管理员密码/)).toBeTruthy();
+  });
+
+  it("retries a single failed step via the per-step command", async () => {
+    let progressHandler: (event: EnvironmentInstallProgressEvent) => void = () => {};
+    vi.mocked(subscribeEnvironmentInstallerEvents).mockImplementation((handler) => {
+      progressHandler = handler;
+      return vi.fn();
+    });
+    vi.mocked(getEnvironmentDoctor).mockResolvedValue(doctorMissingHomebrew());
+    vi.mocked(getEnvironmentInstallPlan).mockResolvedValue(planMissingHomebrew());
+    vi.mocked(runEnvironmentInstaller).mockResolvedValue({
+      ok: false,
+      exitCode: 1,
+      details: "Homebrew step failed",
+      durationMs: 10,
+      doctorResult: doctorMissingHomebrew(),
+    });
+    vi.mocked(retryEnvironmentInstallerStep).mockResolvedValue({
+      ok: true,
+      exitCode: 0,
+      details: null,
+      durationMs: 10,
+      doctorResult: doctorReady(),
+    });
+
+    render(
+      <EnvironmentBootstrapGate>
+        <div>APP_READY</div>
+      </EnvironmentBootstrapGate>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "开始安装" }));
+    await screen.findByText("Homebrew step failed");
+
+    // Simulate the backend marking the homebrew step as failed so the per-step retry surfaces.
+    await act(async () => {
+      progressHandler({
+        runId: "environment-bootstrap",
+        stepId: "install-homebrew",
+        dependencyId: "homebrew",
+        phase: "error",
+        stream: null,
+        message: "boom",
+        exitCode: null,
+        durationMs: 5,
+      });
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "重试此步" }));
+
+    await waitFor(() =>
+      expect(retryEnvironmentInstallerStep).toHaveBeenCalledWith(
+        "install-homebrew",
+        "environment-bootstrap",
+      ),
+    );
+    await waitFor(() => expect(screen.getByText("APP_READY")).toBeTruthy());
   });
 });
 
@@ -143,9 +214,8 @@ function doctorReady(): EnvironmentDoctorResult {
     platform: "macos",
     dependencies: [
       status("xcodeCommandLineTools", true),
-      status("homebrew", true),
-      status("cmake", true),
-      status("openssl3", true),
+      status("homebrew", true, false),
+      status("cmake", true, false),
       status("claudeCli", true),
       status("codexCli", false, false),
     ],
@@ -153,14 +223,15 @@ function doctorReady(): EnvironmentDoctorResult {
 }
 
 function doctorMissingHomebrew(): EnvironmentDoctorResult {
+  // Claude (required) is missing so the gate stays up; Homebrew/CMake are optional and missing,
+  // so they still appear in the on-demand plan without blocking startup themselves.
   return {
     platform: "macos",
     dependencies: [
       status("xcodeCommandLineTools", true),
-      status("homebrew", false),
-      status("cmake", false),
-      status("openssl3", false),
-      status("claudeCli", true),
+      status("homebrew", false, false),
+      status("cmake", false, false),
+      status("claudeCli", false),
       status("codexCli", false, false),
     ],
   };
@@ -183,6 +254,7 @@ function planMissingHomebrew(): EnvironmentInstallPlan {
         ],
         manualFallback: "manual brew install",
         warnings: ["TUNA 国内源"],
+        requiresTty: true,
       },
     ],
   };

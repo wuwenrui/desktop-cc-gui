@@ -35,7 +35,6 @@ pub(crate) enum EnvironmentDependencyId {
     XcodeCommandLineTools,
     Homebrew,
     Cmake,
-    Openssl3,
     NodeJs,
     ClaudeCli,
     CodexCli,
@@ -47,7 +46,6 @@ impl EnvironmentDependencyId {
             Self::XcodeCommandLineTools => "Xcode Command Line Tools",
             Self::Homebrew => "Homebrew",
             Self::Cmake => "CMake",
-            Self::Openssl3 => "OpenSSL 3",
             Self::NodeJs => "Node.js",
             Self::ClaudeCli => "Claude CLI",
             Self::CodexCli => "Codex CLI",
@@ -84,6 +82,11 @@ pub(crate) struct EnvironmentInstallStep {
     pub(crate) environment: Vec<(String, String)>,
     pub(crate) manual_fallback: Option<String>,
     pub(crate) warnings: Vec<String>,
+    // Installing Homebrew itself needs an interactive admin (sudo) password prompt that only a
+    // real TTY can satisfy. Such steps are launched in Terminal.app instead of the non-interactive
+    // piped runner, so the user can type their password. The UI then asks the user to retry once
+    // the terminal finishes, which re-runs detection.
+    pub(crate) requires_tty: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -169,57 +172,15 @@ pub(crate) async fn environment_install_run(
     }
 
     for step in &plan.steps {
-        emit_progress(
-            &app,
-            EnvironmentInstallProgressEvent {
-                run_id: run_id.clone(),
-                step_id: Some(step.id.clone()),
-                dependency_id: Some(step.dependency_id),
-                phase: EnvironmentInstallProgressPhase::Started,
-                stream: None,
-                message: Some(step.command_preview.join(" ")),
+        if let Err(error) = execute_step(step, &run_id, &app, started).await {
+            let doctor_result = build_doctor_result().await;
+            return Ok(EnvironmentInstallResult {
+                ok: false,
                 exit_code: None,
-                duration_ms: Some(started.elapsed().as_millis()),
-            },
-        );
-
-        match run_install_step(step, &run_id, &app, started).await {
-            Ok(()) => emit_progress(
-                &app,
-                EnvironmentInstallProgressEvent {
-                    run_id: run_id.clone(),
-                    step_id: Some(step.id.clone()),
-                    dependency_id: Some(step.dependency_id),
-                    phase: EnvironmentInstallProgressPhase::Finished,
-                    stream: None,
-                    message: Some(format!("{} completed", step.label)),
-                    exit_code: Some(0),
-                    duration_ms: Some(started.elapsed().as_millis()),
-                },
-            ),
-            Err(error) => {
-                emit_progress(
-                    &app,
-                    EnvironmentInstallProgressEvent {
-                        run_id: run_id.clone(),
-                        step_id: Some(step.id.clone()),
-                        dependency_id: Some(step.dependency_id),
-                        phase: EnvironmentInstallProgressPhase::Error,
-                        stream: None,
-                        message: Some(error.clone()),
-                        exit_code: None,
-                        duration_ms: Some(started.elapsed().as_millis()),
-                    },
-                );
-                let doctor_result = build_doctor_result().await;
-                return Ok(EnvironmentInstallResult {
-                    ok: false,
-                    exit_code: None,
-                    details: Some(error),
-                    duration_ms: started.elapsed().as_millis(),
-                    doctor_result,
-                });
-            }
+                details: Some(error),
+                duration_ms: started.elapsed().as_millis(),
+                doctor_result,
+            });
         }
     }
 
@@ -256,6 +217,120 @@ pub(crate) async fn environment_install_run(
     })
 }
 
+#[tauri::command]
+pub(crate) async fn environment_install_step_retry(
+    step_id: String,
+    run_id: Option<String>,
+    app: AppHandle,
+) -> Result<EnvironmentInstallResult, String> {
+    let started = Instant::now();
+    let run_id = normalize_run_id(run_id);
+    let doctor = build_doctor_result().await;
+    let plan = build_install_plan_from_doctor(&doctor);
+
+    // Re-derive the plan from a fresh doctor so the retried step reflects current state. If the
+    // dependency already became installed (e.g. Homebrew finished in Terminal), it is no longer in
+    // the plan, and we report success after verification rather than re-running it.
+    let target = plan.steps.iter().find(|step| step.id == step_id);
+    let step_error = match target {
+        Some(step) => execute_step(step, &run_id, &app, started).await.err(),
+        None => None,
+    };
+
+    emit_progress(
+        &app,
+        EnvironmentInstallProgressEvent {
+            run_id: run_id.clone(),
+            step_id: None,
+            dependency_id: None,
+            phase: EnvironmentInstallProgressPhase::Verifying,
+            stream: None,
+            message: Some("Re-checking environment".to_string()),
+            exit_code: None,
+            duration_ms: Some(started.elapsed().as_millis()),
+        },
+    );
+    let doctor_result = build_doctor_result().await;
+    let ok = step_error.is_none()
+        && doctor_result
+            .dependencies
+            .iter()
+            .filter(|dependency| dependency.required)
+            .all(|dependency| dependency.installed);
+
+    Ok(EnvironmentInstallResult {
+        ok,
+        exit_code: Some(if ok { 0 } else { 1 }),
+        details: step_error.or_else(|| {
+            if ok {
+                None
+            } else {
+                Some("Some required dependencies are still missing.".to_string())
+            }
+        }),
+        duration_ms: started.elapsed().as_millis(),
+        doctor_result,
+    })
+}
+
+// Emits Started, runs the step, then emits Finished or Error. Shared by the full run and the
+// per-step retry so progress events stay identical across both entry points.
+async fn execute_step(
+    step: &EnvironmentInstallStep,
+    run_id: &str,
+    app: &AppHandle,
+    started: Instant,
+) -> Result<(), String> {
+    emit_progress(
+        app,
+        EnvironmentInstallProgressEvent {
+            run_id: run_id.to_string(),
+            step_id: Some(step.id.clone()),
+            dependency_id: Some(step.dependency_id),
+            phase: EnvironmentInstallProgressPhase::Started,
+            stream: None,
+            message: Some(step.command_preview.join(" ")),
+            exit_code: None,
+            duration_ms: Some(started.elapsed().as_millis()),
+        },
+    );
+
+    match run_install_step(step, run_id, app, started).await {
+        Ok(()) => {
+            emit_progress(
+                app,
+                EnvironmentInstallProgressEvent {
+                    run_id: run_id.to_string(),
+                    step_id: Some(step.id.clone()),
+                    dependency_id: Some(step.dependency_id),
+                    phase: EnvironmentInstallProgressPhase::Finished,
+                    stream: None,
+                    message: Some(format!("{} completed", step.label)),
+                    exit_code: Some(0),
+                    duration_ms: Some(started.elapsed().as_millis()),
+                },
+            );
+            Ok(())
+        }
+        Err(error) => {
+            emit_progress(
+                app,
+                EnvironmentInstallProgressEvent {
+                    run_id: run_id.to_string(),
+                    step_id: Some(step.id.clone()),
+                    dependency_id: Some(step.dependency_id),
+                    phase: EnvironmentInstallProgressPhase::Error,
+                    stream: None,
+                    message: Some(error.clone()),
+                    exit_code: None,
+                    duration_ms: Some(started.elapsed().as_millis()),
+                },
+            );
+            Err(error)
+        }
+    }
+}
+
 // ==================== Doctor: platform-aware dependency detection ====================
 
 async fn build_doctor_result() -> EnvironmentDoctorResult {
@@ -280,14 +355,11 @@ async fn build_macos_dependencies() -> Vec<EnvironmentDependencyStatus> {
             true,
             true,
         ),
-        dependency_status(EnvironmentDependencyId::Homebrew, brew.clone(), true, true),
-        dependency_status(EnvironmentDependencyId::Cmake, detect_command("cmake").await, true, true),
-        dependency_status(
-            EnvironmentDependencyId::Openssl3,
-            detect_openssl3(brew.installed).await,
-            true,
-            true,
-        ),
+        // Homebrew is only a tool used to install other brew packages; not required to launch.
+        dependency_status(EnvironmentDependencyId::Homebrew, brew, false, true),
+        // CMake is never invoked by the app itself (whisper.cpp is compiled into the binary at
+        // build time); only the user's own projects might need it, so it is optional.
+        dependency_status(EnvironmentDependencyId::Cmake, detect_command("cmake").await, false, true),
         dependency_status(
             EnvironmentDependencyId::ClaudeCli,
             detect_command("claude").await,
@@ -361,9 +433,6 @@ fn build_macos_install_plan(doctor: &EnvironmentDoctorResult) -> EnvironmentInst
     if dependency_missing(doctor, EnvironmentDependencyId::Cmake) {
         steps.push(build_brew_package_step(EnvironmentDependencyId::Cmake, "cmake"));
     }
-    if dependency_missing(doctor, EnvironmentDependencyId::Openssl3) {
-        steps.push(build_brew_package_step(EnvironmentDependencyId::Openssl3, "openssl@3"));
-    }
     if dependency_missing(doctor, EnvironmentDependencyId::ClaudeCli) {
         steps.push(build_macos_claude_cli_step());
     }
@@ -408,23 +477,22 @@ fn build_homebrew_install_step() -> EnvironmentInstallStep {
         id: "install-homebrew".to_string(),
         dependency_id: EnvironmentDependencyId::Homebrew,
         label: "Install Homebrew".to_string(),
+        // Homebrew's own installer needs an interactive admin password, so it is launched in
+        // Terminal.app rather than the piped runner. The preview reflects that.
         command_preview: vec![
-            "git".to_string(),
-            "clone".to_string(),
-            "--depth=1".to_string(),
-            TUNA_INSTALL_GIT_REMOTE.to_string(),
-            "<temp>/brew-install".to_string(),
-            "&&".to_string(),
+            "open".to_string(),
+            "Terminal.app".to_string(),
+            "->".to_string(),
             "/bin/bash".to_string(),
-            "<temp>/brew-install/install.sh".to_string(),
+            "-c".to_string(),
+            "curl -fsSL <install.sh> | NONINTERACTIVE=1 bash".to_string(),
         ],
         environment: tuna_homebrew_environment(),
-        manual_fallback: Some(format!(
-            "export HOMEBREW_BREW_GIT_REMOTE=\"{TUNA_BREW_GIT_REMOTE}\" && export HOMEBREW_CORE_GIT_REMOTE=\"{TUNA_CORE_GIT_REMOTE}\" && export HOMEBREW_API_DOMAIN=\"{TUNA_API_DOMAIN}\" && export HOMEBREW_BOTTLE_DOMAIN=\"{TUNA_BOTTLE_DOMAIN}\" && git clone --depth=1 {TUNA_INSTALL_GIT_REMOTE} brew-install && /bin/bash brew-install/install.sh"
-        )),
+        manual_fallback: Some(homebrew_terminal_shell_command()),
         warnings: vec![
-            "Homebrew installation may trigger a macOS system prompt for confirmation.".to_string(),
+            "Homebrew needs your administrator password. It opens in Terminal so you can type it; after it finishes, click retry.".to_string(),
         ],
+        requires_tty: true,
     }
 }
 
@@ -437,6 +505,7 @@ fn build_xcode_clt_step() -> EnvironmentInstallStep {
         environment: Vec::new(),
         manual_fallback: Some("xcode-select --install".to_string()),
         warnings: vec!["Complete the macOS system dialog to continue.".to_string()],
+        requires_tty: false,
     }
 }
 
@@ -456,6 +525,7 @@ fn build_brew_package_step(
         environment: tuna_homebrew_environment(),
         manual_fallback: Some(format!("brew install {package_name}")),
         warnings: Vec::new(),
+        requires_tty: false,
     }
 }
 
@@ -472,6 +542,7 @@ fn build_macos_claude_cli_step() -> EnvironmentInstallStep {
         environment: Vec::new(),
         manual_fallback: Some("curl -fsSL https://claude.ai/install.sh | bash".to_string()),
         warnings: Vec::new(),
+        requires_tty: false,
     }
 }
 
@@ -496,6 +567,7 @@ fn build_windows_nodejs_step() -> EnvironmentInstallStep {
         warnings: vec![
             "Restart the application after Node.js installation for PATH changes to take effect.".to_string(),
         ],
+        requires_tty: false,
     }
 }
 
@@ -513,6 +585,7 @@ fn build_windows_claude_cli_step() -> EnvironmentInstallStep {
         environment: Vec::new(),
         manual_fallback: Some("npm install -g @anthropic-ai/claude-code".to_string()),
         warnings: Vec::new(),
+        requires_tty: false,
     }
 }
 
@@ -537,6 +610,63 @@ fn tuna_homebrew_environment() -> Vec<(String, String)> {
     ]
 }
 
+// The full shell command run inside Terminal.app for the Homebrew install. It keeps the TUNA
+// mirror env and NONINTERACTIVE so the only interactive prompt is the sudo password, which the
+// real Terminal TTY can satisfy. Doubles as the manual_fallback shown in the UI.
+fn homebrew_terminal_shell_command() -> String {
+    format!(
+        "export HOMEBREW_BREW_GIT_REMOTE=\"{TUNA_BREW_GIT_REMOTE}\"; \
+export HOMEBREW_CORE_GIT_REMOTE=\"{TUNA_CORE_GIT_REMOTE}\"; \
+export HOMEBREW_INSTALL_FROM_API=1; \
+export HOMEBREW_API_DOMAIN=\"{TUNA_API_DOMAIN}\"; \
+export HOMEBREW_BOTTLE_DOMAIN=\"{TUNA_BOTTLE_DOMAIN}\"; \
+export NONINTERACTIVE=1; \
+BREW_INSTALL_DIR=\"$(mktemp -d)/brew-install\"; \
+git clone --depth=1 {TUNA_INSTALL_GIT_REMOTE} \"$BREW_INSTALL_DIR\" && /bin/bash \"$BREW_INSTALL_DIR/install.sh\"; \
+rm -rf \"$BREW_INSTALL_DIR\""
+    )
+}
+
+// Launches the Homebrew install command in a fresh Terminal.app window via osascript. We do not
+// try to run Homebrew as root; we hand control to a real TTY so the user can complete the sudo
+// prompt. Detection (re-run on retry) confirms the result, so a successful spawn is enough here.
+async fn launch_homebrew_in_terminal(
+    run_id: &str,
+    step: &EnvironmentInstallStep,
+    app: &AppHandle,
+    started: Instant,
+) -> Result<(), String> {
+    if !cfg!(target_os = "macos") {
+        return Err("Terminal-based Homebrew install is only supported on macOS.".to_string());
+    }
+
+    let shell_command = homebrew_terminal_shell_command();
+    let escaped = shell_command.replace('\\', "\\\\").replace('"', "\\\"");
+    let applescript = format!(
+        "tell application \"Terminal\"\nactivate\ndo script \"{escaped}\"\nend tell"
+    );
+
+    emit_output_event(
+        app,
+        run_id,
+        step,
+        EnvironmentInstallOutputStream::Stdout,
+        "Opening Terminal to install Homebrew. Enter your password there, then click retry once it finishes.",
+        started,
+    );
+
+    run_command(
+        "osascript",
+        &["-e", &applescript],
+        &step.environment,
+        run_id,
+        step,
+        app,
+        started,
+    )
+    .await
+}
+
 async fn run_install_step(
     step: &EnvironmentInstallStep,
     run_id: &str,
@@ -559,51 +689,18 @@ async fn run_install_step(
             .await
         }
         (EnvironmentDependencyId::Homebrew, _) => {
-            let install_dir = temporary_homebrew_install_dir();
-            let install_dir_string = install_dir.to_string_lossy().to_string();
-            let script_path = install_dir.join("install.sh").to_string_lossy().to_string();
-            let _ = tokio::fs::remove_dir_all(&install_dir).await;
-            run_command(
-                "git",
-                &["clone", "--depth=1", TUNA_INSTALL_GIT_REMOTE, &install_dir_string],
-                &step.environment,
-                run_id,
-                step,
-                app,
-                started,
-            )
-            .await?;
-            let result = run_command(
-                "/bin/bash",
-                &[&script_path],
-                &step.environment,
-                run_id,
-                step,
-                app,
-                started,
-            )
-            .await;
-            let _ = tokio::fs::remove_dir_all(&install_dir).await;
-            result
+            // Homebrew's installer needs an interactive admin password. The non-interactive piped
+            // runner cannot provide a TTY for sudo, which is exactly the line failure seen in the
+            // field ("stdin is not a TTY ... Need sudo access"). Launch Terminal.app so the user
+            // can type the password, then return early; the UI prompts the user to retry, which
+            // re-runs detection to confirm completion.
+            launch_homebrew_in_terminal(run_id, step, app, started).await
         }
         (EnvironmentDependencyId::Cmake, EnvironmentPlatform::Macos) => {
             let brew = brew_binary().ok_or_else(|| "Homebrew is not available.".to_string())?;
             run_command(
                 &brew.to_string_lossy(),
                 &["install", "cmake"],
-                &step.environment,
-                run_id,
-                step,
-                app,
-                started,
-            )
-            .await
-        }
-        (EnvironmentDependencyId::Openssl3, EnvironmentPlatform::Macos) => {
-            let brew = brew_binary().ok_or_else(|| "Homebrew is not available.".to_string())?;
-            run_command(
-                &brew.to_string_lossy(),
-                &["install", "openssl@3"],
                 &step.environment,
                 run_id,
                 step,
@@ -839,41 +936,6 @@ async fn detect_command(command: &str) -> ProbeResult {
     command_version(command, &["--version"]).await
 }
 
-async fn detect_openssl3(brew_installed: bool) -> ProbeResult {
-    if brew_installed {
-        if let Some(brew) = brew_binary() {
-            if let Ok(prefix) = command_output(&brew.to_string_lossy(), &["--prefix", "openssl@3"]).await
-            {
-                return ProbeResult {
-                    installed: true,
-                    version: None,
-                    details: Some(prefix.trim().to_string()),
-                };
-            }
-        }
-    }
-
-    for candidate in [
-        "/opt/homebrew/opt/openssl@3",
-        "/usr/local/opt/openssl@3",
-        "/home/linuxbrew/.linuxbrew/opt/openssl@3",
-    ] {
-        if std::path::Path::new(candidate).exists() {
-            return ProbeResult {
-                installed: true,
-                version: None,
-                details: Some(candidate.to_string()),
-            };
-        }
-    }
-
-    ProbeResult {
-        installed: false,
-        version: None,
-        details: Some("openssl@3 not found".to_string()),
-    }
-}
-
 async fn command_version(program: &str, args: &[&str]) -> ProbeResult {
     match command_output(program, args).await {
         Ok(output) => ProbeResult {
@@ -913,11 +975,14 @@ async fn command_output(program: &str, args: &[&str]) -> Result<String, String> 
     }
 }
 
+// True when the dependency is present in the doctor result but not yet installed, regardless of
+// whether it blocks startup. Optional deps (Homebrew, CMake) still get an on-demand install step;
+// startup-blocking is decided separately by the required-only verification.
 fn dependency_missing(doctor: &EnvironmentDoctorResult, id: EnvironmentDependencyId) -> bool {
     doctor
         .dependencies
         .iter()
-        .any(|dependency| dependency.id == id && dependency.required && !dependency.installed)
+        .any(|dependency| dependency.id == id && !dependency.installed)
 }
 
 fn brew_binary() -> Option<PathBuf> {
@@ -932,14 +997,6 @@ fn brew_binary() -> Option<PathBuf> {
         }
     }
     None
-}
-
-fn temporary_homebrew_install_dir() -> PathBuf {
-    let millis = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|duration| duration.as_millis())
-        .unwrap_or(0);
-    std::env::temp_dir().join(format!("lawyer-copilot-brew-install-{millis}"))
 }
 
 fn normalize_run_id(run_id: Option<String>) -> String {
@@ -973,7 +1030,6 @@ mod tests {
             dependencies: vec![
                 missing(EnvironmentDependencyId::Homebrew),
                 missing(EnvironmentDependencyId::Cmake),
-                missing(EnvironmentDependencyId::Openssl3),
                 missing(EnvironmentDependencyId::ClaudeCli),
             ],
         };
@@ -988,10 +1044,28 @@ mod tests {
             vec![
                 EnvironmentDependencyId::Homebrew,
                 EnvironmentDependencyId::Cmake,
-                EnvironmentDependencyId::Openssl3,
                 EnvironmentDependencyId::ClaudeCli,
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn macos_doctor_marks_homebrew_and_cmake_optional() {
+        // Only ClaudeCli + Xcode CLT block startup; Homebrew/CMake/Codex stay optional.
+        // detection populates `installed`, but the `required` policy is fixed regardless.
+        let deps = build_macos_dependencies().await;
+
+        let required = |id: EnvironmentDependencyId| {
+            deps.iter()
+                .find(|dep| dep.id == id)
+                .map(|dep| dep.required)
+        };
+
+        assert_eq!(required(EnvironmentDependencyId::XcodeCommandLineTools), Some(true));
+        assert_eq!(required(EnvironmentDependencyId::ClaudeCli), Some(true));
+        assert_eq!(required(EnvironmentDependencyId::Homebrew), Some(false));
+        assert_eq!(required(EnvironmentDependencyId::Cmake), Some(false));
+        assert_eq!(required(EnvironmentDependencyId::CodexCli), Some(false));
     }
 
     #[test]
@@ -1053,9 +1127,9 @@ mod tests {
     #[test]
     fn homebrew_install_step_uses_tuna_mirror() {
         let step = build_homebrew_install_step();
-        let preview = step.command_preview.join(" ");
+        let shell = step.manual_fallback.clone().unwrap_or_default();
 
-        assert!(preview.contains("mirrors.tuna.tsinghua.edu.cn"));
+        assert!(shell.contains("mirrors.tuna.tsinghua.edu.cn"));
         assert!(step.environment.iter().any(|(key, value)| {
             key == "HOMEBREW_API_DOMAIN"
                 && value == "https://mirrors.tuna.tsinghua.edu.cn/homebrew-bottles/api"
@@ -1064,6 +1138,25 @@ mod tests {
             key == "HOMEBREW_BOTTLE_DOMAIN"
                 && value == "https://mirrors.tuna.tsinghua.edu.cn/homebrew-bottles"
         }));
+    }
+
+    #[test]
+    fn homebrew_install_step_requires_tty_via_terminal() {
+        // Homebrew is the only step that needs an interactive sudo password, so it is flagged for
+        // the Terminal-based path and keeps NONINTERACTIVE to suppress non-sudo prompts.
+        let step = build_homebrew_install_step();
+        assert!(step.requires_tty);
+        let shell = step.manual_fallback.clone().unwrap_or_default();
+        assert!(shell.contains("NONINTERACTIVE=1"));
+    }
+
+    #[test]
+    fn non_homebrew_steps_do_not_require_tty() {
+        assert!(!build_xcode_clt_step().requires_tty);
+        assert!(!build_macos_claude_cli_step().requires_tty);
+        assert!(
+            !build_brew_package_step(EnvironmentDependencyId::Cmake, "cmake").requires_tty
+        );
     }
 
     #[test]

@@ -4,15 +4,20 @@ import type {
   EnvironmentDependencyStatus,
   EnvironmentInstallPlan,
   EnvironmentInstallProgressEvent,
+  EnvironmentInstallStep,
 } from "@/types";
 import {
   getEnvironmentDoctor,
   getEnvironmentInstallPlan,
+  retryEnvironmentInstallerStep,
   runEnvironmentInstaller,
 } from "@/services/tauri";
 import { subscribeEnvironmentInstallerEvents } from "@/services/events";
 
 type Phase = "checking" | "ready" | "planning" | "missing" | "running" | "failed";
+
+// Per-step lifecycle derived from the streamed progress events.
+type StepStatus = "pending" | "running" | "done" | "failed";
 
 const RUN_ID = "environment-bootstrap";
 
@@ -22,6 +27,11 @@ export function EnvironmentBootstrapGate({ children }: { children: ReactNode }) 
   const [plan, setPlan] = useState<EnvironmentInstallPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [logLines, setLogLines] = useState<string[]>([]);
+  // stepId -> latest status, updated from streamed events. failedStepId isolates the broken step
+  // so the UI can offer "retry this step" without re-running the whole plan.
+  const [stepStatuses, setStepStatuses] = useState<Record<string, StepStatus>>({});
+  const [failedStepId, setFailedStepId] = useState<string | null>(null);
+  const [retryingStepId, setRetryingStepId] = useState<string | null>(null);
 
   const allRequiredReady = useMemo(
     () =>
@@ -35,6 +45,8 @@ export function EnvironmentBootstrapGate({ children }: { children: ReactNode }) 
   const refresh = useCallback(async () => {
     setPhase("checking");
     setError(null);
+    setFailedStepId(null);
+    setStepStatuses({});
     try {
       const doctor = await getEnvironmentDoctor();
       setDependencies(doctor.dependencies);
@@ -66,38 +78,66 @@ export function EnvironmentBootstrapGate({ children }: { children: ReactNode }) 
         return;
       }
       setLogLines((current) => appendLogLine(current, event));
+      const nextStatus = stepStatusFromPhase(event.phase);
+      if (event.stepId && nextStatus) {
+        const stepId = event.stepId;
+        setStepStatuses((current) => ({ ...current, [stepId]: nextStatus }));
+        setFailedStepId((current) =>
+          nextStatus === "failed"
+            ? stepId
+            : current === stepId
+              ? null
+              : current,
+        );
+      }
     });
   }, []);
+
+  const finishInstall = useCallback(
+    async (result: Awaited<ReturnType<typeof runEnvironmentInstaller>>) => {
+      setDependencies(result.doctorResult.dependencies);
+      if (result.ok) {
+        setPhase("ready");
+        return;
+      }
+      setError(result.details || "环境安装失败");
+      setPhase("failed");
+    },
+    [],
+  );
 
   const runInstall = useCallback(async () => {
     setPhase("running");
     setError(null);
     setLogLines([]);
+    setFailedStepId(null);
+    setStepStatuses({});
     try {
-      const result = await runEnvironmentInstaller(RUN_ID);
-      if (!result.ok) {
-        setDependencies(result.doctorResult.dependencies);
-        setError(result.details || "环境安装失败");
-        setPhase("failed");
-        return;
-      }
-
-      const doctor = await getEnvironmentDoctor();
-      setDependencies(doctor.dependencies);
-      const ready = doctor.dependencies
-        .filter((dependency) => dependency.required)
-        .every((dependency) => dependency.installed);
-      if (ready) {
-        setPhase("ready");
-      } else {
-        setError("安装完成后仍有必需依赖未通过检测");
-        setPhase("failed");
-      }
+      await finishInstall(await runEnvironmentInstaller(RUN_ID));
     } catch (nextError) {
       setError(normalizeError(nextError));
       setPhase("failed");
     }
-  }, []);
+  }, [finishInstall]);
+
+  const retryStep = useCallback(
+    async (stepId: string) => {
+      setPhase("running");
+      setError(null);
+      setRetryingStepId(stepId);
+      setFailedStepId(null);
+      setStepStatuses((current) => ({ ...current, [stepId]: "running" }));
+      try {
+        await finishInstall(await retryEnvironmentInstallerStep(stepId, RUN_ID));
+      } catch (nextError) {
+        setError(normalizeError(nextError));
+        setPhase("failed");
+      } finally {
+        setRetryingStepId(null);
+      }
+    },
+    [finishInstall],
+  );
 
   if (phase === "ready" || allRequiredReady) {
     return <>{children}</>;
@@ -111,7 +151,14 @@ export function EnvironmentBootstrapGate({ children }: { children: ReactNode }) 
         <p style={subtitle}>自动检查依赖；缺 Homebrew 时先用 TUNA 国内源安装 Homebrew。</p>
 
         <DependencyList dependencies={dependencies} />
-        <InstallPlan plan={plan} />
+        <InstallPlan
+          plan={plan}
+          stepStatuses={stepStatuses}
+          failedStepId={failedStepId}
+          retryingStepId={retryingStepId}
+          disabled={phase === "running"}
+          onRetryStep={retryStep}
+        />
 
         {logLines.length > 0 && (
           <div style={logBox} aria-label="安装日志">
@@ -137,9 +184,14 @@ export function EnvironmentBootstrapGate({ children }: { children: ReactNode }) 
               安装中
             </button>
           ) : phase === "failed" ? (
-            <button style={button} onClick={refresh}>
-              重试
-            </button>
+            <>
+              <button style={secondaryButton} onClick={refresh}>
+                重新检测
+              </button>
+              <button style={button} onClick={runInstall} disabled={plan?.canRun === false}>
+                全部重试
+              </button>
+            </>
           ) : (
             <button style={button} onClick={runInstall} disabled={plan?.canRun === false}>
               开始安装
@@ -158,21 +210,36 @@ function DependencyList({ dependencies }: { dependencies: EnvironmentDependencyS
 
   return (
     <div style={list}>
-      {dependencies
-        .filter((dependency) => dependency.required)
-        .map((dependency) => (
-          <div key={dependency.id} style={row}>
-            <span>{dependency.label}</span>
-            <strong style={dependency.installed ? okText : pendingText}>
-              {dependency.installed ? "已安装" : "待安装"}
-            </strong>
-          </div>
-        ))}
+      {dependencies.map((dependency) => (
+        <div key={dependency.id} style={row}>
+          <span>
+            {dependency.label}
+            {!dependency.required && <small style={optionalTag}>（可选）</small>}
+          </span>
+          <strong style={dependency.installed ? okText : pendingText}>
+            {dependency.installed ? "已安装" : "待安装"}
+          </strong>
+        </div>
+      ))}
     </div>
   );
 }
 
-function InstallPlan({ plan }: { plan: EnvironmentInstallPlan | null }) {
+function InstallPlan({
+  plan,
+  stepStatuses,
+  failedStepId,
+  retryingStepId,
+  disabled,
+  onRetryStep,
+}: {
+  plan: EnvironmentInstallPlan | null;
+  stepStatuses: Record<string, StepStatus>;
+  failedStepId: string | null;
+  retryingStepId: string | null;
+  disabled: boolean;
+  onRetryStep: (stepId: string) => void;
+}) {
   if (!plan) {
     return null;
   }
@@ -182,10 +249,16 @@ function InstallPlan({ plan }: { plan: EnvironmentInstallPlan | null }) {
       <div style={planTitle}>安装计划</div>
       <div style={mirrorLine}>Homebrew 默认使用 TUNA 国内源</div>
       {plan.steps.map((step, index) => (
-        <div key={step.id} style={stepRow}>
-          <span>{index + 1}. {step.label}</span>
-          {step.warnings.length > 0 && <small>{step.warnings.join("；")}</small>}
-        </div>
+        <PlanStepRow
+          key={step.id}
+          step={step}
+          index={index}
+          status={stepStatuses[step.id] ?? "pending"}
+          isFailed={failedStepId === step.id}
+          isRetrying={retryingStepId === step.id}
+          disabled={disabled}
+          onRetry={onRetryStep}
+        />
       ))}
       {plan.blockers.map((blocker) => (
         <div key={blocker} style={errorBox}>
@@ -194,6 +267,90 @@ function InstallPlan({ plan }: { plan: EnvironmentInstallPlan | null }) {
       ))}
     </div>
   );
+}
+
+function PlanStepRow({
+  step,
+  index,
+  status,
+  isFailed,
+  isRetrying,
+  disabled,
+  onRetry,
+}: {
+  step: EnvironmentInstallStep;
+  index: number;
+  status: StepStatus;
+  isFailed: boolean;
+  isRetrying: boolean;
+  disabled: boolean;
+  onRetry: (stepId: string) => void;
+}) {
+  return (
+    <div style={stepRow}>
+      <div style={stepHeader}>
+        <span>
+          {index + 1}. {step.label}
+        </span>
+        <strong style={stepBadgeStyle(status)}>{stepStatusLabel(status)}</strong>
+      </div>
+      {step.requiresTty && (
+        <small style={ttyHint}>在终端输入管理员密码，完成后点“重试此步”刷新状态。</small>
+      )}
+      {step.warnings.length > 0 && <small>{step.warnings.join("；")}</small>}
+      {isFailed && (
+        <button
+          type="button"
+          style={disabled ? { ...retryButton, ...buttonDisabled } : retryButton}
+          onClick={() => onRetry(step.id)}
+          disabled={disabled}
+        >
+          {isRetrying ? "重试中" : "重试此步"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function stepStatusFromPhase(
+  phase: EnvironmentInstallProgressEvent["phase"],
+): StepStatus | null {
+  switch (phase) {
+    case "started":
+      return "running";
+    case "finished":
+      return "done";
+    case "error":
+      return "failed";
+    default:
+      return null;
+  }
+}
+
+function stepStatusLabel(status: StepStatus): string {
+  switch (status) {
+    case "running":
+      return "进行中";
+    case "done":
+      return "已完成";
+    case "failed":
+      return "失败";
+    default:
+      return "待安装";
+  }
+}
+
+function stepBadgeStyle(status: StepStatus): CSSProperties {
+  switch (status) {
+    case "running":
+      return runningText;
+    case "done":
+      return okText;
+    case "failed":
+      return failedText;
+    default:
+      return pendingText;
+  }
 }
 
 function appendLogLine(
@@ -272,6 +429,14 @@ const pendingText: CSSProperties = {
   color: "#f2c46d",
 };
 
+const runningText: CSSProperties = {
+  color: "#7fb6ff",
+};
+
+const failedText: CSSProperties = {
+  color: "#ff9a9a",
+};
+
 const planBox: CSSProperties = {
   display: "flex",
   flexDirection: "column",
@@ -295,6 +460,21 @@ const stepRow: CSSProperties = {
   display: "flex",
   flexDirection: "column",
   gap: 4,
+};
+
+const stepHeader: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 12,
+};
+
+const ttyHint: CSSProperties = {
+  color: "#f2c46d",
+};
+
+const optionalTag: CSSProperties = {
+  marginLeft: 6,
+  color: "#a6adbb",
 };
 
 const logBox: CSSProperties = {
@@ -322,6 +502,7 @@ const mutedLine: CSSProperties = {
 const actions: CSSProperties = {
   display: "flex",
   justifyContent: "flex-end",
+  gap: 10,
 };
 
 const button: CSSProperties = {
@@ -338,4 +519,23 @@ const button: CSSProperties = {
 const buttonDisabled: CSSProperties = {
   opacity: 0.65,
   cursor: "default",
+};
+
+const secondaryButton: CSSProperties = {
+  ...button,
+  background: "transparent",
+  color: "#f5f5f5",
+  border: "1px solid rgba(255,255,255,0.3)",
+};
+
+const retryButton: CSSProperties = {
+  alignSelf: "flex-start",
+  marginTop: 4,
+  padding: "6px 12px",
+  border: "1px solid rgba(255,255,255,0.3)",
+  borderRadius: 6,
+  background: "transparent",
+  color: "#f5f5f5",
+  fontWeight: 600,
+  cursor: "pointer",
 };

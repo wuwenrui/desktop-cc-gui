@@ -1214,7 +1214,6 @@ export type EnvironmentDependencyId =
   | "xcodeCommandLineTools"
   | "homebrew"
   | "cmake"
-  | "openssl3"
   | "nodeJs"
   | "claudeCli"
   | "codexCli";
@@ -1242,6 +1241,9 @@ export type EnvironmentInstallStep = {
   environment: [string, string][];
   manualFallback: string | null;
   warnings: string[];
+  // True when the step opens Terminal.app for an interactive admin password (Homebrew install).
+  // The UI tells the user to retry once the terminal finishes; retry re-runs detection.
+  requiresTty: boolean;
 };
 
 export type EnvironmentInstallPlan = {

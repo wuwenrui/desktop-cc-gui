@@ -91,6 +91,7 @@ import {
   runCliInstaller,
   getEnvironmentDoctor,
   getEnvironmentInstallPlan,
+  retryEnvironmentInstallerStep,
   runEnvironmentInstaller,
   setOpenCodeMcpToggle,
   switchEngine,
@@ -436,14 +437,20 @@ describe("tauri invoke wrappers", () => {
     invokeMock.mockResolvedValueOnce({ platform: "macos", dependencies: [] });
     invokeMock.mockResolvedValueOnce({ canRun: true, steps: [] });
     invokeMock.mockResolvedValueOnce({ ok: true });
+    invokeMock.mockResolvedValueOnce({ ok: true });
 
     await getEnvironmentDoctor();
     await getEnvironmentInstallPlan();
     await runEnvironmentInstaller("env-run-1");
+    await retryEnvironmentInstallerStep("install-homebrew", "env-run-1");
 
     expect(invokeMock).toHaveBeenCalledWith("environment_doctor");
     expect(invokeMock).toHaveBeenCalledWith("environment_install_plan");
     expect(invokeMock).toHaveBeenCalledWith("environment_install_run", {
+      runId: "env-run-1",
+    });
+    expect(invokeMock).toHaveBeenCalledWith("environment_install_step_retry", {
+      stepId: "install-homebrew",
       runId: "env-run-1",
     });
     expect(

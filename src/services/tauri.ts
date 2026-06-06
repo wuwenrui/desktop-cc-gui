@@ -163,6 +163,7 @@ export { getCliInstallPlan, runCliInstaller } from "./tauri/cliInstaller";
 export {
   getEnvironmentDoctor,
   getEnvironmentInstallPlan,
+  retryEnvironmentInstallerStep,
   runEnvironmentInstaller,
 } from "./tauri/environmentInstaller";
 export type {

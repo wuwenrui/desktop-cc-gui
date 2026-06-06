@@ -134,6 +134,7 @@ pub(crate) fn invoke_handler(
         crate::environment_installer::environment_doctor,
         crate::environment_installer::environment_install_plan,
         crate::environment_installer::environment_install_run,
+        crate::environment_installer::environment_install_step_retry,
         crate::codex::start_thread,
         crate::codex::send_user_message,
         crate::codex::turn_interrupt,
