@@ -32,7 +32,8 @@ export type SettingsHighlightTarget =
   | "mcp-servers"
   | "mcp-skills"
   | "runtime-pool"
-  | "cli-validation";
+  | "cli-validation"
+  | "environment-dependencies";
 
 export function useSettingsModalState() {
   const [settingsOpen, setSettingsOpen] = useState(false);

@@ -25,6 +25,7 @@ import Mail from "lucide-react/dist/esm/icons/mail";
 import Archive from "lucide-react/dist/esm/icons/archive";
 import NotebookPen from "lucide-react/dist/esm/icons/notebook-pen";
 import Boxes from "lucide-react/dist/esm/icons/boxes";
+import Wrench from "lucide-react/dist/esm/icons/wrench";
 import Bot from "lucide-react/dist/esm/icons/bot";
 import type {
   AppSettings,
@@ -105,6 +106,7 @@ import { ShortcutsSection } from "./settings-view/sections/ShortcutsSection";
 import { OpenAppsSection } from "./settings-view/sections/OpenAppsSection";
 import { BasicAppearanceSection } from "./settings-view/sections/BasicAppearanceSection";
 import { CodexSection } from "./settings-view/sections/CodexSection";
+import { EnvironmentDependenciesSection } from "@/features/setup/EnvironmentDependenciesSection";
 import { OtherSection } from "./settings-view/sections/OtherSection";
 import { SessionManagementSection } from "./settings-view/sections/SessionManagementSection";
 import {
@@ -231,7 +233,8 @@ export type SettingsViewProps = {
     | "mcp-servers"
     | "mcp-skills"
     | "runtime-pool"
-    | "cli-validation";
+    | "cli-validation"
+    | "environment-dependencies";
 };
 const TEMPORARILY_DISABLED_SIDEBAR_SECTIONS: ReadonlySet<SettingsViewSection> =
   BASE_DISABLED_SIDEBAR_SECTIONS as ReadonlySet<SettingsViewSection>;
@@ -387,7 +390,7 @@ export function SettingsView({
     "servers" | "skills"
   >("servers");
   const [runtimeEnvironmentSubTab, setRuntimeEnvironmentSubTab] = useState<
-    "runtime-pool" | "cli-validation"
+    "runtime-pool" | "cli-validation" | "environment-dependencies"
   >("runtime-pool");
   const [commitPrompt, setCommitPrompt] = useState("");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -921,6 +924,10 @@ export function SettingsView({
       case "cli-validation":
         setActiveSection("runtime-environment");
         setRuntimeEnvironmentSubTab("cli-validation");
+        return;
+      case "environment-dependencies":
+        setActiveSection("runtime-environment");
+        setRuntimeEnvironmentSubTab("environment-dependencies");
         return;
       default:
         return;
@@ -2347,6 +2354,16 @@ export function SettingsView({
                   />
                   {t("settings.runtimeEnvironmentCliValidationTab")}
                 </button>
+                <button
+                  type="button"
+                  className={`settings-basic-tab ${runtimeEnvironmentSubTab === "environment-dependencies" ? "active" : ""}`}
+                  onClick={() =>
+                    setRuntimeEnvironmentSubTab("environment-dependencies")
+                  }
+                >
+                  <Wrench className="settings-basic-tab-icon" aria-hidden />
+                  {t("settings.runtimeEnvironmentDependenciesTab")}
+                </button>
               </div>
               {runtimeEnvironmentSubTab === "runtime-pool" && (
                 <RuntimePoolSection
@@ -2399,6 +2416,9 @@ export function SettingsView({
                     setClaudeDoctorState({ status: "done", result });
                   }
                 }}
+              />
+              <EnvironmentDependenciesSection
+                active={runtimeEnvironmentSubTab === "environment-dependencies"}
               />
             </section>
           )}

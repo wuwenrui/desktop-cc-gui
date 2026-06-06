@@ -416,6 +416,7 @@ function createLayoutOptions(
     onOpenMemory: noop,
     onOpenProjectMemory: noop,
     onOpenReleaseNotes: noop,
+    onOpenEnvironment: noop,
     onOpenGlobalSearch: noop,
     globalSearchShortcut: null,
     openChatShortcut: null,

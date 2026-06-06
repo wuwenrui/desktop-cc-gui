@@ -346,13 +346,16 @@ async fn build_doctor_result() -> EnvironmentDoctorResult {
     }
 }
 
+// No dependency is required to launch the app: a missing dependency never blocks startup, it is
+// only surfaced for on-demand install from the Environment panel. `required` stays false across the
+// board so the required-only verification used by install/retry treats everything as optional.
 async fn build_macos_dependencies() -> Vec<EnvironmentDependencyStatus> {
     let brew = detect_brew().await;
     vec![
         dependency_status(
             EnvironmentDependencyId::XcodeCommandLineTools,
             detect_xcode_clt().await,
-            true,
+            false,
             true,
         ),
         // Homebrew is only a tool used to install other brew packages; not required to launch.
@@ -363,7 +366,7 @@ async fn build_macos_dependencies() -> Vec<EnvironmentDependencyStatus> {
         dependency_status(
             EnvironmentDependencyId::ClaudeCli,
             detect_command("claude").await,
-            true,
+            false,
             true,
         ),
         dependency_status(
@@ -380,13 +383,13 @@ async fn build_windows_dependencies() -> Vec<EnvironmentDependencyStatus> {
         dependency_status(
             EnvironmentDependencyId::NodeJs,
             detect_command("node").await,
-            true,
+            false,
             true,
         ),
         dependency_status(
             EnvironmentDependencyId::ClaudeCli,
             detect_command("claude").await,
-            true,
+            false,
             true,
         ),
         dependency_status(
@@ -1051,9 +1054,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn macos_doctor_marks_homebrew_and_cmake_optional() {
-        // Only ClaudeCli + Xcode CLT block startup; Homebrew/CMake/Codex stay optional.
-        // detection populates `installed`, but the `required` policy is fixed regardless.
+    async fn macos_doctor_marks_all_dependencies_optional() {
+        // No dependency blocks startup anymore: every macOS dependency stays optional so a missing
+        // one never gates the app. detection populates `installed`, but `required` is fixed false.
         let deps = build_macos_dependencies().await;
 
         let required = |id: EnvironmentDependencyId| {
@@ -1062,8 +1065,8 @@ mod tests {
                 .map(|dep| dep.required)
         };
 
-        assert_eq!(required(EnvironmentDependencyId::XcodeCommandLineTools), Some(true));
-        assert_eq!(required(EnvironmentDependencyId::ClaudeCli), Some(true));
+        assert_eq!(required(EnvironmentDependencyId::XcodeCommandLineTools), Some(false));
+        assert_eq!(required(EnvironmentDependencyId::ClaudeCli), Some(false));
         assert_eq!(required(EnvironmentDependencyId::Homebrew), Some(false));
         assert_eq!(required(EnvironmentDependencyId::Cmake), Some(false));
         assert_eq!(required(EnvironmentDependencyId::CodexCli), Some(false));

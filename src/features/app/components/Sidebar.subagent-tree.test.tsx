@@ -229,6 +229,7 @@ const baseProps = {
   onLockPanel: vi.fn(),
   onOpenProjectMemory: vi.fn(),
   onOpenReleaseNotes: vi.fn(),
+  onOpenEnvironment: vi.fn(),
   onOpenGlobalSearch: vi.fn(),
   globalSearchShortcut: "cmd+o",
   openChatShortcut: "cmd+j",

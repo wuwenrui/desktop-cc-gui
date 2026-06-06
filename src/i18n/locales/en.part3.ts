@@ -19,6 +19,7 @@ const enPart3 = {
     runtimeEnvironmentDescription: "Inspect runtime pool state and validate local CLI installations from one place.",
     runtimeEnvironmentPoolTab: "Runtime Pool",
     runtimeEnvironmentCliValidationTab: "CLI Validation",
+    runtimeEnvironmentDependenciesTab: "Dependencies",
     performanceCompatibilityTitle: "Low-performance compatibility mode",
     performanceCompatibilityDesc: "Opt-in fallback for older machines that show high foreground CPU while idle.",
     performanceCompatibilityEnabled: "Enable low-performance compatibility mode",

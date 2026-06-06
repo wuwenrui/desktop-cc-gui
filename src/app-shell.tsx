@@ -141,7 +141,6 @@ import { useAppShellLayoutNodesSection } from "./app-shell-parts/useAppShellLayo
 import { renderAppShell } from "./app-shell-parts/renderAppShell";
 import { invoke } from "@tauri-apps/api/core";
 import { OnboardingWizard } from "./features/onboarding/OnboardingWizard";
-import { EnvironmentBootstrapGate } from "./features/setup/EnvironmentBootstrapGate";
 import {
   getEffectiveSelectedEffort,
   getEffectiveModels,
@@ -2311,24 +2310,16 @@ export function AppShell() {
   });
 
   if (!onboarded) {
-    return (
-      <EnvironmentBootstrapGate>
-        <OnboardingWizard onDone={handleOnboardingDone} />
-      </EnvironmentBootstrapGate>
-    );
+    return <OnboardingWizard onDone={handleOnboardingDone} />;
   }
 
-  return (
-    <EnvironmentBootstrapGate>
-      {renderAppShell({
-        ...appShellContext,
-        ...searchAndComposerSection,
-        ...sections,
-        ...layoutNodes,
-        isPullRequestComposer,
-        isPullRequestComposerFromSections: sections.isPullRequestComposer,
-        sections,
-      })}
-    </EnvironmentBootstrapGate>
-  );
+  return renderAppShell({
+    ...appShellContext,
+    ...searchAndComposerSection,
+    ...sections,
+    ...layoutNodes,
+    isPullRequestComposer,
+    isPullRequestComposerFromSections: sections.isPullRequestComposer,
+    sections,
+  });
 }

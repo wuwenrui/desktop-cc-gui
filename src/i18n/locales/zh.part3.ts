@@ -19,6 +19,7 @@ const zhPart3 = {
     runtimeEnvironmentDescription: "在一个入口中查看 runtime 池状态并验证本地 CLI 安装。",
     runtimeEnvironmentPoolTab: "Runtime 池",
     runtimeEnvironmentCliValidationTab: "CLI 验证",
+    runtimeEnvironmentDependenciesTab: "环境依赖",
     performanceCompatibilityTitle: "低性能兼容模式",
     performanceCompatibilityDesc: "给个别老旧机器准备的兜底开关，用于前台空闲 CPU 异常升高时降低非关键刷新负担。",
     performanceCompatibilityEnabled: "启用低性能兼容模式",

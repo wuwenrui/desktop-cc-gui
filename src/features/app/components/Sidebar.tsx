@@ -58,6 +58,7 @@ import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
 import Pencil from "lucide-react/dist/esm/icons/pencil";
 import Settings from "lucide-react/dist/esm/icons/settings";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2";
+import Wrench from "lucide-react/dist/esm/icons/wrench";
 import {
   getWorkspaceSidebarAlias,
   getWorkspaceSidebarLabel,
@@ -454,6 +455,7 @@ type SidebarProps = {
   onLockPanel?: () => void;
   onOpenProjectMemory: () => void;
   onOpenReleaseNotes: () => void;
+  onOpenEnvironment: () => void;
   onOpenSpecHub: () => void;
   onOpenWorkspaceHome: () => void;
   onOpenGlobalSearch: () => void;
@@ -542,6 +544,7 @@ export function Sidebar({
   onLockPanel,
   onOpenProjectMemory,
   onOpenReleaseNotes,
+  onOpenEnvironment,
   onOpenSpecHub,
   onOpenWorkspaceHome: _onOpenWorkspaceHome,
   onOpenGlobalSearch,
@@ -2323,6 +2326,18 @@ export function Sidebar({
                   >
                     <GitBranch size={14} aria-hidden />
                     <span>{t("git.logMode")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="sidebar-settings-dropdown-item"
+                    onClick={() => {
+                      setIsSettingsMenuOpen(false);
+                      onOpenEnvironment();
+                    }}
+                  >
+                    <Wrench size={14} aria-hidden />
+                    <span>{t("sidebar.environmentDependencies")}</span>
                   </button>
                   <button
                     type="button"

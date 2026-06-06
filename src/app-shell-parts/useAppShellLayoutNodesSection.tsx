@@ -1176,6 +1176,8 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     onOpenReleaseNotes: () => {
       void openReleaseNotes();
     },
+    onOpenEnvironment: () =>
+      openSettings("runtime-environment", "environment-dependencies"),
     focusedProjectMemoryId,
     focusedProjectMemoryRequestKey,
     focusedWorkspaceNoteId,

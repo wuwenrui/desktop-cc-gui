@@ -418,6 +418,7 @@ type LayoutNodesOptions = {
   onOpenContextLedgerMemory?: (memoryId: string) => void;
   onOpenContextLedgerNote?: (noteId: string) => void;
   onOpenReleaseNotes: () => void;
+  onOpenEnvironment: () => void;
   onOpenGlobalSearch: () => void;
   globalSearchShortcut: string | null;
   openChatShortcut: string | null;
@@ -1589,6 +1590,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       onLockPanel={options.onLockPanel}
       onOpenProjectMemory={options.onOpenProjectMemory}
       onOpenReleaseNotes={options.onOpenReleaseNotes}
+      onOpenEnvironment={options.onOpenEnvironment}
       onOpenGlobalSearch={options.onOpenGlobalSearch}
       globalSearchShortcut={options.globalSearchShortcut}
       openChatShortcut={options.openChatShortcut}

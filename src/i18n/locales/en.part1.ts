@@ -5,6 +5,7 @@ const enPart1 = {
     mcpSkillsMarket: "MCP & Skills Market",
     longTermMemory: "Long-term Memory",
     pluginMarket: "Plugin Market",
+    environmentDependencies: "Dependencies",
     specHub: "Spec Hub",
     comingSoon: "Coming Soon",
     comingSoonMessage: "This feature is under development, stay tuned",
