@@ -152,3 +152,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 739: 归档大文件拆分治理
+
+**Date**: 2026-06-07
+**Task**: 归档大文件拆分治理
+**Branch**: `feature/v0.5.7`
+
+### Summary
+
+归档 OpenSpec change split-large-file-hard-debt；同步 large-file governance spec；拆分 Project Map relationship/layout/API contracts 大文件并通过 large-file gate、typecheck、OpenSpec strict validate 与 Rust focused compile。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ea0463ed` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

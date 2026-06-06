@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-20.md`
-- **Total Sessions**: 738
+- **Total Sessions**: 739
 - **Last Active**: 2026-06-07
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-20.md` | ~154 | Active |
+| `journal-20.md` | ~187 | Active |
 | `journal-19.md` | ~1989 | Archived |
 | `journal-18.md` | ~1966 | Archived |
 | `journal-17.md` | ~1971 | Archived |
@@ -48,6 +48,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 739 | 2026-06-07 | 归档大文件拆分治理 | `ea0463ed` | `feature/v0.5.7` |
 | 738 | 2026-06-07 | 拆分大文件硬债并清零门禁 | `2a0efb00` | `feature/v0.5.7` |
 | 737 | 2026-06-07 | 修复 CI 门禁测试与大文件基线 | `fe76841f` | `feature/v0.5.7` |
 | 736 | 2026-06-07 | 完成 Project Map 接口契约视图阶段交付 | `5720fde9` | `feature/v0.5.7` |
