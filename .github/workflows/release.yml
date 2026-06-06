@@ -92,6 +92,16 @@ jobs:
           APP_NAME=$(basename "$APP_PATH")
           echo "Packaging $APP_NAME"
 
+          # Apply a proper deep ad-hoc signature so the whole bundle's
+          # resources are sealed. Tauri only emits a linker ad-hoc signature
+          # (Sealed Resources=none), which Gatekeeper flags as "damaged" once
+          # the download is quarantined on Apple Silicon. Deep ad-hoc signing
+          # downgrades that hard block to the normal "unidentified developer"
+          # prompt. Full zero-warning installs still require a paid Apple
+          # Developer ID + notarization.
+          codesign --force --deep --sign - "$APP_PATH"
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+
           ditto -c -k --keepParent \
             "$APP_PATH" \
             release-artifacts/LawyerCopilot.zip
