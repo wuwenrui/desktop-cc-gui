@@ -94,15 +94,15 @@ jobs:
 
           ditto -c -k --keepParent \
             "$APP_PATH" \
-            release-artifacts/ccgui.zip
+            release-artifacts/LawyerCopilot.zip
 
           ARCH="${{ matrix.arch }}"
           bash scripts/create-dmg.sh \
             "$APP_PATH" \
-            release-artifacts/ccgui_${VERSION}_${ARCH}.dmg
+            release-artifacts/LawyerCopilot_${VERSION}_${ARCH}.dmg
 
           COPYFILE_DISABLE=1 tar -czf \
-            src-tauri/target/release/bundle/macos/ccgui.app.tar.gz \
+            src-tauri/target/release/bundle/macos/LawyerCopilot.app.tar.gz \
             -C src-tauri/target/release/bundle/macos "$APP_NAME"
 
           # Write the base64-encoded key to file (tauri signer expects this format)
@@ -112,22 +112,22 @@ jobs:
           npm run tauri signer sign -- \
             -f "$HOME/.tauri/ccgui.key" \
             -p "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" \
-            src-tauri/target/release/bundle/macos/ccgui.app.tar.gz
+            src-tauri/target/release/bundle/macos/LawyerCopilot.app.tar.gz
 
-          cp src-tauri/target/release/bundle/macos/ccgui.app.tar.gz \
-            release-artifacts/ccgui_${ARCH}.app.tar.gz
-          cp src-tauri/target/release/bundle/macos/ccgui.app.tar.gz.sig \
-            release-artifacts/ccgui_${ARCH}.app.tar.gz.sig
+          cp src-tauri/target/release/bundle/macos/LawyerCopilot.app.tar.gz \
+            release-artifacts/LawyerCopilot_${ARCH}.app.tar.gz
+          cp src-tauri/target/release/bundle/macos/LawyerCopilot.app.tar.gz.sig \
+            release-artifacts/LawyerCopilot_${ARCH}.app.tar.gz.sig
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
           name: macos-${{ matrix.arch }}
           path: |
-            release-artifacts/ccgui.zip
-            release-artifacts/ccgui_*_${{ matrix.arch }}.dmg
-            release-artifacts/ccgui_${{ matrix.arch }}.app.tar.gz
-            release-artifacts/ccgui_${{ matrix.arch }}.app.tar.gz.sig
+            release-artifacts/LawyerCopilot.zip
+            release-artifacts/LawyerCopilot_*_${{ matrix.arch }}.dmg
+            release-artifacts/LawyerCopilot_${{ matrix.arch }}.app.tar.gz
+            release-artifacts/LawyerCopilot_${{ matrix.arch }}.app.tar.gz.sig
 
   build_linux:
     name: appimage (x86_64)
@@ -307,8 +307,8 @@ jobs:
           PY
           )
 
-          SIGNATURE_AARCH64=$(cat release-artifacts/ccgui_aarch64.app.tar.gz.sig)
-          SIGNATURE_X86_64=$(cat release-artifacts/ccgui_x86_64.app.tar.gz.sig)
+          SIGNATURE_AARCH64=$(cat release-artifacts/LawyerCopilot_aarch64.app.tar.gz.sig)
+          SIGNATURE_X86_64=$(cat release-artifacts/LawyerCopilot_x86_64.app.tar.gz.sig)
           LAST_TAG=$(git tag --sort=-version:refname \
             | grep -v "^v${VERSION}$" \
             | head -n 1 || true)
@@ -366,11 +366,11 @@ jobs:
 
           platforms = {
             "darwin-aarch64": {
-              "url": "https://github.com/wuwenrui/desktop-cc-gui/releases/download/v${VERSION}/ccgui_aarch64.app.tar.gz",
+              "url": "https://github.com/wuwenrui/desktop-cc-gui/releases/download/v${VERSION}/LawyerCopilot_aarch64.app.tar.gz",
               "signature": "${SIGNATURE_AARCH64}",
             },
             "darwin-x86_64": {
-              "url": "https://github.com/wuwenrui/desktop-cc-gui/releases/download/v${VERSION}/ccgui_x86_64.app.tar.gz",
+              "url": "https://github.com/wuwenrui/desktop-cc-gui/releases/download/v${VERSION}/LawyerCopilot_x86_64.app.tar.gz",
               "signature": "${SIGNATURE_X86_64}",
             }
           }
@@ -436,13 +436,13 @@ jobs:
 
           ASSETS=()
           for pattern in \
-            "release-artifacts/ccgui.zip" \
-            "release-artifacts/ccgui_*_aarch64.dmg" \
-            "release-artifacts/ccgui_*_x86_64.dmg" \
-            "release-artifacts/ccgui_aarch64.app.tar.gz" \
-            "release-artifacts/ccgui_aarch64.app.tar.gz.sig" \
-            "release-artifacts/ccgui_x86_64.app.tar.gz" \
-            "release-artifacts/ccgui_x86_64.app.tar.gz.sig" \
+            "release-artifacts/LawyerCopilot.zip" \
+            "release-artifacts/LawyerCopilot_*_aarch64.dmg" \
+            "release-artifacts/LawyerCopilot_*_x86_64.dmg" \
+            "release-artifacts/LawyerCopilot_aarch64.app.tar.gz" \
+            "release-artifacts/LawyerCopilot_aarch64.app.tar.gz.sig" \
+            "release-artifacts/LawyerCopilot_x86_64.app.tar.gz" \
+            "release-artifacts/LawyerCopilot_x86_64.app.tar.gz.sig" \
             "release-artifacts/*.AppImage*" \
             "release-artifacts/*-setup.exe" \
             "release-artifacts/*-setup.exe.sig" \
