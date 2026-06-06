@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-20.md`
-- **Total Sessions**: 741
+- **Total Sessions**: 742
 - **Last Active**: 2026-06-07
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-20.md` | ~253 | Active |
+| `journal-20.md` | ~286 | Active |
 | `journal-19.md` | ~1989 | Archived |
 | `journal-18.md` | ~1966 | Archived |
 | `journal-17.md` | ~1971 | Archived |
@@ -48,6 +48,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 742 | 2026-06-07 | 保留旧品牌兼容路径例外 | `e52fb2f2` | `feature/v0.5.7` |
 | 741 | 2026-06-07 | 防止跨引擎清理对话残留 | `baa85158` | `feature/v0.5.7` |
 | 740 | 2026-06-07 | 提交 Rust 格式化收口 | `2b4e4333` | `feature/v0.5.7` |
 | 739 | 2026-06-07 | 归档大文件拆分治理 | `ea0463ed` | `feature/v0.5.7` |

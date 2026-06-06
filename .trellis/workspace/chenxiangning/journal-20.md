@@ -251,3 +251,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 742: 保留旧品牌兼容路径例外
+
+**Date**: 2026-06-07
+**Task**: 保留旧品牌兼容路径例外
+**Branch**: `feature/v0.5.7`
+
+### Summary
+
+修复 branding check：为旧 .mossx canvas 迁移路径和旧 .mossx/.codemoss ignored path 增加精确兼容例外，并将 project map ownership 测试 fixture 改为中性 storage key。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e52fb2f2` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
