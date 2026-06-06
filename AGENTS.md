@@ -109,3 +109,44 @@ Keep this managed block so 'trellis update' can refresh the instructions.
 
 - `.omx/**`、`.trellis/.developer`、`.trellis/.current-task` 等本地 state 属于 runtime artifact 或 local-only state。
 - 这类目录和文件不作为规范事实源；若误入库，应按仓库卫生规则清退并加入忽略策略。
+
+## Fork 能力保护（不可被上游合并覆盖）
+
+本仓库是 upstream `desktop-cc-gui` 的 fork。以下 4 项能力是本 fork 专属，**每次
+`git merge upstream/main` 后都必须存活**。合并后逐项对照锚点文件核验，未通过不得 push。
+逐文件改动清单见 `docs/FORK-PATCHES.md`。
+
+1. **去掉「社区与反馈」模块** —— SettingsView 不再渲染 community section。
+   - 锚点：`src/features/settings/components/SettingsView.tsx`
+   - 核验：无社区/反馈导航项或面板。
+
+2. **模型自动配置** —— 首启 onboarding 自动配 new-api provider；vendors 面板提供对应预设。
+   - 锚点：`src/features/onboarding/OnboardingWizard.tsx`、
+     `src/features/vendors/components/VendorSettingsPanel.tsx`
+   - 核验：onboarding 仍向 `~/.claude/settings.json` 注入 new-api provider；vendor 面板仍有预设。
+
+3. **环境依赖检查与安装（非阻塞）** —— 左侧设置菜单 → 运行环境 → 环境依赖。缺失依赖不阻塞启动，
+   仅按需安装；检测会探测常见安装目录（装完工具点「检查依赖」不重启 app 即识别）。
+   - 锚点：`src/features/setup/EnvironmentDependenciesSection.tsx`、
+     `src/features/setup/hooks/useEnvironmentInstaller.ts`、
+     `src/features/setup/DependencyGate.tsx`、
+     `src-tauri/src/environment_installer.rs`、
+     `src-tauri/src/claude_installer.rs`
+   - 核验：环境依赖区块仍渲染；`detect_command` / `detect_claude` 仍探测额外安装目录。
+
+4. **余额展示 + skill 市场** —— 顶栏徽标显示 new-api 实时余额；skill 市场可浏览/安装 skill。
+   - 锚点：`src/features/app/components/MainTopbar.tsx`、`src/features/usage/UsageBadge.tsx`、
+     `src/features/usage/usage-badge.css`、`src-tauri/src/newapi_usage.rs`、
+     `src/features/skill-market/`
+   - 核验：余额徽标仍挂在顶栏；skill 市场入口仍能打开面板。
+
+## 上游同步流程
+
+每次 push 前执行，确保 fork 能力不被静默回退：
+
+1. `git fetch upstream`
+2. 若 `upstream/main` 有我们没有的提交，则合并（`git merge upstream/main`）。冲突按语义解决——
+   对上述锚点文件**禁止**整文件 `--ours` / `--theirs` 覆盖。
+3. 合并后逐项核验「Fork 能力保护」的 4 项能力，重放被合并覆盖的 `docs/FORK-PATCHES.md` 改动。
+4. 跑质量门禁（`npm run typecheck`、`npm run test`，以及 `src-tauri/` 下的 `cargo test`）。
+5. 4 项能力核验通过且门禁全绿后，才 push 触发构建。

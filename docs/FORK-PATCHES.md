@@ -19,6 +19,7 @@
 | `src/i18n/locales/en.part1.ts` / `zh.part1.ts` | 首页 slogan `ccgui Agent...` → `LawyerCopilot · make legal work easier` / `律师助理 · 让法律工作更简单`；设置页 securityNotice 去掉"本项目100%开源/This project is 100% open source" | 换品牌 + 去开源标语 | 确认 slogan 已换、securityNotice 无开源句 |
 | `src/i18n/locales/en.part2.ts` / `zh.part2.ts` | `chat.openSourceBanner` 文案改空字符串 `""` | 去开源标语 | 确认 openSourceBanner 为空 |
 | `src/features/composer/components/ChatInputBox/ChatInputBoxHeader.tsx` | 新增 `hasOpenSourceBanner = showOpenSourceBanner && t('chat.openSourceBanner')`，banner 文案为空则不渲染该条 + 不计入 `hasContent` | 文案清空后避免留空白条 | 上游若改 banner 渲染逻辑需重应用空文案守卫 |
+| `src-tauri/src/environment_installer.rs` | `detect_command` 在 PATH 探测失败后追加探测常见安装目录(`command_install_candidates` / `unix_command_candidates` + `nvm_version_bins` / `windows_command_candidates`)，用绝对路径再跑 `--version` 判定 | app 启动只快照一次 PATH(`fix_path_env::fix()`)，启动后才装的工具(claude→~/.local/bin、node→nvm/brew/npm)在 PATH 快照里看不到；点「检查依赖」需免重启即识别 | 上游若重写 `detect_command` 需重应用 fallback 探测；确认 `command_install_candidates` 仍在且 PATH 命中路径行为不变 |
 
 ## 二、纯新增文件（与 upstream 不冲突，无需在上表跟踪）
 
@@ -30,9 +31,10 @@
 | `src-tauri/src/mcp_writer.rs` | 写 court-crawler SSE MCP 到 ~/.claude.json |
 | `src/features/onboarding/OnboardingWizard.tsx` | 首启向导(new-api provider 运行时注入 + 装 skill + 写 MCP) |
 | `src-tauri/src/newapi_usage.rs` | `get_newapi_usage` 命令：读 settings.json 的 ANTHROPIC_BASE_URL/AUTH_TOKEN，调 new-api `/api/usage/token`，quota→CNY 换算 |
-| `src/features/usage/UsageBadge.tsx` | 顶栏余额/用量徽标(invoke get_newapi_usage，60s 刷新) |
-| `src/features/usage/UsageBadge.test.tsx` | UsageBadge 组件测试(mock invoke) |
-| `src-tauri/src/claude_installer.rs` | `check_claude_cli` / `install_claude_cli` 命令：自检 claude CLI(PATH + ~/.local/bin)，缺失则跑官方 native installer 自动安装并校验 |
+| `src/features/usage/UsageBadge.tsx` | 顶栏余额/用量徽标(invoke get_newapi_usage，60s 刷新；Intl 货币格式化 + 低余额警示 + 结构化样式) |
+| `src/features/usage/usage-badge.css` | 顶栏余额徽标样式(复用主题 token，自动跟随明暗主题；加载/错误/低余额/不限额态) |
+| `src/features/usage/UsageBadge.test.tsx` | UsageBadge 组件测试(mock invoke；含低余额/负值归零) |
+| `src-tauri/src/claude_installer.rs` | `check_claude_cli` / `install_claude_cli` 命令：自检 claude CLI(PATH → ~/.local/bin、~/.claude/local、npm 全局；Windows %APPDATA%\npm)，缺失则跑官方 native installer 自动安装并校验 |
 | `src/features/setup/DependencyGate.tsx` | 启动门禁：自检 claude CLI，缺失则提供一键官方安装/重启提示，安装好后渲染 children |
 | `src/features/setup/__tests__/DependencyGate.test.tsx` | DependencyGate 组件测试(mock invoke) |
 | `src-tauri/src/skill_market.rs` | `market_add_skill`(下载平台 zip → 防 zip-slip 解压到 ~/.claude/skills/<name> + 记 .skillhub-installed.json) / `market_list_installed`(读已装版本) 命令；纯函数化 + cargo test 覆盖 |

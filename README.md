@@ -158,6 +158,65 @@ Focused gates also exist for engine capability routing, context ledger budgets, 
 - `.trellis/spec/**` — implementation rules and executable contracts.
 - `docs/architecture/**` — architecture governance and large-file policies.
 - `docs/perf/**` — performance baselines and runtime evidence reports.
+- `docs/FORK-PATCHES.md` — every upstream file this fork modifies, replayed after each merge.
+
+---
+
+## Fork Capability Protection (must not be reverted by upstream merges)
+
+This is a fork of upstream `desktop-cc-gui`. The four capabilities below are fork-specific and
+**must survive every `git merge upstream/main`**. After a merge, verify each one against its anchor
+files before pushing. Full per-file change log lives in `docs/FORK-PATCHES.md`.
+
+1. **Community & feedback module removed** — the Settings view no longer renders a community
+   section.
+   - Anchor: `src/features/settings/components/SettingsView.tsx`
+   - Verify: no community / feedback nav entry or panel is present.
+
+2. **Automatic model configuration** — first-run onboarding auto-configures the new-api provider, and
+   the vendor settings panel offers the matching provider preset.
+   - Anchors: `src/features/onboarding/OnboardingWizard.tsx`,
+     `src/features/vendors/components/VendorSettingsPanel.tsx`
+   - Verify: onboarding still injects the new-api provider into `~/.claude/settings.json`; the vendor
+     panel still exposes the preset.
+
+3. **Environment dependency check & install (non-blocking)** — left settings menu → Runtime
+   Environment → Environment Dependencies. A missing dependency never blocks startup; it is surfaced
+   for on-demand install. Detection probes well-known install dirs (so a tool installed after launch
+   is recognized without restarting the app).
+   - Anchors: `src/features/setup/EnvironmentDependenciesSection.tsx`,
+     `src/features/setup/hooks/useEnvironmentInstaller.ts`,
+     `src/features/setup/DependencyGate.tsx`,
+     `src-tauri/src/environment_installer.rs`,
+     `src-tauri/src/claude_installer.rs`
+   - Verify: the Environment Dependencies section renders; `detect_command` /
+     `detect_claude` still probe the extra install directories.
+
+4. **Balance display + skill market** — the top-bar badge shows the live new-api balance, and the
+   skill market lets users browse/install skills.
+   - Anchors: `src/features/app/components/MainTopbar.tsx`, `src/features/usage/UsageBadge.tsx`,
+     `src/features/usage/usage-badge.css`, `src-tauri/src/newapi_usage.rs`,
+     `src/features/skill-market/`
+   - Verify: the usage badge still mounts in the top bar; the skill market entry still opens its
+     panel.
+
+---
+
+## Upstream Sync Workflow
+
+Run this before every push so fork capabilities are never silently lost:
+
+1. `git fetch upstream`
+2. If `upstream/main` has commits we do not have, merge them
+   (`git merge upstream/main`). Resolve conflicts semantically — never blanket
+   `--ours` / `--theirs` on the anchor files above.
+3. After the merge, re-verify all four capabilities in
+   "Fork Capability Protection" against their anchor files, replaying any
+   change from `docs/FORK-PATCHES.md` that the merge overwrote.
+4. Run the quality gates (`npm run typecheck`, `npm run test`, and
+   `cargo test` under `src-tauri/`).
+5. Only after the capabilities verify and the gates pass, push to trigger the
+   build.
 
 ---
 
