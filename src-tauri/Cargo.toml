@@ -76,3 +76,9 @@ objc2-app-kit = { version = "0.3", features = ["NSAppearance", "NSResponder", "N
 objc2-foundation = { version = "0.3", features = ["NSString"] }
 objc2-av-foundation = { version = "0.3", features = ["AVCaptureDevice", "AVMediaFormat"] }
 block2 = "0.6"
+# Statically link OpenSSL (pulled in transitively by git2/libgit2/libssh2) so
+# the macOS binary does not depend on Homebrew's /usr/local/opt/openssl@3 dylib
+# at runtime. That path is absent on end-user Macs and makes the app crash at
+# launch with "dyld: Library not loaded: .../libssl.3.dylib". vendored-openssl
+# compiles OpenSSL into the binary; base git2 (Windows/Linux) is unaffected.
+git2 = { version = "0.20.3", features = ["vendored-openssl"] }
