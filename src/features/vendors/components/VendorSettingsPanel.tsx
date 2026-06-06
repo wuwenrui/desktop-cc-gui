@@ -184,6 +184,10 @@ export function VendorSettingsPanel({
             ANTHROPIC_DEFAULT_OPUS_MODEL: claudeSlots.opus,
           };
           const updates = {
+            // ProviderConfig (Rust) requires `id`; the update command
+            // deserializes `updates` into it, so omitting id fails with
+            // "missing field `id`".
+            id: activeProvider.id,
             name: activeProvider.name,
             remark: activeProvider.remark ?? "",
             settingsConfig: { ...activeProvider.settingsConfig, env },
