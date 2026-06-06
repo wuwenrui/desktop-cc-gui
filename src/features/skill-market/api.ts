@@ -19,6 +19,7 @@ export type SkillResp = {
   description: string;
   visibility: string;
   latest_version: number;
+  author?: string;
 };
 
 /** 与后端 `SkillListResp` 对齐。 */

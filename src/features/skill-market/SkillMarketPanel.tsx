@@ -177,6 +177,9 @@ export function SkillMarketPanel() {
                   <span className="skill-market-item-version">
                     v{skill.latest_version}
                   </span>
+                  <span className="skill-market-item-author">
+                    作者：{skill.author || "未知"}
+                  </span>
                   <p className="skill-market-item-desc">{skill.description}</p>
                 </div>
                 <div className="skill-market-item-actions">

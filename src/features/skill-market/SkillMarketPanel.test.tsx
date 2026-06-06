@@ -28,6 +28,7 @@ const publicList: SkillListResp = {
       description: "处理劳动合同",
       visibility: "public",
       latest_version: 3,
+      author: "武艳红",
     },
     {
       id: 2,
@@ -59,6 +60,7 @@ describe("SkillMarketPanel", () => {
     await waitFor(() => {
       expect(screen.getByText("劳动用工小助理")).toBeTruthy();
       expect(screen.getByText("尽职调查")).toBeTruthy();
+      expect(screen.getByText(/作者：武艳红/)).toBeTruthy();
     });
   });
 
