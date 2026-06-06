@@ -1714,3 +1714,51 @@ OpenSpec 回写：
 ### Next Steps
 
 - None - task complete
+
+
+## Session 730: Project Canvas 文件关系图导入阶段实现
+
+**Date**: 2026-06-06
+**Task**: Project Canvas 文件关系图导入阶段实现
+**Branch**: `feature/v0.5.7`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| Area | Summary |
+|------|---------|
+| OpenSpec | 回写 `add-project-canvas-code-graph-import` proposal/design/spec/tasks，校准 file-level import 为主入口、edge import 为 evidence-level secondary action。 |
+| Relationship Import | 新增 relationship node/edge 查询与 projector，file import 直接使用 Relationship Inspector 当前 direct relation set，保留 bounded limits 和 omitted summary。 |
+| Canvas Storage | 扩展 Intent Canvas document semantic graph / AI annotation metadata，并确保 normalize/save/clone 不丢失。 |
+| Canvas Projection | 将 semantic graph 投影为 Excalidraw visual elements，节点文本绑定到 node container，relation arrow 绑定 source/target，method label 绑定 arrow。 |
+| UI | Relationship Inspector 区分 `导入全部 N 条关系到 Canvas` 主操作和 `仅导入这条关系` 次操作，补充 zh/en i18n 和 scoped CSS。 |
+| Backend | `project_map_relations` relationship storage key 复用共享 `project_storage_key`，保持与 Project Canvas project-scoped storage identity 对齐。 |
+
+**Validation**:
+- 未运行自动 typecheck/test；本阶段由用户进行手动 UI 反馈驱动校准。
+- 工作区在代码 commit 后为 clean。
+
+**Follow-up**:
+- 下一阶段继续 method-level selected code import、source backlinks、stale/unresolved UI、AI explanation annotations 和 focused tests。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `861d34a9` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

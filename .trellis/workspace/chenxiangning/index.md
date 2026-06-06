@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-19.md`
-- **Total Sessions**: 729
+- **Total Sessions**: 730
 - **Last Active**: 2026-06-06
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-19.md` | ~1716 | Active |
+| `journal-19.md` | ~1764 | Active |
 | `journal-18.md` | ~1966 | Archived |
 | `journal-17.md` | ~1971 | Archived |
 | `journal-16.md` | ~1985 | Archived |
@@ -47,6 +47,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 730 | 2026-06-06 | Project Canvas 文件关系图导入阶段实现 | `861d34a9` | `feature/v0.5.7` |
 | 729 | 2026-06-06 | 修复 Project Map 文件关系扫描与收起语义 | `bf46b1b7` | `feature/v0.5.7` |
 | 728 | 2026-06-06 | 提交 Project Canvas 代码图导入提案 | `8f2343e1` | `feature/v0.5.7` |
 | 727 | 2026-06-06 | 更新现有 OpenSpec 变更提案 | `3ac4742b` | `feature/v0.5.7` |
