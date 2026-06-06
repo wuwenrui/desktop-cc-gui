@@ -35,9 +35,48 @@ describe("UsageBadge", () => {
     render(<UsageBadge />);
 
     await waitFor(() => {
-      expect(screen.getByText("余额 ¥717.50 · 已用 ¥12.50")).toBeTruthy();
+      expect(screen.getByText("¥717.50")).toBeTruthy();
     });
+    expect(screen.getByText("已用 ¥12.50")).toBeTruthy();
+    // The accessible label combines the figures into one screen-reader string.
+    expect(screen.getByLabelText("余额 ¥717.50，已用 ¥12.50")).toBeTruthy();
     expect(invoke).toHaveBeenCalledWith("get_newapi_usage");
+  });
+
+  it("flags a low balance with the warning modifier", async () => {
+    vi.mocked(invoke).mockResolvedValue({
+      ...sampleUsage,
+      available_cny: 2.5,
+    });
+    const { container } = render(<UsageBadge />);
+
+    await waitFor(() => {
+      expect(screen.getByText("¥2.50")).toBeTruthy();
+    });
+    expect(container.querySelector(".usage-badge--low")).toBeTruthy();
+  });
+
+  it("does not flag a healthy balance as low", async () => {
+    vi.mocked(invoke).mockResolvedValue(sampleUsage);
+    const { container } = render(<UsageBadge />);
+
+    await waitFor(() => {
+      expect(screen.getByText("¥717.50")).toBeTruthy();
+    });
+    expect(container.querySelector(".usage-badge--low")).toBeNull();
+  });
+
+  it("clamps a negative available balance to zero", async () => {
+    vi.mocked(invoke).mockResolvedValue({
+      ...sampleUsage,
+      available_cny: -0.01,
+    });
+    render(<UsageBadge />);
+
+    await waitFor(() => {
+      // Over-drawn tokens must never render as a negative figure.
+      expect(screen.getByText("¥0.00")).toBeTruthy();
+    });
   });
 
   it("renders an error placeholder when invoke rejects", async () => {
@@ -57,8 +96,9 @@ describe("UsageBadge", () => {
     render(<UsageBadge />);
 
     await waitFor(() => {
-      expect(screen.getByText("余额 不限额 · 已用 ¥12.50")).toBeTruthy();
+      expect(screen.getByText("不限额")).toBeTruthy();
     });
+    expect(screen.getByText("已用 ¥12.50")).toBeTruthy();
   });
 
   it("refreshes on a 60s interval and clears the timer on unmount", async () => {

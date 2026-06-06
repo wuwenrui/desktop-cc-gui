@@ -1,0 +1,150 @@
+/*
+ * 顶栏 new-api 余额徽标样式 — 新增文件(fork-friendly)，零改上游。
+ * 复用客户端设计 token(themes.dark.css / themes.light.css)，自动跟随主题切换。
+ * 结构: .usage-badge > (.usage-badge__icon + .usage-badge__primary + .usage-badge__sep + .usage-badge__secondary)
+ */
+
+.usage-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 11px 0 9px;
+  font-size: 12.5px;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--text-muted, #b3b3b3);
+  background: var(--surface-card, #1f1f25);
+  border: 1px solid var(--border-subtle, #252530);
+  border-radius: 999px;
+  user-select: none;
+  -webkit-app-region: no-drag;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.usage-badge:hover {
+  border-color: var(--border-quiet, #404050);
+  background: var(--surface-control, #27272e);
+}
+
+/* ---- 货币 / 状态图标 ---- */
+.usage-badge__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 50%;
+  color: var(--text-accent, #7a9dcc);
+  background: color-mix(in srgb, var(--text-accent, #7a9dcc) 16%, transparent);
+}
+
+/* ---- 主信息: 标签 + 数值 ---- */
+.usage-badge__primary {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.usage-badge__label {
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--text-subtle, #999);
+}
+
+.usage-badge__value {
+  /* 等宽数字让刷新时金额变化不抖动 */
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  color: var(--text-strong, #fff);
+}
+
+/* ---- 分隔点 ---- */
+.usage-badge__sep {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--text-faint, #808080);
+  opacity: 0.7;
+}
+
+/* ---- 次要信息: 已用 ---- */
+.usage-badge__secondary {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--text-subtle, #999);
+}
+
+/* ---- 不限额: 主色调强调 ---- */
+.usage-badge--unlimited .usage-badge__icon {
+  font-size: 14px;
+  color: var(--status-success, #78ebbe);
+  background: color-mix(in srgb, var(--status-success, #78ebbe) 16%, transparent);
+}
+.usage-badge--unlimited .usage-badge__value {
+  color: var(--status-success, #78ebbe);
+}
+
+/* ---- 低余额提醒: 警示色 ---- */
+.usage-badge--low {
+  border-color: color-mix(in srgb, var(--status-warning, #ffaf55) 45%, var(--border-subtle, #252530));
+}
+.usage-badge--low .usage-badge__icon {
+  color: var(--status-warning, #ffaf55);
+  background: color-mix(in srgb, var(--status-warning, #ffaf55) 18%, transparent);
+}
+.usage-badge--low .usage-badge__value {
+  color: var(--status-warning, #ffaf55);
+}
+
+/* ---- 加载态: 脉冲占位 ---- */
+.usage-badge--loading {
+  color: var(--text-subtle, #999);
+}
+.usage-badge__text {
+  font-size: 12px;
+}
+.usage-badge__spinner {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1.6px solid var(--border-quiet, #404050);
+  border-top-color: var(--text-accent, #7a9dcc);
+  animation: usage-badge-spin 760ms linear infinite;
+}
+
+@keyframes usage-badge-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---- 错误态: 静音的红点 + 文案 ---- */
+.usage-badge--error {
+  color: var(--status-error, #ff6e6e);
+  border-color: color-mix(in srgb, var(--status-error, #ff6e6e) 35%, var(--border-subtle, #252530));
+  cursor: help;
+}
+.usage-badge__dot {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--status-error, #ff6e6e);
+}
+
+/* 降低动态偏好时关闭旋转动画 */
+@media (prefers-reduced-motion: reduce) {
+  .usage-badge__spinner {
+    animation: none;
+  }
+}
