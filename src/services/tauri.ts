@@ -1631,6 +1631,14 @@ export async function trashProjectCanvasFile(workspaceId: string, path: string):
   return invoke("project_canvas_trash_file", { workspaceId, path });
 }
 
+export async function compactProjectCanvasFiles(
+  workspaceId: string,
+): Promise<{ deletedDocuments: number; deletedTempFiles: number }> {
+  return invoke<{ deletedDocuments: number; deletedTempFiles: number }>("project_canvas_compact_files", {
+    workspaceId,
+  });
+}
+
 export type ExportRewindFilesParams = {
   workspaceId: string;
   engine: "claude" | "codex" | "gemini";

@@ -22,6 +22,15 @@ pub(crate) struct ProjectCanvasFileResponse {
     truncated: bool,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ProjectCanvasCompactResponse {
+    deleted_documents: usize,
+    deleted_temp_files: usize,
+}
+
+const LEGACY_MIGRATION_SENTINEL: &str = ".legacy-migration-complete";
+
 async fn workspace_entry(state: &AppState, workspace_id: &str) -> Result<WorkspaceEntry, String> {
     let workspaces = state.workspaces.lock().await;
     workspaces
@@ -101,6 +110,10 @@ fn legacy_workspace_canvas_root(entry: &WorkspaceEntry) -> PathBuf {
 }
 
 fn migrate_legacy_workspace_canvases(entry: &WorkspaceEntry, root: &Path) -> Result<(), String> {
+    let migration_sentinel_path = root.join(LEGACY_MIGRATION_SENTINEL);
+    if migration_sentinel_path.exists() {
+        return Ok(());
+    }
     let legacy_root = legacy_workspace_canvas_root(entry);
     if !legacy_root.exists() || !legacy_root.is_dir() {
         return Ok(());
@@ -137,6 +150,8 @@ fn migrate_legacy_workspace_canvases(entry: &WorkspaceEntry, root: &Path) -> Res
         with_storage_lock(&target_path, || write_string_atomically(&target_path, &content))?;
     }
     synthesize_index_from_canvas_documents(&canonical_root)?;
+    std::fs::write(&migration_sentinel_path, "1")
+        .map_err(|error| format!("Failed to write Project Canvas migration sentinel: {error}"))?;
     Ok(())
 }
 
@@ -235,6 +250,83 @@ fn synthesize_index_from_canvas_documents(root: &Path) -> Result<(), String> {
     let content = serde_json::to_string_pretty(&payload)
         .map_err(|error| format!("Failed to serialize Project Canvas index: {error}"))?;
     with_storage_lock(&index_path, || write_string_atomically(&index_path, &content))
+}
+
+fn is_project_canvas_document_filename(file_name: &str) -> bool {
+    file_name.starts_with("canvas-")
+        && file_name.ends_with(".intent-canvas.json")
+        && validate_project_canvas_file_path(file_name).is_ok()
+}
+
+fn is_project_canvas_temp_filename(file_name: &str) -> bool {
+    file_name.starts_with(".index.json.") && file_name.ends_with(".tmp")
+}
+
+fn load_indexed_project_canvas_filenames(root: &Path) -> Result<std::collections::HashSet<String>, String> {
+    let index_path = root.join("index.json");
+    if !index_path.exists() {
+        return Ok(std::collections::HashSet::new());
+    }
+    let content = std::fs::read_to_string(&index_path)
+        .map_err(|error| format!("Failed to read Project Canvas index: {error}"))?;
+    let index: Value = serde_json::from_str(&content)
+        .map_err(|error| format!("Failed to parse Project Canvas index: {error}"))?;
+    let mut indexed_files = std::collections::HashSet::new();
+    let Some(canvases) = index.get("canvases").and_then(Value::as_array) else {
+        return Ok(indexed_files);
+    };
+    for entry in canvases {
+        let Some(id) = value_string(entry, "id") else {
+            continue;
+        };
+        let file_name = format!("{id}.intent-canvas.json");
+        if is_project_canvas_document_filename(&file_name) {
+            indexed_files.insert(file_name);
+        }
+    }
+    Ok(indexed_files)
+}
+
+fn compact_project_canvas_root(root: &Path) -> Result<ProjectCanvasCompactResponse, String> {
+    if !root.exists() {
+        return Ok(ProjectCanvasCompactResponse {
+            deleted_documents: 0,
+            deleted_temp_files: 0,
+        });
+    }
+    let canonical_root = root
+        .canonicalize()
+        .map_err(|error| format!("Failed to resolve Project Canvas root: {error}"))?;
+    let indexed_files = load_indexed_project_canvas_filenames(&canonical_root)?;
+    let mut deleted_documents = 0;
+    let mut deleted_temp_files = 0;
+    let entries = std::fs::read_dir(&canonical_root)
+        .map_err(|error| format!("Failed to read Project Canvas directory: {error}"))?;
+    for entry in entries {
+        let entry = entry.map_err(|error| format!("Failed to read Project Canvas entry: {error}"))?;
+        let file_type = entry
+            .file_type()
+            .map_err(|error| format!("Failed to inspect Project Canvas entry: {error}"))?;
+        if !file_type.is_file() {
+            continue;
+        }
+        let file_name = entry.file_name().to_string_lossy().to_string();
+        if is_project_canvas_temp_filename(&file_name) {
+            std::fs::remove_file(entry.path())
+                .map_err(|error| format!("Failed to remove Project Canvas temp file: {error}"))?;
+            deleted_temp_files += 1;
+            continue;
+        }
+        if is_project_canvas_document_filename(&file_name) && !indexed_files.contains(&file_name) {
+            std::fs::remove_file(entry.path())
+                .map_err(|error| format!("Failed to remove orphan Project Canvas document: {error}"))?;
+            deleted_documents += 1;
+        }
+    }
+    Ok(ProjectCanvasCompactResponse {
+        deleted_documents,
+        deleted_temp_files,
+    })
 }
 
 fn resolve_existing_project_canvas_file(root: &Path, path: &str) -> Result<PathBuf, String> {
@@ -344,4 +436,19 @@ pub(crate) async fn project_canvas_trash_file(
     let root = project_canvas_root(&entry)?;
     let path = resolve_existing_project_canvas_file(&root, &path)?;
     trash::delete(&path).map_err(|error| format!("Failed to move Project Canvas file to trash: {error}"))
+}
+
+#[tauri::command]
+pub(crate) async fn project_canvas_compact_files(
+    workspace_id: String,
+    state: State<'_, AppState>,
+    _app: AppHandle,
+) -> Result<ProjectCanvasCompactResponse, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return Err("Project Canvas global storage is not supported in remote mode yet.".to_string());
+    }
+
+    let entry = workspace_entry(&state, &workspace_id).await?;
+    let root = project_canvas_root(&entry)?;
+    with_storage_lock(&root.join("index.json"), || compact_project_canvas_root(&root))
 }

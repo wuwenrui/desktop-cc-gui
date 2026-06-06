@@ -47,6 +47,32 @@ const GRAPH_NODE_WIDTH = 260;
 const GRAPH_NODE_HEIGHT = 92;
 const GRAPH_COLUMN_GAP = 340;
 const GRAPH_ROW_GAP = 132;
+const GENERATED_ELEMENT_ID_PREFIXES = [
+  "intent-node-",
+  "intent-node-text-",
+  "intent-edge-",
+  "intent-edge-label-",
+];
+const GENERATED_LEGACY_COLOR_REPLACEMENTS: Record<string, string> = {
+  "#000": "#334155",
+  "#000000": "#334155",
+  "#0f172a": "#2563eb",
+  "#111827": "#f8fafc",
+  "#221a08": "#fff7ed",
+  "#05252c": "#ecfeff",
+  "#0b1d34": "#eff6ff",
+  "#08261d": "#ecfdf5",
+  "#082f2c": "#f0fdfa",
+  "#1a2607": "#f7fee7",
+  "#2b1d05": "#fffbeb",
+  "#fef3c7": "#92400e",
+  "#a5f3fc": "#0e7490",
+  "#bfdbfe": "#1d4ed8",
+  "#bbf7d0": "#047857",
+  "#ccfbf1": "#0f766e",
+  "#ecfccb": "#4d7c0f",
+  "#e2e8f0": "#334155",
+};
 
 function inferBoundElementType(id: string): "text" | "arrow" {
   return id.startsWith("intent-node-text-") || id.startsWith("intent-edge-label-")
@@ -185,13 +211,22 @@ function buildSeedSkeleton(source: IntentCanvasOpenSource | null | undefined): S
   ];
 }
 
+function stableSeedHash(value: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36).padStart(7, "0").slice(0, 7);
+}
+
 function createSeedShapeId(prefix: string, value: string): string {
   const safeValue = value
     .trim()
     .replace(/[^A-Za-z0-9._-]+/g, "-")
     .replace(/^-+|-+$/g, "")
-    .slice(0, 72);
-  return `intent-${prefix}-${safeValue || "node"}`;
+    .slice(0, 48);
+  return `intent-${prefix}-${safeValue || "node"}-${stableSeedHash(value)}`;
 }
 
 function compactCanvasLabel(value: string | null | undefined, fallback: string): string {
@@ -228,28 +263,28 @@ function getNodePalette(node: CanvasSemanticNode, isCenterNode: boolean): {
   textColor: string;
 } {
   if (node.kind === "group") {
-    return { strokeColor: "#f59e0b", backgroundColor: "#221a08", textColor: "#fef3c7" };
+    return { strokeColor: "#d97706", backgroundColor: "#fff7ed", textColor: "#92400e" };
   }
   if (isCenterNode) {
-    return { strokeColor: "#22d3ee", backgroundColor: "#05252c", textColor: "#a5f3fc" };
+    return { strokeColor: "#0891b2", backgroundColor: "#ecfeff", textColor: "#0e7490" };
   }
   const role = getNodeRoleLabel(node).toLowerCase();
   if (role.includes("controller")) {
-    return { strokeColor: "#60a5fa", backgroundColor: "#0b1d34", textColor: "#bfdbfe" };
+    return { strokeColor: "#2563eb", backgroundColor: "#eff6ff", textColor: "#1d4ed8" };
   }
   if (role.includes("service")) {
-    return { strokeColor: "#34d399", backgroundColor: "#08261d", textColor: "#bbf7d0" };
+    return { strokeColor: "#059669", backgroundColor: "#ecfdf5", textColor: "#047857" };
   }
   if (role.includes("hook")) {
-    return { strokeColor: "#2dd4bf", backgroundColor: "#082f2c", textColor: "#ccfbf1" };
+    return { strokeColor: "#0d9488", backgroundColor: "#f0fdfa", textColor: "#0f766e" };
   }
   if (role.includes("test")) {
-    return { strokeColor: "#a3e635", backgroundColor: "#1a2607", textColor: "#ecfccb" };
+    return { strokeColor: "#65a30d", backgroundColor: "#f7fee7", textColor: "#4d7c0f" };
   }
   if (role.includes("config") || role.includes("manifest")) {
-    return { strokeColor: "#fbbf24", backgroundColor: "#2b1d05", textColor: "#fef3c7" };
+    return { strokeColor: "#d97706", backgroundColor: "#fffbeb", textColor: "#92400e" };
   }
-  return { strokeColor: "#94a3b8", backgroundColor: "#111827", textColor: "#e2e8f0" };
+  return { strokeColor: "#64748b", backgroundColor: "#f8fafc", textColor: "#334155" };
 }
 
 function getEdgeColor(edge: CanvasSemanticGraph["edges"][number]): string {
@@ -337,8 +372,8 @@ function createGraphEdgeShapes(
     const sourceCenterY = source.y + source.height / 2;
     const targetCenterX = target.x + target.width / 2;
     const targetCenterY = target.y + target.height / 2;
-    const arrowId = createSeedShapeId("edge", edge.id);
-    const labelId = createSeedShapeId("edge-label", `${edge.id}-${edge.label ?? edge.relationKind}`);
+    const arrowId = createSeedShapeId("edge", `${graph.graphId}-${edge.id}`);
+    const labelId = createSeedShapeId("edge-label", `${graph.graphId}-${edge.id}-${edge.label ?? edge.relationKind}`);
     const edgeColor = getEdgeColor(edge);
     shapes.push({
       type: "arrow",
@@ -397,8 +432,8 @@ function buildGraphSeedSkeleton(seedSemanticGraphs: CanvasSemanticGraph[] | unde
   const placeNode = (node: CanvasSemanticNode, x: number, y: number) => {
     placements.set(node.id, {
       node,
-      elementId: createSeedShapeId("node", node.id),
-      textElementId: createSeedShapeId("node-text", node.id),
+      elementId: createSeedShapeId("node", `${graph.graphId}-${node.id}`),
+      textElementId: createSeedShapeId("node-text", `${graph.graphId}-${node.id}`),
       x,
       y,
       width: GRAPH_NODE_WIDTH,
@@ -417,7 +452,7 @@ function buildGraphSeedSkeleton(seedSemanticGraphs: CanvasSemanticGraph[] | unde
   });
   const boundArrowIdsByNodeId = new Map<string, string[]>();
   graph.edges.forEach((edge) => {
-    const arrowId = createSeedShapeId("edge", edge.id);
+    const arrowId = createSeedShapeId("edge", `${graph.graphId}-${edge.id}`);
     const sourceArrowIds = boundArrowIdsByNodeId.get(edge.sourceNodeId) ?? [];
     const targetArrowIds = boundArrowIdsByNodeId.get(edge.targetNodeId) ?? [];
     sourceArrowIds.push(arrowId);
@@ -433,40 +468,7 @@ function buildGraphSeedSkeleton(seedSemanticGraphs: CanvasSemanticGraph[] | unde
       boundArrowIdsByNodeId.get(placement.node.id) ?? [],
     )
   ));
-  const laneLabels: SeedShape[] = [
-    {
-      type: "text",
-      x: 80,
-      y: 84,
-      width: GRAPH_NODE_WIDTH,
-      height: 24,
-      text: "Incoming",
-      fontSize: 18,
-      strokeColor: "#0ea5e9",
-    },
-    {
-      type: "text",
-      x: 80 + GRAPH_COLUMN_GAP,
-      y: 84,
-      width: GRAPH_NODE_WIDTH,
-      height: 24,
-      text: "Current File",
-      fontSize: 18,
-      strokeColor: "#22d3ee",
-    },
-    {
-      type: "text",
-      x: 80 + GRAPH_COLUMN_GAP * 2,
-      y: 84,
-      width: GRAPH_NODE_WIDTH,
-      height: 24,
-      text: "Outgoing",
-      fontSize: 18,
-      strokeColor: "#14b8a6",
-    },
-  ];
   return [
-    ...laneLabels,
     ...createGraphEdgeShapes(graph, placements),
     ...nodeShapes,
   ];
@@ -563,6 +565,281 @@ function isIntentCanvasElement(value: unknown): value is OrderedExcalidrawElemen
   return isRecord(value) && typeof value.id === "string" && typeof value.type === "string";
 }
 
+function isGeneratedElementId(value: unknown): value is string {
+  return typeof value === "string" && GENERATED_ELEMENT_ID_PREFIXES.some((prefix) => value.startsWith(prefix));
+}
+
+function isGeneratedNodeElement(value: Record<string, unknown>): boolean {
+  return value.type === "rectangle" && typeof value.id === "string" && value.id.startsWith("intent-node-");
+}
+
+function isGeneratedNodeTextElement(value: Record<string, unknown>): boolean {
+  return value.type === "text" && typeof value.id === "string" && value.id.startsWith("intent-node-text-");
+}
+
+function isGeneratedEdgeElement(value: Record<string, unknown>): boolean {
+  return value.type === "arrow" && typeof value.id === "string" && value.id.startsWith("intent-edge-");
+}
+
+function isGeneratedEdgeLabelElement(value: Record<string, unknown>): boolean {
+  return value.type === "text" && typeof value.id === "string" && value.id.startsWith("intent-edge-label-");
+}
+
+function repairGeneratedColor(value: unknown): unknown {
+  if (typeof value !== "string") {
+    return value;
+  }
+  return GENERATED_LEGACY_COLOR_REPLACEMENTS[value.toLowerCase()] ?? value;
+}
+
+function getRecordNumber(value: Record<string, unknown>, key: string): number | null {
+  const rawValue = value[key];
+  return typeof rawValue === "number" && Number.isFinite(rawValue) ? rawValue : null;
+}
+
+function getGeneratedElementText(value: Record<string, unknown> | null | undefined): string {
+  const text = typeof value?.text === "string" ? value.text : "";
+  const originalText = typeof value?.originalText === "string" ? value.originalText : "";
+  return (text || originalText).trim();
+}
+
+function getBoundElementIds(value: Record<string, unknown>): string[] {
+  if (!Array.isArray(value.boundElements)) {
+    return [];
+  }
+  return value.boundElements.flatMap((element) => (
+    isRecord(element) && typeof element.id === "string" ? [element.id] : []
+  ));
+}
+
+function remapBindingElementId(value: unknown, idByOriginalId: ReadonlyMap<string, string>): unknown {
+  if (!isRecord(value)) {
+    return value;
+  }
+  const elementId = typeof value.elementId === "string"
+    ? idByOriginalId.get(value.elementId) ?? value.elementId
+    : value.elementId;
+  return {
+    ...value,
+    elementId,
+  };
+}
+
+function remapBoundElements(value: unknown, idByOriginalId: ReadonlyMap<string, string>): unknown {
+  if (!Array.isArray(value)) {
+    return value;
+  }
+  return value.map((element) => {
+    if (!isRecord(element)) {
+      return element;
+    }
+    const id = typeof element.id === "string"
+      ? idByOriginalId.get(element.id) ?? element.id
+      : element.id;
+    return {
+      ...element,
+      id,
+    };
+  });
+}
+
+function findGeneratedNodeTextIndex(input: {
+  records: Record<string, unknown>[];
+  nodeIndex: number;
+  pairedTextIndexes: ReadonlySet<number>;
+}): number | null {
+  const node = input.records[input.nodeIndex];
+  if (!node) {
+    return null;
+  }
+  const boundTextIndex = getBoundElementIds(node)
+    .map((id) => input.records.findIndex((record, index) => (
+      index !== input.nodeIndex
+      && !input.pairedTextIndexes.has(index)
+      && record.id === id
+      && isGeneratedNodeTextElement(record)
+    )))
+    .find((index) => index >= 0);
+  if (boundTextIndex !== undefined) {
+    return boundTextIndex;
+  }
+  const nodeId = typeof node.id === "string" ? node.id : "";
+  const containerTextIndex = input.records.findIndex((record, index) => (
+    index !== input.nodeIndex
+    && !input.pairedTextIndexes.has(index)
+    && isGeneratedNodeTextElement(record)
+    && record.containerId === nodeId
+  ));
+  if (containerTextIndex >= 0) {
+    return containerTextIndex;
+  }
+  const nextRecord = input.records[input.nodeIndex + 1];
+  if (
+    nextRecord
+    && !input.pairedTextIndexes.has(input.nodeIndex + 1)
+    && isGeneratedNodeTextElement(nextRecord)
+  ) {
+    return input.nodeIndex + 1;
+  }
+  const nodeX = getRecordNumber(node, "x");
+  const nodeY = getRecordNumber(node, "y");
+  if (nodeX === null || nodeY === null) {
+    return null;
+  }
+  let closestIndex: number | null = null;
+  let closestDistance = Number.POSITIVE_INFINITY;
+  input.records.forEach((record, index) => {
+    if (index === input.nodeIndex || input.pairedTextIndexes.has(index) || !isGeneratedNodeTextElement(record)) {
+      return;
+    }
+    const textX = getRecordNumber(record, "x");
+    const textY = getRecordNumber(record, "y");
+    if (textX === null || textY === null) {
+      return;
+    }
+    const distance = Math.abs(textX - nodeX) + Math.abs(textY - nodeY);
+    if (distance < closestDistance && distance <= 96) {
+      closestDistance = distance;
+      closestIndex = index;
+    }
+  });
+  return closestIndex;
+}
+
+function repairGeneratedNodeTextPosition(input: {
+  node: Record<string, unknown>;
+  text: Record<string, unknown>;
+}): void {
+  const nodeX = getRecordNumber(input.node, "x");
+  const nodeY = getRecordNumber(input.node, "y");
+  const nodeWidth = getRecordNumber(input.node, "width");
+  const nodeHeight = getRecordNumber(input.node, "height");
+  if (nodeX !== null) {
+    input.text.x = nodeX + 14;
+  }
+  if (nodeY !== null) {
+    input.text.y = nodeY + 16;
+  }
+  if (nodeWidth !== null) {
+    input.text.width = Math.max(40, nodeWidth - 28);
+  }
+  if (nodeHeight !== null) {
+    input.text.height = Math.max(24, nodeHeight - 28);
+  }
+}
+
+export function repairIntentCanvasGeneratedElements(
+  elements: readonly OrderedExcalidrawElement[],
+): OrderedExcalidrawElement[] {
+  const usedIds = new Set<string>();
+  const idByOriginalId = new Map<string, string>();
+  const records = elements.map((element, index) => {
+    const record = { ...(element as unknown as Record<string, unknown>) };
+    const originalId = typeof record.id === "string" ? record.id : "";
+    if (isGeneratedElementId(originalId)) {
+      let nextId = originalId;
+      if (usedIds.has(nextId)) {
+        const suffix = stableSeedHash(`${originalId}:${index}`);
+        nextId = `${originalId}-repair-${suffix}`;
+        let attempt = 1;
+        while (usedIds.has(nextId)) {
+          attempt += 1;
+          nextId = `${originalId}-repair-${suffix}-${attempt}`;
+        }
+      }
+      record.id = nextId;
+      if (!idByOriginalId.has(originalId)) {
+        idByOriginalId.set(originalId, nextId);
+      }
+    }
+    if (typeof record.id === "string") {
+      usedIds.add(record.id);
+    }
+    return record;
+  });
+
+  records.forEach((record) => {
+    if (!isGeneratedElementId(record.id)) {
+      return;
+    }
+    record.strokeColor = repairGeneratedColor(record.strokeColor);
+    record.backgroundColor = repairGeneratedColor(record.backgroundColor);
+    record.containerId = typeof record.containerId === "string"
+      ? idByOriginalId.get(record.containerId) ?? record.containerId
+      : record.containerId;
+    record.startBinding = remapBindingElementId(record.startBinding, idByOriginalId);
+    record.endBinding = remapBindingElementId(record.endBinding, idByOriginalId);
+    record.boundElements = remapBoundElements(record.boundElements, idByOriginalId);
+  });
+
+  const pairedTextIndexes = new Set<number>();
+  const droppedNodeIds = new Set<string>();
+  const droppedIndexes = new Set<number>();
+  records.forEach((node, nodeIndex) => {
+    if (!isGeneratedNodeElement(node)) {
+      return;
+    }
+    const textIndex = findGeneratedNodeTextIndex({ records, nodeIndex, pairedTextIndexes });
+    const text = textIndex === null ? null : records[textIndex];
+    if (!text || !getGeneratedElementText(text)) {
+      if (typeof node.id === "string") {
+        droppedNodeIds.add(node.id);
+      }
+      droppedIndexes.add(nodeIndex);
+      return;
+    }
+    pairedTextIndexes.add(textIndex);
+    text.containerId = node.id;
+    text.strokeColor = repairGeneratedColor(text.strokeColor);
+    repairGeneratedNodeTextPosition({ node, text });
+    const existingArrowBindings = Array.isArray(node.boundElements)
+      ? node.boundElements.filter((binding) => (
+          isRecord(binding)
+          && typeof binding.id === "string"
+          && binding.type !== "text"
+        ))
+      : [];
+    node.boundElements = [
+      { id: text.id, type: "text" },
+      ...existingArrowBindings,
+    ];
+  });
+
+  const droppedEdgeIds = new Set<string>();
+  records.forEach((record, index) => {
+    if (!isGeneratedEdgeElement(record)) {
+      return;
+    }
+    const startBinding = isRecord(record.startBinding) ? record.startBinding : null;
+    const endBinding = isRecord(record.endBinding) ? record.endBinding : null;
+    const startElementId = typeof startBinding?.elementId === "string" ? startBinding.elementId : null;
+    const endElementId = typeof endBinding?.elementId === "string" ? endBinding.elementId : null;
+    if (
+      (startElementId && droppedNodeIds.has(startElementId))
+      || (endElementId && droppedNodeIds.has(endElementId))
+    ) {
+      if (typeof record.id === "string") {
+        droppedEdgeIds.add(record.id);
+      }
+      droppedIndexes.add(index);
+    }
+  });
+
+  records.forEach((record, index) => {
+    if (!isGeneratedEdgeLabelElement(record)) {
+      return;
+    }
+    const containerId = typeof record.containerId === "string" ? record.containerId : null;
+    if (containerId && droppedEdgeIds.has(containerId)) {
+      droppedIndexes.add(index);
+    }
+  });
+
+  return records
+    .filter((_, index) => !droppedIndexes.has(index))
+    .map((record) => record as unknown as OrderedExcalidrawElement);
+}
+
 function sanitizeIntentCanvasAppState(appState: Partial<AppState> | unknown): Partial<AppState> {
   if (!isRecord(appState)) {
     return {};
@@ -595,7 +872,7 @@ export function sanitizeIntentCanvasScene(
     }
   });
   return {
-    elements: safeElements,
+    elements: repairIntentCanvasGeneratedElements(safeElements),
     appState: sanitizeIntentCanvasAppState(appState),
     files: toJsonObject(files) as BinaryFiles,
   };

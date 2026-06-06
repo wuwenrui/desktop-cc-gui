@@ -2,6 +2,7 @@ import type { AppState, BinaryFiles } from "@excalidraw/excalidraw/types";
 import type { OrderedExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 
 export type IntentCanvasMode = "architect" | "spotlight" | "file";
+export type IntentCanvasOpenTarget = "new" | "append";
 
 export type IntentCanvasWorkspaceRef = {
   id: string;
@@ -19,6 +20,7 @@ export type IntentCanvasOpenSource = {
 export type IntentCanvasOpenRequest = {
   requestId: number;
   mode: IntentCanvasMode;
+  target?: IntentCanvasOpenTarget | null;
   canvasId?: string | null;
   title?: string | null;
   summary?: string | null;

@@ -35,9 +35,11 @@ import type {
   IntentCanvasWorkspaceRef,
 } from "../types";
 import {
+  appendIntentCanvasDocumentFromRequest,
   cloneIntentCanvasDocument,
   createIntentCanvasDocument,
   deleteIntentCanvasDocument,
+  deleteIntentCanvasDocuments,
   loadIntentCanvasDocument,
   loadIntentCanvasIndex,
   saveIntentCanvasDocument,
@@ -68,6 +70,7 @@ type IntentCanvasEditorProps = {
   onBack: () => void;
   onSave: (document: IntentCanvasDocument) => Promise<IntentCanvasDocument>;
   onAttachToThread?: (document: IntentCanvasDocument) => Promise<void> | void;
+  onOpenProjectMap?: () => void;
 };
 
 const EMPTY_CANVAS_ENTRIES: IntentCanvasIndexEntry[] = [];
@@ -170,6 +173,7 @@ function IntentCanvasEditor({
   onBack,
   onSave,
   onAttachToThread,
+  onOpenProjectMap,
 }: IntentCanvasEditorProps) {
   const { t, i18n } = useTranslation();
   const excalidrawTheme = useIntentCanvasTheme();
@@ -287,6 +291,9 @@ function IntentCanvasEditor({
   const langCode = i18n.resolvedLanguage?.startsWith("zh") || i18n.language.startsWith("zh")
     ? "zh-CN"
     : "en";
+  const hasProjectMapImportSource =
+    document.links.projectMapNodeIds.length > 0 ||
+    document.semanticGraphs.some((graph) => graph.sourceSnapshot?.kind === "project-map-relations");
 
   return (
     <section className="intent-canvas-editor" aria-label={t("intentCanvas.editor.ariaLabel")}> 
@@ -300,6 +307,16 @@ function IntentCanvasEditor({
             <h2>{title.trim() || t("intentCanvas.untitled")}</h2>
           </div>
         </div>
+        {onOpenProjectMap && hasProjectMapImportSource ? (
+          <button
+            type="button"
+            className="intent-canvas-source-link"
+            onClick={onOpenProjectMap}
+          >
+            <LinkIcon aria-hidden />
+            {t("intentCanvas.editor.backToProjectMap")}
+          </button>
+        ) : null}
         <div className="intent-canvas-editor-actions">
           <span className={cn("intent-canvas-save-state", isDirty && "is-dirty")}>
             {isSaving ? t("intentCanvas.saving") : isDirty ? t("intentCanvas.unsaved") : t("intentCanvas.saved")}
@@ -519,6 +536,10 @@ export function IntentCanvasManager({
   const [isSaving, setIsSaving] = useState(false);
   const [actionPrompt, setActionPrompt] = useState<IntentCanvasActionPrompt | null>(null);
   const [confirmingCanvasActionId, setConfirmingCanvasActionId] = useState<string | null>(null);
+  const [selectedCanvasIds, setSelectedCanvasIds] = useState<Set<string>>(() => new Set());
+  const [isBulkDeletePromptOpen, setIsBulkDeletePromptOpen] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const handledOpenRequestIdsRef = useRef<Set<number>>(new Set());
 
   const workspaceRef = useMemo(
     () => (activeWorkspace ? buildWorkspaceRef(activeWorkspace) : null),
@@ -569,6 +590,28 @@ export function IntentCanvasManager({
       cancelled = true;
     };
   }, [activeWorkspace]);
+
+  useEffect(() => {
+    setSelectedCanvasIds(new Set<string>());
+    setIsBulkDeletePromptOpen(false);
+    setActionPrompt(null);
+  }, [activeWorkspace?.id]);
+
+  useEffect(() => {
+    setSelectedCanvasIds((current) => {
+      const availableCanvasIds = new Set(entries.map((entry) => entry.id));
+      const next = new Set<string>();
+      let changed = false;
+      current.forEach((canvasId) => {
+        if (availableCanvasIds.has(canvasId)) {
+          next.add(canvasId);
+        } else {
+          changed = true;
+        }
+      });
+      return changed ? next : current;
+    });
+  }, [entries]);
 
   const saveDocument = useCallback(
     async (documentToSave: IntentCanvasDocument) => {
@@ -626,29 +669,56 @@ export function IntentCanvasManager({
     [activeWorkspace, saveDocument, t, workspaceRef],
   );
 
+  const appendCanvas = useCallback(
+    async (request: IntentCanvasOpenRequest) => {
+      try {
+        let baseDocument = activeDocument;
+        if (request.canvasId && (!baseDocument || baseDocument.id !== request.canvasId)) {
+          if (!activeWorkspace) {
+            setErrorMessage(t("intentCanvas.errors.noWorkspace"));
+            return;
+          }
+          baseDocument = await loadIntentCanvasDocument(activeWorkspace.id, request.canvasId);
+        }
+        if (!baseDocument) {
+          await createCanvas(request);
+          return;
+        }
+        const nextDocument = appendIntentCanvasDocumentFromRequest({
+          document: baseDocument,
+          request,
+        });
+        const savedDocument = await saveDocument(nextDocument);
+        setActiveDocument(savedDocument);
+        setErrorMessage(null);
+      } catch (error) {
+        setStatus("error");
+        setErrorMessage(normalizeError(error));
+      }
+    },
+    [activeDocument, activeWorkspace, createCanvas, saveDocument, t],
+  );
+
   useEffect(() => {
-    let cancelled = false;
     if (!openRequest || !activeWorkspace || !workspaceRef) {
       return;
     }
+    if (handledOpenRequestIdsRef.current.has(openRequest.requestId)) {
+      return;
+    }
+    handledOpenRequestIdsRef.current.add(openRequest.requestId);
+    onOpenRequestConsumed?.(openRequest.requestId);
     const executeRequest = async () => {
-      try {
-        if (openRequest.canvasId) {
-          await openCanvas(openRequest.canvasId);
-        } else {
-          await createCanvas(openRequest);
-        }
-      } finally {
-        if (!cancelled) {
-          onOpenRequestConsumed?.(openRequest.requestId);
-        }
+      if (openRequest.target === "append") {
+        await appendCanvas(openRequest);
+      } else if (openRequest.canvasId) {
+        await openCanvas(openRequest.canvasId);
+      } else {
+        await createCanvas(openRequest);
       }
     };
     void executeRequest();
-    return () => {
-      cancelled = true;
-    };
-  }, [activeWorkspace, createCanvas, onOpenRequestConsumed, openCanvas, openRequest, workspaceRef]);
+  }, [activeWorkspace, appendCanvas, createCanvas, onOpenRequestConsumed, openCanvas, openRequest, workspaceRef]);
 
   const handleCanvasActionRequest = useCallback(
     (entry: IntentCanvasIndexEntry, action: IntentCanvasManagerAction) => {
@@ -687,6 +757,14 @@ export function IntentCanvasManager({
           if (activeDocument?.id === entry.id) {
             setActiveDocument(null);
           }
+          setSelectedCanvasIds((current) => {
+            if (!current.has(entry.id)) {
+              return current;
+            }
+            const next = new Set(current);
+            next.delete(entry.id);
+            return next;
+          });
           await refreshIndex();
         }
         setActionPrompt(null);
@@ -709,6 +787,73 @@ export function IntentCanvasManager({
       return searchable.includes(query);
     });
   }, [entries, searchQuery]);
+
+  const selectedEntries = useMemo(
+    () => entries.filter((entry) => selectedCanvasIds.has(entry.id)),
+    [entries, selectedCanvasIds],
+  );
+
+  const allFilteredEntriesSelected = filteredEntries.length > 0
+    && filteredEntries.every((entry) => selectedCanvasIds.has(entry.id));
+
+  const toggleCanvasSelection = useCallback((canvasId: string) => {
+    setSelectedCanvasIds((current) => {
+      const next = new Set(current);
+      if (next.has(canvasId)) {
+        next.delete(canvasId);
+      } else {
+        next.add(canvasId);
+      }
+      return next;
+    });
+    setIsBulkDeletePromptOpen(false);
+  }, []);
+
+  const toggleFilteredCanvasSelection = useCallback(() => {
+    setSelectedCanvasIds((current) => {
+      const next = new Set(current);
+      const shouldSelectAll = filteredEntries.some((entry) => !next.has(entry.id));
+      filteredEntries.forEach((entry) => {
+        if (shouldSelectAll) {
+          next.add(entry.id);
+        } else {
+          next.delete(entry.id);
+        }
+      });
+      if (next.size === current.size && Array.from(next).every((canvasId) => current.has(canvasId))) {
+        return current;
+      }
+      return next;
+    });
+    setIsBulkDeletePromptOpen(false);
+  }, [filteredEntries]);
+
+  const clearCanvasSelection = useCallback(() => {
+    setSelectedCanvasIds((current) => (current.size === 0 ? current : new Set<string>()));
+    setIsBulkDeletePromptOpen(false);
+  }, []);
+
+  const confirmBulkDelete = useCallback(async () => {
+    if (!activeWorkspace || selectedEntries.length === 0) {
+      return;
+    }
+    const deletedCanvasIds = selectedEntries.map((entry) => entry.id);
+    setIsBulkDeleting(true);
+    try {
+      await deleteIntentCanvasDocuments(activeWorkspace.id, deletedCanvasIds);
+      if (activeDocument && deletedCanvasIds.includes(activeDocument.id)) {
+        setActiveDocument(null);
+      }
+      setSelectedCanvasIds(new Set<string>());
+      setIsBulkDeletePromptOpen(false);
+      setActionPrompt(null);
+      await refreshIndex();
+    } catch (error) {
+      setErrorMessage(normalizeError(error));
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  }, [activeDocument, activeWorkspace, refreshIndex, selectedEntries]);
 
   if (!activeWorkspace) {
     return (
@@ -734,6 +879,7 @@ export function IntentCanvasManager({
         }}
         onSave={saveDocument}
         onAttachToThread={onAttachToThread}
+        onOpenProjectMap={onOpenProjectMap}
       />
     );
   }
@@ -758,6 +904,15 @@ export function IntentCanvasManager({
             <FileText aria-hidden />
             {t("intentCanvas.manager.count", { count: filteredEntries.length })}
           </span>
+          <button
+            type="button"
+            onClick={toggleFilteredCanvasSelection}
+            disabled={filteredEntries.length === 0 || status === "loading"}
+          >
+            {allFilteredEntriesSelected
+              ? t("intentCanvas.manager.clearSelection")
+              : t("intentCanvas.manager.selectAll")}
+          </button>
           <button type="button" onClick={() => void refreshIndex()} disabled={status === "loading"}>
             <RefreshCw aria-hidden className={status === "loading" ? "is-spinning" : undefined} />
             {t("intentCanvas.manager.refresh")}
@@ -779,6 +934,42 @@ export function IntentCanvasManager({
         <p key={warning} className="intent-canvas-warning" role="status">{warning}</p>
       ))}
       {errorMessage ? <p className="intent-canvas-error" role="alert">{errorMessage}</p> : null}
+      {selectedEntries.length > 0 ? (
+        <div className="intent-canvas-bulk-toolbar" role="status">
+          <span>{t("intentCanvas.manager.selectedCount", { count: selectedEntries.length })}</span>
+          <div className="intent-canvas-bulk-actions">
+            <button type="button" onClick={clearCanvasSelection} disabled={isBulkDeleting}>
+              {t("intentCanvas.manager.clearSelection")}
+            </button>
+            <button
+              type="button"
+              className="is-danger"
+              onClick={() => {
+                setActionPrompt(null);
+                setIsBulkDeletePromptOpen(true);
+              }}
+              disabled={isBulkDeleting}
+            >
+              <Trash2 aria-hidden />
+              {t("intentCanvas.manager.deleteSelected", { count: selectedEntries.length })}
+            </button>
+          </div>
+          {isBulkDeletePromptOpen ? (
+            <div className="intent-canvas-action-popover-shell is-bulk">
+              <ThreadDeleteConfirmBubble
+                threadName={t("intentCanvas.manager.selectedCount", { count: selectedEntries.length })}
+                title={t("intentCanvas.manager.bulkDelete")}
+                message={t("intentCanvas.manager.bulkDeleteConfirm", { count: selectedEntries.length })}
+                hint={t("intentCanvas.manager.bulkDeleteHint")}
+                confirmLabel={t("intentCanvas.manager.deleteSelected", { count: selectedEntries.length })}
+                isDeleting={isBulkDeleting}
+                onCancel={() => setIsBulkDeletePromptOpen(false)}
+                onConfirm={() => void confirmBulkDelete()}
+              />
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {status === "loading" && entries.length === 0 ? (
         <div className="intent-canvas-loading"><LoaderCircle aria-hidden className="is-spinning" /> {t("intentCanvas.loading")}</div>
@@ -795,7 +986,20 @@ export function IntentCanvasManager({
       ) : (
         <div className="intent-canvas-grid" role="list">
           {filteredEntries.map((entry) => (
-            <article key={entry.id} className="intent-canvas-card-tile" role="listitem">
+            <article
+              key={entry.id}
+              className={cn("intent-canvas-card-tile", selectedCanvasIds.has(entry.id) && "is-selected")}
+              role="listitem"
+            >
+              <label className="intent-canvas-card-selection">
+                <input
+                  type="checkbox"
+                  checked={selectedCanvasIds.has(entry.id)}
+                  onChange={() => toggleCanvasSelection(entry.id)}
+                  aria-label={t("intentCanvas.manager.selectCanvas", { title: entry.title })}
+                />
+                <span>{t("intentCanvas.manager.selectCanvasShort")}</span>
+              </label>
               <button
                 type="button"
                 className="intent-canvas-card-open"

@@ -58,3 +58,12 @@
 - [x] 8.6 Fail closed with a readable unsupported error in remote mode until Project Canvas global storage ownership is defined.
 - [x] 8.7 Normalize nullable Excalidraw selection maps before scene initial data reaches the editor.
 - [x] 8.8 Update frontend storage service, i18n copy, and OpenSpec artifacts to the global project-canvas contract.
+
+## 9. Import idempotency and bulk management hardening
+
+- [x] 9.1 Make Project Map -> Intent Canvas open requests one-shot and idempotent by request id.
+- [x] 9.2 Replace timestamp request ids with a monotonic in-session request sequence.
+- [x] 9.3 Add Canvas Manager selection, select-all, and app-local batch delete confirmation.
+- [x] 9.4 Add batch canvas deletion service that trashes selected documents and writes the index once.
+- [x] 9.5 Add focused tests for request idempotency and batch index write behavior.
+- [x] 9.6 Add Project Canvas compaction to physically remove index-unreachable orphan documents and stale atomic index temp files.

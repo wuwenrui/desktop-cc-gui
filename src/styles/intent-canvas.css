@@ -273,6 +273,13 @@
   overflow: visible;
 }
 
+.intent-canvas-card-tile.is-selected {
+  border-color: color-mix(in srgb, var(--intent-canvas-accent), transparent 24%);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--intent-canvas-accent), transparent 80%),
+    0 16px 46px rgba(0, 0, 0, 0.12);
+}
+
 .intent-canvas-card-tile::before {
   content: "";
   position: absolute;
@@ -280,6 +287,31 @@
   height: 4px;
   border-radius: 24px 24px 0 0;
   background: linear-gradient(90deg, #2563eb, #14b8a6, #f59e0b);
+}
+
+.intent-canvas-card-selection {
+  position: absolute;
+  top: 11px;
+  right: 12px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 24px;
+  padding: 2px 6px;
+  border-radius: 7px;
+  color: var(--intent-canvas-muted);
+  background: color-mix(in srgb, var(--intent-canvas-surface-strong), transparent 8%);
+  font-size: 11px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.intent-canvas-card-selection input {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: var(--intent-canvas-accent);
 }
 
 .intent-canvas-card-open {
@@ -418,6 +450,61 @@
   transform: rotate(135deg);
 }
 
+.intent-canvas-bulk-toolbar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--intent-canvas-accent), transparent 54%);
+  border-radius: 12px;
+  color: var(--intent-canvas-strong);
+  background: color-mix(in srgb, var(--intent-canvas-accent), transparent 91%);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.intent-canvas-bulk-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.intent-canvas-bulk-actions button {
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.intent-canvas-bulk-actions button svg {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 17px;
+}
+
+.intent-canvas-bulk-actions button:hover {
+  color: var(--text-accent);
+  background: transparent;
+}
+
+.intent-canvas-bulk-actions button.is-danger:hover {
+  color: color-mix(in srgb, var(--intent-canvas-error), #000 12%);
+}
+
+.intent-canvas-action-popover-shell.is-bulk {
+  top: calc(100% + 8px);
+  right: 10px;
+}
+
 .intent-canvas-empty-state,
 .intent-canvas-loading {
   display: flex;
@@ -483,6 +570,12 @@
   min-width: 40px;
 }
 
+.intent-canvas-source-link {
+  flex: 0 0 auto;
+  color: var(--text-accent);
+  font-size: 12px;
+}
+
 .intent-canvas-save-state {
   display: inline-flex;
   align-items: center;
@@ -501,6 +594,7 @@
 }
 
 .intent-canvas-editor-topbar .intent-canvas-icon-button,
+.intent-canvas-editor-topbar .intent-canvas-source-link,
 .intent-canvas-editor-topbar .intent-canvas-editor-actions button {
   min-height: 32px;
   padding: 5px 8px;
@@ -511,6 +605,7 @@
 }
 
 .intent-canvas-editor-topbar .intent-canvas-icon-button:hover,
+.intent-canvas-editor-topbar .intent-canvas-source-link:hover,
 .intent-canvas-editor-topbar .intent-canvas-editor-actions button:hover {
   color: var(--text-accent);
   background: color-mix(in srgb, var(--intent-canvas-accent), transparent 90%);
@@ -905,6 +1000,11 @@
     left: 8px;
     width: auto;
     max-width: none;
+  }
+
+  .intent-canvas-bulk-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .intent-canvas-action-popover-shell .thread-delete-popover::before {

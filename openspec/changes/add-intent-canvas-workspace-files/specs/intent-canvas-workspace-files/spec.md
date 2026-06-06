@@ -79,6 +79,15 @@ The system SHALL provide an Intent Canvas management surface separate from Proje
 - **WHEN** the user searches, opens, renames, duplicates, or deletes a canvas
 - **THEN** the index and document files remain consistent with the selected action.
 
+#### Scenario: Batch delete canvas records
+
+- **GIVEN** multiple canvas documents appear in the manager grid
+- **WHEN** the user selects multiple canvases and confirms batch delete
+- **THEN** all selected canvas files are moved to trash
+- **AND** the index is written once with the deleted records removed
+- **AND** index-unreachable orphan canvas documents and stale atomic index temp files are physically removed from the Project Canvas partition
+- **AND** canceling keeps every selected canvas unchanged.
+
 ### Requirement: Canvas Editor SHALL support mainstream whiteboard interactions
 
 The editor SHALL provide a drawing experience comparable to mainstream whiteboard tools for the MVP scope.
@@ -112,6 +121,13 @@ Project Map node and file/evidence actions SHALL open the standalone Canvas modu
 - **GIVEN** a Project Map node has a source/evidence file path
 - **WHEN** the user chooses to create a canvas for that file
 - **THEN** the created canvas includes that file path in `links.filePaths`.
+
+#### Scenario: Import request is one-shot
+
+- **GIVEN** Project Map sends an Intent Canvas open/import request
+- **WHEN** the Canvas manager receives the request
+- **THEN** the manager consumes that request id exactly once
+- **AND** React rerenders, editor activation, or index refreshes SHALL NOT create another canvas from the same request.
 
 ### Requirement: Chat sessions SHALL accept canvas structured context
 

@@ -1,4 +1,5 @@
 import {
+  compactProjectCanvasFiles,
   readProjectCanvasFile,
   trashProjectCanvasFile,
   writeProjectCanvasFile,
@@ -17,6 +18,7 @@ import type {
   IntentCanvasLoadResult,
   IntentCanvasMode,
   IntentCanvasOpenRequest,
+  IntentCanvasScene,
   IntentCanvasWorkspaceRef,
 } from "../types";
 import { asString, asStringArray, isRecord } from "../utils/json";
@@ -641,19 +643,41 @@ export async function saveIntentCanvasDocument(
   return nextDocument;
 }
 
+export async function deleteIntentCanvasDocuments(
+  workspaceId: string,
+  canvasIds: string[],
+): Promise<void> {
+  const uniqueCanvasIds = Array.from(
+    new Set(
+      canvasIds.flatMap((canvasId) => {
+        const normalizedCanvasId = normalizeCanvasId(canvasId);
+        return normalizedCanvasId ? [normalizedCanvasId] : [];
+      }),
+    ),
+  );
+  if (uniqueCanvasIds.length === 0) {
+    return;
+  }
+  const indexResult = await loadIntentCanvasIndex(workspaceId);
+  for (const canvasId of uniqueCanvasIds) {
+    try {
+      await trashProjectCanvasFile(workspaceId, resolveDocumentPath(canvasId));
+    } catch (error) {
+      if (!isMissingFileError(error)) {
+        throw error;
+      }
+    }
+  }
+  const deletedCanvasIds = new Set(uniqueCanvasIds);
+  await writeIndex(workspaceId, indexResult.value.filter((entry) => !deletedCanvasIds.has(entry.id)));
+  await compactProjectCanvasFiles(workspaceId);
+}
+
 export async function deleteIntentCanvasDocument(
   workspaceId: string,
   canvasId: string,
 ): Promise<void> {
-  const indexResult = await loadIntentCanvasIndex(workspaceId);
-  try {
-    await trashProjectCanvasFile(workspaceId, resolveDocumentPath(canvasId));
-  } catch (error) {
-    if (!isMissingFileError(error)) {
-      throw error;
-    }
-  }
-  await writeIndex(workspaceId, indexResult.value.filter((entry) => entry.id !== canvasId));
+  await deleteIntentCanvasDocuments(workspaceId, [canvasId]);
 }
 
 export function createIntentCanvasDocument(input: {
@@ -697,6 +721,94 @@ export function createIntentCanvasDocument(input: {
     aiContext: buildIntentCanvasAiContext(scene, summary),
     semanticGraphs: seedSemanticGraphs,
     aiAnnotations: [],
+  };
+}
+
+function getIntentCanvasSceneRightEdge(scene: IntentCanvasScene): number {
+  return scene.elements.reduce((rightEdge, element) => {
+    const rawElement = element as unknown as Record<string, unknown>;
+    const x = typeof rawElement.x === "number" && Number.isFinite(rawElement.x) ? rawElement.x : 0;
+    const width = typeof rawElement.width === "number" && Number.isFinite(rawElement.width) ? rawElement.width : 0;
+    return Math.max(rightEdge, x + width);
+  }, 0);
+}
+
+function offsetIntentCanvasScene(scene: IntentCanvasScene, offsetX: number, offsetY: number): IntentCanvasScene {
+  const elements = scene.elements.map((element) => {
+    const rawElement = element as unknown as Record<string, unknown>;
+    return {
+      ...rawElement,
+      x: typeof rawElement.x === "number" && Number.isFinite(rawElement.x)
+        ? rawElement.x + offsetX
+        : rawElement.x,
+      y: typeof rawElement.y === "number" && Number.isFinite(rawElement.y)
+        ? rawElement.y + offsetY
+        : rawElement.y,
+    };
+  }) as IntentCanvasScene["elements"];
+  return sanitizeIntentCanvasScene(elements, scene.appState, scene.files);
+}
+
+function appendIntentCanvasScene(currentScene: IntentCanvasScene, appendedScene: IntentCanvasScene): IntentCanvasScene {
+  const currentRightEdge = getIntentCanvasSceneRightEdge(currentScene);
+  const offsetX = currentRightEdge > 0 ? Math.ceil((currentRightEdge + 160) / 40) * 40 : 0;
+  const shiftedScene = offsetIntentCanvasScene(appendedScene, offsetX, 0);
+  return sanitizeIntentCanvasScene(
+    [...currentScene.elements, ...shiftedScene.elements],
+    currentScene.appState,
+    {
+      ...currentScene.files,
+      ...shiftedScene.files,
+    },
+  );
+}
+
+function appendIntentCanvasSummary(currentSummary: string, nextSummary: string): string {
+  const current = currentSummary.trim();
+  const next = nextSummary.trim();
+  if (!next || current.includes(next)) {
+    return current;
+  }
+  return current ? `${current}\n\n${next}` : next;
+}
+
+export function appendIntentCanvasDocumentFromRequest(input: {
+  document: IntentCanvasDocument;
+  request: IntentCanvasOpenRequest;
+}): IntentCanvasDocument {
+  const now = new Date().toISOString();
+  const source = input.request.source ?? null;
+  const seedSemanticGraphs = collectSeedSemanticGraphs(input.request.seedSemanticGraphs);
+  const appendedScene = createInitialIntentCanvasScene(source, seedSemanticGraphs);
+  const scene = appendIntentCanvasScene(input.document.scene, appendedScene);
+  const summary = appendIntentCanvasSummary(
+    input.document.summary,
+    input.request.summary?.trim() || source?.summary?.trim() || "",
+  );
+  const links: IntentCanvasLinks = {
+    projectMapNodeIds: uniqueStrings([
+      ...input.document.links.projectMapNodeIds,
+      ...source?.projectMapNodeId ? [source.projectMapNodeId] : [],
+      ...collectSeedProjectMapNodeIds(seedSemanticGraphs),
+    ]),
+    filePaths: uniqueStrings([
+      ...input.document.links.filePaths,
+      ...source?.filePath ? [source.filePath] : [],
+      ...collectSeedFilePaths(seedSemanticGraphs),
+    ]),
+    threadIds: input.document.links.threadIds,
+  };
+  return {
+    ...input.document,
+    updatedAt: now,
+    summary,
+    links,
+    scene,
+    aiContext: buildIntentCanvasAiContext(scene, summary),
+    semanticGraphs: [
+      ...input.document.semanticGraphs.map(cloneCanvasGraph),
+      ...seedSemanticGraphs,
+    ],
   };
 }
 

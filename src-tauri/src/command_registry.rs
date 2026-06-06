@@ -296,6 +296,7 @@ pub(crate) fn invoke_handler(
         crate::project_canvas::project_canvas_read_file,
         crate::project_canvas::project_canvas_write_file,
         crate::project_canvas::project_canvas_trash_file,
+        crate::project_canvas::project_canvas_compact_files,
         crate::project_map_relations::project_map_relationship_scan,
         crate::project_map_relations::project_map_relationship_read,
         crate::project_map_relations::project_map_relationship_write_snapshot,

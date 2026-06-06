@@ -23,7 +23,9 @@
 - **THEN** 系统 SHALL 创建或追加 Canvas graph，并把 selected node 放在中心
 - **AND** 系统 SHALL 默认包含该文件 direct incoming / outgoing relationship neighborhood
 - **AND** 系统 SHALL 使用当前 Relationship Inspector 已解析出的 direct relation set，保持 Canvas 导入结果与 inspector 计数一致
+- **AND** 用户 SHALL 能选择新建 Canvas 或追加到某个具体已有 Canvas 作为导入目标
 - **AND** 系统 SHALL 在视觉上区分 incoming、current file、outgoing 三个关系区域
+- **AND** 这种区域区分 SHALL 通过布局和节点关系表达，不得导出没有 source anchor 的 `Incoming`、`Current File`、`Outgoing` 独立标题文本
 - **AND** Canvas node 的 title/path 文本 SHALL 绑定在 node container 内，而不是作为未绑定的独立文本散落在画布上
 - **AND** Canvas relation arrow SHALL 绑定到 source/target node containers
 
@@ -40,6 +42,7 @@
 - **THEN** 系统 SHALL 创建或追加 edge source / target 的 Canvas nodes
 - **AND** 系统 SHALL 创建 directed Canvas edge，并保留 relation kind 和 evidence reference
 - **AND** source/target node labels SHALL be container-bound and the directed edge SHALL attach to both node containers
+- **AND** 用户 SHALL 能选择新建 Canvas 或追加到某个具体已有 Canvas 作为导入目标
 - **AND** 如果 relationship evidence 中存在 method/function call candidate，Canvas edge label SHALL 显示该方法/函数名，而不是只显示 relation kind
 - **AND** method/function label SHALL be bound to the Canvas arrow element rather than rendered as an unrelated free-floating text element
 
@@ -81,6 +84,10 @@
 #### Scenario: edge opens relationship evidence
 - **WHEN** 用户激活带 relationship evidence ids 的 imported Canvas edge
 - **THEN** 系统 SHALL 提供 inspect relationship evidence 或 source-target relation detail 的 action
+
+#### Scenario: imported graph returns to project knowledge map
+- **WHEN** 用户打开包含 `project-map-relations` imported graph 的 Canvas
+- **THEN** 系统 SHALL 在 Canvas editor topbar 提供返回 Project Knowledge Map 的 navigation link
 
 ### Requirement: Stale and unresolved source state
 系统 SHALL 检测并展示 imported Canvas graph 的 stale / unresolved source state，同时不删除用户画布内容。

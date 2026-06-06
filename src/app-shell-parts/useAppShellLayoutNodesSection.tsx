@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { useLayoutNodes } from "../features/layout/hooks/useLayoutNodes";
 import { MainHeaderActions } from "../features/app/components/MainHeaderActions";
@@ -73,6 +73,7 @@ export function useAppShellLayoutNodesSection(ctx: any) {
   const [focusedWorkspaceNoteRequestKey, setFocusedWorkspaceNoteRequestKey] = useState(0);
   const [intentCanvasOpenRequest, setIntentCanvasOpenRequest] =
     useState<IntentCanvasOpenRequest | null>(null);
+  const intentCanvasOpenRequestSequenceRef = useRef(0);
   const [pendingIntentCanvasByThreadId, setPendingIntentCanvasByThreadId] =
     useState<Record<string, IntentCanvasDocument[]>>({});
   const {
@@ -477,9 +478,12 @@ export function useAppShellLayoutNodesSection(ctx: any) {
         setIntentCanvasOpenRequest(null);
         return;
       }
+      const nextRequestId = intentCanvasOpenRequestSequenceRef.current + 1;
+      intentCanvasOpenRequestSequenceRef.current = nextRequestId;
       setIntentCanvasOpenRequest({
-        requestId: Date.now(),
+        requestId: nextRequestId,
         mode: request.mode,
+        target: request.target ?? null,
         canvasId: request.canvasId ?? null,
         title: request.title ?? null,
         summary: request.summary ?? null,

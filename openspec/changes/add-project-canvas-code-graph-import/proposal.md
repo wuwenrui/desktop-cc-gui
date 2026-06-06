@@ -229,6 +229,9 @@ openspec validate add-project-canvas-code-graph-import --strict --no-interactive
   - method/function label 绑定到 arrow container。
 - Canvas edge label 必须优先保留 Project Map 已解析的 method/function call candidate，例如 `ApiResponse.success`、`error.getDefaultMessage`；`calls/imports/configures` 等 relation kind 只是 metadata/fallback。
 - 第一阶段已经将 file-level relationship graph 导入与 edge-level relation 导入区分清楚，并完成 Canvas semantic graph metadata 的 normalize/save/clone 保留。
+- 关系图导入目标已从隐式 `追加到当前 Canvas` 校准为显式选择：`新建 Canvas` 或追加到某个具体已有 Canvas。追加行为由 Intent Canvas Manager 根据 `canvasId + target=append` 合并 scene elements、links、semanticGraphs 和 AI context，Relationship Dashboard 不直接操作 Canvas storage。
+- 包含 `project-map-relations` imported graph 的 Canvas editor 顶部提供 `返回项目知识地图` navigation link，避免用户从 Project Map 进入 Canvas 后失去来源路径。
+- `replace selected imported graph group` 仍作为后续独立任务保留；当前阶段不把替换行为混进 target chooser，避免误删用户已编辑的 Canvas 内容。
 - Method-level selected code import 仍未完成，继续保留在后续 `6.x` task，不应在本阶段归档或宣称完成。
 
 ## 建议实施顺序 / Recommended Implementation Order
@@ -243,3 +246,33 @@ openspec validate add-project-canvas-code-graph-import --strict --no-interactive
 7. 接入 code selected method -> Canvas import
 8. 接入 AI explanation annotations
 ```
+
+## 阶段性回写：旧 Canvas 合并导入稳定性（2026-06-06）
+
+本阶段基于真实旧 Canvas 回归截图修正 Project Map / Code Graph 导入 Intent Canvas 的合并导入质量问题。
+
+### 问题校准
+
+- 关系导入目标列表此前只在入口初始化时读取，用户新建或保存 Canvas 后，目标下拉存在不及时刷新。
+- 合并导入到旧 Canvas 时，系统生成的 relationship seed 元素可能保留旧深色 palette，在浅色画布下表现为黑框。
+- 长路径或相似 relation id 经截断后可能生成重复 Excalidraw element id，导致 rectangle 与 text binding 错乱，出现无数据空框。
+- 旧画布中已持久化的系统生成黑框不会仅靠新 palette 自动消失，需要在 scene sanitize / append 链路中做轻量自愈。
+
+### 实现回写
+
+- 关系导入面板新增目标 Canvas index reload 链路，在面板展开/目标选择链路中重新拉取目标列表，并使用 request id guard 避免 stale response 覆盖新状态。
+- Intent Canvas relationship seed id 改为 `readable slug + stable hash`，避免长路径前缀相同导致 id 冲突。
+- Intent Canvas scene sanitize 增加仅作用于系统生成元素的 repair 层：修复旧深色 palette、重建 node-text binding、过滤没有可见 label 的系统空节点。
+- 新导入与 append 到旧 Canvas 的 relationship seed 均使用 theme-safe light palette；普通用户手绘元素不进入自动改色范围。
+- 增加 scene 回归测试，覆盖浅色 palette、长路径唯一 id、旧深色元素修复、空 label 系统框过滤。
+
+### 行为边界
+
+- 本阶段不迁移 storage schema，不修改 Rust Project Canvas command contract。
+- repair 仅识别 `intent-node-*`、`intent-node-text-*`、`intent-edge-*`、`intent-edge-label-*` 系统生成元素，避免误改用户手绘内容。
+- 旧 Canvas 的系统生成黑框在重新加载、保存或 append 时被修复；不会主动扫描并重写所有历史 Canvas 文件。
+
+### 阶段风险
+
+- 已有旧画布中如果用户手动编辑过系统生成节点文本，repair 会尽量保留可见文本并只修复颜色和绑定。
+- 如果旧画布存在完全无文本的系统矩形，repair 会将其视为导入残留空框并过滤。

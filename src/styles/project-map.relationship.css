@@ -2096,6 +2096,43 @@
   text-transform: uppercase;
 }
 
+.project-map-relationship-import-target {
+  flex: 1 0 100%;
+  display: grid;
+  gap: 5px;
+  color: var(--project-map-text-muted);
+  font-size: 9.5px;
+  font-weight: 760;
+}
+
+.project-map-relationship-import-target span {
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.project-map-relationship-import-target select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--project-map-border) 66%, transparent);
+  border-radius: 10px;
+  padding: 7px 9px;
+  background: color-mix(in srgb, var(--project-map-surface-strong) 78%, transparent);
+  color: var(--project-map-text-strong);
+  font: inherit;
+}
+
+.project-map-relationship-import-target select:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.project-map-relationship-import-target-error {
+  flex: 1 0 100%;
+  margin: -1px 0 2px;
+  color: var(--project-map-text-muted);
+  font-size: 9.5px;
+}
+
 .project-map-relationship-inspector-file-actions button.project-map-relationship-inspector-primary-action {
   width: 100%;
   justify-content: center;

@@ -40,16 +40,18 @@
 - [x] 4.6 Add default limits and summary nodes for dense neighborhoods。
 - [x] 4.8 Bind imported node labels and relation arrows using Excalidraw container/binding metadata。
 - [x] 4.9 Bind relation method labels to arrows and add role-aware graph styling。
-- [ ] 4.7 Add merge behavior：append-to-current Canvas、create-new Canvas。
+- [x] 4.10 Remove generated lane header labels from Canvas export；relationship regions are represented by layout and source-backed nodes/edges only。
+- [x] 4.7 Add merge behavior：append-to-selected existing Canvas、create-new Canvas。
 
 ## 5. Relationship Dashboard entry points / 关系图入口
 
 - [x] 5.1 Add `Import to Canvas` action for selected relationship graph node。
 - [x] 5.2 Add `Import to Canvas` action for selected relationship graph edge or edge inspector。
-- [ ] 5.3 Add import target chooser：new Canvas、current Canvas、replace selected imported graph group after confirmation。
+- [x] 5.3 Add import target chooser：new Canvas、specific existing Canvas。
 - [x] 5.4 Add i18n keys for relationship import actions and error states。
 - [x] 5.5 Keep relationship graph click semantics unchanged；import action must not overload node body click。
 - [x] 5.6 Split file graph import copy from edge evidence import copy。
+- [ ] 5.7 Add replace selected imported graph group after confirmation。
 
 ## 6. Code selection entry point / 代码选择入口
 
@@ -68,6 +70,7 @@
 - [ ] 7.3 Show stale snapshot state for imported graph groups。
 - [ ] 7.4 Show unresolved source state without deleting Canvas content。
 - [ ] 7.5 Add refresh/re-project affordance when source anchors can still resolve。
+- [x] 7.6 Add Canvas topbar return link back to Project Knowledge Map for imported relationship graphs。
 
 ## 8. AI explanation layer / AI 解释层
 
