@@ -133,6 +133,17 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
             >
               {busy ? "Loading models..." : "Next"}
             </button>
+
+            {/* The API Key is not strictly required to enter the app. Let users
+                skip and configure the New API provider later in Settings. */}
+            <button
+              type="button"
+              style={skipButton}
+              disabled={busy}
+              onClick={onDone}
+            >
+              Skip for now (set up later in Settings)
+            </button>
           </>
         )}
 
@@ -271,4 +282,14 @@ const button: CSSProperties = {
 const buttonDisabled: CSSProperties = {
   opacity: 0.45,
   cursor: "not-allowed",
+};
+
+const skipButton: CSSProperties = {
+  padding: "8px 12px",
+  background: "transparent",
+  color: "#9aa0a6",
+  border: "none",
+  borderRadius: 8,
+  fontSize: 13,
+  cursor: "pointer",
 };
