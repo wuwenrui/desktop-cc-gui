@@ -55,6 +55,32 @@
 
 取舍：本 change 以 B 为可落地 MVP，以 C 为架构闭环，保留 A 作为失败回退路径。这样既能快速降低卡顿，也不会把实现锁死在主线程。
 
+## Rollout / Fallback Contract
+
+- `rich-react` 是强制保留的 file-preview fallback profile，必须能通过显式 flag 或配置回退。
+- `fast-html` 与 `bounded-fast-html` 只能由 deterministic document metrics 与显式 rollout flag 共同选择，不能依赖机器本地耗时测速作为主决策。
+- fast renderer 的 compile、sanitize、hydrate 任一阶段失败时，必须 fail closed 到 file-preview fallback，不得挂载未消毒 HTML，也不得回退到 message-curtain Markdown renderer。
+- renderer profile、content hash、compile cache key 与 fallback reason 必须能通过 diagnostics 或测试可观测属性确认。
+- 回滚路径必须是配置级或小范围代码级回退到 `rich-react`，不能要求迁移 message Markdown 或修改 Tauri backend contract。
+
+## Phase Boundary
+
+Phase 1 范围：
+
+- 主线程 fast sanitized HTML renderer。
+- parser/token-derived outline。
+- compile result / outline / heavy-block metadata contract。
+- source-line anchors、interaction islands、readable fallback。
+- pure and serializable compile API，为 Worker 化保留边界。
+
+Phase 1 不要求：
+
+- 实现 Worker adapter。
+- 完成所有 `yn` 插件能力。
+- 迁移 chat/message Markdown、Spec Hub、release note 等非 file-preview surfaces。
+
+Phase 2 才考虑 Worker adapter，并且必须复用 Phase 1 的 compile request/result contract，新增 latest-request-wins 与 stale-result discard 语义。
+
 ## Impact
 
 - Affected frontend code:
@@ -65,18 +91,30 @@
   - Markdown preview CSS under `src/styles/**`
   - focused tests for file Markdown preview, outline, and renderer fallback
 - APIs/dependencies:
-  - May add `markdown-it` and a sanitizer if not already available in the dependency graph.
+  - Before adding parser or sanitizer dependencies, implementation must first audit the existing dependency graph.
+  - If a new parser or sanitizer is required, record the selected package, maintenance status, bundle/runtime impact, and rejected alternatives in implementation evidence.
+  - Parser/sanitizer selection must prefer maintained allowlist-based libraries over custom Markdown or HTML security logic.
   - No Tauri command signature change.
   - No backend storage format change.
 - Systems:
   - File preview becomes a document-renderer surface rather than a ReactMarkdown component tree surface.
   - Message Markdown and live conversation streaming remain isolated.
 
+## Security Definition of Done
+
+- Sanitizer uses an allowlist schema scoped to file-preview Markdown output.
+- Event handler attributes such as `onclick` and unsafe URL schemes such as `javascript:` are stripped before mount.
+- Raw HTML handling remains explicit and file-preview scoped; arbitrary plugin HTML is never trusted as safe by default.
+- File/local resource opening remains behind existing file-link and external URL policies.
+- XSS regression fixtures cover raw HTML, unsafe links, inline event attributes, tables, code blocks, math, Mermaid placeholders, and sanitizer failure fallback.
+
 ## 验收标准
 
 - Large Markdown preview remains scrollable and interactive under deterministic render budgets.
-- Same-content annotation typing does not recompile or remount the Markdown document body.
+- Same-content annotation typing does not recompile, re-sanitize, or remount the Markdown document body.
 - Mermaid rendered tab, table scroll, and annotation draft state survive same-content rerenders.
-- Outline entries are produced from parser/token/source-line metadata and can jump to rendered headings without DOM-wide rescans.
+- Outline entries are produced from parser/token/source-line metadata and can jump to rendered headings without DOM-wide rescans or body recompilation.
 - Fast renderer failures fail closed to the existing readable file-preview fallback.
+- Sanitizer failures never mount unsafe HTML and remain isolated to the file-preview boundary.
+- Renderer diagnostics expose profile, cache identity, and fallback reason for focused tests.
 - Chat/message Markdown surfaces remain visually and structurally unchanged.

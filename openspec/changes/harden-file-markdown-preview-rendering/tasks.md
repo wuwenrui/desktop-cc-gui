@@ -1,12 +1,12 @@
 ## 1. Planning / Contract
 
-- [ ] 1.1 Confirm renderer rollout flag and deterministic profile names. Input: proposal/design. Output: selected rollout contract. Verification: reviewer can identify how to force fallback.
-- [ ] 1.2 Define fast renderer result types. Input: design type sketches. Output: typed compile result / outline / source-line / heavy-block metadata. Verification: typecheck covers public signatures.
-- [ ] 1.3 Add fixture set for Markdown parity. Input: tables, nested lists, task lists, code, raw HTML, math, Mermaid, duplicate headings, Chinese headings. Output: reusable test fixtures. Verification: fixtures are consumed by focused tests.
+- [ ] 1.1 Confirm renderer rollout flag and deterministic profile names. Input: proposal/design. Output: selected rollout contract for `rich-react` / `fast-html` / `bounded-fast-html` / readable fallback. Verification: reviewer can identify how to force fallback and how diagnostics expose profile/fallback reason.
+- [ ] 1.2 Define fast renderer result types. Input: design type sketches. Output: typed compile result / outline / source-line / heavy-block metadata / diagnostics. Verification: typecheck covers public signatures and compile result contains no React/DOM instance dependency.
+- [ ] 1.3 Add fixture set for Markdown parity and security. Input: tables, nested lists, task lists, code, raw HTML, unsafe links, inline event attributes, math, Mermaid, duplicate headings, Chinese headings. Output: reusable test fixtures. Verification: fixtures are consumed by focused tests including sanitizer failure fallback.
 
 ## 2. Fast Renderer Core
 
-- [ ] 2.1 Add file-preview Markdown parser service. Input: raw markdown + document key + renderer profile. Output: sanitized HTML compile result. Verification: unit test returns stable cache key and sanitized HTML.
+- [ ] 2.1 Add file-preview Markdown parser service. Input: raw markdown + document key + renderer profile. Output: sanitized HTML compile result. Verification: unit test returns stable cache key, sanitized HTML, and rejected unsafe attributes/schemes.
 - [ ] 2.2 Attach source-line attributes from parser token maps. Input: heading/paragraph/list/table/code tokens. Output: block-level `data-source-line-start/end` or equivalent. Verification: fixture assertions cover original line ranges.
 - [ ] 2.3 Add compile cache independent from annotation UI state. Input: document key/content hash/profile. Output: reusable compile result. Verification: same-content annotation-state rerender does not call compile again.
 - [ ] 2.4 Implement readable fallback on compile failure. Input: malformed Markdown/plugin failure fixture. Output: existing ReactMarkdown or low-cost readable fallback. Verification: preview is not blank and error is isolated.
@@ -29,7 +29,7 @@
 
 ## 5. Render Profile / Rollout
 
-- [ ] 5.1 Add deterministic renderer profile selector. Input: metrics, truncation, feature flag. Output: `rich-react` / `fast-html` / `bounded-fast-html` / fallback profile. Verification: unit tests cover thresholds across platforms.
+- [ ] 5.1 Add deterministic renderer profile selector. Input: metrics, truncation, feature flag. Output: `rich-react` / `fast-html` / `bounded-fast-html` / fallback profile. Verification: unit tests cover thresholds across platforms and do not use machine-local timing as the primary selector.
 - [ ] 5.2 Integrate fast renderer into `FileMarkdownPreview`. Input: compile result and profile. Output: stable document surface. Verification: focused component test renders large Markdown through fast path.
 - [ ] 5.3 Keep message Markdown isolated. Input: chat/release/spec surfaces. Output: no implicit migration to file renderer. Verification: existing message Markdown tests remain targeted to message renderer.
 
@@ -45,4 +45,5 @@
 - [ ] 7.3 Run `npm run typecheck`.
 - [ ] 7.4 Run `npm run lint`.
 - [ ] 7.5 Run `npm run check:large-files` if touched files/styles cross large-file thresholds.
-- [ ] 7.6 Record implementation evidence in verification/archive notes before closing the change.
+- [ ] 7.6 Record parser/sanitizer dependency decision if a new dependency is introduced.
+- [ ] 7.7 Record implementation evidence in verification/archive notes before closing the change, including renderer diagnostics, fallback path, and sanitizer/security fixture results.
