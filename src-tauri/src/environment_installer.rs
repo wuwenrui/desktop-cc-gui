@@ -485,7 +485,7 @@ fn build_homebrew_install_step() -> EnvironmentInstallStep {
             "->".to_string(),
             "/bin/bash".to_string(),
             "-c".to_string(),
-            "curl -fsSL <install.sh> | NONINTERACTIVE=1 bash".to_string(),
+            "curl -fsSL <install.sh> | bash".to_string(),
         ],
         environment: tuna_homebrew_environment(),
         manual_fallback: Some(homebrew_terminal_shell_command()),
@@ -610,9 +610,11 @@ fn tuna_homebrew_environment() -> Vec<(String, String)> {
     ]
 }
 
-// The full shell command run inside Terminal.app for the Homebrew install. It keeps the TUNA
-// mirror env and NONINTERACTIVE so the only interactive prompt is the sudo password, which the
-// real Terminal TTY can satisfy. Doubles as the manual_fallback shown in the UI.
+// The full shell command run inside Terminal.app for the Homebrew install. It exports the TUNA
+// mirror env and runs the installer interactively. We deliberately do NOT set NONINTERACTIVE:
+// Homebrew's installer treats NONINTERACTIVE as `sudo -n`, which suppresses the password prompt
+// and aborts with "Need sudo access" for a normal admin. In a real Terminal TTY we want the
+// installer to prompt for RETURN + the sudo password. Doubles as the manual_fallback shown in UI.
 fn homebrew_terminal_shell_command() -> String {
     format!(
         "export HOMEBREW_BREW_GIT_REMOTE=\"{TUNA_BREW_GIT_REMOTE}\"; \
@@ -620,7 +622,6 @@ export HOMEBREW_CORE_GIT_REMOTE=\"{TUNA_CORE_GIT_REMOTE}\"; \
 export HOMEBREW_INSTALL_FROM_API=1; \
 export HOMEBREW_API_DOMAIN=\"{TUNA_API_DOMAIN}\"; \
 export HOMEBREW_BOTTLE_DOMAIN=\"{TUNA_BOTTLE_DOMAIN}\"; \
-export NONINTERACTIVE=1; \
 BREW_INSTALL_DIR=\"$(mktemp -d)/brew-install\"; \
 git clone --depth=1 {TUNA_INSTALL_GIT_REMOTE} \"$BREW_INSTALL_DIR\" && /bin/bash \"$BREW_INSTALL_DIR/install.sh\"; \
 rm -rf \"$BREW_INSTALL_DIR\""
@@ -1143,11 +1144,13 @@ mod tests {
     #[test]
     fn homebrew_install_step_requires_tty_via_terminal() {
         // Homebrew is the only step that needs an interactive sudo password, so it is flagged for
-        // the Terminal-based path and keeps NONINTERACTIVE to suppress non-sudo prompts.
+        // the Terminal-based path and runs interactively (NO NONINTERACTIVE, which would suppress
+        // the sudo password prompt and abort the install).
         let step = build_homebrew_install_step();
         assert!(step.requires_tty);
         let shell = step.manual_fallback.clone().unwrap_or_default();
-        assert!(shell.contains("NONINTERACTIVE=1"));
+        assert!(!shell.contains("NONINTERACTIVE"));
+        assert!(shell.contains("install.sh"));
     }
 
     #[test]
