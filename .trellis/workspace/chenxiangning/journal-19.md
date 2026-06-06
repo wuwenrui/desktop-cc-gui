@@ -1934,3 +1934,56 @@ OpenSpec 回写：
 ### Next Steps
 
 - None - task complete
+
+
+## Session 735: 加固客户端渲染稳定性防线
+
+**Date**: 2026-06-07
+**Task**: 加固客户端渲染稳定性防线
+**Branch**: `feature/v0.5.7`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+完成 OpenSpec change `harden-client-renderer-stability-under-pressure` 的实现、验证、归档与独立提交。
+
+主要改动：
+- 增加 renderer heartbeat 前端发送链路、Tauri command、后端 heartbeat store 与 watchdog。
+- 增加 platform hook support matrix，明确 Windows WebView2 / macOS WKWebView / Linux WebKitGTK native crash hook 当前均为 not-implemented，使用 heartbeat/watchdog 作为 portable fallback。
+- 增加 Git branch polling 非 Git workspace neutral response，前端 normalize 与重复错误 dedupe，降低非仓库路径噪音。
+- 增加 realtime batcher cadence flush reason 与 streaming pressure diagnostic，避免高频多引擎 streaming 吃掉关键诊断视野。
+- 增加 runtime acquire-boundary contract sentinel，区分 passive/helper-live/runtime-required 路径。
+- 增加 renderer recovery policy，自动恢复受 draft preservation、attempt budget、bounded backoff 约束。
+- 同步并归档 OpenSpec specs，归档目录为 `openspec/changes/archive/2026-06-06-harden-client-renderer-stability-under-pressure`。
+
+验证：
+- `openspec validate harden-client-renderer-stability-under-pressure --strict --no-interactive` 通过。
+- `pnpm vitest run src/services/rendererDiagnostics.test.ts src/services/rendererRecoveryPolicy.test.ts src/features/git/utils/gitBranchList.test.ts src/features/threads/contracts/realtimeEventBatcher.test.ts` 通过，4 files / 21 tests。
+- `cargo test --manifest-path src-tauri/Cargo.toml renderer_stability` 通过，2 tests。
+- `cargo test --manifest-path src-tauri/Cargo.toml acquire_boundary` 通过，lib/bin 共 6 tests；最终使用隔离 `CARGO_TARGET_DIR=/tmp/mossx-codex-target` 避免被外部 Cargo build lock 阻塞。
+
+Review：
+- Targeted diff review 未发现 blocker。
+- Staged 列表确认未包含 project-map、Cargo.toml、Cargo.lock 等并行任务改动。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `96ba5b06` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
