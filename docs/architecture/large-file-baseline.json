@@ -1,43 +1,6 @@
 {
-  "generatedAt": "2026-06-06T19:20:05.889Z",
+  "generatedAt": "2026-06-06T19:57:53.928Z",
   "scope": "fail",
   "policyVersion": "2026-04-22.policy-v2",
-  "entries": [
-    {
-      "path": "src/features/project-map/components/ProjectMapRelationshipSection.tsx",
-      "lines": 3683,
-      "type": "ts/tsx",
-      "policyId": "default-source",
-      "priority": "P1",
-      "warnThreshold": 2600,
-      "failThreshold": 3000
-    },
-    {
-      "path": "src/features/layout/hooks/useLayoutNodes.tsx",
-      "lines": 3312,
-      "type": "ts/tsx",
-      "policyId": "default-source",
-      "priority": "P1",
-      "warnThreshold": 2600,
-      "failThreshold": 3000
-    },
-    {
-      "path": "src-tauri/src/project_map_relations.rs",
-      "lines": 3090,
-      "type": "rust",
-      "policyId": "default-source",
-      "priority": "P1",
-      "warnThreshold": 2600,
-      "failThreshold": 3000
-    },
-    {
-      "path": "src/styles/project-map.relationship.css",
-      "lines": 2802,
-      "type": "css",
-      "policyId": "styles",
-      "priority": "P1",
-      "warnThreshold": 2200,
-      "failThreshold": 2800
-    }
-  ]
+  "entries": []
 }

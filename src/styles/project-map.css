@@ -1,6 +1,7 @@
 @import "./project-map.inspector.css";
 @import "./project-map.overlays.css";
 @import "./project-map.relationship.css";
+@import "./project-map.relationship-inspector.css";
 @import "./project-map.relationship-workspace.css";
 @import "./project-map.api-contract.css";
 @import "./project-map.controls.css";
