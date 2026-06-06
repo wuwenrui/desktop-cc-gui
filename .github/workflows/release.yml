@@ -459,7 +459,7 @@ jobs:
             --target "$GITHUB_SHA" \
             "${ASSETS[@]}"
 
-      - name: Bump version and open PR
+      - name: Bump version
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -501,13 +501,9 @@ jobs:
           path.write_text(json.dumps(data, indent=2) + "\n")
           PY
 
-          git checkout -b "chore/bump-version-${NEXT_VERSION}"
           git add package.json package-lock.json src-tauri/tauri.conf.json
           git commit -m "chore: bump version to ${NEXT_VERSION}"
-          git push origin "chore/bump-version-${NEXT_VERSION}"
-
-          gh pr create \
-            --title "chore: bump version to ${NEXT_VERSION}" \
-            --body "Post-release version bump to ${NEXT_VERSION}." \
-            --base main \
-            --head "chore/bump-version-${NEXT_VERSION}"
+          # Commit the post-release bump straight to the release branch.
+          # Solo fork: no PR needed, and this avoids the "Actions cannot
+          # create PRs" restriction that the open-PR approach hit.
+          git push origin "HEAD:${GITHUB_REF_NAME}"
