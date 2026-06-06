@@ -23,6 +23,7 @@ type SeedShape = {
 };
 
 const EXCALIDRAW_RUNTIME_APP_STATE_KEYS = new Set(["collaborators"]);
+const EXCALIDRAW_OBJECT_MAP_APP_STATE_KEYS = new Set(["selectedElementIds", "selectedGroupIds"]);
 
 function finiteNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? Math.round(value) : null;
@@ -236,7 +237,11 @@ function sanitizeIntentCanvasAppState(appState: Partial<AppState> | unknown): Pa
   const safeAppState = Object.entries(appState).reduce<Record<string, unknown>>(
     (current, [key, value]) => {
       if (!EXCALIDRAW_RUNTIME_APP_STATE_KEYS.has(key)) {
-        current[key] = value === appState ? null : value;
+        current[key] = EXCALIDRAW_OBJECT_MAP_APP_STATE_KEYS.has(key) && !isRecord(value)
+          ? {}
+          : value === appState
+            ? null
+            : value;
       }
       return current;
     },

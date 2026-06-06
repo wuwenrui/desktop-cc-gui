@@ -40,14 +40,6 @@ pub(crate) struct ProjectMapWriteFile {
     content: String,
 }
 
-fn sanitize_project_name(value: &str) -> String {
-    project_identity::sanitize_project_name(value)
-}
-
-fn hash_workspace_identity(value: &str) -> String {
-    project_identity::hash_workspace_identity(value)
-}
-
 fn storage_key(entry: &WorkspaceEntry) -> String {
     project_identity::project_storage_key(entry)
 }
@@ -381,10 +373,10 @@ pub(crate) async fn project_map_write_snapshot(
 #[cfg(test)]
 mod tests {
     use super::{
-        atomic_write, hash_workspace_identity, sanitize_project_name, storage_key,
-        validate_project_map_snapshot_ownership, validate_relative_project_map_path,
-        write_project_map_snapshot_files, ProjectMapWriteFile,
+        atomic_write, storage_key, validate_project_map_snapshot_ownership,
+        validate_relative_project_map_path, write_project_map_snapshot_files, ProjectMapWriteFile,
     };
+    use crate::project_identity::{hash_workspace_identity, sanitize_project_name};
     use crate::storage::with_storage_lock;
     use crate::types::{WorkspaceEntry, WorkspaceKind, WorkspaceSettings};
     use std::sync::mpsc;

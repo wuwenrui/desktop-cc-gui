@@ -62,6 +62,28 @@ describe("sanitizeIntentCanvasScene", () => {
     });
   });
 
+  it("normalizes nullable Excalidraw selection maps before appState is reused as initial data", () => {
+    const scene = sanitizeIntentCanvasScene(
+      [],
+      {
+        selectedElementIds: null,
+        selectedGroupIds: undefined,
+        zoom: {
+          value: 1,
+        },
+      },
+      {},
+    );
+
+    expect(scene.appState).toEqual({
+      selectedElementIds: {},
+      selectedGroupIds: {},
+      zoom: {
+        value: 1,
+      },
+    });
+  });
+
   it("filters malformed elements before loading untrusted scene data", () => {
     const scene = sanitizeIntentCanvasScene(
       [
