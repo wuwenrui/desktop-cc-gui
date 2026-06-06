@@ -947,7 +947,113 @@ async fn detect_brew() -> ProbeResult {
 }
 
 async fn detect_command(command: &str) -> ProbeResult {
-    command_version(command, &["--version"]).await
+    // First honor the current process PATH: a tool that was already reachable at app launch
+    // must keep being detected exactly as before (no behavior change for that path).
+    let on_path = command_version(command, &["--version"]).await;
+    if on_path.installed {
+        return on_path;
+    }
+
+    // The app snapshots PATH once at startup (fix_path_env::fix() in main.rs). Tools installed
+    // *after* launch (claude into ~/.local/bin, node via nvm/Homebrew, etc.) are invisible to that
+    // snapshot, so "check dependencies" keeps reporting them missing even though the terminal sees
+    // them. Probe the well-known install locations by absolute path so a freshly installed tool is
+    // recognized without restarting the app.
+    for candidate in command_install_candidates(command) {
+        if candidate.is_file() {
+            let probed = command_version(&candidate.to_string_lossy(), &["--version"]).await;
+            if probed.installed {
+                return probed;
+            }
+        }
+    }
+
+    // Nothing found anywhere: surface the original PATH probe error for diagnostics.
+    on_path
+}
+
+/// Well-known absolute install locations for `command`, probed when it is not on PATH.
+/// These mirror the locations the installer scripts / common package managers use, so a tool
+/// installed while the app is already running can still be detected.
+fn command_install_candidates(command: &str) -> Vec<PathBuf> {
+    #[cfg(target_os = "windows")]
+    {
+        windows_command_candidates(command)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        unix_command_candidates(command)
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn unix_command_candidates(command: &str) -> Vec<PathBuf> {
+    let home = dirs::home_dir().unwrap_or_default();
+    // Directories every CLI we detect may land in. macOS-focused but valid on Linux too.
+    let mut dirs: Vec<PathBuf> = vec![
+        home.join(".local/bin"),       // claude native installer, pipx, user-local installs
+        home.join(".claude/local"),    // claude alternate local layout
+        PathBuf::from("/opt/homebrew/bin"), // Homebrew on Apple Silicon
+        PathBuf::from("/usr/local/bin"),    // Homebrew on Intel / manual installs
+        home.join(".bun/bin"),         // bun global bin
+        home.join(".npm-global/bin"),  // npm global prefix override
+    ];
+    // nvm installs node/npm-managed CLIs under ~/.nvm/versions/node/<ver>/bin; include every
+    // installed version's bin so the active one is covered without parsing nvm state.
+    dirs.extend(nvm_version_bins(&home));
+
+    dirs.into_iter()
+        .map(|dir| dir.join(command))
+        .collect()
+}
+
+/// All `~/.nvm/versions/node/*/bin` directories that currently exist.
+#[cfg(not(target_os = "windows"))]
+fn nvm_version_bins(home: &std::path::Path) -> Vec<PathBuf> {
+    let versions_dir = home.join(".nvm/versions/node");
+    let Ok(entries) = std::fs::read_dir(&versions_dir) else {
+        return Vec::new();
+    };
+    entries
+        .filter_map(Result::ok)
+        .map(|entry| entry.path().join("bin"))
+        .filter(|bin| bin.is_dir())
+        .collect()
+}
+
+#[cfg(target_os = "windows")]
+fn windows_command_candidates(command: &str) -> Vec<PathBuf> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+
+    // Per-user npm global (claude/codex install here via `npm i -g`). npm ships CLIs as both a
+    // `.cmd` shim and an extensionless script; probe both, plus the raw command name.
+    if let Some(appdata) = std::env::var_os("APPDATA") {
+        let npm = PathBuf::from(&appdata).join("npm");
+        candidates.push(npm.join(format!("{command}.cmd")));
+        candidates.push(npm.join(format!("{command}.exe")));
+        candidates.push(npm.join(command));
+    }
+
+    // node MSI / winget installs into Program Files.
+    if let Some(program_files) = std::env::var_os("ProgramFiles") {
+        candidates.push(PathBuf::from(&program_files).join("nodejs").join(format!("{command}.exe")));
+    }
+
+    // winget "Links" shim directory (claude native installer + many winget packages land here).
+    if let Some(local_appdata) = std::env::var_os("LOCALAPPDATA") {
+        let links = PathBuf::from(&local_appdata).join("Microsoft").join("WinGet").join("Links");
+        candidates.push(links.join(format!("{command}.exe")));
+        candidates.push(links.join(format!("{command}.cmd")));
+    }
+
+    // claude native installer per-user location.
+    if let Some(user_profile) = std::env::var_os("USERPROFILE") {
+        let local_bin = PathBuf::from(&user_profile).join(".local").join("bin");
+        candidates.push(local_bin.join(format!("{command}.exe")));
+        candidates.push(local_bin.join(format!("{command}.cmd")));
+    }
+
+    candidates
 }
 
 async fn command_version(program: &str, args: &[&str]) -> ProbeResult {
@@ -1196,6 +1302,70 @@ mod tests {
         let sanitized = sanitize_installer_output(raw);
         assert!(!sanitized.contains(r"C:\Users\bob"));
         assert!(sanitized.contains("<home>"));
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn unix_candidates_cover_known_install_dirs() {
+        // The well-known fallback locations must be probed for a command not on PATH so a tool
+        // installed after launch (e.g. claude into ~/.local/bin) is still detected.
+        let home = dirs::home_dir().unwrap_or_default();
+        let candidates = unix_command_candidates("claude");
+        let expected = [
+            home.join(".local/bin/claude"),
+            home.join(".claude/local/claude"),
+            PathBuf::from("/opt/homebrew/bin/claude"),
+            PathBuf::from("/usr/local/bin/claude"),
+            home.join(".bun/bin/claude"),
+            home.join(".npm-global/bin/claude"),
+        ];
+        for path in expected {
+            assert!(
+                candidates.contains(&path),
+                "expected candidate {path:?} to be probed, got {candidates:?}"
+            );
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_candidates_cover_npm_and_program_files() {
+        // npm global (.cmd shim), Program Files nodejs, and the winget Links dir must be probed.
+        std::env::set_var("APPDATA", r"C:\Users\test\AppData\Roaming");
+        std::env::set_var("ProgramFiles", r"C:\Program Files");
+        std::env::set_var("LOCALAPPDATA", r"C:\Users\test\AppData\Local");
+        let candidates = windows_command_candidates("claude");
+        assert!(candidates.contains(&PathBuf::from(r"C:\Users\test\AppData\Roaming\npm\claude.cmd")));
+        let node = windows_command_candidates("node");
+        assert!(node.contains(&PathBuf::from(r"C:\Program Files\nodejs\node.exe")));
+        assert!(candidates.contains(&PathBuf::from(
+            r"C:\Users\test\AppData\Local\Microsoft\WinGet\Links\claude.exe"
+        )));
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[tokio::test]
+    async fn command_version_resolves_absolute_path_off_path() {
+        // Simulates a tool installed into a well-known dir after launch: it is NOT on PATH, but
+        // probing it by absolute path (the fallback detect_command performs) must succeed.
+        use std::io::Write;
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = std::env::temp_dir().join(format!("envtest-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        let bin = dir.join("faketool");
+        let mut file = std::fs::File::create(&bin).expect("create fake binary");
+        file.write_all(b"#!/bin/sh\necho '9.9.9 (fake)'\n").expect("write script");
+        file.flush().expect("flush");
+        drop(file);
+        std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755))
+            .expect("chmod +x");
+
+        let result = command_version(&bin.to_string_lossy(), &["--version"]).await;
+        std::fs::remove_dir_all(&dir).ok();
+
+        assert!(result.installed, "absolute-path probe should succeed: {result:?}");
+        assert_eq!(result.version.as_deref(), Some("9.9.9 (fake)"));
     }
 
     fn missing(id: EnvironmentDependencyId) -> EnvironmentDependencyStatus {

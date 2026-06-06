@@ -82,19 +82,45 @@ async fn probe_version(program: &str) -> Option<String> {
     }
 }
 
-/// Probe the `claude` CLI: PATH first, then the explicit native-installer path.
+/// Probe the `claude` CLI: PATH first, then well-known install locations.
+///
+/// PATH is snapshotted once at startup (fix_path_env::fix() in main.rs), so a `claude` installed
+/// after launch (native installer into ~/.local/bin, or `npm i -g` into the npm global prefix) is
+/// invisible to the PATH probe. Falling back to absolute paths lets the dependency check recognize
+/// it without restarting the app.
 async fn detect_claude() -> Option<String> {
     if let Some(version) = probe_version("claude").await {
         return Some(version);
     }
-    if let Some(path) = native_claude_path() {
-        if path.exists() {
+    for path in claude_fallback_paths() {
+        if path.is_file() {
             if let Some(version) = probe_version(&path.to_string_lossy()).await {
                 return Some(version);
             }
         }
     }
     None
+}
+
+/// Absolute fallback locations for the `claude` binary, probed when it is not on PATH.
+fn claude_fallback_paths() -> Vec<PathBuf> {
+    let mut paths: Vec<PathBuf> = Vec::new();
+    if let Some(path) = native_claude_path() {
+        paths.push(path);
+    }
+    let home = dirs::home_dir().unwrap_or_default();
+    if cfg!(windows) {
+        // npm global prefix on Windows ships CLIs as a `.cmd` shim and an extensionless script.
+        if let Some(appdata) = std::env::var_os("APPDATA") {
+            let npm = PathBuf::from(&appdata).join("npm");
+            paths.push(npm.join("claude.cmd"));
+            paths.push(npm.join("claude.exe"));
+        }
+    } else {
+        paths.push(home.join(".claude/local/claude")); // claude alternate local layout
+        paths.push(home.join(".npm-global/bin/claude")); // npm global prefix override
+    }
+    paths
 }
 
 /// Check whether the Claude CLI is installed and reachable.
