@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import type { SiteModel } from "../../../services/tauri/vendors";
+import { initialSelectedIds } from "../syncModelMerge";
 
 export interface SlotMapping {
   haiku: string;
@@ -10,20 +11,25 @@ export interface SlotMapping {
 
 interface SiteModelPickerProps {
   models: SiteModel[];
-  onConfirm: (claudeSlots: SlotMapping, codexModels: string[]) => void;
+  /** ids of models already in the current engine's managed list, used to preselect */
+  ownedModelIds?: string[];
+  onConfirm: (claudeSlots: SlotMapping, selectedModelIds: string[]) => void;
   onBack?: () => void;
   loading?: boolean;
 }
 
 export function SiteModelPicker({
   models,
+  ownedModelIds,
   onConfirm,
   onBack,
   loading,
 }: SiteModelPickerProps) {
   const [search, setSearch] = useState("");
   const [slots, setSlots] = useState<SlotMapping>(() => autoSuggestSlots(models));
-  const [codexSelected, setCodexSelected] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<Set<string>>(() =>
+    initialSelectedIds(models, new Set(ownedModelIds ?? [])),
+  );
 
   const filtered = useMemo(() => {
     if (!search.trim()) return models;
@@ -35,8 +41,8 @@ export function SiteModelPicker({
     );
   }, [models, search]);
 
-  const toggleCodex = useCallback((id: string) => {
-    setCodexSelected((prev) => {
+  const toggleModel = useCallback((id: string) => {
+    setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -92,15 +98,15 @@ export function SiteModelPicker({
       </div>
 
       <div style={sectionHeader}>
-        Codex Models ({codexSelected.size} selected)
+        Models ({selected.size} selected)
       </div>
       <div style={modelList}>
         {filtered.map((m) => (
           <label key={m.id} style={modelRow}>
             <input
               type="checkbox"
-              checked={codexSelected.has(m.id)}
-              onChange={() => toggleCodex(m.id)}
+              checked={selected.has(m.id)}
+              onChange={() => toggleModel(m.id)}
               style={checkbox}
             />
             <span style={modelId}>{m.id}</span>
@@ -125,7 +131,7 @@ export function SiteModelPicker({
             ...(!canConfirm || loading ? disabledBtn : undefined),
           }}
           disabled={!canConfirm || loading}
-          onClick={() => onConfirm(slots, [...codexSelected])}
+          onClick={() => onConfirm(slots, [...selected])}
         >
           {loading ? "Saving..." : "Confirm"}
         </button>

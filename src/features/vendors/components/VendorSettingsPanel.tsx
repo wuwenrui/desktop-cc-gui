@@ -11,6 +11,7 @@ import {
   type SiteModel,
 } from "../../../services/tauri/vendors";
 import { SiteModelPicker, type SlotMapping } from "./SiteModelPicker";
+import { mergeSyncedModels } from "../syncModelMerge";
 import type { CodexUnifiedExecExternalStatus } from "../../../types";
 import { useProviderManagement } from "../hooks/useProviderManagement";
 import { useCodexProviderManagement } from "../hooks/useCodexProviderManagement";
@@ -171,7 +172,7 @@ export function VendorSettingsPanel({
   }, [claude.providers]);
 
   const handleSiteModelConfirm = useCallback(
-    async (claudeSlots: SlotMapping, codexModelIds: string[]) => {
+    async (claudeSlots: SlotMapping, selectedModelIds: string[]) => {
       setSiteModelLoading(true);
       try {
         const activeProvider = claude.providers.find((p) => p.isActive);
@@ -197,17 +198,12 @@ export function VendorSettingsPanel({
           await claude.loadProviders();
           await claude.loadCurrentConfig();
         }
-        if (codexModelIds.length > 0) {
-          const existing = codexModels.models;
-          const existingIds = new Set(existing.map((m) => m.id));
-          const merged = [
-            ...existing,
-            ...codexModelIds
-              .filter((id) => !existingIds.has(id))
-              .map((id) => ({ id, label: id })),
-          ];
-          codexModels.updateModels(merged);
-        }
+        // 把弹窗勾选结果同步进 Claude 的管理模型列表（安全双向 diff）
+        const fetchedIds = new Set(siteModels.map((m) => m.id));
+        const selectedIds = new Set(selectedModelIds);
+        claudeModels.updateModels(
+          mergeSyncedModels(claudeModels.models, fetchedIds, selectedIds),
+        );
         setSiteModelDialogOpen(false);
       } catch (e) {
         pushErrorToast({ title: "Save failed", message: String(e) });
@@ -215,7 +211,7 @@ export function VendorSettingsPanel({
         setSiteModelLoading(false);
       }
     },
-    [claude, codexModels],
+    [claude, claudeModels, siteModels],
   );
 
   const loadCodexGlobalConfig = useCallback(async () => {
@@ -881,6 +877,7 @@ export function VendorSettingsPanel({
           >
             <SiteModelPicker
               models={siteModels}
+              ownedModelIds={claudeModels.models.map((m) => m.id)}
               loading={siteModelLoading}
               onBack={() => setSiteModelDialogOpen(false)}
               onConfirm={handleSiteModelConfirm}
