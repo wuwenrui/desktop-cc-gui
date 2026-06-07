@@ -860,3 +860,47 @@ Codex app-server 对话链路切换为 codex-tui 兼容身份，补 terminal env
 ### Next Steps
 
 - None - task complete
+
+
+## Session 756: Project Map API 合约大文件拆分
+
+**Date**: 2026-06-08
+**Task**: Project Map API 合约大文件拆分
+**Branch**: `feature/v0.5.8`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| 项目 | 内容 |
+|---|---|
+| 背景 | large-file-governance hard gate 指出 `src-tauri/src/project_map_api_contracts.rs` 接近/触发 3000 行 fail 阈值。 |
+| 处理 | 拆出 API contract DTO 到 `project_map_api_contracts_types.rs`，拆出 hash/path/endpoint identity helper 到 `project_map_api_contracts_identity.rs`。 |
+| 验证 | `cargo check --manifest-path src-tauri/Cargo.toml` 通过；`npm run check:large-files:near-threshold` 通过且仅 watch warning；`npm run check:large-files:gate` 通过，found=0。 |
+| 影响 | 主文件从贴近 3000 行红线降至约 2793 行，保留约 200 行安全余量；未改变 API contract 构建行为。 |
+
+**Updated Files**:
+- `src-tauri/src/project_map_api_contracts.rs`
+- `src-tauri/src/project_map_api_contracts_types.rs`
+- `src-tauri/src/project_map_api_contracts_identity.rs`
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `391a336d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
