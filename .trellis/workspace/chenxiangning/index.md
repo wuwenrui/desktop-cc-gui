@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-20.md`
-- **Total Sessions**: 746
+- **Total Sessions**: 747
 - **Last Active**: 2026-06-07
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-20.md` | ~478 | Active |
+| `journal-20.md` | ~523 | Active |
 | `journal-19.md` | ~1989 | Archived |
 | `journal-18.md` | ~1966 | Archived |
 | `journal-17.md` | ~1971 | Archived |
@@ -48,6 +48,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 747 | 2026-06-07 | 适配文档预览目录按钮测试 | `23e41f2a` | `feature/v0.5.7` |
 | 746 | 2026-06-07 | 同步 Markdown bounded preview 测试期望 | `efc0022c` | `feature/v0.5.7` |
 | 745 | 2026-06-07 | 跳过默认关闭 OpenCode 会话扫描 | `12480982` | `feature/v0.5.7` |
 | 744 | 2026-06-07 | 移除 OpenCode CLI 扫描型测试 | `7acab695` | `feature/v0.5.7` |
