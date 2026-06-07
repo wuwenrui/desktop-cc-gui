@@ -15,14 +15,17 @@ import {
   restoreCodexUnifiedExecOfficialDefault,
   setCodexUnifiedExecOfficialOverride,
 } from "../../../services/tauri";
+import { fetchSiteModels } from "../../../services/tauri/vendors";
 import { VendorSettingsPanel } from "./VendorSettingsPanel";
 
 const mockState = vi.hoisted(() => ({
   claudeManagement: {
     currentConfig: null,
     currentConfigLoading: false,
-    providers: [],
+    providers: [] as unknown[],
     loading: false,
+    loadProviders: vi.fn(),
+    loadCurrentConfig: vi.fn(),
     handleSwitchProvider: vi.fn(),
     handleAddProvider: vi.fn(),
     handleEditProvider: vi.fn(),
@@ -49,9 +52,18 @@ const mockState = vi.hoisted(() => ({
     confirmDeleteCodexProvider: vi.fn(),
     cancelDeleteCodexProvider: vi.fn(),
   },
-  claudeModels: { models: [], updateModels: vi.fn() },
-  codexModels: { models: [], updateModels: vi.fn() },
-  geminiModels: { models: [], updateModels: vi.fn() },
+  claudeModels: {
+    models: [] as Array<{ id: string; label: string; description?: string }>,
+    updateModels: vi.fn(),
+  },
+  codexModels: {
+    models: [] as Array<{ id: string; label: string; description?: string }>,
+    updateModels: vi.fn(),
+  },
+  geminiModels: {
+    models: [] as Array<{ id: string; label: string; description?: string }>,
+    updateModels: vi.fn(),
+  },
 }));
 
 vi.mock("../hooks/useProviderManagement", () => ({
@@ -77,6 +89,12 @@ vi.mock("../hooks/usePluginModels", () => ({
 vi.mock("../modelManagerRequest", () => ({
   consumeVendorModelManagerRequest: vi.fn(() => null),
   VENDOR_MODEL_MANAGER_REQUEST_EVENT: "vendor-model-manager-request",
+}));
+
+vi.mock("../../../services/tauri/vendors", () => ({
+  fetchSiteModels: vi.fn(),
+  updateClaudeProvider: vi.fn().mockResolvedValue(undefined),
+  switchClaudeProvider: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("./ProviderList", () => ({
@@ -144,6 +162,7 @@ const restoreCodexUnifiedExecOfficialDefaultMock = vi.mocked(
 const setCodexUnifiedExecOfficialOverrideMock = vi.mocked(
   setCodexUnifiedExecOfficialOverride,
 );
+const fetchSiteModelsMock = vi.mocked(fetchSiteModels);
 
 function renderPanel(
   options: {
@@ -213,6 +232,9 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  mockState.claudeManagement.providers = [];
+  mockState.claudeModels.models = [];
+  mockState.codexModels.models = [];
 });
 
 describe("VendorSettingsPanel", () => {
@@ -333,5 +355,58 @@ describe("VendorSettingsPanel", () => {
         getCodexUnifiedExecExternalStatusMock.mock.calls.length,
       ).toBeGreaterThan(initialStatusReads);
     });
+  });
+
+  it("syncs picker selections into the Claude managed list, not codex", async () => {
+    mockState.claudeManagement.providers = [
+      {
+        id: "p1",
+        name: "P1",
+        isActive: true,
+        settingsConfig: {
+          env: {
+            ANTHROPIC_AUTH_TOKEN: "tok",
+            ANTHROPIC_BASE_URL: "http://example.test",
+          },
+        },
+      },
+    ];
+    mockState.claudeModels.models = [{ id: "existing", label: "Existing" }];
+    fetchSiteModelsMock.mockResolvedValue([
+      { id: "existing", owned_by: "" },
+      { id: "fresh", owned_by: "" },
+    ]);
+
+    renderPanel();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /Sync Models from Site/ }),
+    );
+
+    const existingCheckbox = (await screen.findByRole("checkbox", {
+      name: /existing/,
+    })) as HTMLInputElement;
+    expect(existingCheckbox.checked).toBe(true);
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /fresh/ }));
+
+    fireEvent.change(screen.getByRole("combobox", { name: "haiku" }), {
+      target: { value: "fresh" },
+    });
+    fireEvent.change(screen.getByRole("combobox", { name: "sonnet" }), {
+      target: { value: "fresh" },
+    });
+    fireEvent.change(screen.getByRole("combobox", { name: "opus" }), {
+      target: { value: "fresh" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+
+    await waitFor(() => {
+      expect(mockState.claudeModels.updateModels).toHaveBeenCalledWith([
+        { id: "existing", label: "Existing" },
+        { id: "fresh", label: "fresh" },
+      ]);
+    });
+    expect(mockState.codexModels.updateModels).not.toHaveBeenCalled();
   });
 });
