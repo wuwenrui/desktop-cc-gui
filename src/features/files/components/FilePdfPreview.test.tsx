@@ -208,12 +208,12 @@ describe("FilePdfPreview", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Appendix" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: /^Appendix/ })).toBeTruthy();
     });
     expect(screen.getByRole("button", { name: "Hide outline" })).toBeTruthy();
     expect(screen.getByText("page-1")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Appendix" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Appendix/ }));
 
     await waitFor(() => {
       expect(screen.getByText("page-240")).toBeTruthy();
@@ -294,7 +294,7 @@ describe("FilePdfPreview", () => {
       expect(screen.getByRole("button", { name: "Hide outline" })).toBeTruthy();
     });
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Section A" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: /^Section A/ })).toBeTruthy();
     });
     await waitFor(() => {
       expect(screen.getByText("115%")).toBeTruthy();
@@ -302,7 +302,7 @@ describe("FilePdfPreview", () => {
     expect(getViewport).toHaveBeenCalledWith({ scale: 1.15 });
 
     fireEvent.click(screen.getByRole("button", { name: "Hide outline" }));
-    expect(screen.queryByRole("button", { name: "Section A" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Section A/ })).toBeNull();
     expect(screen.getByRole("button", { name: "Show outline" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
