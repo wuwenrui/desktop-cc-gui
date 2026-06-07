@@ -248,6 +248,9 @@ describe("FilePdfPreview", () => {
     );
 
     await waitFor(() => {
+      expect(invalidOutlineDocument.getPageIndex).toHaveBeenCalledTimes(1);
+    });
+    await waitFor(() => {
       expect(screen.getByText("No outline")).toBeTruthy();
     });
     expect(screen.queryByRole("button", { name: "Broken target" })).toBeNull();
