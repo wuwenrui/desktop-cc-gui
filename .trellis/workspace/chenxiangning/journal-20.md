@@ -611,3 +611,47 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 750: 记录 Codex codex-tui UA 兼容
+
+**Date**: 2026-06-07
+**Task**: 记录 Codex codex-tui UA 兼容
+**Branch**: `feature/v0.5.7`
+
+### Summary
+
+Codex app-server 对话链路切换为 codex-tui 兼容身份，补 terminal env fallback，并保留 ccgui/codex-tui control-plane 过滤兼容。
+
+### Main Changes
+
+本次 session 记录 commit ba8786a7。
+
+主要内容：
+- Codex app-server 子进程启动时补充 TERM_PROGRAM / TERM_PROGRAM_VERSION，缺失时 fallback 为 Apple_Terminal/470.2。
+- Codex app-server initialize.clientInfo 切换为 codex-tui，并从 codex --version 动态解析版本，失败 fallback 为 0.137.0。
+- Claude history/control-plane filtering 兼容 ccgui 与 codex-tui，避免内部控制面消息污染历史。
+- 新增 OpenSpec change: openspec/changes/harden-codex-tui-compatible-user-agent/。
+
+验证：
+- cargo test --manifest-path src-tauri/Cargo.toml parse_codex_cli_version_accepts_common_outputs
+- cargo test --manifest-path src-tauri/Cargo.toml codex_tui_client_info_with_experimental_api_is_control_plane
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ba8786a7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

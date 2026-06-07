@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-20.md`
-- **Total Sessions**: 749
+- **Total Sessions**: 750
 - **Last Active**: 2026-06-07
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-20.md` | ~613 | Active |
+| `journal-20.md` | ~657 | Active |
 | `journal-19.md` | ~1989 | Archived |
 | `journal-18.md` | ~1966 | Archived |
 | `journal-17.md` | ~1971 | Archived |
@@ -48,6 +48,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 750 | 2026-06-07 | 记录 Codex codex-tui UA 兼容 | `ba8786a7` | `feature/v0.5.7` |
 | 749 | 2026-06-07 | 补齐 FileViewPanel 预览读取 mock | `dc6a56f1` | `feature/v0.5.7` |
 | 748 | 2026-06-07 | 适配 PDF 预览目录按钮测试 | `6f343a2d` | `feature/v0.5.7` |
 | 747 | 2026-06-07 | 适配文档预览目录按钮测试 | `23e41f2a` | `feature/v0.5.7` |
