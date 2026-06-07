@@ -384,3 +384,50 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 745: 跳过默认关闭 OpenCode 会话扫描
+
+**Date**: 2026-06-07
+**Task**: 跳过默认关闭 OpenCode 会话扫描
+**Branch**: `feature/v0.5.7`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+修复 OpenCode 默认关闭时仍触发会话扫描并产生运行时提示的问题。
+
+改动：
+- src/services/tauri.ts：getOpenCodeSessionList 在后端返回 OpenCode disabled diagnostic 时返回空列表，不再让 traceStartupInvoke 记录内部命令失败。
+- src-tauri/src/session_management_catalog_projection.rs：catalog 聚合在 cached OpenCode engine status 已为 disabled 时直接投影空 source，不进入 opencode_session_list_core。
+- src-tauri/src/session_management_catalog_projection.rs：OpenCode CLI not found / disabled diagnostic 作为空 source 兜底，不再标记 degraded source。
+
+背景：
+- 运行时提示面板显示多 workspace 的 opencode_session_list 内部命令失败。
+- OpenCode 当前默认关闭，自动线程/会话聚合不应该把未启用引擎当成异常提示。
+- 手动启用 OpenCode 后，非 disabled / missing CLI 的真实错误仍继续抛出。
+
+验证：
+- 本次修复未额外运行测试。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `12480982` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
