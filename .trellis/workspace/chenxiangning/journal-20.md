@@ -1170,3 +1170,36 @@ Codex app-server 对话链路切换为 codex-tui 兼容身份，补 terminal env
 ### Next Steps
 
 - None - task complete
+
+
+## Session 763: 拆分客户端大文件第二组
+
+**Date**: 2026-06-08
+**Task**: 拆分客户端大文件第二组
+**Branch**: `feature/v0.5.8`
+
+### Summary
+
+拆分 files 面板与 Sidebar 大文件：抽离 FileView/FileTree helpers、文件树行渲染、Sidebar 菜单/弹层/工具逻辑；验证 typecheck、lint、large-file sentry 与 targeted tests 全部通过。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `47e36c4f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
