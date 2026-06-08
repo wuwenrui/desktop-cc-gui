@@ -1139,6 +1139,7 @@ pub(crate) fn list_external_absolute_directory_children_inner(
 }
 
 const MAX_WORKSPACE_FILE_BYTES: u64 = 400_000;
+const MAX_WORKSPACE_PREVIEW_FILE_BYTES: u64 = 4 * 1024 * 1024;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub(crate) struct WorkspaceFileResponse {
@@ -1458,6 +1459,21 @@ pub(crate) fn read_workspace_file_inner(
     root: &PathBuf,
     relative_path: &str,
 ) -> Result<WorkspaceFileResponse, String> {
+    read_workspace_file_with_limit_inner(root, relative_path, MAX_WORKSPACE_FILE_BYTES)
+}
+
+pub(crate) fn read_workspace_file_preview_inner(
+    root: &PathBuf,
+    relative_path: &str,
+) -> Result<WorkspaceFileResponse, String> {
+    read_workspace_file_with_limit_inner(root, relative_path, MAX_WORKSPACE_PREVIEW_FILE_BYTES)
+}
+
+fn read_workspace_file_with_limit_inner(
+    root: &PathBuf,
+    relative_path: &str,
+    max_bytes: u64,
+) -> Result<WorkspaceFileResponse, String> {
     let canonical_root = root
         .canonicalize()
         .map_err(|err| format!("Failed to resolve workspace root: {err}"))?;
@@ -1476,13 +1492,13 @@ pub(crate) fn read_workspace_file_inner(
 
     let file = File::open(&canonical_path).map_err(|err| format!("Failed to open file: {err}"))?;
     let mut buffer = Vec::new();
-    file.take(MAX_WORKSPACE_FILE_BYTES + 1)
+    file.take(max_bytes + 1)
         .read_to_end(&mut buffer)
         .map_err(|err| format!("Failed to read file: {err}"))?;
 
-    let truncated = buffer.len() > MAX_WORKSPACE_FILE_BYTES as usize;
+    let truncated = buffer.len() > max_bytes as usize;
     if truncated {
-        buffer.truncate(MAX_WORKSPACE_FILE_BYTES as usize);
+        buffer.truncate(max_bytes as usize);
     }
 
     let content = decode_text_bytes(&buffer, "File")?;

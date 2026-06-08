@@ -479,6 +479,7 @@ export interface ChatInputBoxAdapterProps {
 
   // Attachments (string paths in Composer, Attachment objects in ChatInputBox)
   attachments?: string[];
+  hasContextAttachment?: boolean;
   onAddAttachment?: () => void;
   onAttachImages?: (paths: string[]) => void;
   onRemoveAttachment?: (path: string) => void;
@@ -966,6 +967,7 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
       streamingEnabled,
       onStreamingEnabledChange,
       attachments,
+      hasContextAttachment = false,
       onAddAttachment,
       onRemoveAttachment,
       contextUsage,
@@ -1951,6 +1953,7 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
         onStop={onStop}
         onInput={handleInput}
         attachments={pathsToAttachments(attachments)}
+        hasContextAttachment={hasContextAttachment}
         onAddAttachment={onAddAttachment ? (_files?: FileList | null) => {
           // In Tauri, we use the native file picker instead of FileList
           onAddAttachment?.();

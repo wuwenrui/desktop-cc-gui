@@ -40,6 +40,31 @@ type UseSelectedAgentSessionResult = {
   reloadAgentCatalog: () => Promise<void>;
 };
 
+const selectedAgentSelectionsEqual = <T extends object>(
+  left: T | null | undefined,
+  right: T | null | undefined,
+): boolean => {
+  if (left === right) {
+    return true;
+  }
+
+  if (!left || !right) {
+    return false;
+  }
+
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+
+  if (leftKeys.length !== rightKeys.length) {
+    return false;
+  }
+
+  const leftRecord = left as Record<string, unknown>;
+  const rightRecord = right as Record<string, unknown>;
+
+  return leftKeys.every((key) => Object.is(leftRecord[key], rightRecord[key]));
+};
+
 export function useSelectedAgentSession({
   activeThreadId,
   activeWorkspaceId,
@@ -178,7 +203,9 @@ export function useSelectedAgentSession({
       agentCatalogById,
     );
     selectedAgentRef.current = resolved;
-    setSelectedAgent(resolved);
+    setSelectedAgent((currentAgent) =>
+      selectedAgentSelectionsEqual(currentAgent, resolved) ? currentAgent : resolved
+    );
 
     if (
       resolved

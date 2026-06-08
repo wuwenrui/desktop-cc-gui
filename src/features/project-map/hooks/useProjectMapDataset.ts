@@ -4,10 +4,14 @@ import type { EngineType, WorkspaceInfo } from "../../../types";
 import { projectMemoryList } from "../../../services/tauri/projectMemory";
 import type {
   ProjectMapCandidate,
+  ProjectMapContextRiskFlag,
   ProjectMapDataset,
   ProjectMapGenerationRequest,
   ProjectMapNode,
   ProjectMapPreferredLanguage,
+  ProjectMapRelationshipAgentReadPlan,
+  ProjectMapRelationshipStaleReason,
+  ProjectMapRelationshipStaleSummary,
   ProjectMapSource,
   ProjectMapStorageLocation,
   ProjectMapRunMetadata,
@@ -17,6 +21,7 @@ import type {
 import {
   createEmptyProjectMapDataset,
   readProjectMapDataset,
+  readProjectMapRelationships,
   writeProjectMapDataset,
 } from "../services/projectMapPersistence";
 import {
@@ -67,9 +72,12 @@ export type ProjectMapDatasetController = {
   status: ProjectMapDatasetStatus;
   storageDir: string | null;
   activeReadLocation: ProjectMapStorageLocation;
+  relationshipContextPack: ProjectMapRelationshipAgentReadPlan | null;
+  relationshipStaleSummary: ProjectMapRelationshipStaleSummary | null;
   error: string | null;
   pendingRequest: ProjectMapGenerationRequest | null;
   reload: () => Promise<void>;
+  reloadRelationshipContext: () => Promise<void>;
   switchReadLocation: (location: ProjectMapStorageLocation) => void;
   openGlobalCollection: () => void;
   openUnassignedOrganizer: () => void;
@@ -458,6 +466,149 @@ function projectMapSourceFromPath(path: string): ProjectMapSource {
   };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readStringArray(value: unknown, key: string): string[] {
+  if (!isRecord(value) || !Array.isArray(value[key])) {
+    return [];
+  }
+  return value[key].filter((item): item is string => typeof item === "string");
+}
+
+function readString(value: unknown, key: string): string | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const fieldValue = value[key];
+  return typeof fieldValue === "string" ? fieldValue : undefined;
+}
+
+function readNumber(value: unknown, key: string): number {
+  if (!isRecord(value)) {
+    return 0;
+  }
+  const fieldValue = value[key];
+  return typeof fieldValue === "number" && Number.isFinite(fieldValue) ? fieldValue : 0;
+}
+
+function normalizeRelationshipStaleReasons(value: unknown): ProjectMapRelationshipStaleReason[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((item) => {
+    if (!isRecord(item)) {
+      return [];
+    }
+    const kind = readString(item, "kind") ?? "fingerprint-changed";
+    const message = readString(item, "message");
+    if (!message) {
+      return [];
+    }
+    const normalizedKind: ProjectMapRelationshipStaleReason["kind"] =
+      kind === "git-commit-changed" ||
+      kind === "fingerprint-changed" ||
+      kind === "unmapped-changed-file" ||
+      kind === "file-read-failed"
+        ? kind
+        : "fingerprint-changed";
+    return [{
+      kind: normalizedKind,
+      message,
+      path: readString(item, "path"),
+      previous: readString(item, "previous"),
+      current: readString(item, "current"),
+    }];
+  });
+}
+
+function normalizeRelationshipStaleSummary(value: unknown): ProjectMapRelationshipStaleSummary | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const generatedAt = readString(value, "generatedAt");
+  const isFresh = value.isFresh;
+  if (!generatedAt || typeof isFresh !== "boolean") {
+    return null;
+  }
+  const suggestedMode = isRecord(value.refreshSuggestion)
+    ? readString(value.refreshSuggestion, "mode")
+    : undefined;
+  const refreshMode: NonNullable<ProjectMapRelationshipStaleSummary["refreshSuggestion"]>["mode"] =
+    suggestedMode === "partial" || suggestedMode === "ignore-only" ? suggestedMode : "full";
+  const refreshSuggestion = isRecord(value.refreshSuggestion)
+    ? {
+        mode: refreshMode,
+        changedFiles: readStringArray(value.refreshSuggestion, "changedFiles"),
+        reason: readString(value.refreshSuggestion, "reason") ?? "",
+      }
+    : null;
+  return {
+    schemaVersion: 1,
+    generatedAt,
+    isFresh,
+    reasons: normalizeRelationshipStaleReasons(value.reasons),
+    staleFileCount: readNumber(value, "staleFileCount"),
+    changedFiles: readStringArray(value, "changedFiles"),
+    refreshSuggestion,
+  };
+}
+
+function normalizeRelationshipRiskFlags(value: unknown): ProjectMapContextRiskFlag[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((item) => {
+    if (!isRecord(item)) {
+      return [];
+    }
+    const id = readString(item, "id");
+    const label = readString(item, "label");
+    if (!id || !label) {
+      return [];
+    }
+    const severity = readString(item, "severity");
+    return [{
+      id,
+      label,
+      severity:
+        severity === "critical" || severity === "warning" || severity === "info"
+          ? severity
+          : "warning",
+      nodeId: readString(item, "nodeId"),
+    }];
+  });
+}
+
+function normalizeRelationshipContextPack(value: unknown): ProjectMapRelationshipAgentReadPlan | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const generatedAt = readString(value, "generatedAt");
+  const provenance = isRecord(value.provenance) ? value.provenance : null;
+  const scanRunId = provenance ? readString(provenance, "scanRunId") : undefined;
+  if (!generatedAt || !scanRunId) {
+    return null;
+  }
+  return {
+    schemaVersion: 1,
+    generatedAt,
+    mustReadFiles: readStringArray(value, "mustReadFiles"),
+    relatedFiles: readStringArray(value, "relatedFiles"),
+    testTargets: readStringArray(value, "testTargets"),
+    contracts: readStringArray(value, "contracts"),
+    riskFlags: normalizeRelationshipRiskFlags(value.riskFlags),
+    provenance: {
+      scanRunId,
+      relationIds: readStringArray(provenance, "relationIds"),
+      fileIds: readStringArray(provenance, "fileIds"),
+    },
+    staleReason: readString(value, "staleReason"),
+    staleReasons: normalizeRelationshipStaleReasons(value.staleReasons),
+  };
+}
+
 export function useProjectMapDataset(
   workspace: WorkspaceInfo | null | undefined,
   options: {
@@ -495,6 +646,10 @@ export function useProjectMapDataset(
     global: null,
     project: null,
   });
+  const [relationshipContextPack, setRelationshipContextPack] =
+    useState<ProjectMapRelationshipAgentReadPlan | null>(null);
+  const [relationshipStaleSummary, setRelationshipStaleSummary] =
+    useState<ProjectMapRelationshipStaleSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pendingRequest, setPendingRequest] = useState<ProjectMapGenerationRequest | null>(null);
   const loadSequenceRef = useRef(0);
@@ -551,6 +706,25 @@ export function useProjectMapDataset(
     [activeReadLocation, expectedStorageKey, workspaceId],
   );
 
+  const loadRelationshipContextFromLocation = useCallback(async (readLocation: ProjectMapStorageLocation) => {
+    if (!workspaceId) {
+      setRelationshipContextPack(null);
+      setRelationshipStaleSummary(null);
+      return;
+    }
+    try {
+      const response = await readProjectMapRelationships({
+        workspaceId,
+        storageLocation: readLocation,
+      });
+      setRelationshipContextPack(normalizeRelationshipContextPack(response.contextPack));
+      setRelationshipStaleSummary(normalizeRelationshipStaleSummary(response.stale));
+    } catch {
+      setRelationshipContextPack(null);
+      setRelationshipStaleSummary(null);
+    }
+  }, [workspaceId]);
+
   const loadDatasetFromLocation = useCallback(async (readLocation: ProjectMapStorageLocation) => {
     const loadSequence = loadSequenceRef.current + 1;
     loadSequenceRef.current = loadSequence;
@@ -562,6 +736,8 @@ export function useProjectMapDataset(
       setActiveReadLocation(DEFAULT_STORAGE_LOCATION);
       setError(null);
       setPendingRequest(null);
+      setRelationshipContextPack(null);
+      setRelationshipStaleSummary(null);
       return;
     }
 
@@ -600,6 +776,7 @@ export function useProjectMapDataset(
         [readLocation]: readResult.response.storageDir,
       }));
       setActiveReadLocation(readLocation);
+      void loadRelationshipContextFromLocation(readLocation);
       if (readResult.dataset) {
         setDataset(readResult.dataset);
         setStatus("persisted");
@@ -620,12 +797,18 @@ export function useProjectMapDataset(
       setStatus("error");
       setActiveReadLocation(readLocation);
       setDataset(createEmptyProjectMapDataset({ identity, storageKey: expectedStorageKey }));
+      setRelationshipContextPack(null);
+      setRelationshipStaleSummary(null);
     }
-  }, [expectedStorageKey, identity, workspaceId]);
+  }, [expectedStorageKey, identity, loadRelationshipContextFromLocation, workspaceId]);
 
   const reload = useCallback(async () => {
     await loadDatasetFromLocation(activeReadLocation);
   }, [activeReadLocation, loadDatasetFromLocation]);
+
+  const reloadRelationshipContext = useCallback(async () => {
+    await loadRelationshipContextFromLocation(activeReadLocation);
+  }, [activeReadLocation, loadRelationshipContextFromLocation]);
 
   const switchReadLocation = useCallback(
     (location: ProjectMapStorageLocation) => {
@@ -1298,9 +1481,12 @@ export function useProjectMapDataset(
     status,
     storageDir,
     activeReadLocation,
+    relationshipContextPack,
+    relationshipStaleSummary,
     error,
     pendingRequest,
     reload,
+    reloadRelationshipContext,
     switchReadLocation,
     openGlobalCollection,
     openUnassignedOrganizer,

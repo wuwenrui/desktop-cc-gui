@@ -362,3 +362,105 @@ Project Map generation SHALL validate node references, relation endpoints, and e
 #### Scenario: Relation endpoint is missing
 - **WHEN** a relation references a missing source or target node
 - **THEN** Project Map reports or removes the invalid relation before using it
+
+### Requirement: Project Map generation consumes API contract evidence without flattening
+
+The system SHALL allow Project Map generation and scan flows to consume API contract artifacts as source-backed evidence while preserving API contracts as a separate fact layer.
+
+#### Scenario: API contract artifacts enrich Project Map generation
+
+- **WHEN** Project Map generation builds context for a workspace that has API contract artifacts
+- **THEN** the generation flow SHALL be able to read API endpoint summaries, API groups, and method chain evidence as source-backed context
+- **AND** the generation flow SHALL NOT delete existing Project Map nodes merely because an API endpoint is absent from the latest API scan
+
+#### Scenario: API contracts are not flattened into semantic nodes
+
+- **WHEN** API contract scan artifacts contain many endpoints
+- **THEN** Project Map generation SHALL NOT blindly create one semantic node per endpoint under the project root
+- **AND** API contract hierarchy SHALL remain available through the API contract view or source-backed grouped evidence
+
+#### Scenario: API evidence keeps provenance
+
+- **WHEN** Project Map generation references API contract information
+- **THEN** generated or enriched Project Map content SHALL keep provenance linking back to API contract artifacts, source files, schema files, or evidence lines when available
+- **AND** weak API inference SHALL remain distinguishable from strong schema-backed API evidence
+
+#### Scenario: API evidence consumed by generation is redacted
+
+- **WHEN** Project Map generation consumes API contract evidence containing examples, headers, cookies, tokens, passwords, secrets, credentials, or api keys
+- **THEN** the generation context SHALL use redacted evidence values
+- **AND** unredacted sensitive values SHALL NOT be injected into prompts or generated Project Map content
+
+### Requirement: Intent Canvas conversation context
+
+The system SHALL let users create a lightweight Project Map Intent Canvas and submit it as structured context to the current workspace conversation.
+
+#### Scenario: User opens architect canvas from Project Map detail
+
+- **WHEN** the user selects a Project Map node
+- **AND** activates the architect canvas action
+- **THEN** the system SHALL open an editable Intent Canvas
+- **AND** the canvas SHALL allow adding nodes and connecting nodes
+- **AND** the canvas SHALL NOT mutate the persisted Project Map dataset merely by opening or editing the canvas
+
+#### Scenario: User opens spotlight canvas from selected node
+
+- **WHEN** the user selects a Project Map node
+- **AND** activates the spotlight canvas action
+- **THEN** the system SHALL seed the Intent Canvas with the selected node as the central source node
+- **AND** the submitted payload SHALL include that source node id, title, kind, and summary when available
+
+#### Scenario: User submits canvas into the conversation
+
+- **WHEN** the user submits an Intent Canvas
+- **THEN** the system SHALL send the canvas mode, summary, nodes, edges, and source seed as structured text to the active workspace conversation
+- **AND** if no active thread exists, the system MAY create a workspace thread before sending
+- **AND** the message SHALL describe the canvas as user intent rather than persisted code fact
+
+#### Scenario: Workspace or thread is unavailable
+
+- **WHEN** the user submits an Intent Canvas
+- **AND** the app cannot resolve an active workspace or create a target thread
+- **THEN** the system SHALL show a readable error
+- **AND** the canvas SHALL remain available for retry
+
+### Requirement: Deterministic relationships are authoritative substrate
+Project Map generation SHALL treat relationship scan data as authoritative facts for graph-like reasoning.
+
+#### Scenario: relationship scan exists
+- **WHEN** generation starts and fresh relationship artifacts exist
+- **THEN** generator MAY consume `files`, `relations`, `modules`, `impact`, and `context-packs`
+- **AND** generated outputs SHALL preserve relation provenance fields (`scanRunId`, relation ids)
+
+#### Scenario: relationship conflict
+- **WHEN** generated relation conflicts with deterministic relation
+- **THEN** deterministic edge SHALL win and generator output SHALL be flagged as conflicting
+
+### Requirement: generation must not overwrite deterministic edge
+The generation system SHALL never overwrite deterministic relation artifacts.
+
+#### Scenario: generator emits relation
+- **WHEN** generator proposes new relation edges
+- **THEN** it SHALL write only semantic overlays or suggestions, not modify `relations/*.json` directly
+
+### Requirement: stale context awareness in generation
+Generation SHALL reflect stale state in prompts and confidence.
+
+#### Scenario: stale scan
+- **WHEN** scan is stale by commit/fingerprint
+- **THEN** generator SHALL include stale warning and optional refresh path
+
+### Requirement: no redundant broad scans
+The system SHALL reuse existing relationship context packs to avoid duplicate scanning.
+
+#### Scenario: fresh context pack exists
+- **WHEN** generation needs project-resource discovery
+- **THEN** generator SHALL first read context packs rather than re-scan all files
+
+### Requirement: provenance traceability for calibrated nodes
+Calibrations and candidates SHALL keep source links to relationship artifacts.
+
+#### Scenario: candidate calibration
+- **WHEN** a map node is calibrated
+- **THEN** candidate SHALL reference evidence relation/file/run identifiers
+

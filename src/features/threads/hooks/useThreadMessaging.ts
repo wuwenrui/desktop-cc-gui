@@ -13,6 +13,7 @@ import type {
   ReviewTarget,
   WorkspaceInfo,
   BrowserContextSendAttachment,
+  IntentCanvasContextSendAttachment,
 } from "../../../types";
 import type { AutoSessionMetadata } from "../../../services/tauri";
 import {
@@ -125,6 +126,7 @@ type SendMessageOptions = {
     icon?: string | null;
   } | null;
   browserContextAttachment?: BrowserContextSendAttachment | null;
+  intentCanvasContextAttachments?: IntentCanvasContextSendAttachment[];
   codexInvalidThreadRetryAttempted?: boolean;
   autoSession?: AutoSessionMetadata | null;
 };
@@ -864,7 +866,8 @@ export function useThreadMessaging({
           resolvedEngine === "codex" ||
           wasProcessing ||
           threadKind === "shared" ||
-          Boolean(options?.browserContextAttachment)
+          Boolean(options?.browserContextAttachment) ||
+          Boolean(options?.intentCanvasContextAttachments?.length)
         );
       let optimisticUserItem: Extract<ConversationItem, { kind: "message" }> | null = null;
       let optimisticGeneratedImageItem: Extract<
@@ -878,7 +881,8 @@ export function useThreadMessaging({
         if (
           optimisticDisplayText ||
           optimisticImages.length > 0 ||
-          options?.browserContextAttachment
+          options?.browserContextAttachment ||
+          options?.intentCanvasContextAttachments?.length
         ) {
           optimisticUserItem = {
             id: `optimistic-user-${Date.now()}-${Math.random()
@@ -892,6 +896,7 @@ export function useThreadMessaging({
             selectedAgentName,
             selectedAgentIcon,
             browserContextAttachment: options?.browserContextAttachment ?? null,
+            intentCanvasContextAttachments: options?.intentCanvasContextAttachments,
           };
           dispatch({
             type: "upsertItem",
@@ -1419,6 +1424,7 @@ export function useThreadMessaging({
                 collaborationMode: userCollaborationMode,
                 selectedAgentName,
                 selectedAgentIcon,
+                intentCanvasContextAttachments: options?.intentCanvasContextAttachments,
               },
               hasCustomName: Boolean(getCustomName(workspace.id, threadId)),
             });

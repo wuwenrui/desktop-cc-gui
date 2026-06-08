@@ -18,6 +18,10 @@ import type {
   ProjectMapProfile,
   ProjectMapRelatedArtifact,
   ProjectMapRelation,
+  ProjectMapRelationshipReadResponse,
+  ProjectMapRelationshipScanOptions,
+  ProjectMapRelationshipScanResponse,
+  ProjectMapRelationshipWriteSnapshotInput,
   ProjectMapRefreshReasonKind,
   ProjectMapRefreshSummary,
   ProjectMapRunMetadata,
@@ -1056,4 +1060,49 @@ export async function writeProjectMapFiles(input: ProjectMapWriteSnapshotInput):
       storageMode: input.storageLocation,
     }),
   );
+}
+
+export async function scanProjectMapRelationships(input: {
+  workspaceId: string;
+  options?: ProjectMapRelationshipScanOptions;
+  storageLocation?: ProjectMapStorageLocation;
+}): Promise<ProjectMapRelationshipScanResponse> {
+  return invoke<ProjectMapRelationshipScanResponse>("project_map_relationship_scan", {
+    workspaceId: input.workspaceId,
+    options: input.options,
+    storageMode: input.storageLocation,
+  });
+}
+
+export async function readProjectMapRelationships(input: {
+  workspaceId: string;
+  storageLocation?: ProjectMapStorageLocation;
+}): Promise<ProjectMapRelationshipReadResponse> {
+  return invoke<ProjectMapRelationshipReadResponse>("project_map_relationship_read", {
+    workspaceId: input.workspaceId,
+    storageMode: input.storageLocation,
+  });
+}
+
+export async function writeProjectMapRelationshipFiles(
+  input: ProjectMapRelationshipWriteSnapshotInput,
+): Promise<void> {
+  await withProjectMapWriteTimeout(
+    invoke("project_map_relationship_write_snapshot", {
+      workspaceId: input.workspaceId,
+      files: input.files,
+      createBackup: input.createBackup ?? false,
+      storageMode: input.storageLocation,
+    }),
+  );
+}
+
+export async function clearProjectMapRelationships(input: {
+  workspaceId: string;
+  storageLocation?: ProjectMapStorageLocation;
+}): Promise<void> {
+  await invoke("project_map_relationship_clear", {
+    workspaceId: input.workspaceId,
+    storageMode: input.storageLocation,
+  });
 }

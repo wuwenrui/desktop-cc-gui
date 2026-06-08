@@ -1,6 +1,5 @@
 import { lazy, Suspense, useCallback, useDeferredValue, useEffect, useMemo, useReducer, useRef, useState, type DragEvent, type MouseEvent, type ReactNode, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
-import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left";
 import { Sidebar } from "../../app/components/Sidebar";
 import { HomeChat } from "../../home/components/HomeChat";
 import { MainHeader } from "../../app/components/MainHeader";
@@ -26,6 +25,14 @@ import { WorkspaceSearchPanel } from "../../search/components/WorkspaceSearchPan
 import { PromptPanel } from "../../prompts/components/PromptPanel";
 import { ProjectMemoryPanel } from "../../project-memory/components/ProjectMemoryPanel";
 import { ProjectMapPanel, type ProjectMapDatasetController } from "../../project-map";
+import { IntentCanvasManager } from "../../intent-canvas/components/IntentCanvasManager";
+import type {
+  CanvasSemanticGraph,
+  IntentCanvasCodeSelectionAnchor,
+  IntentCanvasDocument,
+  IntentCanvasOpenRequest,
+} from "../../intent-canvas/types";
+import { pushErrorToast } from "../../../services/toasts";
 import { buildGitStatusProjectMapImpactInput } from "../../project-map/utils/impactSources";
 import {
   OrchestrationCenterView,
@@ -55,12 +62,8 @@ import { patchTaskRun, saveTaskRunStore } from "../../tasks/utils/taskRunStorage
 import { WorkspaceNoteCardPanel } from "../../note-cards/components/WorkspaceNoteCardPanel";
 import { WorkspaceSessionActivityPanel } from "../../session-activity/components/WorkspaceSessionActivityPanel";
 import { WorkspaceSessionRadarPanel } from "../../session-activity/components/WorkspaceSessionRadarPanel";
-import { DebugPanel } from "../../debug/components/DebugPanel";
-import { PanelTabs } from "../components/PanelTabs";
 import { TabBar } from "../../app/components/TabBar";
 import { TabletNav } from "../../app/components/TabletNav";
-import { TerminalDock } from "../../terminal/components/TerminalDock";
-import { TerminalPanel } from "../../terminal/components/TerminalPanel";
 import { StatusPanel } from "../../status-panel/components/StatusPanel";
 import { useStatusPanelData } from "../../status-panel/hooks/useStatusPanelData";
 import { useGlobalRuntimeNoticeDock } from "../../notifications/hooks/useGlobalRuntimeNoticeDock";
@@ -104,8 +107,6 @@ import type {
   RateLimitSnapshot,
   RequestUserInputRequest,
   RequestUserInputResponse,
-  RuntimeLifecycleState,
-  RuntimePoolRow,
   SkillOption,
   SelectedAgentOption,
   ThreadSummary,
@@ -171,6 +172,18 @@ import {
   type TopbarSessionWindows,
 } from "./topbarSessionTabs";
 import { buildWorkspaceHeaderGroups } from "./workspaceHeaderGroups";
+import { loadCodeSelectionRelationshipGraph } from "./codeSelectionRelationshipGraph";
+import { resolveRuntimeLifecycleForComposer } from "./runtimeLifecycle";
+import { focusUserInputRequestCard } from "./userInputRequestFocus";
+import { dispatchMessageJumpEvent } from "./messageJumpEvent";
+import {
+  buildCompactEmptyNode,
+  buildCompactGitBackNode,
+  buildDebugPanelNodes,
+  buildDesktopTopbarLeftNode,
+  buildRightPanelToolbarNode,
+  buildTerminalDockNode,
+} from "./layoutNodeSections";
 
 const GitDiffPanel = lazy(() =>
   import("../../git/components/GitDiffPanel").then((m) => ({ default: m.GitDiffPanel })),
@@ -209,52 +222,6 @@ type GitDiffViewerItem = {
   oldImageMime?: string | null;
   newImageMime?: string | null;
 };
-
-const MESSAGE_JUMP_EVENT_NAME = "ccgui:jump-to-message";
-
-function dispatchMessageJumpEvent(messageId: string) {
-  if (!messageId || typeof document === "undefined") {
-    return;
-  }
-  document.dispatchEvent(
-    new CustomEvent<string>(MESSAGE_JUMP_EVENT_NAME, {
-      detail: messageId,
-    }),
-  );
-}
-
-function focusUserInputRequestCard(request: RequestUserInputRequest) {
-  if (typeof document === "undefined") {
-    return false;
-  }
-  const candidates = document.querySelectorAll<HTMLElement>("[data-request-user-input-id]");
-  const card = Array.from(candidates).find(
-    (candidate) =>
-      candidate.dataset.requestUserInputId === String(request.request_id) &&
-      candidate.dataset.workspaceId === request.workspace_id &&
-      candidate.dataset.threadId === request.params.thread_id,
-  );
-  if (!card) {
-    return false;
-  }
-  card.scrollIntoView({ block: "center", behavior: "smooth" });
-  card.focus({ preventScroll: true });
-  return true;
-}
-
-function resolveRuntimeLifecycleForComposer(
-  rows: readonly RuntimePoolRow[] | undefined,
-  workspaceId: string | null,
-  engine: EngineType | undefined,
-): RuntimeLifecycleState | null {
-  if (!workspaceId || !engine || !rows) {
-    return null;
-  }
-  return (
-    rows.find((row) => row.workspaceId === workspaceId && row.engine === engine)
-      ?.lifecycleState ?? null
-  );
-}
 
 type GitDiffListView = "flat" | "tree";
 
@@ -477,8 +444,8 @@ type LayoutNodesOptions = {
   mainHeaderActionsNode?: ReactNode;
   browserDockOpen?: boolean;
   onCloseBrowserDock?: () => void;
-  centerMode: "chat" | "diff" | "editor" | "memory" | "projectMap";
-  setCenterMode: (mode: "chat" | "diff" | "editor" | "memory" | "projectMap") => void;
+  centerMode: "chat" | "diff" | "editor" | "memory" | "projectMap" | "intentCanvas";
+  setCenterMode: (mode: "chat" | "diff" | "editor" | "memory" | "projectMap" | "intentCanvas") => void;
   editorSplitCompanion: "chat" | "projectMap";
   setEditorSplitCompanion: (companion: "chat" | "projectMap") => void;
   editorSplitLayout: "vertical" | "horizontal";
@@ -513,6 +480,12 @@ type LayoutNodesOptions = {
   onGitPanelModeChange: (mode: "diff" | "log" | "issues" | "prs") => void;
   onOpenGitHistoryPanel: () => void;
   onOpenProjectMap: () => void;
+  intentCanvasOpenRequest?: IntentCanvasOpenRequest | null;
+  onOpenIntentCanvas?: (request?: Omit<IntentCanvasOpenRequest, "requestId">) => void;
+  onIntentCanvasOpenRequestConsumed?: (requestId: number) => void;
+  onAttachIntentCanvasToThread?: (document: IntentCanvasDocument) => Promise<void> | void;
+  pendingIntentCanvasDocuments?: IntentCanvasDocument[];
+  onRemovePendingIntentCanvas?: (documentId: string) => void;
   gitDiffViewStyle: "split" | "unified";
   gitDiffListView: GitDiffListView;
   onGitDiffListViewChange: (view: "flat" | "tree") => void;
@@ -789,6 +762,8 @@ type LayoutNodesOptions = {
   onOpenComposerKanbanPanel: (panelId: string) => void;
   activeComposerFilePath: string | null;
   activeComposerFileLineRange: { startLine: number; endLine: number } | null;
+  activeCodeSelectionAnchor: IntentCanvasCodeSelectionAnchor | null;
+  onActiveCodeSelectionAnchorChange: (anchor: IntentCanvasCodeSelectionAnchor | null) => void;
   fileReferenceMode: "path" | "none";
   onFileReferenceModeChange: (mode: "path" | "none") => void;
   plan: TurnPlan | null;
@@ -834,6 +809,7 @@ type LayoutNodesResult = {
   gitDiffViewerNode: ReactNode;
   fileViewPanelNode: ReactNode;
   projectMapPanelNode: ReactNode;
+  intentCanvasPanelNode: ReactNode;
   browserDockNode: ReactNode;
   planPanelNode: ReactNode;
   debugPanelNode: ReactNode;
@@ -845,7 +821,7 @@ type LayoutNodesResult = {
   compactGitBackNode: ReactNode;
 };
 
-type RightPanelTabSelection = LayoutNodesOptions["filePanelMode"] | "projectMap";
+type RightPanelTabSelection = LayoutNodesOptions["filePanelMode"] | "projectMap" | "intentCanvas";
 
 const EMPTY_COMMANDS: CustomCommandOption[] = [];
 
@@ -1034,6 +1010,10 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   const backgroundRenderGatingEnabled = isBackgroundRenderGatingEnabled();
   const deferredThreadItemsByThreadValue = useDeferredValue(options.threadItemsByThread);
   const deferredThreadStatusByIdValue = useDeferredValue(options.threadStatusById);
+  const deferredStatusPanelItemsValue = useDeferredValue(options.activeItems);
+  const statusPanelItems = options.isProcessing
+    ? deferredStatusPanelItemsValue
+    : options.activeItems;
   const deferredThreadItemsByThread = backgroundRenderGatingEnabled
     ? deferredThreadItemsByThreadValue
     : options.threadItemsByThread;
@@ -1830,7 +1810,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     subagentTotal,
     fileChanges,
     commandTotal,
-  } = useStatusPanelData(options.activeItems, {
+  } = useStatusPanelData(statusPanelItems, {
     isCodexEngine: isStatusPanelCodexEngine,
     activeThreadId: options.activeThreadId,
     itemsByThread: deferredThreadItemsByThread,
@@ -1951,6 +1931,8 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         onPickImages={options.onPickImages}
         onAttachImages={options.onAttachImages}
         onRemoveImage={options.onRemoveImage}
+        intentCanvasAttachments={options.pendingIntentCanvasDocuments}
+        onRemoveIntentCanvasAttachment={options.onRemovePendingIntentCanvas}
         prefillDraft={options.prefillDraft}
         onPrefillHandled={options.onPrefillHandled}
         insertText={options.insertText}
@@ -2160,21 +2142,13 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     />
   ) : null;
 
-  const desktopTopbarLeftNode = (
-    <>
-      {options.centerMode === "diff" && (
-        <button
-          className="icon-button back-button"
-          onClick={options.onExitDiff}
-          aria-label={t("files.backToChat")}
-        >
-          <ArrowLeft aria-hidden />
-        </button>
-      )}
-      {mainHeaderNode}
-      {topbarTabContextMenuNode}
-    </>
-  );
+  const desktopTopbarLeftNode = buildDesktopTopbarLeftNode({
+    centerMode: options.centerMode,
+    backLabel: t("files.backToChat"),
+    mainHeaderNode,
+    contextMenuNode: topbarTabContextMenuNode,
+    onExitDiff: options.onExitDiff,
+  });
 
   const tabletNavNode = (
     <TabletNav activeTab={options.tabletNavTab} onSelect={options.onSelectTab} />
@@ -2198,6 +2172,50 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     options.centerMode === "diff" ? options.selectedDiffPath : null;
   const onFilePanelModeChange = options.onFilePanelModeChange;
   const onOpenProjectMap = options.onOpenProjectMap;
+  const onOpenIntentCanvas = options.onOpenIntentCanvas;
+  const handleAssociateIntentCanvasCodeAnchor = useCallback(
+    async (anchor: IntentCanvasCodeSelectionAnchor) => {
+      if (!options.activeWorkspace) {
+        pushErrorToast({
+          title: "无法关联 Canvas",
+          message: "请先选择一个工作区。",
+          variant: "info",
+          durationMs: 4200,
+        });
+        return;
+      }
+      let graph: CanvasSemanticGraph;
+      try {
+        graph = await loadCodeSelectionRelationshipGraph({
+          workspaceId: options.activeWorkspace.id,
+          anchor,
+          storageLocation: options.projectMapDatasetController?.activeReadLocation,
+        });
+      } catch (error) {
+        pushErrorToast({
+          title: "无法生成方法关系图",
+          message: error instanceof Error ? error.message : String(error),
+          variant: "info",
+          durationMs: 5200,
+        });
+        return;
+      }
+      onOpenIntentCanvas?.({
+        mode: "file",
+        target: "new",
+        title: `${anchor.symbolName} Canvas`,
+        summary: `${anchor.symbolKind} ${anchor.symbolName} at ${anchor.filePath}:${anchor.declarationLine}`,
+        source: {
+          filePath: anchor.filePath,
+          nodeTitle: anchor.symbolName,
+          nodeKind: anchor.symbolKind,
+          summary: `${anchor.symbolKind} ${anchor.symbolName}`,
+        },
+        seedSemanticGraphs: [graph],
+      });
+    },
+    [onOpenIntentCanvas, options.activeWorkspace, options.projectMapDatasetController?.activeReadLocation],
+  );
   const centerMode = options.centerMode;
   const setCenterMode = options.setCenterMode;
   const editorSplitCompanion = options.editorSplitCompanion;
@@ -2205,9 +2223,18 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   const isProjectMapSurfaceActive =
     centerMode === "projectMap" ||
     (centerMode === "editor" && editorSplitCompanion === "projectMap");
+  const isIntentCanvasSurfaceActive = centerMode === "intentCanvas";
 
   const handleRightPanelTabSelect = useCallback(
     (tabId: RightPanelTabSelection) => {
+      if (tabId === "intentCanvas") {
+        if (isIntentCanvasSurfaceActive) {
+          setCenterMode("chat");
+          return;
+        }
+        onOpenIntentCanvas?.();
+        return;
+      }
       if (tabId === "projectMap") {
         if (isProjectMapSurfaceActive) {
           if (centerMode === "editor") {
@@ -2230,10 +2257,12 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       onFilePanelModeChange(tabId);
     },
     [
+      isIntentCanvasSurfaceActive,
       isProjectMapSurfaceActive,
       centerMode,
       onFilePanelModeChange,
       onOpenProjectMap,
+      onOpenIntentCanvas,
       isEditorFileMaximized,
       onToggleEditorFileMaximized,
       setCenterMode,
@@ -2241,20 +2270,19 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     ],
   );
 
-  const rightPanelToolbarNode =
-    showRightActivityToolbar && hasVisibleRightToolbarControl ? (
-    <div className="right-panel-toolbar">
-      <PanelTabs
-        active={isProjectMapSurfaceActive ? "projectMap" : options.filePanelMode}
-        onSelect={handleRightPanelTabSelect}
-        liveStates={{
-          activity: workspaceActivity.isProcessing,
-          radar: options.sessionRadarRunningSessions.length > 0,
-        }}
-        visibleTabs={rightToolbarVisibleTabs}
-      />
-    </div>
-  ) : null;
+  const rightPanelToolbarNode = buildRightPanelToolbarNode({
+    active: isIntentCanvasSurfaceActive
+      ? "intentCanvas"
+      : isProjectMapSurfaceActive
+        ? "projectMap"
+        : options.filePanelMode,
+    showToolbar: showRightActivityToolbar,
+    hasVisibleControl: hasVisibleRightToolbarControl,
+    activityLive: workspaceActivity.isProcessing,
+    radarLive: options.sessionRadarRunningSessions.length > 0,
+    visibleTabs: rightToolbarVisibleTabs,
+    onSelect: handleRightPanelTabSelect,
+  });
 
   let gitDiffPanelNode: ReactNode;
   if (options.filePanelMode === "files" && options.activeWorkspace) {
@@ -2509,6 +2537,8 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         onFileReferenceModeChange={options.onFileReferenceModeChange}
         activeFileLineRange={options.activeComposerFileLineRange}
         onActiveFileLineRangeChange={options.onActiveEditorLineRangeChange}
+        onActiveCodeAnchorChange={options.onActiveCodeSelectionAnchorChange}
+        onAssociateIntentCanvasCodeAnchor={handleAssociateIntentCanvasCodeAnchor}
         openTargets={options.openAppTargets}
         openAppIconById={options.openAppIconById}
         selectedOpenAppId={options.selectedOpenAppId}
@@ -2545,6 +2575,8 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   const [selectedOrchestrationTaskId, setSelectedOrchestrationTaskId] = useState<string | null>(null);
   const [projectMapSourceFocusNodeId, setProjectMapSourceFocusNodeId] = useState<string | null>(null);
   const projectMapDataset = options.projectMapDatasetController?.dataset ?? null;
+  const projectMapRelationshipContextPack =
+    options.projectMapDatasetController?.relationshipContextPack ?? null;
   const orchestrationWorkspaceId =
     options.activeWorkspace?.id ??
     projectMapDataset?.manifest.storageKey ??
@@ -2591,6 +2623,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       const coreSnapshots = collectCoreOrchestrationProviderSnapshots({
         workspaceId: orchestrationWorkspaceId,
         projectMapDataset,
+        projectMapRelationshipContextPack,
         taskRuns: taskRunStore.runs,
       });
       if (
@@ -2610,6 +2643,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     [
       orchestrationWorkspaceId,
       projectMapDataset,
+      projectMapRelationshipContextPack,
       specWorkspaceSnapshot,
       taskRunStore.runs,
     ],
@@ -2774,8 +2808,23 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       changedFilePaths={projectMapImpactInput.filePaths}
       changedFileSource={projectMapImpactInput.source}
       sourceFocusNodeId={projectMapSourceFocusNodeId}
+      activeCodeSelectionAnchor={options.activeCodeSelectionAnchor}
       onOpenEvidenceFile={handleOpenProjectMapEvidenceFile}
       onOpenOrchestrationTask={handleOpenOrchestrationTask}
+      onOpenIntentCanvas={options.onOpenIntentCanvas}
+      onOpenIntentCanvasFromRelationship={options.onOpenIntentCanvas}
+    />
+  );
+
+  const intentCanvasPanelNode = (
+    <IntentCanvasManager
+      activeWorkspace={options.activeWorkspace ?? null}
+      activeThreadId={options.activeThreadId ?? null}
+      openRequest={options.intentCanvasOpenRequest ?? null}
+      onOpenRequestConsumed={options.onIntentCanvasOpenRequestConsumed}
+      onAttachToThread={options.onAttachIntentCanvasToThread}
+      onOpenProjectMap={options.onOpenProjectMap}
+      onOpenSourceFile={handleOpenProjectMapEvidenceFile}
     />
   );
 
@@ -2783,7 +2832,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     <StatusPanel
       workspaceId={options.activeWorkspace?.id ?? null}
       workspacePath={options.activeWorkspace?.path ?? null}
-      items={options.activeItems}
+      items={statusPanelItems}
       isProcessing={options.isProcessing}
       expanded
       plan={options.plan}
@@ -2830,84 +2879,52 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     />
   ) : null;
 
-  const terminalPanelNode = options.terminalState ? (
-    <TerminalPanel
-      containerRef={options.terminalState.containerRef}
-      status={options.terminalState.status}
-      message={options.terminalState.message}
-    />
-  ) : null;
+  const terminalDockNode = buildTerminalDockNode({
+    terminalState: options.terminalState,
+    terminalOpen: options.terminalOpen,
+    terminalTabs: options.terminalTabs,
+    activeTerminalId: options.activeTerminalId,
+    onToggleTerminal: options.onToggleTerminal,
+    onSelectTerminal: options.onSelectTerminal,
+    onNewTerminal: options.onNewTerminal,
+    onCloseTerminal: options.onCloseTerminal,
+    onResizeTerminal: options.onResizeTerminal,
+  });
 
-  const terminalDockNode = (
-    <TerminalDock
-      isOpen={options.terminalOpen}
-      terminals={options.terminalTabs}
-      activeTerminalId={options.activeTerminalId}
-      onToggleOpen={options.onToggleTerminal}
-      onSelectTerminal={options.onSelectTerminal}
-      onNewTerminal={options.onNewTerminal}
-      onCloseTerminal={options.onCloseTerminal}
-      onResizeStart={options.onResizeTerminal}
-      terminalNode={terminalPanelNode}
-    />
-  );
+  const { debugPanelNode, debugPanelFullNode } = buildDebugPanelNodes({
+    debugEntries: options.debugEntries,
+    debugOpen: options.debugOpen,
+    onClearDebug: options.onClearDebug,
+    onCopyDebug: options.onCopyDebug,
+    onResizeDebug: options.onResizeDebug,
+  });
 
-  const debugPanelNode = (
-    <DebugPanel
-      entries={options.debugEntries}
-      isOpen={options.debugOpen}
-      onClear={options.onClearDebug}
-      onCopy={options.onCopyDebug}
-      onResizeStart={options.onResizeDebug}
-    />
-  );
+  const compactEmptyCodexNode = buildCompactEmptyNode({
+    title: t("workspace.noWorkspaceSelected"),
+    description: t("workspace.chooseProjectToChat"),
+    buttonLabel: t("workspace.goToProjects"),
+    onGoProjects: options.onGoProjects,
+  });
 
-  const debugPanelFullNode = (
-    <DebugPanel
-      entries={options.debugEntries}
-      isOpen
-      onClear={options.onClearDebug}
-      onCopy={options.onCopyDebug}
-      variant="full"
-    />
-  );
+  const compactEmptyGitNode = buildCompactEmptyNode({
+    title: t("workspace.noWorkspaceSelected"),
+    description: t("workspace.selectProjectToInspect"),
+    buttonLabel: t("workspace.goToProjects"),
+    onGoProjects: options.onGoProjects,
+  });
 
-  const compactEmptyCodexNode = (
-    <div className="compact-empty">
-      <h3>{t("workspace.noWorkspaceSelected")}</h3>
-      <p>{t("workspace.chooseProjectToChat")}</p>
-      <button className="ghost" onClick={options.onGoProjects}>
-        {t("workspace.goToProjects")}
-      </button>
-    </div>
-  );
+  const compactEmptySpecNode = buildCompactEmptyNode({
+    title: t("workspace.noWorkspaceSelected"),
+    description: t("workspace.selectProjectToReadSpecs"),
+    buttonLabel: t("workspace.goToProjects"),
+    onGoProjects: options.onGoProjects,
+  });
 
-  const compactEmptyGitNode = (
-    <div className="compact-empty">
-      <h3>{t("workspace.noWorkspaceSelected")}</h3>
-      <p>{t("workspace.selectProjectToInspect")}</p>
-      <button className="ghost" onClick={options.onGoProjects}>
-        {t("workspace.goToProjects")}
-      </button>
-    </div>
-  );
-
-  const compactEmptySpecNode = (
-    <div className="compact-empty">
-      <h3>{t("workspace.noWorkspaceSelected")}</h3>
-      <p>{t("workspace.selectProjectToReadSpecs")}</p>
-      <button className="ghost" onClick={options.onGoProjects}>
-        {t("workspace.goToProjects")}
-      </button>
-    </div>
-  );
-
-  const compactGitBackNode = (
-    <div className="compact-git-back">
-      <button onClick={options.onBackFromDiff}>&#8249; {t("workspace.back")}</button>
-      <span className="workspace-title">{t("workspace.diff")}</span>
-    </div>
-  );
+  const compactGitBackNode = buildCompactGitBackNode({
+    backLabel: t("workspace.back"),
+    diffLabel: t("workspace.diff"),
+    onBackFromDiff: options.onBackFromDiff,
+  });
   const browserDockNode = null;
 
   return {
@@ -2929,6 +2946,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     gitDiffViewerNode,
     fileViewPanelNode,
     projectMapPanelNode,
+    intentCanvasPanelNode,
     browserDockNode,
     planPanelNode,
     debugPanelNode,

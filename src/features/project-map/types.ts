@@ -475,6 +475,533 @@ export type ProjectMapRelation = {
   generatedBy?: ProjectMapGeneratedBy;
 };
 
+export type ProjectMapRelationshipLanguage =
+  | "typescript"
+  | "javascript"
+  | "rust"
+  | "java"
+  | "kotlin"
+  | "python"
+  | "go"
+  | "csharp"
+  | "php"
+  | "ruby"
+  | "c"
+  | "cpp"
+  | "swift"
+  | "dart"
+  | "vue"
+  | "svelte"
+  | "json"
+  | "toml"
+  | "xml"
+  | "yaml"
+  | "properties"
+  | "gradle"
+  | "terraform"
+  | "dockerfile"
+  | "makefile"
+  | "cmake"
+  | "sql"
+  | "html"
+  | "text"
+  | "markdown"
+  | "css"
+  | "shell"
+  | "unknown";
+
+export type ProjectMapRelationshipLayer =
+  | "frontend"
+  | "backend"
+  | "spec"
+  | "test"
+  | "style"
+  | "config"
+  | "docs"
+  | "runtime"
+  | "unknown";
+
+export type ProjectMapRelationshipFileRole =
+  | "component"
+  | "hook"
+  | "service"
+  | "controller"
+  | "repository"
+  | "entity"
+  | "manifest"
+  | "migration"
+  | "infra"
+  | "route"
+  | "type"
+  | "test"
+  | "style"
+  | "command"
+  | "module"
+  | "spec"
+  | "config"
+  | "document"
+  | "unknown";
+
+export type ProjectMapRelationshipParseStatus = "parsed" | "parse-failed" | "skipped";
+
+export type ProjectMapRelationshipRelationType =
+  | "imports"
+  | "exports"
+  | "calls"
+  | "contains"
+  | "tested_by"
+  | "styled_by"
+  | "specified_by"
+  | "documents"
+  | "configures"
+  | "bridges_to"
+  | "related";
+
+export type ProjectMapRelationshipSourceKind = "deterministic";
+
+export type ProjectMapRelationshipManifest = {
+  schemaVersion: 1;
+  storageKey: string;
+  workspaceId: string;
+  workspacePath: string;
+  projectName: string;
+  scannedRoot: string;
+  gitCommonRoot: string | null;
+  gitCommitHash: string | null;
+  generatedAt: string;
+  scanRunId: string;
+  fileCount: number;
+  relationCount: number;
+  ignoredCount: number;
+  repairIssueCount: number;
+  source: "deterministic-scan";
+};
+
+export type ProjectMapRelationshipEvidence = {
+  path: string;
+  line?: number;
+  excerpt?: string;
+  extractorVersion?: string;
+  observedAt?: string;
+};
+
+export type ProjectMapScannedFile = {
+  id: string;
+  path: string;
+  basename: string;
+  extension: string;
+  language: ProjectMapRelationshipLanguage;
+  layer: ProjectMapRelationshipLayer;
+  role: ProjectMapRelationshipFileRole;
+  sizeBytes: number;
+  lineCount: number;
+  contentHash: string;
+  parseStatus: ProjectMapRelationshipParseStatus;
+};
+
+export type ProjectMapRelationshipSymbol = {
+  id: string;
+  fileId: string;
+  name: string;
+  kind: string;
+  language: ProjectMapRelationshipLanguage;
+  line: number;
+};
+
+export type ProjectMapFileRelation = {
+  id: string;
+  sourceFileId: string;
+  targetFileId: string;
+  type: ProjectMapRelationshipRelationType;
+  direction: "forward" | "backward" | "bidirectional";
+  confidence: ProjectMapConfidence;
+  sourceKind: ProjectMapRelationshipSourceKind;
+  evidence: ProjectMapRelationshipEvidence[];
+  stale?: boolean;
+  fingerprint?: string;
+};
+
+export type ProjectMapRelationshipHotspotReason =
+  | "many-dependents"
+  | "cross-layer-hub"
+  | "missing-test"
+  | "stale"
+  | "large-file";
+
+export type ProjectMapRelationshipDashboardIndex = {
+  schemaVersion: 1;
+  generatedAt: string;
+  byFileId: Record<
+    string,
+    {
+      incoming: string[];
+      outgoing: string[];
+      tests: string[];
+      specs: string[];
+      styles: string[];
+      bridgeTargets: string[];
+    }
+  >;
+  byType: Record<ProjectMapRelationshipRelationType | string, string[]>;
+  hotspots: Array<{
+    fileId: string;
+    reason: ProjectMapRelationshipHotspotReason;
+    score: number;
+    rationale?: string;
+  }>;
+};
+
+export type ProjectMapRelationshipHotspot = ProjectMapRelationshipDashboardIndex["hotspots"][number];
+
+export type ProjectMapRelationshipModuleSummary = {
+  id: string;
+  label: string;
+  fileIds: string[];
+  fileCount: number;
+  relationCount: number;
+};
+
+export type ProjectMapRelationshipRepairIssueKind =
+  | "missing-node"
+  | "inverted-direction"
+  | "duplicate-relation"
+  | "parse-failed"
+  | "unresolved-target";
+
+export type ProjectMapRelationshipRepairIssue = {
+  id: string;
+  kind: ProjectMapRelationshipRepairIssueKind;
+  severity: "info" | "warning" | "critical";
+  message: string;
+  fileId?: string;
+  relationId?: string;
+  path?: string;
+  action?: "repaired" | "quarantined" | "ignored";
+};
+
+export type ProjectMapRelationshipRepairSummary = {
+  schemaVersion: 1;
+  generatedAt: string;
+  issues: ProjectMapRelationshipRepairIssue[];
+};
+
+export type ProjectMapRelationshipImpactSummary = {
+  schemaVersion: 1;
+  generatedAt: string;
+  inputFiles: string[];
+  changedFiles: string[];
+  directlyAffectedFiles: string[];
+  transitivelyAffectedFiles: string[];
+  unmappedFiles: string[];
+  ignoredFiles: string[];
+  riskFlags: ProjectMapContextRiskFlag[];
+};
+
+export type ProjectMapRelationshipStaleReasonKind =
+  | "git-commit-changed"
+  | "fingerprint-changed"
+  | "unmapped-changed-file"
+  | "file-read-failed"
+  | "scan-scope-warning";
+
+export type ProjectMapRelationshipRefreshMode = "full" | "partial" | "ignore-only";
+
+export type ProjectMapRelationshipStaleReason = {
+  kind: ProjectMapRelationshipStaleReasonKind;
+  message: string;
+  path?: string;
+  previous?: string;
+  current?: string;
+};
+
+export type ProjectMapRelationshipStaleSummary = {
+  schemaVersion: 1;
+  generatedAt: string;
+  isFresh: boolean;
+  reasons: ProjectMapRelationshipStaleReason[];
+  staleFileCount: number;
+  changedFiles: string[];
+  refreshSuggestion?: {
+    mode: ProjectMapRelationshipRefreshMode;
+    changedFiles: string[];
+    reason: string;
+  } | null;
+};
+
+export type ProjectMapRelationshipAgentReadPlan = {
+  schemaVersion: 1;
+  generatedAt: string;
+  mustReadFiles: string[];
+  relatedFiles: string[];
+  testTargets: string[];
+  contracts: string[];
+  riskFlags: ProjectMapContextRiskFlag[];
+  provenance: {
+    scanRunId: string;
+    relationIds: string[];
+    fileIds: string[];
+  };
+  staleReason?: string;
+  staleReasons?: ProjectMapRelationshipStaleReason[];
+};
+
+export type ProjectMapApiProtocol = "http" | "grpc" | "graphql" | "rpc" | "c-abi" | "unknown";
+
+export type ProjectMapApiConfidence = "spec" | "high" | "medium" | "low";
+
+export type ProjectMapApiParserSource =
+  | "schema-parser"
+  | "compiler-api"
+  | "syntax-tree-parser"
+  | "descriptor"
+  | "fallback-pattern"
+  | "unknown";
+
+export type ProjectMapApiParameterLocation = "path" | "query" | "header" | "cookie" | "body";
+
+export type ProjectMapApiGroupLevel = "protocol" | "module" | "namespace" | "controller" | "endpoint";
+
+export type ProjectMapApiEvidence = {
+  path: string;
+  line?: number;
+  excerpt?: string;
+  parserSource: ProjectMapApiParserSource;
+  extractorVersion?: string;
+  observedAt?: string;
+  redacted?: boolean;
+};
+
+export type ProjectMapApiSchemaRef = {
+  id: string;
+  name: string;
+  language?: ProjectMapRelationshipLanguage;
+  sourceFile?: string;
+  evidence?: ProjectMapApiEvidence[];
+};
+
+export type ProjectMapApiDescriptionSourceKind =
+  | "doc-comment"
+  | "swagger-annotation"
+  | "schema-description"
+  | "route-name"
+  | "fallback";
+
+export type ProjectMapApiDescriptionSource = {
+  kind: ProjectMapApiDescriptionSourceKind;
+  text: string;
+  language?: string;
+  evidence: ProjectMapApiEvidence[];
+};
+
+export type ProjectMapApiStructuredSchemaField = {
+  name: string;
+  type?: string;
+  required?: boolean;
+  defaultValue?: string;
+  description?: string;
+  enumValues?: string[];
+  range?: string;
+  example?: string;
+  children?: ProjectMapApiStructuredSchemaField[];
+  evidence?: ProjectMapApiEvidence[];
+};
+
+export type ProjectMapApiParameter = {
+  name: string;
+  location: ProjectMapApiParameterLocation;
+  required?: boolean;
+  schema?: ProjectMapApiSchemaRef;
+  description?: string;
+  defaultValue?: string;
+  example?: string;
+  structuredFields?: ProjectMapApiStructuredSchemaField[];
+  evidence: ProjectMapApiEvidence[];
+};
+
+export type ProjectMapApiRequestBody = {
+  contentType?: string;
+  required?: boolean;
+  schema?: ProjectMapApiSchemaRef;
+  structuredFields?: ProjectMapApiStructuredSchemaField[];
+  examples?: string[];
+  evidence: ProjectMapApiEvidence[];
+};
+
+export type ProjectMapApiResponse = {
+  statusCode?: string;
+  contentType?: string;
+  schema?: ProjectMapApiSchemaRef;
+  structuredFields?: ProjectMapApiStructuredSchemaField[];
+  examples?: string[];
+  isError?: boolean;
+  evidence: ProjectMapApiEvidence[];
+};
+
+export type ProjectMapApiEndpointIdentityKind =
+  | "http"
+  | "grpc"
+  | "graphql"
+  | "c-abi"
+  | "generic-rpc"
+  | "source-candidate";
+
+export type ProjectMapApiEndpoint = {
+  id: string;
+  protocol: ProjectMapApiProtocol;
+  language: ProjectMapRelationshipLanguage | "unknown";
+  framework?: string;
+  method?: string;
+  path?: string;
+  operationName?: string;
+  handlerSymbol?: string;
+  sourceFile: string;
+  parameters: ProjectMapApiParameter[];
+  requestBody?: ProjectMapApiRequestBody;
+  responses: ProjectMapApiResponse[];
+  requestSchema?: ProjectMapApiSchemaRef;
+  responseSchema?: ProjectMapApiSchemaRef;
+  description?: string;
+  descriptionSources?: ProjectMapApiDescriptionSource[];
+  usageScenario?: string;
+  groupIds: string[];
+  callChainIds: string[];
+  callChainUnavailableReason?: string;
+  confidence: ProjectMapApiConfidence;
+  evidence: ProjectMapApiEvidence[];
+  canonicalIdentity?: string;
+  identityKind?: ProjectMapApiEndpointIdentityKind;
+  ambiguousIdentity?: boolean;
+};
+
+export type ProjectMapApiGroup = {
+  id: string;
+  label: string;
+  level: ProjectMapApiGroupLevel;
+  parentId?: string;
+  endpointIds: string[];
+  childGroupIds: string[];
+  protocolCounts?: Record<string, number>;
+  languageCounts?: Record<string, number>;
+  confidenceCounts?: Record<string, number>;
+};
+
+export type ProjectMapApiCallChainEdgeKind =
+  | "handler"
+  | "service"
+  | "repository"
+  | "model"
+  | "outbound-http"
+  | "rpc"
+  | "event"
+  | "unknown";
+
+export type ProjectMapApiCallChainEdge = {
+  id: string;
+  sourceSymbol: string;
+  targetSymbol: string;
+  sourceFile: string;
+  line?: number;
+  excerpt?: string;
+  direction: "forward" | "backward";
+  kind: ProjectMapApiCallChainEdgeKind;
+  confidence: ProjectMapApiConfidence;
+  evidence: ProjectMapApiEvidence[];
+};
+
+export type ProjectMapApiCallChain = {
+  id: string;
+  endpointId: string;
+  edges: ProjectMapApiCallChainEdge[];
+  maxDepth: number;
+  truncatedReason?: string;
+};
+
+export type ProjectMapApiAdapterCoverage = {
+  language: string;
+  parserSource: ProjectMapApiParserSource;
+  frameworks: string[];
+  status: "active" | "no-candidate" | "not-present" | "unsupported";
+  fileCount: number;
+  endpointCount: number;
+  noCandidateCount: number;
+  unsupportedCount: number;
+};
+
+export type ProjectMapApiContractGraph = {
+  schemaVersion: 1;
+  generatedAt: string;
+  storageKey?: string;
+  scanRunId?: string;
+  workspaceFingerprint?: string;
+  endpoints: ProjectMapApiEndpoint[];
+  groups: ProjectMapApiGroup[];
+  schemas: ProjectMapApiSchemaRef[];
+  callChains: ProjectMapApiCallChain[];
+  adapters?: ProjectMapApiAdapterCoverage[];
+  stale?: unknown;
+  repair?: unknown;
+  skipped?: Array<{ reason: string; count: number }>;
+};
+
+export type ProjectMapRelationshipReadResponse = {
+  storageKey: string;
+  storageDir: string;
+  exists: boolean;
+  manifest?: unknown;
+  profile?: unknown;
+  run?: unknown;
+  scan?: unknown;
+  filesManifest?: unknown;
+  files?: unknown;
+  relations?: unknown;
+  relationsByFile?: unknown;
+  relationsByType?: unknown;
+  symbols?: unknown;
+  modules?: unknown;
+  impact?: unknown;
+  contextPack?: unknown;
+  apiContracts?: unknown;
+  stale?: unknown;
+  repair?: unknown;
+  readErrors?: Array<{
+    path: string;
+    message: string;
+  }>;
+};
+
+export type ProjectMapRelationshipScanOptions = {
+  maxFiles?: number;
+  includeIgnoredHints?: boolean;
+  paths?: string[];
+  changedFiles?: string[];
+};
+
+export type ProjectMapRelationshipScanResponse = {
+  storageKey: string;
+  storageDir: string;
+  scanRunId: string;
+  generatedAt: string;
+  scannedRoot: string;
+  fileCount: number;
+  relationCount: number;
+  apiEndpointCount?: number;
+  apiGroupCount?: number;
+  ignoredCount: number;
+  repairIssueCount: number;
+};
+
+export type ProjectMapRelationshipWriteFile = {
+  relativePath: string;
+  content: string;
+};
+
+export type ProjectMapRelationshipWriteSnapshotInput = {
+  workspaceId: string;
+  files: ProjectMapRelationshipWriteFile[];
+  createBackup?: boolean;
+  storageLocation?: ProjectMapStorageLocation;
+};
+
 export type ProjectMapContextRiskFlag = {
   id: string;
   severity: "info" | "warning" | "critical";

@@ -7,6 +7,7 @@ use serde_json::Value;
 use tauri::State;
 
 use crate::app_paths;
+use crate::project_identity;
 use crate::state::AppState;
 use crate::storage::{with_storage_lock, write_string_atomically};
 use crate::types::WorkspaceEntry;
@@ -39,39 +40,8 @@ pub(crate) struct ProjectMapWriteFile {
     content: String,
 }
 
-fn sanitize_project_name(value: &str) -> String {
-    let mut slug = String::new();
-    for character in value.trim().chars() {
-        if character.is_alphanumeric() || matches!(character, '.' | '_' | '-') {
-            slug.push(character);
-        } else if !slug.ends_with('-') {
-            slug.push('-');
-        }
-        if slug.len() >= 60 {
-            break;
-        }
-    }
-    let trimmed = slug.trim_matches('-').to_string();
-    if trimmed.is_empty() {
-        "project".to_string()
-    } else {
-        trimmed
-    }
-}
-
-fn hash_workspace_identity(value: &str) -> String {
-    let mut hash: u32 = 0x811c9dc5;
-    for byte in value.replace('\\', "/").to_lowercase().bytes() {
-        hash ^= byte as u32;
-        hash = hash.wrapping_mul(0x01000193);
-    }
-    format!("{hash:08x}")
-}
-
 fn storage_key(entry: &WorkspaceEntry) -> String {
-    let slug = sanitize_project_name(&entry.name);
-    let hash = hash_workspace_identity(&format!("{}#{}", entry.path, entry.id));
-    format!("{slug}-{hash}")
+    project_identity::project_storage_key(entry)
 }
 
 async fn workspace_entry(state: &AppState, workspace_id: &str) -> Result<WorkspaceEntry, String> {
@@ -403,10 +373,10 @@ pub(crate) async fn project_map_write_snapshot(
 #[cfg(test)]
 mod tests {
     use super::{
-        atomic_write, hash_workspace_identity, sanitize_project_name, storage_key,
-        validate_project_map_snapshot_ownership, validate_relative_project_map_path,
-        write_project_map_snapshot_files, ProjectMapWriteFile,
+        atomic_write, storage_key, validate_project_map_snapshot_ownership,
+        validate_relative_project_map_path, write_project_map_snapshot_files, ProjectMapWriteFile,
     };
+    use crate::project_identity::{hash_workspace_identity, sanitize_project_name};
     use crate::storage::with_storage_lock;
     use crate::types::{WorkspaceEntry, WorkspaceKind, WorkspaceSettings};
     use std::sync::mpsc;

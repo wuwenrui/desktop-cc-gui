@@ -208,6 +208,7 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
       memoryReferenceMode = 'off',
       onSetMemoryReferenceMode,
       attachments: externalAttachments,
+      hasContextAttachment = false,
       placeholder = '', // Will be passed from parent via t('chat.inputPlaceholder')
       disabled = false,
       value,
@@ -1665,7 +1666,7 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
           {!isInputBoxCollapsed && (
             <ChatInputBoxFooter
               disabled={disabled}
-              hasInputContent={hasContent || attachments.length > 0}
+              hasInputContent={hasContent || attachments.length > 0 || hasContextAttachment}
               isLoading={isLoading}
               streamActivityPhase={streamActivityPhase}
               isEnhancing={isEnhancing}

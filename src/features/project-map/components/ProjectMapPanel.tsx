@@ -89,6 +89,10 @@ import {
 import { getProjectMapUnassignedDiscoveryChildren } from "../services/projectMapNodeOrganizer";
 import { type ProjectMapTraceTarget } from "./ProjectMapTraceChips";
 import {
+  ProjectMapRelationshipSection,
+  type ProjectMapRelationshipSummaryState,
+} from "./ProjectMapRelationshipSection";
+import {
   ProjectMapGenerationTaskDrawer,
 } from "./ProjectMapTaskDrawer";
 import {
@@ -109,6 +113,8 @@ import {
 import {
   buildProjectMapEvidenceFileIndex,
 } from "../utils/evidenceFileIndex";
+import type { IntentCanvasMode, IntentCanvasOpenRequest } from "../../intent-canvas";
+import type { IntentCanvasCodeSelectionAnchor } from "../../intent-canvas/types";
 import type { ProjectMapHierarchyRelationView } from "./ProjectMapPanelSurfaces";
 import type {
   ProjectMapDataset,
@@ -118,7 +124,7 @@ import type {
   ProjectMapLayoutPreset,
   ProjectMapNode,
   ProjectMapImpactSourceMetadata,
-  ProjectMapPreferredLanguage,
+    ProjectMapPreferredLanguage,
   ProjectMapProfile,
   ProjectMapQuickFilterId,
   ProjectMapAdvisorHint,
@@ -136,8 +142,11 @@ type ProjectMapPanelProps = {
   changedFilePaths?: string[];
   changedFileSource?: ProjectMapImpactSourceMetadata;
   sourceFocusNodeId?: string | null;
+  activeCodeSelectionAnchor?: IntentCanvasCodeSelectionAnchor | null;
   onOpenEvidenceFile?: (path: string, location?: { line: number; column: number }) => void;
   onOpenOrchestrationTask?: (taskId: string) => void;
+  onOpenIntentCanvas?: (request: Omit<IntentCanvasOpenRequest, "requestId">) => void;
+  onOpenIntentCanvasFromRelationship?: (request: Omit<IntentCanvasOpenRequest, "requestId">) => void;
 };
 
 type GraphViewport = ProjectMapGraphViewport;
@@ -168,6 +177,7 @@ type ProjectMapVisibleSectionState = {
   query: boolean;
   activity: boolean;
   evidence: boolean;
+  fileRelations: boolean;
   relations: boolean;
   advisor: boolean;
   health: boolean;
@@ -365,8 +375,10 @@ export function ProjectMapPanel({
   changedFilePaths = [],
   changedFileSource,
   sourceFocusNodeId = null,
+  activeCodeSelectionAnchor = null,
   onOpenEvidenceFile,
   onOpenOrchestrationTask,
+  onOpenIntentCanvas,
 }: ProjectMapPanelProps) {
   const { t, i18n } = useTranslation();
   const preferredLanguage = resolveProjectMapPreferredLanguage(
@@ -418,6 +430,7 @@ export function ProjectMapPanel({
   const [isNavigationPanelExpanded, setIsNavigationPanelExpanded] = useState(false);
   const [isQueryPanelExpanded, setIsQueryPanelExpanded] = useState(false);
   const [isActivityPanelExpanded, setIsActivityPanelExpanded] = useState(false);
+  const [isFileRelationPanelExpanded, setIsFileRelationPanelExpanded] = useState(false);
   const [isRelationPanelExpanded, setIsRelationPanelExpanded] = useState(false);
   const [isAdvisorPanelExpanded, setIsAdvisorPanelExpanded] = useState(false);
   const [isGraphHealthExpanded, setIsGraphHealthExpanded] = useState(false);
@@ -437,6 +450,9 @@ export function ProjectMapPanel({
   const [selectedAdvisorHintId, setSelectedAdvisorHintId] = useState<string | null>(null);
   const [queryHistory, setQueryHistory] = useState<string[]>([]);
   const [navigationHistory, setNavigationHistory] = useState<ProjectMapNavigationHistoryItem[]>([]);
+  const [relationshipSummaryState, setRelationshipSummaryState] =
+    useState<ProjectMapRelationshipSummaryState>({ status: "idle" });
+  const [relationshipScanRequestId, setRelationshipScanRequestId] = useState(0);
   const [dragPreviewPositions, setDragPreviewPositions] = useState<
     Record<string, ProjectMapGraphNodePosition>
   >({});
@@ -456,6 +472,7 @@ export function ProjectMapPanel({
   const suppressNextNodeClickRef = useRef(false);
   const lastAutoFitGraphKeyRef = useRef<string | null>(null);
   const lastSourceFocusNodeIdRef = useRef<string | null>(null);
+
   const visibleNodes = useMemo(
     () => resolveVisibleProjectMapNodes(dataset, focusNodeId),
     [dataset, focusNodeId],
@@ -699,6 +716,7 @@ export function ProjectMapPanel({
       query: isQueryPanelExpanded,
       activity: isActivityPanelExpanded,
       evidence: false,
+      fileRelations: isFileRelationPanelExpanded,
       relations: isRelationPanelExpanded,
       advisor: isAdvisorPanelExpanded,
       health: isGraphHealthExpanded,
@@ -706,12 +724,14 @@ export function ProjectMapPanel({
     [
       isActivityPanelExpanded,
       isAdvisorPanelExpanded,
+      isFileRelationPanelExpanded,
       isGraphHealthExpanded,
       isNavigationPanelExpanded,
       isQueryPanelExpanded,
       isRelationPanelExpanded,
     ],
   );
+  const isFileRelationsWorkspaceVisible = visibleSectionState.fileRelations;
   const selectedNodeStaleReasons = useMemo(
     () =>
       selectedNode
@@ -1735,6 +1755,65 @@ export function ProjectMapPanel({
     }));
   };
 
+  const handleRelationshipScanClick = useCallback(() => {
+    setIsFileRelationPanelExpanded(true);
+    setRelationshipScanRequestId((current) => current + 1);
+  }, []);
+
+  const handleOpenIntentCanvas = useCallback((mode: IntentCanvasMode) => {
+    if (!selectedNode) {
+      return;
+    }
+    onOpenIntentCanvas?.({
+      mode,
+      title: mode === "spotlight"
+        ? `${selectedNode.title} Spotlight`
+        : `${selectedNode.title} Intent Canvas`,
+      summary: selectedNode.summary,
+      source: {
+        projectMapNodeId: selectedNode.id,
+        nodeTitle: selectedNode.title,
+        nodeKind: selectedNode.nodeKind,
+        summary: selectedNode.summary,
+      },
+    });
+    setIsDetailCollapsed(false);
+  }, [onOpenIntentCanvas, selectedNode]);
+
+  const handleOpenIntentCanvasForFile = useCallback((filePath: string) => {
+    const trimmedPath = filePath.trim();
+    if (!trimmedPath) {
+      return;
+    }
+    onOpenIntentCanvas?.({
+      mode: "file",
+      title: `${trimmedPath} Intent Canvas`,
+      summary: selectedNode?.summary ?? "",
+      source: {
+        projectMapNodeId: selectedNode?.id ?? null,
+        nodeTitle: selectedNode?.title ?? null,
+        nodeKind: selectedNode?.nodeKind ?? null,
+        summary: selectedNode?.summary ?? null,
+        filePath: trimmedPath,
+      },
+    });
+    setIsDetailCollapsed(false);
+  }, [onOpenIntentCanvas, selectedNode]);
+
+  const handleOpenIntentCanvasFromRelationship = useCallback((request: Omit<IntentCanvasOpenRequest, "requestId">) => {
+    const enrichedRequest = activeCodeSelectionAnchor && request.seedSemanticGraphs?.length
+      ? {
+          ...request,
+          seedSemanticGraphs: request.seedSemanticGraphs.map((graph) => ({
+            ...graph,
+            sourceSelection: activeCodeSelectionAnchor,
+          })),
+        }
+      : request;
+    onOpenIntentCanvas?.(enrichedRequest);
+    setIsDetailCollapsed(false);
+  }, [activeCodeSelectionAnchor, onOpenIntentCanvas]);
+
   const handleNodeDrillClick = (
     event: MouseEvent<HTMLButtonElement>,
     node: ProjectMapNode,
@@ -1864,6 +1943,22 @@ export function ProjectMapPanel({
                 </>
               ) : null}
               <button
+                className="project-map-toolbar-action project-map-profile-action"
+                type="button"
+                onClick={handleRelationshipScanClick}
+                disabled={!activeWorkspace?.id || relationshipSummaryState.status === "running"}
+                title={
+                  activeWorkspace?.id
+                    ? t("projectMap.relationship.scanHint")
+                    : t("projectMap.relationship.disabledNoWorkspace")
+                }
+              >
+                <RefreshCw aria-hidden />
+                {relationshipSummaryState.status === "running"
+                  ? t("projectMap.relationship.scanning")
+                  : t("projectMap.relationship.scan")}
+              </button>
+              <button
                 className={cn(
                   "project-map-toolbar-action project-map-task-button",
                   generationQueue.length > 0 && "has-active-task",
@@ -1901,27 +1996,96 @@ export function ProjectMapPanel({
         )}
       </header>
 
-      <main className="project-map-stage" aria-label={t("projectMap.stageAria")}>
+      <main
+        className={cn(
+          "project-map-stage",
+          isFileRelationsWorkspaceVisible && "is-file-relations-focused",
+        )}
+        aria-label={t("projectMap.stageAria")}
+      >
         {!isProjectMapChromeCollapsed ? (
           <div className={cn("project-map-lens-shell", isLensStripCollapsed && "is-collapsed")}>
             <div className="project-map-stage-toolbar">
-              <div className="project-map-breadcrumb" aria-label={t("projectMap.breadcrumb")}>
-                <span className="project-map-breadcrumb-root">
-                  <Network aria-hidden />
-                  {t("projectMap.breadcrumbRoot")}
-                </span>
-                {activeLens && focusNodeId ? (
+              <div
+                className={cn("project-map-breadcrumb", isFileRelationsWorkspaceVisible && "is-file-relations-summary")}
+                aria-label={isFileRelationsWorkspaceVisible
+                  ? t("projectMap.relationship.dashboardTitle")
+                  : t("projectMap.breadcrumb")}
+              >
+                {isFileRelationsWorkspaceVisible ? (
+                  <div className="project-map-relationship-inline-summary" role="status">
+                    <Network aria-hidden />
+                    <div className="project-map-relationship-inline-copy">
+                      <strong>{t("projectMap.relationship.dashboardTitle")}</strong>
+                      <span>
+                        {relationshipSummaryState.status === "success"
+                          ? t("projectMap.relationship.dashboardReady", {
+                              runId: relationshipSummaryState.summary.scanRunId,
+                            })
+                          : relationshipSummaryState.status === "failed"
+                            ? t("projectMap.relationship.failed", {
+                                message: relationshipSummaryState.message,
+                              })
+                            : t("projectMap.relationship.dashboardEmpty")}
+                      </span>
+                    </div>
+                    {relationshipSummaryState.status === "success" ? (
+                      <div className="project-map-relationship-inline-metrics">
+                        <span>
+                          <strong>{relationshipSummaryState.summary.fileCount}</strong>
+                          {t("projectMap.relationship.metricFiles")}
+                        </span>
+                        <span>
+                          <strong>{relationshipSummaryState.summary.relationCount}</strong>
+                          {t("projectMap.relationship.metricRelations")}
+                        </span>
+                        <span>
+                          <strong>{relationshipSummaryState.summary.ignoredCount}</strong>
+                          {t("projectMap.relationship.metricIgnored")}
+                        </span>
+                        <span>
+                          <strong>{relationshipSummaryState.summary.repairIssueCount}</strong>
+                          {t("projectMap.relationship.metricRepair")}
+                        </span>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <>
+                    <span className="project-map-breadcrumb-root">
+                      <Network aria-hidden />
+                      {t("projectMap.breadcrumbRoot")}
+                    </span>
+                    {activeLens && focusNodeId ? (
                   <>
                     <span>/</span>
                     <strong>{activeLens.title}</strong>
                   </>
-                ) : null}
+                    ) : null}
+                  </>
+                )}
               </div>
               <div className="project-map-stage-stats">
                 <span>{t("projectMap.totalNodes", { count: dataset.nodes.length })}</span>
                 <span>{t("projectMap.lensStats", { detected: detectedLensCount, candidate: candidateLensCount })}</span>
                 <span>{t("projectMap.staleNodes", { count: staleCount })}</span>
                 <span>{t("projectMap.candidateNodes", { count: candidateCount })}</span>
+                {relationshipSummaryState.status === "success" ? (
+                  <span>
+                    {t("projectMap.relationship.summary", {
+                      files: relationshipSummaryState.summary.fileCount,
+                      relations: relationshipSummaryState.summary.relationCount,
+                      ignored: relationshipSummaryState.summary.ignoredCount,
+                    })}
+                  </span>
+                ) : null}
+                {relationshipSummaryState.status === "failed" ? (
+                  <span className="project-map-inline-status is-error">
+                    {t("projectMap.relationship.failed", {
+                      message: relationshipSummaryState.message,
+                    })}
+                  </span>
+                ) : null}
                 <button
                   className={cn(
                     "project-map-health-chip",
@@ -1987,6 +2151,18 @@ export function ProjectMapPanel({
                     <RadioTower aria-hidden />
                     <span><strong>{t("projectMap.viewIa.activityMode")}</strong></span>
                     <b>{activityItemCount}</b>
+                  </button>
+                  <button
+                    className={cn("project-map-investigation-mode", visibleSectionState.fileRelations && "is-active")}
+                    type="button"
+                    aria-label={t("projectMap.viewIa.fileRelationsMode")}
+                    aria-pressed={visibleSectionState.fileRelations}
+                    aria-expanded={visibleSectionState.fileRelations}
+                    onClick={() => setIsFileRelationPanelExpanded((current) => !current)}
+                  >
+                    <Network aria-hidden />
+                    <span><strong>{t("projectMap.viewIa.fileRelationsMode")}</strong></span>
+                    <b>{relationshipSummaryState.status === "success" ? relationshipSummaryState.summary.relationCount : 0}</b>
                   </button>
                   <button
                     className={cn("project-map-investigation-mode", visibleSectionState.relations && "is-active")}
@@ -2077,23 +2253,32 @@ export function ProjectMapPanel({
             ) : null}
 
             {visibleSectionState.relations ? (
-              <ProjectMapRelationLegendPanel
-                relationIndex={relationIndex}
-                hierarchyRelations={filteredHierarchyRelations}
-                hierarchyRelationTotalCount={filteredHierarchyRelations.length}
-                expanded={visibleSectionState.relations}
-                typeFilter={relationTypeFilter}
-                sourceKindFilter={relationSourceKindFilter}
-                directionFilter={relationDirectionFilter}
-                typeOptions={relationTypeOptions}
-                sourceKindOptions={relationSourceKindOptions}
-                selectedNodeId={selectedNode?.id ?? null}
-                onTypeFilterChange={setRelationTypeFilter}
-                onSourceKindFilterChange={setRelationSourceKindFilter}
-                onDirectionFilterChange={setRelationDirectionFilter}
-                onClearSelectedRelation={() => setSelectedRelationId(null)}
-                onFocusNode={focusNavigationNode}
-              />
+                <section className="project-map-semantic-relations-panel">
+                  <header className="project-map-semantic-relations-header">
+                    <div>
+                      <strong>{t("projectMap.relationship.semanticTitle")}</strong>
+                      <p>{t("projectMap.relationship.semanticDescription")}</p>
+                    </div>
+                    <span>{t("projectMap.relationship.semanticBadge")}</span>
+                  </header>
+                  <ProjectMapRelationLegendPanel
+                    relationIndex={relationIndex}
+                    hierarchyRelations={filteredHierarchyRelations}
+                    hierarchyRelationTotalCount={filteredHierarchyRelations.length}
+                    expanded={visibleSectionState.relations}
+                    typeFilter={relationTypeFilter}
+                    sourceKindFilter={relationSourceKindFilter}
+                    directionFilter={relationDirectionFilter}
+                    typeOptions={relationTypeOptions}
+                    sourceKindOptions={relationSourceKindOptions}
+                    selectedNodeId={selectedNode?.id ?? null}
+                    onTypeFilterChange={setRelationTypeFilter}
+                    onSourceKindFilterChange={setRelationSourceKindFilter}
+                    onDirectionFilterChange={setRelationDirectionFilter}
+                    onClearSelectedRelation={() => setSelectedRelationId(null)}
+                    onFocusNode={focusNavigationNode}
+                  />
+                </section>
             ) : null}
 
             {visibleSectionState.advisor ? (
@@ -2136,6 +2321,18 @@ export function ProjectMapPanel({
           </div>
         ) : null}
 
+        <ProjectMapRelationshipSection
+          activeWorkspaceId={activeWorkspace?.id ?? null}
+          activeReadLocation={datasetController.activeReadLocation}
+          expanded={isFileRelationsWorkspaceVisible}
+          activeCodeSelectionAnchor={activeCodeSelectionAnchor}
+          onOpenEvidenceFile={onOpenEvidenceFile}
+          onOpenIntentCanvasFromRelationship={handleOpenIntentCanvasFromRelationship}
+          reloadRelationshipContext={datasetController.reloadRelationshipContext}
+          scanRequestId={relationshipScanRequestId}
+          onSummaryStateChange={setRelationshipSummaryState}
+        />
+
         {candidateBatchMessage ? (
           <div className="project-map-inline-status" role="status">
             {candidateBatchMessage}
@@ -2152,7 +2349,7 @@ export function ProjectMapPanel({
               {t("projectMap.retryLoad")}
             </button>
           </div>
-        ) : visibleNodes.length === 0 ? (
+        ) : isFileRelationsWorkspaceVisible ? null : visibleNodes.length === 0 ? (
           <div className="project-map-empty-state">
             <Crosshair aria-hidden />
             <h3>{t("projectMap.emptyTitle")}</h3>
@@ -2579,6 +2776,13 @@ export function ProjectMapPanel({
               onSelectRelation={handleRelationSelect}
               onGraphHealthExpandedChange={setIsGraphHealthExpanded}
               onRepairGraph={handleRepairGraphIntegrity}
+              onOpenIntentCanvasArchitect={
+                onOpenIntentCanvas ? () => handleOpenIntentCanvas("architect") : undefined
+              }
+              onOpenIntentCanvasSpotlight={
+                onOpenIntentCanvas ? () => handleOpenIntentCanvas("spotlight") : undefined
+              }
+              onOpenIntentCanvasForFile={onOpenIntentCanvas ? handleOpenIntentCanvasForFile : undefined}
             />
           </div>
         )}

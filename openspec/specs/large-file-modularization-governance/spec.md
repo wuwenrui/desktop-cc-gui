@@ -118,6 +118,34 @@ The system SHALL define measurable completion criteria for the Deferred + JIT go
 - **AND** the baseline MUST be regenerated only after the retained source no longer exceeds the fail threshold
 - **AND** the cleanup MUST preserve public facades, selector contracts, command names, payload shapes, and persisted fields for the same batch
 
+#### Scenario: Four-file retained hard-debt cleanup
+- **WHEN** this change is marked complete
+- **THEN** `src/features/project-map/components/ProjectMapRelationshipSection.tsx` MUST be below the default-source fail threshold
+- **AND** `src/features/layout/hooks/useLayoutNodes.tsx` MUST be below the default-source fail threshold
+- **AND** `src-tauri/src/project_map_relations.rs` MUST be below the default-source fail threshold
+- **AND** `src/styles/project-map.relationship.css` MUST be below the styles fail threshold
+- **AND** the regenerated hard-debt baseline MUST NOT contain retained fail-scope entries for those four files
+
+#### Scenario: Project Map relationship facade preservation
+- **WHEN** `ProjectMapRelationshipSection.tsx` is split
+- **THEN** the exported `ProjectMapRelationshipSection` component MUST remain available from the same module path
+- **AND** existing props, callbacks, visible view modes, API contract entry behavior, graph/file/read view behavior, and class names MUST remain compatible
+
+#### Scenario: Layout hook facade preservation
+- **WHEN** `useLayoutNodes.tsx` is split
+- **THEN** the exported `useLayoutNodes` hook MUST keep the same public input and return contracts
+- **AND** existing panel ordering, selected tab behavior, code-selection relationship graph behavior, and lazy panel fallback behavior MUST remain compatible
+
+#### Scenario: Rust relationship scanner facade preservation
+- **WHEN** `project_map_relations.rs` is split
+- **THEN** existing Tauri command names and registered backend entrypoints MUST remain available
+- **AND** snapshot ownership validation, path safety validation, scan output schema, API contract enrichment, and stale-state summaries MUST remain compatible
+
+#### Scenario: Project Map relationship stylesheet contract preservation
+- **WHEN** `project-map.relationship.css` is split
+- **THEN** existing class selectors MUST remain valid
+- **AND** imported stylesheet order MUST preserve graph, inspector, file-list, action-output, loading, and responsive cascade behavior
+
 ### Requirement: Large-File Governance MUST Favor Boundary-Driven Splits
 第一阶段 large-file 治理 MUST 优先执行 boundary-driven split，而不是只按行数机械切分。
 
@@ -165,4 +193,3 @@ Feature stylesheet splits SHALL preserve selector contracts when cohesive style 
 - **WHEN** Project Map inspector/detail styles grow the main stylesheet beyond the style hard-fail threshold
 - **THEN** those styles MAY move to a feature-local imported stylesheet
 - **AND** existing class names and component markup SHALL remain compatible
-

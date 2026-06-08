@@ -375,7 +375,7 @@ fn value_contains_string_recursive(value: &Value, needle: &str) -> bool {
     }
 }
 
-fn is_ccgui_client_info(value: &Value) -> bool {
+fn is_gui_control_plane_client_info(value: &Value) -> bool {
     let Some(client_info) = value.get("clientInfo").and_then(Value::as_object) else {
         return false;
     };
@@ -383,7 +383,9 @@ fn is_ccgui_client_info(value: &Value) -> bool {
         client_info
             .get(*key)
             .and_then(Value::as_str)
-            .map(|text| text.eq_ignore_ascii_case("ccgui"))
+            .map(|text| {
+                text.eq_ignore_ascii_case("ccgui") || text.eq_ignore_ascii_case("codex-tui")
+            })
             .unwrap_or(false)
     })
 }
@@ -454,9 +456,9 @@ pub(crate) fn is_claude_control_plane_entry(entry: &Value) -> bool {
             entry
                 .get("message")
                 .and_then(|message| message.get("params"))
-        });
+    });
     if let Some(params) = params {
-        if is_ccgui_client_info(params) && has_experimental_api_capability(params) {
+        if is_gui_control_plane_client_info(params) && has_experimental_api_capability(params) {
             return true;
         }
     }

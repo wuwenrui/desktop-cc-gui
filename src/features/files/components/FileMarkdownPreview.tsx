@@ -46,7 +46,7 @@ import {
   type FileRenderPressure,
 } from "../types/fileRenderPressure";
 
-type FileMarkdownPreviewProps = {
+export type FileMarkdownPreviewProps = {
   value: string;
   documentKey?: string;
   className?: string;
@@ -119,7 +119,7 @@ const MAX_CACHED_TABLE_SCROLL_POSITIONS = 160;
 const MAX_REVEALED_HEAVY_BLOCKS = 800;
 const PROGRESSIVE_INITIAL_LINES = 360;
 const PROGRESSIVE_CHUNK_LINES = 720;
-const BOUNDED_RENDER_LINE_LIMIT = 1_800;
+const BOUNDED_RENDER_LINE_LIMIT = 2_800;
 const LARGE_MARKDOWN_LINE_THRESHOLD = 6_000;
 const LARGE_MARKDOWN_BYTE_THRESHOLD = 240_000;
 const LARGE_MARKDOWN_BLOCK_THRESHOLD = 1_800;

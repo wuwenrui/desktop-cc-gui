@@ -174,12 +174,63 @@ const DEFAULT_RESUME_AFTER_USER_INPUT_TIMEOUT_MS: u64 = 360_000;
 const MIN_RESUME_AFTER_USER_INPUT_TIMEOUT_MS: u64 = 10_000;
 const MAX_RESUME_AFTER_USER_INPUT_TIMEOUT_MS: u64 = 600_000;
 const TIMED_OUT_REQUEST_GRACE_MS: u64 = 600_000;
+const CODEX_TUI_COMPAT_CLIENT_NAME: &str = "codex-tui";
+const FALLBACK_CODEX_TUI_COMPAT_VERSION: &str = "0.137.0";
+const FALLBACK_TERM_PROGRAM: &str = "Apple_Terminal";
+const FALLBACK_TERM_PROGRAM_VERSION: &str = "470.2";
 
 #[derive(Debug, Clone)]
 struct TimedOutRequest {
     method: String,
     thread_id: Option<String>,
     timed_out_at_ms: u64,
+}
+
+fn non_empty_env_var(key: &str) -> Option<String> {
+    env::var(key)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn apply_codex_tui_compatible_terminal_env(command: &mut tokio::process::Command) {
+    let terminal_program =
+        non_empty_env_var("TERM_PROGRAM").unwrap_or_else(|| FALLBACK_TERM_PROGRAM.to_string());
+    let terminal_version = non_empty_env_var("TERM_PROGRAM_VERSION")
+        .unwrap_or_else(|| FALLBACK_TERM_PROGRAM_VERSION.to_string());
+
+    command.env("TERM_PROGRAM", terminal_program);
+    command.env("TERM_PROGRAM_VERSION", terminal_version);
+}
+
+fn parse_codex_cli_version(version_output: &str) -> Option<String> {
+    version_output
+        .split_whitespace()
+        .rev()
+        .map(|token| token.trim_start_matches('v'))
+        .find(|token| {
+            token
+                .chars()
+                .next()
+                .map(|character| character.is_ascii_digit())
+                .unwrap_or(false)
+        })
+        .map(ToString::to_string)
+}
+
+async fn resolve_codex_tui_compatible_client_version(
+    launch_context: &CodexLaunchContext,
+) -> String {
+    let version_output =
+        check_cli_binary(&launch_context.resolved_bin, launch_context.path_env.clone())
+            .await
+            .ok()
+            .flatten();
+
+    version_output
+        .as_deref()
+        .and_then(parse_codex_cli_version)
+        .unwrap_or_else(|| FALLBACK_CODEX_TUI_COMPAT_VERSION.to_string())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -931,7 +982,7 @@ async fn spawn_workspace_session_once<E: EventSink>(
     entry: WorkspaceEntry,
     codex_args: Option<String>,
     codex_home: Option<PathBuf>,
-    client_version: String,
+    _client_version: String,
     auto_compaction_threshold_percent: f64,
     auto_compaction_enabled: bool,
     event_sink: E,
@@ -940,6 +991,7 @@ async fn spawn_workspace_session_once<E: EventSink>(
 ) -> Result<Arc<WorkspaceSession>, String> {
     let mut command =
         build_codex_command_from_launch_context(launch_context, launch_options.hide_console);
+    apply_codex_tui_compatible_terminal_env(&mut command);
     WorkspaceSession::configure_spawn_command(&mut command);
     apply_codex_app_server_args(&mut command, codex_args.as_deref(), launch_options)?;
     command.current_dir(&entry.path);
@@ -998,11 +1050,13 @@ async fn spawn_workspace_session_once<E: EventSink>(
         event_sink.clone(),
     );
 
+    let codex_tui_compatible_version =
+        resolve_codex_tui_compatible_client_version(launch_context).await;
     let init_params = json!({
         "clientInfo": {
-            "name": "ccgui",
-            "title": "ccgui",
-            "version": client_version
+            "name": CODEX_TUI_COMPAT_CLIENT_NAME,
+            "title": CODEX_TUI_COMPAT_CLIENT_NAME,
+            "version": codex_tui_compatible_version
         },
         "capabilities": {
             // Plan mode collaboration and requestUserInput are experimental APIs in codex app-server.

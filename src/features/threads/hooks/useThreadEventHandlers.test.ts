@@ -659,6 +659,56 @@ describe("useThreadEventHandlers diagnostics", () => {
     ).toBe(false);
   });
 
+  it("does not clear interrupted watchdog residue when stream correlation belongs to another engine", async () => {
+    const onDebug = vi.fn();
+    await primeThreadStreamLatencyContext({
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      engine: "claude",
+      model: "MiniMax-M2.7",
+    });
+    const options = makeOptions(onDebug);
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "claude-turn-1");
+      options.interruptedThreadsRef.current.add("thread-1");
+      vi.advanceTimersByTime(CODEX_TURN_NO_PROGRESS_STALL_MS);
+    });
+
+    expect(options.markProcessing).not.toHaveBeenCalledWith("thread-1", false);
+    expect(options.setActiveTurnId).not.toHaveBeenCalledWith("thread-1", null);
+
+    const cleanupApplied = collectDiagnosticCalls(onDebug).find(
+      (entry) =>
+        entry.label ===
+        "thread/session:turn-diagnostic:three-evidence-reconciliation-cleanup-applied",
+    );
+    expect(cleanupApplied).toBeUndefined();
+
+    const cleanupSkipped = collectDiagnosticCalls(onDebug).find(
+      (entry) =>
+        entry.label ===
+        "thread/session:turn-diagnostic:three-evidence-reconciliation-cleanup-skipped",
+    );
+    expect(cleanupSkipped?.payload).toEqual(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        turnId: "claude-turn-1",
+        cleanupSource: "watchdog-interrupted",
+        skipReason: "engine-mismatch",
+        decisionAction: "cleanup-residue",
+        decisionReason: "interrupted",
+        scopeMatch: expect.objectContaining({
+          engine: false,
+          matched: false,
+          turn: true,
+        }),
+      }),
+    );
+  });
+
   it("clears matching busy residue after scoped backend terminal reconciliation", async () => {
     const onDebug = vi.fn();
     const options = makeOptions(onDebug);

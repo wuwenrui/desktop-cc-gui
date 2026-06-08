@@ -2,7 +2,9 @@ use super::{
     encode_project_path, list_claude_sessions_from_base_dir, load_claude_session_from_base_dir,
     ClaudeSessionAttributionScope,
 };
-use crate::engine::claude_history_entries::CLAUDE_CONTROL_EVENT_TOOL_TYPE;
+use crate::engine::claude_history_entries::{
+    is_claude_control_plane_entry, CLAUDE_CONTROL_EVENT_TOOL_TYPE,
+};
 use serde_json::json;
 use uuid::Uuid;
 
@@ -36,6 +38,18 @@ fn synthetic_continuation_summary_text() -> String {
         "Continue the conversation from where it left off without asking the user any further questions.",
     ]
     .join("\n")
+}
+
+#[test]
+fn codex_tui_client_info_with_experimental_api_is_control_plane() {
+    let entry = json!({
+        "params": {
+            "clientInfo": { "name": "codex-tui", "title": "codex-tui" },
+            "capabilities": { "experimentalApi": true }
+        }
+    });
+
+    assert!(is_claude_control_plane_entry(&entry));
 }
 
 #[tokio::test]

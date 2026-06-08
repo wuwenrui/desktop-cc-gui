@@ -1547,6 +1547,21 @@ impl DaemonState {
 
     pub(crate) async fn list_git_branches(&self, workspace_id: String) -> Result<Value, String> {
         let repo_root = self.git_repo_root(&workspace_id).await?;
+        if !crate::git_utils::path_has_git_repository_marker(&repo_root) {
+            return Ok(json!({
+                "branches": [],
+                "localBranches": [],
+                "remoteBranches": [],
+                "currentBranch": null,
+                "repositoryState": "not_git_repository",
+                "diagnostic": {
+                    "kind": "neutral_non_repository",
+                    "reason": "missing_git_marker",
+                    "workspaceId": workspace_id,
+                    "pathKind": "workspace_path"
+                }
+            }));
+        }
         let repo = open_repository_at_root(&repo_root)?;
         let current_branch = repo
             .head()
@@ -1644,7 +1659,8 @@ impl DaemonState {
             "branches": branches,
             "localBranches": local_branches,
             "remoteBranches": remote_branches,
-            "currentBranch": current_branch
+            "currentBranch": current_branch,
+            "repositoryState": "git_repository"
         }))
     }
 

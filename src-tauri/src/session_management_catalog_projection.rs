@@ -441,6 +441,23 @@ async fn build_workspace_scope_catalog_data(
             }
         }
 
+        let opencode_disabled = engine_manager
+            .get_engine_status(engine::EngineType::OpenCode)
+            .await
+            .is_some_and(|status| {
+                status.error.as_deref() == Some(engine::OPENCODE_DISABLED_DIAGNOSTIC)
+            });
+        if opencode_disabled {
+            source_statuses.push(build_success_source_status(
+                "opencode",
+                0,
+                scan_mode,
+                WorkspaceSessionSourceCompleteness::AuthoritativeEmpty,
+                None,
+            ));
+            continue;
+        }
+
         match engine::commands::opencode_session_list_core(
             workspaces,
             engine_manager,
@@ -501,6 +518,18 @@ async fn build_workspace_scope_catalog_data(
                 }));
             }
             Err(error) => {
+                if error.contains("OpenCode CLI not found")
+                    || error.contains(engine::OPENCODE_DISABLED_DIAGNOSTIC)
+                {
+                    source_statuses.push(build_success_source_status(
+                        "opencode",
+                        0,
+                        scan_mode,
+                        WorkspaceSessionSourceCompleteness::AuthoritativeEmpty,
+                        None,
+                    ));
+                    continue;
+                }
                 log::warn!(
                     "[session_management.list_workspace_sessions] opencode history unavailable for workspace {}: {}",
                     owner_workspace_id,

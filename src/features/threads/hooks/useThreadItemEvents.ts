@@ -19,7 +19,10 @@ import {
   settleLiveAssistantShadowTranscript,
   upsertLiveAssistantShadowSnapshot,
 } from "../utils/liveAssistantShadowTranscript";
-import { noteThreadReducerWorkMeasured } from "../utils/streamLatencyDiagnostics";
+import {
+  noteRealtimeCoalescedFlush,
+  noteThreadReducerWorkMeasured,
+} from "../utils/streamLatencyDiagnostics";
 
 const CLAUDE_STREAM_DEBUG_FLAG_KEY = "ccgui.debug.claude.stream";
 
@@ -774,6 +777,15 @@ export function useThreadItemEvents({
       const ensuredThreads = new Set<string>();
       const markedProcessingThreads = new Set<string>();
       for (const flush of flushes) {
+        noteRealtimeCoalescedFlush({
+          reason: flush.reason,
+          eventCount: flush.events.length,
+          engine: operation.event.engine,
+          workspaceId: operation.event.workspaceId,
+          threadId: operation.event.threadId,
+          turnId: operation.event.turnId ?? null,
+          itemKind: operation.event.itemKind,
+        });
         for (const event of flush.events) {
           applyNormalizedRealtimeEventNow(
             {
@@ -839,7 +851,7 @@ export function useThreadItemEvents({
         return;
       }
       normalizedRealtimeFlushTimerRef.current = window.setTimeout(() => {
-        const flush = normalizedRealtimeBatcherRef.current.flush();
+        const flush = normalizedRealtimeBatcherRef.current.flush("cadence");
         if (flush) {
           applyNormalizedRealtimeBatcherFlushes([flush], operation);
         }

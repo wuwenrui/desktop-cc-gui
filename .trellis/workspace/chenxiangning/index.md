@@ -7,9 +7,9 @@
 ## Current Status
 
 <!-- @@@auto:current-status -->
-- **Active File**: `journal-19.md`
-- **Total Sessions**: 714
-- **Last Active**: 2026-06-05
+- **Active File**: `journal-20.md`
+- **Total Sessions**: 751
+- **Last Active**: 2026-06-07
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,8 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-19.md` | ~956 | Active |
+| `journal-20.md` | ~696 | Active |
+| `journal-19.md` | ~1989 | Archived |
 | `journal-18.md` | ~1966 | Archived |
 | `journal-17.md` | ~1971 | Archived |
 | `journal-16.md` | ~1985 | Archived |
@@ -47,6 +48,43 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 751 | 2026-06-07 | 收口接口契约边界与大文件门禁 | `6e9c6afb` | `feature/v0.5.7` |
+| 750 | 2026-06-07 | 记录 Codex codex-tui UA 兼容 | `ba8786a7` | `feature/v0.5.7` |
+| 749 | 2026-06-07 | 补齐 FileViewPanel 预览读取 mock | `dc6a56f1` | `feature/v0.5.7` |
+| 748 | 2026-06-07 | 适配 PDF 预览目录按钮测试 | `6f343a2d` | `feature/v0.5.7` |
+| 747 | 2026-06-07 | 适配文档预览目录按钮测试 | `23e41f2a` | `feature/v0.5.7` |
+| 746 | 2026-06-07 | 同步 Markdown bounded preview 测试期望 | `efc0022c` | `feature/v0.5.7` |
+| 745 | 2026-06-07 | 跳过默认关闭 OpenCode 会话扫描 | `12480982` | `feature/v0.5.7` |
+| 744 | 2026-06-07 | 移除 OpenCode CLI 扫描型测试 | `7acab695` | `feature/v0.5.7` |
+| 743 | 2026-06-07 | Markdown 预览硬化收口 | `f9dfe648` | `feature/v0.5.7` |
+| 742 | 2026-06-07 | 保留旧品牌兼容路径例外 | `e52fb2f2` | `feature/v0.5.7` |
+| 741 | 2026-06-07 | 防止跨引擎清理对话残留 | `baa85158` | `feature/v0.5.7` |
+| 740 | 2026-06-07 | 提交 Rust 格式化收口 | `2b4e4333` | `feature/v0.5.7` |
+| 739 | 2026-06-07 | 归档大文件拆分治理 | `ea0463ed` | `feature/v0.5.7` |
+| 738 | 2026-06-07 | 拆分大文件硬债并清零门禁 | `2a0efb00` | `feature/v0.5.7` |
+| 737 | 2026-06-07 | 修复 CI 门禁测试与大文件基线 | `fe76841f` | `feature/v0.5.7` |
+| 736 | 2026-06-07 | 完成 Project Map 接口契约视图阶段交付 | `5720fde9` | `feature/v0.5.7` |
+| 735 | 2026-06-07 | 加固客户端渲染稳定性防线 | `96ba5b06` | `feature/v0.5.7` |
+| 734 | 2026-06-07 | 归档 Project Canvas 代码关系图导入变更 | `a26a3a9d` | `feature/v0.5.7` |
+| 733 | 2026-06-07 | 收口 Project Canvas 代码关系图导入 | `78d0101d` | `feature/v0.5.7` |
+| 732 | 2026-06-06 | 完善代码关系导入画布链路 | `d2d14f4d` | `feature/v0.5.7` |
+| 731 | 2026-06-06 | 修复代码关系导入 Intent Canvas 稳定性 | `83c6feaf` | `feature/v0.5.7` |
+| 730 | 2026-06-06 | Project Canvas 文件关系图导入阶段实现 | `861d34a9` | `feature/v0.5.7` |
+| 729 | 2026-06-06 | 修复 Project Map 文件关系扫描与收起语义 | `bf46b1b7` | `feature/v0.5.7` |
+| 728 | 2026-06-06 | 提交 Project Canvas 代码图导入提案 | `8f2343e1` | `feature/v0.5.7` |
+| 727 | 2026-06-06 | 更新现有 OpenSpec 变更提案 | `3ac4742b` | `feature/v0.5.7` |
+| 726 | 2026-06-06 | 规范化 Intent Canvas Excalidraw 选择状态 | `153926fd` | `feature/v0.5.7` |
+| 725 | 2026-06-06 | 修复 Project Map UNKNOWN 关系节点聚焦 | `8519b3f2` | `feature/v0.5.7` |
+| 724 | 2026-06-06 | 提交收口：意图画布与项目地图上下文 | `d9560c94` | `feature/v0.5.7` |
+| 723 | 2026-06-06 | 修复 Project Map 文件导航完整性与治理 | `72fc29f4` | `feature/v0.5.7` |
+| 722 | 2026-06-06 | 禁用文件关系滚轮缩放 | `98c16634` | `feature/v0.5.7` |
+| 721 | 2026-06-06 | 收口文件关系图谱工作台 | `6a0bdbb3` | `feature/v0.5.7` |
+| 720 | 2026-06-05 | 优化文件关系聚焦视图 | `9a8cd685` | `feature/v0.5.7` |
+| 719 | 2026-06-05 | 完善文件关系图谱面板 | `c4535bda` | `feature/v0.5.7` |
+| 718 | 2026-06-05 | Project Map 文件关系上下文闭环 | `104417eb01fb08235439a76f47884f1e278cb1e6` | `feature/v0.5.7` |
+| 717 | 2026-06-05 | Project Map 文件关系扫描看板 Alpha | `79a6777e` | `feature/v0.5.7` |
+| 716 | 2026-06-05 | OpenSpec Markdown 预览渲染重构提案 | `07d14186` | `feature/v0.5.7` |
+| 715 | 2026-06-05 | 提交 Project Map Relationship Dashboard 提案 | `1344da54` | `feature/v0.5.6` |
 | 714 | 2026-06-05 | 全量 CI 门禁与格式化收口 | `425b2d8e` | `feature/v0.5.6` |
 | 713 | 2026-06-05 | 加固 Claude 提问恢复边界 | `19d0485c10212a0e946657c99eb4c860cc0112ec` | `feature/v0.5.6` |
 | 712 | 2026-06-05 | 收口实时吸顶对齐任务 | `77f29fa49f1f6065ccf86bab8715a251378c28e9` | `feature/v0.5.6` |

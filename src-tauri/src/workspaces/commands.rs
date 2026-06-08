@@ -20,7 +20,7 @@ use super::files::{
     list_workspace_directory_children_inner, list_workspace_files_inner,
     paste_external_workspace_items_inner, paste_workspace_item_inner,
     read_external_absolute_file_inner, read_external_spec_file_inner, read_workspace_file_inner,
-    rename_workspace_item_inner, resolve_external_absolute_preview_handle_inner,
+    read_workspace_file_preview_inner, rename_workspace_item_inner, resolve_external_absolute_preview_handle_inner,
     resolve_external_spec_preview_handle_inner, resolve_workspace_preview_handle_inner,
     search_workspace_text_inner, trash_workspace_item_inner, write_external_absolute_file_inner,
     write_external_spec_file_inner, write_workspace_file_inner, ExternalSpecFileResponse,
@@ -641,6 +641,33 @@ pub(crate) async fn read_workspace_file(
         &workspace_id,
         &path,
         |root, rel_path| read_workspace_file_inner(root, rel_path),
+    )
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn read_workspace_file_preview(
+    workspace_id: String,
+    path: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<WorkspaceFileResponse, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        let response = remote_backend::call_remote(
+            &*state,
+            app,
+            "read_workspace_file_preview",
+            json!({ "workspaceId": workspace_id, "path": path }),
+        )
+        .await?;
+        return serde_json::from_value(response).map_err(|err| err.to_string());
+    }
+
+    workspaces_core::read_workspace_file_core(
+        &state.workspaces,
+        &workspace_id,
+        &path,
+        |root, rel_path| read_workspace_file_preview_inner(root, rel_path),
     )
     .await
 }

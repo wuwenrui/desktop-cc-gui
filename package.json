@@ -85,6 +85,7 @@
     "@codemirror/search": "^6.6.0",
     "@codemirror/state": "^6.6.0",
     "@codemirror/view": "^6.40.0",
+    "@excalidraw/excalidraw": "^0.18.1",
     "@hello-pangea/dnd": "^18.0.1",
     "@lobehub/icons": "^4.9.0",
     "@tailwindcss/vite": "^4.1.18",

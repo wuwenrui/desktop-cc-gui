@@ -1561,3 +1561,181 @@ Project Map SHALL keep information architecture state, section expansion, active
 - **THEN** existing Project Map search, guided tour, path finder, impact overlay, evidence file reverse navigation, relation inspector, relation filters, and graph repair flows SHALL remain reachable
 - **AND** legacy datasets without relations, evidence files, tour metadata, or repair candidates SHALL continue rendering usable fallback states
 
+### Requirement: relationship file navigation preserves scan reachability
+The Project Map relationship dashboard SHALL distinguish bounded graph recommendation surfaces from full scan-backed file navigation.
+
+#### Scenario: graph rail shows bounded top files
+- **WHEN** relationship scan data contains more files than the graph rail can render
+- **THEN** the graph rail SHALL label itself as a high-relevance Top Files surface rather than a complete File Tree
+- **AND** the rail SHALL show count context that makes the cap transparent
+
+#### Scenario: graph rail groups top files
+- **WHEN** the Top Files surface contains many files with different roles or modules
+- **THEN** the rail SHALL group files by at least one semantic layer such as role, module, or path segment
+- **AND** role and module groups SHALL be collapsible
+- **AND** each expanded leaf group SHALL support bounded default rendering with an explicit expand affordance
+
+#### Scenario: files explorer uses full scan set
+- **WHEN** the user opens the relationship Files Explorer view
+- **THEN** the file groups SHALL be derived from all scanned files that match active query, role filter, and noise visibility settings
+- **AND** the explorer SHALL NOT derive its only data source from the bounded graph rail list
+
+#### Scenario: large scans remain navigable
+- **WHEN** a relationship snapshot contains thousands of scanned files
+- **THEN** the Files Explorer SHALL keep matching files reachable through grouping and search
+- **AND** the UI SHALL distinguish scanned total, matching total, and currently rendered or highlighted counts
+
+#### Scenario: selecting explorer file focuses graph context
+- **WHEN** the user selects a file from the Files Explorer
+- **THEN** the dashboard SHALL preserve the existing behavior of selecting that file and focusing the graph or inspector context
+
+### Requirement: Project Map exposes scan action
+The `Project Map` panel SHALL expose a relationship scan action for the active workspace.
+
+#### Scenario: scan action exists
+- **WHEN** the panel is opened with active workspace
+- **THEN** the UI SHALL show a `Scan Relationships` action
+- **AND** action language can be localized
+
+#### Scenario: no active workspace
+- **WHEN** no workspace is selected
+- **THEN** scan action SHALL be disabled with a reason message and direct guidance
+
+### Requirement: scan execution visibility
+UI SHALL provide explicit run-state during scanning.
+
+#### Scenario: scan starts
+- **WHEN** scan is triggered
+- **THEN** panel SHALL show running state, phase, and estimated file count
+
+#### Scenario: large scan confirmation
+- **WHEN** scope exceeds threshold
+- **THEN** user SHALL confirm before execution
+- **AND** estimated ignored files shall be shown
+
+#### Scenario: scan succeeds
+- **WHEN** backend returns success
+- **THEN** dashboard SHALL refresh summary and selected-state data atomically
+
+#### Scenario: scan fails
+- **WHEN** scan returns failure
+- **THEN** error message SHALL distinguish `path`, `permission`, `parser`, `storage`, `cancelled`
+
+### Requirement: file neighborhood rendering
+Selected file neighborhood SHALL show deterministic relations.
+
+#### Scenario: selected file has neighbors
+- **WHEN** user selects a scanned file
+- **THEN** outgoing and incoming links SHALL display grouped by relation type
+- **AND** each relation SHALL expose evidence source and evidence location
+
+#### Scenario: selected file has no neighbors
+- **WHEN** selected file has no known relation
+- **THEN** UI SHALL show explicit empty-state text and suggestion to rescan or inspect ignore scope
+
+### Requirement: relationship scan dashboard remains visually isolated
+The scanned relationship dashboard SHALL remain visually and behaviorally separate from the existing Project Map semantic graph.
+
+#### Scenario: scan data is available
+- **WHEN** latest relationship scan artifacts contain files and relations
+- **THEN** the panel SHALL render them in a dedicated scan snapshot dashboard
+- **AND** it SHALL NOT automatically inject scanned edges into the Project Map canvas, hierarchy relation index, or semantic dataset
+- **AND** existing Project Map semantic relations SHALL remain visually isolated from the scan snapshot
+
+#### Scenario: large relationship set
+- **WHEN** relation count is large
+- **THEN** UI SHALL render capped lists, indexed summaries, or virtualized surfaces
+- **AND** it SHALL NOT force all relationship edges into the graph layout by default
+
+#### Scenario: semantic graph relation section is available
+- **WHEN** scan snapshot and semantic graph relations are both shown
+- **THEN** they SHALL use separate investigation entries instead of one vertically stacked relation view
+- **AND** the scan snapshot SHALL keep independent filters and selection state
+
+#### Scenario: file relationship entry is selected
+- **WHEN** the user selects `File Relations`
+- **THEN** the UI SHALL show deterministic scan snapshot content from `project-map-relations`
+- **AND** it SHALL NOT render existing Project Map semantic relation filters in the same view
+
+#### Scenario: inspect relations entry is selected
+- **WHEN** the user selects `Inspect Relations`
+- **THEN** the UI SHALL show existing Project Map semantic graph relations
+- **AND** it SHALL NOT render scan snapshot dashboard content in the same view
+
+### Requirement: relationship dashboard supports multiple views
+The relationship dashboard SHALL support multiple complementary views over the same scan snapshot.
+
+#### Scenario: default board view
+- **WHEN** scan data is available
+- **THEN** dashboard SHALL provide a board-style file tile view grouped by role or node type
+- **AND** each tile SHOULD show file identity, role, language, and relation density
+
+#### Scenario: analyst switches view
+- **WHEN** user switches between board, list, and neighborhood views
+- **THEN** filters and selected file context SHALL remain stable
+- **AND** the system SHALL NOT trigger a new scan or mutate the semantic Project Map graph
+
+### Requirement: relationship filtering and search
+The panel SHALL support query and filtering.
+
+#### Scenario: search
+- **WHEN** user types query
+- **THEN** files are filtered by path/module/role and focusable in the list
+
+#### Scenario: relation type filter
+- **WHEN** user selects one or more relation types
+- **THEN** only matching relations are rendered
+
+### Requirement: module and hotspot insight
+The panel SHALL expose module summary and hotspot ranking.
+
+#### Scenario: module summary
+- **WHEN** modules are available
+- **THEN** each module SHALL show file count, relation density, cross-module count, stale flag
+
+#### Scenario: hotspot
+- **WHEN** candidate has high risk score
+- **THEN** it SHALL appear in hotspot list with reason (`many-dependents`, `cross-layer-hub`, `missing-test`, `stale`, `large-file`)
+
+### Requirement: impact overlay from changes
+The panel SHALL compute and show impact for changed files.
+
+#### Scenario: explicit changed files
+- **WHEN** explicit changed files are passed
+- **THEN** they take precedence over git-derived changes
+
+#### Scenario: unmapped changed files
+- **WHEN** changed file is absent from latest scan
+- **THEN** it SHALL be listed as unmapped with remediation hint
+
+#### Scenario: impact summary card is shown
+- **WHEN** impact artifact is available
+- **THEN** UI SHALL show changed, direct, transitive, unmapped, and risk flag counts as capped summary
+- **AND** it SHALL NOT render impacted edges directly on the main Project Map canvas
+
+### Requirement: stale and repair visibility
+The panel SHALL surface stale reasons and repair summaries.
+
+#### Scenario: stale by git/fingerprint
+- **WHEN** stale is detected
+- **THEN** banner SHALL indicate stale reason and refresh mode
+
+#### Scenario: repair exists
+- **WHEN** repair summary has entries
+- **THEN** user sees issue count and severity by type
+
+### Requirement: UA-style actions over Project Map relationship substrate
+The panel SHALL provide actions corresponding to explain/diff/onboard/chat/domain without schema coupling.
+
+#### Scenario: explain selected file
+- **WHEN** user triggers explain
+- **THEN** an explain pack is assembled from neighborhood relations
+
+#### Scenario: diff view
+- **WHEN** diff impact is requested
+- **THEN** changed and affected files are surfaced with relation paths
+
+#### Scenario: guided read tour
+- **WHEN** enough context exists
+- **THEN** system can propose guided read order
+

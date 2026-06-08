@@ -2,6 +2,7 @@ import type {
   ProjectMapDataset,
   ProjectMapNode,
   ProjectMapRelatedArtifact,
+  ProjectMapRelationshipAgentReadPlan,
   ProjectMapSource,
 } from "../../project-map/types";
 import type { OrchestrationRiskMarker, OrchestrationSourceRef, OrchestrationTask } from "../types";
@@ -119,6 +120,110 @@ function buildRiskMarkers(node: ProjectMapNode, evidenceRefs: OrchestrationSourc
   return risks;
 }
 
+function buildRelationshipContextEvidenceRefs(input: {
+  contextPack: ProjectMapRelationshipAgentReadPlan;
+  workspacePath?: string | null;
+}): OrchestrationSourceRef[] {
+  const paths = [
+    ...input.contextPack.mustReadFiles.map((path) => ({ path, kind: "file", label: "must-read" })),
+    ...input.contextPack.relatedFiles.map((path) => ({ path, kind: "file", label: "related" })),
+    ...input.contextPack.testTargets.map((path) => ({ path, kind: "test", label: "test" })),
+    ...input.contextPack.contracts.map((path) => ({ path, kind: "document", label: "contract" })),
+  ];
+  const refsByPath = new Map<string, OrchestrationSourceRef>();
+  for (const item of paths) {
+    if (refsByPath.has(item.path)) {
+      continue;
+    }
+    refsByPath.set(item.path, createOrchestrationSourceRef({
+      providerId: "project-map",
+      kind: item.kind,
+      id: `project-map:relationship:${input.contextPack.provenance.scanRunId}:${refsByPath.size}`,
+      label: `${item.label}: ${item.path}`,
+      path: item.path,
+      workspacePath: input.workspacePath,
+      confidence: input.contextPack.staleReason ? "medium" : "high",
+      stale: Boolean(input.contextPack.staleReason),
+      capabilities: ["open_source"],
+      metadata: {
+        scanRunId: input.contextPack.provenance.scanRunId,
+        source: "project-map-relations",
+      },
+    }));
+  }
+  return [...refsByPath.values()].slice(0, 48);
+}
+
+export function buildProjectMapRelationshipContextTaskDraft(input: {
+  workspaceId: string;
+  contextPack: ProjectMapRelationshipAgentReadPlan | null | undefined;
+  workspacePath?: string | null;
+  now?: string;
+}): OrchestrationTask | null {
+  const contextPack = input.contextPack;
+  if (
+    !contextPack ||
+    (
+      contextPack.mustReadFiles.length === 0 &&
+      contextPack.relatedFiles.length === 0 &&
+      contextPack.testTargets.length === 0 &&
+      contextPack.contracts.length === 0
+    )
+  ) {
+    return null;
+  }
+  const sourceRef = createOrchestrationSourceRef({
+    providerId: "project-map",
+    kind: "project_map_context_pack",
+    id: `project-map-context-pack:${contextPack.provenance.scanRunId}`,
+    label: "Project Map relationship context pack",
+    workspacePath: input.workspacePath,
+    confidence: contextPack.staleReason ? "medium" : "high",
+    stale: Boolean(contextPack.staleReason),
+    capabilities: ["open_source", "create_task"],
+    metadata: {
+      scanRunId: contextPack.provenance.scanRunId,
+      relationCount: contextPack.provenance.relationIds.length,
+      fileCount: contextPack.provenance.fileIds.length,
+    },
+  });
+  const evidenceRefs = buildRelationshipContextEvidenceRefs({
+    contextPack,
+    workspacePath: input.workspacePath,
+  });
+  const riskMarkers: OrchestrationRiskMarker[] = [
+    ...(contextPack.staleReason
+      ? [{ kind: "stale_source" as const, label: contextPack.staleReason, sourceRefId: sourceRef.id }]
+      : []),
+    ...contextPack.riskFlags.slice(0, 8).map((flag) => ({
+      kind: "relationship_context_risk" as const,
+      label: flag.label,
+      sourceRefId: sourceRef.id,
+    })),
+  ];
+  return createOrchestrationTask({
+    taskId: `project-map-relationship-context-${contextPack.provenance.scanRunId}`,
+    workspaceId: input.workspaceId,
+    title: "Review Project Map relationship context",
+    status: riskMarkers.length ? "candidate" : "planned",
+    sourceRefs: [sourceRef],
+    evidenceRefs,
+    riskMarkers,
+    scopeSummary:
+      `Use Project Map relationship context pack: ${contextPack.mustReadFiles.length} must-read, ` +
+      `${contextPack.relatedFiles.length} related, ${contextPack.testTargets.length} tests, ` +
+      `${contextPack.contracts.length} contracts.`,
+    acceptanceSummary: "Agent work uses relationship context-pack before any broad resource scan.",
+    promptSummary: [
+      "Prefer project-map-relations/context-packs/latest.json.",
+      "Read mustReadFiles first, then relatedFiles, then tests/contracts.",
+      contextPack.staleReason ? `Stale warning: ${contextPack.staleReason}` : "Context pack is fresh.",
+    ].join("\n"),
+    threadStrategy: "new_thread",
+    now: input.now,
+  });
+}
+
 export function buildProjectMapOrchestrationTaskDraft(input: {
   workspaceId: string;
   dataset: ProjectMapDataset;
@@ -173,12 +278,19 @@ export function buildProjectMapOrchestrationTaskDraft(input: {
 export function readProjectMapOrchestrationCandidates(input: {
   workspaceId: string;
   dataset: ProjectMapDataset | null | undefined;
+  relationshipContextPack?: ProjectMapRelationshipAgentReadPlan | null;
   now?: string;
 }): OrchestrationTask[] {
+  const relationshipContextTask = buildProjectMapRelationshipContextTaskDraft({
+    workspaceId: input.workspaceId,
+    contextPack: input.relationshipContextPack,
+    workspacePath: input.dataset?.manifest.workspacePath ?? null,
+    now: input.now,
+  });
   if (!input.dataset) {
-    return [];
+    return relationshipContextTask ? [relationshipContextTask] : [];
   }
-  return input.dataset.nodes.flatMap((node) =>
+  const nodeTasks = input.dataset.nodes.flatMap((node) =>
     buildProjectMapOrchestrationTaskDraft({
       workspaceId: input.workspaceId,
       dataset: input.dataset!,
@@ -186,6 +298,7 @@ export function readProjectMapOrchestrationCandidates(input: {
       now: input.now,
     }) ?? [],
   );
+  return relationshipContextTask ? [relationshipContextTask, ...nodeTasks] : nodeTasks;
 }
 
 export function resolveProjectMapOrchestrationSourceNode(input: {

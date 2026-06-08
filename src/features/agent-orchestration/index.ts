@@ -33,6 +33,7 @@ export {
 } from "./utils/sourceRefs";
 export { createManualOrchestrationTaskDraft } from "./providers/manualProvider";
 export {
+  buildProjectMapRelationshipContextTaskDraft,
   buildProjectMapOrchestrationTaskDraft,
   readProjectMapOrchestrationCandidates,
   resolveProjectMapOrchestrationSourceNode,

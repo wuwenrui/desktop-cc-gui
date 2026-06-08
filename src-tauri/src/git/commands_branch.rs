@@ -21,6 +21,21 @@ pub(crate) async fn list_git_branches(
         .ok_or("workspace not found")?
         .clone();
     let repo_root = resolve_git_root(&entry)?;
+    if !path_has_git_repository_marker(&repo_root) {
+        return Ok(json!({
+            "branches": [],
+            "localBranches": [],
+            "remoteBranches": [],
+            "currentBranch": null,
+            "repositoryState": "not_git_repository",
+            "diagnostic": {
+                "kind": "neutral_non_repository",
+                "reason": "missing_git_marker",
+                "workspaceId": workspace_id,
+                "pathKind": "workspace_path"
+            }
+        }));
+    }
     let repo = open_repository_at_root(&repo_root)?;
     let current_branch = repo
         .head()
@@ -119,7 +134,8 @@ pub(crate) async fn list_git_branches(
         "branches": legacy_branches,
         "localBranches": local_branches,
         "remoteBranches": remote_branches,
-        "currentBranch": current_branch
+        "currentBranch": current_branch,
+        "repositoryState": "git_repository"
     }))
 }
 
@@ -1258,6 +1274,9 @@ mod tests {
                 crate::workspaces::DetachedExternalChangeRuntime::default(),
             ),
             runtime_manager: std::sync::Arc::new(crate::runtime::RuntimeManager::new(&data_dir)),
+            renderer_heartbeats: tokio::sync::Mutex::new(
+                crate::renderer_stability::RendererHeartbeatStore::default(),
+            ),
             engine_manager: crate::engine::EngineManager::new(),
         }
     }

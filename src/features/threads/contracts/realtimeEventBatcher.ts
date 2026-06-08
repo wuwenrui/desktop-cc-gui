@@ -1,6 +1,7 @@
 import type { NormalizedThreadEvent } from "./conversationCurtainContracts";
 
 export type RealtimeBatcherFlushReason =
+  | "cadence"
   | "first-token"
   | "terminal"
   | "manual";
@@ -100,8 +101,8 @@ export function createRealtimeEventBatcher() {
       });
       return output;
     },
-    flush(): RealtimeBatcherFlush | null {
-      return flushPending("manual");
+    flush(reason: RealtimeBatcherFlushReason = "manual"): RealtimeBatcherFlush | null {
+      return flushPending(reason);
     },
   };
 }

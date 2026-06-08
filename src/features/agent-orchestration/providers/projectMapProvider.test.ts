@@ -6,6 +6,7 @@ import {
   createProjectMapSourceFixture,
 } from "../../project-map/testUtils/fixtures";
 import {
+  buildProjectMapRelationshipContextTaskDraft,
   buildProjectMapOrchestrationTaskDraft,
   readProjectMapOrchestrationCandidates,
   resolveProjectMapOrchestrationSourceNode,
@@ -96,5 +97,39 @@ describe("project map orchestration provider", () => {
       dataset: { ...dataset, nodes: [] },
       task: task!,
     })).toEqual({ status: "missing", nodeId: "project-core" });
+  });
+
+  it("creates a resource discovery candidate from relationship context-pack", () => {
+    const task = buildProjectMapRelationshipContextTaskDraft({
+      workspaceId: "workspace-a",
+      workspacePath: "/Users/demo/workspace",
+      contextPack: {
+        schemaVersion: 1,
+        generatedAt: "2026-06-05T00:00:00.000Z",
+        mustReadFiles: ["src/api/controller.ts"],
+        relatedFiles: ["src/api/service.ts"],
+        testTargets: ["src/api/controller.test.ts"],
+        contracts: ["openspec/changes/demo/spec.md"],
+        riskFlags: [],
+        provenance: {
+          scanRunId: "relationship-scan-test",
+          relationIds: ["rel-a"],
+          fileIds: ["file-a"],
+        },
+      },
+    });
+
+    expect(task).toMatchObject({
+      taskId: "project-map-relationship-context-relationship-scan-test",
+      title: "Review Project Map relationship context",
+      status: "planned",
+      sourceRefs: [expect.objectContaining({ kind: "project_map_context_pack" })],
+      evidenceRefs: [
+        expect.objectContaining({ workspaceRelativePath: "src/api/controller.ts" }),
+        expect.objectContaining({ workspaceRelativePath: "src/api/service.ts" }),
+        expect.objectContaining({ workspaceRelativePath: "src/api/controller.test.ts" }),
+        expect.objectContaining({ workspaceRelativePath: "openspec/changes/demo/spec.md" }),
+      ],
+    });
   });
 });

@@ -28,6 +28,7 @@ describe("rendererDiagnostics", () => {
   afterEach(async () => {
     const diagnostics = await import("./rendererDiagnostics");
     diagnostics.stopRendererBlankScreenWatchdog();
+    diagnostics.stopRendererHeartbeat();
     vi.useRealTimers();
   });
 
@@ -393,5 +394,32 @@ describe("rendererDiagnostics", () => {
     await new Promise((resolve) => setTimeout(resolve, 550));
 
     expect(clientStorageMocks.writeClientStoreValue).not.toHaveBeenCalled();
+  });
+
+  it("builds privacy-safe renderer heartbeat payload without conversation content fields", async () => {
+    vi.stubGlobal("navigator", {
+      platform: "MacIntel",
+    });
+    vi.stubGlobal("document", {
+      visibilityState: "visible",
+      readyState: "complete",
+    });
+    clientStorageMocks.isPreloaded.mockReturnValue(true);
+    clientStorageMocks.getClientStoreSync.mockReturnValue([]);
+    const diagnostics = await import("./rendererDiagnostics");
+
+    const payload = diagnostics.buildRendererHeartbeatPayload({
+      workspaceId: "workspace-1",
+      threadId: "thread-1",
+    });
+    const serialized = JSON.stringify(payload);
+
+    expect(payload.workspaceId).toBe("workspace-1");
+    expect(payload.threadId).toBe("thread-1");
+    expect(serialized).not.toContain("prompt");
+    expect(serialized).not.toContain("assistant");
+    expect(serialized).not.toContain("toolOutput");
+    expect(serialized).not.toContain("fileContent");
+    expect(serialized).not.toContain("environment");
   });
 });

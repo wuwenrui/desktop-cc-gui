@@ -143,7 +143,7 @@ export function useGitPanelController({
   onOpenEditorLayoutRequest?: () => void;
 }) {
   const [centerMode, setCenterMode] = useState<
-    "chat" | "diff" | "editor" | "memory" | "projectMap"
+    "chat" | "diff" | "editor" | "memory" | "projectMap" | "intentCanvas"
   >("chat");
   const [openFileTabs, setOpenFileTabs] = useState<string[]>([]);
   const [activeEditorFilePath, setActiveEditorFilePath] = useState<string | null>(null);
