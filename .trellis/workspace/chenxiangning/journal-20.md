@@ -1123,3 +1123,50 @@ Codex app-server 对话链路切换为 codex-tui 兼容身份，补 terminal env
 ### Next Steps
 
 - None - task complete
+
+
+## Session 762: 修复大文件拆分后启动崩溃
+
+**Date**: 2026-06-08
+**Task**: 修复大文件拆分后启动崩溃
+**Branch**: `feature/v0.5.8`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| Area | Summary |
+|------|---------|
+| App shell split regression | Restored `handleDispatchOrchestrationTask` wiring after extracting Kanban execution logic. |
+| Kanban execution section | Moved orchestration dispatch dependencies into `useAppShellKanbanExecutionSection` and returned the handler to `useAppShellSections`. |
+| Regression coverage | Added a static adapter contract assertion so the extracted execution section must destructure and return the dispatch handler. |
+
+**Root Cause**:
+`useAppShellSections.ts` still returned `handleDispatchOrchestrationTask`, but the extracted `useAppShellKanbanExecutionSection` did not return it. Because the adapter file is still under legacy `ts-nocheck`, TypeScript did not catch the missing binding and the app failed at runtime during initial render.
+
+**Validation**:
+- `npm run typecheck -- --pretty false`
+- `npm run lint`
+- `npm run check:large-files`
+- `npx vitest run --maxWorkers 1 --minWorkers 1 src/app-shell-parts/useAppShellSections.kanban-text.test.ts src/app-shell-parts/useAppShellLayoutNodesSection.test.ts src/features/layout/hooks/useLayoutNodes.client-ui-visibility.test.tsx`
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `58ca7358` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
