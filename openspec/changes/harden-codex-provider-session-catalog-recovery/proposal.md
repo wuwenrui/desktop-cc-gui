@@ -1,10 +1,12 @@
 ## 当前状态 / Current Status
 
-**状态：Planning complete / Implementation not started。**
+**状态：Implementation mostly complete / Closure pending。**
 
-这个 change 目前只完成了 OpenSpec 提案、设计、任务拆分和 capability delta。代码实现还没有开始：`tasks.md` 中 Backend Source Discovery、Catalog Projection、Mutation Routing、Regression Tests 都仍是未勾选状态。
+这个 change 已经完成主要代码实现和自动化回归：Codex workspace catalog 会扫描 managed provider homes，provider-home rows 会投影 provider metadata，archive/delete/folder mutation 能定位 provider-home session，frontend sidebar continuity 已有 provider-backed row 测试覆盖。
 
-**English summary:** This change is currently a completed plan only. The implementation and regression tests are not done yet.
+已补齐 `WorkspaceSessionCatalogSourceStatus.sourceKind`，Codex 会分别上报 `disk` 与 `provider-home` completeness；旧的按 engine 消费逻辑会取最不完整状态，避免 provider-home degraded 被 disk complete 掩盖。真实 app 的“创建 managed-provider Codex session -> 重启 -> 左侧栏验证 provider label 和 archive/delete/folder actions”手工验证还未执行。
+
+**English summary:** The main implementation and automated regressions are mostly complete. Codex workspace catalog scans managed provider homes, projects provider metadata, resolves provider-home mutation targets, reports separate `disk` and `provider-home` source completeness via `sourceKind`, and has frontend sidebar continuity coverage. The remaining closure item is real app manual restart verification.
 
 ## 为什么要做 / Why
 
