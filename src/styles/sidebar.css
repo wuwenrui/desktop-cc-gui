@@ -102,6 +102,99 @@
   border-color: color-mix(in srgb, var(--border-strong) 62%, transparent);
 }
 
+/* lawhub 内联展开菜单 */
+.lawhub-chevron {
+  margin-left: auto;
+  flex-shrink: 0;
+  color: var(--text-faint);
+}
+
+.lawhub-subitem {
+  padding-left: 30px;
+}
+
+.lawhub-file-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 28px;
+  padding: 0 8px 0 30px;
+  border-radius: 8px;
+  color: var(--text-strong);
+  transition: background-color 0.16s ease;
+}
+
+.lawhub-file-row:hover {
+  background: var(--surface-hover);
+}
+
+.lawhub-file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.lawhub-file-publish {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.lawhub-file-publish:hover {
+  color: var(--text-strong);
+}
+
+.lawhub-hint {
+  padding: 6px 8px 6px 30px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.lawhub-login {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 8px 8px 30px;
+}
+
+.lawhub-login input {
+  height: 28px;
+  padding: 0 8px;
+  font-size: 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-control);
+  color: var(--text-strong);
+}
+
+.lawhub-login-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.lawhub-login-actions button {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-control);
+  color: var(--text-strong);
+  cursor: pointer;
+}
+
 .app.layout-desktop.layout-swapped .sidebar-primary-nav .sidebar-primary-nav-item {
   justify-content: flex-start;
   text-align: left;
