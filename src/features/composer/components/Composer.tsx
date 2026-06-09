@@ -31,6 +31,10 @@ import type {
 } from "../../threads/hooks/useReviewPrompt";
 import type { EngineDisplayInfo } from "../../engine/hooks/useEngineController";
 import { computeDictationInsertion } from "../../../utils/dictation";
+import {
+  SELECT_SKILL_EVENT,
+  type SelectSkillEventDetail,
+} from "../../lawhub/pptSkill";
 import { useComposerAutocompleteState } from "../hooks/useComposerAutocompleteState";
 import { usePromptHistory } from "../hooks/usePromptHistory";
 import { useInlineHistoryCompletion } from "../hooks/useInlineHistoryCompletion";
@@ -964,6 +968,21 @@ export const Composer = memo(function Composer({
       return mergeUniqueNames(prev, [normalized]);
     });
   }, []);
+
+  // 外部入口（如侧栏 lawhub「制作 PPT」）通过 window 事件触发 skill 选择，
+  // 走与 $ 选择相同的路径附加 chip，不暴露 skill 提示词正文。
+  useEffect(() => {
+    const onSelectSkillEvent = (event: Event) => {
+      const detail = (event as CustomEvent<SelectSkillEventDetail>).detail;
+      const name = detail?.name?.trim();
+      if (name) {
+        handleSelectSkill(name);
+      }
+    };
+    window.addEventListener(SELECT_SKILL_EVENT, onSelectSkillEvent);
+    return () =>
+      window.removeEventListener(SELECT_SKILL_EVENT, onSelectSkillEvent);
+  }, [handleSelectSkill]);
 
   const {
     isAutocompleteOpen,

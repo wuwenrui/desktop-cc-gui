@@ -9,6 +9,7 @@ import type {
 } from "../../../types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SkillMarketNavItem } from "../../skill-market/SkillMarketNavItem";
+import { LawhubNavSection } from "../../lawhub/components/LawhubNavSection";
 import type { MouseEvent as ReactMouseEvent, ReactNode, RefObject } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -2157,6 +2158,12 @@ export function Sidebar({
               </span>
             </button>
             <SkillMarketNavItem />
+            <LawhubNavSection
+              activeWorkspaceId={activeWorkspaceId}
+              workspacePath={
+                workspaces.find((w) => w.id === activeWorkspaceId)?.path ?? null
+              }
+            />
           </nav>
           <ScrollArea
             className={`sidebar-content-column${scrollFade.top ? " fade-top" : ""}${
