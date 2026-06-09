@@ -1285,3 +1285,49 @@ Codex app-server 对话链路切换为 codex-tui 兼容身份，补 terminal env
 ### Next Steps
 
 - None - task complete
+
+
+## Session 766: 提交 Codex provider 作用域会话启动变更
+
+**Date**: 2026-06-09
+**Task**: 提交 Codex provider 作用域会话启动变更
+**Branch**: `feature/v0.5.8`
+
+### Summary
+
+按模块提交 Codex provider-scoped session launch：OpenSpec 规范、Rust provider runtime/session 绑定、前端 provider 选择展示，以及 Project Map 测试格式整理。
+
+### Main Changes
+
+本次会话按模块完成工作区整体提交：
+
+- docs(openspec): 新增 add-codex-provider-scoped-session-launch change artifacts，覆盖 proposal/design/tasks/spec deltas。
+- feat(codex): 后端支持 provider-scoped CODEX_HOME、runtime key、thread provider binding、catalog projection、fork provider rebind 与 thread-bound routing。
+- feat(sidebar): 前端支持 Codex 新会话 provider selector、sidebar provider badge/fallback label、fork dialog provider 选择、thread reducer metadata 保留、tauri service payload 与相关测试/i18n/styles。
+- refactor(project-map): 整理 API contract relation 相关 Rust 测试和轻量格式化变更。
+
+已执行：
+- npm run typecheck
+- npm run lint
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d1b8c648` | (see git log) |
+| `1b572f99` | (see git log) |
+| `6e1c97b6` | (see git log) |
+| `319293be` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
