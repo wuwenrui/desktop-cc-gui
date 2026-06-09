@@ -219,10 +219,16 @@ public class FcsOrderCancelParam {
     let endpoints = artifact.get("endpoints").and_then(Value::as_array).unwrap();
     let endpoint = endpoints
         .iter()
-        .find(|endpoint| endpoint.get("path").and_then(Value::as_str) == Some("/api/device-vehicle/od-pay/v1/fcs-order/cancel"))
+        .find(|endpoint| {
+            endpoint.get("path").and_then(Value::as_str)
+                == Some("/api/device-vehicle/od-pay/v1/fcs-order/cancel")
+        })
         .expect("expected cancel endpoint");
     assert_eq!(endpoint.get("method").and_then(Value::as_str), Some("POST"));
-    assert_eq!(endpoint.get("description").and_then(Value::as_str), Some("取消订单"));
+    assert_eq!(
+        endpoint.get("description").and_then(Value::as_str),
+        Some("取消订单")
+    );
     assert_eq!(
         endpoint
             .get("requestBody")
@@ -231,53 +237,50 @@ public class FcsOrderCancelParam {
             .and_then(Value::as_str),
         Some("FcsOrderCancelParam"),
     );
-    assert!(
-        endpoint
-            .get("parameters")
-            .and_then(Value::as_array)
-            .map(|parameters| parameters.iter().any(|parameter| {
-                parameter.get("location").and_then(Value::as_str) == Some("body")
-                    && parameter.get("name").and_then(Value::as_str) == Some("orderCancelParam")
-                    && parameter
-                        .get("structuredFields")
-                        .and_then(Value::as_array)
-                        .map(|fields| fields.iter().any(|field| {
+    assert!(endpoint
+        .get("parameters")
+        .and_then(Value::as_array)
+        .map(|parameters| parameters.iter().any(|parameter| {
+            parameter.get("location").and_then(Value::as_str) == Some("body")
+                && parameter.get("name").and_then(Value::as_str) == Some("orderCancelParam")
+                && parameter
+                    .get("structuredFields")
+                    .and_then(Value::as_array)
+                    .map(|fields| {
+                        fields.iter().any(|field| {
                             field.get("name").and_then(Value::as_str) == Some("orderNo")
-                                && field.get("description").and_then(Value::as_str) == Some("订单号")
+                                && field.get("description").and_then(Value::as_str)
+                                    == Some("订单号")
                                 && field.get("required").and_then(Value::as_bool) == Some(true)
-                        }))
-                        .unwrap_or(false)
-            }))
-            .unwrap_or(false)
-    );
-    assert!(
-        endpoint
-            .get("descriptionSources")
-            .and_then(Value::as_array)
-            .map(|sources| sources.iter().any(|source| {
-                source.get("text").and_then(Value::as_str) == Some("取消订单")
-            }))
-            .unwrap_or(false)
-    );
-    assert!(
-        endpoint
-            .get("responses")
-            .and_then(Value::as_array)
-            .map(|responses| responses.iter().any(|response| {
-                response.get("statusCode").and_then(Value::as_str) == Some("500")
-                    && response
-                        .get("structuredFields")
-                        .and_then(Value::as_array)
-                        .map(|fields| fields.iter().any(|field| {
-                            field
-                                .get("description")
-                                .and_then(Value::as_str)
+                        })
+                    })
+                    .unwrap_or(false)
+        }))
+        .unwrap_or(false));
+    assert!(endpoint
+        .get("descriptionSources")
+        .and_then(Value::as_array)
+        .map(|sources| sources
+            .iter()
+            .any(|source| { source.get("text").and_then(Value::as_str) == Some("取消订单") }))
+        .unwrap_or(false));
+    assert!(endpoint
+        .get("responses")
+        .and_then(Value::as_array)
+        .map(|responses| responses.iter().any(|response| {
+            response.get("statusCode").and_then(Value::as_str) == Some("500")
+                && response
+                    .get("structuredFields")
+                    .and_then(Value::as_array)
+                    .map(|fields| {
+                        fields.iter().any(|field| {
+                            field.get("description").and_then(Value::as_str)
                                 == Some("该订单已取消，不可再次操作")
-                        }))
-                        .unwrap_or(false)
-            }))
-            .unwrap_or(false)
-    );
+                        })
+                    })
+                    .unwrap_or(false)
+        }))
+        .unwrap_or(false));
 }
 
 #[test]
@@ -332,41 +335,52 @@ public class RealNameCheckParam {
         .and_then(Value::as_array)
         .unwrap()
         .iter()
-        .find(|endpoint| endpoint.get("path").and_then(Value::as_str) == Some("/api/device-vehicle/od-pay/v1/fcs-order/mm/check-real"))
+        .find(|endpoint| {
+            endpoint.get("path").and_then(Value::as_str)
+                == Some("/api/device-vehicle/od-pay/v1/fcs-order/mm/check-real")
+        })
         .expect("expected check-real endpoint");
     assert_eq!(
         endpoint.get("description").and_then(Value::as_str),
         Some("校验用户是否实名认证(23mm)")
     );
-    assert!(
-        endpoint
-            .get("parameters")
-            .and_then(Value::as_array)
-            .map(|parameters| parameters.iter().any(|parameter| {
-                parameter.get("location").and_then(Value::as_str) == Some("body")
-                    && parameter.get("schema").and_then(|schema| schema.get("name")).and_then(Value::as_str) == Some("RealNameCheckParam")
-                    && parameter
-                        .get("structuredFields")
-                        .and_then(Value::as_array)
-                        .map(|fields| fields.iter().any(|field| {
+    assert!(endpoint
+        .get("parameters")
+        .and_then(Value::as_array)
+        .map(|parameters| parameters.iter().any(|parameter| {
+            parameter.get("location").and_then(Value::as_str) == Some("body")
+                && parameter
+                    .get("schema")
+                    .and_then(|schema| schema.get("name"))
+                    .and_then(Value::as_str)
+                    == Some("RealNameCheckParam")
+                && parameter
+                    .get("structuredFields")
+                    .and_then(Value::as_array)
+                    .map(|fields| {
+                        fields.iter().any(|field| {
                             field.get("name").and_then(Value::as_str) == Some("vin")
-                                && field.get("description").and_then(Value::as_str) == Some("车辆 VIN")
-                                && field.get("example").and_then(Value::as_str) == Some("L123456789")
-                        }))
-                        .unwrap_or(false)
-            }))
-            .unwrap_or(false)
-    );
-    assert!(
-        endpoint
-            .get("responses")
-            .and_then(Value::as_array)
-            .map(|responses| responses.iter().any(|response| {
-                response.get("statusCode").and_then(Value::as_str) == Some("200")
-                    && response.get("schema").and_then(|schema| schema.get("name")).and_then(Value::as_str) == Some("R<Boolean>")
-            }))
-            .unwrap_or(false)
-    );
+                                && field.get("description").and_then(Value::as_str)
+                                    == Some("车辆 VIN")
+                                && field.get("example").and_then(Value::as_str)
+                                    == Some("L123456789")
+                        })
+                    })
+                    .unwrap_or(false)
+        }))
+        .unwrap_or(false));
+    assert!(endpoint
+        .get("responses")
+        .and_then(Value::as_array)
+        .map(|responses| responses.iter().any(|response| {
+            response.get("statusCode").and_then(Value::as_str) == Some("200")
+                && response
+                    .get("schema")
+                    .and_then(|schema| schema.get("name"))
+                    .and_then(Value::as_str)
+                    == Some("R<Boolean>")
+        }))
+        .unwrap_or(false));
 }
 
 #[test]
@@ -401,11 +415,21 @@ class GoodBasicService {
     let artifact = build_api_contract_artifact(
         &[
             (
-                scanned_file("src/main/java/com/demo/GoodBasicController.java", "java", "java", controller),
+                scanned_file(
+                    "src/main/java/com/demo/GoodBasicController.java",
+                    "java",
+                    "java",
+                    controller,
+                ),
                 controller.to_string(),
             ),
             (
-                scanned_file("src/main/java/com/demo/GoodBasicService.java", "java", "java", service),
+                scanned_file(
+                    "src/main/java/com/demo/GoodBasicService.java",
+                    "java",
+                    "java",
+                    service,
+                ),
                 service.to_string(),
             ),
         ],
@@ -419,11 +443,16 @@ class GoodBasicService {
         .and_then(Value::as_array)
         .unwrap();
     assert_eq!(call_chains.len(), 1);
-    let edges = call_chains[0].get("edges").and_then(Value::as_array).unwrap();
+    let edges = call_chains[0]
+        .get("edges")
+        .and_then(Value::as_array)
+        .unwrap();
     assert!(edges.iter().any(|edge| {
         edge.get("sourceSymbol").and_then(Value::as_str) == Some("GoodBasicController.shelfBatch")
-            && edge.get("targetSymbol").and_then(Value::as_str) == Some("GoodBasicService.shelfBatch")
-            && edge.get("targetFile").and_then(Value::as_str) == Some("src/main/java/com/demo/GoodBasicService.java")
+            && edge.get("targetSymbol").and_then(Value::as_str)
+                == Some("GoodBasicService.shelfBatch")
+            && edge.get("targetFile").and_then(Value::as_str)
+                == Some("src/main/java/com/demo/GoodBasicService.java")
     }));
     assert!(!edges.iter().any(|edge| {
         edge.get("targetSymbol")

@@ -689,13 +689,7 @@ fn java_field_binding_from_line(line: &str) -> Option<(String, String)> {
         .filter(|token| {
             !matches!(
                 *token,
-                "private"
-                    | "protected"
-                    | "public"
-                    | "static"
-                    | "final"
-                    | "volatile"
-                    | "transient"
+                "private" | "protected" | "public" | "static" | "final" | "volatile" | "transient"
             )
         })
         .collect::<Vec<_>>();
@@ -742,7 +736,10 @@ pub(super) fn build_java_call_resolution_context(
         let Some(file_id) = resolve_java_import(&import_name, java_file_by_type) else {
             continue;
         };
-        type_file_by_name.insert(simple_java_type_name(&import_name).to_string(), file_id.clone());
+        type_file_by_name.insert(
+            simple_java_type_name(&import_name).to_string(),
+            file_id.clone(),
+        );
         type_file_by_name.insert(import_name, file_id);
     }
 

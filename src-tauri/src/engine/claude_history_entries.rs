@@ -456,7 +456,7 @@ pub(crate) fn is_claude_control_plane_entry(entry: &Value) -> bool {
             entry
                 .get("message")
                 .and_then(|message| message.get("params"))
-    });
+        });
     if let Some(params) = params {
         if is_gui_control_plane_client_info(params) && has_experimental_api_capability(params) {
             return true;
