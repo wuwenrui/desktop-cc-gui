@@ -1640,6 +1640,11 @@ export type LocalUsageSessionSummary = {
   summary?: string | null;
   source?: string | null;
   provider?: string | null;
+  providerProfileId?: string | null;
+  providerProfileSource?: string | null;
+  providerProfileName?: string | null;
+  providerAvailability?: string | null;
+  physicalPath?: string | null;
   fileSizeBytes?: number;
   modifiedLines?: number;
 };

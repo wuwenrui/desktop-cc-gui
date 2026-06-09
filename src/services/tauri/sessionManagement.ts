@@ -63,6 +63,7 @@ export type WorkspaceSessionSourceCompleteness =
 
 export interface WorkspaceSessionCatalogSourceStatus {
   engine: string;
+  sourceKind?: string | null;
   completeness: WorkspaceSessionSourceCompleteness;
   reason?: string | null;
   scannedCandidates?: number | null;
