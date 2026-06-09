@@ -95,7 +95,11 @@ export function isSharedSessionThreadId(threadId: string): boolean {
 
 export function isSessionCatalogNotReadyError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
-  return message.toLowerCase().includes("session does not belong to target workspace");
+  const normalizedMessage = message.toLowerCase();
+  return (
+    normalizedMessage.includes("session does not belong to target workspace") ||
+    normalizedMessage.includes("codex session target could not be resolved safely")
+  );
 }
 
 export function resolveEnginePrefix(threadId: string): "claude" | "gemini" | "opencode" | "codex" {

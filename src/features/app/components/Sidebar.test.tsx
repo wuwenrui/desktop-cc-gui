@@ -12,6 +12,7 @@ import {
 import { pushErrorToast } from "../../../services/toasts";
 
 import { Sidebar } from "./Sidebar";
+import { isSessionCatalogNotReadyError } from "./sidebarInternals";
 
 afterEach(() => {
   cleanup();
@@ -19,6 +20,23 @@ afterEach(() => {
 
 beforeEach(() => {
   resetSidebarTestMocks();
+});
+
+describe("sidebarInternals", () => {
+  it("recognizes legacy and Codex provider-home unresolved session errors as retryable", () => {
+    expect(
+      isSessionCatalogNotReadyError(
+        new Error("session does not belong to target workspace"),
+      ),
+    ).toBe(true);
+    expect(
+      isSessionCatalogNotReadyError(
+        new Error(
+          "Codex session target could not be resolved safely for this workspace; provider-home source may be incomplete or the session no longer belongs to this workspace",
+        ),
+      ),
+    ).toBe(true);
+  });
 });
 
 describe("Sidebar", () => {
