@@ -1820,3 +1820,52 @@ Codex app-server 对话链路切换为 codex-tui 兼容身份，补 terminal env
 ### Next Steps
 
 - None - task complete
+
+
+## Session 779: Session Activity 轮次产物语义 diff 第一版
+
+**Date**: 2026-06-10
+**Task**: Session Activity 轮次产物语义 diff 第一版
+**Branch**: `feature/v0.5.8`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| Area | Summary |
+|------|---------|
+| Product | 将 Session Activity 的文件视图改为轮次级“产物”视图，按对话轮次展示 AI 改动了哪些文件。 |
+| UI | 合并 file-change card 与文件列表，产物模块内提供“产物 / 语义 diff” tabs，header 压缩为单行，语义 diff 使用单列布局。 |
+| Semantics | 新增基于 diff evidence 的确定性语义摘要，覆盖 intent、behavior、risk、validation，并展示本轮语义。 |
+| Turn Context | `turnSemantic` 来自用户消息，并支持 child session 继承父轮次用户请求；文本由 React 转义展示。 |
+| Reliability | 产物 tab 计数按去重文件数显示，不再按底层 file-change event 数显示。 |
+| Governance | 新增 OpenSpec change `add-semantic-diff-review` 和 Trellis task PRD，并已归档 task。 |
+
+**Validation**:
+- `npx vitest run src/features/session-activity/components/WorkspaceSessionActivityPanel.test.tsx src/features/session-activity/adapters/buildWorkspaceSessionActivity.test.ts src/features/git/utils/semanticDiffSummary.test.ts` -> 98 passed
+- `npm run typecheck` -> passed
+- `npm run lint` -> passed
+- `npm run check:large-files` -> passed
+- `openspec validate add-semantic-diff-review --strict --no-interactive` -> valid
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1c5e6a6e` | (see git log) |
+| `0192308a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
