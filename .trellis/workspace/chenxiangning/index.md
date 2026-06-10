@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-21.md`
-- **Total Sessions**: 793
+- **Total Sessions**: 794
 - **Last Active**: 2026-06-10
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-21.md` | ~480 | Active |
+| `journal-21.md` | ~530 | Active |
 | `journal-20.md` | ~1997 | Archived |
 | `journal-19.md` | ~1989 | Archived |
 | `journal-18.md` | ~1966 | Archived |
@@ -49,6 +49,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 794 | 2026-06-10 | 修复长会话锚点跳转失效 | `fed155e8` | `feature/v0.5.8` |
 | 793 | 2026-06-10 | 修复接口探索面板高度 | `7b649ea6` | `feature/v0.5.8` |
 | 792 | 2026-06-10 | Fix Windows titlebar controls overlap | `997596d4` | `feature/v0.5.8` |
 | 791 | 2026-06-10 | Review 两日提交并修复跨平台边界 | `011247f7` | `feature/v0.5.8` |

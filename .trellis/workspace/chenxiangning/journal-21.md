@@ -478,3 +478,53 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 794: 修复长会话锚点跳转失效
+
+**Date**: 2026-06-10
+**Task**: 修复长会话锚点跳转失效
+**Branch**: `feature/v0.5.8`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## Task
+修复消息幕布在长会话/虚拟化场景下，左侧锚点和右侧“跳到消息”点击后无法跳转的问题。
+
+## Changes
+- `src/features/messages/components/Messages.tsx`: 统一锚点跳转入口，目标节点不存在时进入 pending jump，并在会话头切换时清理 pending 状态。
+- `src/features/messages/components/MessagesTimeline.tsx`: 当 pending jump 命中虚拟化未挂载行时，按 projection row index 调用 `virtualizer.scrollToIndex(..., { align: "center" })`，待目标节点挂载后交回父层做精确滚动。
+- `src/features/messages/components/messagesTimelineProjection.ts`: 新增 `findTimelineProjectionRowIndexByItemId`，用于 message id 定位 projection row。
+- 新增 `Messages.virtualized-jump.test.tsx`，覆盖长会话虚拟化下跳到未挂载消息时必须驱动 virtualizer 的回归场景。
+
+## Validation
+- `npx vitest run src/features/messages/components/messagesTimelineProjection.test.ts src/features/messages/components/Messages.live-behavior.test.tsx src/features/messages/components/Messages.virtualized-jump.test.tsx`
+- `npx eslint src/features/messages/components/Messages.tsx src/features/messages/components/MessagesTimeline.tsx src/features/messages/components/messagesTimelineProjection.ts src/features/messages/components/messagesTimelineProjection.test.ts src/features/messages/components/Messages.virtualized-jump.test.tsx --ext .ts,.tsx`
+- `npm run typecheck`
+- `git diff --check`
+
+## Notes
+- 未提交用户已有样式改动：`src/styles/session-activity.css`、`src/styles/sidebar.css`。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `fed155e8` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
