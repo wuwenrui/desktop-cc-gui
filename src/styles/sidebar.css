@@ -2022,8 +2022,8 @@
 }
 
 .thread-status.processing {
-  background: #ff9f43;
-  box-shadow: 0 0 0 4px rgba(255, 159, 67, 0.16);
+  background: #2f80ed;
+  box-shadow: 0 0 0 4px rgba(47, 128, 237, 0.18);
   animation: sidebar-thread-status-heartbeat 0.92s ease-in-out infinite;
 }
 
@@ -2061,7 +2061,7 @@
 }
 
 .thread-engine-badge.is-processing {
-  color: #ff9f43;
+  color: #7db7ff;
   opacity: 1;
   filter: none;
 }
@@ -2148,8 +2148,13 @@
 }
 
 .thread-runtime-badge--processing {
-  color: #ffb86b;
-  background: rgba(255, 159, 67, 0.14);
+  color: #7db7ff;
+  background: rgba(47, 128, 237, 0.16);
+}
+
+:root[data-theme="light"] .thread-runtime-badge--processing {
+  color: #1d4ed8;
+  background: #dbeafe;
 }
 
 .thread-runtime-badge--reviewing {
