@@ -1,10 +1,6 @@
-// @ts-nocheck
 import {
   useCallback,
   useEffect,
-  useMemo,
-  useRef,
-  useState,
 } from "react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { getWorkspaceFiles } from "../services/tauri";
@@ -29,9 +25,6 @@ import type { WorkspaceHomeDeleteResult } from "../features/workspaces/component
 import type { EngineType, WorkspaceInfo } from "../types";
 import {
   isRewindSupportedThreadId,
-  resolvePendingSessionThreadCandidate,
-  resolveTaskThreadId,
-  syncKanbanExecutionEngineAndModel,
 } from "./useAppShellSections.kanbanHelpers";
 import {
   getThreadSelectDiffCleanupAction,
@@ -40,6 +33,13 @@ import {
 } from "./threadEditorPreservation";
 import { useAppShellKanbanComposerSection } from "./useAppShellKanbanComposerSection";
 import { useAppShellKanbanExecutionSection } from "./useAppShellKanbanExecutionSection";
+import type { UseAppShellSectionsContext } from "./useAppShellSectionsTypes";
+import {
+  defineAppShellContextActions,
+  defineAppShellNavigationActions,
+  defineAppShellRuntimeActions,
+  defineAppShellTaskRunActions,
+} from "./appShellActionBoundaries";
 export {
   resolvePendingSessionThreadCandidate,
   resolveTaskThreadId,
@@ -48,20 +48,14 @@ export {
   syncKanbanExecutionEngineAndModel,
 } from "./useAppShellSections.kanbanHelpers";
 
-export function useAppShellSections(ctx: any) {
-  const {
+export function useAppShellSections(ctx: UseAppShellSectionsContext) {
+  const{
     activeWorkspace,
     workspaces,
-    kanbanPanels,
-    setKanbanViewState,
     setAppMode,
     activeEngine,
-    selectedAgent,
-    selectedAgentRef,
     activeWorkspaceId,
     activeThreadId,
-    interruptTurn,
-    normalizePath,
     addWorkspaceFromPath,
     alertError,
     workspacesById,
@@ -73,15 +67,10 @@ export function useAppShellSections(ctx: any) {
     selectWorkspace,
     setActiveThreadId,
     sendUserMessageToThread,
-    handleComposerSend,
     isPullRequestComposer,
     resetPullRequestSelection,
     threadsByWorkspace,
     addDebugEntry,
-    effectiveSelectedModelId,
-    kanbanCreateTask,
-    kanbanUpdateTask,
-    forkThreadForWorkspace,
     forkSessionFromMessageForWorkspace,
     forkClaudeSessionFromMessageForWorkspace,
     isCompact,
@@ -96,16 +85,8 @@ export function useAppShellSections(ctx: any) {
     clearDraftForThread,
     removeImagesForThread,
     t,
-    persistComposerSelectionForThread,
-    resolveComposerSelectionForThread,
-    threadItemsByThread,
-    threadStatusById,
-    kanbanTasks,
     appMode,
-    setSelectedKanbanTaskId,
     selectedKanbanTaskId,
-    workspacesByPath,
-    kanbanViewState,
     setActiveWorkspaceId,
     setWorkspaceHomeWorkspaceId,
     updateWorkspaceSettings,
@@ -138,7 +119,6 @@ export function useAppShellSections(ctx: any) {
     handleArchiveActiveThread,
     appSettings,
     groupedWorkspaces,
-    homeWorkspaceDefaultId,
     homeWorkspaceSelectedId,
     getThreadRows,
     getPinTimestamp,
@@ -162,18 +142,13 @@ export function useAppShellSections(ctx: any) {
     showHome,
     showKanban,
     showGitHistory,
-    showLoadingProgressDialog = () => "",
-    hideLoadingProgressDialog = () => {},
+    showLoadingProgressDialog,
+    hideLoadingProgressDialog,
     isWindowsDesktop,
     isMacDesktop,
     reduceTransparency,
-    handleComposerQueue,
     setSelectedDiffPath,
     handleSelectDiff,
-    setSelectedPullRequest,
-    setSelectedCommitSha,
-    setDiffSource,
-    resolveCanonicalThreadId,
   } = ctx;
 
   const {
@@ -255,7 +230,7 @@ export function useAppShellSections(ctx: any) {
       selectWorkspace(workspaceId);
       setActiveThreadId(threadId, workspaceId);
       const threads = threadsByWorkspace[workspaceId] ?? [];
-      const thread = threads.find((entry) => entry.id === threadId);
+      const thread = threads.find((entry: any) => entry.id === threadId);
       if (thread?.engineSource) {
         setActiveEngine(thread.engineSource);
       }
@@ -566,19 +541,19 @@ export function useAppShellSections(ctx: any) {
     const targetGroupId = target.settings.groupId ?? null;
     const ordered = workspaces
       .filter(
-        (entry) =>
+        (entry: WorkspaceInfo) =>
           (entry.kind ?? "main") !== "worktree" &&
           (entry.settings.groupId ?? null) === targetGroupId,
       )
       .slice()
-      .sort((a, b) => {
+      .sort((a: WorkspaceInfo, b: WorkspaceInfo) => {
         const orderDiff = orderValue(a) - orderValue(b);
         if (orderDiff !== 0) {
           return orderDiff;
         }
         return a.name.localeCompare(b.name);
       });
-    const index = ordered.findIndex((entry) => entry.id === workspaceId);
+    const index = ordered.findIndex((entry: WorkspaceInfo) => entry.id === workspaceId);
     if (index === -1) {
       return;
     }
@@ -591,7 +566,7 @@ export function useAppShellSections(ctx: any) {
     next[index] = next[nextIndex];
     next[nextIndex] = temp;
     await Promise.all(
-      next.map((entry, idx) =>
+      next.map((entry: WorkspaceInfo, idx: number) =>
         updateWorkspaceSettings(entry.id, {
           sortOrder: idx
         })
@@ -727,7 +702,7 @@ export function useAppShellSections(ctx: any) {
     async (path: string) => {
       const normalizedTarget = normalizeWorkspacePath(path);
       const existing = workspaces.find(
-        (entry) => normalizeWorkspacePath(entry.path) === normalizedTarget,
+        (entry: WorkspaceInfo) => normalizeWorkspacePath(entry.path) === normalizedTarget,
       );
       if (existing) {
         setActiveWorkspaceId(existing.id);
@@ -760,7 +735,7 @@ export function useAppShellSections(ctx: any) {
       return;
     }
     closeSettings();
-    setActiveTab((current) => (current === "spec" ? "codex" : current));
+    setActiveTab((current: string) => (current === "spec" ? "codex" : current));
     void getWorkspaceFiles(activeWorkspace.id)
       .then((result) =>
         openOrFocusDetachedSpecHub(
@@ -1006,24 +981,11 @@ export function useAppShellSections(ctx: any) {
   }${isSoloMode ? " solo-mode" : ""
   }`;
 
-  return {
-    selectedComposerKanbanPanelId,
-    setSelectedComposerKanbanPanelId,
-    composerKanbanContextMode,
-    setComposerKanbanContextMode,
-    composerLinkedKanbanPanels,
-    handleOpenComposerKanbanPanel,
-    handleComposerSendWithEditorFallback,
-    handleComposerQueueWithEditorFallback,
-    handleRewindFromMessage,
-    handleSelectWorkspaceInstance,
-    handleStartWorkspaceConversation,
-    handleStartSharedConversation,
-    handleContinueLatestConversation,
-    handleStartGuidedConversation,
-    handleRevealActiveWorkspace,
-    handleDeleteWorkspaceConversations,
-    handleDeleteWorkspaceConversationsInSettings,
+  const runtimeActions = defineAppShellRuntimeActions({
+    handleToggleRuntimeConsole,
+    handleToggleTerminalPanel,
+  });
+  const taskRunActions = defineAppShellTaskRunActions({
     handleOpenTaskConversation,
     handleRetryTaskRun,
     handleResumeTaskRun,
@@ -1032,8 +994,48 @@ export function useAppShellSections(ctx: any) {
     handleCloseTaskConversation,
     handleKanbanCreateTask,
     handleDispatchOrchestrationTask,
-    taskProcessingMap,
     handleDragToInProgress,
+  });
+  const navigationActions = defineAppShellNavigationActions({
+    handleSelectWorkspaceInstance,
+    handleStartWorkspaceConversation,
+    handleStartSharedConversation,
+    handleContinueLatestConversation,
+    handleStartGuidedConversation,
+    handleRevealActiveWorkspace,
+    handleOpenSpecHub,
+    handleOpenClientDocumentation,
+    handleOpenWorkspaceHome,
+    handleOpenHomeChat,
+    handleSelectHomeWorkspace,
+    handleSelectWorkspacePathForGitHistory,
+  });
+  const contextActions = defineAppShellContextActions({
+    handleOpenWorkspaceFile,
+    handleActivateWorkspaceFileTab,
+    handleCloseWorkspaceFileTab,
+    handleCloseAllWorkspaceFileTabs,
+    handleExitWorkspaceEditor,
+    handleSelectDiffForPanel,
+    handleRewindFromMessage,
+    handleDeleteWorkspaceConversations,
+    handleDeleteWorkspaceConversationsInSettings,
+  });
+
+  return {
+    ...runtimeActions,
+    ...taskRunActions,
+    ...navigationActions,
+    ...contextActions,
+    selectedComposerKanbanPanelId,
+    setSelectedComposerKanbanPanelId,
+    composerKanbanContextMode,
+    setComposerKanbanContextMode,
+    composerLinkedKanbanPanels,
+    handleOpenComposerKanbanPanel,
+    handleComposerSendWithEditorFallback,
+    handleComposerQueueWithEditorFallback,
+    taskProcessingMap,
     handleMoveWorkspace,
     shouldMountSpecHub,
     showSpecHub,
@@ -1042,21 +1044,9 @@ export function useAppShellSections(ctx: any) {
     isSoloMode,
     toggleSoloMode,
     sidebarToggleProps,
-    handleOpenWorkspaceFile,
-    handleActivateWorkspaceFileTab,
-    handleCloseWorkspaceFileTab,
-    handleCloseAllWorkspaceFileTabs,
-    handleExitWorkspaceEditor,
     showComposer,
     showGitDetail,
-    handleSelectDiffForPanel,
     handleCloseGitHistoryPanel,
-    handleSelectWorkspacePathForGitHistory,
-    handleOpenSpecHub,
-    handleOpenClientDocumentation,
-    handleOpenWorkspaceHome,
-    handleOpenHomeChat,
-    handleSelectHomeWorkspace,
     handleRefreshAccountRateLimits,
     dropOverlayActive,
     dropOverlayText,

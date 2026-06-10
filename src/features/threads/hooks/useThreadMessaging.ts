@@ -1,6 +1,5 @@
 import { useCallback, useRef } from "react";
 import type { Dispatch, MutableRefObject } from "react";
-import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import type {
   AccessMode,
@@ -104,6 +103,12 @@ import {
   shouldDeferCodexActivityUntilTurnAccepted,
 } from "../utils/codexConversationLiveness";
 import { formatBrowserContextPromptOnce } from "../../browser-agent";
+import {
+  buildLocalizedMemoryScoutPreviewText,
+  extractClaudeCandidateSessionId,
+  normalizeEngineScopedEffort,
+  withMemoryScoutTimeout,
+} from "./messageRuntimeController";
 
 type SendMessageOptions = {
   skipPromptExpansion?: boolean;
@@ -159,25 +164,6 @@ const AGENT_PROMPT_HEADER = "## Agent Role and Instructions";
 const AGENT_PROMPT_NAME_PREFIX = "Agent Name:";
 const AGENT_PROMPT_ICON_PREFIX = "Agent Icon:";
 
-function buildLocalizedMemoryScoutPreviewText(brief: MemoryBrief, t: TFunction) {
-  if (brief.status === "ok") {
-    const titles = brief.items.map((item) => item.title).slice(0, 3).join("；");
-    return t("threads.memoryReferenceReferenced", {
-      count: brief.items.length,
-      titlesSuffix: titles
-        ? t("threads.memoryReferenceTitlesSuffix", { titles })
-        : "",
-    });
-  }
-  if (brief.status === "timeout") {
-    return t("threads.memoryReferenceTimeout");
-  }
-  if (brief.status === "error") {
-    return t("threads.memoryReferenceError");
-  }
-  return t("threads.memoryReferenceNoRelated");
-}
-
 const isThreadMessagingTestMode = (() => {
   try {
     return import.meta.env.MODE === "test";
@@ -192,55 +178,6 @@ const shouldEmitThreadMessagingDevLogs = (() => {
     return false;
   }
 })();
-const MEMORY_SCOUT_TIMEOUT_MS = 1500;
-const CLAUDE_REASONING_EFFORTS = new Set(["low", "medium", "high", "xhigh", "max"]);
-
-function extractClaudeCandidateSessionId(response: Record<string, unknown>): string | null {
-  const candidate = extractSessionIdFromEngineSendResponse(response);
-  return candidate && candidate !== "pending" ? candidate : null;
-}
-
-function normalizeEngineScopedEffort(
-  engine: "claude" | "codex" | "gemini" | "opencode",
-  effort: string | null | undefined,
-): string | null {
-  if (typeof effort !== "string") {
-    return null;
-  }
-  const trimmed = effort.trim();
-  if (!trimmed) {
-    return null;
-  }
-  if (engine === "claude") {
-    return CLAUDE_REASONING_EFFORTS.has(trimmed) ? trimmed : null;
-  }
-  if (engine === "codex") {
-    return trimmed;
-  }
-  return null;
-}
-
-function withMemoryScoutTimeout(action: Promise<MemoryBrief>, timeoutMs = MEMORY_SCOUT_TIMEOUT_MS) {
-  const startedAt = Date.now();
-  return Promise.race<MemoryBrief>([
-    action,
-    new Promise((resolve) => {
-      window.setTimeout(() => {
-        resolve({
-          status: "timeout",
-          query: "",
-          memories: [],
-          items: [],
-          conflicts: [],
-          truncated: false,
-          elapsedMs: Date.now() - startedAt,
-          retrievalMode: "lexical",
-        });
-      }, timeoutMs);
-    }),
-  ]);
-}
-
 type UseThreadMessagingOptions = {
   activeWorkspace: WorkspaceInfo | null;
   activeThreadId: string | null;
