@@ -28,6 +28,8 @@ describe("update release configuration", () => {
     const workflow = readWorkspaceFile(".github/workflows/release.yml");
 
     expect(workflow).toContain("UPDATE_BASE_URL");
+    expect(workflow).toContain('"version": os.environ["VERSION"]');
+    expect(workflow).not.toContain('"version": "${VERSION}"');
     expect(workflow).not.toContain("github.com/wuwenrui/desktop-cc-gui/releases/download/v${VERSION}");
   });
 

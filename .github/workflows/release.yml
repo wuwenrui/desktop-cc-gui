@@ -383,7 +383,7 @@ jobs:
           Path("release-artifacts/release-notes.md").write_text(notes + "\n")
           PY
 
-          UPDATE_BASE_URL="$UPDATE_BASE_URL" python3 - <<'PY'
+          VERSION="$VERSION" UPDATE_BASE_URL="$UPDATE_BASE_URL" python3 - <<'PY'
           import json
           import os
           from datetime import datetime, timezone
@@ -444,7 +444,7 @@ jobs:
               break
 
           payload = {
-            "version": "${VERSION}",
+            "version": os.environ["VERSION"],
             "notes": notes,
             "pub_date": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "platforms": platforms,
