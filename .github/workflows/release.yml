@@ -24,6 +24,7 @@ jobs:
       MACOSX_DEPLOYMENT_TARGET: "10.13"
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
       TAURI_SIGNING_PRIVATE_KEY_B64: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_B64 }}
+      LAWYER_COPILOT_UPDATE_BASE_URL: ${{ vars.LAWYER_COPILOT_UPDATE_BASE_URL }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -58,6 +59,9 @@ jobs:
           mkdir -p "$HOME/.tauri"
           # DO NOT decode - Tauri expects base64-encoded key
           printf '%s' "$TAURI_SIGNING_PRIVATE_KEY_B64" > "$HOME/.tauri/ccgui.key"
+
+      - name: Configure self-hosted updater endpoint
+        run: node scripts/configure-updater-endpoint.mjs
 
       - name: Build app bundle
         env:
@@ -146,6 +150,7 @@ jobs:
     env:
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
       TAURI_SIGNING_PRIVATE_KEY_B64: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_B64 }}
+      LAWYER_COPILOT_UPDATE_BASE_URL: ${{ vars.LAWYER_COPILOT_UPDATE_BASE_URL }}
     steps:
       - uses: actions/checkout@v4
 
@@ -171,6 +176,9 @@ jobs:
 
       - name: install frontend dependencies
         run: npm ci
+
+      - name: Configure self-hosted updater endpoint
+        run: node scripts/configure-updater-endpoint.mjs
 
       - name: build AppImage
         env:
@@ -228,6 +236,7 @@ jobs:
     env:
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
       TAURI_SIGNING_PRIVATE_KEY_B64: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_B64 }}
+      LAWYER_COPILOT_UPDATE_BASE_URL: ${{ vars.LAWYER_COPILOT_UPDATE_BASE_URL }}
     steps:
       - uses: actions/checkout@v4
 
@@ -248,6 +257,10 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Configure self-hosted updater endpoint
+        shell: pwsh
+        run: node scripts/configure-updater-endpoint.mjs
 
       - name: Build Windows installer
         shell: pwsh
@@ -276,6 +289,11 @@ jobs:
   release:
     runs-on: ubuntu-latest
     environment: release
+    env:
+      LAWYER_COPILOT_UPDATE_BASE_URL: ${{ vars.LAWYER_COPILOT_UPDATE_BASE_URL }}
+      LAWYER_COPILOT_UPDATE_UPLOAD_URL: ${{ vars.LAWYER_COPILOT_UPDATE_UPLOAD_URL }}
+      LAWYER_COPILOT_UPDATE_UPLOAD_USER: ${{ secrets.LAWYER_COPILOT_UPDATE_UPLOAD_USER }}
+      LAWYER_COPILOT_UPDATE_UPLOAD_PASSWORD: ${{ secrets.LAWYER_COPILOT_UPDATE_UPLOAD_PASSWORD }}
     needs:
       - build_macos
       - build_linux
@@ -308,6 +326,7 @@ jobs:
       - name: Build latest.json
         run: |
           set -euo pipefail
+          UPDATE_BASE_URL=$(node -e 'import("./scripts/configure-updater-endpoint.mjs").then(({ normalizeUpdateBaseUrl }) => console.log(normalizeUpdateBaseUrl(process.env.LAWYER_COPILOT_UPDATE_BASE_URL))).catch((error) => { console.error(error.message); process.exit(1); })')
           VERSION=$(python3 - <<'PY'
           import json
           from pathlib import Path
@@ -317,8 +336,6 @@ jobs:
           PY
           )
 
-          SIGNATURE_AARCH64=$(cat release-artifacts/LawyerCopilot_aarch64.app.tar.gz.sig)
-          SIGNATURE_X86_64=$(cat release-artifacts/LawyerCopilot_x86_64.app.tar.gz.sig)
           LAST_TAG=$(git tag --sort=-version:refname \
             | grep -v "^v${VERSION}$" \
             | head -n 1 || true)
@@ -366,22 +383,28 @@ jobs:
           Path("release-artifacts/release-notes.md").write_text(notes + "\n")
           PY
 
-          python3 - <<PY
+          UPDATE_BASE_URL="$UPDATE_BASE_URL" python3 - <<'PY'
           import json
+          import os
           from datetime import datetime, timezone
           from pathlib import Path
+          from urllib.parse import quote
 
           notes = Path("release-artifacts/release-notes.md").read_text().strip()
           artifacts_dir = Path("release-artifacts")
+          update_base_url = os.environ["UPDATE_BASE_URL"].rstrip("/")
+
+          def artifact_url(name):
+              return f"{update_base_url}/{quote(name)}"
 
           platforms = {
             "darwin-aarch64": {
-              "url": "https://github.com/wuwenrui/desktop-cc-gui/releases/download/v${VERSION}/LawyerCopilot_aarch64.app.tar.gz",
-              "signature": "${SIGNATURE_AARCH64}",
+              "url": artifact_url("LawyerCopilot_aarch64.app.tar.gz"),
+              "signature": (artifacts_dir / "LawyerCopilot_aarch64.app.tar.gz.sig").read_text().strip(),
             },
             "darwin-x86_64": {
-              "url": "https://github.com/wuwenrui/desktop-cc-gui/releases/download/v${VERSION}/LawyerCopilot_x86_64.app.tar.gz",
-              "signature": "${SIGNATURE_X86_64}",
+              "url": artifact_url("LawyerCopilot_x86_64.app.tar.gz"),
+              "signature": (artifacts_dir / "LawyerCopilot_x86_64.app.tar.gz.sig").read_text().strip(),
             }
           }
 
@@ -405,7 +428,7 @@ jobs:
             sig_path = appimage.with_suffix(appimage.suffix + ".sig")
             if sig_path.exists():
               platforms[f"linux-{arch}"] = {
-                "url": f"https://github.com/wuwenrui/desktop-cc-gui/releases/download/v${VERSION}/{appimage.name}",
+                "url": artifact_url(appimage.name),
                 "signature": sig_path.read_text().strip(),
               }
 
@@ -415,7 +438,7 @@ jobs:
             sig_path = Path(str(nsis_exe) + ".sig")
             if sig_path.exists():
               platforms["windows-x86_64"] = {
-                "url": f"https://github.com/wuwenrui/desktop-cc-gui/releases/download/v${VERSION}/{nsis_exe.name}",
+                "url": artifact_url(nsis_exe.name),
                 "signature": sig_path.read_text().strip(),
               }
               break
@@ -429,6 +452,22 @@ jobs:
 
           Path("release-artifacts/latest.json").write_text(json.dumps(payload, indent=2) + "\n")
           PY
+
+      - name: Upload updater artifacts to self-hosted server
+        run: |
+          set -euo pipefail
+          : "${LAWYER_COPILOT_UPDATE_UPLOAD_USER:?missing LAWYER_COPILOT_UPDATE_UPLOAD_USER secret}"
+          : "${LAWYER_COPILOT_UPDATE_UPLOAD_PASSWORD:?missing LAWYER_COPILOT_UPDATE_UPLOAD_PASSWORD secret}"
+          UPDATE_UPLOAD_URL="${LAWYER_COPILOT_UPDATE_UPLOAD_URL:-${LAWYER_COPILOT_UPDATE_BASE_URL/downloads/update-upload}}"
+          UPDATE_UPLOAD_URL="${UPDATE_UPLOAD_URL%/}"
+
+          find release-artifacts -maxdepth 1 -type f -print0 | while IFS= read -r -d '' artifact; do
+            name="$(basename "$artifact")"
+            curl --fail --show-error --silent \
+              --user "$LAWYER_COPILOT_UPDATE_UPLOAD_USER:$LAWYER_COPILOT_UPDATE_UPLOAD_PASSWORD" \
+              --upload-file "$artifact" \
+              "$UPDATE_UPLOAD_URL/$name"
+          done
 
       - name: Create GitHub release
         env:
