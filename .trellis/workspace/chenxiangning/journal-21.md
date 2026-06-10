@@ -528,3 +528,49 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 795: 调整运行中状态浅色配色
+
+**Date**: 2026-06-10
+**Task**: 调整运行中状态浅色配色
+**Branch**: `feature/v0.5.8`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## Summary
+- 将左侧会话列表 processing/running 状态从橙色切换为蓝色系，提高浅色主题下的可读性。
+- 同步调整 Session Activity running chip 的暗色/浅色主题配色，保持不同面板的运行态视觉一致。
+
+## Changed Files
+- `src/styles/sidebar.css`
+- `src/styles/session-activity.css`
+
+## Validation
+- `npm run lint`
+- `npm run typecheck`
+- `npm run test`
+- `npm run check:large-files`
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a3b3f8c6` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
