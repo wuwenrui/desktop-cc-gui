@@ -574,3 +574,46 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 796: 修复浏览器快照浅色主题可读性
+
+**Date**: 2026-06-10
+**Task**: 修复浏览器快照浅色主题可读性
+**Branch**: `feature/v0.5.8`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| 项目 | 内容 |
+|---|---|
+| 代码提交 | `b262d353 fix(browser-context): 提升浅色主题快照卡可读性` |
+| OpenSpec | 新增 `openspec/changes/fix-browser-context-light-theme-contrast/`，包含 proposal/tasks/verification/spec delta |
+| 前端修复 | Composer 浏览器快照卡和消息摘要卡恢复 `expired/degraded/unsupported` 独立状态 class 与 i18n label |
+| 样式修复 | 提升浅色主题、Windows WebView2 system-light 和显式 light theme 下的卡片文字、chip、操作按钮、状态 badge 对比度 |
+| 状态保真 | `BrowserContextSummaryCard` 保留 `observation`，避免历史摘要丢失 expired 状态 |
+| 测试 | 增加 expired 状态回归测试，覆盖 preview card 和 summary card 的 `is-expired` class |
+| 验证 | `npx vitest run src/features/browser-agent/components/BrowserContextPreview.test.tsx src/features/browser-agent/components/BrowserContextSummaryCard.test.tsx`; `npm run typecheck`; `npm run lint`; `npm run check:large-files`; `git diff --check`; `openspec validate fix-browser-context-light-theme-contrast --strict --no-interactive` 全部通过 |
+| 平台备注 | 当前环境非 Windows，仍建议在 Windows WebView2 浅色主题下做一次视觉确认 |
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b262d353` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

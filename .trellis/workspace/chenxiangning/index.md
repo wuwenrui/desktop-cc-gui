@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-21.md`
-- **Total Sessions**: 795
+- **Total Sessions**: 796
 - **Last Active**: 2026-06-10
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-21.md` | ~576 | Active |
+| `journal-21.md` | ~619 | Active |
 | `journal-20.md` | ~1997 | Archived |
 | `journal-19.md` | ~1989 | Archived |
 | `journal-18.md` | ~1966 | Archived |
@@ -49,6 +49,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 796 | 2026-06-10 | 修复浏览器快照浅色主题可读性 | `b262d353` | `feature/v0.5.8` |
 | 795 | 2026-06-10 | 调整运行中状态浅色配色 | `a3b3f8c6` | `feature/v0.5.8` |
 | 794 | 2026-06-10 | 修复长会话锚点跳转失效 | `fed155e8` | `feature/v0.5.8` |
 | 793 | 2026-06-10 | 修复接口探索面板高度 | `7b649ea6` | `feature/v0.5.8` |
