@@ -11,6 +11,10 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string) => {
       const translations: Record<string, string> = {
+        "menu.closeWindow": "Close window",
+        "menu.maximize": "Maximize",
+        "menu.minimize": "Minimize",
+        "common.restore": "Restore",
         "sidebar.showThreadsSidebar": "Show threads sidebar",
         "sidebar.hideThreadsSidebar": "Hide threads sidebar",
       };
@@ -64,6 +68,30 @@ describe("TitlebarExpandControls", () => {
     expect(
       screen.getByRole("button", { name: "Show threads sidebar" }),
     ).toBeTruthy();
+  });
+
+  it("renders distinct Windows window controls and swapped floating sidebar restore groups", () => {
+    mocks.isWindowsPlatform.mockReturnValue(true);
+
+    const { container } = render(
+      createElement(TitlebarExpandControls as never, {
+        ...baseProps,
+        isLayoutSwapped: true,
+        showSidebarTitlebarToggle: true,
+      }),
+    );
+
+    const windowControls = container.querySelector(".titlebar-window-controls");
+    const sidebarToggle = container.querySelector(".titlebar-sidebar-toggle");
+
+    expect(windowControls).toBeTruthy();
+    expect(windowControls?.classList.contains("titlebar-toggle-right")).toBe(true);
+    expect(sidebarToggle).toBeTruthy();
+    expect(sidebarToggle?.classList.contains("titlebar-toggle-right")).toBe(true);
+    expect(screen.getByRole("button", { name: "Show threads sidebar" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Minimize" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Maximize" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Close window" })).toBeTruthy();
   });
 
   it("shows a tooltip for the sidebar collapse button on hover", async () => {
