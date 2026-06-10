@@ -553,6 +553,7 @@ export const Messages = memo(function Messages({
     const currentFirstId = effectiveItems[0]?.id ?? null;
     if (currentFirstId !== firstItemIdRef.current) {
       setShowAllHistoryItems(false);
+      setPendingJumpMessageId(null);
       pendingHistoryExpansionScrollSnapshotRef.current = null;
     }
     firstItemIdRef.current = currentFirstId;
@@ -1868,7 +1869,7 @@ export const Messages = memo(function Messages({
     const node = messageNodeByIdRef.current.get(messageId);
     const container = containerRef.current;
     if (!node || !container) {
-      return;
+      return false;
     }
     const containerRect = container.getBoundingClientRect();
     const nodeRect = node.getBoundingClientRect();
@@ -1880,18 +1881,36 @@ export const Messages = memo(function Messages({
       behavior: "smooth",
     });
     setActiveAnchorId((previous) => (previous === messageId ? previous : messageId));
+    return true;
   }, []);
+
+  const requestScrollToAnchor = useCallback((messageId: string) => {
+    if (scrollToAnchor(messageId)) {
+      setPendingJumpMessageId(null);
+      return;
+    }
+    setPendingJumpMessageId((previous) => (previous === messageId ? previous : messageId));
+    if (!showAllHistoryItems) {
+      handleShowAllHistoryItems();
+    }
+  }, [handleShowAllHistoryItems, scrollToAnchor, showAllHistoryItems]);
+
+  const handlePendingJumpTargetReady = useCallback((messageId: string) => {
+    if (pendingJumpMessageId !== messageId) {
+      return;
+    }
+    if (scrollToAnchor(messageId)) {
+      setPendingJumpMessageId(null);
+    }
+  }, [pendingJumpMessageId, scrollToAnchor]);
 
   useEffect(() => {
     if (!pendingJumpMessageId) {
       return;
     }
-    const targetNode = messageNodeByIdRef.current.get(pendingJumpMessageId);
-    if (!targetNode) {
-      return;
+    if (scrollToAnchor(pendingJumpMessageId)) {
+      setPendingJumpMessageId(null);
     }
-    scrollToAnchor(pendingJumpMessageId);
-    setPendingJumpMessageId(null);
   }, [pendingJumpMessageId, timelinePresentationItems, scrollToAnchor]);
 
   useEffect(() => {
@@ -1904,18 +1923,13 @@ export const Messages = memo(function Messages({
       if (!messageId) {
         return;
       }
-      if (!messageNodeByIdRef.current.get(messageId) && !showAllHistoryItems) {
-        setPendingJumpMessageId(messageId);
-        handleShowAllHistoryItems();
-        return;
-      }
-      scrollToAnchor(messageId);
+      requestScrollToAnchor(messageId);
     };
     document.addEventListener(MESSAGE_JUMP_EVENT_NAME, handleJumpToMessage);
     return () => {
       document.removeEventListener(MESSAGE_JUMP_EVENT_NAME, handleJumpToMessage);
     };
-  }, [handleShowAllHistoryItems, scrollToAnchor, showAllHistoryItems]);
+  }, [requestScrollToAnchor]);
 
   return (
     <div
@@ -1927,7 +1941,7 @@ export const Messages = memo(function Messages({
         anchorNavigationLabel={t("messages.anchorNavigation")}
         getJumpLabel={(index) => t("messages.anchorJumpToUser", { index: index + 1 })}
         getTitle={(index) => t("messages.anchorUserTitle", { index: index + 1 })}
-        onScrollToAnchor={scrollToAnchor}
+        onScrollToAnchor={requestScrollToAnchor}
       />
       <div
         className="messages"
@@ -1983,6 +1997,8 @@ export const Messages = memo(function Messages({
           messageActionTargetByAssistantId={messageActionTargets.targetByAssistantId}
           messageCopyTextByAssistantId={messageActionTargets.copyTextByAssistantId}
           latestFinalAssistantMessageId={messageActionTargets.latestFinalAssistantMessageId}
+          pendingJumpMessageId={pendingJumpMessageId}
+          onPendingJumpTargetReady={handlePendingJumpTargetReady}
           onForkFromMessage={onForkFromMessage}
           onRewindFromMessage={onRewindFromMessage}
           handleExitPlanModeExecuteForItem={handleExitPlanModeExecuteForItem}

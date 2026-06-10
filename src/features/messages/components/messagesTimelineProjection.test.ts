@@ -3,6 +3,7 @@ import { groupToolItems } from "../utils/groupToolItems";
 import { buildLongListFixture } from "../../../test-fixtures/perf/longListFixtureFactory";
 import {
   buildTimelineProjectionRows,
+  findTimelineProjectionRowIndexByItemId,
   getGroupedEntryProjectionKey,
 } from "./messagesTimelineProjection";
 
@@ -56,5 +57,33 @@ describe("messagesTimelineProjection", () => {
     expect(rows.map((row) => row.kind)).toContain("dockedReasoning");
     expect(rows.map((row) => row.kind)).toContain("liveMiddleCollapsed");
     expect(rows.map((row) => row.kind)).toContain("approval");
+  });
+
+  it("resolves the projection row index for a message id", () => {
+    const entries = groupToolItems(buildLongListFixture(12));
+    const rows = buildTimelineProjectionRows({
+      activeUserInputAnchorItemId: null,
+      approvalVisible: true,
+      claudeDockedReasoningItemIds: ["reasoning-live"],
+      collapsedMiddleStepCount: 0,
+      collapseLiveMiddleStepsEnabled: false,
+      effectiveItemsCount: 12,
+      groupedEntries: entries,
+      hasVisibleUserInputRequest: false,
+      hiddenClaudeReasoningOnly: false,
+      isHistoryLoading: false,
+      isThinking: false,
+      shouldRenderUserInputAtTail: false,
+    });
+
+    const index = findTimelineProjectionRowIndexByItemId(rows, "message-6");
+
+    expect(index).toBeGreaterThanOrEqual(0);
+    expect(rows[index]).toMatchObject({
+      kind: "entry",
+      itemIds: expect.arrayContaining(["message-6"]),
+    });
+    expect(findTimelineProjectionRowIndexByItemId(rows, "reasoning-live")).toBe(-1);
+    expect(findTimelineProjectionRowIndexByItemId(rows, "missing")).toBe(-1);
   });
 });

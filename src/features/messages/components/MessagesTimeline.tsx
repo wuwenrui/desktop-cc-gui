@@ -53,7 +53,11 @@ import {
   resolveProvenanceEngineLabel,
   shouldHideCodexCanvasCommandCard,
 } from "./messagesRenderUtils";
-import { buildTimelineProjectionRows, groupedEntryContainsItemId } from "./messagesTimelineProjection";
+import {
+  buildTimelineProjectionRows,
+  findTimelineProjectionRowIndexByItemId,
+  groupedEntryContainsItemId,
+} from "./messagesTimelineProjection";
 import {
   classifyTimelineVirtualizerStability,
   estimateTimelineProjectionRowSize,
@@ -100,6 +104,8 @@ type MessagesTimelineProps = {
   messageActionTargetByAssistantId: Map<string, string>;
   messageCopyTextByAssistantId: Map<string, string>;
   latestFinalAssistantMessageId: string | null;
+  pendingJumpMessageId: string | null;
+  onPendingJumpTargetReady: (messageId: string) => void;
   onForkFromMessage?: (messageId: string) => void;
   onRewindFromMessage?: (messageId: string) => void;
   handleExitPlanModeExecuteForItem: (
@@ -208,6 +214,8 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   messageActionTargetByAssistantId,
   messageCopyTextByAssistantId,
   latestFinalAssistantMessageId,
+  pendingJumpMessageId,
+  onPendingJumpTargetReady,
   onForkFromMessage,
   onRewindFromMessage,
   handleExitPlanModeExecuteForItem,
@@ -338,6 +346,36 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     () => virtualTimelineRows.map((row) => row.key),
     [virtualTimelineRows],
   );
+
+  const pendingJumpRowIndex = useMemo(
+    () =>
+      pendingJumpMessageId
+        ? findTimelineProjectionRowIndexByItemId(timelineProjectionRows, pendingJumpMessageId)
+        : -1,
+    [pendingJumpMessageId, timelineProjectionRows],
+  );
+
+  useEffect(() => {
+    if (!pendingJumpMessageId) {
+      return;
+    }
+    if (messageNodeByIdRef.current.get(pendingJumpMessageId)) {
+      onPendingJumpTargetReady(pendingJumpMessageId);
+      return;
+    }
+    if (!shouldVirtualizeTimeline || pendingJumpRowIndex < 0) {
+      return;
+    }
+    timelineVirtualizer.scrollToIndex(pendingJumpRowIndex, { align: "center" });
+  }, [
+    messageNodeByIdRef,
+    onPendingJumpTargetReady,
+    pendingJumpMessageId,
+    pendingJumpRowIndex,
+    shouldVirtualizeTimeline,
+    timelineVirtualizer,
+    virtualTimelineRowKeys,
+  ]);
 
   useEffect(() => {
     const scrollElement = scrollElementRef.current;
