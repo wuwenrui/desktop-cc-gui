@@ -1,4 +1,5 @@
 import "./lawyer-shell.css";
+import FolderInput from "lucide-react/dist/esm/icons/folder-input";
 import Plus from "lucide-react/dist/esm/icons/plus";
 import { useCallback, useState } from "react";
 import { ensureWorkspacePathDir } from "../../services/tauri/workspaceRuntime";
@@ -9,6 +10,7 @@ import {
   dispatchCaseSkillDeferred,
   type CaseQuickAction,
 } from "./caseActions";
+import { importFormToNewCaseInput, type ImportCaseForm } from "./caseImport";
 import {
   createCaseRecord,
   loadCases,
@@ -18,10 +20,15 @@ import {
   upsertCase,
   type CaseRecord,
 } from "./caseRegistry";
+import { ImportCaseDialog } from "./ImportCaseDialog";
 import { NewCaseDialog, type NewCaseFormValues } from "./NewCaseDialog";
 
 /**
- * 律师首页「我的案件」：案件卡片列表 + 新建案件向导。
+ * 律师首页「我的案件」：案件卡片列表 + 导入案件向导（主入口）+ 新建案件向导。
+ *
+ * 导入流程：解析已有材料文件夹（Rust `parse_case_folder`，零写入）→ 律师确认
+ * → 写登记表（workspacePath = 原目录，origin: "imported"）→ 打开工作区。
+ * 默认不在原目录创建骨架子目录（确认页可选开启）。
  *
  * 新建流程：建工作区目录 + 标准目录骨架（复用 `ensure_workspace_path_dir`，
  * 递归创建）→ 写本地案件登记表 → 通过 onOpenCaseWorkspace 注册并打开工作区。
@@ -53,6 +60,8 @@ function formatRecency(record: CaseRecord): string {
 export function CaseHomePage({ onOpenCaseWorkspace }: CaseHomePageProps) {
   const [cases, setCases] = useState<CaseRecord[]>(() => loadCases());
   const [isWizardOpen, setIsWizardOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const [importBusy, setImportBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 
   const persist = useCallback((next: CaseRecord[]) => {
@@ -101,25 +110,70 @@ export function CaseHomePage({ onOpenCaseWorkspace }: CaseHomePageProps) {
     [cases, onOpenCaseWorkspace, persist],
   );
 
+  /**
+   * 导入确认（单个或批量）：可选补齐骨架 → 一次性写登记表。
+   * 单个导入直接打开工作区；批量导入只提示数量，由律师从卡片进入。
+   */
+  const importCases = useCallback(
+    async (forms: ImportCaseForm[]) => {
+      if (forms.length === 0) {
+        return;
+      }
+      setImportBusy(true);
+      try {
+        let next = cases;
+        for (const form of forms) {
+          if (form.createSkeleton) {
+            for (const dir of CASE_DIR_SKELETON) {
+              await ensureWorkspacePathDir(joinPath(form.dirPath, dir));
+            }
+          }
+          next = upsertCase(next, createCaseRecord(importFormToNewCaseInput(form)));
+        }
+        persist(next);
+        setIsImportOpen(false);
+        if (forms.length === 1) {
+          await onOpenCaseWorkspace(forms[0].dirPath);
+        } else {
+          setStatus(`已导入 ${forms.length} 个案件`);
+        }
+      } catch (e) {
+        setStatus(e instanceof Error ? e.message : "导入案件失败");
+      }
+      setImportBusy(false);
+    },
+    [cases, onOpenCaseWorkspace, persist],
+  );
+
   const sortedCases = sortCasesByRecency(cases);
 
   return (
     <div className="lawyer-shell-home">
       <div className="lawyer-shell-home-header">
         <h2>我的案件</h2>
-        <button
-          type="button"
-          className="lawyer-shell-primary"
-          onClick={() => setIsWizardOpen(true)}
-        >
-          <Plus size={16} aria-hidden />
-          <span>新建案件</span>
-        </button>
+        <div className="lawyer-shell-home-actions">
+          <button
+            type="button"
+            className="lawyer-shell-primary"
+            onClick={() => setIsImportOpen(true)}
+          >
+            <FolderInput size={16} aria-hidden />
+            <span>导入案件</span>
+          </button>
+          <button
+            type="button"
+            className="lawyer-shell-secondary"
+            onClick={() => setIsWizardOpen(true)}
+          >
+            <Plus size={16} aria-hidden />
+            <span>新建案件</span>
+          </button>
+        </div>
       </div>
 
       {sortedCases.length === 0 && (
         <div className="lawyer-shell-empty">
-          还没有案件，点「新建案件」开始办理第一个案件
+          还没有案件。推荐点「导入案件」从已有材料文件夹自动建案，也可以「新建案件」从零开始
         </div>
       )}
 
@@ -173,6 +227,14 @@ export function CaseHomePage({ onOpenCaseWorkspace }: CaseHomePageProps) {
         <NewCaseDialog
           onSubmit={createCase}
           onClose={() => setIsWizardOpen(false)}
+        />
+      )}
+
+      {isImportOpen && (
+        <ImportCaseDialog
+          busy={importBusy}
+          onImport={(forms) => void importCases(forms)}
+          onClose={() => setIsImportOpen(false)}
         />
       )}
     </div>

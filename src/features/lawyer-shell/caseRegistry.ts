@@ -38,6 +38,9 @@ export type CaseParties = {
   opposing: string;
 };
 
+/** 案件来源：手工新建 / 从已有材料文件夹导入。旧记录无此字段，视为 manual。 */
+export type CaseOrigin = "manual" | "imported";
+
 export type CaseRecord = {
   id: string;
   /** 案件名 */
@@ -55,6 +58,10 @@ export type CaseRecord = {
   updatedAt: string;
   /** ISO 8601，卡片「最近打开」展示用 */
   lastOpenedAt: string | null;
+  /** 可选：案件来源（旧记录缺省，等价 manual） */
+  origin?: CaseOrigin;
+  /** 可选：法院（导入解析得到，旧记录缺省） */
+  courtName?: string | null;
 };
 
 export const CASE_REGISTRY_STORE = "app" as const;
@@ -66,6 +73,11 @@ export type NewCaseInput = {
   parties: CaseParties;
   causeOfAction: string;
   workspacePath: string;
+  /** 缺省 intake（导入流程会带解析出的阶段） */
+  stage?: CaseStage;
+  /** 缺省 manual */
+  origin?: CaseOrigin;
+  courtName?: string | null;
 };
 
 function generateCaseId(): string {
@@ -118,11 +130,13 @@ export function createCaseRecord(
       opposing: input.parties.opposing.trim(),
     },
     causeOfAction: input.causeOfAction.trim(),
-    stage: "intake",
+    stage: input.stage ?? "intake",
     workspacePath: input.workspacePath,
     createdAt: timestamp,
     updatedAt: timestamp,
     lastOpenedAt: null,
+    origin: input.origin ?? "manual",
+    courtName: input.courtName?.trim() || null,
   };
 }
 

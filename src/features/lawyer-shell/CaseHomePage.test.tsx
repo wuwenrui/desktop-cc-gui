@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CaseHomePage } from "./CaseHomePage";
 import { SELECT_SKILL_EVENT } from "../lawhub/pptSkill";
@@ -9,6 +9,7 @@ import {
   writeClientStoreValue,
 } from "../../services/clientStorage";
 import { createCaseRecord, type CaseRecord } from "./caseRegistry";
+import { draftToImportForm, type CaseDraft, type ImportCaseForm } from "./caseImport";
 
 vi.mock("../../services/tauri/workspaceRuntime", () => ({
   ensureWorkspacePathDir: vi.fn(),
@@ -19,6 +20,25 @@ vi.mock("../../services/clientStorage", () => ({
 }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   open: vi.fn(),
+}));
+// 导入对话框本体在 ImportCaseDialog.test.tsx 单测；这里打桩拿到 props 驱动编排逻辑。
+type ImportDialogStubProps = {
+  busy: boolean;
+  onImport: (forms: unknown[]) => void;
+  onClose: () => void;
+};
+const mockImportDialogProps = vi.hoisted(() => ({
+  current: null as {
+    busy: boolean;
+    onImport: (forms: unknown[]) => void;
+    onClose: () => void;
+  } | null,
+}));
+vi.mock("./ImportCaseDialog", () => ({
+  ImportCaseDialog: (props: ImportDialogStubProps) => {
+    mockImportDialogProps.current = props;
+    return <div>导入案件对话框</div>;
+  },
 }));
 
 function makeCase(overrides: Partial<CaseRecord> = {}): CaseRecord {
@@ -47,7 +67,7 @@ describe("CaseHomePage", () => {
   it("renders empty state when the registry is empty", () => {
     render(<CaseHomePage onOpenCaseWorkspace={vi.fn()} />);
     expect(
-      screen.getByText("还没有案件，点「新建案件」开始办理第一个案件"),
+      screen.getByText(/还没有案件。推荐点「导入案件」/),
     ).toBeTruthy();
   });
 
@@ -152,5 +172,99 @@ describe("CaseHomePage", () => {
 
     // 列表立即可见
     expect(await screen.findByText("王五诉赵六合同纠纷")).toBeTruthy();
+  });
+});
+
+function makeImportForm(overrides: Partial<ImportCaseForm> = {}): ImportCaseForm {
+  const draft: CaseDraft = {
+    titleSuggestion: "导入的案件",
+    caseNo: {
+      value: "（2023）京01民初1号",
+      sourceFile: "受理通知书.txt",
+      confidence: "high",
+    },
+    causeOfAction: null,
+    courtName: null,
+    stageSuggestion: "filed",
+    stageEvidence: [],
+    parties: [],
+    scannedFiles: [],
+    skippedPdfCount: 0,
+    notes: [],
+  };
+  return { ...draftToImportForm("/cases/导入的案件", draft), ...overrides };
+}
+
+describe("CaseHomePage - 导入案件", () => {
+  it("renders the import button as the primary entry and opens the dialog", () => {
+    render(<CaseHomePage onOpenCaseWorkspace={vi.fn()} />);
+    const importButton = screen.getByRole("button", { name: /导入案件/ });
+    expect(importButton.className).toContain("lawyer-shell-primary");
+    // 新建案件降级为次按钮
+    expect(
+      screen.getByRole("button", { name: /新建案件/ }).className,
+    ).toContain("lawyer-shell-secondary");
+    fireEvent.click(importButton);
+    expect(screen.getByText("导入案件对话框")).toBeTruthy();
+  });
+
+  it("single import persists the record (origin imported) and opens the workspace without creating dirs", async () => {
+    const onOpen = vi.fn();
+    render(<CaseHomePage onOpenCaseWorkspace={onOpen} />);
+    fireEvent.click(screen.getByRole("button", { name: /导入案件/ }));
+
+    act(() => {
+      mockImportDialogProps.current?.onImport([makeImportForm()]);
+    });
+
+    await waitFor(() => expect(onOpen).toHaveBeenCalledWith("/cases/导入的案件"));
+    // 默认不补齐骨架 → 不创建任何目录
+    expect(ensureWorkspacePathDir).not.toHaveBeenCalled();
+    const written = vi.mocked(writeClientStoreValue).mock
+      .calls[0]?.[2] as CaseRecord[];
+    expect(written).toHaveLength(1);
+    expect(written[0].title).toBe("导入的案件");
+    expect(written[0].origin).toBe("imported");
+    expect(written[0].stage).toBe("filed");
+    expect(written[0].caseNo).toBe("（2023）京01民初1号");
+    expect(written[0].workspacePath).toBe("/cases/导入的案件");
+  });
+
+  it("creates the skeleton when requested on import", async () => {
+    const onOpen = vi.fn();
+    render(<CaseHomePage onOpenCaseWorkspace={onOpen} />);
+    fireEvent.click(screen.getByRole("button", { name: /导入案件/ }));
+
+    act(() => {
+      mockImportDialogProps.current?.onImport([
+        makeImportForm({ createSkeleton: true }),
+      ]);
+    });
+
+    await waitFor(() => expect(onOpen).toHaveBeenCalled());
+    const ensured = vi
+      .mocked(ensureWorkspacePathDir)
+      .mock.calls.map((call) => call[0]);
+    expect(ensured).toContain("/cases/导入的案件/起诉材料");
+    expect(ensured).toContain("/cases/导入的案件/结案");
+  });
+
+  it("batch import persists all records without opening a workspace", async () => {
+    const onOpen = vi.fn();
+    render(<CaseHomePage onOpenCaseWorkspace={onOpen} />);
+    fireEvent.click(screen.getByRole("button", { name: /导入案件/ }));
+
+    act(() => {
+      mockImportDialogProps.current?.onImport([
+        makeImportForm({ dirPath: "/cases/甲案", title: "甲案" }),
+        makeImportForm({ dirPath: "/cases/乙案", title: "乙案" }),
+      ]);
+    });
+
+    expect(await screen.findByText("已导入 2 个案件")).toBeTruthy();
+    expect(onOpen).not.toHaveBeenCalled();
+    const written = vi.mocked(writeClientStoreValue).mock
+      .calls[0]?.[2] as CaseRecord[];
+    expect(written.map((record) => record.title)).toEqual(["甲案", "乙案"]);
   });
 });

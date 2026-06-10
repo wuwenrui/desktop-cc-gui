@@ -39,6 +39,31 @@ beforeEach(() => {
 });
 
 describe("createCaseRecord", () => {
+  it("supports imported cases with stage, origin and courtName", () => {
+    const record = createCaseRecord(
+      {
+        title: "导入案",
+        caseNo: "（2023）京01民初1号",
+        parties: { our: "张三", opposing: "李四" },
+        causeOfAction: "民间借贷纠纷",
+        workspacePath: "/cases/导入案",
+        stage: "filed",
+        origin: "imported",
+        courtName: " 北京市朝阳区人民法院 ",
+      },
+      new Date("2026-06-10T08:00:00Z"),
+    );
+    expect(record.stage).toBe("filed");
+    expect(record.origin).toBe("imported");
+    expect(record.courtName).toBe("北京市朝阳区人民法院");
+  });
+
+  it("defaults origin to manual and courtName to null", () => {
+    const record = makeCase();
+    expect(record.origin).toBe("manual");
+    expect(record.courtName).toBeNull();
+  });
+
   it("trims fields, defaults stage to intake, null caseNo", () => {
     const record = createCaseRecord(
       {
@@ -107,6 +132,25 @@ describe("parseCaseList", () => {
     const valid = makeCase();
     const parsed = parseCaseList([valid, { id: 1 }, null, { title: "缺字段" }]);
     expect(parsed).toEqual([valid]);
+  });
+
+  it("keeps legacy records without origin/courtName (back-compat)", () => {
+    const legacy = {
+      id: "legacy-1",
+      title: "旧记录",
+      caseNo: null,
+      parties: { our: "甲", opposing: "乙" },
+      causeOfAction: "合同纠纷",
+      stage: "intake",
+      workspacePath: "/cases/旧记录",
+      createdAt: "2026-06-01T00:00:00.000Z",
+      updatedAt: "2026-06-01T00:00:00.000Z",
+      lastOpenedAt: null,
+    };
+    const parsed = parseCaseList([legacy]);
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0].origin).toBeUndefined();
+    expect(parsed[0].courtName).toBeUndefined();
   });
 });
 

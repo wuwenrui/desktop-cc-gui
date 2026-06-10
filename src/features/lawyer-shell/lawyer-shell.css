@@ -263,3 +263,211 @@
 .lawyer-shell-dialog-actions .lawyer-shell-primary {
   border: none;
 }
+
+/* ---- 导入案件 ---- */
+.lawyer-shell-home-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.lawyer-shell-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--border-subtle, #353540);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.lawyer-shell-dialog-wide {
+  width: min(640px, calc(100% - 48px));
+  max-height: min(84vh, 720px);
+  display: flex;
+  flex-direction: column;
+}
+
+.lawyer-shell-dialog-wide .lawyer-shell-form {
+  overflow-y: auto;
+}
+
+.lawyer-shell-dialog-error {
+  padding: 8px 18px 0;
+}
+
+.lawyer-shell-tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.lawyer-shell-tabs button {
+  padding: 5px 12px;
+  border: 1px solid var(--border-subtle, #353540);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.lawyer-shell-tabs .lawyer-shell-tab-active {
+  border-color: var(--accent, #4078f2);
+  color: var(--accent, #7ba4ff);
+}
+
+.lawyer-shell-root-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lawyer-shell-root-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle, #2a2a33);
+  border-radius: 10px;
+  background: var(--surface-card, #14161c);
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.lawyer-shell-root-card:hover {
+  border-color: var(--accent, #4078f2);
+}
+
+.lawyer-shell-root-name {
+  font-weight: 600;
+}
+
+.lawyer-shell-root-path {
+  font-size: 11px;
+  color: var(--text-muted, #8a8f98);
+}
+
+.lawyer-shell-local-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.lawyer-shell-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted, #8a8f98);
+}
+
+.lawyer-shell-batch-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lawyer-shell-batch-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle, #2a2a33);
+  border-radius: 8px;
+}
+
+.lawyer-shell-batch-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.lawyer-shell-batch-main input {
+  padding: 4px 8px;
+  border: 1px solid var(--border-subtle, #353540);
+  border-radius: 6px;
+  background: var(--surface-input, #101218);
+  color: var(--text-primary, #e6e6eb);
+}
+
+.lawyer-shell-batch-name {
+  font-weight: 600;
+}
+
+.lawyer-shell-batch-meta {
+  font-size: 11px;
+  color: var(--text-muted, #8a8f98);
+}
+
+.lawyer-shell-batch-row button {
+  padding: 4px 12px;
+  border: 1px solid var(--border-subtle, #353540);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.lawyer-shell-import-dir {
+  font-size: 11px;
+  color: var(--text-muted, #8a8f98);
+  word-break: break-all;
+}
+
+.lawyer-shell-source-tag {
+  margin-left: 8px;
+  font-size: 11px;
+  color: var(--text-muted, #6f7480);
+}
+
+.lawyer-shell-evidence {
+  font-size: 11px;
+  color: var(--text-muted, #8a8f98);
+}
+
+.lawyer-shell-field select {
+  padding: 6px 10px;
+  border: 1px solid var(--border-subtle, #353540);
+  border-radius: 8px;
+  background: var(--surface-input, #101218);
+  color: var(--text-primary, #e6e6eb);
+}
+
+.lawyer-shell-party-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lawyer-shell-party-role {
+  flex-shrink: 0;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent, #4078f2) 14%, transparent);
+  color: var(--accent, #7ba4ff);
+}
+
+.lawyer-shell-party-name {
+  color: var(--text-primary, #e6e6eb);
+}
+
+.lawyer-shell-party-row select {
+  padding: 3px 6px;
+  border: 1px solid var(--border-subtle, #353540);
+  border-radius: 6px;
+  background: var(--surface-input, #101218);
+  color: var(--text-primary, #e6e6eb);
+}
+
+.lawyer-shell-import-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--warning, #d9a23c);
+}
