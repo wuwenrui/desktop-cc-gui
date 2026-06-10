@@ -241,7 +241,12 @@ export type LightThemePresetId =
   | "vscode-light-modern"
   | "vscode-light-plus"
   | "vscode-github-light"
-  | "vscode-solarized-light";
+  | "vscode-solarized-light"
+  | "vscode-catppuccin-latte"
+  | "vscode-tokyo-day"
+  | "vscode-rose-pine-dawn"
+  | "vscode-everforest-light"
+  | "vscode-ayu-light";
 export type DarkThemePresetId =
   | "vscode-dark-modern"
   | "vscode-dark-plus"
@@ -249,7 +254,12 @@ export type DarkThemePresetId =
   | "vscode-github-dark-dimmed"
   | "vscode-one-dark-pro"
   | "vscode-monokai"
-  | "vscode-solarized-dark";
+  | "vscode-solarized-dark"
+  | "vscode-dracula"
+  | "vscode-nord"
+  | "vscode-catppuccin-mocha"
+  | "vscode-tokyo-night"
+  | "vscode-rose-pine";
 export type ThemePresetId = LightThemePresetId | DarkThemePresetId;
 export type AppMode = "chat" | "kanban" | "gitHistory";
 
