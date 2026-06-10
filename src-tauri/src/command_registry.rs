@@ -390,6 +390,10 @@ pub(crate) fn invoke_handler(
         // Lawyer copilot: skill 市场（下载/更新平台 skill）
         crate::skill_market::market_add_skill,
         crate::skill_market::market_list_installed,
+        // Lawyer copilot: 案件导入（AlphaBox 同步库 + 文件夹解析）
+        crate::case_import::alphabox_sync_roots,
+        crate::case_import::scan_case_candidates,
+        crate::case_import::parse_case_folder,
         // Lawyer copilot: site model auto-load
         crate::vendors::fetch_site_models
     ]

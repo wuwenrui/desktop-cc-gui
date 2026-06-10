@@ -97,6 +97,8 @@ mod app_paths;
 mod backend;
 mod browser_agent;
 mod claude_commands;
+// Lawyer copilot: 案件导入（AlphaBox 同步库 + 文件夹解析）
+mod case_import;
 mod claude_home;
 // Lawyer copilot: claude CLI self-check + native installer
 mod claude_installer;
