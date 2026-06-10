@@ -51,7 +51,7 @@ describe("FileDocumentPreview", () => {
     const scrollIntoView = vi.fn();
     headingNode.scrollIntoView = scrollIntoView;
 
-    fireEvent.click(screen.getByRole("button", { name: "概览" }));
+    fireEvent.click(screen.getByRole("button", { name: /^概览/ }));
 
     expect(headingNode.id).toBe("_Toc123");
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
@@ -71,9 +71,9 @@ describe("FileDocumentPreview", () => {
     const scrollIntoView = vi.fn();
     headingNode.scrollIntoView = scrollIntoView;
 
-    fireEvent.click(screen.getByRole("button", { name: "细节" }));
+    fireEvent.click(screen.getByRole("button", { name: /^细节/ }));
 
-    expect(screen.getByRole("button", { name: "概览" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^概览/ })).toBeTruthy();
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
   });
 

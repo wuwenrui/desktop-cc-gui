@@ -3,9 +3,7 @@
 ## Purpose
 
 Defines the composer-context-project-resource-discovery behavior contract, covering Project-Scoped Skill Discovery.
-
 ## Requirements
-
 ### Requirement: Project-Scoped Skill Discovery
 
 The system SHALL discover project-scoped skills from the active workspace in addition to existing managed/global
@@ -96,3 +94,36 @@ The system SHALL return source metadata for each discovered skill/command so UI 
 
 - **WHEN** frontend requests commands list
 - **THEN** each returned command item SHALL include a non-empty `source` field
+
+### Requirement: Project Map context packs are a first-class resource source
+Composer resource discovery SHALL consume `project-map-relations/context-packs/latest.json` when available.
+
+#### Scenario: fresh context pack exists
+- **WHEN** discovery is triggered for active workspace
+- **THEN** composer MAY prioritize must-read files, related files, tests, contracts, and risk flags from context pack
+
+#### Scenario: stale context pack
+- **WHEN** context pack is stale
+- **THEN** discovery SHALL tag suggestions as stale or request Project Map refresh
+
+### Requirement: no duplicate broad scan if deterministic context is available
+Composer SHALL avoid launching another broad file scan for resource ranking when Project Map context is sufficient.
+
+#### Scenario: relationship context covers requested files
+- **WHEN** request concerns files present in relationship context
+- **THEN** composer SHALL skip re-scan and use existing context data
+
+### Requirement: fallback behavior
+Composer SHALL remain backward compatible when Project Map context is missing.
+
+#### Scenario: no relationship data
+- **WHEN** no fresh context pack exists
+- **THEN** composer SHALL fallback to existing discovery mechanism
+
+### Requirement: context pack fields for composer are explicit
+Composer SHALL require stable fields from context packs.
+
+#### Scenario: consume contract
+- **WHEN** consuming context pack
+- **THEN** composer SHOULD rely on `mustReadFiles`, `relatedFiles`, `testTargets`, `contracts`, `riskFlags`, `provenance`, `staleReason`
+

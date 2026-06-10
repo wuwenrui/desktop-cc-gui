@@ -1,9 +1,128 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import type { ButtonHTMLAttributes, HTMLAttributes, ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkspaceInfo } from "../../../types";
 import type { OpenCodeStatusSnapshot } from "../../opencode/types";
 import { McpSection } from "./McpSection";
+
+type SelectMockContextValue = {
+  value: string | undefined;
+  open: boolean;
+  setOpen: (open: boolean) => void;
+  onValueChange: ((value: string) => void) | undefined;
+};
+
+vi.mock("@/components/ui/select", async () => {
+  const React = await import("react");
+  const SelectContext = React.createContext<SelectMockContextValue | null>(null);
+
+  const useSelectContext = () => {
+    const context = React.useContext(SelectContext);
+    if (!context) {
+      throw new Error("Select mock components must be rendered inside Select");
+    }
+    return context;
+  };
+
+  function Select({
+    value,
+    onValueChange,
+    children,
+  }: {
+    value?: string;
+    onValueChange?: (value: string) => void;
+    children: ReactNode;
+  }) {
+    const [open, setOpen] = React.useState(false);
+
+    return (
+      <SelectContext.Provider value={{ value, open, setOpen, onValueChange }}>
+        {children}
+      </SelectContext.Provider>
+    );
+  }
+
+  function SelectTrigger({
+    children,
+    onClick,
+    ...props
+  }: ButtonHTMLAttributes<HTMLButtonElement>) {
+    const context = useSelectContext();
+
+    return (
+      <button
+        aria-expanded={context.open}
+        onClick={(event) => {
+          onClick?.(event);
+          if (!event.defaultPrevented) {
+            context.setOpen(!context.open);
+          }
+        }}
+        role="combobox"
+        type="button"
+        {...props}
+      >
+        {children}
+      </button>
+    );
+  }
+
+  function SelectValue() {
+    const context = useSelectContext();
+    return <span>{context.value}</span>;
+  }
+
+  function SelectContent({
+    children,
+    ...props
+  }: HTMLAttributes<HTMLDivElement>) {
+    const context = useSelectContext();
+    if (!context.open) {
+      return null;
+    }
+
+    return (
+      <div role="listbox" {...props}>
+        {children}
+      </div>
+    );
+  }
+
+  function SelectItem({
+    value,
+    children,
+    onClick,
+    ...props
+  }: HTMLAttributes<HTMLDivElement> & { value: string }) {
+    const context = useSelectContext();
+
+    return (
+      <div
+        aria-selected={context.value === value}
+        onClick={(event) => {
+          onClick?.(event);
+          if (!event.defaultPrevented) {
+            context.onValueChange?.(value);
+            context.setOpen(false);
+          }
+        }}
+        role="option"
+        {...props}
+      >
+        {children}
+      </div>
+    );
+  }
+
+  return {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+  };
+});
 
 vi.mock("../../../services/tauri", () => ({
   detectEngines: vi.fn(),

@@ -1013,6 +1013,9 @@ export function DetailPanel({
   onSelectRelation,
   onGraphHealthExpandedChange,
   onRepairGraph,
+  onOpenIntentCanvasArchitect,
+  onOpenIntentCanvasSpotlight,
+  onOpenIntentCanvasForFile,
 }: {
   node: ProjectMapNode | null;
   dataset: ProjectMapDataset;
@@ -1054,6 +1057,9 @@ export function DetailPanel({
   onSelectRelation: (relationId: string) => void;
   onGraphHealthExpandedChange: (expanded: boolean) => void;
   onRepairGraph: () => Promise<void>;
+  onOpenIntentCanvasArchitect?: () => void;
+  onOpenIntentCanvasSpotlight?: () => void;
+  onOpenIntentCanvasForFile?: (path: string) => void;
 }) {
   const { t } = useTranslation();
   const isCalibratedCandidate = node
@@ -1088,6 +1094,7 @@ export function DetailPanel({
   const explainPackEvidenceCount = explainPack
     ? explainPack.evidenceSources.length + explainPack.evidenceRecords.length + explainPack.governanceEvidence.length
     : 0;
+  const primaryFileSource = node?.sources.find((source) => source.path?.trim()) ?? null;
 
   return (
     <aside
@@ -1636,6 +1643,24 @@ export function DetailPanel({
                 {canDrill ? (
                   <button type="button" onClick={onDrill}>
                     {t("projectMap.drillIn")}
+                  </button>
+                ) : null}
+                {onOpenIntentCanvasArchitect ? (
+                  <button type="button" onClick={onOpenIntentCanvasArchitect}>
+                    <Network aria-hidden />
+                    {t("projectMap.openIntentCanvasArchitect")}
+                  </button>
+                ) : null}
+                {onOpenIntentCanvasSpotlight ? (
+                  <button type="button" onClick={onOpenIntentCanvasSpotlight}>
+                    <Search aria-hidden />
+                    {t("projectMap.openIntentCanvasSpotlight")}
+                  </button>
+                ) : null}
+                {onOpenIntentCanvasForFile && primaryFileSource?.path ? (
+                  <button type="button" onClick={() => onOpenIntentCanvasForFile(primaryFileSource.path!)}>
+                    <Folder aria-hidden />
+                    {t("projectMap.openIntentCanvasForFile")}
                   </button>
                 ) : null}
                 <button className="is-primary" type="button" onClick={onCreateOrchestrationTask}>

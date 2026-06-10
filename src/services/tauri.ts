@@ -106,6 +106,17 @@ export {
 } from "./tauri/textFiles";
 export { getComputerUseBridgeStatus, runComputerUseActivationProbe, runComputerUseCodexBroker, runComputerUseHostContractDiagnostics } from "./tauri/computerUse";
 export {
+  getRendererStabilitySnapshot,
+  recordRendererHeartbeat,
+} from "./tauri/rendererStability";
+export type {
+  RendererHeartbeatInput,
+  RendererHeartbeatStatus,
+  RendererPlatformHookSupport,
+  RendererStabilitySnapshot,
+  RendererSupportState,
+} from "./tauri/rendererStability";
+export {
   captureBrowserAgentSnapshot,
   captureBrowserAgentSnapshotV2,
   cleanupBrowserAgentEvidence,
@@ -942,15 +953,30 @@ export async function getOpenCodeAgentsList(refresh = false) {
 }
 
 export async function getOpenCodeSessionList(workspaceId: string) {
-  return traceStartupInvoke("opencode_session_list", workspaceScope(workspaceId), () =>
-    invoke<
-      Array<{
-        sessionId: string;
-        title: string;
-        updatedLabel: string;
-        updatedAt?: number | null;
-      }>
-    >("opencode_session_list", { workspaceId }),
+  return traceStartupInvoke(
+    "opencode_session_list",
+    workspaceScope(workspaceId),
+    async () => {
+      try {
+        return await invoke<
+          Array<{
+            sessionId: string;
+            title: string;
+            updatedLabel: string;
+            updatedAt?: number | null;
+          }>
+        >("opencode_session_list", { workspaceId });
+      } catch (error) {
+        if (
+          String(error).includes(
+            "OpenCode CLI is disabled in CLI validation settings",
+          )
+        ) {
+          return [];
+        }
+        throw error;
+      }
+    },
   );
 }
 
@@ -1556,6 +1582,13 @@ export async function readWorkspaceFile(workspaceId: string, path: string): Prom
   });
 }
 
+export async function readWorkspaceFilePreview(workspaceId: string, path: string): Promise<{ content: string; truncated: boolean }> {
+  return invoke<{ content: string; truncated: boolean }>("read_workspace_file_preview", {
+    workspaceId,
+    path,
+  });
+}
+
 export async function readExternalSpecFile(workspaceId: string, specRoot: string, path: string): Promise<ExternalSpecFileResponse> {
   return invoke<ExternalSpecFileResponse>("read_external_spec_file", {
     workspaceId,
@@ -1620,6 +1653,29 @@ export async function readLocalImageDataUrl(workspaceId: string, path: string): 
 
 export async function writeWorkspaceFile(workspaceId: string, path: string, content: string): Promise<void> {
   return invoke("write_workspace_file", { workspaceId, path, content });
+}
+
+export async function readProjectCanvasFile(workspaceId: string, path: string): Promise<{ content: string; truncated: boolean }> {
+  return invoke<{ content: string; truncated: boolean }>("project_canvas_read_file", {
+    workspaceId,
+    path,
+  });
+}
+
+export async function writeProjectCanvasFile(workspaceId: string, path: string, content: string): Promise<void> {
+  return invoke("project_canvas_write_file", { workspaceId, path, content });
+}
+
+export async function trashProjectCanvasFile(workspaceId: string, path: string): Promise<void> {
+  return invoke("project_canvas_trash_file", { workspaceId, path });
+}
+
+export async function compactProjectCanvasFiles(
+  workspaceId: string,
+): Promise<{ deletedDocuments: number; deletedTempFiles: number }> {
+  return invoke<{ deletedDocuments: number; deletedTempFiles: number }>("project_canvas_compact_files", {
+    workspaceId,
+  });
 }
 
 export type ExportRewindFilesParams = {

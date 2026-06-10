@@ -1,7 +1,7 @@
 # Project Context
 
 - Type: OpenSpec Workspace
-- Updated At: 2026-06-01T00:00:00+08:00
+- Updated At: 2026-06-06T00:00:00+08:00
 - Scope: governance snapshot for the current `mossx` repository workspace
 - Product version fact: `ccgui@0.5.4` from `package.json` and `src-tauri/tauri.conf.json`
 
@@ -20,7 +20,7 @@ The product in this repository is `ccgui`: a Tauri 2 desktop AI engineering work
 - Change workflow artifacts: `openspec/changes/<change-id>/{proposal,design,tasks,verification}.md`
 - Archive: `openspec/changes/archive/*`
 - Implementation rules: `.trellis/spec/**`
-- Current workspace state: active changes = `2`, archive changes = `402`, main specs = `303`
+- Current workspace state: active changes = `7`, archive/main spec counts were not refreshed in this stage-writeback pass
 
 ## Entry Surfaces
 
@@ -54,32 +54,60 @@ The product in this repository is `ccgui`: a Tauri 2 desktop AI engineering work
 
 ## Current Inventory
 
-- Active changes: `2`
-- Archive changes: `402`
-- Main specs: `303`
-- Completed task sets still active: `1`
-- In-progress task sets: `1`
+- Active changes: `7`
+- Archive changes: not refreshed in this pass
+- Main specs: not refreshed in this pass
+- Completed task sets still active: `4`
+- In-progress task sets: `3`
 
 ## Active Changes
 
-### `add-agent-task-orchestration-center`
+### `add-intent-canvas-workspace-files`
 
-- Task state: `0/31`.
-- Current artifact fact: proposal, design, tasks, and spec deltas define the 0.5.5 Agent Task Orchestration Center direction.
-- Product boundary: this must be a universal client capability, not a mossx-only OpenSpec/Trellis workbench.
-- Core direction: provider-based orchestration task projection, manual task drafts, Project Map task bridge, TaskRun/session linkage, explicit dispatch gate, and review/closure workflow.
-- Action: keep active as a 0.5.5 planning/execution change.
+- Task state: complete (`20/20`).
+- Current artifact fact: proposal and design have been stage-written back on 2026-06-06.
+- Product boundary: Intent Canvas is a workspace-level user-authored intent artifact, not a confirmed implementation fact and not a Project Map semantic graph replacement.
+- Core direction: persisted `.mossx/canvases/**` documents, Excalidraw-backed editor, Project Map bridge, Composer staging, structured context send path.
+- Action: keep visible as completed active work until verify / sync / archive decision.
 
-### `harden-model-structured-output-normalization`
+### `add-project-map-intent-canvas-context`
 
-- Task state: complete.
-- Current code fact: shared model structured-output normalization has been implemented and adopted by Project Map generation and organizer paths.
-- Captured implementation memory: `.trellis/spec/frontend/model-structured-output.md` and frontend index/quality triggers.
-- Validation evidence recorded in change artifacts:
-  - focused Vitest coverage for `src/services/modelStructuredOutput.test.ts`
-  - focused Project Map organizer/generation tests
-  - `openspec validate harden-model-structured-output-normalization --strict --no-interactive`
-- Action: keep visible as completed active work until archive/closure decision is made.
+- Task state: complete (`8/8`).
+- Current artifact fact: completed active work related to Project Map Intent Canvas context bridge.
+- Action: keep visible until closure decision.
+
+### `fix-project-map-file-navigation-completeness`
+
+- Task state: complete (`17/17`).
+- Current artifact fact: completed active fix for Project Map file navigation completeness.
+- Action: keep visible until closure decision.
+
+### `add-project-map-api-contract-view`
+
+- Task state: in progress (`13/48`).
+- Current artifact fact: proposal and design have been stage-written back on 2026-06-06.
+- Product boundary: API contract graph stays isolated from file relationship scan artifacts and Project Map semantic graph.
+- Core direction: independent API contract scan branch, unified contract graph, group-first API view, endpoint inspector, evidence/confidence/redaction, multi-language adapter matrix.
+- Current phase: API View Alpha; parser adapter, canonical merge, method chain, filters/search hierarchy, ownership/stale gates remain next-batch work.
+- Action: keep active as a planning/execution change.
+
+### `add-project-map-relationship-dashboard`
+
+- Task state: complete (`95/95`).
+- Current artifact fact: completed relationship dashboard / explorer work remains visible as active pending archive.
+- Action: keep visible until closure decision.
+
+### `harden-file-markdown-preview-rendering`
+
+- Task state: in progress (`0/28`).
+- Current artifact fact: active hardening work for file markdown preview rendering.
+- Action: keep active as planning/execution work.
+
+### `harden-windows-ask-user-question-resume`
+
+- Task state: in progress (`17/18`).
+- Current artifact fact: nearly complete Windows ask-user-question resume hardening.
+- Action: keep active until final task completion and closure decision.
 
 ## Recent Archive / Sync Snapshot
 
@@ -153,7 +181,8 @@ npm run check:large-files
 
 ## Update History
 
-- 2026-06-01: Refreshed project documentation snapshot. Current counts are active=2, archive=402, specs=303. Active changes are `add-agent-task-orchestration-center` and `harden-model-structured-output-normalization`; the former remains 0.5.5 planning/execution work, while the latter is completed active work pending archive/closure decision.
+- 2026-06-06: Stage-writeback refresh. Active change list corrected to the current seven active directories. `add-project-map-api-contract-view` and `add-intent-canvas-workspace-files` proposal/design artifacts received stage assessment and implementation calibration notes. Archive/main spec counts were intentionally not refreshed in this pass.
+- 2026-06-01: Refreshed project documentation snapshot. Current counts were active=2, archive=402, specs=303. Active changes were `add-agent-task-orchestration-center` and `harden-model-structured-output-normalization`; the former remained 0.5.5 planning/execution work, while the latter was completed active work pending archive/closure decision.
 - 2026-05-30: Archived 13 completed 0.5.4 changes after syncing delta specs into main specs. Previous workspace counts were active=2, archive=391, specs=299.
 - 2026-05-28: Archived `fix-user-input-dismiss-settlement` after strict OpenSpec validation, focused Vitest coverage, typecheck, and lint. Previous workspace counts were active=4, archive=370, specs=291.
 - 2026-05-28: Archived 20 verified changes from `feature/v0.5.4`, including the Project Map verified closure set, runtime performance evidence gates, workspace session catalog, reasoning-effort support, composer control surface, file rendering scheduler, and harness/performance governance changes.

@@ -96,7 +96,7 @@ describe("FileMarkdownPreview render budget", () => {
 
     const preview = screen.getByTestId("file-markdown-preview");
     expect(preview.getAttribute("data-markdown-render-projection")).toBe("bounded");
-    expect(preview.getAttribute("data-markdown-visible-lines")).toBe("1800");
+    expect(preview.getAttribute("data-markdown-visible-lines")).toBe("2800");
     expect(screen.getByTestId("file-markdown-render-budget")).toBeTruthy();
     expect(preview.textContent).not.toContain("paragraph-7000");
   });

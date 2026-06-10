@@ -3,6 +3,7 @@ use crate::workspace_io::{
     list_external_absolute_directory_children_inner, list_external_spec_tree_inner,
     list_workspace_directory_children_inner, list_workspace_files_inner,
     read_external_absolute_file_inner, read_external_spec_file_inner, read_workspace_file_inner,
+    read_workspace_file_preview_inner,
     write_external_absolute_file_inner, write_external_spec_file_inner, ExternalSpecFileResponse,
     WorkspaceFileResponse, WorkspaceFilesResponse,
 };
@@ -166,6 +167,20 @@ impl DaemonState {
             &workspace_id,
             &path,
             |root, rel_path| read_workspace_file_inner(root, rel_path),
+        )
+        .await
+    }
+
+    pub(crate) async fn read_workspace_file_preview(
+        &self,
+        workspace_id: String,
+        path: String,
+    ) -> Result<WorkspaceFileResponse, String> {
+        workspaces_core::read_workspace_file_core(
+            &self.workspaces,
+            &workspace_id,
+            &path,
+            |root, rel_path| read_workspace_file_preview_inner(root, rel_path),
         )
         .await
     }

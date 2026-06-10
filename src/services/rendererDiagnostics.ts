@@ -3,6 +3,10 @@ import {
   isPreloaded,
   writeClientStoreValue,
 } from "./clientStorage";
+import type {
+  RendererHeartbeatInput,
+  RendererSupportState,
+} from "./tauri/rendererStability";
 
 export type RendererDiagnosticEntry = {
   timestamp: number;
@@ -17,18 +21,32 @@ const EARLY_RENDERER_DIAGNOSTICS_STORAGE_KEY = "ccgui.bootstrapRendererDiagnosti
 const DEFAULT_BLANK_WATCHDOG_INTERVAL_MS = 1_500;
 const DEFAULT_BLANK_WATCHDOG_MIN_CONSECUTIVE_SAMPLES = 2;
 const DEFAULT_BLANK_WATCHDOG_MAX_REPORTS = 6;
+const DEFAULT_RENDERER_HEARTBEAT_INTERVAL_MS = 15_000;
+const MAX_HEARTBEAT_FAILURE_REPORTS = 3;
 
 let installed = false;
 let bufferedEntries: RendererDiagnosticEntry[] = [];
 let blankWatchdogTimer: number | null = null;
 let blankWatchdogConsecutiveSamples = 0;
 let blankWatchdogReports = 0;
+let rendererHeartbeatTimer: number | null = null;
+let rendererHeartbeatInFlight = false;
+let rendererHeartbeatSequence = 0;
+let rendererHeartbeatFailureReports = 0;
 
 type BlankScreenWatchdogOptions = {
   rootId?: string;
   intervalMs?: number;
   minConsecutiveSamples?: number;
   maxReports?: number;
+};
+
+type RendererHeartbeatOptions = {
+  intervalMs?: number;
+  appScope?: string;
+  rendererId?: string;
+  workspaceId?: string | null;
+  threadId?: string | null;
 };
 
 function trimDiagnostics(entries: RendererDiagnosticEntry[]) {
@@ -318,6 +336,124 @@ function toBoundedDiagnosticString(value: string | null | undefined) {
   return trimmed ? trimmed.slice(0, 120) : null;
 }
 
+function toSupportState(supported: boolean): RendererSupportState {
+  return supported ? "supported" : "unsupported";
+}
+
+function getNavigatorPlatform() {
+  if (typeof navigator === "undefined") {
+    return "unknown";
+  }
+  const navigatorWithUserAgentData = navigator as Navigator & {
+    userAgentData?: { platform?: string };
+  };
+  return (
+    navigatorWithUserAgentData.userAgentData?.platform ||
+    navigator.platform ||
+    "unknown"
+  ).slice(0, 80);
+}
+
+function getAppVersion() {
+  const env = (import.meta.env ?? {}) as Record<string, string | undefined>;
+  return (env.VITE_APP_VERSION || env.PACKAGE_VERSION || "unknown").slice(0, 80);
+}
+
+function getLongTaskSupportState(): RendererSupportState {
+  if (typeof PerformanceObserver === "undefined") {
+    return "unsupported";
+  }
+  const observer = PerformanceObserver as typeof PerformanceObserver & {
+    supportedEntryTypes?: readonly string[];
+  };
+  return toSupportState(Boolean(observer.supportedEntryTypes?.includes("longtask")));
+}
+
+function getMemorySnapshot() {
+  if (typeof performance === "undefined" || !("memory" in performance)) {
+    return {
+      memorySupportState: "unsupported" as RendererSupportState,
+      usedJsHeapSize: null,
+      totalJsHeapSize: null,
+      jsHeapSizeLimit: null,
+    };
+  }
+  const memory = (performance as Performance & {
+    memory?: {
+      usedJSHeapSize?: number;
+      totalJSHeapSize?: number;
+      jsHeapSizeLimit?: number;
+    };
+  }).memory;
+  return {
+    memorySupportState: "supported" as RendererSupportState,
+    usedJsHeapSize: toFiniteDiagnosticNumber(memory?.usedJSHeapSize),
+    totalJsHeapSize: toFiniteDiagnosticNumber(memory?.totalJSHeapSize),
+    jsHeapSizeLimit: toFiniteDiagnosticNumber(memory?.jsHeapSizeLimit),
+  };
+}
+
+export function buildRendererHeartbeatPayload(
+  options: RendererHeartbeatOptions = {},
+): RendererHeartbeatInput {
+  const memorySnapshot = getMemorySnapshot();
+  const longTaskSupportState = getLongTaskSupportState();
+  rendererHeartbeatSequence += 1;
+  return {
+    appScope: toBoundedDiagnosticString(options.appScope) ?? "main",
+    rendererId: toBoundedDiagnosticString(options.rendererId) ?? "main",
+    sequence: rendererHeartbeatSequence,
+    sentAt: Date.now(),
+    platform: getNavigatorPlatform(),
+    appVersion: getAppVersion(),
+    workspaceId: toBoundedDiagnosticString(options.workspaceId),
+    threadId: toBoundedDiagnosticString(options.threadId),
+    visibilityState:
+      typeof document === "undefined" ? "unknown" : document.visibilityState,
+    documentReadyState:
+      typeof document === "undefined" ? "unknown" : document.readyState,
+    support: {
+      nativeProcessFailureHook: "not-implemented",
+      memory: memorySnapshot.memorySupportState,
+      longTask: longTaskSupportState,
+      processCount: "unsupported",
+    },
+    pressure: {
+      activeEngineCount: null,
+      activeStreamingTurnCount: null,
+      helperProcessCount: null,
+      memorySupportState: memorySnapshot.memorySupportState,
+      usedJsHeapSize: memorySnapshot.usedJsHeapSize,
+      totalJsHeapSize: memorySnapshot.totalJsHeapSize,
+      jsHeapSizeLimit: memorySnapshot.jsHeapSizeLimit,
+      longTaskSupportState,
+      recoveryAttemptCount: 0,
+    },
+  };
+}
+
+async function sendRendererHeartbeat(options: RendererHeartbeatOptions) {
+  if (rendererHeartbeatInFlight) {
+    return;
+  }
+  rendererHeartbeatInFlight = true;
+  try {
+    const { recordRendererHeartbeat } = await import("./tauri/rendererStability");
+    await recordRendererHeartbeat(buildRendererHeartbeatPayload(options));
+    rendererHeartbeatFailureReports = 0;
+  } catch (error) {
+    if (rendererHeartbeatFailureReports < MAX_HEARTBEAT_FAILURE_REPORTS) {
+      rendererHeartbeatFailureReports += 1;
+      appendRendererDiagnostic("renderer/heartbeat-send-failed", {
+        error: formatUnknown(error),
+        reportCount: rendererHeartbeatFailureReports,
+      });
+    }
+  } finally {
+    rendererHeartbeatInFlight = false;
+  }
+}
+
 export function appendClientInteractionPerfDiagnostic(
   input: ClientInteractionPerfDiagnosticInput,
 ) {
@@ -346,6 +482,40 @@ export function stopRendererBlankScreenWatchdog() {
   }
   window.clearInterval(blankWatchdogTimer);
   blankWatchdogTimer = null;
+}
+
+export function stopRendererHeartbeat() {
+  if (
+    rendererHeartbeatTimer === null ||
+    typeof window === "undefined" ||
+    typeof window.clearInterval !== "function"
+  ) {
+    rendererHeartbeatTimer = null;
+    return;
+  }
+  window.clearInterval(rendererHeartbeatTimer);
+  rendererHeartbeatTimer = null;
+}
+
+export function startRendererHeartbeat(options: RendererHeartbeatOptions = {}) {
+  if (
+    typeof window === "undefined" ||
+    typeof document === "undefined" ||
+    typeof window.setInterval !== "function"
+  ) {
+    return;
+  }
+  if (rendererHeartbeatTimer !== null) {
+    return;
+  }
+  const intervalMs = Math.max(
+    5_000,
+    options.intervalMs ?? DEFAULT_RENDERER_HEARTBEAT_INTERVAL_MS,
+  );
+  void sendRendererHeartbeat(options);
+  rendererHeartbeatTimer = window.setInterval(() => {
+    void sendRendererHeartbeat(options);
+  }, intervalMs);
 }
 
 export function startRendererBlankScreenWatchdog(
@@ -410,6 +580,7 @@ export function installRendererLifecycleDiagnostics() {
   installed = true;
 
   appendRendererDiagnostic("renderer/install", collectWindowSnapshot());
+  startRendererHeartbeat();
 
   window.addEventListener("focus", () => {
     appendRendererDiagnostic("window/focus", collectWindowSnapshot());

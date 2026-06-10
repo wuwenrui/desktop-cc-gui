@@ -9,6 +9,7 @@ import Search from "lucide-react/dist/esm/icons/search";
 import Activity from "lucide-react/dist/esm/icons/activity";
 import LayoutList from "lucide-react/dist/esm/icons/layout-list";
 import NotebookPen from "lucide-react/dist/esm/icons/notebook-pen";
+import PenLine from "lucide-react/dist/esm/icons/pen-line";
 import { TooltipIconButton } from "../../../components/ui/tooltip-icon-button";
 
 export type PanelTabId =
@@ -21,7 +22,7 @@ export type PanelTabId =
   | "memory"
   | "activity";
 
-export type PanelToolbarTabId = PanelTabId | "projectMap";
+export type PanelToolbarTabId = PanelTabId | "projectMap" | "intentCanvas";
 
 type PanelTab = {
   id: PanelToolbarTabId;
@@ -45,6 +46,7 @@ const SHOW_GIT_TAB = true;
 const tabIds: PanelToolbarTabId[] = ([
   "activity",
   "projectMap",
+  "intentCanvas",
   "radar",
   "git",
   "files",
@@ -65,6 +67,7 @@ const tabIcons: Record<PanelToolbarTabId, ReactNode> = {
   notes: <NotebookPen aria-hidden />,
   memory: <Brain aria-hidden />,
   projectMap: <Globe2 aria-hidden />,
+  intentCanvas: <PenLine aria-hidden />,
   activity: <Activity aria-hidden />,
   prompts: <ScrollText aria-hidden />,
 };
@@ -77,6 +80,7 @@ const tabI18nKeys: Record<PanelToolbarTabId, string> = {
   notes: "panels.notes",
   memory: "panels.memory",
   projectMap: "panels.projectMap",
+  intentCanvas: "panels.intentCanvas",
   activity: "panels.activity",
   prompts: "panels.prompts",
 };

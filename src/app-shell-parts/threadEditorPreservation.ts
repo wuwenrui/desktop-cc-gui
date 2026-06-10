@@ -6,7 +6,7 @@ export function shouldPreserveEditorOnThreadSelect({
   activeEditorFilePath,
 }: {
   isCompact: boolean;
-  centerMode: "chat" | "diff" | "editor" | "memory" | "projectMap";
+  centerMode: "chat" | "diff" | "editor" | "memory" | "projectMap" | "intentCanvas";
   activeWorkspaceId: string | null | undefined;
   targetWorkspaceId: string;
   activeEditorFilePath: string | null | undefined;

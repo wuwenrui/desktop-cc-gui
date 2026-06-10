@@ -92,4 +92,20 @@ describe("realtimeEventBatcher", () => {
       ["msg-1", "bc"],
     ]);
   });
+
+  it("supports cadence flushes for bounded multi-engine streaming pressure", () => {
+    const batcher = createRealtimeEventBatcher();
+    batcher.push(textDelta("a"));
+    batcher.push(textDelta("b"));
+
+    expect(batcher.flush("cadence")).toMatchObject({
+      reason: "cadence",
+      events: [
+        {
+          operation: "appendAgentMessageDelta",
+          delta: "b",
+        },
+      ],
+    });
+  });
 });

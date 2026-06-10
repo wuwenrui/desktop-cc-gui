@@ -6,7 +6,8 @@ import {
   useState,
   type RefObject,
 } from "react";
-import { EditorView, keymap } from "@codemirror/view";
+import { StateEffect, StateField } from "@codemirror/state";
+import { Decoration, EditorView, keymap, type DecorationSet } from "@codemirror/view";
 import { closeSearchPanel, openSearchPanel, searchPanelOpen } from "@codemirror/search";
 import type { ReactCodeMirrorRef } from "@uiw/react-codemirror";
 import { getCodeIntelDefinition, getCodeIntelReferences } from "../../../services/tauri";
@@ -56,6 +57,35 @@ type UseFileNavigationArgs = {
   cmRef: RefObject<ReactCodeMirrorRef | null>;
 };
 
+const navigationLineFlashEffect = StateEffect.define<number | null>();
+
+const navigationLineFlashField = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(markers, transaction) {
+    let nextMarkers = markers.map(transaction.changes);
+    for (const effect of transaction.effects) {
+      if (!effect.is(navigationLineFlashEffect)) {
+        continue;
+      }
+      const lineNumber = effect.value;
+      if (lineNumber === null) {
+        nextMarkers = Decoration.none;
+        continue;
+      }
+      if (lineNumber < 1 || lineNumber > transaction.state.doc.lines) {
+        nextMarkers = Decoration.none;
+        continue;
+      }
+      const line = transaction.state.doc.line(lineNumber);
+      nextMarkers = Decoration.set([
+        Decoration.line({ class: "cm-navigation-line-flash" }).range(line.from),
+      ]);
+    }
+    return nextMarkers;
+  },
+  provide: (field) => EditorView.decorations.from(field),
+});
+
 export function useFileNavigation({
   workspaceId,
   workspacePath,
@@ -82,6 +112,7 @@ export function useFileNavigation({
   const recentReferencesTriggerRef = useRef<RecentTrigger | null>(null);
   const appliedNavigationRequestRef = useRef(0);
   const navigationFocusTimerRef = useRef<number | null>(null);
+  const navigationFlashTimerRef = useRef<number | null>(null);
   const currentFileUri = useMemo(() => toFileUri(absolutePath), [absolutePath]);
 
   const clearNavigationFocusTimer = useCallback(() => {
@@ -90,6 +121,46 @@ export function useFileNavigation({
       navigationFocusTimerRef.current = null;
     }
   }, []);
+
+  const clearNavigationFlashTimer = useCallback(() => {
+    if (navigationFlashTimerRef.current !== null) {
+      window.clearTimeout(navigationFlashTimerRef.current);
+      navigationFlashTimerRef.current = null;
+    }
+  }, []);
+
+  const clearEditorNavigationFlash = useCallback(() => {
+    clearNavigationFlashTimer();
+    const view = cmRef.current?.view;
+    if (!view) {
+      return;
+    }
+    view.dispatch({
+      effects: navigationLineFlashEffect.of(null),
+    });
+  }, [clearNavigationFlashTimer, cmRef]);
+
+  const flashEditorNavigationLine = useCallback((line: number) => {
+    const view = cmRef.current?.view;
+    if (!view || line < 1 || line > view.state.doc.lines) {
+      return;
+    }
+    clearNavigationFlashTimer();
+    view.dispatch({
+      effects: navigationLineFlashEffect.of(line),
+    });
+    navigationFlashTimerRef.current = window.setTimeout(() => {
+      const currentView = cmRef.current?.view;
+      if (!currentView) {
+        navigationFlashTimerRef.current = null;
+        return;
+      }
+      currentView.dispatch({
+        effects: navigationLineFlashEffect.of(null),
+      });
+      navigationFlashTimerRef.current = null;
+    }, 2000);
+  }, [clearNavigationFlashTimer, cmRef]);
 
   const focusEditorAtLocation = useCallback((line: number, column: number) => {
     const view = cmRef.current?.view;
@@ -120,6 +191,7 @@ export function useFileNavigation({
       const focused = focusEditorAtLocation(line, column);
       if (focused && attempt >= 4) {
         clearNavigationFocusTimer();
+        flashEditorNavigationLine(line);
         onFocused?.();
         return;
       }
@@ -132,7 +204,7 @@ export function useFileNavigation({
         focusEditorAtLocationWithRetry(line, column, attempt + 1, onFocused);
       }, 16);
     },
-    [clearNavigationFocusTimer, focusEditorAtLocation],
+    [clearNavigationFocusTimer, flashEditorNavigationLine, focusEditorAtLocation],
   );
 
   const navigateToLocation = useCallback(
@@ -359,34 +431,37 @@ export function useFileNavigation({
 
   const editorNavigationKeymapExt = useMemo(
     () =>
-      keymap.of([
-        {
-          key: "Mod-f",
-          run: (view) => {
-            if (searchPanelOpen(view.state)) {
-              closeSearchPanel(view);
-            } else {
-              openSearchPanel(view);
-            }
-            view.focus();
-            return true;
+      [
+        navigationLineFlashField,
+        keymap.of([
+          {
+            key: "Mod-f",
+            run: (view) => {
+              if (searchPanelOpen(view.state)) {
+                closeSearchPanel(view);
+              } else {
+                openSearchPanel(view);
+              }
+              view.focus();
+              return true;
+            },
           },
-        },
-        {
-          key: "Mod-b",
-          run: () => {
-            runDefinitionFromCursor();
-            return true;
+          {
+            key: "Mod-b",
+            run: () => {
+              runDefinitionFromCursor();
+              return true;
+            },
           },
-        },
-        {
-          key: "Alt-F7",
-          run: () => {
-            runReferencesFromCursor();
-            return true;
+          {
+            key: "Alt-F7",
+            run: () => {
+              runReferencesFromCursor();
+              return true;
+            },
           },
-        },
-      ]),
+        ]),
+      ],
     [runDefinitionFromCursor, runReferencesFromCursor],
   );
 
@@ -425,10 +500,12 @@ export function useFileNavigation({
 
   useEffect(() => {
     clearNavigationFocusTimer();
+    clearEditorNavigationFlash();
     return () => {
       clearNavigationFocusTimer();
+      clearEditorNavigationFlash();
     };
-  }, [clearNavigationFocusTimer, filePath]);
+  }, [clearEditorNavigationFlash, clearNavigationFocusTimer, filePath]);
 
   useEffect(() => {
     if (!navigationTarget) {

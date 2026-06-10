@@ -39,13 +39,7 @@ export function useWorkspaceSessionProjectionSummary({
   const requestSeqRef = useRef(0);
   const normalizedQuery = useMemo(
     () => normalizeQuery(query),
-    [
-      query?.engine,
-      query?.folderId,
-      query?.keyword,
-      query?.sessionAttributionMode,
-      query?.status,
-    ],
+    [query],
   );
 
   const load = useCallback(async () => {

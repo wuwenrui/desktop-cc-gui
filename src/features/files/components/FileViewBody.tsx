@@ -15,7 +15,7 @@ import CodeMirror, {
   type ReactCodeMirrorRef,
 } from "@uiw/react-codemirror";
 import { FileDocumentPreview } from "./FileDocumentPreview";
-import { FileMarkdownPreview } from "./FileMarkdownPreview";
+import { FileMarkdownPreviewFast } from "./FileMarkdownPreviewFast";
 import { FilePdfPreview } from "./FilePdfPreview";
 import { FileStructuredPreview } from "./FileStructuredPreview";
 import { FileTabularPreview } from "./FileTabularPreview";
@@ -24,6 +24,10 @@ import type { FileDocumentSnapshot } from "../utils/fileDocumentSnapshot";
 import type { FileViewSurface } from "../utils/fileViewSurface";
 import { highlightLine } from "../../../utils/syntax";
 import type { FileRenderPressure } from "../types/fileRenderPressure";
+import type {
+  FastMarkdownFeatureFlags,
+  FastMarkdownRendererProfileId,
+} from "../../markdown/fastMarkdownRenderer";
 import type {
   CodeAnnotationLineRange,
   CodeAnnotationSelection,
@@ -49,6 +53,10 @@ type FileViewBodyProps = {
     fileRenderPressure: FileRenderPressure;
     markdownPreviewSnapshotMode: "stable" | "live";
     markdownPreviewRefreshKey?: number | null;
+    markdownPreviewContentOverride?: string | null;
+    markdownRendererProfile?: FastMarkdownRendererProfileId;
+    markdownFastFeatureFlags?: FastMarkdownFeatureFlags;
+    onFastMarkdownRendererFallback?: (reason: string) => void;
   cmRef: RefObject<ReactCodeMirrorRef | null>;
   handleCodeMirrorCreate: NonNullable<ReactCodeMirrorProps["onCreateEditor"]>;
   onActiveFileLineRangeChange?: (range: { startLine: number; endLine: number } | null) => void;
@@ -524,6 +532,10 @@ export function FileViewBody({
     fileRenderPressure,
     markdownPreviewSnapshotMode,
     markdownPreviewRefreshKey,
+    markdownPreviewContentOverride,
+    markdownRendererProfile,
+    markdownFastFeatureFlags,
+    onFastMarkdownRendererFallback,
   cmRef,
   handleCodeMirrorCreate,
   onActiveFileLineRangeChange,
@@ -813,20 +825,25 @@ export function FileViewBody({
 
   if (viewSurface.kind === "markdown-preview") {
     const markdownPreviewContent =
-      markdownPreviewSnapshotMode === "live"
+      markdownPreviewContentOverride ??
+      (markdownPreviewSnapshotMode === "live"
         ? content
         : stableMarkdownPreviewSnapshot.documentKey === documentKey &&
             stableMarkdownPreviewSnapshot.content.length > 0
           ? stableMarkdownPreviewSnapshot.content
-          : content;
+          : content);
     return (
-      <div className="fvp-preview-scroll">
-        <FileMarkdownPreview
+      <div className="fvp-markdown-preview-frame">
+        <FileMarkdownPreviewFast
           key={filePath}
           documentKey={documentKey}
           value={markdownPreviewContent}
           renderPressure={fileRenderPressure}
           className="fvp-file-markdown fvp-markdown-github"
+          rendererProfile={markdownRendererProfile}
+          featureFlags={markdownFastFeatureFlags}
+          onFastRendererFallback={onFastMarkdownRendererFallback}
+          t={t}
           onAnnotationStart={onPreviewAnnotationStart}
           annotationDraft={previewDraft}
           annotations={previewAnnotations}

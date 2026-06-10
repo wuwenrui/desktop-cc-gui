@@ -1,14 +1,14 @@
 import { useEffect } from "react";
 
 type AutoExitEmptyDiffOptions = {
-  centerMode: "chat" | "diff" | "editor" | "memory" | "projectMap";
+  centerMode: "chat" | "diff" | "editor" | "memory" | "projectMap" | "intentCanvas";
   autoExitEnabled: boolean;
   activeDiffCount: number;
   activeDiffLoading: boolean;
   activeDiffError: string | null;
   activeThreadId: string | null;
   isCompact: boolean;
-  setCenterMode: (mode: "chat" | "diff" | "editor" | "memory" | "projectMap") => void;
+  setCenterMode: (mode: "chat" | "diff" | "editor" | "memory" | "projectMap" | "intentCanvas") => void;
   setSelectedDiffPath: (path: string | null) => void;
   setActiveTab: (tab: "projects" | "codex" | "spec" | "git" | "log") => void;
 };

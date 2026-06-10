@@ -77,6 +77,19 @@ const ALLOWED_LINE_PATTERNS = [
     line:
       /file_name != "cc_gui_daemon" && file_name != "moss_x_daemon" && file_name != "moss-x-daemon"/,
   },
+  {
+    path: /^src-tauri\/src\/project_canvas\.rs$/,
+    line: /PathBuf::from\(&entry\.path\)\.join\("\.mossx"\)\.join\("canvases"\)/,
+  },
+  {
+    path: /^src-tauri\/src\/project_map_relations\/file_classification\.rs$/,
+    line: /^\s*\| "\.(?:mossx|codemoss)"$/,
+  },
+  {
+    path: /^src\/features\/files\/components\/FileViewPanel\.tsx$/,
+    line:
+      /readBooleanStorageFlag\("ccgui\.fileMarkdown(?:Bounded)?FastHtml"\) \|\| readBooleanStorageFlag\("mossx\.fileMarkdown(?:Bounded)?FastHtml"\)/,
+  },
 ];
 
 function normalizeRelativePath(relativePath) {

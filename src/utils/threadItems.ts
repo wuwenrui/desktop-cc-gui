@@ -1,4 +1,5 @@
-import type { ConversationItem } from "../types";
+import type { ConversationItem, IntentCanvasContextSendAttachment } from "../types";
+import { parseIntentCanvasContextSummaries } from "../features/intent-canvas/utils/messageContext";
 import { findEquivalentReasoningObservationIndex } from "../features/threads/assembly/conversationNormalization";
 import { normalizeAgentIcon } from "./agentIcons";
 import {
@@ -278,6 +279,56 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     return null;
   }
   return value as Record<string, unknown>;
+}
+
+function isIntentCanvasContextAttachment(
+  value: unknown,
+): value is IntentCanvasContextSendAttachment {
+  const record = asRecord(value);
+  return (
+    record?.kind === "intent_canvas_context" &&
+    typeof record.attachmentId === "string" &&
+    typeof record.canvasId === "string" &&
+    typeof record.rawPayload === "string"
+  );
+}
+
+function normalizeIntentCanvasContextAttachmentList(
+  value: unknown,
+): IntentCanvasContextSendAttachment[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter(isIntentCanvasContextAttachment);
+}
+
+function mergeIntentCanvasContextAttachmentCandidates(
+  candidates: IntentCanvasContextSendAttachment[][],
+) {
+  const merged: IntentCanvasContextSendAttachment[] = [];
+  const seen = new Set<string>();
+  candidates.flat().forEach((attachment) => {
+    if (seen.has(attachment.attachmentId)) {
+      return;
+    }
+    seen.add(attachment.attachmentId);
+    merged.push(attachment);
+  });
+  return merged;
+}
+
+function extractIntentCanvasContextAttachmentsFromUserMessageItem(
+  item: Record<string, unknown>,
+  text: string,
+) {
+  const metadata = asRecord(item.metadata);
+  return mergeIntentCanvasContextAttachmentCandidates([
+    normalizeIntentCanvasContextAttachmentList(item.intentCanvasContextAttachments),
+    normalizeIntentCanvasContextAttachmentList(item.intent_canvas_context_attachments),
+    normalizeIntentCanvasContextAttachmentList(metadata?.intentCanvasContextAttachments),
+    normalizeIntentCanvasContextAttachmentList(metadata?.intent_canvas_context_attachments),
+    parseIntentCanvasContextSummaries(text),
+  ]);
 }
 
 function normalizeCommandValue(value: unknown) {
@@ -1056,6 +1107,8 @@ export function buildConversationItem(
       item,
       resolvedText,
     );
+    const intentCanvasContextAttachments =
+      extractIntentCanvasContextAttachmentsFromUserMessageItem(item, resolvedText);
     return {
       id,
       kind: "message",
@@ -1065,6 +1118,9 @@ export function buildConversationItem(
       collaborationMode,
       selectedAgentName,
       selectedAgentIcon,
+      ...(intentCanvasContextAttachments.length > 0
+        ? { intentCanvasContextAttachments }
+        : {}),
     };
   }
   if (type === "reasoning") {
@@ -1869,6 +1925,8 @@ export function buildConversationItemFromThreadItem(
       item,
       resolvedText,
     );
+    const intentCanvasContextAttachments =
+      extractIntentCanvasContextAttachmentsFromUserMessageItem(item, resolvedText);
     return {
       id,
       kind: "message",
@@ -1878,6 +1936,9 @@ export function buildConversationItemFromThreadItem(
       collaborationMode,
       selectedAgentName,
       selectedAgentIcon,
+      ...(intentCanvasContextAttachments.length > 0
+        ? { intentCanvasContextAttachments }
+        : {}),
     };
   }
   if (type === "agentMessage") {

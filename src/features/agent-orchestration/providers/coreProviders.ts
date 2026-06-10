@@ -1,4 +1,4 @@
-import type { ProjectMapDataset } from "../../project-map/types";
+import type { ProjectMapDataset, ProjectMapRelationshipAgentReadPlan } from "../../project-map/types";
 import type { TaskRunRecord } from "../../tasks/types";
 import type { OrchestrationProviderSnapshot, OrchestrationTask } from "../types";
 import { readProjectMapOrchestrationCandidates } from "./projectMapProvider";
@@ -48,6 +48,7 @@ export function collectCoreOrchestrationProviderSnapshots(input: {
   workspaceId: string;
   manualTasks?: OrchestrationTask[];
   projectMapDataset?: ProjectMapDataset | null;
+  projectMapRelationshipContextPack?: ProjectMapRelationshipAgentReadPlan | null;
   taskRuns?: TaskRunRecord[];
   now?: string;
   readProjectMapCandidates?: () => OrchestrationTask[];
@@ -63,6 +64,7 @@ export function collectCoreOrchestrationProviderSnapshots(input: {
       return readProjectMapOrchestrationCandidates({
         workspaceId: input.workspaceId,
         dataset: input.projectMapDataset,
+        relationshipContextPack: input.projectMapRelationshipContextPack,
         now: input.now,
       });
     })),

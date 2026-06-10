@@ -241,7 +241,9 @@ export function useSelectedComposerSession({
     }
 
     selectedComposerSelectionRef.current = candidate;
-    setSelectedComposerSelection(candidate);
+    setSelectedComposerSelection((currentSelection) =>
+      selectionsEqual(currentSelection, candidate) ? currentSelection : candidate
+    );
   }, [
     activeThreadId,
     activeWorkspaceId,

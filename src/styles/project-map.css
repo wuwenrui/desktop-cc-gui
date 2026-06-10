@@ -1,5 +1,13 @@
 @import "./project-map.inspector.css";
 @import "./project-map.overlays.css";
+@import "./project-map.relationship-chrome.css";
+@import "./project-map.relationship-graph.css";
+@import "./project-map.relationship.css";
+@import "./project-map.relationship-inspector.css";
+@import "./project-map.relationship-file-read.css";
+@import "./project-map.relationship-workspace.css";
+@import "./project-map.api-contract.css";
+@import "./project-map.controls.css";
 
 .project-map-panel {
   --project-map-toolbar-control-height: 22px;
@@ -23,6 +31,12 @@
   --project-map-success: var(--status-success, var(--success, #16a34a));
   --project-map-warning: var(--status-warning, var(--warning, #f59e0b));
   --project-map-error: var(--status-error, var(--destructive, #dc2626));
+  --project-map-info: var(--status-info, var(--info, color-mix(in srgb, var(--project-map-accent) 68%, var(--project-map-success))));
+  --project-map-core: var(--project-map-accent);
+  --project-map-relation-calls: color-mix(in srgb, var(--project-map-accent) 72%, var(--project-map-success));
+  --project-map-relation-imports: var(--project-map-info);
+  --project-map-relation-tests: color-mix(in srgb, var(--project-map-success) 72%, var(--project-map-warning));
+  --project-map-relation-inspected: var(--project-map-success);
   --project-map-shadow: color-mix(in srgb, var(--background, #000000) 58%, transparent);
   --project-map-grid-line: color-mix(in srgb, var(--project-map-border) 58%, transparent);
   --project-map-grid-glow: color-mix(in srgb, var(--project-map-accent) 18%, transparent);
@@ -227,137 +241,104 @@
   outline-offset: 3px;
 }
 
-.project-map-primary-button,
-.project-map-empty-action,
-.project-map-chrome-toggle:not(.project-map-toolbar-action),
-.project-map-icon-button,
-.project-map-task-button:not(.project-map-toolbar-action),
-.project-map-node-actions button,
-.project-map-back-button,
-.project-map-dialog footer button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  height: var(--project-map-toolbar-control-height);
-  box-sizing: border-box;
-  border: 1px solid color-mix(in srgb, var(--project-map-accent) 38%, transparent);
+.project-map-relationship-scan-panel {
+  display: grid;
+  gap: 10px;
+  max-height: min(74vh, 760px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  border: 1px solid color-mix(in srgb, var(--project-map-accent) 22%, var(--project-map-border));
   border-radius: 8px;
-  padding: 0 8px;
-  font-size: 11px;
-  font-weight: 650;
-  letter-spacing: 0;
-  line-height: 1;
-  white-space: nowrap;
-  cursor: pointer;
+  padding: 10px;
+  background: color-mix(in srgb, var(--project-map-surface) 90%, transparent);
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--project-map-accent) 52%, transparent) transparent;
 }
 
-.project-map-chrome-toggle {
-  flex: 0 0 auto;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
+.project-map-relationship-scan-panel::-webkit-scrollbar,
+.project-map-relationship-tile-board::-webkit-scrollbar,
+.project-map-relationship-dashboard-grid::-webkit-scrollbar,
+.project-map-relationship-file-list::-webkit-scrollbar,
+.project-map-relationship-edge-list::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
 }
 
-.project-map-compact-title {
+.project-map-relationship-scan-panel::-webkit-scrollbar-thumb,
+.project-map-relationship-tile-board::-webkit-scrollbar-thumb,
+.project-map-relationship-dashboard-grid::-webkit-scrollbar-thumb,
+.project-map-relationship-file-list::-webkit-scrollbar-thumb,
+.project-map-relationship-edge-list::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--project-map-accent) 44%, var(--project-map-border));
+  background-clip: padding-box;
+}
+
+.project-map-relationship-scan-panel header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.project-map-relationship-scan-title {
   display: flex;
   min-width: 0;
   align-items: center;
   gap: 8px;
-  color: var(--project-map-text-muted);
-  font-size: 11px;
 }
 
-.project-map-compact-title strong {
-  overflow: hidden;
-  color: var(--project-map-text-strong);
+.project-map-relationship-scan-panel h4,
+.project-map-relationship-scan-panel p {
+  margin: 0;
+}
+
+.project-map-relationship-scan-panel h4 {
   font-size: 12px;
+  font-weight: 760;
+  color: var(--project-map-text-strong);
+}
+
+.project-map-relationship-scan-panel p {
+  overflow: hidden;
+  color: var(--project-map-text-muted);
+  font-size: 11px;
+  line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.project-map-compact-title span {
-  flex: 0 0 auto;
-  color: var(--project-map-text-subtle);
-}
-
-.project-map-primary-button {
-  background: var(--project-map-accent);
-  color: var(--project-map-accent-text);
-}
-
-.project-map-empty-action {
-  min-width: 118px;
-  min-height: 34px;
-  background: var(--project-map-surface);
-  color: var(--project-map-accent);
-  box-shadow: 0 8px 20px color-mix(in srgb, var(--project-map-accent) 18%, transparent);
-}
-
-.project-map-icon-button,
-.project-map-task-button:not(.project-map-toolbar-action),
-.project-map-node-actions button,
-.project-map-back-button {
-  background: var(--project-map-surface);
-  color: var(--project-map-accent);
-}
-
-.project-map-primary-button svg,
-.project-map-empty-action svg,
-.project-map-chrome-toggle svg,
-.project-map-icon-button svg,
-.project-map-task-button svg,
-.project-map-node-actions svg,
-.project-map-back-button svg,
-.project-map-dialog footer svg {
-  width: 13px;
-  height: 13px;
-}
-
-.project-map-candidate-badge {
-  display: inline-flex;
+.project-map-relationship-scan-metrics {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 4px;
   align-items: center;
-  height: var(--project-map-toolbar-control-height);
-  box-sizing: border-box;
-  border: 0;
-  border-radius: 7px;
-  padding: 0 7px;
-  background: color-mix(in srgb, var(--project-map-warning) 14%, var(--project-map-surface));
-  color: var(--project-map-warning);
-  font-size: 10.5px;
-  font-weight: 650;
-  white-space: nowrap;
-  cursor: pointer;
 }
 
-.project-map-candidate-badge:hover {
-  background: color-mix(in srgb, var(--project-map-warning) 20%, var(--project-map-surface));
-}
-
-.project-map-confirm-all-candidates {
+.project-map-relationship-scan-metrics span {
   display: inline-flex;
-  align-items: center;
-  height: var(--project-map-toolbar-control-height);
-  box-sizing: border-box;
-  border: 1px solid color-mix(in srgb, var(--project-map-warning) 34%, transparent);
-  border-radius: 7px;
-  padding: 0 7px;
-  background: color-mix(in srgb, var(--project-map-warning) 7%, var(--project-map-surface));
-  color: var(--project-map-warning);
-  font-size: 10.5px;
-  font-weight: 650;
-  white-space: nowrap;
-  cursor: pointer;
+  min-width: fit-content;
+  align-items: baseline;
+  gap: 3px;
+  border: 1px solid color-mix(in srgb, var(--project-map-border) 76%, transparent);
+  border-radius: 999px;
+  padding: 3px 6px;
+  background: color-mix(in srgb, var(--project-map-surface-strong) 62%, transparent);
+  color: var(--project-map-text-muted);
+  font-size: 10px;
 }
 
-.project-map-confirm-all-candidates:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--project-map-warning) 14%, var(--project-map-surface));
+.project-map-relationship-scan-metrics strong {
+  display: inline;
+  color: var(--project-map-text-strong);
+  font-size: 11px;
 }
 
-.project-map-confirm-all-candidates:disabled {
-  cursor: wait;
-  opacity: 0.58;
+.project-map-relationship-scan-error {
+  color: var(--project-map-error);
 }
 
 .project-map-inline-status {
@@ -899,7 +880,7 @@
     );
   box-shadow:
     0 18px 46px color-mix(in srgb, var(--project-map-shadow) 78%, transparent),
-    0 1px 0 color-mix(in srgb, #ffffff 58%, transparent) inset;
+    0 1px 0 color-mix(in srgb, var(--project-map-accent-text) 58%, transparent) inset;
 }
 
 .project-map-auto-ingestion-dialog::after {
@@ -1228,14 +1209,14 @@
 }
 
 .project-map-delete-dialog {
-  border-color: color-mix(in srgb, #dc2626 30%, var(--project-map-border));
+  border-color: color-mix(in srgb, var(--project-map-error) 30%, var(--project-map-border));
   background: var(--project-map-surface);
   color: var(--project-map-text-strong);
 }
 
 .project-map-delete-dialog-warning {
   margin: 8px 0 0;
-  color: #b91c1c;
+  color: var(--project-map-error);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -1266,9 +1247,9 @@
 }
 
 .project-map-delete-dialog-danger {
-  border: 1px solid color-mix(in srgb, #dc2626 44%, transparent);
-  background: #dc2626;
-  color: #ffffff;
+  border: 1px solid color-mix(in srgb, var(--project-map-error) 44%, transparent);
+  background: var(--project-map-error);
+  color: var(--project-map-accent-text);
 }
 
 .project-map-delete-dialog-danger svg {
@@ -1415,7 +1396,7 @@
 }
 
 .project-map-edge.is-path-edge {
-  stroke: color-mix(in srgb, #2563eb 74%, #22d3ee 26%);
+  stroke: color-mix(in srgb, var(--project-map-core) 74%, var(--project-map-info) 26%);
   stroke-width: 3;
   stroke-dasharray: 7 5;
 }
@@ -1478,23 +1459,23 @@
 .project-map-node.is-core {
   width: 220px;
   min-height: 132px;
-  border: 2px solid color-mix(in srgb, #2563eb 76%, #7dd3fc 24%);
+  border: 2px solid color-mix(in srgb, var(--project-map-core) 76%, var(--project-map-info) 24%);
   border-left-width: 7px;
   padding: 13px 36px 13px 14px;
   background:
-    linear-gradient(135deg, color-mix(in srgb, #2563eb 18%, transparent), transparent 44%),
-    linear-gradient(180deg, color-mix(in srgb, #7dd3fc 10%, transparent), transparent 72%),
-    color-mix(in srgb, var(--project-map-surface) 88%, #2563eb 12%);
+    linear-gradient(135deg, color-mix(in srgb, var(--project-map-core) 18%, transparent), transparent 44%),
+    linear-gradient(180deg, color-mix(in srgb, var(--project-map-info) 10%, transparent), transparent 72%),
+    color-mix(in srgb, var(--project-map-surface) 88%, var(--project-map-core) 12%);
   box-shadow:
-    0 0 0 1px color-mix(in srgb, #7dd3fc 38%, transparent),
-    0 0 0 6px color-mix(in srgb, #2563eb 14%, transparent),
-    0 22px 42px color-mix(in srgb, var(--project-map-shadow) 72%, #2563eb 28%);
+    0 0 0 1px color-mix(in srgb, var(--project-map-info) 38%, transparent),
+    0 0 0 6px color-mix(in srgb, var(--project-map-core) 14%, transparent),
+    0 22px 42px color-mix(in srgb, var(--project-map-shadow) 72%, var(--project-map-core) 28%);
 }
 
 .project-map-node.is-core .project-map-node-kind {
-  background: linear-gradient(90deg, #2563eb, #0891b2);
-  color: #f8fbff;
-  box-shadow: 0 0 0 1px color-mix(in srgb, #bfdbfe 34%, transparent);
+  background: linear-gradient(90deg, var(--project-map-core), var(--project-map-info));
+  color: var(--project-map-accent-text);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--project-map-info) 34%, transparent);
 }
 
 .project-map-node.is-core strong {
@@ -1504,9 +1485,9 @@
 
 .project-map-node.is-core:hover {
   box-shadow:
-    0 0 0 1px color-mix(in srgb, #7dd3fc 48%, transparent),
-    0 0 0 7px color-mix(in srgb, #2563eb 18%, transparent),
-    0 24px 44px color-mix(in srgb, var(--project-map-shadow) 68%, #2563eb 32%);
+    0 0 0 1px color-mix(in srgb, var(--project-map-info) 48%, transparent),
+    0 0 0 7px color-mix(in srgb, var(--project-map-core) 18%, transparent),
+    0 24px 44px color-mix(in srgb, var(--project-map-shadow) 68%, var(--project-map-core) 32%);
 }
 
 .project-map-node.is-hub {
@@ -1521,11 +1502,11 @@
 }
 
 .project-map-node.is-core.is-selected {
-  border-color: color-mix(in srgb, #2563eb 82%, #7dd3fc 18%);
+  border-color: color-mix(in srgb, var(--project-map-core) 82%, var(--project-map-info) 18%);
   box-shadow:
-    0 0 0 2px color-mix(in srgb, #bfdbfe 44%, transparent),
-    0 0 0 8px color-mix(in srgb, #2563eb 18%, transparent),
-    0 24px 46px color-mix(in srgb, var(--project-map-shadow) 66%, #2563eb 34%);
+    0 0 0 2px color-mix(in srgb, var(--project-map-info) 44%, transparent),
+    0 0 0 8px color-mix(in srgb, var(--project-map-core) 18%, transparent),
+    0 24px 46px color-mix(in srgb, var(--project-map-shadow) 66%, var(--project-map-core) 34%);
 }
 
 .project-map-node.is-group-selected:not(.is-selected) {
@@ -1534,19 +1515,19 @@
 }
 
 .project-map-node.is-search-match {
-  border-color: color-mix(in srgb, #0891b2 72%, transparent);
+  border-color: color-mix(in srgb, var(--project-map-info) 72%, transparent);
   box-shadow:
-    0 0 0 2px color-mix(in srgb, #0891b2 22%, transparent),
+    0 0 0 2px color-mix(in srgb, var(--project-map-info) 22%, transparent),
     0 14px 30px var(--project-map-shadow);
 }
 
 .project-map-node.is-path-node {
-  border-color: color-mix(in srgb, #22d3ee 72%, transparent);
+  border-color: color-mix(in srgb, var(--project-map-info) 72%, transparent);
   background:
-    linear-gradient(135deg, color-mix(in srgb, #2563eb 12%, transparent), transparent 58%),
+    linear-gradient(135deg, color-mix(in srgb, var(--project-map-core) 12%, transparent), transparent 58%),
     color-mix(in srgb, var(--project-map-surface) 94%, transparent);
   box-shadow:
-    0 0 0 3px color-mix(in srgb, #22d3ee 20%, transparent),
+    0 0 0 3px color-mix(in srgb, var(--project-map-info) 20%, transparent),
     0 16px 34px var(--project-map-shadow);
 }
 
@@ -2466,7 +2447,7 @@
   border: 1px solid var(--project-map-border);
   border-radius: 16px;
   background: color-mix(in srgb, var(--project-map-surface) 88%, transparent);
-  box-shadow: 0 14px 40px rgb(15 23 42 / 8%);
+  box-shadow: 0 14px 40px color-mix(in srgb, var(--project-map-shadow) 8%, transparent);
   overflow: auto;
 }
 
@@ -2688,7 +2669,7 @@
 
 .project-map-node.is-evidence-file-node {
   border-color: color-mix(in srgb, var(--project-map-accent) 72%, var(--project-map-border));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--project-map-accent) 18%, transparent), 0 20px 40px rgb(37 99 235 / 16%);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--project-map-accent) 18%, transparent), 0 20px 40px color-mix(in srgb, var(--project-map-core) 16%, transparent);
 }
 
 @media (max-width: 900px) {

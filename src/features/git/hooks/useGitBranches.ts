@@ -5,6 +5,7 @@ import {
   createGitBranch,
   listGitBranches,
 } from "../../../services/tauri";
+import { normalizeGitBranchListResponse } from "../utils/gitBranchList";
 
 type UseGitBranchesOptions = {
   activeWorkspace: WorkspaceInfo | null;
@@ -16,6 +17,11 @@ export function useGitBranches({ activeWorkspace, onDebug }: UseGitBranchesOptio
   const [error, setError] = useState<string | null>(null);
   const lastFetchedWorkspaceId = useRef<string | null>(null);
   const inFlight = useRef(false);
+  const lastFailureSignature = useRef<{
+    signature: string;
+    count: number;
+    emittedAt: number;
+  } | null>(null);
 
   const workspaceId = activeWorkspace?.id ?? null;
   const isConnected = Boolean(activeWorkspace?.connected);
@@ -38,10 +44,7 @@ export function useGitBranches({ activeWorkspace, onDebug }: UseGitBranchesOptio
     });
     try {
       const response = await listGitBranches(workspaceId);
-      const legacyResult =
-        response && typeof response === "object" && "result" in response
-          ? (response as { result?: { branches?: unknown } }).result
-          : undefined;
+      const normalized = normalizeGitBranchListResponse(response);
       onDebug?.({
         id: `${Date.now()}-server-branches-list`,
         timestamp: Date.now(),
@@ -49,25 +52,54 @@ export function useGitBranches({ activeWorkspace, onDebug }: UseGitBranchesOptio
         label: "git/branches/list response",
         payload: response,
       });
-      const data = response?.branches ?? legacyResult?.branches ?? response ?? [];
-      const normalized: BranchInfo[] = Array.isArray(data)
-        ? data.map((item: any) => ({
-            name: String(item?.name ?? ""),
-            lastCommit: Number(item?.lastCommit ?? item?.last_commit ?? 0),
-          }))
-        : [];
-      setBranches(normalized.filter((branch) => branch.name));
+      if (normalized.repositoryState === "not_git_repository") {
+        setBranches([]);
+        lastFetchedWorkspaceId.current = workspaceId;
+        setError(null);
+        onDebug?.({
+          id: `${Date.now()}-server-branches-not-repository`,
+          timestamp: Date.now(),
+          source: "server",
+          label: "git/branches/not-repository",
+          payload: normalized.diagnostic ?? { workspaceId },
+        });
+        return;
+      }
+      setBranches(normalized.branches);
       lastFetchedWorkspaceId.current = workspaceId;
       setError(null);
+      lastFailureSignature.current = null;
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-      onDebug?.({
-        id: `${Date.now()}-client-branches-list-error`,
-        timestamp: Date.now(),
-        source: "error",
-        label: "git/branches/list error",
-        payload: err instanceof Error ? err.message : String(err),
-      });
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message);
+      const signature = `${workspaceId}:${message}`;
+      const now = Date.now();
+      const previous = lastFailureSignature.current;
+      const nextCount = previous?.signature === signature ? previous.count + 1 : 1;
+      const shouldEmit =
+        !previous ||
+        previous.signature !== signature ||
+        now - previous.emittedAt > 60_000 ||
+        nextCount === 5;
+      lastFailureSignature.current = {
+        signature,
+        count: nextCount,
+        emittedAt: shouldEmit ? now : previous?.emittedAt ?? now,
+      };
+      if (shouldEmit) {
+        onDebug?.({
+          id: `${Date.now()}-client-branches-list-error`,
+          timestamp: Date.now(),
+          source: "error",
+          label: "git/branches/list error",
+          payload: {
+            workspaceId,
+            message,
+            repeatedCount: nextCount,
+            dedupeWindowMs: 60_000,
+          },
+        });
+      }
     } finally {
       inFlight.current = false;
     }

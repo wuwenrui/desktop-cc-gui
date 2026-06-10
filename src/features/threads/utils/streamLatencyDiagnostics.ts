@@ -1584,3 +1584,34 @@ export function resetThreadStreamLatencyDiagnosticsForTests() {
   streamLatencyTraceEnabledCache = null;
   notifySnapshotListeners();
 }
+const STREAMING_PRESSURE_DIAGNOSTIC_MIN_INTERVAL_MS = 15_000;
+let lastStreamingPressureDiagnosticAt = 0;
+
+export function noteRealtimeCoalescedFlush(input: {
+  reason: "cadence" | "terminal" | "manual" | "first-token";
+  eventCount: number;
+  engine: ConversationEngine | null;
+  workspaceId: string | null;
+  threadId: string;
+  turnId: string | null;
+  itemKind: string;
+}) {
+  const now = Date.now();
+  if (input.reason === "first-token" || input.eventCount <= 0) {
+    return;
+  }
+  if (now - lastStreamingPressureDiagnosticAt < STREAMING_PRESSURE_DIAGNOSTIC_MIN_INTERVAL_MS) {
+    return;
+  }
+  lastStreamingPressureDiagnosticAt = now;
+  appendRendererDiagnostic("renderer/streaming-pressure", {
+    reason: input.reason,
+    eventCount: Math.min(100, Math.max(0, input.eventCount)),
+    engine: normalizeNullableString(input.engine),
+    workspaceId: normalizeNullableString(input.workspaceId),
+    threadId: normalizeNullableString(input.threadId),
+    turnId: normalizeNullableString(input.turnId),
+    itemKind: normalizeNullableString(input.itemKind),
+    diagnosticKind: "coalesced-realtime-flush",
+  });
+}

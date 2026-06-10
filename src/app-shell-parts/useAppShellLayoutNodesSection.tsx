@@ -1,11 +1,18 @@
 // @ts-nocheck
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { useLayoutNodes } from "../features/layout/hooks/useLayoutNodes";
 import { MainHeaderActions } from "../features/app/components/MainHeaderActions";
 import { WorkspaceAliasPrompt } from "../features/workspaces/components/WorkspaceAliasPrompt";
 import { useClientUiVisibility } from "../features/client-ui-visibility/hooks/useClientUiVisibility";
 import { useProjectMapDataset } from "../features/project-map";
+import {
+  buildIntentCanvasContextAttachment,
+  formatIntentCanvasThreadContext,
+  type IntentCanvasDocument,
+  type IntentCanvasOpenRequest,
+} from "../features/intent-canvas";
+import type { IntentCanvasCodeSelectionAnchor } from "../features/intent-canvas/types";
 import { normalizeSharedSessionEngine } from "../features/shared-session/utils/sharedSessionEngines";
 import {
   recoverThreadBindingAndResendForManualRecovery,
@@ -66,6 +73,13 @@ export function useAppShellLayoutNodesSection(ctx: any) {
   const [focusedProjectMemoryRequestKey, setFocusedProjectMemoryRequestKey] = useState(0);
   const [focusedWorkspaceNoteId, setFocusedWorkspaceNoteId] = useState<string | null>(null);
   const [focusedWorkspaceNoteRequestKey, setFocusedWorkspaceNoteRequestKey] = useState(0);
+  const [intentCanvasOpenRequest, setIntentCanvasOpenRequest] =
+    useState<IntentCanvasOpenRequest | null>(null);
+  const [activeIntentCanvasCodeSelectionAnchor, setActiveIntentCanvasCodeSelectionAnchor] =
+    useState<IntentCanvasCodeSelectionAnchor | null>(null);
+  const intentCanvasOpenRequestSequenceRef = useRef(0);
+  const [pendingIntentCanvasByThreadId, setPendingIntentCanvasByThreadId] =
+    useState<Record<string, IntentCanvasDocument[]>>({});
   const {
     GitHubPanelData, RECENT_THREAD_LIMIT, SettingsView, accessMode, accountByWorkspace, accountSwitching, activeAccount, activeDiffError,
     activeDiffLoading, activeDiffs, activeDraft, activeEditorFilePath, activeEditorLineRange, activeEngine, activeFusingMessageId, activeGitRoot, activeImages,
@@ -163,6 +177,123 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     worktreeApplySuccess, worktreeCreateResult, worktreeLabel, worktreePrompt, worktreeRename, worktreeSetupScriptState,
     sessionRadarRunningSessions, sessionRadarRecentCompletedSessions, runningSessionCountByWorkspaceId, recentCompletedSessionCountByWorkspaceId,
   } = ctx;
+  const pendingIntentCanvasDocuments = useMemo(
+    () => (activeThreadId ? pendingIntentCanvasByThreadId[activeThreadId] ?? [] : []),
+    [activeThreadId, pendingIntentCanvasByThreadId],
+  );
+
+  const appendPendingIntentCanvasContext = useCallback(
+    (text: string, documents: IntentCanvasDocument[]) => {
+      if (documents.length === 0) {
+        return text;
+      }
+      return [
+        text.trim(),
+        ...documents.map((document) =>
+          formatIntentCanvasThreadContext(document, activeWorkspace?.name),
+        ),
+      ].filter(Boolean).join("\n\n");
+    },
+    [activeWorkspace?.name],
+  );
+
+  const appendPendingIntentCanvasSendOptions = useCallback(
+    (documents: IntentCanvasDocument[], options?: any) => {
+      if (documents.length === 0) {
+        return options;
+      }
+      const attachments = documents.map((document) =>
+        buildIntentCanvasContextAttachment(document, activeWorkspace?.name),
+      );
+      return {
+        ...(options ?? {}),
+        intentCanvasContextAttachments: [
+          ...(Array.isArray(options?.intentCanvasContextAttachments)
+            ? options.intentCanvasContextAttachments
+            : []),
+          ...attachments,
+        ],
+      };
+    },
+    [activeWorkspace?.name],
+  );
+
+  const clearPendingIntentCanvasForThread = useCallback((targetThreadId: string) => {
+    setPendingIntentCanvasByThreadId((current) => {
+      if (!current[targetThreadId]?.length) {
+        return current;
+      }
+      const next = { ...current };
+      delete next[targetThreadId];
+      return next;
+    });
+  }, []);
+
+  const handleRemovePendingIntentCanvas = useCallback(
+    (documentId: string) => {
+      if (!activeThreadId) {
+        return;
+      }
+      setPendingIntentCanvasByThreadId((current) => {
+        const currentDocuments = current[activeThreadId] ?? [];
+        const nextDocuments = currentDocuments.filter((document) => document.id !== documentId);
+        if (nextDocuments.length === currentDocuments.length) {
+          return current;
+        }
+        if (nextDocuments.length === 0) {
+          const next = { ...current };
+          delete next[activeThreadId];
+          return next;
+        }
+        return {
+          ...current,
+          [activeThreadId]: nextDocuments,
+        };
+      });
+    },
+    [activeThreadId],
+  );
+
+  const handleComposerSendWithIntentCanvas = useCallback(
+    async (text: string, images: string[], options?: any) => {
+      const stagedDocuments = pendingIntentCanvasDocuments;
+      const nextText = appendPendingIntentCanvasContext(text, stagedDocuments);
+      const nextOptions = appendPendingIntentCanvasSendOptions(stagedDocuments, options);
+      await handleComposerSendWithEditorFallback(nextText, images, nextOptions);
+      if (activeThreadId && stagedDocuments.length > 0) {
+        clearPendingIntentCanvasForThread(activeThreadId);
+      }
+    },
+    [
+      activeThreadId,
+      appendPendingIntentCanvasContext,
+      appendPendingIntentCanvasSendOptions,
+      clearPendingIntentCanvasForThread,
+      handleComposerSendWithEditorFallback,
+      pendingIntentCanvasDocuments,
+    ],
+  );
+
+  const handleComposerQueueWithIntentCanvas = useCallback(
+    async (text: string, images: string[], options?: any) => {
+      const stagedDocuments = pendingIntentCanvasDocuments;
+      const nextText = appendPendingIntentCanvasContext(text, stagedDocuments);
+      const nextOptions = appendPendingIntentCanvasSendOptions(stagedDocuments, options);
+      await handleComposerQueueWithEditorFallback(nextText, images, nextOptions);
+      if (activeThreadId && stagedDocuments.length > 0) {
+        clearPendingIntentCanvasForThread(activeThreadId);
+      }
+    },
+    [
+      activeThreadId,
+      appendPendingIntentCanvasContext,
+      appendPendingIntentCanvasSendOptions,
+      clearPendingIntentCanvasForThread,
+      handleComposerQueueWithEditorFallback,
+      pendingIntentCanvasDocuments,
+    ],
+  );
+
   const handleSelectConversationEngine = useCallback(
     async (engine: "claude" | "codex" | "gemini" | "opencode") => {
       const thread = activeWorkspaceId && activeThreadId
@@ -361,6 +492,110 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     // Browser Agent now lives in its own tool window.
   }, []);
 
+  const handleOpenIntentCanvas = useCallback(
+    (request?: Omit<IntentCanvasOpenRequest, "requestId">) => {
+      if (!activeWorkspace) {
+        alertError(t("intentCanvas.errors.noWorkspace"));
+        return;
+      }
+      closeSettings();
+      collapseSidebar();
+      setAppMode("chat");
+      setCenterMode("intentCanvas");
+      expandRightPanel();
+      if (!request) {
+        setIntentCanvasOpenRequest(null);
+        return;
+      }
+      const nextRequestId = intentCanvasOpenRequestSequenceRef.current + 1;
+      intentCanvasOpenRequestSequenceRef.current = nextRequestId;
+      setIntentCanvasOpenRequest({
+        requestId: nextRequestId,
+        mode: request.mode,
+        target: request.target ?? null,
+        canvasId: request.canvasId ?? null,
+        title: request.title ?? null,
+        summary: request.summary ?? null,
+        source: request.source ?? null,
+        seedSemanticGraphs: request.seedSemanticGraphs,
+      });
+    },
+    [
+      activeWorkspace,
+      alertError,
+      closeSettings,
+      collapseSidebar,
+      expandRightPanel,
+      setAppMode,
+      setCenterMode,
+      t,
+    ],
+  );
+
+  const handleIntentCanvasOpenRequestConsumed = useCallback((requestId: number) => {
+    setIntentCanvasOpenRequest((current) =>
+      current?.requestId === requestId ? null : current,
+    );
+  }, []);
+
+  const handleAttachIntentCanvasToThread = useCallback(
+    async (document: IntentCanvasDocument) => {
+      if (!activeWorkspace) {
+        const message = t("intentCanvas.errors.noWorkspace");
+        alertError(message);
+        throw new Error(message);
+      }
+
+      if (!activeWorkspace.connected) {
+        await connectWorkspace(activeWorkspace);
+      }
+
+      const targetThreadId =
+        activeThreadId ??
+        (await startThreadForWorkspace(activeWorkspace.id, {
+          activate: true,
+        }));
+      if (!targetThreadId) {
+        const message = t("intentCanvas.errors.noThread");
+        alertError(message);
+        throw new Error(message);
+      }
+
+      setActiveThreadId(targetThreadId, activeWorkspace.id);
+      setCenterMode("chat");
+      const stagedDocument = document.links.threadIds.includes(targetThreadId)
+        ? document
+        : {
+            ...document,
+            links: {
+              ...document.links,
+              threadIds: [...document.links.threadIds, targetThreadId],
+            },
+          };
+      setPendingIntentCanvasByThreadId((current) => {
+        const currentDocuments = current[targetThreadId] ?? [];
+        const nextDocuments = [
+          stagedDocument,
+          ...currentDocuments.filter((item) => item.id !== stagedDocument.id),
+        ];
+        return {
+          ...current,
+          [targetThreadId]: nextDocuments,
+        };
+      });
+    },
+    [
+      activeThreadId,
+      activeWorkspace,
+      alertError,
+      connectWorkspace,
+      setActiveThreadId,
+      setCenterMode,
+      startThreadForWorkspace,
+      t,
+    ],
+  );
+
   useEffect(() => {
     const handleExternalToggle = () => {
       void openOrFocusBrowserAgentDockWindow({
@@ -405,6 +640,7 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     gitDiffViewerNode,
     fileViewPanelNode,
     projectMapPanelNode,
+    intentCanvasPanelNode,
     browserDockNode,
     planPanelNode,
     debugPanelNode,
@@ -952,8 +1188,8 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     onRevealWorkspacePrompts: handleRevealWorkspacePrompts,
     onRevealGeneralPrompts: handleRevealGeneralPrompts,
     canRevealGeneralPrompts: Boolean(activeWorkspace),
-    onSend: handleComposerSendWithEditorFallback,
-    onQueue: handleComposerQueueWithEditorFallback,
+    onSend: handleComposerSendWithIntentCanvas,
+    onQueue: handleComposerQueueWithIntentCanvas,
     onRequestContextCompaction: () => startCompact("/compact"),
     onStop: interruptTurn,
     completionEmailSelected: Boolean(
@@ -1042,6 +1278,12 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     projectMapDatasetController,
     onSelectModel: handleSelectModel,
     onDispatchOrchestrationTask: handleDispatchOrchestrationTask,
+    intentCanvasOpenRequest,
+    onOpenIntentCanvas: handleOpenIntentCanvas,
+    onIntentCanvasOpenRequestConsumed: handleIntentCanvasOpenRequestConsumed,
+    onAttachIntentCanvasToThread: handleAttachIntentCanvasToThread,
+    pendingIntentCanvasDocuments,
+    onRemovePendingIntentCanvas: handleRemovePendingIntentCanvas,
     reasoningOptions,
     selectedEffort,
     onSelectEffort: setSelectedEffort,
@@ -1096,6 +1338,8 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     onOpenComposerKanbanPanel: handleOpenComposerKanbanPanel,
     activeComposerFilePath: activeEditorFilePath,
     activeComposerFileLineRange: activeEditorLineRange,
+    activeCodeSelectionAnchor: activeIntentCanvasCodeSelectionAnchor,
+    onActiveCodeSelectionAnchorChange: setActiveIntentCanvasCodeSelectionAnchor,
     fileReferenceMode,
     onFileReferenceModeChange: setFileReferenceMode,
     showComposer,
@@ -1205,7 +1449,7 @@ export function useAppShellLayoutNodesSection(ctx: any) {
 
   return {
     sidebarNode, messagesNode, composerNode, approvalToastsNode, updateToastNode, errorToastsNode, globalRuntimeNoticeDockNode, homeNode, mainHeaderNode,
-    desktopTopbarLeftNode, tabletNavNode, tabBarNode, rightPanelToolbarNode, gitDiffPanelNode, gitDiffViewerNode, fileViewPanelNode, projectMapPanelNode, browserDockNode, planPanelNode,
+    desktopTopbarLeftNode, tabletNavNode, tabBarNode, rightPanelToolbarNode, gitDiffPanelNode, gitDiffViewerNode, fileViewPanelNode, projectMapPanelNode, intentCanvasPanelNode, browserDockNode, planPanelNode,
     debugPanelNode, debugPanelFullNode, terminalDockNode, compactEmptyCodexNode, compactEmptySpecNode, compactEmptyGitNode, compactGitBackNode,
     codeAnnotationBridgeProps,
     workspaceAliasPromptNode,

@@ -188,6 +188,7 @@ vi.mock("../../../components/FileIcon", () => ({
 
 vi.mock("../../../services/tauri", () => ({
   readWorkspaceFile: vi.fn(),
+  readWorkspaceFilePreview: vi.fn(async () => ({ content: "", truncated: false })),
   readExternalSpecFile: vi.fn(),
   readExternalAbsoluteFile: vi.fn(),
   readLocalImageDataUrl: vi.fn(),

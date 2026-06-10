@@ -16,7 +16,7 @@ type AppLayoutProps = {
   showGitDetail: boolean;
   activeTab: "projects" | "codex" | "spec" | "git" | "log";
   tabletTab: "codex" | "spec" | "git" | "log";
-  centerMode: "chat" | "diff" | "editor" | "memory" | "projectMap";
+  centerMode: "chat" | "diff" | "editor" | "memory" | "projectMap" | "intentCanvas";
   editorSplitLayout: "vertical" | "horizontal";
   editorSplitCompanion: "chat" | "projectMap";
   isEditorFileMaximized: boolean;
@@ -39,6 +39,7 @@ type AppLayoutProps = {
   gitDiffViewerNode: ReactNode;
   fileViewPanelNode: ReactNode;
   projectMapPanelNode: ReactNode;
+  intentCanvasPanelNode: ReactNode;
   browserDockNode?: ReactNode;
   planPanelNode: ReactNode;
   runtimeConsoleDockNode: ReactNode;
@@ -93,6 +94,7 @@ export const AppLayout = memo(function AppLayout({
   gitDiffViewerNode,
   fileViewPanelNode,
   projectMapPanelNode,
+  intentCanvasPanelNode,
   browserDockNode = null,
   planPanelNode,
   runtimeConsoleDockNode,
@@ -195,6 +197,7 @@ export const AppLayout = memo(function AppLayout({
       gitDiffViewerNode={gitDiffViewerNode}
       fileViewPanelNode={fileViewPanelNode}
       projectMapPanelNode={projectMapPanelNode}
+      intentCanvasPanelNode={intentCanvasPanelNode}
       browserDockNode={browserDockNode}
       rightPanelToolbarNode={rightPanelToolbarNode}
       gitDiffPanelNode={gitDiffPanelNode}

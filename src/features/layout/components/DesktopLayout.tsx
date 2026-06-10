@@ -28,7 +28,7 @@ type DesktopLayoutProps = {
   settingsOpen: boolean;
   settingsNode: ReactNode;
   topbarLeftNode: ReactNode;
-  centerMode: "chat" | "diff" | "editor" | "memory" | "projectMap";
+  centerMode: "chat" | "diff" | "editor" | "memory" | "projectMap" | "intentCanvas";
   editorSplitLayout: "vertical" | "horizontal";
   editorSplitCompanion: "chat" | "projectMap";
   isEditorFileMaximized: boolean;
@@ -36,6 +36,7 @@ type DesktopLayoutProps = {
   gitDiffViewerNode: ReactNode;
   fileViewPanelNode: ReactNode;
   projectMapPanelNode?: ReactNode;
+  intentCanvasPanelNode?: ReactNode;
   browserDockNode?: ReactNode;
   rightPanelToolbarNode: ReactNode;
   gitDiffPanelNode: ReactNode;
@@ -77,6 +78,7 @@ export function DesktopLayout({
   gitDiffViewerNode,
   fileViewPanelNode,
   projectMapPanelNode = null,
+  intentCanvasPanelNode = null,
   browserDockNode = null,
   rightPanelToolbarNode,
   gitDiffPanelNode,
@@ -95,6 +97,7 @@ export function DesktopLayout({
   const chatLayerRef = useRef<HTMLDivElement | null>(null);
   const editorLayerRef = useRef<HTMLDivElement | null>(null);
   const projectMapLayerRef = useRef<HTMLDivElement | null>(null);
+  const intentCanvasLayerRef = useRef<HTMLDivElement | null>(null);
   const memoryLayerRef = useRef<HTMLDivElement | null>(null);
   const splitResizeCleanupRef = useRef<(() => void) | null>(null);
   const isEditorSplitMode = centerMode === "editor";
@@ -112,6 +115,7 @@ export function DesktopLayout({
   const hasBottomPanel = Boolean(planPanelNode);
   const shouldShowComposerBelowContent =
     centerMode !== "projectMap" &&
+    centerMode !== "intentCanvas" &&
     !shouldPlaceComposerInChatColumn &&
     !isEditorSplitProjectMapVisible;
 
@@ -120,12 +124,14 @@ export function DesktopLayout({
     const chatLayer = chatLayerRef.current;
     const editorLayer = editorLayerRef.current;
     const projectMapLayer = projectMapLayerRef.current;
+    const intentCanvasLayer = intentCanvasLayerRef.current;
 
     const layers = [
       { ref: diffLayer, mode: "diff" as const },
       { ref: chatLayer, mode: "chat" as const },
       { ref: editorLayer, mode: "editor" as const },
       { ref: projectMapLayer, mode: "projectMap" as const },
+      { ref: intentCanvasLayer, mode: "intentCanvas" as const },
     ];
 
     for (const { ref, mode } of layers) {
@@ -423,6 +429,15 @@ export function DesktopLayout({
                     ref={projectMapLayerRef}
                   >
                     {projectMapPanelNode}
+                  </div>
+                  <div
+                    className={`content-layer content-layer--intent-canvas ${
+                      centerMode === "intentCanvas" ? "is-active" : "is-hidden"
+                    }`}
+                    aria-hidden={centerMode !== "intentCanvas"}
+                    ref={intentCanvasLayerRef}
+                  >
+                    {intentCanvasPanelNode}
                   </div>
                   <div
                     className={`content-layer content-layer--chat ${

@@ -578,6 +578,8 @@ export interface ChatInputBoxProps {
   alwaysThinkingEnabled?: boolean;
   /** Attachment list */
   attachments?: Attachment[];
+  /** Whether an external structured context attachment is staged above the input */
+  hasContextAttachment?: boolean;
   /** Placeholder text */
   placeholder?: string;
   /** Whether disabled */

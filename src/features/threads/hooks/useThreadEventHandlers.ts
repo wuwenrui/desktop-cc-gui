@@ -248,12 +248,14 @@ export function useThreadEventHandlers({
         activeTurnId === input.turnId ||
         (input.allowAbandonedActiveTurn === true && activeTurnId === null);
       const scopeMatched = input.scopeMatch.matched === true;
+      const engineMatched = input.scopeMatch.engine !== false;
       const terminalAccepted = input.acceptedEvidence.terminal === true;
       const stateAccepted = input.acceptedEvidence.state === true;
       const cleanupAllowed =
         input.decisionAction === "cleanup-residue" &&
         input.lifecycle.isProcessing &&
         turnMatches &&
+        engineMatched &&
         (input.source === "watchdog-interrupted" ||
           (scopeMatched && terminalAccepted && stateAccepted));
 
@@ -269,6 +271,8 @@ export function useThreadEventHandlers({
             ? "not-processing"
             : !turnMatches
               ? "active-turn-mismatch"
+              : !engineMatched
+                ? "engine-mismatch"
               : input.decisionAction !== "cleanup-residue"
                 ? "decision-not-cleanup-residue"
                 : input.source !== "watchdog-interrupted" && !scopeMatched
@@ -865,25 +869,29 @@ export function useThreadEventHandlers({
           return;
         }
         if (interruptedThreadsRef.current.has(threadId)) {
+          const inferredEngine = inferThreadEngine(threadId);
+          const correlationEngine =
+            buildThreadStreamCorrelationDimensions(threadId).engine;
+          const engineScopeMatches =
+            correlationEngine === null || correlationEngine === inferredEngine;
+          const turnScopeMatches =
+            lifecycle.activeTurnId === latestDiagnostic.turnId ||
+            lifecycle.activeTurnId === null;
           settleForegroundTurnResidue({
             workspaceId: latestDiagnostic.workspaceId,
             threadId,
             turnId: latestDiagnostic.turnId,
-            engine: inferThreadEngine(threadId),
+            engine: inferredEngine,
             lifecycle,
             source: "watchdog-interrupted",
             decisionAction: "cleanup-residue",
             decisionReason: "interrupted",
             scopeMatch: {
-              matched:
-                lifecycle.activeTurnId === latestDiagnostic.turnId ||
-                lifecycle.activeTurnId === null,
+              matched: engineScopeMatches && turnScopeMatches,
               workspace: true,
-              engine: true,
+              engine: engineScopeMatches,
               thread: true,
-              turn:
-                lifecycle.activeTurnId === latestDiagnostic.turnId ||
-                lifecycle.activeTurnId === null,
+              turn: turnScopeMatches,
               foregroundOwner: true,
               runtimeLease: null,
             },

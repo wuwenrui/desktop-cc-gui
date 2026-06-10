@@ -64,7 +64,8 @@ export type OrchestrationRiskMarkerKind =
   | "unknown_confidence"
   | "candidate_source"
   | "missing_evidence"
-  | "missing_linked_session";
+  | "missing_linked_session"
+  | "relationship_context_risk";
 
 export type OrchestrationRiskMarker = {
   kind: OrchestrationRiskMarkerKind;

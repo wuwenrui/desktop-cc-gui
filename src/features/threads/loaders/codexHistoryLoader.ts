@@ -5,6 +5,7 @@ import {
   buildComparableConversationMessageSignature,
   normalizeUserImages,
 } from "../assembly/conversationNormalization";
+import { parseIntentCanvasContextSummaries } from "../../intent-canvas/utils/messageContext";
 import { normalizeHistorySnapshot } from "../contracts/conversationCurtainContracts";
 import { parseCodexSessionHistory } from "./codexSessionHistory";
 import { asRecord } from "./historyLoaderUtils";
@@ -52,6 +53,9 @@ function isInvalidCodexThreadIdError(value: unknown) {
 type MessageItem = Extract<ConversationItem, { kind: "message" }>;
 type AssistantMessageItem = MessageItem & { role: "assistant" };
 type UserMessageItem = MessageItem & { role: "user" };
+type IntentCanvasContextAttachmentList = NonNullable<
+  UserMessageItem["intentCanvasContextAttachments"]
+>;
 
 function appendUniqueItems(
   target: ConversationItem[],
@@ -177,6 +181,114 @@ function hydrateRemoteUserMemoryContextPrefixes(
     } satisfies UserMessageItem;
   });
   return changed ? hydrated : historyItems;
+}
+
+function mergeIntentCanvasContextAttachments(
+  existing: UserMessageItem["intentCanvasContextAttachments"],
+  incoming: IntentCanvasContextAttachmentList,
+) {
+  const existingAttachments = Array.isArray(existing) ? existing : [];
+  if (incoming.length === 0) {
+    return existing;
+  }
+  if (existingAttachments.length === 0) {
+    return incoming;
+  }
+  const seenAttachmentIds = new Set(
+    existingAttachments.map((attachment) => attachment.attachmentId),
+  );
+  const mergedAttachments = [...existingAttachments];
+  incoming.forEach((attachment) => {
+    if (seenAttachmentIds.has(attachment.attachmentId)) {
+      return;
+    }
+    seenAttachmentIds.add(attachment.attachmentId);
+    mergedAttachments.push(attachment);
+  });
+  return mergedAttachments.length === existingAttachments.length
+    ? existing
+    : mergedAttachments;
+}
+
+function collectRemoteUserIntentCanvasContextAttachments(
+  thread: Record<string, unknown>,
+) {
+  const turns = Array.isArray(thread.turns) ? thread.turns : [];
+  const attachmentsByUserTurn: IntentCanvasContextAttachmentList[] = [];
+  turns.forEach((turn) => {
+    const turnRecord = turn && typeof turn === "object"
+      ? (turn as Record<string, unknown>)
+      : {};
+    const turnItems = Array.isArray(turnRecord.items) ? turnRecord.items : [];
+    turnItems.forEach((item) => {
+      const itemRecord = item && typeof item === "object"
+        ? (item as Record<string, unknown>)
+        : {};
+      if (asString(itemRecord.type).trim() !== "userMessage") {
+        return;
+      }
+      const rawText = extractUserItemText(itemRecord);
+      attachmentsByUserTurn.push(parseIntentCanvasContextSummaries(rawText));
+    });
+  });
+  return attachmentsByUserTurn;
+}
+
+function hydrateRemoteUserIntentCanvasContextAttachments(
+  historyItems: ConversationItem[],
+  attachmentsByUserTurn: IntentCanvasContextAttachmentList[],
+) {
+  if (attachmentsByUserTurn.length === 0) {
+    return historyItems;
+  }
+  let userIndex = 0;
+  let changed = false;
+  const hydrated = historyItems.map((item) => {
+    if (item.kind !== "message" || item.role !== "user") {
+      return item;
+    }
+    const incomingAttachments = attachmentsByUserTurn[userIndex] ?? [];
+    userIndex += 1;
+    const mergedAttachments = mergeIntentCanvasContextAttachments(
+      item.intentCanvasContextAttachments,
+      incomingAttachments,
+    );
+    if (mergedAttachments === item.intentCanvasContextAttachments) {
+      return item;
+    }
+    changed = true;
+    return {
+      ...item,
+      role: "user",
+      intentCanvasContextAttachments: mergedAttachments,
+    } satisfies UserMessageItem;
+  });
+  return changed ? hydrated : historyItems;
+}
+
+function hydrateCodexRemoteIntentCanvasAttachmentsFromFallback(
+  historyItems: ConversationItem[],
+  fallbackItems: ConversationItem[],
+) {
+  const historyUserCount = historyItems.filter(
+    (item) => item.kind === "message" && item.role === "user",
+  ).length;
+  const fallbackUserMessages = fallbackItems.filter(
+    (item): item is UserMessageItem => item.kind === "message" && item.role === "user",
+  );
+  if (historyUserCount === 0 || historyUserCount !== fallbackUserMessages.length) {
+    return historyItems;
+  }
+  const attachmentsByUserTurn = fallbackUserMessages.map((item) =>
+    parseIntentCanvasContextSummaries(item.text),
+  );
+  if (!attachmentsByUserTurn.some((attachments) => attachments.length > 0)) {
+    return historyItems;
+  }
+  return hydrateRemoteUserIntentCanvasContextAttachments(
+    historyItems,
+    attachmentsByUserTurn,
+  );
 }
 
 function normalizeTurnAnchorText(value: string) {
@@ -758,10 +870,17 @@ export function createCodexHistoryLoader({
       const thread = asRecord(result.thread ?? response?.thread);
       const hasThread = Object.keys(thread).length > 0;
       const historyItems = hasThread
-        ? hydrateRemoteUserMemoryContextPrefixes(
-            buildItemsFromThread(thread),
-            collectRemoteUserMemoryContextPrefixes(thread),
-          )
+        ? (() => {
+            const threadItems = buildItemsFromThread(thread);
+            const withMemoryContext = hydrateRemoteUserMemoryContextPrefixes(
+              threadItems,
+              collectRemoteUserMemoryContextPrefixes(thread),
+            );
+            return hydrateRemoteUserIntentCanvasContextAttachments(
+              withMemoryContext,
+              collectRemoteUserIntentCanvasContextAttachments(thread),
+            );
+          })()
         : [];
       let items = historyItems;
 
@@ -769,15 +888,23 @@ export function createCodexHistoryLoader({
         if (!fallbackHistoryLoaded) {
           fallbackItems = await loadFallbackHistoryItems();
         }
+        const historyItemsWithFallbackIntentCanvas =
+          hydrateCodexRemoteIntentCanvasAttachmentsFromFallback(
+            historyItems,
+            fallbackItems,
+          );
         const messagesMatchIgnoringUserImages = areComparableMessageSequencesEqualIgnoringUserImages(
-          historyItems,
+          historyItemsWithFallbackIntentCanvas,
           fallbackItems,
         );
         const historyItemsWithFallbackUserImages =
           messagesMatchIgnoringUserImages &&
-          fallbackHasRicherRenderableUserImages(historyItems, fallbackItems)
-            ? hydrateCodexRemoteUserImagesFromFallback(historyItems, fallbackItems)
-            : historyItems;
+          fallbackHasRicherRenderableUserImages(historyItemsWithFallbackIntentCanvas, fallbackItems)
+            ? hydrateCodexRemoteUserImagesFromFallback(
+                historyItemsWithFallbackIntentCanvas,
+                fallbackItems,
+              )
+            : historyItemsWithFallbackIntentCanvas;
 
         if (
           areComparableMessageSequencesEqual(

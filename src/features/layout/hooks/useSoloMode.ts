@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PanelTabId } from "../components/PanelTabs";
 
-type CenterMode = "chat" | "diff" | "editor" | "memory" | "projectMap";
+type CenterMode = "chat" | "diff" | "editor" | "memory" | "projectMap" | "intentCanvas";
 type AppTab = "projects" | "codex" | "spec" | "git" | "log";
 type FilePanelMode = PanelTabId;
 

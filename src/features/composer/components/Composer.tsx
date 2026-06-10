@@ -120,6 +120,8 @@ import {
   BrowserContextPreview,
   useBrowserContextAttachment,
 } from "../../browser-agent";
+import { IntentCanvasAttachmentCard } from "../../intent-canvas/components/IntentCanvasAttachmentCard";
+import type { IntentCanvasDocument } from "../../intent-canvas/types";
 import { resolveBrowserNavigationUrl } from "../utils/browserNavigation";
 
 type RewindExecutionOptions = {
@@ -254,6 +256,8 @@ type ComposerProps = {
   onPickImages?: () => void;
   onAttachImages?: (paths: string[]) => void;
   onRemoveImage?: (path: string) => void;
+  intentCanvasAttachments?: IntentCanvasDocument[];
+  onRemoveIntentCanvasAttachment?: (documentId: string) => void;
   prefillDraft?: QueuedMessage | null;
   onPrefillHandled?: (id: string) => void;
   insertText?: QueuedMessage | null;
@@ -506,6 +510,8 @@ export const Composer = memo(function Composer({
   onPickImages,
   onAttachImages,
   onRemoveImage,
+  intentCanvasAttachments = [],
+  onRemoveIntentCanvasAttachment,
   prefillDraft = null,
   onPrefillHandled,
   insertText = null,
@@ -1386,15 +1392,19 @@ export const Composer = memo(function Composer({
       const mergedImages = Array.from(
         new Set([...attachedImages, ...(submittedImages ?? [])]),
       );
+      const hasIntentCanvasAttachments = intentCanvasAttachments.length > 0;
       if (
         !trimmed &&
         mergedImages.length === 0 &&
-        !selectedOpenCodeDirectCommand
+        !selectedOpenCodeDirectCommand &&
+        !hasIntentCanvasAttachments
       ) {
         return;
       }
       const browserNavigationUrl =
-        mergedImages.length === 0 ? resolveBrowserNavigationUrl(trimmed) : null;
+        mergedImages.length === 0 && !hasIntentCanvasAttachments
+          ? resolveBrowserNavigationUrl(trimmed)
+          : null;
       if (browserNavigationUrl && activeWorkspaceId) {
         window.sessionStorage.setItem(PENDING_BROWSER_URL_KEY, browserNavigationUrl);
         window.dispatchEvent(new CustomEvent(BROWSER_OPEN_DOCK_EVENT));
@@ -1523,6 +1533,7 @@ export const Composer = memo(function Composer({
       activeWorkspaceId,
       browserContext,
       disabled,
+      intentCanvasAttachments.length,
       applyActiveFileReference,
       opencodeDisconnected,
       selectedOpenCodeDirectCommand,
@@ -2326,6 +2337,20 @@ export const Composer = memo(function Composer({
                 ) : null}
               </div>
             ) : null}
+            {intentCanvasAttachments.length > 0 ? (
+              <div
+                className="composer-intent-canvas-attachments"
+                aria-label={t("intentCanvas.attachment.groupLabel")}
+              >
+                {intentCanvasAttachments.map((document) => (
+                  <IntentCanvasAttachmentCard
+                    key={document.id}
+                    document={document}
+                    onRemove={onRemoveIntentCanvasAttachment}
+                  />
+                ))}
+              </div>
+            ) : null}
             <ChatInputBoxAdapter
               ref={chatInputRef}
               text={text}
@@ -2349,6 +2374,7 @@ export const Composer = memo(function Composer({
               reasoningSupported={reasoningSupported}
               onResolvedAlwaysThinkingChange={onResolvedAlwaysThinkingChange}
               attachments={attachedImages}
+              hasContextAttachment={intentCanvasAttachments.length > 0}
               onAddAttachment={onPickImages}
               onAttachImages={onAttachImages}
               onRemoveAttachment={onRemoveImage}

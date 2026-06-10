@@ -10,6 +10,7 @@ import {
 } from "./messagesNoteCardContext";
 import { extractCommandMessageDisplayText } from "../utils/commandMessageTags";
 import { stripBrowserContextPrompt } from "../../browser-agent";
+import { stripIntentCanvasContextPrompt } from "../../intent-canvas/utils/messageContext";
 
 const MODE_FALLBACK_MARKER_REGEX = /User request\s*:\s*/i;
 const MODE_FALLBACK_PREFIX_REGEX =
@@ -246,10 +247,12 @@ export function resolveUserMessagePresentation({
   const afterMemoryText = legacyUserMemory?.remainingText ?? textWithoutBrowserContext;
   const legacyUserNoteCard = parseInjectedNoteCardContextFromUser(afterMemoryText);
   const originalText = legacyUserNoteCard?.remainingText ?? afterMemoryText;
+  const textWithoutIntentCanvasContext = stripIntentCanvasContextPrompt(originalText);
+  const hasIntentCanvasContext = textWithoutIntentCanvasContext !== originalText;
   const normalizedSelectedAgentName = normalizeSelectedAgentName(selectedAgentName);
   const normalizedSelectedAgentIcon = normalizeSelectedAgentIcon(selectedAgentIcon);
   const strippedAgentPrompt = stripAgentPromptBlockFromUserText(
-    originalText,
+    textWithoutIntentCanvasContext,
     normalizedSelectedAgentName,
     normalizedSelectedAgentIcon,
   );
@@ -260,7 +263,9 @@ export function resolveUserMessagePresentation({
   const displayText =
     preferredText.displayText.trim().length > 0
       ? preferredText.displayText
-      : textWithoutBrowserContext || originalText;
+      : hasIntentCanvasContext
+        ? textWithoutIntentCanvasContext
+        : textWithoutBrowserContext || originalText;
   return {
     displayText,
     stickyCandidateText: preferredText.stickyCandidateText,

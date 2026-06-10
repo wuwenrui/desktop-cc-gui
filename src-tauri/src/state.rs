@@ -34,6 +34,7 @@ pub(crate) struct AppState {
     pub(crate) codex_login_cancels: Mutex<HashMap<String, oneshot::Sender<()>>>,
     pub(crate) detached_external_change_runtime: Mutex<DetachedExternalChangeRuntime>,
     pub(crate) runtime_manager: Arc<crate::runtime::RuntimeManager>,
+    pub(crate) renderer_heartbeats: Mutex<crate::renderer_stability::RendererHeartbeatStore>,
     /// Multi-engine manager
     pub(crate) engine_manager: EngineManager,
 }
@@ -138,6 +139,9 @@ impl AppState {
             codex_login_cancels: Mutex::new(HashMap::new()),
             detached_external_change_runtime: Mutex::new(DetachedExternalChangeRuntime::default()),
             runtime_manager,
+            renderer_heartbeats: Mutex::new(
+                crate::renderer_stability::RendererHeartbeatStore::default(),
+            ),
             engine_manager,
         }
     }

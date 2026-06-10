@@ -7,13 +7,13 @@ use super::{
     extract_thread_id, is_codex_thread_id, is_plan_blocker_stream_method,
     is_repo_mutating_command_tokens, looks_like_executable_plan_text,
     looks_like_plan_blocker_prompt, looks_like_user_info_followup_prompt,
-    normalize_command_tokens_from_item, now_millis, should_block_request_user_input,
-    should_skip_codex_stderr_line, visible_console_fallback_enabled_from_env,
-    wrapper_kind_for_binary, AutoCompactionThreadState, DeferredStartupEventSink, PlanTurnState,
-    RuntimeShutdownSource, TimedOutRequest, WorkspaceSession, AUTO_COMPACTION_THRESHOLD_PERCENT,
-    MODE_BLOCKED_PLAN_REASON, MODE_BLOCKED_PLAN_SUGGESTION, MODE_BLOCKED_REASON,
-    MODE_BLOCKED_REASON_CODE_PLAN_READONLY, MODE_BLOCKED_REASON_CODE_REQUEST_USER_INPUT,
-    MODE_BLOCKED_SUGGESTION,
+    normalize_command_tokens_from_item, now_millis, parse_codex_cli_version,
+    should_block_request_user_input, should_skip_codex_stderr_line,
+    visible_console_fallback_enabled_from_env, wrapper_kind_for_binary,
+    AutoCompactionThreadState, DeferredStartupEventSink, PlanTurnState, RuntimeShutdownSource,
+    TimedOutRequest, WorkspaceSession, AUTO_COMPACTION_THRESHOLD_PERCENT, MODE_BLOCKED_PLAN_REASON,
+    MODE_BLOCKED_PLAN_SUGGESTION, MODE_BLOCKED_REASON, MODE_BLOCKED_REASON_CODE_PLAN_READONLY,
+    MODE_BLOCKED_REASON_CODE_REQUEST_USER_INPUT, MODE_BLOCKED_SUGGESTION,
 };
 use crate::backend::events::{AppServerEvent, EventSink, TerminalOutput};
 use crate::runtime::RuntimeManager;
@@ -74,6 +74,19 @@ fn deferred_startup_event_sink_buffers_until_flush() {
     let events = inner.emitted_app_server_events();
     assert_eq!(events.len(), 2);
     assert_eq!(events[1].message["method"], "codex/connected");
+}
+
+#[test]
+fn parse_codex_cli_version_accepts_common_outputs() {
+    assert_eq!(
+        parse_codex_cli_version("codex-cli 0.137.0"),
+        Some("0.137.0".to_string())
+    );
+    assert_eq!(
+        parse_codex_cli_version("codex v0.138.1"),
+        Some("0.138.1".to_string())
+    );
+    assert_eq!(parse_codex_cli_version("codex"), None);
 }
 
 #[test]

@@ -190,7 +190,13 @@ export function useStatusPanelData(
         itemsByThread: projectionInputs.itemsByThread,
         threadParentById: projectionInputs.threadParentById,
       }),
-    [projectionInputs],
+    [
+      projectionInputs.activeThreadId,
+      projectionInputs.activeTurnId,
+      projectionInputs.items,
+      projectionInputs.itemsByThread,
+      projectionInputs.threadParentById,
+    ],
   );
 
   const subagents = useMemo(() => {
@@ -334,7 +340,8 @@ export function useStatusPanelData(
       });
   }, [
     isCodexEngine,
-    projectionInputs,
+    projectionInputs.itemsByThread,
+    projectionInputs.threadStatusById,
     scopedToolEntries,
   ]);
 

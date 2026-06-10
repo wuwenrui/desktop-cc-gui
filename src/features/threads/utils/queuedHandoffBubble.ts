@@ -81,6 +81,9 @@ export function buildQueuedHandoffBubbleItem(
     ...(item.sendOptions?.browserContextAttachment
       ? { browserContextAttachment: item.sendOptions.browserContextAttachment }
       : {}),
+    ...(item.sendOptions?.intentCanvasContextAttachments?.length
+      ? { intentCanvasContextAttachments: item.sendOptions.intentCanvasContextAttachments }
+      : {}),
   };
 }
 

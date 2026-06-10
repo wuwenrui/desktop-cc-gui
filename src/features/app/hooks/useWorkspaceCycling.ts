@@ -25,7 +25,7 @@ type Params = {
   activeWorkspaceIdRef: MutableRefObject<string | null>;
   activeThreadIdRef: MutableRefObject<string | null>;
   activeEditorFilePath: string | null;
-  centerMode: "chat" | "diff" | "editor" | "memory" | "projectMap";
+  centerMode: "chat" | "diff" | "editor" | "memory" | "projectMap" | "intentCanvas";
   exitDiffView: () => void;
   isCompact: boolean;
   resetPullRequestSelection: () => void;

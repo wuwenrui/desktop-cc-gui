@@ -120,6 +120,7 @@ export type ConversationItem =
       selectedAgentName?: string | null;
       selectedAgentIcon?: string | null;
       browserContextAttachment?: BrowserContextSendAttachment | null;
+      intentCanvasContextAttachments?: IntentCanvasContextSendAttachment[];
     }
   | {
       id: string;
@@ -1542,6 +1543,21 @@ export type GitBranchListResponse = {
   localBranches?: GitBranchListItem[];
   remoteBranches?: GitBranchListItem[];
   currentBranch?: string | null;
+  repositoryState?: GitBranchListRepositoryState;
+  diagnostic?: GitBranchListDiagnostic | null;
+};
+
+export type GitBranchListRepositoryState =
+  | "git_repository"
+  | "not_git_repository"
+  | "unknown";
+
+export type GitBranchListDiagnostic = {
+  kind: string;
+  reason?: string | null;
+  message?: string | null;
+  workspaceId?: string | null;
+  pathKind?: string | null;
 };
 
 export type GitBranchUpdateStatus = "success" | "no-op" | "blocked";
@@ -1811,6 +1827,28 @@ export type QueuedMessage = {
   sendOptions?: MessageSendOptions;
 };
 
+export type IntentCanvasContextCount = {
+  total: number;
+  sent: number;
+  omitted: number;
+};
+
+export type IntentCanvasContextSendAttachment = {
+  kind: "intent_canvas_context";
+  attachmentId: string;
+  canvasId: string;
+  title: string;
+  mode: string;
+  compressionMode: string;
+  truncated: boolean;
+  payloadCharacters: number;
+  rawPayload: string;
+  semanticNodes: IntentCanvasContextCount;
+  semanticEdges: IntentCanvasContextCount;
+  evidence: IntentCanvasContextCount;
+  visualTextBlocks: IntentCanvasContextCount;
+};
+
 export type MemoryContextInjectionMode = "summary" | "detail";
 
 export type BrowserContextSendAttachment = {
@@ -1961,6 +1999,7 @@ export type MessageSendOptions = {
   suppressUserMessageRender?: boolean;
   autoSession?: AutoSessionMetadata | null;
   browserContextAttachment?: BrowserContextSendAttachment | null;
+  intentCanvasContextAttachments?: IntentCanvasContextSendAttachment[];
 };
 
 export type SelectedAgentOption = {

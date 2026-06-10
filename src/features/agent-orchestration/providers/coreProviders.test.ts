@@ -44,6 +44,20 @@ describe("core orchestration provider aggregation", () => {
         }),
       ],
       projectMapDataset: createProjectMapDatasetFixture(),
+      projectMapRelationshipContextPack: {
+        schemaVersion: 1,
+        generatedAt: "2026-06-05T00:00:00.000Z",
+        mustReadFiles: ["src/main.ts"],
+        relatedFiles: [],
+        testTargets: [],
+        contracts: [],
+        riskFlags: [],
+        provenance: {
+          scanRunId: "relationship-scan-test",
+          relationIds: [],
+          fileIds: ["file-main"],
+        },
+      },
       taskRuns: [],
     });
 
@@ -52,6 +66,9 @@ describe("core orchestration provider aggregation", () => {
       "project-map",
       "core:task-run",
     ]);
+    expect(flattenAvailableOrchestrationCandidates(snapshots).map((task) => task.taskId)).toContain(
+      "project-map-relationship-context-relationship-scan-test",
+    );
     expect(flattenAvailableOrchestrationCandidates(snapshots).length).toBeGreaterThan(1);
   });
 });

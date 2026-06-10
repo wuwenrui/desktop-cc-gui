@@ -11,7 +11,7 @@ type UseWorkspaceSelectionOptions = {
     workspaceId: string,
     settings: Partial<WorkspaceSettings>,
   ) => Promise<WorkspaceInfo>;
-  setCenterMode: (mode: "chat" | "diff" | "editor" | "memory" | "projectMap") => void;
+  setCenterMode: (mode: "chat" | "diff" | "editor" | "memory" | "projectMap" | "intentCanvas") => void;
   setSelectedDiffPath: (path: string | null) => void;
 };
 
