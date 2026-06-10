@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-21.md`
-- **Total Sessions**: 798
+- **Total Sessions**: 799
 - **Last Active**: 2026-06-10
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-21.md` | ~697 | Active |
+| `journal-21.md` | ~744 | Active |
 | `journal-20.md` | ~1997 | Archived |
 | `journal-19.md` | ~1989 | Archived |
 | `journal-18.md` | ~1966 | Archived |
@@ -49,6 +49,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 799 | 2026-06-10 | 归档已验证 OpenSpec 提案 | `f4dfba2d` | `feature/v0.5.9` |
 | 798 | 2026-06-10 | 补充消息 Fork 文件保护回归测试 | `5e155324` | `feature/v0.5.8` |
 | 797 | 2026-06-10 | 修复消息 Fork 改写工作区 | `88d6d494` | `feature/v0.5.8` |
 | 796 | 2026-06-10 | 修复浏览器快照浅色主题可读性 | `b262d353` | `feature/v0.5.8` |

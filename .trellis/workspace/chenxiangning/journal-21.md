@@ -695,3 +695,50 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 799: 归档已验证 OpenSpec 提案
+
+**Date**: 2026-06-10
+**Task**: 归档已验证 OpenSpec 提案
+**Branch**: `feature/v0.5.9`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+完成 OpenSpec 已验证提案归档提交。
+
+主要变更：
+- 归档 8 个已完成 change：add-codex-provider-scoped-session-launch、add-prompt-enhancer-manual-provider-timeout、harden-codex-provider-session-catalog-recovery、fix-message-fork-workspace-mutation、fix-browser-context-light-theme-contrast、fix-windows-titlebar-controls-overlap、split-app-shell-runtime-boundaries、unify-client-workflow-runtime-model。
+- 同步 main specs，新增 app-shell-runtime-boundaries、client-workflow-runtime-model、codex-provider-scoped-session-launch、composer-prompt-enhancer、windows-titlebar-control-safe-zone。
+- 更新 openspec/project.md 的 active/archive/spec 计数、active change 列表和 2026-06-10 closure snapshot。
+
+验证结果：
+- 归档前 8 个候选 change strict validation 均通过。
+- openspec validate --specs --strict --no-interactive 通过，325 specs passed。
+- OpenSpec consistency full check 0 errors，保留既有 warnings。
+- openspec validate --all --strict --no-interactive 仍被既有 active change harden-realtime-composer-status-panel-performance 缺少 spec deltas 阻塞。
+
+未纳入本次提交：AGENTS.md 本地修改，以及 4 个未开始 active proposal 目录。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f4dfba2d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
