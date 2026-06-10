@@ -18,9 +18,3 @@
 - [x] Add focused test coverage for `codex-tui + experimentalApi` control-plane classification.
 - [x] Run `cargo test --manifest-path src-tauri/Cargo.toml parse_codex_cli_version_accepts_common_outputs`.
 - [x] Run `cargo test --manifest-path src-tauri/Cargo.toml codex_tui_client_info_with_experimental_api_is_control_plane`.
-
-## 3. Deferred / Not Done
-
-- [ ] Verify relay-side request logs after launching the updated client against the target relay.
-- [ ] Run broader Rust regression for `backend::app_server` and `engine::claude_history` if closure requires wider confidence.
-- [ ] Record relay-side request-log evidence after launching the updated client against the target relay.

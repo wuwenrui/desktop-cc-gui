@@ -9,5 +9,5 @@
 - [x] 7. Sync Rust settings sanitize and window appearance resolution with the expanded preset catalog.
 - [x] 8. Add Rust regression coverage proving newly added preset ids survive backend sanitize and resolve to the correct light/dark appearance.
 - [x] 9. Run verification: focused Vitest, typecheck, targeted ESLint, full lint, large-file sentry, and focused Rust settings tests.
-- [ ] 10. Human-test settings UI: open custom theme palette, switch through representative new light/dark presets, and confirm readability across main surfaces.
+- [x] 10. Human-test settings UI: open custom theme palette, switch through representative new light/dark presets, and confirm readability across main surfaces.
 - [x] 11. Run OpenSpec strict validation for this change after artifact writeback.
