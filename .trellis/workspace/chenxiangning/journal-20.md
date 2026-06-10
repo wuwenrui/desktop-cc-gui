@@ -1911,3 +1911,54 @@ Codex app-server 对话链路切换为 codex-tui 兼容身份，补 terminal env
 ### Next Steps
 
 - None - task complete
+
+
+## Session 781: 扩展自定义主题配色
+
+**Date**: 2026-06-10
+**Task**: 扩展自定义主题配色
+**Branch**: `feature/v0.5.8`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+本次完成自定义主题配色扩展并修复新增 preset 保存后回弹问题。
+
+主要变更：
+- 新增 OpenSpec change `add-custom-theme-palette-presets`，记录自定义主题新增 10 套配色的 proposal、tasks 与 `settings-custom-theme-presets` spec delta。
+- 前端新增 5 套 light preset 与 5 套 dark preset，更新 `ThemePresetId` 类型、`vscodeThemePresets` catalog、SettingsView 下拉顺序测试和中英文 i18n label。
+- 修复新增主题切换后瞬间回退问题：同步 `src-tauri/src/shared/settings_core.rs` 的 Rust settings sanitize 白名单和 custom window appearance 解析，避免后端把新增 `customThemePresetId` 当非法值回退到默认 preset。
+- 补充 Rust regression coverage，确认新增 preset 可通过后端 sanitize 并解析正确 light/dark appearance。
+
+验证：
+- `npx vitest run src/features/theme/utils/themePreset.test.ts src/features/settings/components/SettingsView.test.tsx` 通过。
+- `npm run typecheck` 通过。
+- 相关文件 ESLint 通过。
+- `npm run check:large-files` 通过。
+- `cargo test --manifest-path src-tauri/Cargo.toml shared::settings_core::tests` 通过。
+- `openspec validate add-custom-theme-palette-presets --strict --no-interactive` 通过。
+
+备注：
+- 未纳入无关未跟踪目录 `.trellis/tasks/06-10-client-module-integration-plan/` 与 `openspec/changes/extend-client-font-size-coverage/`。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f79e269e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
