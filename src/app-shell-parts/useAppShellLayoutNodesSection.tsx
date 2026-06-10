@@ -444,6 +444,12 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     sessionRadarRecentCompletedSessions,
     activeRateLimits,
     usageShowRemaining: appSettings.usageShowRemaining,
+    // lawyer-shell：界面模式 + 「我的案件」打开工作区（复用 addWorkspaceFromPath，
+    // 内部已处理「已存在则激活」与 setActiveWorkspaceId）。
+    uiMode: appSettings.uiMode,
+    onOpenCaseWorkspacePath: async (path: string) => {
+      await addWorkspaceFromPath(path);
+    },
     onRefreshAccountRateLimits: handleRefreshAccountRateLimits,
     showMessageAnchors: appSettings.showMessageAnchors,
     accountInfo: activeAccount,

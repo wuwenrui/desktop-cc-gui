@@ -16,6 +16,8 @@ const CANVAS_WIDTH_MODE_NARROW: &str = "narrow";
 const CANVAS_WIDTH_MODE_WIDE: &str = "wide";
 const LAYOUT_MODE_DEFAULT: &str = "default";
 const LAYOUT_MODE_SWAPPED: &str = "swapped";
+const UI_MODE_DEVELOPER: &str = "developer";
+const UI_MODE_LAWYER: &str = "lawyer";
 const THEME_SYSTEM: &str = "system";
 const THEME_LIGHT: &str = "light";
 const THEME_DARK: &str = "dark";
@@ -51,6 +53,14 @@ fn sanitize_layout_mode(mode: &str) -> String {
     match mode {
         LAYOUT_MODE_DEFAULT | LAYOUT_MODE_SWAPPED => mode.to_string(),
         _ => LAYOUT_MODE_DEFAULT.to_string(),
+    }
+}
+
+// lawyer-shell：界面模式仅允许 developer / lawyer，非法值回退 developer。
+fn sanitize_ui_mode(mode: &str) -> String {
+    match mode {
+        UI_MODE_DEVELOPER | UI_MODE_LAWYER => mode.to_string(),
+        _ => UI_MODE_DEVELOPER.to_string(),
     }
 }
 
@@ -115,6 +125,7 @@ fn sanitize_theme_settings(settings: &mut AppSettings) {
     settings.theme = sanitize_theme(&settings.theme);
     settings.canvas_width_mode = sanitize_canvas_width_mode(&settings.canvas_width_mode);
     settings.layout_mode = sanitize_layout_mode(&settings.layout_mode);
+    settings.ui_mode = sanitize_ui_mode(&settings.ui_mode);
     settings.light_theme_preset_id =
         sanitize_light_theme_preset_id(&settings.light_theme_preset_id);
     settings.dark_theme_preset_id = sanitize_dark_theme_preset_id(&settings.dark_theme_preset_id);
@@ -326,7 +337,7 @@ mod tests {
         get_codex_unified_exec_external_status_core, resolve_window_theme_preference,
         restore_codex_unified_exec_official_default_core, sanitize_canvas_width_mode,
         sanitize_dark_theme_preset_id, sanitize_layout_mode, sanitize_light_theme_preset_id,
-        sanitize_theme, sanitize_theme_preset_id, sanitize_ui_scale,
+        sanitize_theme, sanitize_theme_preset_id, sanitize_ui_mode, sanitize_ui_scale,
         set_codex_unified_exec_official_override_core, update_app_settings_core, validate_ui_scale,
         DARK_THEME_PRESET_GITHUB, DARK_THEME_PRESET_GITHUB_DIMMED, DARK_THEME_PRESET_MODERN,
         DARK_THEME_PRESET_MONOKAI, DARK_THEME_PRESET_ONE_DARK_PRO, DARK_THEME_PRESET_PLUS,
@@ -402,6 +413,18 @@ mod tests {
     fn sanitize_layout_mode_keeps_supported_values() {
         assert_eq!(sanitize_layout_mode("default"), "default");
         assert_eq!(sanitize_layout_mode("swapped"), "swapped");
+    }
+
+    #[test]
+    fn sanitize_ui_mode_falls_back_for_invalid_values() {
+        assert_eq!(sanitize_ui_mode("foo"), "developer");
+        assert_eq!(sanitize_ui_mode(""), "developer");
+    }
+
+    #[test]
+    fn sanitize_ui_mode_keeps_supported_values() {
+        assert_eq!(sanitize_ui_mode("developer"), "developer");
+        assert_eq!(sanitize_ui_mode("lawyer"), "lawyer");
     }
 
     #[test]

@@ -111,6 +111,7 @@ import type {
   ThreadSummary,
   ThreadTokenUsage,
   TurnPlan,
+  UiMode,
   WorkspaceInfo,
 } from "../../../types";
 import { getClientStoreSync } from "../../../services/clientStorage";
@@ -309,6 +310,10 @@ type LayoutNodesOptions = {
   sessionRadarRecentCompletedSessions: SessionRadarEntry[];
   activeRateLimits: RateLimitSnapshot | null;
   usageShowRemaining: boolean;
+  /** lawyer-shell：界面模式（Sidebar 导航过滤用）。 */
+  uiMode?: UiMode;
+  /** lawyer-shell：把目录注册为 workspace 并激活（我的案件用）。 */
+  onOpenCaseWorkspacePath?: (path: string) => Promise<void> | void;
   onRefreshAccountRateLimits?: () => Promise<void> | void;
   showMessageAnchors: boolean;
   accountInfo: AccountSnapshot | null;
@@ -1602,6 +1607,8 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       showTerminalButton={options.showTerminalButton}
       isTerminalOpen={options.terminalOpen}
       onToggleTerminal={options.onToggleTerminal}
+      uiMode={options.uiMode}
+      onOpenCaseWorkspacePath={options.onOpenCaseWorkspacePath}
     />
   );
 

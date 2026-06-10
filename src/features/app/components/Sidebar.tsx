@@ -4,12 +4,15 @@ import type {
   ConversationItem,
   EngineType,
   RateLimitSnapshot,
-  ThreadSummary,
+  UiMode,
   WorkspaceInfo,
+  ThreadSummary,
 } from "../../../types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SkillMarketNavItem } from "../../skill-market/SkillMarketNavItem";
 import { LawhubNavSection } from "../../lawhub/components/LawhubNavSection";
+import { CaseNavItem } from "../../lawyer-shell/CaseNavItem";
+import { isNavVisible } from "../../lawyer-shell/navVisibility";
 import type { MouseEvent as ReactMouseEvent, ReactNode, RefObject } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -466,6 +469,10 @@ type SidebarProps = {
   showLoadingProgressDialog?: LoadingProgressController["showLoadingProgressDialog"];
   hideLoadingProgressDialog?: LoadingProgressController["hideLoadingProgressDialog"];
   topbarNode?: ReactNode;
+  /** lawyer-shell：界面模式（缺省 developer，全量渲染）。 */
+  uiMode?: UiMode;
+  /** lawyer-shell：把目录注册为 workspace 并激活（我的案件用）。 */
+  onOpenCaseWorkspacePath?: (path: string) => Promise<void> | void;
 };
 
 export function Sidebar({
@@ -555,6 +562,8 @@ export function Sidebar({
   showLoadingProgressDialog,
   hideLoadingProgressDialog,
   topbarNode,
+  uiMode,
+  onOpenCaseWorkspacePath,
 }: SidebarProps) {
   const { t } = useTranslation();
   const quickSearchLabel = t("sidebar.quickSearch");
@@ -2111,6 +2120,11 @@ export function Sidebar({
       <div className="sidebar-body">
         <div className="sidebar-body-layout">
           <nav className="sidebar-primary-nav" aria-label={t("tabbar.primaryNavigation")}>
+            {/* lawyer-shell：律师模式下「我的案件」置顶 */}
+            {uiMode === "lawyer" && (
+              <CaseNavItem onOpenCaseWorkspacePath={onOpenCaseWorkspacePath} />
+            )}
+            {isNavVisible(uiMode, "home-chat") && (
             <button
               type="button"
               className={`sidebar-primary-nav-item sidebar-primary-nav-mode-item ${appMode === "chat" ? "is-active" : ""}`}
@@ -2122,6 +2136,8 @@ export function Sidebar({
               <House className="sidebar-primary-nav-icon" aria-hidden size={20} strokeWidth={1.8} />
               <span className="sidebar-primary-nav-text">{t("sidebar.quickNewThread")}</span>
             </button>
+            )}
+            {isNavVisible(uiMode, "kanban") && (
             <button
               type="button"
               className={`sidebar-primary-nav-item sidebar-primary-nav-mode-item ${appMode === "kanban" ? "is-active" : ""}`}
@@ -2140,6 +2156,8 @@ export function Sidebar({
                 {quickKanbanShortcutLabel}
               </span>
             </button>
+            )}
+            {isNavVisible(uiMode, "global-search") && (
             <button
               type="button"
               className="sidebar-primary-nav-item sidebar-primary-nav-subitem"
@@ -2157,6 +2175,7 @@ export function Sidebar({
                 {quickSearchShortcutLabel}
               </span>
             </button>
+            )}
             <SkillMarketNavItem />
             <LawhubNavSection
               activeWorkspaceId={activeWorkspaceId}
@@ -2164,6 +2183,10 @@ export function Sidebar({
                 workspaces.find((w) => w.id === activeWorkspaceId)?.path ?? null
               }
             />
+            {/* lawyer-shell：开发者模式下「我的案件」排在 lawhub 之后，不打扰既有顺序 */}
+            {uiMode !== "lawyer" && (
+              <CaseNavItem onOpenCaseWorkspacePath={onOpenCaseWorkspacePath} />
+            )}
           </nav>
           <ScrollArea
             className={`sidebar-content-column${scrollFade.top ? " fade-top" : ""}${
@@ -2273,6 +2296,7 @@ export function Sidebar({
                   ref={settingsMenuRef}
                   role="menu"
                 >
+                  {isNavVisible(uiMode, "quick-skills") && (
                   <button
                     type="button"
                     role="menuitem"
@@ -2286,6 +2310,8 @@ export function Sidebar({
                     <BriefcaseBusiness size={14} aria-hidden />
                     <span>{t("sidebar.quickSkills")}</span>
                   </button>
+                  )}
+                  {isNavVisible(uiMode, "lock") && (
                   <button
                     type="button"
                     role="menuitem"
@@ -2298,6 +2324,8 @@ export function Sidebar({
                     <Lock size={14} aria-hidden />
                     <span>{t("lockScreen.lock")}</span>
                   </button>
+                  )}
+                  {isNavVisible(uiMode, "spec-hub") && (
                   <button
                     type="button"
                     role="menuitem"
@@ -2310,6 +2338,8 @@ export function Sidebar({
                     <LayoutDashboard size={14} aria-hidden />
                     <span>{t("sidebar.specHub")}</span>
                   </button>
+                  )}
+                  {isNavVisible(uiMode, "memory") && (
                   <button
                     type="button"
                     role="menuitem"
@@ -2322,6 +2352,8 @@ export function Sidebar({
                     <Brain size={14} aria-hidden />
                     <span>{t("panels.memory")}</span>
                   </button>
+                  )}
+                  {isNavVisible(uiMode, "git-history") && (
                   <button
                     type="button"
                     role="menuitem"
@@ -2334,6 +2366,7 @@ export function Sidebar({
                     <GitBranch size={14} aria-hidden />
                     <span>{t("git.logMode")}</span>
                   </button>
+                  )}
                   <button
                     type="button"
                     role="menuitem"

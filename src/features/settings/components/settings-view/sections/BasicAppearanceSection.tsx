@@ -28,6 +28,7 @@ import PanelTop from "lucide-react/dist/esm/icons/panel-top";
 import PanelsLeftRight from "lucide-react/dist/esm/icons/panels-left-right";
 import Play from "lucide-react/dist/esm/icons/play";
 import RotateCcw from "lucide-react/dist/esm/icons/rotate-ccw";
+import Scale from "lucide-react/dist/esm/icons/scale";
 import Search from "lucide-react/dist/esm/icons/search";
 import Sparkles from "lucide-react/dist/esm/icons/sparkles";
 import Sun from "lucide-react/dist/esm/icons/sun";
@@ -464,6 +465,50 @@ export function BasicAppearanceSection({
             </button>
           </div>
           <div className="settings-help">{t("settings.layoutModeDesc")}</div>
+        </div>
+        {/* lawyer-shell：界面模式切换（中文文案为本 fork 约定，见 add-lawyer-mode-shell） */}
+        <div className="settings-field settings-basic-item">
+          <div className="settings-basic-field-header">
+            <Scale className="settings-basic-field-icon" aria-hidden />
+            <span className="settings-basic-field-label">界面模式</span>
+          </div>
+          <div className="settings-basic-theme-selector" role="radiogroup" aria-label="界面模式">
+            <button
+              type="button"
+              role="radio"
+              aria-checked={appSettings.uiMode !== "lawyer"}
+              className={`settings-basic-theme-option ${
+                appSettings.uiMode !== "lawyer" ? "active" : ""
+              }`}
+              onClick={() =>
+                void onUpdateAppSettings({
+                  ...appSettings,
+                  uiMode: "developer",
+                })
+              }
+            >
+              <span>开发者模式</span>
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={appSettings.uiMode === "lawyer"}
+              className={`settings-basic-theme-option ${
+                appSettings.uiMode === "lawyer" ? "active" : ""
+              }`}
+              onClick={() =>
+                void onUpdateAppSettings({
+                  ...appSettings,
+                  uiMode: "lawyer",
+                })
+              }
+            >
+              <span>律师模式</span>
+            </button>
+          </div>
+          <div className="settings-help">
+            律师模式以「我的案件」为入口，隐藏开发者向导航；开发者模式保留全部功能。
+          </div>
         </div>
         <div className="settings-field settings-basic-item settings-scale-item">
           <div className="settings-basic-field-header">

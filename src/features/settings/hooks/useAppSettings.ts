@@ -193,6 +193,7 @@ const defaultSettings: AppSettings = {
   customSkillDirectories: [],
   canvasWidthMode: "narrow",
   layoutMode: "default",
+  uiMode: "developer",
   userMsgColor: "",
   usageShowRemaining: false,
   showMessageAnchors: true,
@@ -343,6 +344,8 @@ function normalizeAppSettings(
     layoutMode: allowedLayoutModes.has(settings.layoutMode ?? "default")
       ? (settings.layoutMode ?? "default")
       : "default",
+    // lawyer-shell：非法/缺省值一律回退 developer，存量行为零破坏。
+    uiMode: settings.uiMode === "lawyer" ? "lawyer" : "developer",
     userMsgColor: fallbackUserMsgColor,
     performanceCompatibilityModeEnabled:
       settings.performanceCompatibilityModeEnabled === true,

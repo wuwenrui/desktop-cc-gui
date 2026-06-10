@@ -1043,6 +1043,8 @@ pub(crate) struct AppSettings {
     pub(crate) canvas_width_mode: String,
     #[serde(default = "default_layout_mode", rename = "layoutMode")]
     pub(crate) layout_mode: String,
+    #[serde(default = "default_ui_mode", rename = "uiMode")]
+    pub(crate) ui_mode: String,
     #[serde(default = "default_ui_font_family", rename = "uiFontFamily")]
     pub(crate) ui_font_family: String,
     #[serde(default = "default_code_font_family", rename = "codeFontFamily")]
@@ -1319,6 +1321,11 @@ fn default_canvas_width_mode() -> String {
 
 fn default_layout_mode() -> String {
     "default".to_string()
+}
+
+// lawyer-shell：界面模式（developer | lawyer），本期默认 developer。
+fn default_ui_mode() -> String {
+    "developer".to_string()
 }
 
 fn default_ui_font_family() -> String {
@@ -1720,6 +1727,7 @@ impl Default for AppSettings {
             ),
             canvas_width_mode: default_canvas_width_mode(),
             layout_mode: default_layout_mode(),
+            ui_mode: default_ui_mode(),
             ui_font_family: default_ui_font_family(),
             code_font_family: default_code_font_family(),
             code_font_size: default_code_font_size(),
@@ -1932,6 +1940,7 @@ mod tests {
         assert!(!settings.performance_compatibility_mode_enabled);
         assert_eq!(settings.canvas_width_mode, "narrow");
         assert_eq!(settings.layout_mode, "default");
+        assert_eq!(settings.ui_mode, "developer");
         assert!(settings.ui_font_family.starts_with("Monaco"));
         assert!(settings.code_font_family.starts_with("Monaco"));
         assert_eq!(settings.code_font_size, 11);

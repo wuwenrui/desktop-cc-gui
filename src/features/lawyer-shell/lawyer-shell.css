@@ -1,0 +1,265 @@
+/*
+ * 律师模式壳样式（lawyer-shell）— 新增文件（fork-friendly），零改上游。
+ * 复用客户端设计 token，自动跟随主题切换。
+ * 结构: .lawyer-shell-overlay > .lawyer-shell-panel > (.lawyer-shell-panel-header + .lawyer-shell-home)
+ */
+
+/* ---- 居中模态遮罩（与 skill-market-overlay 同范式） ---- */
+.lawyer-shell-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  background: rgba(6, 8, 12, 0.66);
+  backdrop-filter: blur(6px) saturate(120%);
+  -webkit-backdrop-filter: blur(6px) saturate(120%);
+}
+
+.lawyer-shell-panel {
+  width: min(760px, 100%);
+  max-height: min(84vh, 760px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface-popover, #0c1016);
+  border: 1px solid var(--border-strong, #353540);
+  border-radius: 16px;
+  box-shadow: 0 24px 64px -12px rgba(0, 0, 0, 0.7);
+}
+
+.lawyer-shell-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--border-subtle, #252530);
+  font-weight: 600;
+}
+
+.lawyer-shell-panel-header button {
+  background: transparent;
+  border: 1px solid var(--border-subtle, #353540);
+  border-radius: 8px;
+  color: inherit;
+  cursor: pointer;
+  padding: 4px 10px;
+}
+
+/* ---- 案件首页 ---- */
+.lawyer-shell-home {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 20px 20px;
+  overflow-y: auto;
+}
+
+.lawyer-shell-home-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.lawyer-shell-home-header h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.lawyer-shell-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent, #4078f2);
+  color: #fff;
+  cursor: pointer;
+}
+
+.lawyer-shell-primary:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.lawyer-shell-empty {
+  padding: 28px 0;
+  text-align: center;
+  color: var(--text-muted, #8a8f98);
+}
+
+.lawyer-shell-case-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lawyer-shell-case-card {
+  border: 1px solid var(--border-subtle, #2a2a33);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--surface-card, #14161c);
+}
+
+.lawyer-shell-case-main {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  padding: 0;
+}
+
+.lawyer-shell-case-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lawyer-shell-case-title {
+  font-weight: 600;
+}
+
+.lawyer-shell-stage-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent, #4078f2) 18%, transparent);
+  color: var(--accent, #7ba4ff);
+}
+
+.lawyer-shell-case-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text-muted, #8a8f98);
+}
+
+.lawyer-shell-case-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.lawyer-shell-case-actions button {
+  padding: 4px 12px;
+  border: 1px solid var(--border-subtle, #353540);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.lawyer-shell-case-actions button:hover {
+  border-color: var(--accent, #4078f2);
+}
+
+/* ---- 新建案件弹窗 ---- */
+.lawyer-shell-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(6, 8, 12, 0.5);
+}
+
+.lawyer-shell-dialog {
+  width: min(480px, calc(100% - 48px));
+  background: var(--surface-popover, #0c1016);
+  border: 1px solid var(--border-strong, #353540);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.lawyer-shell-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px 10px;
+  border-bottom: 1px solid var(--border-subtle, #252530);
+  font-weight: 600;
+}
+
+.lawyer-shell-dialog-header button {
+  background: transparent;
+  border: none;
+  color: var(--text-muted, #8a8f98);
+  cursor: pointer;
+}
+
+.lawyer-shell-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 18px 18px;
+}
+
+.lawyer-shell-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-muted, #8a8f98);
+}
+
+.lawyer-shell-field input {
+  padding: 6px 10px;
+  border: 1px solid var(--border-subtle, #353540);
+  border-radius: 8px;
+  background: var(--surface-input, #101218);
+  color: var(--text-primary, #e6e6eb);
+}
+
+.lawyer-shell-dir-row {
+  display: flex;
+  gap: 8px;
+}
+
+.lawyer-shell-dir-row input {
+  flex: 1;
+}
+
+.lawyer-shell-dir-row button {
+  padding: 6px 10px;
+  border: 1px solid var(--border-subtle, #353540);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.lawyer-shell-error {
+  color: var(--danger, #e5534b);
+  font-size: 12px;
+}
+
+.lawyer-shell-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.lawyer-shell-dialog-actions button {
+  padding: 6px 14px;
+  border: 1px solid var(--border-subtle, #353540);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.lawyer-shell-dialog-actions .lawyer-shell-primary {
+  border: none;
+}

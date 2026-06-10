@@ -736,6 +736,9 @@ export type EmailSendResult = {
   durationMs: number;
 };
 
+/** 界面模式：开发者工作台（默认） / 律师办案台（lawyer-shell）。 */
+export type UiMode = "developer" | "lawyer";
+
 export type AppSettings = {
   claudeBin: string | null;
   codexBin: string | null;
@@ -797,6 +800,7 @@ export type AppSettings = {
   customSkillDirectories?: string[];
   canvasWidthMode: CanvasWidthMode;
   layoutMode?: LayoutMode;
+  uiMode?: UiMode;
   userMsgColor: string;
   usageShowRemaining: boolean;
   showMessageAnchors: boolean;
