@@ -33,6 +33,15 @@ describe("update release configuration", () => {
     expect(workflow).not.toContain("github.com/wuwenrui/desktop-cc-gui/releases/download/v${VERSION}");
   });
 
+  it("allows latest.json to point large artifacts at a separate CDN base", () => {
+    const workflow = readWorkspaceFile(".github/workflows/release.yml");
+
+    expect(workflow).toContain("LAWYER_COPILOT_UPDATE_ARTIFACT_BASE_URL");
+    expect(workflow).toContain("UPDATE_ARTIFACT_BASE_URL");
+    expect(workflow).toContain("update_artifact_base_url");
+    expect(workflow).toContain("artifact_url_base");
+  });
+
   it("uploads updater artifacts over authenticated HTTPS", () => {
     const workflow = readWorkspaceFile(".github/workflows/release.yml");
 

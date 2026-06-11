@@ -291,6 +291,7 @@ jobs:
     environment: release
     env:
       LAWYER_COPILOT_UPDATE_BASE_URL: ${{ vars.LAWYER_COPILOT_UPDATE_BASE_URL }}
+      LAWYER_COPILOT_UPDATE_ARTIFACT_BASE_URL: ${{ vars.LAWYER_COPILOT_UPDATE_ARTIFACT_BASE_URL }}
       LAWYER_COPILOT_UPDATE_UPLOAD_URL: ${{ vars.LAWYER_COPILOT_UPDATE_UPLOAD_URL }}
       LAWYER_COPILOT_UPDATE_UPLOAD_USER: ${{ secrets.LAWYER_COPILOT_UPDATE_UPLOAD_USER }}
       LAWYER_COPILOT_UPDATE_UPLOAD_PASSWORD: ${{ secrets.LAWYER_COPILOT_UPDATE_UPLOAD_PASSWORD }}
@@ -327,6 +328,7 @@ jobs:
         run: |
           set -euo pipefail
           UPDATE_BASE_URL=$(node -e 'import("./scripts/configure-updater-endpoint.mjs").then(({ normalizeUpdateBaseUrl }) => console.log(normalizeUpdateBaseUrl(process.env.LAWYER_COPILOT_UPDATE_BASE_URL))).catch((error) => { console.error(error.message); process.exit(1); })')
+          UPDATE_ARTIFACT_BASE_URL=$(node -e 'import("./scripts/configure-updater-endpoint.mjs").then(({ normalizeUpdateBaseUrl }) => console.log(normalizeUpdateBaseUrl(process.env.LAWYER_COPILOT_UPDATE_ARTIFACT_BASE_URL || process.env.LAWYER_COPILOT_UPDATE_BASE_URL))).catch((error) => { console.error(error.message); process.exit(1); })')
           VERSION=$(python3 - <<'PY'
           import json
           from pathlib import Path
@@ -383,7 +385,7 @@ jobs:
           Path("release-artifacts/release-notes.md").write_text(notes + "\n")
           PY
 
-          VERSION="$VERSION" UPDATE_BASE_URL="$UPDATE_BASE_URL" python3 - <<'PY'
+          VERSION="$VERSION" UPDATE_BASE_URL="$UPDATE_BASE_URL" UPDATE_ARTIFACT_BASE_URL="$UPDATE_ARTIFACT_BASE_URL" python3 - <<'PY'
           import json
           import os
           from datetime import datetime, timezone
@@ -393,9 +395,11 @@ jobs:
           notes = Path("release-artifacts/release-notes.md").read_text().strip()
           artifacts_dir = Path("release-artifacts")
           update_base_url = os.environ["UPDATE_BASE_URL"].rstrip("/")
+          update_artifact_base_url = os.environ["UPDATE_ARTIFACT_BASE_URL"].rstrip("/")
+          artifact_url_base = update_artifact_base_url
 
           def artifact_url(name):
-              return f"{update_base_url}/{quote(name)}"
+              return f"{artifact_url_base}/{quote(name)}"
 
           platforms = {
             "darwin-aarch64": {

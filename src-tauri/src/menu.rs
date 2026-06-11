@@ -7,6 +7,19 @@ use tauri::{Emitter, Manager, Runtime, WebviewUrl, WebviewWindowBuilder};
 
 const NEW_WINDOW_ACCELERATOR: &str = "CmdOrCtrl+Shift+N";
 const RELOAD_WINDOW_ACCELERATOR: &str = "CmdOrCtrl+R";
+const APP_DISPLAY_NAME: &str = "LawyerCopilot";
+
+fn app_display_name() -> &'static str {
+    APP_DISPLAY_NAME
+}
+
+fn about_menu_title() -> String {
+    format!("关于 {}", app_display_name())
+}
+
+fn about_window_title() -> String {
+    about_menu_title()
+}
 
 fn reload_window_accelerator() -> Option<&'static str> {
     #[cfg(target_os = "macos")]
@@ -146,8 +159,8 @@ pub(crate) fn build_menu<R: tauri::Runtime>(
     handle: &tauri::AppHandle<R>,
 ) -> tauri::Result<Menu<R>> {
     let registry = handle.state::<MenuItemRegistry<R>>();
-    let app_name = handle.package_info().name.clone();
-    let about_item = MenuItemBuilder::with_id("about", format!("关于 {app_name}")).build(handle)?;
+    let app_name = app_display_name();
+    let about_item = MenuItemBuilder::with_id("about", about_menu_title()).build(handle)?;
     let check_updates_item =
         MenuItemBuilder::with_id("check_for_updates", "检查更新…").build(handle)?;
     let settings_item = MenuItemBuilder::with_id("file_open_settings", "设置…")
@@ -161,7 +174,7 @@ pub(crate) fn build_menu<R: tauri::Runtime>(
 
     let app_menu = Submenu::with_items(
         handle,
-        app_name.clone(),
+        app_name,
         true,
         &[
             &about_item,
@@ -451,7 +464,7 @@ pub(crate) fn handle_menu_event<R: tauri::Runtime>(
                 return;
             }
             let _ = WebviewWindowBuilder::new(app, "about", WebviewUrl::App("index.html".into()))
-                .title("关于 ccgui")
+                .title(about_window_title())
                 .resizable(false)
                 .inner_size(360.0, 240.0)
                 .center()
@@ -536,7 +549,10 @@ fn emit_menu_event<R: tauri::Runtime>(app: &tauri::AppHandle<R>, event: &str) {
 
 #[cfg(test)]
 mod tests {
-    use super::{menu_event_name_for_id, reload_window_accelerator, NEW_WINDOW_ACCELERATOR};
+    use super::{
+        about_menu_title, about_window_title, app_display_name, menu_event_name_for_id,
+        reload_window_accelerator, NEW_WINDOW_ACCELERATOR,
+    };
 
     #[test]
     fn new_window_menu_shortcut_matches_expected() {
@@ -558,5 +574,12 @@ mod tests {
             Some("menu-new-window")
         );
         assert_eq!(menu_event_name_for_id("unknown"), None);
+    }
+
+    #[test]
+    fn app_about_labels_use_product_display_name() {
+        assert_eq!(app_display_name(), "LawyerCopilot");
+        assert_eq!(about_menu_title(), "关于 LawyerCopilot");
+        assert_eq!(about_window_title(), "关于 LawyerCopilot");
     }
 }
