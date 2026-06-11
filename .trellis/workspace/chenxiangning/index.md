@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-21.md`
-- **Total Sessions**: 804
+- **Total Sessions**: 805
 - **Last Active**: 2026-06-11
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-21.md` | ~974 | Active |
+| `journal-21.md` | ~1021 | Active |
 | `journal-20.md` | ~1997 | Archived |
 | `journal-19.md` | ~1989 | Archived |
 | `journal-18.md` | ~1966 | Archived |
@@ -49,6 +49,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 805 | 2026-06-11 | 归档 P0 性能提案至 openspec archive | `aba7c2fd` | `feature/v0.5.9` |
 | 804 | 2026-06-11 | 补齐实时链路追踪门禁 | `ea916f00` | `feature/v0.5.9` |
 | 803 | 2026-06-11 | 完善 search index review 修复 | `905c6a37` | `feature/v0.5.9` |
 | 802 | 2026-06-11 | 完成文件预览重依赖延迟加载 | `b2fe0224`, `bf048d7c` | `feature/v0.5.9` |

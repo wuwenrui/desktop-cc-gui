@@ -972,3 +972,50 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 805: 归档 P0 性能提案至 openspec archive
+
+**Date**: 2026-06-11
+**Task**: 归档 P0 性能提案至 openspec archive
+**Branch**: `feature/v0.5.9`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| 阶段 | 内容 |
+|---|---|
+| P0 收口确认 | 扫描 roadmap P0-01 ~ P0-11 共 11 项；全部落地（3 个 active change + 8 个 archive 06-10 change）；tasks 全 [x]；openspec validate 全部 valid |
+| 归档 1 | `lazy-file-preview-dependencies` → `2026-06-11-lazy-file-preview-dependencies`；spec delta: `file-view-document-preview-modes` / `file-view-language-rendering-coverage` 各 `~2 modified` |
+| 归档 2 | `search-index-and-bounded-hydration` → `2026-06-11-search-index-and-bounded-hydration`；delta 原用 MODIFIED header 找不到（main spec 同名 requirement 不一致），改 `## ADDED Requirements` 通过；落点 `composer-file-reference-index-availability` `+1 added` |
+| 归档 3 | `realtime-trace-correlation-gate` → `2026-06-11-realtime-trace-correlation-gate`；delta 拆为 `## MODIFIED Requirements`（2 个原 requirement replace 升级 body）+ `## ADDED Requirements`（新增 `Realtime Visible Lag Budgets SHALL Use Correlated Milestones`）；落点 `conversation-stream-latency-diagnostics` `~2 modified` / `runtime-performance-evidence-gates` `+1 added ~1 modified` |
+| 校验 | 5 个被改 main spec `openspec validate --type spec --strict` 全部 `is valid`；`openspec list` 返回 `No active changes found` |
+| 工作区 | 归档前残留的 `ensure-dev-port.mjs` Windows shell 注入修复 + 对应测试 + 2 份 v0.5.9 baseline 历史快照已被 `fbeea497` / `75d49166` 等 commit 收走，无需在本 commit 处理 |
+| Commit | `aba7c2fd chore(openspec): 归档 P0 性能提案`（19 files changed, +89 / -102，全部为 rename + spec merge） |
+
+**下一步候选**：
+1. 启动 P1 立项：roadmap P1 14 项 + P2 12 项共 26 项未走独立 OpenSpec 流程；散落 commit 线索（`cef83671` MessageRow / `03520fb7` Composer / `99e819c2` git polling 等）可作归档/反向立项素材
+2. 验证矩阵实跑：`npm run perf:baseline:all` / `check:bundle-chunking` / `perf:long-list:baseline` / `perf:composer:baseline` / `perf:realtime:extended-baseline` / `perf:realtime:boundary-guard` 全套
+3. roadmap 第 15 章"缺口复核"按当前 v0.5.9 实际状态刷新
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `aba7c2fd` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
