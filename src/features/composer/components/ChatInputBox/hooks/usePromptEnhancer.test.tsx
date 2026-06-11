@@ -9,6 +9,39 @@ vi.mock('../../../../../services/tauri', () => ({
   engineSendMessageSync: vi.fn(),
 }));
 
+const defaultModelGroups = [
+  {
+    providerId: 'claude' as const,
+    providerLabel: 'Claude Code',
+    enabled: true,
+    models: [
+      { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5', model: 'claude-sonnet-4-5' },
+    ],
+  },
+  {
+    providerId: 'codex' as const,
+    providerLabel: 'Codex',
+    enabled: true,
+    models: [
+      { id: 'gpt-5.1-codex', label: 'GPT-5.1 Codex', model: 'gpt-5.1-codex' },
+    ],
+  },
+  {
+    providerId: 'gemini' as const,
+    providerLabel: 'Gemini',
+    enabled: true,
+    models: [
+      { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', model: 'gemini-2.5-pro' },
+    ],
+  },
+  {
+    providerId: 'opencode' as const,
+    providerLabel: 'OpenCode',
+    enabled: true,
+    models: [],
+  },
+];
+
 function renderPromptEnhancer(options?: {
   currentProvider?: string;
   selectedModel?: string;
@@ -25,6 +58,7 @@ function renderPromptEnhancer(options?: {
       getTextContent: () => options?.draft ?? '报告管理页面加载数据时，标题的获取逻辑是什么',
       currentProvider: options?.currentProvider ?? 'claude',
       selectedModel: options?.selectedModel ?? 'claude-sonnet-4-5',
+      modelGroups: defaultModelGroups,
       setHasContent,
       handleInput,
     }),
@@ -38,6 +72,64 @@ afterEach(() => {
 });
 
 describe('usePromptEnhancer', () => {
+  it('opens the dialog without starting enhancement automatically', () => {
+    const sendSync = vi.mocked(engineSendMessageSync);
+    const { result } = renderPromptEnhancer();
+
+    act(() => {
+      result.current.handleEnhancePrompt();
+    });
+
+    expect(result.current.showEnhancerDialog).toBe(true);
+    expect(result.current.originalPrompt).toBe('报告管理页面加载数据时，标题的获取逻辑是什么');
+    expect(result.current.isEnhancing).toBe(false);
+    expect(sendSync).not.toHaveBeenCalled();
+  });
+
+  it('uses the configured engine and timeout when the user starts enhancement', async () => {
+    const sendSync = vi.mocked(engineSendMessageSync);
+    sendSync.mockResolvedValueOnce({
+      engine: 'gemini',
+      text: '请说明报告管理页面标题加载逻辑。',
+    });
+
+    const { result } = renderPromptEnhancer();
+
+    act(() => {
+      result.current.handleEnhancePrompt();
+    });
+
+    await waitFor(() => {
+      expect(result.current.showEnhancerDialog).toBe(true);
+    });
+
+    act(() => {
+      result.current.handleEnhancerEngineChange('gemini');
+      result.current.handleEnhancerModelChange('gemini-2.5-pro');
+      result.current.handleEnhancerTimeoutChange(12);
+    });
+
+    await waitFor(() => {
+    expect(result.current.selectedEnhancerEngine).toBe('gemini');
+      expect(result.current.selectedEnhancerModel).toBe('gemini-2.5-pro');
+      expect(result.current.enhancerTimeoutSeconds).toBe(12);
+    });
+
+    act(() => {
+      result.current.handleRunPromptEnhancement();
+    });
+
+    await waitFor(() => {
+      expect(result.current.isEnhancing).toBe(false);
+      expect(result.current.canUseEnhancedPrompt).toBe(true);
+    });
+
+    expect(result.current.enhancingEngine).toBe('gemini');
+    expect(sendSync).toHaveBeenCalledTimes(1);
+    expect(sendSync.mock.calls[0]?.[1].engine).toBe('gemini');
+    expect(sendSync.mock.calls[0]?.[1].model).toBe('gemini-2.5-pro');
+  });
+
   it('falls back to Codex when Claude enhancement exits before returning text', async () => {
     const sendSync = vi.mocked(engineSendMessageSync);
     sendSync
@@ -51,6 +143,14 @@ describe('usePromptEnhancer', () => {
 
     act(() => {
       result.current.handleEnhancePrompt();
+    });
+
+    await waitFor(() => {
+      expect(result.current.showEnhancerDialog).toBe(true);
+    });
+
+    act(() => {
+      result.current.handleRunPromptEnhancement();
     });
 
     await waitFor(() => {
@@ -92,6 +192,14 @@ describe('usePromptEnhancer', () => {
     });
 
     await waitFor(() => {
+      expect(result.current.showEnhancerDialog).toBe(true);
+    });
+
+    act(() => {
+      result.current.handleRunPromptEnhancement();
+    });
+
+    await waitFor(() => {
       expect(result.current.isEnhancing).toBe(false);
       expect(result.current.canUseEnhancedPrompt).toBe(true);
     });
@@ -129,6 +237,14 @@ describe('usePromptEnhancer', () => {
     });
 
     await waitFor(() => {
+      expect(result.current.showEnhancerDialog).toBe(true);
+    });
+
+    act(() => {
+      result.current.handleRunPromptEnhancement();
+    });
+
+    await waitFor(() => {
       expect(result.current.isEnhancing).toBe(false);
       expect(result.current.canUseEnhancedPrompt).toBe(true);
     });
@@ -153,6 +269,14 @@ describe('usePromptEnhancer', () => {
 
     act(() => {
       result.current.handleEnhancePrompt();
+    });
+
+    await waitFor(() => {
+      expect(result.current.showEnhancerDialog).toBe(true);
+    });
+
+    act(() => {
+      result.current.handleRunPromptEnhancement();
     });
 
     await waitFor(() => {
@@ -181,6 +305,14 @@ describe('usePromptEnhancer', () => {
 
     act(() => {
       result.current.handleEnhancePrompt();
+    });
+
+    await waitFor(() => {
+      expect(result.current.showEnhancerDialog).toBe(true);
+    });
+
+    act(() => {
+      result.current.handleRunPromptEnhancement();
     });
 
     await waitFor(() => {

@@ -901,6 +901,8 @@ export type ProjectMapApiCallChainEdge = {
   targetSymbol: string;
   sourceFile: string;
   line?: number;
+  targetFile?: string;
+  targetLine?: number;
   excerpt?: string;
   direction: "forward" | "backward";
   kind: ProjectMapApiCallChainEdgeKind;

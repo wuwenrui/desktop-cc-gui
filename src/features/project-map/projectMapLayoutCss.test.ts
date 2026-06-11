@@ -1,10 +1,13 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const projectMapCss = readFileSync(
-  new URL("../../styles/project-map.css", import.meta.url),
-  "utf8",
-);
+const projectMapCss = [
+  "../../styles/project-map.css",
+  "../../styles/project-map.graph-canvas.css",
+  "../../styles/project-map.evidence-files.css",
+]
+  .map((filePath) => readFileSync(new URL(filePath, import.meta.url), "utf8"))
+  .join("\n");
 
 function readRuleBody(selector: string): string {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

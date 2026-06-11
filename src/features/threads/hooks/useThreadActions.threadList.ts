@@ -71,6 +71,10 @@ export type ProjectCatalogSessionSummary = {
   source?: string | null;
   provider?: string | null;
   sourceLabel?: string | null;
+  providerProfileId?: string | null;
+  providerProfileSource?: string | null;
+  providerProfileName?: string | null;
+  providerAvailability?: string | null;
   sourceCompleteness?: WorkspaceSessionSourceCompleteness | null;
   sourceStatusReason?: string | null;
   folderId?: string | null;
@@ -217,6 +221,10 @@ export function normalizeProjectCatalogSession(
     source?: unknown;
     provider?: unknown;
     sourceLabel?: unknown;
+    providerProfileId?: unknown;
+    providerProfileSource?: unknown;
+    providerProfileName?: unknown;
+    providerAvailability?: unknown;
     sourceCompleteness?: unknown;
     sourceStatusReason?: unknown;
     folderId?: unknown;
@@ -255,6 +263,12 @@ export function normalizeProjectCatalogSession(
     source: normalizeOptionalCatalogString(session.source),
     provider: normalizeOptionalCatalogString(session.provider),
     sourceLabel: normalizeOptionalCatalogString(session.sourceLabel),
+    providerProfileId: normalizeOptionalCatalogString(session.providerProfileId),
+    providerProfileSource: normalizeOptionalCatalogString(
+      session.providerProfileSource,
+    ),
+    providerProfileName: normalizeOptionalCatalogString(session.providerProfileName),
+    providerAvailability: normalizeOptionalCatalogString(session.providerAvailability),
     sourceCompleteness: normalizeCatalogSourceCompleteness(
       session.sourceCompleteness,
     ),

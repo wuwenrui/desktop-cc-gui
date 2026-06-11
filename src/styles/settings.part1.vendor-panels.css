@@ -472,6 +472,10 @@
   background: var(--surface-hover);
 }
 
+.vendor-provider-label-toggle {
+  cursor: default;
+}
+
 .vendor-plugin-model-entry-main {
   display: flex;
   align-items: center;

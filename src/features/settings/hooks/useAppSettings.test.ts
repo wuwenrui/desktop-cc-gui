@@ -87,6 +87,7 @@ describe("useAppSettings", () => {
     expect(result.current.settings.performanceCompatibilityModeEnabled).toBe(
       false,
     );
+    expect(result.current.settings.showSidebarProviderLabels).toBe(false);
     expect(result.current.settings.sessionAttributionMode).toBe("related");
   });
 

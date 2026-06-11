@@ -1814,10 +1814,10 @@ const enPart2 = {
     summary: "{{workspace}} · {{total}} work item(s) · {{providers}} source(s) available",
     workspaceUnknown: "Unknown workspace",
     loadingTitle: "Loading orchestration view",
-    loadingDescription: "Aggregating local task drafts, Project Map candidates, and TaskRun context.",
+    loadingDescription: "Aggregating Project Map candidates, existing task drafts, and TaskRun context.",
     emptyTitle: "No orchestration tasks in this workspace yet",
     emptyDescription:
-      "Create a draft from a Project Map node, or add a manual task. Missing OpenSpec/Trellis providers do not block this center.",
+      "This view currently shows existing orchestration context and run status only. Task creation entry points will return after the task module redesign.",
     degradedTitle: "Some providers are degraded",
     unavailable: "Unavailable",
     noRefs: "No source refs",
@@ -1998,6 +1998,11 @@ const enPart2 = {
     unavailable: "Unavailable",
     noArtifacts: "No artifacts yet",
     noBrowserEvidence: "No browser evidence linked",
+    browserEvidenceCandidates: "candidates",
+    source: {
+      kanban: "kanban",
+      orchestration: "orchestration",
+    },
     browserEvidenceState: {
       available: "available",
       stale: "stale",

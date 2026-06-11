@@ -172,7 +172,8 @@ pub(super) fn source_status_for_engine<'a>(
     }
     source_statuses
         .iter()
-        .find(|status| status.engine.eq_ignore_ascii_case(&normalized_engine))
+        .filter(|status| status.engine.eq_ignore_ascii_case(&normalized_engine))
+        .max_by_key(|status| source_status_priority(status.completeness))
 }
 
 pub(super) fn decorate_catalog_entry_for_response(
@@ -214,13 +215,20 @@ fn merge_optional_count(left: Option<usize>, right: Option<usize>) -> Option<usi
 pub(super) fn normalize_source_statuses(
     source_statuses: Vec<WorkspaceSessionCatalogSourceStatus>,
 ) -> Vec<WorkspaceSessionCatalogSourceStatus> {
-    let mut by_engine = HashMap::<String, WorkspaceSessionCatalogSourceStatus>::new();
+    let mut by_source =
+        HashMap::<(String, Option<String>), WorkspaceSessionCatalogSourceStatus>::new();
     for mut status in source_statuses {
         let engine = status.engine.trim().to_ascii_lowercase();
         if engine.is_empty() {
             continue;
         }
         status.engine = engine.clone();
+        status.source_kind = status
+            .source_kind
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(|value| value.to_ascii_lowercase());
         if status.scan_cap_reached.unwrap_or(false)
             && status.completeness == WorkspaceSessionSourceCompleteness::Complete
         {
@@ -229,7 +237,8 @@ pub(super) fn normalize_source_statuses(
                 status.reason = Some(format!("{engine}-scan-cap-reached"));
             }
         }
-        match by_engine.get_mut(&engine) {
+        let key = (engine.clone(), status.source_kind.clone());
+        match by_source.get_mut(&key) {
             Some(existing) => {
                 existing.scanned_candidates =
                     merge_optional_count(existing.scanned_candidates, status.scanned_candidates);
@@ -254,12 +263,16 @@ pub(super) fn normalize_source_statuses(
                 }
             }
             None => {
-                by_engine.insert(engine, status);
+                by_source.insert(key, status);
             }
         }
     }
-    let mut normalized = by_engine.into_values().collect::<Vec<_>>();
-    normalized.sort_by(|left, right| left.engine.cmp(&right.engine));
+    let mut normalized = by_source.into_values().collect::<Vec<_>>();
+    normalized.sort_by(|left, right| {
+        left.engine
+            .cmp(&right.engine)
+            .then_with(|| left.source_kind.cmp(&right.source_kind))
+    });
     normalized
 }
 
@@ -316,6 +329,7 @@ pub(super) fn build_success_source_status(
     };
     WorkspaceSessionCatalogSourceStatus {
         engine: engine.to_string(),
+        source_kind: None,
         completeness,
         reason,
         scanned_candidates: Some(row_count),
@@ -332,6 +346,7 @@ pub(super) fn build_degraded_source_status(
 ) -> WorkspaceSessionCatalogSourceStatus {
     WorkspaceSessionCatalogSourceStatus {
         engine: engine.to_string(),
+        source_kind: None,
         completeness: WorkspaceSessionSourceCompleteness::Degraded,
         reason: Some(reason.to_string()),
         scanned_candidates: None,
@@ -473,6 +488,7 @@ pub(super) fn build_claude_source_fact_status(
     diagnostics.extend(extra_diagnostics);
     WorkspaceSessionCatalogSourceStatus {
         engine: "claude".to_string(),
+        source_kind: None,
         completeness,
         reason,
         scanned_candidates: Some(result.scanned_candidates),

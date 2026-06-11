@@ -240,6 +240,83 @@ describe("buildWorkspaceSessionActivity", () => {
     expect(result.timeline[1]?.summary).toBe("Thinking · ...");
   });
 
+  it("attaches compact user turn text to following activity events", () => {
+    const threads: ThreadSummary[] = [{ id: "root", name: "Root", updatedAt: 1000 }];
+    const longRequest = `请把语义 diff 放进对应对话轮次里，并展示 <OperationLog> 相关意图。${"补充说明".repeat(40)}`;
+    const itemsByThread = {
+      root: [
+        {
+          id: "user-1",
+          kind: "message",
+          role: "user",
+          text: longRequest,
+        } satisfies ConversationItem,
+        toolItem("file-1", {
+          toolType: "fileChange",
+          title: "File changes",
+          detail: "M src/App.tsx",
+          status: "completed",
+          changes: [{ path: "src/App.tsx", diff: "@@ -1 +1 @@\n-old\n+new" }],
+        }),
+      ],
+    };
+
+    const result = buildWorkspaceSessionActivity({
+      activeThreadId: "root",
+      threads,
+      itemsByThread,
+      threadParentById: {},
+      threadStatusById: {},
+    });
+
+    expect(result.timeline[0]?.turnSemantic).toContain("<OperationLog>");
+    expect(result.timeline[0]?.turnSemantic?.length).toBeLessThanOrEqual(180);
+  });
+
+  it("inherits root user turn text for child artifacts without their own user message", () => {
+    const threads: ThreadSummary[] = [
+      { id: "root", name: "Root", updatedAt: 1000 },
+      { id: "child", name: "Child", updatedAt: 1100 },
+    ];
+    const itemsByThread = {
+      root: [
+        {
+          id: "user-1",
+          kind: "message",
+          role: "user",
+          text: "把文件改成产物，并解释这一轮为什么改这些文件。",
+        } satisfies ConversationItem,
+      ],
+      child: [
+        toolItem("file-1", {
+          toolType: "fileChange",
+          title: "File changes",
+          detail: "M src/features/session-activity/components/WorkspaceSessionActivityPanel.tsx",
+          status: "completed",
+          changes: [
+            {
+              path: "src/features/session-activity/components/WorkspaceSessionActivityPanel.tsx",
+              diff: "@@ -1 +1 @@\n-old\n+new",
+            },
+          ],
+        }),
+      ],
+    };
+
+    const result = buildWorkspaceSessionActivity({
+      activeThreadId: "child",
+      threads,
+      itemsByThread,
+      threadParentById: { child: "root" },
+      threadStatusById: {},
+    });
+
+    expect(result.timeline[0]?.threadId).toBe("child");
+    expect(result.timeline[0]?.turnSemantic).toBe(
+      "把文件改成产物，并解释这一轮为什么改这些文件。",
+    );
+  });
+
   it("normalizes claude multiline reasoning summary into a single activity event", () => {
     const threads: ThreadSummary[] = [{ id: "claude-pending-1", name: "Claude", updatedAt: 1000 }];
     const itemsByThread = {

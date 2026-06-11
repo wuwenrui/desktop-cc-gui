@@ -65,7 +65,7 @@
 }
 
 .task-type-badge {
-  font-size: 11px;
+  font-size: var(--message-caption-font-size);
   font-weight: 600;
   color: var(--color-task-badge-text, #d7ba7d);
   background: var(--color-task-badge-bg, #262218);
@@ -76,7 +76,7 @@
 }
 
 .task-summary-text {
-  font-size: 12px;
+  font-size: var(--message-meta-font-size);
   color: var(--text-secondary, var(--text-muted));
   white-space: nowrap;
   font-weight: 500;
@@ -102,7 +102,7 @@
 }
 
 .task-field-label {
-  font-size: 11px;
+  font-size: var(--message-caption-font-size);
   text-transform: uppercase;
   color: var(--text-tertiary, var(--text-muted));
   margin-bottom: 4px;
@@ -113,7 +113,7 @@
 }
 
 .task-field-content {
-  font-size: 11px;
+  font-size: var(--code-font-size, 11px);
   color: var(--text-primary, var(--text-stronger));
   line-height: 1.4;
   white-space: pre-wrap;
@@ -134,7 +134,7 @@
 }
 
 .read-tool-markdown {
-  font-size: 12px;
+  font-size: var(--message-content-font-size);
   line-height: 1.55;
 }
 
@@ -175,7 +175,7 @@
 
 .tool-title-text {
   font-weight: 500;
-  font-size: 13px;
+  font-size: var(--message-content-font-size);
   color: var(--text-secondary, var(--text-stronger));
   white-space: nowrap;
 }

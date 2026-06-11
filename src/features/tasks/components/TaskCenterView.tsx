@@ -6,11 +6,11 @@ import {
   dispatchOpenOrchestrationTaskEvent,
   readOpenTaskRunEvent,
 } from "../../agent-orchestration/utils/navigationEvents";
-import { hasActiveRunConflict } from "../utils/taskRunProjection";
 import {
   compareTaskRunSurfacePriority,
   describeTaskRunSurface,
 } from "../utils/taskRunSurface";
+import { RunDetailSurface, formatTaskRunTime } from "./RunDetailSurface";
 
 type TaskCenterViewProps = {
   runs: TaskRunRecord[];
@@ -24,22 +24,15 @@ type TaskCenterViewProps = {
 };
 
 const STATUS_ORDER: TaskRunStatus[] = [
-  "queued",
-  "planning",
-  "running",
   "waiting_input",
   "blocked",
   "failed",
+  "running",
+  "planning",
+  "queued",
   "completed",
   "canceled",
 ];
-
-function formatRunTime(value: number | null | undefined) {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return "";
-  }
-  return new Date(value).toLocaleString();
-}
 
 export function TaskCenterView({
   runs,
@@ -85,24 +78,14 @@ export function TaskCenterView({
       window.removeEventListener(OPEN_TASK_RUN_EVENT, handleOpenTaskRun);
     };
   }, [workspaceRuns]);
-  const hasDuplicateConflict = selectedRun
-    ? hasActiveRunConflict(workspaceRuns, selectedRun.task.taskId, selectedRun.runId)
-    : false;
-  const availableActions = new Set(selectedRun?.availableRecoveryActions ?? []);
-  const canOpenConversation = Boolean(selectedRun?.linkedThreadId && onOpenConversation);
-  const canRetry =
-    Boolean(selectedRun && onRetryRun && availableActions.has("retry")) && !hasDuplicateConflict;
-  const canResume = Boolean(selectedRun && onResumeRun && availableActions.has("resume"));
-  const canCancel = Boolean(selectedRun && onCancelRun && availableActions.has("cancel"));
-  const canFork =
-    Boolean(selectedRun && onForkRun && availableActions.has("fork_new_run")) && !hasDuplicateConflict;
-  const orchestrationTaskId =
-    selectedRun?.task.source === "orchestration"
-      ? selectedRun.task.orchestrationTaskId ?? selectedRun.task.taskId
-      : null;
-  const canOpenOrchestrationTask = Boolean(orchestrationTaskId);
-  const selectedRunSurface = selectedRun ? describeTaskRunSurface(selectedRun) : null;
   const highlightedRuns = filteredRuns.filter((run) => describeTaskRunSurface(run).needsAttention).length;
+  const handleOpenOrchestrationRunTask = (taskId: string) => {
+    if (onOpenOrchestrationTask) {
+      onOpenOrchestrationTask(taskId);
+      return;
+    }
+    dispatchOpenOrchestrationTaskEvent(taskId);
+  };
 
   return (
     <section className="task-center" aria-label={t("taskCenter.title")}>
@@ -181,7 +164,7 @@ export function TaskCenterView({
                       </span>
                     </span>
                     <span className="task-center__run-meta">
-                      {run.engine} · {formatRunTime(run.updatedAt)}
+                      {run.engine} · {formatTaskRunTime(run.updatedAt)}
                     </span>
                     <span className="task-center__run-summary">{runSummary}</span>
                     <span className="task-center__run-hint">{t(surface.hintKey)}</span>
@@ -193,125 +176,16 @@ export function TaskCenterView({
         </div>
 
         {selectedRun ? (
-          <article className={`task-center__detail task-center__detail--${selectedRunSurface?.severity ?? "muted"}`}>
-            <div className="task-center__detail-head">
-              <div>
-                <p className="task-center__eyebrow">{selectedRun.runId}</p>
-                <h3>{selectedRun.task.title || selectedRun.task.taskId}</h3>
-                <p className="task-center__detail-hint">
-                  {selectedRunSurface ? t(selectedRunSurface.hintKey) : null}
-                </p>
-              </div>
-              <span className={`task-center__badge task-center__badge--${selectedRunSurface?.severity ?? "muted"}`}>
-                {t(`taskCenter.status.${selectedRun.status}`)}
-              </span>
-            </div>
-            <dl className="task-center__facts">
-              <div>
-                <dt>{t("taskCenter.trigger")}</dt>
-                <dd>{selectedRun.trigger}</dd>
-              </div>
-              <div>
-                <dt>{t("taskCenter.updatedAt")}</dt>
-                <dd>{formatRunTime(selectedRun.updatedAt)}</dd>
-              </div>
-              <div>
-                <dt>{t("taskCenter.currentStep")}</dt>
-                <dd>{selectedRun.currentStep || t("taskCenter.unavailable")}</dd>
-              </div>
-              <div>
-                <dt>{t("taskCenter.latestOutput")}</dt>
-                <dd>{selectedRun.latestOutputSummary || t("taskCenter.unavailable")}</dd>
-              </div>
-              <div>
-                <dt>{t("taskCenter.diagnostics")}</dt>
-                <dd>
-                  {selectedRun.blockedReason ||
-                    selectedRun.failureReason ||
-                    t("taskCenter.unavailable")}
-                </dd>
-              </div>
-              <div>
-                <dt>{t("taskCenter.artifacts")}</dt>
-                <dd>
-                  {selectedRun.artifacts.length > 0
-                    ? selectedRun.artifacts.map((artifact) => artifact.label).join(", ")
-                    : t("taskCenter.noArtifacts")}
-                </dd>
-              </div>
-              <div>
-                <dt>{t("taskCenter.browserEvidence")}</dt>
-                <dd>
-                  {selectedRun.browserEvidence ? (
-                    <span title={selectedRun.browserEvidence.url}>
-                      {selectedRun.browserEvidence.title || selectedRun.browserEvidence.url}
-                      {" · "}
-                      {t(`taskCenter.browserEvidenceState.${selectedRun.browserEvidence.state}`)}
-                      {selectedRun.browserEvidence.codeCandidates?.length
-                        ? ` · ${selectedRun.browserEvidence.codeCandidates.length} candidates`
-                        : ""}
-                      {selectedRun.browserEvidence.diagnostics?.length
-                        ? ` · ${selectedRun.browserEvidence.diagnostics[0]}`
-                        : ""}
-                    </span>
-                  ) : (
-                    t("taskCenter.noBrowserEvidence")
-                  )}
-                </dd>
-              </div>
-            </dl>
-            <div className="task-center__actions">
-              {canOpenConversation ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (selectedRun.linkedThreadId) {
-                      onOpenConversation?.(selectedRun.linkedThreadId);
-                    }
-                  }}
-                >
-                  {t("taskCenter.action.openConversation")}
-                </button>
-              ) : null}
-              {canOpenOrchestrationTask ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!orchestrationTaskId) {
-                      return;
-                    }
-                    if (onOpenOrchestrationTask) {
-                      onOpenOrchestrationTask(orchestrationTaskId);
-                      return;
-                    }
-                    dispatchOpenOrchestrationTaskEvent(orchestrationTaskId);
-                  }}
-                >
-                  {t("taskCenter.action.openOrchestrationTask")}
-                </button>
-              ) : null}
-              {canRetry ? (
-                <button type="button" onClick={() => onRetryRun?.(selectedRun)}>
-                  {t("taskCenter.action.retry")}
-                </button>
-              ) : null}
-              {canResume ? (
-                <button type="button" onClick={() => onResumeRun?.(selectedRun)}>
-                  {t("taskCenter.action.resume")}
-                </button>
-              ) : null}
-              {canCancel ? (
-                <button type="button" onClick={() => onCancelRun?.(selectedRun)}>
-                  {t("taskCenter.action.cancel")}
-                </button>
-              ) : null}
-              {canFork ? (
-                <button type="button" onClick={() => onForkRun?.(selectedRun)}>
-                  {t("taskCenter.action.fork")}
-                </button>
-              ) : null}
-            </div>
-          </article>
+          <RunDetailSurface
+            run={selectedRun}
+            comparisonRuns={workspaceRuns}
+            onOpenConversation={onOpenConversation}
+            onRetryRun={onRetryRun}
+            onResumeRun={onResumeRun}
+            onCancelRun={onCancelRun}
+            onForkRun={onForkRun}
+            onOpenOrchestrationTask={handleOpenOrchestrationRunTask}
+          />
         ) : null}
       </div>
     </section>

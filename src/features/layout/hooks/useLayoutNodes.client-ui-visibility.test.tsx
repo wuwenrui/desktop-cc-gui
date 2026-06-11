@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import type { ConversationItem, WorkspaceInfo } from "../../../types";
 import { useLayoutNodes } from "./useLayoutNodes";
+import { getCodexProviders } from "../../../services/tauri";
 
 const clientUiVisibilityMock = vi.hoisted(() => ({
   visiblePanels: new Set<string>(),
@@ -63,6 +64,10 @@ vi.mock("../../client-ui-visibility/hooks/useClientUiVisibility", () => ({
     setControlVisible: vi.fn(),
     resetVisibility: vi.fn(),
   }),
+}));
+
+vi.mock("../../../services/tauri", () => ({
+  getCodexProviders: vi.fn(async () => []),
 }));
 
 vi.mock("../../app/components/Sidebar", () => ({
@@ -355,6 +360,7 @@ function createLayoutOptions(
     sessionRadarRecentCompletedSessions: [],
     activeRateLimits: null,
     usageShowRemaining: false,
+    showSidebarProviderLabels: false,
     showMessageAnchors: true,
     accountInfo: null,
     onSwitchAccount: noop,
@@ -788,7 +794,61 @@ describe("useLayoutNodes client UI visibility", () => {
     fireEvent.click(screen.getByRole("button", { name: "messages.forkConfirmAction" }));
 
     await waitFor(() => {
-      expect(onForkFromMessage).toHaveBeenCalledWith("user-fork-anchor");
+      expect(onForkFromMessage).toHaveBeenCalledWith("user-fork-anchor", {
+        providerProfileId: "__disk__",
+        providerProfile: {
+          id: "__disk__",
+          name: "磁盘 .codex 配置",
+          source: "disk",
+        },
+      });
+    });
+  });
+
+  it("passes selected codex provider when confirming message-tail fork", async () => {
+    vi.mocked(getCodexProviders).mockResolvedValueOnce([
+      { id: "provider-a", name: "Provider A" },
+      { id: "provider-b", name: "Provider B" },
+    ]);
+    const onForkFromMessage = vi.fn(async () => {});
+
+    render(
+      <LayoutNodesHarness
+        options={createLayoutOptions({
+          onForkFromMessage,
+          threadsByWorkspace: {
+            [workspace.id]: [
+              {
+                id: "thread-1",
+                name: "Thread",
+                updatedAt: 1,
+                engineSource: "codex",
+                providerProfileId: "provider-a",
+                providerProfileName: "Provider A",
+                providerProfileSource: "managed",
+              },
+            ],
+          },
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "open fork confirm" }));
+
+    const selector = await screen.findByLabelText("messages.forkProviderLabel");
+    expect((selector as HTMLSelectElement).value).toBe("provider-a");
+    fireEvent.change(selector, { target: { value: "provider-b" } });
+    fireEvent.click(screen.getByRole("button", { name: "messages.forkConfirmAction" }));
+
+    await waitFor(() => {
+      expect(onForkFromMessage).toHaveBeenCalledWith("user-fork-anchor", {
+        providerProfileId: "provider-b",
+        providerProfile: {
+          id: "provider-b",
+          name: "Provider B",
+          source: "managed",
+        },
+      });
     });
   });
 

@@ -51,21 +51,29 @@ function mergeFirstPartialSource(
   return normalized.length > 0 ? normalized : null;
 }
 
-function mergeSourceStatusesByEngine(
+function sourceStatusMergeKey(status: WorkspaceSessionCatalogSourceStatus): string {
+  return `${status.engine.trim().toLowerCase()}::${(status.sourceKind ?? "")
+    .trim()
+    .toLowerCase()}`;
+}
+
+function mergeSourceStatusesBySource(
   current: WorkspaceSessionCatalogSourceStatus[],
   incoming: WorkspaceSessionCatalogSourceStatus[] | null | undefined,
 ): WorkspaceSessionCatalogSourceStatus[] {
   if (!Array.isArray(incoming) || incoming.length === 0) {
     return current;
   }
-  const byEngine = new Map(current.map((status) => [status.engine, status]));
+  const bySource = new Map(
+    current.map((status) => [sourceStatusMergeKey(status), status]),
+  );
   incoming.forEach((status) => {
     if (!status.engine) {
       return;
     }
-    byEngine.set(status.engine, status);
+    bySource.set(sourceStatusMergeKey(status), status);
   });
-  return Array.from(byEngine.values());
+  return Array.from(bySource.values());
 }
 
 export function useThreadActionsSessionCatalog({
@@ -184,7 +192,7 @@ export function useThreadActionsSessionCatalog({
         null,
         response.partialSource,
       );
-      const sourceStatuses = mergeSourceStatusesByEngine(
+      const sourceStatuses = mergeSourceStatusesBySource(
         [],
         response.sourceStatuses,
       );

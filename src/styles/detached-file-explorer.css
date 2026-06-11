@@ -45,7 +45,7 @@
 }
 
 .detached-file-explorer-menubar-label {
-  font-size: 10px;
+  font-size: var(--client-caption-font-size, 10px);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -54,7 +54,7 @@
 
 .detached-file-explorer-menubar-title {
   min-width: 0;
-  font-size: 10px;
+  font-size: var(--client-caption-font-size, 10px);
   font-weight: 600;
   color: var(--text-muted);
   white-space: nowrap;
@@ -70,7 +70,7 @@
 }
 
 .detached-file-explorer-titlebar-label {
-  font-size: 11px;
+  font-size: var(--client-meta-font-size, 11px);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-faint);
@@ -78,7 +78,7 @@
 
 .detached-file-explorer-titlebar-title {
   min-width: 0;
-  font-size: 13px;
+  font-size: var(--client-content-font-size, 13px);
   font-weight: 600;
   color: var(--text-stronger);
   white-space: nowrap;
@@ -215,7 +215,7 @@
 
 .detached-file-explorer-empty-title {
   margin: 0;
-  font-size: 16px;
+  font-size: var(--client-title-font-size, 16px);
   font-weight: 600;
   color: var(--text-stronger);
 }
@@ -223,7 +223,7 @@
 .detached-file-explorer-empty-body {
   margin: 0;
   max-width: 420px;
-  font-size: 13px;
+  font-size: var(--client-content-font-size, 13px);
   line-height: 1.6;
   color: var(--text-muted);
 }

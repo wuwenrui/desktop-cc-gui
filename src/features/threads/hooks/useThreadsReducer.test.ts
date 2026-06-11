@@ -21,6 +21,139 @@ describe("threadReducer", () => {
     expect(next.threadStatusById["thread-1"]?.isProcessing).toBe(false);
   });
 
+  it("preserves codex provider binding when a thread list refresh omits provider metadata", () => {
+    const withProvider = threadReducer(initialState, {
+      type: "ensureThread",
+      workspaceId: "ws-1",
+      threadId: "thread-provider-a",
+      engine: "codex",
+      providerProfileId: "provider-a",
+      providerProfileSource: "managed",
+      providerProfileName: "AskUs",
+      providerAvailability: "available",
+    });
+
+    const refreshed = threadReducer(withProvider, {
+      type: "setThreads",
+      workspaceId: "ws-1",
+      threads: [
+        {
+          id: "thread-provider-a",
+          name: "3+3",
+          updatedAt: 20,
+          engineSource: "codex",
+          threadKind: "native",
+        },
+      ],
+    });
+
+    expect(refreshed.threadsByWorkspace["ws-1"]?.[0]).toMatchObject({
+      id: "thread-provider-a",
+      name: "3+3",
+      providerProfileId: "provider-a",
+      providerProfileSource: "managed",
+      providerProfileName: "AskUs",
+      providerAvailability: "available",
+    });
+  });
+
+  it("does not churn state when ensureThread repeats identical provider metadata", () => {
+    const withProvider = threadReducer(initialState, {
+      type: "ensureThread",
+      workspaceId: "ws-1",
+      threadId: "thread-provider-a",
+      engine: "codex",
+      providerProfileId: "provider-a",
+      providerProfileSource: "managed",
+      providerProfileName: "AskUs",
+      providerAvailability: "available",
+    });
+
+    const repeated = threadReducer(withProvider, {
+      type: "ensureThread",
+      workspaceId: "ws-1",
+      threadId: "thread-provider-a",
+      engine: "codex",
+      providerProfileId: "provider-a",
+      providerProfileSource: "managed",
+      providerProfileName: "AskUs",
+      providerAvailability: "available",
+    });
+
+    expect(repeated).toBe(withProvider);
+  });
+
+  it("fills missing provider metadata on an existing codex thread", () => {
+    const withProviderIdOnly = threadReducer(initialState, {
+      type: "ensureThread",
+      workspaceId: "ws-1",
+      threadId: "thread-provider-a",
+      engine: "codex",
+      providerProfileId: "provider-a",
+    });
+
+    const completed = threadReducer(withProviderIdOnly, {
+      type: "ensureThread",
+      workspaceId: "ws-1",
+      threadId: "thread-provider-a",
+      providerProfileId: "provider-a",
+      providerProfileSource: "managed",
+      providerProfileName: "AskUs",
+      providerAvailability: "available",
+    });
+
+    expect(completed).not.toBe(withProviderIdOnly);
+    expect(completed.threadsByWorkspace["ws-1"]?.[0]).toMatchObject({
+      providerProfileId: "provider-a",
+      providerProfileSource: "managed",
+      providerProfileName: "AskUs",
+      providerAvailability: "available",
+    });
+  });
+
+  it("preserves locally accepted codex threads during temporarily incomplete list refreshes", () => {
+    const withThread = threadReducer(initialState, {
+      type: "ensureThread",
+      workspaceId: "ws-1",
+      threadId: "thread-provider-a",
+      engine: "codex",
+      providerProfileId: "provider-a",
+      providerProfileName: "AskUs",
+    });
+    const accepted = threadReducer(withThread, {
+      type: "markCodexAcceptedTurn",
+      threadId: "thread-provider-a",
+      fact: "empty-draft",
+      source: "thread-start",
+      timestamp: 10,
+    });
+    const withOtherActive = threadReducer(accepted, {
+      type: "setActiveThreadId",
+      workspaceId: "ws-1",
+      threadId: "other-thread",
+    });
+
+    const refreshed = threadReducer(withOtherActive, {
+      type: "setThreads",
+      workspaceId: "ws-1",
+      threads: [
+        {
+          id: "other-thread",
+          name: "Other",
+          updatedAt: 20,
+          engineSource: "codex",
+          threadKind: "native",
+        },
+      ],
+    });
+
+    expect(
+      refreshed.threadsByWorkspace["ws-1"]?.some(
+        (thread) => thread.id === "thread-provider-a",
+      ),
+    ).toBe(true);
+  });
+
   it("preserves folder intent when creating a pending engine thread", () => {
     const next = threadReducer(initialState, {
       type: "ensureThread",

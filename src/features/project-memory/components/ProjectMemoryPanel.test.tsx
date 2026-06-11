@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProjectMemoryPanel } from "./ProjectMemoryPanel";
 import { useProjectMemory } from "../hooks/useProjectMemory";
@@ -428,6 +428,11 @@ describe("ProjectMemoryPanel", () => {
 
   it("keeps manual memory editable", async () => {
     const hookState = buildHookState();
+    let resolveUpdateMemory: (item: typeof baseItem) => void = () => {};
+    const updateMemoryPromise = new Promise<typeof baseItem>((resolve) => {
+      resolveUpdateMemory = resolve;
+    });
+    hookState.updateMemory = vi.fn(() => updateMemoryPromise);
     mockUseProjectMemory.mockReturnValue(hookState as never);
     const view = render(
       <ProjectMemoryPanel
@@ -437,16 +442,21 @@ describe("ProjectMemoryPanel", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Save" })).toBeTruthy();
+    const saveButton = view.container.querySelector(
+      '.project-memory-actions button[aria-label="Save"]',
+    ) as HTMLButtonElement | null;
+    expect(saveButton).toBeTruthy();
     const textarea = view.container.querySelector(".project-memory-detail-text") as HTMLTextAreaElement;
     expect(textarea).toBeTruthy();
     fireEvent.change(textarea, { target: { value: "Updated manual detail" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() => {
-      expect(hookState.updateMemory).toHaveBeenCalledWith("memory-1", {
-        detail: "Updated manual detail",
-        source: "manual",
-      });
+    fireEvent.click(saveButton as HTMLButtonElement);
+    expect(hookState.updateMemory).toHaveBeenCalledWith("memory-1", {
+      detail: "Updated manual detail",
+      source: "manual",
+    });
+    await act(async () => {
+      resolveUpdateMemory(baseItem);
+      await updateMemoryPromise;
     });
     expect(view.container.querySelector(".project-memory-detail-title")).toBeNull();
   });

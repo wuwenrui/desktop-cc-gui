@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+import { fireEvent, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { HomeChat } from "./HomeChat";
@@ -8,17 +10,19 @@ const translations: Record<string, string> = {
   "homeChat.workspaceSelectLabel": "Workspace",
   "workspace.homeBranchLabelMain": "Primary branch",
   "workspace.homeBranchLabelWorktree": "Worktree",
+  "homeChat.recentConversations": "Recent conversations",
+  "homeChat.loadingRecentAgents": "Loading recent work",
   "workspace.unknownBranch": "unknown",
 };
 
-function translate(key: string, params?: string | Record<string, string>) {
+function translate(key: string, params?: string | Record<string, string | number>) {
   const template = translations[key] ?? key;
   if (!params || typeof params === "string") {
     return template;
   }
 
   return Object.entries(params).reduce(
-    (acc, [paramKey, value]) => acc.replace(new RegExp(`{{${paramKey}}}`, "g"), value),
+    (acc, [paramKey, value]) => acc.replace(new RegExp(`{{${paramKey}}}`, "g"), String(value)),
     template,
   );
 }
@@ -123,5 +127,38 @@ describe("HomeChat", () => {
 
     expect(markup).not.toContain("unknown");
     expect(markup).not.toContain("home-chat-workspace-branch");
+  });
+
+  it("keeps New Home creation-first without a runtime dashboard", () => {
+    const markup = renderToStaticMarkup(<HomeChat {...baseProps} />);
+
+    expect(markup).toContain("Composer node");
+    expect(markup).not.toContain("Run cockpit");
+    expect(markup).not.toContain("What the agents are doing");
+    expect(markup).not.toContain("home-chat-run-card");
+    expect(markup).not.toContain("home-chat-run-detail");
+  });
+
+  it("opens recent conversations from the lightweight recent list", () => {
+    const handleSelectThread = vi.fn();
+
+    render(
+      <HomeChat
+        {...baseProps}
+        onSelectThread={handleSelectThread}
+        latestAgentRuns={[{
+          workspaceId: "ws-1",
+          threadId: "thread-1",
+          projectName: "desktop-cc-gui",
+          message: "Follow up",
+          timestamp: 1,
+          isProcessing: false,
+        }]}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Follow up"));
+
+    expect(handleSelectThread).toHaveBeenCalledWith("ws-1", "thread-1");
   });
 });

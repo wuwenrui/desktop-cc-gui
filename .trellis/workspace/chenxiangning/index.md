@@ -7,9 +7,9 @@
 ## Current Status
 
 <!-- @@@auto:current-status -->
-- **Active File**: `journal-20.md`
-- **Total Sessions**: 751
-- **Last Active**: 2026-06-07
+- **Active File**: `journal-21.md`
+- **Total Sessions**: 797
+- **Last Active**: 2026-06-10
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,8 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-20.md` | ~696 | Active |
+| `journal-21.md` | ~659 | Active |
+| `journal-20.md` | ~1997 | Archived |
 | `journal-19.md` | ~1989 | Archived |
 | `journal-18.md` | ~1966 | Archived |
 | `journal-17.md` | ~1971 | Archived |
@@ -48,6 +49,52 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 797 | 2026-06-10 | 修复消息 Fork 改写工作区 | `88d6d494` | `feature/v0.5.8` |
+| 796 | 2026-06-10 | 修复浏览器快照浅色主题可读性 | `b262d353` | `feature/v0.5.8` |
+| 795 | 2026-06-10 | 调整运行中状态浅色配色 | `a3b3f8c6` | `feature/v0.5.8` |
+| 794 | 2026-06-10 | 修复长会话锚点跳转失效 | `fed155e8` | `feature/v0.5.8` |
+| 793 | 2026-06-10 | 修复接口探索面板高度 | `7b649ea6` | `feature/v0.5.8` |
+| 792 | 2026-06-10 | Fix Windows titlebar controls overlap | `997596d4` | `feature/v0.5.8` |
+| 791 | 2026-06-10 | Review 两日提交并修复跨平台边界 | `011247f7` | `feature/v0.5.8` |
+| 790 | 2026-06-10 | 添加 v0.5.8 changelog | `1bd88ff5` | `feature/v0.5.8` |
+| 789 | 2026-06-10 | 拆分 AppShell 运行态编排边界 | `6837f5a5`, `09126ce7` | `feature/v0.5.8` |
+| 788 | 2026-06-10 | 修复追加上下文用户气泡列宽 | `11eb5b27` | `feature/v0.5.8` |
+| 787 | 2026-06-10 | 稳定 Project Map 批量候选确认测试 | `cf159107` | `feature/v0.5.8` |
+| 786 | 2026-06-10 | 收口客户端运行态 P0 | `91cf4440` | `feature/v0.5.8` |
+| 785 | 2026-06-10 | 提示词增强支持手动配置模型 | `5bb5b56f` | `feature/v0.5.8` |
+| 784 | 2026-06-10 | 归档已验证 OpenSpec 提案批次 | `8615451e` | `feature/v0.5.8` |
+| 783 | 2026-06-10 | 补充 Codex 供应商面板背景验收 | `9b8b17d9` | `feature/v0.5.8` |
+| 782 | 2026-06-10 | 扩展客户端字号覆盖范围 | `fc2a2a1f` | `feature/v0.5.8` |
+| 781 | 2026-06-10 | 扩展自定义主题配色 | `f79e269e` | `feature/v0.5.8` |
+| 780 | 2026-06-10 | 深化 Session Activity 语义 Diff 证据审查 | `9daa596c` | `feature/v0.5.8` |
+| 779 | 2026-06-10 | Session Activity 轮次产物语义 diff 第一版 | `1c5e6a6e`, `0192308a` | `feature/v0.5.8` |
+| 778 | 2026-06-09 | 修复 Sidebar 子会话移动测试等待 | `d4a7ed63` | `feature/v0.5.8` |
+| 777 | 2026-06-09 | 兼容 Codex provider-home 会话归属恢复错误 | `f464ef6c` | `feature/v0.5.8` |
+| 776 | 2026-06-09 | 拆分会话管理大文件测试 | `ef677161` | `feature/v0.5.8` |
+| 775 | 2026-06-09 | 收口 provider home 会话恢复提案 | `8cd0c751` | `feature/v0.5.8` |
+| 774 | 2026-06-09 | 保留 provider home 会话侧栏连续性 | `d88fb69d` | `feature/v0.5.8` |
+| 773 | 2026-06-09 | 恢复 Codex provider home 会话目录扫描 | `27a43778` | `feature/v0.5.8` |
+| 772 | 2026-06-09 | 校准 Codex provider home catalog recovery 提案 | `ebf75dff` | `feature/v0.5.8` |
+| 771 | 2026-06-09 | 会话列表供应商标签显示开关 | `3b4a975a` | `feature/v0.5.8` |
+| 770 | 2026-06-09 | 同步 Codex 供应商契约文档 | `e6dc2157` | `feature/v0.5.8` |
+| 769 | 2026-06-09 | 修复 Codex 磁盘会话 stale thread 重试 | `24b92415` | `feature/v0.5.8` |
+| 768 | 2026-06-09 | Composer provider 标签显示 | `1d2797bc` | `feature/v0.5.8` |
+| 767 | 2026-06-09 | 修复用户输入提交与取消收口 | `9b074c8f` | `feature/v0.5.8` |
+| 766 | 2026-06-09 | 提交 Codex provider 作用域会话启动变更 | `d1b8c648`, `1b572f99`, `6e1c97b6`, `319293be` | `feature/v0.5.8` |
+| 765 | 2026-06-08 | 拆分消息渲染大文件 | `9e249e7f` | `feature/v0.5.8` |
+| 764 | 2026-06-08 | 收敛旧品牌兼容入口 | `b79ce303` | `feature/v0.5.8` |
+| 763 | 2026-06-08 | 拆分客户端大文件第二组 | `47e36c4f` | `feature/v0.5.8` |
+| 762 | 2026-06-08 | 修复大文件拆分后启动崩溃 | `58ca7358` | `feature/v0.5.8` |
+| 761 | 2026-06-08 | 拆分客户端大文件第一组 | `7473688b` | `feature/v0.5.8` |
+| 760 | 2026-06-08 | 稳定实时对话幕布渲染 | `241f5839` | `feature/v0.5.8` |
+| 759 | 2026-06-08 | 收口 ProjectMap 大文件拆分 | `f64deaf2` | `feature/v0.5.8` |
+| 758 | 2026-06-08 | 修复 markdown 预览标注测试 act warning | `c74d0f9f` | `feature/v0.5.8` |
+| 757 | 2026-06-08 | 拆分 Project Map 关系视图工作区 | `a85570b7` | `feature/v0.5.8` |
+| 756 | 2026-06-08 | Project Map API 合约大文件拆分 | `391a336d` | `feature/v0.5.8` |
+| 755 | 2026-06-08 | 收口 Project Map Read Path 提案与门禁修复 | `5a657356`, `4b916613` | `feature/v0.5.8` |
+| 754 | 2026-06-08 | 收口 Project Map 阅读路径与关系精度 | `346fcbf7` | `feature/v0.5.8` |
+| 753 | 2026-06-08 | 打磨 Project Map 文件关系与接口契约视图 | `6acd7dd9` | `feature/v0.5.8` |
+| 752 | 2026-06-07 | 稳定异步测试等待契约 | `f2518b86` | `feature/v0.5.8` |
 | 751 | 2026-06-07 | 收口接口契约边界与大文件门禁 | `6e9c6afb` | `feature/v0.5.7` |
 | 750 | 2026-06-07 | 记录 Codex codex-tui UA 兼容 | `ba8786a7` | `feature/v0.5.7` |
 | 749 | 2026-06-07 | 补齐 FileViewPanel 预览读取 mock | `dc6a56f1` | `feature/v0.5.7` |

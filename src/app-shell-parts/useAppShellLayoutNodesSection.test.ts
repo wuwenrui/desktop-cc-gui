@@ -123,18 +123,27 @@ describe("useAppShellLayoutNodesSection adapter contract", () => {
     );
   });
 
-  it("routes message-tail fork through the shared composer fork action", () => {
+  it("routes message-tail fork through message anchored fork with provider options", () => {
     const source = readFileSync(
       join(currentDir, "useAppShellLayoutNodesSection.tsx"),
       "utf8",
     );
     const forkHandler = source.slice(
-      source.indexOf("onForkFromMessage: async () => {"),
-      source.indexOf("canStop: canInterrupt,", source.indexOf("onForkFromMessage: async () => {")),
+      source.indexOf("onForkFromMessage: async (messageId, options) => {"),
+      source.indexOf(
+        "canStop: canInterrupt,",
+        source.indexOf("onForkFromMessage: async (messageId, options) => {"),
+      ),
     );
 
-    expect(forkHandler).toContain('await startFork("/fork");');
-    expect(forkHandler).not.toContain("forkSessionFromMessageForWorkspace");
+    expect(forkHandler).toContain("forkSessionFromMessageForWorkspace");
+    expect(forkHandler).toContain("messageId");
+    expect(forkHandler).toContain('mode: "messages-only"');
+    expect(forkHandler).toContain("providerProfileId: options?.providerProfileId ?? null");
+    expect(forkHandler).toContain("providerProfile: options?.providerProfile ?? null");
+    expect(forkHandler).toContain('throw new Error("Fork did not return a child conversation.")');
+    expect(forkHandler).toContain('typeof updateThreadParent === "function"');
+    expect(forkHandler).not.toContain('await startFork("/fork");');
     expect(forkHandler).not.toContain("forkClaudeSessionFromMessageForWorkspace");
   });
 });

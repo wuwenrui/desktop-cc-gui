@@ -14,9 +14,10 @@ import {
 } from "../../../services/tauri";
 import { pushErrorToast } from "../../../services/toasts";
 import type { DebugEntry, EngineType, WorkspaceInfo } from "../../../types";
+import type { CodexProviderProfileSelection } from "../../threads/constants/codexProviderProfiles";
 
 type WorkspaceOpenMode = "current-window" | "new-window";
-type SessionCreationOptions = {
+type SessionCreationOptions = CodexProviderProfileSelection & {
   folderId?: string | null;
 };
 const SESSION_CREATION_EMPTY_THREAD_ID = "SESSION_CREATION_EMPTY_THREAD_ID";
@@ -62,7 +63,12 @@ type Params = {
   connectWorkspace: (workspace: WorkspaceInfo) => Promise<void>;
   startThreadForWorkspace: (
     workspaceId: string,
-    options?: { engine?: EngineType; folderId?: string | null },
+    options?: {
+      engine?: EngineType;
+      folderId?: string | null;
+      providerProfileId?: string | null;
+      providerProfile?: CodexProviderProfileSelection["providerProfile"];
+    },
   ) => Promise<string | null>;
   setActiveThreadId: (threadId: string | null, workspaceId: string) => void;
   setActiveTab: (tab: "projects" | "codex" | "spec" | "git" | "log") => void;
@@ -202,6 +208,12 @@ export function useWorkspaceActions({
           const creationOptions = {
             engine: targetEngine,
             ...(options?.folderId ? { folderId: options.folderId } : {}),
+            ...(options?.providerProfileId
+              ? { providerProfileId: options.providerProfileId }
+              : {}),
+            ...(options?.providerProfile
+              ? { providerProfile: options.providerProfile }
+              : {}),
           };
           const threadId = await startThreadForWorkspace(workspace.id, creationOptions);
           if (!threadId) {

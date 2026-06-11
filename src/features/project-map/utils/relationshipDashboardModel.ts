@@ -867,6 +867,8 @@ function normalizeProjectMapApiCallChains(value: unknown): ProjectMapApiCallChai
               targetSymbol,
               sourceFile,
               line: readProjectMapRelationshipNumber(edge, "line") || undefined,
+              targetFile: readProjectMapRelationshipString(edge, "targetFile") ?? undefined,
+              targetLine: readProjectMapRelationshipNumber(edge, "targetLine") || undefined,
               excerpt: readProjectMapRelationshipString(edge, "excerpt") ?? undefined,
               direction: edge.direction === "backward" ? "backward" : "forward",
               kind: normalizeProjectMapApiCallChainEdgeKind(edge.kind),
@@ -1036,11 +1038,15 @@ export function isProjectMapRelationshipNoiseFile(file: ProjectMapScannedFile): 
     path.startsWith(".agents/")
     || path.startsWith(".codex/")
     || path.startsWith(".claude/")
-    || path.startsWith(".trellis/")
+  ) {
+    return true;
+  }
+  if (
+    path.startsWith(".trellis/")
     || path.startsWith("openspec/")
     || path.startsWith("docs/")
   ) {
-    return true;
+    return file.parseStatus === "skipped" || file.role === "unknown";
   }
   return file.parseStatus === "skipped"
     || file.role === "document"

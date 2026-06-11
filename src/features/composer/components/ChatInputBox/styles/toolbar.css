@@ -115,6 +115,26 @@
   flex-shrink: 0;
 }
 
+.button-area-provider-tag {
+  display: inline-flex;
+  align-items: center;
+  max-width: clamp(74px, 18vw, 168px);
+  min-height: 22px;
+  padding: 2px 7px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 74%, transparent);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--surface-subtle) 86%, transparent);
+  color: var(--text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: none;
+}
+
 .button-area-inline-tools {
   display: flex;
   align-items: center;

@@ -83,6 +83,24 @@ describe("sessionDisplayProjection", () => {
     ).toBe("映射标题");
   });
 
+  it("preserves ordinal Agent titles when they are explicit custom names", () => {
+    const previous: ThreadSummary = {
+      id: "codex:session-1",
+      name: "真实业务标题",
+      updatedAt: 100,
+      engineSource: "codex",
+      threadKind: "native",
+    };
+
+    expect(
+      mergeSessionDisplaySummary(
+        previous,
+        { ...previous, name: "Codex Session", updatedAt: 120 },
+        { customTitle: "Agent 103" },
+      ).name,
+    ).toBe("Agent 103");
+  });
+
   it("preserves parent relationship metadata during degraded continuity merges", () => {
     const previous: ThreadSummary = {
       id: "claude:child",

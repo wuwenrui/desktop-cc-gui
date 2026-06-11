@@ -1,3 +1,7 @@
+use super::provider_profile::{
+    codex_runtime_key, legacy_codex_runtime_key, materialize_codex_provider_profile,
+    resolve_codex_provider_profile, CodexProviderProfile, CODEX_DISK_PROVIDER_PROFILE_ID,
+};
 use super::*;
 use crate::runtime::{RuntimeAcquireDisposition, RuntimeAcquireToken};
 use tauri::AppHandle;
@@ -93,7 +97,8 @@ fn summarize_fallback_failure(error: &str) -> String {
     if normalized.len() <= 320 {
         return normalized;
     }
-    format!("{}...", &normalized[..320])
+    let truncated = normalized.chars().take(320).collect::<String>();
+    format!("{truncated}...")
 }
 
 async fn reuse_existing_session_if_healthy<FProbe, FutProbe, FTouch, FutTouch, FStop, FutStop>(
@@ -198,8 +203,19 @@ pub(crate) async fn ensure_codex_session(
     state: &AppState,
     app: &AppHandle,
 ) -> Result<(), String> {
+    ensure_codex_session_for_provider(workspace_id, CODEX_DISK_PROVIDER_PROFILE_ID, state, app)
+        .await
+}
+
+pub(crate) async fn ensure_codex_session_for_provider(
+    workspace_id: &str,
+    provider_profile_id: &str,
+    state: &AppState,
+    app: &AppHandle,
+) -> Result<(), String> {
     ensure_codex_session_with_mode(
         workspace_id,
+        provider_profile_id,
         state,
         app,
         false,
@@ -209,13 +225,15 @@ pub(crate) async fn ensure_codex_session(
     .await
 }
 
-pub(crate) async fn ensure_codex_session_without_session_hooks(
+pub(crate) async fn ensure_codex_session_without_session_hooks_for_provider(
     workspace_id: &str,
+    provider_profile_id: &str,
     state: &AppState,
     app: &AppHandle,
 ) -> Result<(), String> {
     ensure_codex_session_with_mode(
         workspace_id,
+        provider_profile_id,
         state,
         app,
         false,
@@ -227,18 +245,25 @@ pub(crate) async fn ensure_codex_session_without_session_hooks(
 
 async fn ensure_codex_session_with_mode(
     workspace_id: &str,
+    provider_profile_id: &str,
     state: &AppState,
     app: &AppHandle,
     automatic_recovery: bool,
     recovery_source: &str,
     ensure_mode: CodexSessionEnsureMode,
 ) -> Result<(), String> {
+    let profile = resolve_codex_provider_profile(Some(provider_profile_id))?;
+    let session_key = match &profile {
+        CodexProviderProfile::Disk => legacy_codex_runtime_key(workspace_id),
+        _ => codex_runtime_key(workspace_id, profile.id()),
+    };
+    let runtime_identity = session_key.as_str();
     loop {
         let recovery_source = ensure_mode.recovery_source(recovery_source);
         let lifecycle = state.runtime_manager.lifecycle_coordinator();
         let existing_session = {
             let sessions = state.sessions.lock().await;
-            sessions.get(workspace_id).cloned()
+            sessions.get(&session_key).cloned()
         };
         if let Some(session) = existing_session {
             if ensure_mode.requires_replacement() {
@@ -246,7 +271,7 @@ async fn ensure_codex_session_with_mode(
                     .runtime_manager
                     .has_active_work_protection_for_session(
                         "codex",
-                        workspace_id,
+                        runtime_identity,
                         session.process_id,
                         Some(session.started_at_ms),
                     )
@@ -259,7 +284,7 @@ async fn ensure_codex_session_with_mode(
                 crate::runtime::stop_workspace_session_with_source(
                     &state.sessions,
                     &state.runtime_manager,
-                    workspace_id,
+                    &session_key,
                     crate::backend::app_server::RuntimeShutdownSource::InternalReplacement,
                 )
                 .await?;
@@ -269,24 +294,29 @@ async fn ensure_codex_session_with_mode(
             if let Some(reason) = stale_reason.as_deref() {
                 state
                     .runtime_manager
-                    .note_stale_session_rejection("codex", workspace_id, recovery_source, reason)
+                    .note_stale_session_rejection(
+                        "codex",
+                        runtime_identity,
+                        recovery_source,
+                        reason,
+                    )
                     .await;
             }
             if reuse_existing_session_if_healthy(
-                workspace_id,
+                runtime_identity,
                 stale_reason.as_deref(),
                 || session.probe_health(Duration::from_secs(SESSION_HEALTH_PROBE_TIMEOUT_SECS)),
                 || async {
                     state
                         .runtime_manager
-                        .touch("codex", workspace_id, recovery_source)
+                        .touch("codex", runtime_identity, recovery_source)
                         .await;
                 },
                 || async {
                     crate::runtime::stop_workspace_session_with_source(
                         &state.sessions,
                         &state.runtime_manager,
-                        workspace_id,
+                        &session_key,
                         crate::backend::app_server::RuntimeShutdownSource::StaleReuseCleanup,
                     )
                     .await
@@ -296,7 +326,7 @@ async fn ensure_codex_session_with_mode(
             {
                 state
                     .runtime_manager
-                    .record_recovery_success("codex", workspace_id)
+                    .record_recovery_success("codex", runtime_identity)
                     .await;
                 return Ok(());
             }
@@ -305,14 +335,14 @@ async fn ensure_codex_session_with_mode(
             if stale_failure == "stale existing session failed health probe" {
                 state
                     .runtime_manager
-                    .note_probe_failure("codex", workspace_id, recovery_source, &stale_failure)
+                    .note_probe_failure("codex", runtime_identity, recovery_source, &stale_failure)
                     .await;
             }
             if automatic_recovery {
                 if let Err(quarantine_error) = lifecycle
                     .record_recovering_failure(
                         "codex",
-                        workspace_id,
+                        runtime_identity,
                         recovery_source,
                         &stale_failure,
                     )
@@ -327,7 +357,7 @@ async fn ensure_codex_session_with_mode(
         let acquire_token = match lifecycle
             .acquire_or_retry(
                 "codex",
-                workspace_id,
+                runtime_identity,
                 recovery_source,
                 automatic_recovery,
                 "timed out waiting for concurrent runtime acquire",
@@ -340,7 +370,7 @@ async fn ensure_codex_session_with_mode(
         };
         log::info!(
             "[ensure_codex_session] No session for workspace {}, spawning new Codex session",
-            workspace_id
+            runtime_identity
         );
 
         let (entry, parent_entry) = load_workspace_entries_for_runtime_start(
@@ -351,7 +381,7 @@ async fn ensure_codex_session_with_mode(
         )
         .await?;
 
-        let (default_bin, codex_args) = {
+        let (default_bin, base_codex_args) = {
             let settings = state.app_settings.lock().await;
             (
                 settings.codex_bin.clone(),
@@ -359,7 +389,13 @@ async fn ensure_codex_session_with_mode(
             )
         };
 
-        let codex_home = resolve_workspace_codex_home(&entry, parent_entry.as_ref());
+        let materialized_profile = materialize_codex_provider_profile(profile.clone())?;
+        let codex_home = materialized_profile
+            .codex_home
+            .clone()
+            .or_else(|| resolve_workspace_codex_home(&entry, parent_entry.as_ref()));
+        let codex_args =
+            merge_codex_args(base_codex_args, materialized_profile.codex_args_override);
         let mode_enforcement_enabled = {
             let settings = state.app_settings.lock().await;
             settings.codex_mode_enforcement_enabled
@@ -390,7 +426,7 @@ async fn ensure_codex_session_with_mode(
                     if let Err(quarantine_error) = lifecycle
                         .record_recovering_failure(
                             "codex",
-                            workspace_id,
+                            runtime_identity,
                             recovery_source,
                             error.as_str(),
                         )
@@ -408,14 +444,14 @@ async fn ensure_codex_session_with_mode(
         let replace_result = crate::runtime::replace_workspace_session(
             &state.sessions,
             Some(&state.runtime_manager),
-            entry.id,
+            session_key.clone(),
             session,
             recovery_source,
         )
         .await;
         lifecycle.finish_acquire(&acquire_token).await;
         if replace_result.is_ok() {
-            lifecycle.record_recovered("codex", workspace_id).await;
+            lifecycle.record_recovered("codex", runtime_identity).await;
             return replace_result;
         }
         if let Err(error) = &replace_result {
@@ -423,7 +459,7 @@ async fn ensure_codex_session_with_mode(
                 if let Err(quarantine_error) = lifecycle
                     .record_recovering_failure(
                         "codex",
-                        workspace_id,
+                        runtime_identity,
                         recovery_source,
                         error.as_str(),
                     )
@@ -438,13 +474,28 @@ async fn ensure_codex_session_with_mode(
     }
 }
 
+fn merge_codex_args(base: Option<String>, override_args: Option<String>) -> Option<String> {
+    match (
+        base.map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty()),
+        override_args
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty()),
+    ) {
+        (Some(base), Some(extra)) => Some(format!("{base} {extra}")),
+        (Some(base), None) => Some(base),
+        (None, Some(extra)) => Some(extra),
+        (None, None) => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
         attach_hook_safe_fallback_metadata, create_session_runtime_recovering_error,
         is_hook_safe_fallback_trigger, is_stopping_runtime_race_error,
         load_workspace_entries_for_runtime_start, reuse_existing_session_if_healthy,
-        CREATE_SESSION_RUNTIME_RECOVERING_ERROR_PREFIX,
+        summarize_fallback_failure, CREATE_SESSION_RUNTIME_RECOVERING_ERROR_PREFIX,
     };
     use crate::runtime::{RuntimeAcquireGate, RuntimeManager};
     use crate::types::WorkspaceEntry;
@@ -588,6 +639,14 @@ mod tests {
         assert!(!is_hook_safe_fallback_trigger(
             "Codex CLI is not app-server capable"
         ));
+    }
+
+    #[test]
+    fn fallback_failure_summary_truncates_multibyte_text_without_panicking() {
+        let summary = summarize_fallback_failure(&"权限".repeat(200));
+
+        assert!(summary.ends_with("..."));
+        assert_eq!(summary.trim_end_matches("...").chars().count(), 320);
     }
 
     #[test]

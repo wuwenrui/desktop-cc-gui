@@ -134,4 +134,28 @@ describe("BrowserContextPreview", () => {
     expect(screen.getByText(/issue screenshot/)).toBeTruthy();
     expect(screen.getByText(/diff display screenshot/)).toBeTruthy();
   });
+
+  it("marks expired browser snapshots with the high-contrast expired state", () => {
+    const attachment = makeAttachment();
+    attachment.stale = true;
+    attachment.freshness = "expired";
+    attachment.observation.state = "expired";
+    attachment.observation.staleReasons = ["ttl_expired"];
+
+    render(
+      <BrowserContextPreview
+        attachment={attachment}
+        busy={false}
+        onRefresh={vi.fn()}
+        onRemove={vi.fn()}
+      />,
+    );
+
+    const stateBadge = screen.getByText("expired");
+
+    expect(stateBadge.classList.contains("is-expired")).toBe(true);
+    expect(
+      stateBadge.closest(".composer-browser-context-card")?.classList.contains("is-expired"),
+    ).toBe(true);
+  });
 });

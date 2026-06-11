@@ -434,18 +434,57 @@ export async function getConfigModel(workspaceId: string): Promise<string | null
   return trimmed.length > 0 ? trimmed : null;
 }
 
-export async function startThread(workspaceId: string, options?: { autoSession?: AutoSessionMetadata | null }) {
+export async function startThread(
+  workspaceId: string,
+  options?: {
+    autoSession?: AutoSessionMetadata | null;
+    providerProfileId?: string | null;
+  },
+) {
   return invoke<Record<string, unknown> | null | undefined>("start_thread", {
     workspaceId,
     autoSession: options?.autoSession ?? null,
+    providerProfileId: options?.providerProfileId ?? null,
   });
 }
 
-export async function forkThread(workspaceId: string, threadId: string, messageId?: string | null) {
+export async function forkThread(
+  workspaceId: string,
+  threadId: string,
+  messageId?: string | null,
+  options?: {
+    providerProfileId?: string | null;
+    targetUserTurnIndex?: number | null;
+    targetUserMessageText?: string | null;
+    targetUserMessageOccurrence?: number | null;
+    localUserMessageCount?: number | null;
+  },
+) {
+  const targetUserTurnIndex =
+    typeof options?.targetUserTurnIndex === "number" &&
+    Number.isFinite(options.targetUserTurnIndex)
+      ? Math.max(0, Math.floor(options.targetUserTurnIndex))
+      : null;
+  const targetUserMessageOccurrence =
+    typeof options?.targetUserMessageOccurrence === "number" &&
+    Number.isFinite(options.targetUserMessageOccurrence)
+      ? Math.max(1, Math.floor(options.targetUserMessageOccurrence))
+      : null;
+  const localUserMessageCount =
+    typeof options?.localUserMessageCount === "number" &&
+    Number.isFinite(options.localUserMessageCount)
+      ? Math.max(1, Math.floor(options.localUserMessageCount))
+      : null;
+  const targetUserMessageText = options?.targetUserMessageText?.trim() || null;
   return invoke<Record<string, unknown> | null | undefined>("fork_thread", {
     workspaceId,
     threadId,
     messageId: messageId ?? null,
+    providerProfileId: options?.providerProfileId ?? null,
+    targetUserTurnIndex,
+    targetUserMessageText,
+    targetUserMessageOccurrence,
+    localUserMessageCount,
   });
 }
 

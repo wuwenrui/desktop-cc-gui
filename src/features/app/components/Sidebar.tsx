@@ -8,8 +8,6 @@ import type {
   WorkspaceInfo,
 } from "../../../types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { SkillMarketNavItem } from "../../skill-market/SkillMarketNavItem";
-import { LawhubNavSection } from "../../lawhub/components/LawhubNavSection";
 import type { MouseEvent as ReactMouseEvent, ReactNode, RefObject } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -20,6 +18,14 @@ import { PinnedThreadList } from "./PinnedThreadList";
 import { WorkspaceCard } from "./WorkspaceCard";
 import { WorkspaceGroup } from "./WorkspaceGroup";
 import { WorkspaceSessionFolderTree } from "./WorkspaceSessionFolderTree";
+import { SidebarFolderMovePicker } from "./SidebarFolderMovePicker";
+import { SidebarSearchBox } from "./SidebarSearchBox";
+import { SidebarSettingsMenu } from "./SidebarSettingsMenu";
+import { SidebarTopbarSlot } from "./SidebarTopbarSlot";
+import { SidebarWorkspaceDropOverlay } from "./SidebarWorkspaceDropOverlay";
+import { SidebarWorkspaceMenuOverlay } from "./SidebarWorkspaceMenuOverlay";
+import { SkillMarketNavItem } from "../../skill-market/SkillMarketNavItem";
+import { LawhubNavSection } from "../../lawhub/components/LawhubNavSection";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { RendererContextMenu } from "../../../components/ui/RendererContextMenu";
 import { useCollapsedGroups } from "../hooks/useCollapsedGroups";
@@ -29,7 +35,6 @@ import { useSidebarMenus } from "../hooks/useSidebarMenus";
 import type { ThreadMoveFolderTarget } from "../hooks/useSidebarMenus";
 import { useSidebarScrollFade } from "../hooks/useSidebarScrollFade";
 import { useThreadRows } from "../hooks/useThreadRows";
-import { parseToolArgs } from "../../messages/components/toolBlocks/toolConstants";
 import { isDefaultWorkspacePath } from "../../workspaces/utils/defaultWorkspace";
 import { formatShortcutForPlatform, isMacPlatform } from "../../../utils/shortcuts";
 import { formatRelativeTimeShort } from "../../../utils/time";
@@ -42,24 +47,29 @@ import { TooltipIconButton } from "../../../components/ui/tooltip-icon-button";
 import { SharedSessionIcon } from "../../shared-session/components/SharedSessionIcon";
 import { pushErrorToast } from "../../../services/toasts";
 import {
-  getClientStoreSync,
-  writeClientStoreValue,
-} from "../../../services/clientStorage";
-import Brain from "lucide-react/dist/esm/icons/brain";
-import BriefcaseBusiness from "lucide-react/dist/esm/icons/briefcase-business";
-import ChevronUp from "lucide-react/dist/esm/icons/chevron-up";
+  EMPTY_SESSION_FOLDER_OVERRIDES,
+  EMPTY_SESSION_FOLDERS,
+  buildClaudeLiveSubagentRows,
+  collectThreadSubtreeIds,
+  isPendingEngineThreadId,
+  isPendingSubagentThreadId,
+  isSessionCatalogNotReadyError,
+  isSharedSessionThreadId,
+  readPersistedCollapsedSessionFolderIds,
+  resolveFolderIntentReplacementThreadId,
+  updateCollapsedSessionFolderIdsForWorkspace,
+  writePersistedCollapsedSessionFolderIds,
+  type ThreadFolderMovePickerState,
+  type WorkspaceGroupSection,
+  type WorkspaceThreadRows,
+} from "./sidebarInternals";
 import ChevronsDownUp from "lucide-react/dist/esm/icons/chevrons-down-up";
 import Copy from "lucide-react/dist/esm/icons/copy";
-import FileText from "lucide-react/dist/esm/icons/file-text";
 import GitBranch from "lucide-react/dist/esm/icons/git-branch";
 import House from "lucide-react/dist/esm/icons/house";
-import LayoutDashboard from "lucide-react/dist/esm/icons/layout-dashboard";
-import Lock from "lucide-react/dist/esm/icons/lock";
 import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
 import Pencil from "lucide-react/dist/esm/icons/pencil";
-import Settings from "lucide-react/dist/esm/icons/settings";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2";
-import Wrench from "lucide-react/dist/esm/icons/wrench";
 import {
   getWorkspaceSidebarAlias,
   getWorkspaceSidebarLabel,
@@ -80,288 +90,16 @@ import {
   listWorkspaceSessionFolders,
   renameWorkspaceSessionFolder,
   type WorkspaceSessionFolder,
+  getCodexProviders,
 } from "../../../services/tauri";
+import type {
+  CodexProviderProfileOption,
+  CodexProviderProfileSelection,
+} from "../../threads/constants/codexProviderProfiles";
 import {
   runWithLoadingProgress,
   type LoadingProgressController,
 } from "../utils/loadingProgressActions";
-
-type WorkspaceGroupSection = {
-  id: string | null;
-  name: string;
-  workspaces: WorkspaceInfo[];
-};
-
-type WorkspaceThreadRows = {
-  unpinnedRows: Array<{ thread: ThreadSummary; depth: number }>;
-  totalRoots: number;
-};
-
-type ToolConversationItem = Extract<ConversationItem, { kind: "tool" }>;
-
-type ThreadFolderMovePickerState = {
-  workspaceId: string;
-  threadId: string;
-  targets: ThreadMoveFolderTarget[];
-  currentFolderId: string | null;
-};
-
-const SESSION_FOLDER_COLLAPSED_STATE_KEY = "workspaceSessionFolders.collapsedByWorkspaceId";
-const EMPTY_SESSION_FOLDERS: WorkspaceSessionFolder[] = [];
-const EMPTY_SESSION_FOLDER_OVERRIDES: Record<string, string | null | undefined> = {};
-
-function readPersistedCollapsedSessionFolderIds(): Record<string, string[]> {
-  const stored = getClientStoreSync<Record<string, unknown>>(
-    "layout",
-    SESSION_FOLDER_COLLAPSED_STATE_KEY,
-  );
-  if (!stored || typeof stored !== "object" || Array.isArray(stored)) {
-    return {};
-  }
-  const normalized: Record<string, string[]> = {};
-  Object.entries(stored).forEach(([workspaceId, rawIds]) => {
-    if (!Array.isArray(rawIds)) {
-      return;
-    }
-    const folderIds = rawIds
-      .filter((value): value is string => typeof value === "string")
-      .map((value) => value.trim())
-      .filter(Boolean);
-    if (folderIds.length > 0) {
-      normalized[workspaceId] = Array.from(new Set(folderIds));
-    }
-  });
-  return normalized;
-}
-
-function writePersistedCollapsedSessionFolderIds(value: Record<string, string[]>): void {
-  writeClientStoreValue("layout", SESSION_FOLDER_COLLAPSED_STATE_KEY, value);
-}
-
-function updateCollapsedSessionFolderIdsForWorkspace(
-  current: Record<string, string[]>,
-  workspaceId: string,
-  folderIds: string[],
-): Record<string, string[]> {
-  const normalizedIds = Array.from(new Set(folderIds.map((id) => id.trim()).filter(Boolean)));
-  if (normalizedIds.length === 0) {
-    const { [workspaceId]: _removed, ...rest } = current;
-    return rest;
-  }
-  return {
-    ...current,
-    [workspaceId]: normalizedIds,
-  };
-}
-
-function isPendingEngineThreadId(threadId: string): boolean {
-  const normalizedThreadId = threadId.trim();
-  return (
-    normalizedThreadId.startsWith("codex-pending-") ||
-    normalizedThreadId.startsWith("claude-pending-") ||
-    normalizedThreadId.startsWith("gemini-pending-") ||
-    normalizedThreadId.startsWith("opencode-pending-")
-  );
-}
-
-function isSharedSessionThreadId(threadId: string): boolean {
-  return threadId.trim().startsWith("shared:");
-}
-
-function isSessionCatalogNotReadyError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return message.toLowerCase().includes("session does not belong to target workspace");
-}
-
-function resolveEnginePrefix(threadId: string): "claude" | "gemini" | "opencode" | "codex" {
-  if (threadId.startsWith("claude:") || threadId.startsWith("claude-pending-")) {
-    return "claude";
-  }
-  if (threadId.startsWith("gemini:") || threadId.startsWith("gemini-pending-")) {
-    return "gemini";
-  }
-  if (threadId.startsWith("opencode:") || threadId.startsWith("opencode-pending-")) {
-    return "opencode";
-  }
-  if (threadId.startsWith("codex:") || threadId.startsWith("codex-pending-")) {
-    return "codex";
-  }
-  return "codex";
-}
-
-function resolveFolderIntentReplacementThreadId(
-  pendingThreadId: string,
-  threads: ThreadSummary[],
-): string | null {
-  if (!isPendingEngineThreadId(pendingThreadId)) {
-    return pendingThreadId;
-  }
-  const explicitReplacement = threads.find((thread) =>
-    thread.nativeThreadIds?.includes(pendingThreadId),
-  );
-  if (explicitReplacement && !isPendingEngineThreadId(explicitReplacement.id)) {
-    return explicitReplacement.id;
-  }
-  const pendingEngine = resolveEnginePrefix(pendingThreadId);
-  const sameEngineRealThreads = threads.filter((thread) => {
-    const engineSource = thread.engineSource ?? resolveEnginePrefix(thread.id);
-    return (
-      engineSource === pendingEngine &&
-      thread.id.startsWith(`${pendingEngine}:`) &&
-      !thread.id.includes("-pending-")
-    );
-  });
-  if (sameEngineRealThreads.length !== 1) {
-    return null;
-  }
-  return sameEngineRealThreads[0]?.id ?? null;
-}
-
-function isClaudeThreadId(threadId: string | null | undefined) {
-  return Boolean(threadId?.startsWith("claude:") || threadId?.startsWith("claude-pending-"));
-}
-
-function isPendingSubagentThreadId(threadId: string) {
-  return threadId.startsWith("claude-pending-subagent:");
-}
-
-function resolveThreadParentId(
-  thread: ThreadSummary,
-  threadParentById: Record<string, string>,
-) {
-  return thread.parentThreadId ?? threadParentById[thread.id] ?? null;
-}
-
-function collectThreadSubtreeIds(
-  threads: ThreadSummary[],
-  threadParentById: Record<string, string>,
-  rootThreadId: string,
-) {
-  const childrenByParent = new Map<string, string[]>();
-  threads.forEach((thread) => {
-    const parentId = resolveThreadParentId(thread, threadParentById);
-    if (!parentId || parentId === thread.id) {
-      return;
-    }
-    const children = childrenByParent.get(parentId) ?? [];
-    children.push(thread.id);
-    childrenByParent.set(parentId, children);
-  });
-
-  const subtreeIds: string[] = [];
-  const visited = new Set<string>();
-  const visit = (threadId: string) => {
-    if (visited.has(threadId)) {
-      return;
-    }
-    visited.add(threadId);
-    subtreeIds.push(threadId);
-    (childrenByParent.get(threadId) ?? []).forEach(visit);
-  };
-  visit(rootThreadId);
-  return subtreeIds;
-}
-
-function normalizeRuntimeString(value: unknown) {
-  return typeof value === "string" ? value : "";
-}
-
-function extractToolName(title: unknown) {
-  return normalizeRuntimeString(title).replace(/^Tool:\s*/i, "").trim();
-}
-
-function isClaudeAgentTool(item: ToolConversationItem) {
-  const normalizedToolType = normalizeRuntimeString(item.toolType).trim().toLowerCase();
-  const normalizedToolName = extractToolName(item.title).trim().toLowerCase();
-  return normalizedToolType === "agent" || normalizedToolName === "agent";
-}
-
-function getFirstStringField(source: Record<string, unknown> | null, keys: string[]) {
-  if (!source) {
-    return "";
-  }
-  for (const key of keys) {
-    const value = source[key];
-    if (typeof value === "string" && value.trim()) {
-      return value.trim();
-    }
-  }
-  return "";
-}
-
-function isCompletedToolStatus(status: string | undefined, output: string | undefined) {
-  const normalized = status?.trim().toLowerCase() ?? "";
-  return Boolean(output) || normalized === "completed" || normalized === "success";
-}
-
-function buildClaudeLiveSubagentRows(
-  threads: ThreadSummary[],
-  workspaceId: string,
-  activeWorkspaceId: string | null,
-  activeThreadId: string | null,
-  activeItems: ConversationItem[],
-): ThreadSummary[] {
-  if (workspaceId !== activeWorkspaceId || !isClaudeThreadId(activeThreadId)) {
-    return threads;
-  }
-  const parent = threads.find((thread) => thread.id === activeThreadId);
-  if (!parent) {
-    return threads;
-  }
-  const threadIds = new Set(threads.map((thread) => thread.id));
-  const parentSessionId = activeThreadId?.replace(/^claude:/, "") ?? "";
-  let unmatchedRealChildCount = threads.filter(
-    (thread) =>
-      thread.parentThreadId === activeThreadId ||
-      thread.id.startsWith(`claude:subagent:${parentSessionId}:`),
-  ).length;
-  const pendingRows: ThreadSummary[] = [];
-
-  activeItems.forEach((item) => {
-    if (item.kind !== "tool" || !isClaudeAgentTool(item)) {
-      return;
-    }
-    const args = parseToolArgs(normalizeRuntimeString(item.detail));
-    const taskId = getFirstStringField(args, ["task_id", "taskId"]);
-    const stableAgentId = getFirstStringField(args, ["agent_id", "agentId"]);
-    const childSessionId = stableAgentId
-      ? `claude:subagent:${parentSessionId}:${stableAgentId}`
-      : "";
-    if (childSessionId && threadIds.has(childSessionId)) {
-      return;
-    }
-    const output = normalizeRuntimeString(item.output);
-    if (!stableAgentId && isCompletedToolStatus(item.status, output) && unmatchedRealChildCount > 0) {
-      unmatchedRealChildCount -= 1;
-      return;
-    }
-    const pendingId = `claude-pending-subagent:${activeThreadId}:${taskId || item.id}`;
-    if (threadIds.has(pendingId)) {
-      return;
-    }
-    const description =
-      getFirstStringField(args, ["description", "prompt", "query", "task"]) ||
-      output.split(/\r?\n/, 1)[0]?.trim() ||
-      "Claude subagent";
-    const subagentType =
-      getFirstStringField(args, ["subagent_type", "agent", "type", "name"]) || "Agent";
-    pendingRows.push({
-      id: pendingId,
-      name: `${subagentType} ${description}`.trim(),
-      updatedAt: parent.updatedAt,
-      engineSource: "claude",
-      threadKind: "native",
-      parentThreadId: activeThreadId,
-      isDegraded: true,
-      degradedReason: isCompletedToolStatus(item.status, item.output)
-        ? "Subagent transcript is still being indexed."
-        : "Subagent is running; transcript is not available yet.",
-    });
-  });
-
-  return pendingRows.length > 0 ? [...threads, ...pendingRows] : threads;
-}
-
 type SidebarProps = {
   workspaces: WorkspaceInfo[];
   groupedWorkspaces: WorkspaceGroupSection[];
@@ -386,11 +124,13 @@ type SidebarProps = {
   systemProxyUrl?: string | null;
   accountRateLimits: RateLimitSnapshot | null;
   usageShowRemaining: boolean;
+  showProviderLabels?: boolean;
   accountInfo: AccountSnapshot | null;
   onSwitchAccount: () => void;
   onCancelSwitchAccount: () => void;
   accountSwitching: boolean;
   onOpenSettings: () => void;
+  onOpenEnvironment: () => void;
   onOpenDebug: () => void;
   showDebugButton?: boolean;
   showTerminalButton?: boolean;
@@ -403,7 +143,7 @@ type SidebarProps = {
   onAddAgent: (
     workspace: WorkspaceInfo,
     engine?: EngineType,
-    options?: { folderId?: string | null },
+    options?: { folderId?: string | null } & CodexProviderProfileSelection,
   ) => Promise<string | null> | string | null | void;
   engineOptions?: EngineDisplayInfo[];
   enabledEngines?: Partial<Record<EngineType, boolean>>;
@@ -456,7 +196,6 @@ type SidebarProps = {
   onLockPanel?: () => void;
   onOpenProjectMemory: () => void;
   onOpenReleaseNotes: () => void;
-  onOpenEnvironment: () => void;
   onOpenSpecHub: () => void;
   onOpenWorkspaceHome: () => void;
   onOpenGlobalSearch: () => void;
@@ -487,11 +226,13 @@ export function Sidebar({
   activeThreadId,
   systemProxyEnabled = false,
   systemProxyUrl = null,
+  showProviderLabels = false,
   accountInfo: _accountInfo,
   onSwitchAccount: _onSwitchAccount,
   onCancelSwitchAccount: _onCancelSwitchAccount,
   accountSwitching: _accountSwitching,
   onOpenSettings,
+  onOpenEnvironment,
   onOpenDebug: _onOpenDebug,
   showTerminalButton: _showTerminalButton,
   isTerminalOpen: _isTerminalOpen,
@@ -545,7 +286,6 @@ export function Sidebar({
   onLockPanel,
   onOpenProjectMemory,
   onOpenReleaseNotes,
-  onOpenEnvironment,
   onOpenSpecHub,
   onOpenWorkspaceHome: _onOpenWorkspaceHome,
   onOpenGlobalSearch,
@@ -592,6 +332,9 @@ export function Sidebar({
     pendingSessionFolderIntentByWorkspaceId,
     setPendingSessionFolderIntentByWorkspaceId,
   ] = useState<Record<string, Record<string, string>>>(() => ({}));
+  const [codexProviderProfiles, setCodexProviderProfiles] = useState<
+    CodexProviderProfileOption[]
+  >([]);
   const [rootSessionFolderDraftRequestByWorkspaceId, setRootSessionFolderDraftRequestByWorkspaceId] = useState<
     Record<string, number>
   >(() => ({}));
@@ -895,6 +638,49 @@ export function Sidebar({
   );
 
   useEffect(() => {
+    let cancelled = false;
+    getCodexProviders()
+      .then((providers) => {
+        if (cancelled) {
+          return;
+        }
+        const nextProfiles = providers
+            .map((provider) => ({
+              id: provider.id.trim(),
+              name: provider.name.trim() || provider.id.trim(),
+              source: "managed" as const,
+            }))
+            .filter((provider) => provider.id.length > 0);
+        setCodexProviderProfiles((currentProfiles) => {
+          if (
+            currentProfiles.length === nextProfiles.length &&
+            currentProfiles.every((currentProfile, index) => {
+              const nextProfile = nextProfiles[index];
+              return (
+                currentProfile.id === nextProfile?.id &&
+                currentProfile.name === nextProfile.name &&
+                currentProfile.source === nextProfile.source
+              );
+            })
+          ) {
+            return currentProfiles;
+          }
+          return nextProfiles;
+        });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCodexProviderProfiles((currentProfiles) =>
+            currentProfiles.length === 0 ? currentProfiles : [],
+          );
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     Object.entries(pendingSessionFolderIntentByWorkspaceId).forEach(
       ([workspaceId, intents]) => {
         const workspaceThreads = threadsByWorkspace[workspaceId] ?? [];
@@ -962,6 +748,7 @@ export function Sidebar({
   } =
     useSidebarMenus({
       onAddAgent,
+      codexProviderProfiles,
       engineOptions,
       enabledEngines,
       onRefreshEngineOptions,
@@ -1878,6 +1665,7 @@ export function Sidebar({
             activeThreadId={activeThreadId}
             systemProxyEnabled={systemProxyEnabled}
             systemProxyUrl={systemProxyUrl}
+            showProviderLabels={showProviderLabels}
             moveFolderTargetsByWorkspaceId={moveFolderTargetsByWorkspaceId}
             getThreadRows={getThreadRows}
             getThreadTime={getThreadTime}
@@ -1927,6 +1715,7 @@ export function Sidebar({
               activeThreadId,
               systemProxyEnabled,
               systemProxyUrl,
+              showProviderLabels,
               threadStatusById,
               getThreadTime,
               isThreadPinned,
@@ -1964,6 +1753,7 @@ export function Sidebar({
             activeThreadId={activeThreadId}
             systemProxyEnabled={systemProxyEnabled}
             systemProxyUrl={systemProxyUrl}
+            showProviderLabels={showProviderLabels}
             threadStatusById={threadStatusById}
             getThreadTime={getThreadTime}
             isThreadPinned={isThreadPinned}
@@ -2028,6 +1818,7 @@ export function Sidebar({
     showWorktreeMenu,
     systemProxyEnabled,
     systemProxyUrl,
+    showProviderLabels,
     onToggleWorkspaceCollapse,
     renderHighlightedName,
     hydratedThreadListWorkspaceIds,
@@ -2056,58 +1847,19 @@ export function Sidebar({
       onDragLeave={onWorkspaceDragLeave}
       onDrop={onWorkspaceDrop}
     >
-      <div className="sidebar-topbar-placeholder" data-tauri-drag-region>
-        {topbarNode ? (
-          <div className="sidebar-topbar-content" data-tauri-drag-region>
-            {topbarNode}
-          </div>
-        ) : null}
-      </div>
-      <div className={`sidebar-search${isSearchOpen ? " is-open" : ""}`}>
-        {isSearchOpen && (
-          <input
-            className="sidebar-search-input"
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder={t("sidebar.searchProjects")}
-            aria-label={t("sidebar.searchProjects")}
-            data-tauri-drag-region="false"
-            autoFocus
-          />
-        )}
-        {isSearchOpen && searchQuery.length > 0 && (
-          <button
-            type="button"
-            className="sidebar-search-clear"
-            onClick={() => setSearchQuery("")}
-            aria-label={t("sidebar.clearSearch")}
-            data-tauri-drag-region="false"
-          >
-            <span className="codicon codicon-close" style={{ fontSize: "12px" }} aria-hidden />
-          </button>
-        )}
-      </div>
-      <div
-        className={`workspace-drop-overlay${
-          isWorkspaceDropActive ? " is-active" : ""
-        }`}
-        aria-hidden
-      >
-        <div
-          className={`workspace-drop-overlay-text${
-            workspaceDropText === "Adding Project..." ? " is-busy" : ""
-          }`}
-        >
-          {workspaceDropText === "Drop Project Here" && (
-            <span className="codicon codicon-folder-opened workspace-drop-overlay-icon" aria-hidden />
-          )}
-          {workspaceDropText === "Drop Project Here"
-            ? t("sidebar.dropProjectHere")
-            : workspaceDropText === "Adding Project..."
-              ? t("sidebar.addingProject")
-              : workspaceDropText}
-        </div>
-      </div>
+      <SidebarTopbarSlot topbarNode={topbarNode} />
+      <SidebarSearchBox
+        isOpen={isSearchOpen}
+        query={searchQuery}
+        t={t}
+        onQueryChange={setSearchQuery}
+        onClear={() => setSearchQuery("")}
+      />
+      <SidebarWorkspaceDropOverlay
+        isActive={isWorkspaceDropActive}
+        text={workspaceDropText}
+        t={t}
+      />
       <div className="sidebar-body">
         <div className="sidebar-body-layout">
           <nav className="sidebar-primary-nav" aria-label={t("tabbar.primaryNavigation")}>
@@ -2161,7 +1913,7 @@ export function Sidebar({
             <LawhubNavSection
               activeWorkspaceId={activeWorkspaceId}
               workspacePath={
-                workspaces.find((w) => w.id === activeWorkspaceId)?.path ?? null
+                workspaces.find((workspace) => workspace.id === activeWorkspaceId)?.path ?? null
               }
             />
           </nav>
@@ -2180,6 +1932,7 @@ export function Sidebar({
                   activeThreadId={activeThreadId}
                   systemProxyEnabled={systemProxyEnabled}
                   systemProxyUrl={systemProxyUrl}
+                  showProviderLabels={showProviderLabels}
                   threadStatusById={threadStatusById}
                   moveFolderTargetsByWorkspaceId={moveFolderTargetsByWorkspaceId}
                   getThreadTime={getThreadTime}
@@ -2266,300 +2019,45 @@ export function Sidebar({
             </div>
           </ScrollArea>
           <div className="sidebar-bottom-nav">
-            <div className="sidebar-settings-dropdown-wrapper">
-              {isSettingsMenuOpen && (
-                <div
-                  className="sidebar-settings-dropdown"
-                  ref={settingsMenuRef}
-                  role="menu"
-                >
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="sidebar-settings-dropdown-item"
-                    disabled
-                    onClick={() => {
-                      setIsSettingsMenuOpen(false);
-                      handleOpenSkillsComingSoon();
-                    }}
-                  >
-                    <BriefcaseBusiness size={14} aria-hidden />
-                    <span>{t("sidebar.quickSkills")}</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="sidebar-settings-dropdown-item"
-                    onClick={() => {
-                      setIsSettingsMenuOpen(false);
-                      onLockPanel?.();
-                    }}
-                  >
-                    <Lock size={14} aria-hidden />
-                    <span>{t("lockScreen.lock")}</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="sidebar-settings-dropdown-item"
-                    onClick={() => {
-                      setIsSettingsMenuOpen(false);
-                      onOpenSpecHub();
-                    }}
-                  >
-                    <LayoutDashboard size={14} aria-hidden />
-                    <span>{t("sidebar.specHub")}</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="sidebar-settings-dropdown-item"
-                    onClick={() => {
-                      setIsSettingsMenuOpen(false);
-                      onOpenProjectMemory();
-                    }}
-                  >
-                    <Brain size={14} aria-hidden />
-                    <span>{t("panels.memory")}</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className={`sidebar-settings-dropdown-item${appMode === "gitHistory" ? " is-active" : ""}`}
-                    onClick={() => {
-                      setIsSettingsMenuOpen(false);
-                      onAppModeChange(appMode === "gitHistory" ? "chat" : "gitHistory");
-                    }}
-                  >
-                    <GitBranch size={14} aria-hidden />
-                    <span>{t("git.logMode")}</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="sidebar-settings-dropdown-item"
-                    onClick={() => {
-                      setIsSettingsMenuOpen(false);
-                      onOpenEnvironment();
-                    }}
-                  >
-                    <Wrench size={14} aria-hidden />
-                    <span>{t("sidebar.environmentDependencies")}</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="sidebar-settings-dropdown-item"
-                    onClick={() => {
-                      setIsSettingsMenuOpen(false);
-                      onOpenReleaseNotes();
-                    }}
-                  >
-                    <FileText size={14} aria-hidden />
-                    <span>{t("sidebar.releaseNotes")}</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="sidebar-settings-dropdown-item"
-                    onClick={() => {
-                      setIsSettingsMenuOpen(false);
-                      onOpenSettings();
-                    }}
-                  >
-                    <Settings size={14} aria-hidden />
-                    <span>{t("settings.title")}</span>
-                  </button>
-                </div>
-              )}
-              <button
-                ref={settingsButtonRef}
-                type="button"
-                className={`sidebar-primary-nav-item sidebar-primary-nav-item-bottom${isSettingsMenuOpen ? " is-active" : ""}`}
-                onClick={() => setIsSettingsMenuOpen((prev) => !prev)}
-                title={t("settings.title")}
-                aria-label={t("settings.title")}
-                aria-expanded={isSettingsMenuOpen}
-                aria-haspopup="menu"
-                data-tauri-drag-region="false"
-              >
-                <Settings className="sidebar-primary-nav-icon" aria-hidden />
-                <span className="sidebar-primary-nav-text">{t("settings.title")}</span>
-                <ChevronUp
-                  size={14}
-                  className={`sidebar-settings-chevron${isSettingsMenuOpen ? " is-open" : ""}`}
-                  aria-hidden
-                />
-              </button>
-            </div>
+            <SidebarSettingsMenu
+              isOpen={isSettingsMenuOpen}
+              appMode={appMode}
+              menuRef={settingsMenuRef}
+              buttonRef={settingsButtonRef}
+              t={t}
+              onToggleOpen={() => setIsSettingsMenuOpen((prev) => !prev)}
+              onClose={() => setIsSettingsMenuOpen(false)}
+              onOpenSkillsComingSoon={handleOpenSkillsComingSoon}
+              onLockPanel={onLockPanel}
+              onOpenSpecHub={onOpenSpecHub}
+              onOpenProjectMemory={onOpenProjectMemory}
+              onOpenEnvironment={onOpenEnvironment}
+              onOpenReleaseNotes={onOpenReleaseNotes}
+              onOpenSettings={onOpenSettings}
+              onAppModeChange={onAppModeChange}
+            />
           </div>
         </div>
       </div>
       {folderMovePicker ? (
-        <div
-          className="sidebar-workspace-menu-backdrop"
-          onClick={closeFolderMovePicker}
-          onContextMenu={(event) => {
-            event.preventDefault();
-            closeFolderMovePicker();
-          }}
-        >
-          <div
-            className="sidebar-workspace-menu sidebar-folder-move-picker"
-            role="dialog"
-            aria-label={t("threads.moveToFolder")}
-            onMouseDown={(event) => event.stopPropagation()}
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={(event) => event.stopPropagation()}
-            onContextMenu={(event) => event.preventDefault()}
-          >
-            <div className="sidebar-workspace-menu-group">
-              <div className="sidebar-workspace-menu-group-title">
-                {t("threads.moveToFolder")}
-              </div>
-              <input
-                className="sidebar-search-input sidebar-folder-move-picker-input"
-                value={folderMovePickerQuery}
-                onChange={(event) => setFolderMovePickerQuery(event.target.value)}
-                placeholder={t("threads.searchFolderTargets")}
-                aria-label={t("threads.searchFolderTargets")}
-                data-tauri-drag-region="false"
-                autoFocus
-              />
-              <div className="sidebar-folder-move-picker-list" role="listbox">
-                {filteredFolderMoveTargets.map((target) => {
-                  const isCurrentTarget =
-                    (target.folderId ?? null) === (folderMovePicker.currentFolderId ?? null);
-                  return (
-                    <button
-                      key={target.folderId ?? "__root__"}
-                      type="button"
-                      className={`sidebar-workspace-menu-item${
-                        isCurrentTarget ? " is-unavailable" : ""
-                      }`}
-                      role="option"
-                      aria-selected={isCurrentTarget}
-                      disabled={isCurrentTarget}
-                      onClick={() => void selectFolderMoveTarget(target)}
-                    >
-                      <span className="sidebar-workspace-menu-item-label">
-                        {target.label}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        </div>
+        <SidebarFolderMovePicker
+          picker={folderMovePicker}
+          query={folderMovePickerQuery}
+          targets={filteredFolderMoveTargets}
+          t={t}
+          onQueryChange={setFolderMovePickerQuery}
+          onClose={closeFolderMovePicker}
+          onSelectTarget={(target) => void selectFolderMoveTarget(target)}
+        />
       ) : null}
       {workspaceMenuState ? (
-        <div
-          className="sidebar-workspace-menu-backdrop"
-          onClick={closeWorkspaceMenu}
-          onContextMenu={(event) => {
-            event.preventDefault();
-            closeWorkspaceMenu();
-          }}
-        >
-          <div
-            className="sidebar-workspace-menu"
-            role="menu"
-            aria-label={
-              workspaceMenuState.groups.length === 1 &&
-              workspaceMenuState.groups[0]?.id === "new-session"
-                ? t("sidebar.sessionActionsGroup")
-                : t("sidebar.workspaceActionsGroup")
-            }
-            style={{
-              left: workspaceMenuState.x,
-              top: workspaceMenuState.y,
-            }}
-            onMouseDown={(event) => event.stopPropagation()}
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={(event) => event.stopPropagation()}
-            onContextMenu={(event) => event.preventDefault()}
-          >
-            {workspaceMenuState.groups.map((group, groupIndex) => (
-              <div className="sidebar-workspace-menu-group" key={group.id}>
-                <div className="sidebar-workspace-menu-group-title">
-                  {group.label}
-                </div>
-                {group.actions.map((action) => (
-                  <div className="sidebar-workspace-menu-item-row" key={action.id}>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className={`sidebar-workspace-menu-item${
-                        action.tone === "danger" ? " is-danger" : ""
-                      }${action.deprecated ? " is-deprecated" : ""}${
-                        action.unavailable ? " is-unavailable" : ""
-                      }`}
-                      disabled={action.unavailable}
-                      onClick={() => onWorkspaceMenuAction(action)}
-                    >
-                      <span
-                        className={`sidebar-workspace-menu-item-icon sidebar-workspace-menu-item-icon-${action.iconKind}${
-                          action.unavailable ? " is-unavailable" : ""
-                        }`}
-                        aria-hidden
-                      >
-                        {renderWorkspaceMenuIcon(action.iconKind)}
-                      </span>
-                      <span className="sidebar-workspace-menu-item-label">
-                        {action.label}
-                      </span>
-                      {action.deprecated ? (
-                        <span className="sidebar-workspace-menu-item-deprecated">
-                          ({t("sidebar.deprecatedTag")})
-                        </span>
-                      ) : null}
-                      {action.unavailable ? (
-                        <span className="sidebar-workspace-menu-item-unavailable">
-                          （{action.statusLabel ?? t("sidebar.unavailableTag")}）
-                        </span>
-                      ) : null}
-                    </button>
-                    {action.refreshable ? (
-                      <button
-                        type="button"
-                        className={`sidebar-workspace-menu-item-refresh${
-                          action.refreshing ? " is-refreshing" : ""
-                        }`}
-                        onMouseDown={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                        }}
-                        onPointerDown={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                        }}
-                        onClick={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          void action.onRefresh?.();
-                        }}
-                        onDoubleClick={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                        }}
-                        aria-label={t("common.refresh")}
-                        title={t("common.refresh")}
-                        data-tauri-drag-region="false"
-                        disabled={action.refreshing}
-                      >
-                        <RefreshCw size={13} aria-hidden />
-                      </button>
-                    ) : null}
-                  </div>
-                ))}
-                {groupIndex < workspaceMenuState.groups.length - 1 ? (
-                  <div className="sidebar-workspace-menu-divider" aria-hidden />
-                ) : null}
-              </div>
-            ))}
-          </div>
-        </div>
+        <SidebarWorkspaceMenuOverlay
+          menu={workspaceMenuState}
+          t={t}
+          onClose={closeWorkspaceMenu}
+          onAction={onWorkspaceMenuAction}
+          renderIcon={renderWorkspaceMenuIcon}
+        />
       ) : null}
       {sidebarContextMenuState ? (
         <RendererContextMenu

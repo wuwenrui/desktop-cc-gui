@@ -78,6 +78,11 @@ export type ThreadAction =
       engine?: "codex" | "claude" | "gemini" | "opencode";
       folderId?: string | null;
       autoSession?: AutoSessionMetadata | null;
+      sourceLabel?: string | null;
+      providerProfileId?: string | null;
+      providerProfileSource?: string | null;
+      providerProfileName?: string | null;
+      providerAvailability?: string | null;
     }
   | { type: "hideThread"; workspaceId: string; threadId: string }
   | { type: "removeThread"; workspaceId: string; threadId: string }

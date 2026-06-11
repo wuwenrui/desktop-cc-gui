@@ -96,6 +96,11 @@ describe("themePreset", () => {
       "vscode-light-plus",
       "vscode-github-light",
       "vscode-solarized-light",
+      "vscode-catppuccin-latte",
+      "vscode-tokyo-day",
+      "vscode-rose-pine-dawn",
+      "vscode-everforest-light",
+      "vscode-ayu-light",
       "vscode-dark-modern",
       "vscode-dark-plus",
       "vscode-github-dark",
@@ -103,6 +108,11 @@ describe("themePreset", () => {
       "vscode-one-dark-pro",
       "vscode-monokai",
       "vscode-solarized-dark",
+      "vscode-dracula",
+      "vscode-nord",
+      "vscode-catppuccin-mocha",
+      "vscode-tokyo-night",
+      "vscode-rose-pine",
     ]);
   });
 });

@@ -3,6 +3,7 @@ import {
   memo,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type MutableRefObject,
   type ReactNode,
@@ -42,6 +43,7 @@ import {
   ReviewRow,
   WorkingIndicator,
 } from "./MessagesRows";
+import { appendRendererDiagnostic } from "../../../services/rendererDiagnostics";
 import { parseReasoning } from "./messagesReasoning";
 import type { RuntimeReconnectRecoveryCallbackResult } from "./runtimeReconnect";
 import {
@@ -51,13 +53,23 @@ import {
   resolveProvenanceEngineLabel,
   shouldHideCodexCanvasCommandCard,
 } from "./messagesRenderUtils";
-import { buildTimelineProjectionRows, groupedEntryContainsItemId } from "./messagesTimelineProjection";
 import {
+  buildTimelineProjectionRows,
+  findTimelineProjectionRowIndexByItemId,
+  groupedEntryContainsItemId,
+} from "./messagesTimelineProjection";
+import {
+  classifyTimelineVirtualizerStability,
   estimateTimelineProjectionRowSize,
   estimateTimelineProjectionRenderWeight,
+  getActiveLiveTimelineRowKeys,
   observeTimelineElementOffset,
   shouldVirtualizeTimelineRows,
 } from "./messagesTimelineVirtualization";
+
+const TIMELINE_VIRTUALIZER_STABILITY_REMEASURE_COOLDOWN_MS = 750;
+const TIMELINE_VIRTUALIZER_STABILITY_DIAGNOSTIC_COOLDOWN_MS = 5_000;
+const TIMELINE_LIVE_ROW_BOTTOM_PROXIMITY_PX = 720;
 
 type MessagesTimelineProps = {
   activeCollaborationModeId: string | null;
@@ -92,6 +104,8 @@ type MessagesTimelineProps = {
   messageActionTargetByAssistantId: Map<string, string>;
   messageCopyTextByAssistantId: Map<string, string>;
   latestFinalAssistantMessageId: string | null;
+  pendingJumpMessageId: string | null;
+  onPendingJumpTargetReady: (messageId: string) => void;
   onForkFromMessage?: (messageId: string) => void;
   onRewindFromMessage?: (messageId: string) => void;
   handleExitPlanModeExecuteForItem: (
@@ -200,6 +214,8 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   messageActionTargetByAssistantId,
   messageCopyTextByAssistantId,
   latestFinalAssistantMessageId,
+  pendingJumpMessageId,
+  onPendingJumpTargetReady,
   onForkFromMessage,
   onRewindFromMessage,
   handleExitPlanModeExecuteForItem,
@@ -249,6 +265,8 @@ export const MessagesTimeline = memo(function MessagesTimeline({
 }: MessagesTimelineProps) {
   const { t } = useTranslation();
   const [isStickyHeaderCollapsed, setIsStickyHeaderCollapsed] = useState(false);
+  const lastTimelineStabilityRemeasureAtRef = useRef(0);
+  const lastTimelineStabilityDiagnosticAtRef = useRef(0);
 
   useEffect(() => {
     setIsStickyHeaderCollapsed(false);
@@ -304,6 +322,122 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     observeElementOffset: observeTimelineElementOffset,
     overscan: 12,
   });
+  const virtualTimelineRows = timelineVirtualizer.getVirtualItems();
+  const activeLiveTimelineRowKeys = useMemo(
+    () =>
+      getActiveLiveTimelineRowKeys({
+        rows: timelineProjectionRows,
+        liveAssistantItemId: liveAssistantItem?.id ?? liveAssistantMessageId,
+        liveReasoningItemId: liveReasoningItem?.id ?? latestReasoningId,
+      }),
+    [
+      latestReasoningId,
+      liveAssistantItem?.id,
+      liveAssistantMessageId,
+      liveReasoningItem?.id,
+      timelineProjectionRows,
+    ],
+  );
+  const activeLiveTimelineRowKeySet = useMemo(
+    () => new Set(activeLiveTimelineRowKeys),
+    [activeLiveTimelineRowKeys],
+  );
+  const virtualTimelineRowKeys = useMemo(
+    () => virtualTimelineRows.map((row) => row.key),
+    [virtualTimelineRows],
+  );
+
+  const pendingJumpRowIndex = useMemo(
+    () =>
+      pendingJumpMessageId
+        ? findTimelineProjectionRowIndexByItemId(timelineProjectionRows, pendingJumpMessageId)
+        : -1,
+    [pendingJumpMessageId, timelineProjectionRows],
+  );
+
+  useEffect(() => {
+    if (!pendingJumpMessageId) {
+      return;
+    }
+    if (messageNodeByIdRef.current.get(pendingJumpMessageId)) {
+      onPendingJumpTargetReady(pendingJumpMessageId);
+      return;
+    }
+    if (!shouldVirtualizeTimeline || pendingJumpRowIndex < 0) {
+      return;
+    }
+    timelineVirtualizer.scrollToIndex(pendingJumpRowIndex, { align: "center" });
+  }, [
+    messageNodeByIdRef,
+    onPendingJumpTargetReady,
+    pendingJumpMessageId,
+    pendingJumpRowIndex,
+    shouldVirtualizeTimeline,
+    timelineVirtualizer,
+    virtualTimelineRowKeys,
+  ]);
+
+  useEffect(() => {
+    const scrollElement = scrollElementRef.current;
+    const distanceFromBottom = scrollElement
+      ? scrollElement.scrollHeight - scrollElement.scrollTop - scrollElement.clientHeight
+      : Number.POSITIVE_INFINITY;
+    const isNearLiveTail =
+      Number.isFinite(distanceFromBottom) &&
+      distanceFromBottom <= TIMELINE_LIVE_ROW_BOTTOM_PROXIMITY_PX;
+    const stabilityState = classifyTimelineVirtualizerStability({
+      shouldVirtualize: shouldVirtualizeTimeline,
+      rowCount: timelineProjectionRows.length,
+      hasScrollElement: Boolean(scrollElement),
+      virtualItemKeys: virtualTimelineRowKeys,
+      activeLiveRowKeys: activeLiveTimelineRowKeys,
+      streamingActive: Boolean((isThinking || isWorking) && isNearLiveTail),
+    });
+    if (stabilityState === "stable") {
+      return;
+    }
+
+    const now = Date.now();
+    if (
+      now - lastTimelineStabilityRemeasureAtRef.current >=
+      TIMELINE_VIRTUALIZER_STABILITY_REMEASURE_COOLDOWN_MS
+    ) {
+      lastTimelineStabilityRemeasureAtRef.current = now;
+      timelineVirtualizer.measure();
+    }
+    if (
+      now - lastTimelineStabilityDiagnosticAtRef.current <
+      TIMELINE_VIRTUALIZER_STABILITY_DIAGNOSTIC_COOLDOWN_MS
+    ) {
+      return;
+    }
+    lastTimelineStabilityDiagnosticAtRef.current = now;
+    appendRendererDiagnostic("messages/timeline-virtualizer-stability", {
+      state: stabilityState,
+      threadId,
+      workspaceId: workspaceId ?? null,
+      rowCount: timelineProjectionRows.length,
+      virtualItemCount: virtualTimelineRowKeys.length,
+      activeLiveRowCount: activeLiveTimelineRowKeys.length,
+      isThinking,
+      isWorking,
+      isNearLiveTail,
+      distanceFromBottom: Number.isFinite(distanceFromBottom)
+        ? Math.max(0, Math.round(distanceFromBottom))
+        : null,
+    });
+  }, [
+    activeLiveTimelineRowKeys,
+    isThinking,
+    isWorking,
+    scrollElementRef,
+    shouldVirtualizeTimeline,
+    threadId,
+    timelineProjectionRows.length,
+    timelineVirtualizer,
+    virtualTimelineRowKeys,
+    workspaceId,
+  ]);
 
   const renderSingleItem = (item: ConversationItem) => {
     const renderItem = resolveLiveRenderItem(
@@ -743,13 +877,16 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         position: "relative",
       }}
     >
-      {timelineVirtualizer.getVirtualItems().map((virtualRow) => {
+      {virtualTimelineRows.map((virtualRow) => {
         const row = timelineProjectionRows[virtualRow.index];
+        const isActiveLiveTimelineRow = activeLiveTimelineRowKeySet.has(String(virtualRow.key));
         return (
           <div
             key={virtualRow.key}
             data-index={virtualRow.index}
+            data-active-live-row={isActiveLiveTimelineRow ? "true" : undefined}
             data-timeline-row-kind={row?.kind}
+            className={isActiveLiveTimelineRow ? "messages-virtualized-row is-active-live-row" : "messages-virtualized-row"}
             ref={timelineVirtualizer.measureElement}
             style={{
               left: 0,

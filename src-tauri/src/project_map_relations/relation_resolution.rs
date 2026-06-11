@@ -647,6 +647,163 @@ pub(super) fn resolve_call_target(
     None
 }
 
+pub(super) struct JavaCallResolutionContext {
+    receiver_file_by_name: HashMap<String, String>,
+    type_file_by_name: HashMap<String, String>,
+    method_names_by_file_id: HashMap<String, HashSet<String>>,
+}
+
+fn simple_java_type_name(value: &str) -> &str {
+    value.rsplit('.').next().unwrap_or(value)
+}
+
+fn normalize_java_declared_type(value: &str) -> String {
+    value
+        .split('<')
+        .next()
+        .unwrap_or(value)
+        .trim()
+        .trim_matches(|character| character == '[' || character == ']')
+        .to_string()
+}
+
+fn java_field_binding_from_line(line: &str) -> Option<(String, String)> {
+    let trimmed = line.trim();
+    if trimmed.is_empty()
+        || trimmed.starts_with("//")
+        || trimmed.starts_with('*')
+        || trimmed.contains('(')
+        || !trimmed.ends_with(';')
+    {
+        return None;
+    }
+    let declaration = trimmed
+        .split('=')
+        .next()
+        .unwrap_or(trimmed)
+        .trim_end_matches(';')
+        .trim();
+    let tokens = declaration
+        .split_whitespace()
+        .filter(|token| !token.starts_with('@'))
+        .filter(|token| {
+            !matches!(
+                *token,
+                "private" | "protected" | "public" | "static" | "final" | "volatile" | "transient"
+            )
+        })
+        .collect::<Vec<_>>();
+    if tokens.len() < 2 {
+        return None;
+    }
+    let field_name = tokens.last()?.trim();
+    let field_type = normalize_java_declared_type(tokens.get(tokens.len() - 2)?);
+    if field_name.is_empty()
+        || field_type.is_empty()
+        || field_name
+            .chars()
+            .next()
+            .is_some_and(|character| character.is_ascii_uppercase())
+    {
+        return None;
+    }
+    Some((field_name.to_string(), field_type))
+}
+
+pub(super) fn build_java_call_resolution_context(
+    source_file: &ScannedFile,
+    content: &str,
+    java_file_by_type: &HashMap<String, String>,
+    symbols: &[RelationshipSymbol],
+) -> JavaCallResolutionContext {
+    let mut receiver_file_by_name = HashMap::new();
+    let mut type_file_by_name = HashMap::new();
+    let mut method_names_by_file_id: HashMap<String, HashSet<String>> = HashMap::new();
+
+    for symbol in symbols {
+        if symbol.kind == "function" {
+            method_names_by_file_id
+                .entry(symbol.file_id.clone())
+                .or_default()
+                .insert(symbol.name.to_ascii_lowercase());
+        }
+    }
+
+    for line in content.lines() {
+        let Some(import_name) = java_import_specifier(line) else {
+            continue;
+        };
+        let Some(file_id) = resolve_java_import(&import_name, java_file_by_type) else {
+            continue;
+        };
+        type_file_by_name.insert(
+            simple_java_type_name(&import_name).to_string(),
+            file_id.clone(),
+        );
+        type_file_by_name.insert(import_name, file_id);
+    }
+
+    if let Some(type_name) = java_declared_type(content) {
+        type_file_by_name.insert(type_name, source_file.id.clone());
+    }
+
+    for line in content.lines() {
+        let Some((receiver_name, receiver_type)) = java_field_binding_from_line(line) else {
+            continue;
+        };
+        let Some(file_id) = type_file_by_name
+            .get(&receiver_type)
+            .or_else(|| java_file_by_type.get(&receiver_type))
+        else {
+            continue;
+        };
+        receiver_file_by_name.insert(receiver_name, file_id.clone());
+    }
+
+    JavaCallResolutionContext {
+        receiver_file_by_name,
+        type_file_by_name,
+        method_names_by_file_id,
+    }
+}
+
+pub(super) fn resolve_java_call_target(
+    candidate: &str,
+    source_file_id: &str,
+    context: &JavaCallResolutionContext,
+) -> Option<String> {
+    let normalized = candidate.replace("::", ".").replace("->", ".");
+    let parts = normalized
+        .split('.')
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>();
+    if parts.len() < 2 {
+        return None;
+    }
+    let method_name = parts.last()?.trim();
+    if method_name.len() < 3 || is_call_keyword(method_name) {
+        return None;
+    }
+    let receiver_name = if parts.first().copied() == Some("this") && parts.len() >= 3 {
+        parts.get(1).copied()?
+    } else {
+        parts.first().copied()?
+    };
+    let target_file_id = context
+        .receiver_file_by_name
+        .get(receiver_name)
+        .or_else(|| context.type_file_by_name.get(receiver_name))?;
+    if target_file_id == source_file_id {
+        return None;
+    }
+    let target_methods = context.method_names_by_file_id.get(target_file_id)?;
+    if target_methods.contains(&method_name.to_ascii_lowercase()) {
+        Some(target_file_id.clone())
+    } else {
+        None
+    }
+}
+
 pub(super) fn c_include_specifier(line: &str) -> Option<String> {
     let trimmed = line.trim();
     if !trimmed.starts_with("#include") {

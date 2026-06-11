@@ -135,6 +135,8 @@ body {
   overflow: hidden;
   position: relative;
   --main-topbar-height: 44px;
+  --titlebar-window-controls-width: 116px;
+  --titlebar-toggle-side-gap: 12px;
   transition: grid-template-columns 220ms ease;
   font-family: var(--ui-font-family);
 }
@@ -203,6 +205,13 @@ body[data-panel-resizing="true"] .app {
 
 .titlebar-toggle-right {
   right: 10px;
+}
+
+.app.windows-desktop.layout-swapped
+  .titlebar-sidebar-toggle.titlebar-toggle-right {
+  right: calc(
+    10px + var(--titlebar-window-controls-width) + var(--titlebar-toggle-side-gap)
+  );
 }
 
 .titlebar-sidebar-toggle {

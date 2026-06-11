@@ -33,6 +33,9 @@ vi.mock("react-i18next", () => ({
         "threads.delete": "Delete",
         "sidebar.sessionActionsGroup": "New session",
         "sidebar.newSharedSession": "Shared Session",
+        "sidebar.codexProviderChoiceTitle": "Provider selection",
+        "sidebar.codexProviderDiskConfigLabel": "Disk config",
+        "sidebar.codexProviderCustomConfigLabel": "Custom config",
         "sidebar.workspaceActionsGroup": "Workspace actions",
         "sidebar.setWorkspaceAlias": "Set alias",
         "workspace.engineClaudeCode": "Claude Code",
@@ -430,6 +433,53 @@ describe("useSidebarMenus", () => {
 
     expect(sessionActions.map((action) => action.id)).not.toContain("new-session-gemini");
     expect(sessionActions.map((action) => action.id)).not.toContain("new-session-opencode");
+  });
+
+  it("labels Codex provider choices by config source", async () => {
+    const handlers = createHandlers();
+    const { result } = renderHook(() =>
+      useSidebarMenus({
+        ...handlers,
+        codexProviderProfiles: [
+          {
+            id: "provider-openai",
+            name: "OpenAI",
+            source: "managed",
+          },
+        ],
+      }),
+    );
+
+    await act(async () => {
+      const event = {
+        clientX: 160,
+        clientY: 120,
+        preventDefault: vi.fn(),
+        stopPropagation: vi.fn(),
+      } as unknown as Parameters<typeof result.current.showWorkspaceMenu>[0];
+      result.current.showWorkspaceMenu(event, workspace);
+    });
+
+    const codexAction = result.current.workspaceMenuState?.groups
+      .find((group) => group.id === "new-session")
+      ?.actions.find((action) => action.id === "new-session-codex");
+
+    expect(codexAction?.submenuTitle).toBe("Provider selection");
+    expect(
+      codexAction?.children?.map((child) => ({
+        id: child.id,
+        badgeLabel: child.badgeLabel,
+      })),
+    ).toEqual([
+      {
+        id: "new-session-codex-provider-__disk__",
+        badgeLabel: "Disk config",
+      },
+      {
+        id: "new-session-codex-provider-provider-openai",
+        badgeLabel: "Custom config",
+      },
+    ]);
   });
 
   it("triggers create action when Gemini entry is clicked", async () => {

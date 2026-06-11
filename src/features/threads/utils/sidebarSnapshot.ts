@@ -161,6 +161,18 @@ function normalizeThreadSummary(value: unknown): ThreadSummary | null {
   if (typeof value.sourceLabel === "string") {
     summary.sourceLabel = value.sourceLabel;
   }
+  if (typeof value.providerProfileId === "string") {
+    summary.providerProfileId = value.providerProfileId;
+  }
+  if (typeof value.providerProfileSource === "string") {
+    summary.providerProfileSource = value.providerProfileSource;
+  }
+  if (typeof value.providerProfileName === "string") {
+    summary.providerProfileName = value.providerProfileName;
+  }
+  if (typeof value.providerAvailability === "string") {
+    summary.providerAvailability = value.providerAvailability;
+  }
   if (typeof value.partialSource === "string") {
     summary.partialSource = value.partialSource;
   }

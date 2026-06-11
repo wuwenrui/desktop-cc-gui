@@ -2,12 +2,14 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
 import Bot from "lucide-react/dist/esm/icons/bot";
+import Brain from "lucide-react/dist/esm/icons/brain";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import ChevronUp from "lucide-react/dist/esm/icons/chevron-up";
 import FileCode2 from "lucide-react/dist/esm/icons/file-code-2";
 import GitCompareArrows from "lucide-react/dist/esm/icons/git-compare-arrows";
 import LayoutList from "lucide-react/dist/esm/icons/layout-list";
 import ListTodo from "lucide-react/dist/esm/icons/list-todo";
+import Package from "lucide-react/dist/esm/icons/package";
 import Search from "lucide-react/dist/esm/icons/search";
 import Terminal from "lucide-react/dist/esm/icons/terminal";
 import X from "lucide-react/dist/esm/icons/x";
@@ -15,6 +17,13 @@ import type { CSSProperties, ReactNode } from "react";
 import FileIcon from "../../../components/FileIcon";
 import { resolveWorkspaceRelativePath } from "../../../utils/workspacePaths";
 import { WorkspaceEditableDiffReviewSurface } from "../../git/components/WorkspaceEditableDiffReviewSurface";
+import {
+  buildSemanticDiffSummary,
+  type SemanticEvidenceRef,
+  type SemanticDiffSummary,
+  type SemanticDiffSummaryItem,
+  type TurnValidationEvidence,
+} from "../../git/utils/semanticDiffSummary";
 import type { CodeAnnotationBridgeProps } from "../../code-annotations/types";
 import { Markdown } from "../../messages/components/Markdown";
 import {
@@ -63,6 +72,14 @@ type SessionActivityTurnGroup = {
   occurredAt: number;
   events: SessionActivityEvent[];
 };
+type TurnArtifactTab = "artifacts" | "semantic";
+type TurnArtifactSummary = {
+  files: SessionActivityFileChangeEntry[];
+  semanticSummary: SemanticDiffSummary;
+  turnSemantic: string | null;
+  additions: number;
+  deletions: number;
+};
 type StickyChildSessionSummary = SessionActivitySessionSummary & {
   lastSeenAt: number;
 };
@@ -101,6 +118,11 @@ const tabIconMap: Record<ActivityTab, ReactNode> = {
   subagent: <Bot size={14} aria-hidden />,
   explore: <Search size={14} aria-hidden />,
   reasoning: <span className="codicon codicon-thinking session-activity-tab-codicon" aria-hidden />,
+};
+
+const turnArtifactTabIconMap: Record<TurnArtifactTab, ReactNode> = {
+  artifacts: <Package size={13} strokeWidth={2.15} aria-hidden />,
+  semantic: <Brain size={13} strokeWidth={2.15} aria-hidden />,
 };
 
 function readSoloFollowCoachDismissedByWorkspace() {
@@ -512,6 +534,147 @@ function sortTurnGroupEvents(events: SessionActivityEvent[]) {
   });
 }
 
+function mergeStatusLetter(
+  current: SessionActivityFileChangeEntry["statusLetter"],
+  next: SessionActivityFileChangeEntry["statusLetter"],
+) {
+  if (current === next) {
+    return current;
+  }
+  if (current === "D" || next === "D") {
+    return "D";
+  }
+  if (current === "A" || next === "A") {
+    return "A";
+  }
+  if (current === "R" || next === "R") {
+    return "R";
+  }
+  return "M";
+}
+
+function buildTurnValidationEvidence(events: SessionActivityEvent[]): TurnValidationEvidence[] {
+  return events
+    .filter((event) => event.kind === "command" && event.commandText?.trim())
+    .map((event) => ({
+      eventId: event.eventId,
+      commandText: event.commandText?.trim() ?? "",
+      commandDescription: event.commandDescription?.trim() || event.summary,
+      status: event.status,
+    }));
+}
+
+function buildTurnArtifactSummary(events: SessionActivityEvent[]): TurnArtifactSummary | null {
+  const filesByPath = new Map<string, SessionActivityFileChangeEntry>();
+  const turnSemantic =
+    events.find((event) => event.turnSemantic?.trim())?.turnSemantic?.trim() ?? null;
+  for (const event of events) {
+    if (event.kind !== "fileChange") {
+      continue;
+    }
+    const entries = event.fileChanges?.length
+      ? event.fileChanges
+      : event.filePath
+        ? [
+            {
+              filePath: event.filePath,
+              fileName: event.filePath.split(/[\\/]/).pop() ?? event.filePath,
+              statusLetter: event.fileChangeStatusLetter ?? "M",
+              additions: event.additions ?? 0,
+              deletions: event.deletions ?? 0,
+            },
+          ]
+        : [];
+    for (const entry of entries) {
+      const normalizedPath = entry.filePath.replace(/\\/g, "/");
+      const existing = filesByPath.get(normalizedPath);
+      if (!existing) {
+        filesByPath.set(normalizedPath, { ...entry, filePath: normalizedPath });
+        continue;
+      }
+      filesByPath.set(normalizedPath, {
+        ...existing,
+        statusLetter: mergeStatusLetter(existing.statusLetter, entry.statusLetter),
+        additions: Math.max(existing.additions, entry.additions),
+        deletions: Math.max(existing.deletions, entry.deletions),
+        diff: entry.diff?.trim() ? entry.diff : existing.diff,
+        line: existing.line ?? entry.line,
+        markers: existing.markers ?? entry.markers,
+      });
+    }
+  }
+  const files = Array.from(filesByPath.values());
+  if (files.length === 0) {
+    return null;
+  }
+  const semanticSummary = buildSemanticDiffSummary({
+    entries: files.map((file) => ({
+      path: file.filePath,
+      status: file.statusLetter,
+      diff: file.diff ?? "",
+    })),
+    validationEvidence: buildTurnValidationEvidence(events),
+  });
+  return {
+    files,
+    semanticSummary,
+    turnSemantic,
+    additions: files.reduce((total, file) => total + file.additions, 0),
+    deletions: files.reduce((total, file) => total + file.deletions, 0),
+  };
+}
+
+function countTurnArtifactFiles(events: SessionActivityEvent[]) {
+  const paths = new Set<string>();
+  for (const event of events) {
+    if (event.kind !== "fileChange") {
+      continue;
+    }
+    const entries = event.fileChanges?.length
+      ? event.fileChanges
+      : event.filePath
+        ? [{ filePath: event.filePath }]
+        : [];
+    for (const entry of entries) {
+      const normalizedPath = entry.filePath.replace(/\\/g, "/");
+      if (normalizedPath) {
+        paths.add(normalizedPath);
+      }
+    }
+  }
+  return paths.size;
+}
+
+function countVisibleActivityItems(events: SessionActivityEvent[], activeTab: ActivityTab) {
+  if (activeTab === "fileChange") {
+    return countTurnArtifactFiles(events);
+  }
+  return events.length;
+}
+
+function confidenceLabelKey(confidence: SemanticDiffSummaryItem["confidence"]) {
+  switch (confidence) {
+    case "high":
+      return "git.semanticDiff.confidenceHigh";
+    case "medium":
+      return "git.semanticDiff.confidenceMedium";
+    case "low":
+      return "git.semanticDiff.confidenceLow";
+  }
+}
+
+function semanticEvidenceRefLabel(ref: SemanticEvidenceRef) {
+  const baseLabel = ref.label ?? ref.commandText ?? ref.path ?? ref.id;
+  if (ref.path && ref.line && !baseLabel.endsWith(`:${ref.line}`)) {
+    return `${baseLabel}:${ref.line}`;
+  }
+  return baseLabel;
+}
+
+function primarySemanticEvidenceRef(item: SemanticDiffSummaryItem) {
+  return item.evidenceRefs?.[0] ?? null;
+}
+
 export function WorkspaceSessionActivityPanel({
   workspaceId,
   workspacePath = null,
@@ -530,6 +693,9 @@ export function WorkspaceSessionActivityPanel({
   const [activeTab, setActiveTab] = useState<ActivityTab>("all");
   const [expandedExpandableIds, setExpandedExpandableIds] = useState<Record<string, true>>({});
   const [collapsedTurnGroupIds, setCollapsedTurnGroupIds] = useState<Record<string, true>>({});
+  const [artifactTabByTurnGroupId, setArtifactTabByTurnGroupId] = useState<
+    Record<string, TurnArtifactTab>
+  >({});
   const [manuallyToggledTurnGroupIds, setManuallyToggledTurnGroupIds] = useState<Record<string, true>>(
     {},
   );
@@ -598,7 +764,10 @@ export function WorkspaceSessionActivityPanel({
         t,
         activeTab === "all"
           ? viewModel.timeline.length
-          : viewModel.timeline.filter((event) => event.kind === activeTab).length,
+          : countVisibleActivityItems(
+              viewModel.timeline.filter((event) => event.kind === activeTab),
+              activeTab,
+            ),
         viewModel.sessionSummaries.length,
         viewModel.isProcessing,
       ),
@@ -647,7 +816,7 @@ export function WorkspaceSessionActivityPanel({
     () => ({
       all: viewModel.timeline.length,
       command: viewModel.timeline.filter((event) => event.kind === "command").length,
-      fileChange: viewModel.timeline.filter((event) => event.kind === "fileChange").length,
+      fileChange: countTurnArtifactFiles(viewModel.timeline),
       task: viewModel.timeline.filter((event) => event.kind === "task").length,
       subagent: viewModel.timeline.filter((event) => event.kind === "subagent").length,
       explore: viewModel.timeline.filter((event) => event.kind === "explore").length,
@@ -1196,6 +1365,14 @@ export function WorkspaceSessionActivityPanel({
     onEnsureEditorFileMaximized?.();
   };
 
+  const openSemanticEvidenceRef = (ref: SemanticEvidenceRef) => {
+    if (!ref.path) {
+      return;
+    }
+    onOpenDiffPath(ref.path, ref.line ? { line: ref.line, column: 1 } : undefined, undefined);
+    onEnsureEditorFileMaximized?.();
+  };
+
   const handleOpenDiffPreview = (entry: SessionActivityFileChangeEntry) => {
     if (!entry.diff?.trim() && !workspaceId) {
       return;
@@ -1495,11 +1672,222 @@ export function WorkspaceSessionActivityPanel({
       </div>
     ) : null;
 
+  const renderSemanticSummaryList = (
+    summary: SemanticDiffSummary,
+    sectionKey: keyof Pick<SemanticDiffSummary, "intent" | "behavior" | "risks" | "validation">,
+  ) => (
+    <ul className="session-activity-semantic-list">
+      {summary[sectionKey].map((item) => {
+        const primaryRef = primarySemanticEvidenceRef(item);
+        const evidenceLabel = primaryRef
+          ? semanticEvidenceRefLabel(primaryRef)
+          : t(item.evidenceKey, item.values);
+        const extraEvidenceCount = Math.max((item.evidenceRefs?.length ?? 0) - 1, 0);
+        return (
+          <li key={`${sectionKey}-${item.textKey}-${JSON.stringify(item.values ?? {})}-${item.source ?? "rule"}`}>
+            <span className="session-activity-semantic-text">
+              {t(item.textKey, item.values)}
+            </span>
+            <span className="session-activity-semantic-meta">
+              <span className="session-activity-semantic-evidence-label">
+                <span>{t("git.semanticDiff.evidence.prefix")}</span>
+                {primaryRef?.path ? (
+                  <button
+                    type="button"
+                    className="session-activity-semantic-evidence-link"
+                    title={evidenceLabel}
+                    onClick={(clickEvent) => {
+                      clickEvent.stopPropagation();
+                      openSemanticEvidenceRef(primaryRef);
+                    }}
+                  >
+                    {evidenceLabel}
+                  </button>
+                ) : (
+                  <span>{evidenceLabel}</span>
+                )}
+                {extraEvidenceCount > 0 ? (
+                  <span className="session-activity-semantic-evidence-more">
+                    {t("git.semanticDiff.evidence.moreRefs", { count: extraEvidenceCount })}
+                  </span>
+                ) : null}
+              </span>
+              <span className="session-activity-semantic-confidence">
+                {t(confidenceLabelKey(item.confidence))}
+              </span>
+              {item.source === "ai" ? (
+                <span className="session-activity-semantic-source">
+                  {t("git.semanticDiff.source.ai")}
+                </span>
+              ) : item.source === "command" ? (
+                <span className="session-activity-semantic-source">
+                  {t("git.semanticDiff.source.command")}
+                </span>
+              ) : null}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+
+  const renderTurnArtifacts = (group: SessionActivityTurnGroup) => {
+    const artifactSummary = buildTurnArtifactSummary(group.events);
+    if (!artifactSummary) {
+      return null;
+    }
+    const activeArtifactTab = artifactTabByTurnGroupId[group.id] ?? "artifacts";
+    const signedAdditions = formatSignedCount(artifactSummary.additions, "+");
+    const signedDeletions = formatSignedCount(artifactSummary.deletions, "-");
+    return (
+      <article className="session-activity-turn-artifacts">
+        <div className="session-activity-turn-artifacts-header">
+          <div className="session-activity-turn-artifacts-title">
+            <div className="session-activity-turn-artifacts-kicker">
+              {t("activityPanel.artifacts.kicker")}
+            </div>
+            <h4>{t("activityPanel.artifacts.title")}</h4>
+          </div>
+          <div className="session-activity-turn-artifacts-stats">
+            <span>{t("activityPanel.artifacts.fileCount", { count: artifactSummary.files.length })}</span>
+            {signedAdditions ? <span className="is-add">{signedAdditions}</span> : null}
+            {signedDeletions ? <span className="is-del">{signedDeletions}</span> : null}
+          </div>
+          <div
+            className="session-activity-turn-artifacts-tabs"
+            role="tablist"
+            aria-label={t("activityPanel.artifacts.tabsAriaLabel")}
+          >
+            {(["artifacts", "semantic"] as const).map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                role="tab"
+                aria-selected={activeArtifactTab === tab}
+                className={`session-activity-turn-artifacts-tab${activeArtifactTab === tab ? " is-active" : ""}`}
+                onClick={() =>
+                  setArtifactTabByTurnGroupId((current) => ({
+                    ...current,
+                    [group.id]: tab,
+                  }))
+                }
+              >
+                <span className="session-activity-turn-artifacts-tab-icon" aria-hidden>
+                  {turnArtifactTabIconMap[tab]}
+                </span>
+                <span>
+                  {tab === "artifacts"
+                    ? t("activityPanel.artifacts.tabs.artifacts")
+                    : t("activityPanel.artifacts.tabs.semantic")}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+        {activeArtifactTab === "artifacts" ? (
+          <div className="session-activity-file-list is-turn-artifacts">
+            {artifactSummary.files.map((fileChangeEntry) => {
+              const fileSignedAdditions = formatSignedCount(fileChangeEntry.additions, "+");
+              const fileSignedDeletions = formatSignedCount(fileChangeEntry.deletions, "-");
+              return (
+                <div
+                  key={`${group.id}:${fileChangeEntry.filePath}`}
+                  className="session-activity-file-row"
+                >
+                  <button
+                    type="button"
+                    className="session-activity-file-row-main"
+                    title={fileChangeEntry.filePath}
+                    onClick={(clickEvent) => {
+                      clickEvent.stopPropagation();
+                      openActivityFile(fileChangeEntry);
+                    }}
+                  >
+                    <span
+                      className={`session-activity-file-kind-badge is-${fileChangeEntry.statusLetter.toLowerCase()}`}
+                      aria-hidden
+                    >
+                      {fileChangeEntry.statusLetter}
+                    </span>
+                    <span className="session-activity-file-row-icon" aria-hidden>
+                      <FileIcon filePath={fileChangeEntry.filePath} />
+                    </span>
+                    <span className="session-activity-file-row-copy">
+                      <span className="session-activity-file-row-name">
+                        {fileChangeEntry.fileName}
+                      </span>
+                    </span>
+                    {fileSignedAdditions || fileSignedDeletions ? (
+                      <span className="session-activity-file-row-stats">
+                        {fileSignedAdditions ? (
+                          <span className="is-add">{fileSignedAdditions}</span>
+                        ) : null}
+                        {fileSignedDeletions ? (
+                          <span className="is-del">{fileSignedDeletions}</span>
+                        ) : null}
+                      </span>
+                    ) : null}
+                  </button>
+                  <button
+                    type="button"
+                    className="session-activity-file-row-action"
+                    aria-label={t("git.previewModalAction")}
+                    title={t("git.previewModalAction")}
+                    disabled={!fileChangeEntry.diff?.trim() && !workspaceId}
+                    onClick={(clickEvent) => {
+                      clickEvent.stopPropagation();
+                      handleOpenDiffPreview(fileChangeEntry);
+                    }}
+                  >
+                    <GitCompareArrows
+                      size={18}
+                      strokeWidth={2.25}
+                      aria-hidden
+                      className="session-activity-file-row-action-icon"
+                    />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="session-activity-turn-semantic" role="tabpanel">
+            {artifactSummary.turnSemantic ? (
+              <div className="session-activity-turn-semantic-section is-turn-meaning">
+                <h5>{t("activityPanel.artifacts.turnSemanticTitle")}</h5>
+                <p className="session-activity-turn-semantic-text">
+                  {artifactSummary.turnSemantic}
+                </p>
+              </div>
+            ) : null}
+            <div className="session-activity-turn-semantic-section is-intent">
+              <h5>{t("git.semanticDiff.intentTitle")}</h5>
+              {renderSemanticSummaryList(artifactSummary.semanticSummary, "intent")}
+            </div>
+            <div className="session-activity-turn-semantic-section is-behavior">
+              <h5>{t("git.semanticDiff.behaviorTitle")}</h5>
+              {renderSemanticSummaryList(artifactSummary.semanticSummary, "behavior")}
+            </div>
+            <div className="session-activity-turn-semantic-section is-risk">
+              <h5>{t("git.semanticDiff.riskTitle")}</h5>
+              {renderSemanticSummaryList(artifactSummary.semanticSummary, "risks")}
+            </div>
+            <div className="session-activity-turn-semantic-section is-validation">
+              <h5>{t("git.semanticDiff.validationTitle")}</h5>
+              {renderSemanticSummaryList(artifactSummary.semanticSummary, "validation")}
+            </div>
+          </div>
+        )}
+      </article>
+    );
+  };
+
   const renderTimelineEvent = (event: SessionActivityEvent) => {
+    if (event.kind === "fileChange") {
+      return null;
+    }
     const isExpanded = Boolean(expandedExpandableIds[event.eventId]);
     const isRunning = event.status === "running";
-    const signedAdditions = formatSignedCount(event.additions, "+");
-    const signedDeletions = formatSignedCount(event.deletions, "-");
     const showThreadChip = event.sessionRole === "child";
     const isExpandable = canExpandEvent(event);
     const collapsedSummary = getCollapsedCommandSummary(event, t);
@@ -1549,14 +1937,6 @@ export function WorkspaceSessionActivityPanel({
             >
               <span className="session-activity-card-copy">
                 <span className="session-activity-card-title">
-                  {event.kind === "fileChange" && event.fileChangeStatusLetter ? (
-                    <span
-                      className={`session-activity-file-kind-badge is-${event.fileChangeStatusLetter.toLowerCase()}`}
-                      aria-hidden
-                    >
-                      {event.fileChangeStatusLetter}
-                    </span>
-                  ) : null}
                   <span>{displaySummary}</span>
                 </span>
                 <span className="session-activity-card-meta">
@@ -1584,13 +1964,6 @@ export function WorkspaceSessionActivityPanel({
                   ) : null}
                 </span>
               </span>
-
-              {event.kind === "fileChange" && (signedAdditions || signedDeletions) ? (
-                <span className="session-activity-file-stats">
-                  {signedAdditions ? <span className="is-add">{signedAdditions}</span> : null}
-                  {signedDeletions ? <span className="is-del">{signedDeletions}</span> : null}
-                </span>
-              ) : null}
             </button>
 
             {isExpandable ? (
@@ -1616,74 +1989,6 @@ export function WorkspaceSessionActivityPanel({
               </button>
             ) : null}
           </div>
-
-          {event.kind === "fileChange" && event.fileChanges?.length ? (
-            <div className="session-activity-file-list">
-              {event.fileChanges.map((fileChangeEntry) => {
-                const fileSignedAdditions = formatSignedCount(fileChangeEntry.additions, "+");
-                const fileSignedDeletions = formatSignedCount(fileChangeEntry.deletions, "-");
-                return (
-                  <div
-                    key={`${event.eventId}:${fileChangeEntry.filePath}`}
-                    className="session-activity-file-row"
-                  >
-                    <button
-                      type="button"
-                      className="session-activity-file-row-main"
-                      title={fileChangeEntry.filePath}
-                      onClick={(clickEvent) => {
-                        clickEvent.stopPropagation();
-                        openActivityFile(fileChangeEntry);
-                      }}
-                    >
-                      <span
-                        className={`session-activity-file-kind-badge is-${fileChangeEntry.statusLetter.toLowerCase()}`}
-                        aria-hidden
-                      >
-                        {fileChangeEntry.statusLetter}
-                      </span>
-                      <span className="session-activity-file-row-icon" aria-hidden>
-                        <FileIcon filePath={fileChangeEntry.filePath} />
-                      </span>
-                      <span className="session-activity-file-row-copy">
-                        <span className="session-activity-file-row-name">
-                          {fileChangeEntry.fileName}
-                        </span>
-                      </span>
-                      {fileSignedAdditions || fileSignedDeletions ? (
-                        <span className="session-activity-file-row-stats">
-                          {fileSignedAdditions ? (
-                            <span className="is-add">{fileSignedAdditions}</span>
-                          ) : null}
-                          {fileSignedDeletions ? (
-                            <span className="is-del">{fileSignedDeletions}</span>
-                          ) : null}
-                        </span>
-                      ) : null}
-                    </button>
-                    <button
-                      type="button"
-                      className="session-activity-file-row-action"
-                      aria-label={t("git.previewModalAction")}
-                      title={t("git.previewModalAction")}
-                      disabled={!fileChangeEntry.diff?.trim() && !workspaceId}
-                      onClick={(clickEvent) => {
-                        clickEvent.stopPropagation();
-                        handleOpenDiffPreview(fileChangeEntry);
-                      }}
-                    >
-                      <GitCompareArrows
-                        size={18}
-                        strokeWidth={2.25}
-                        aria-hidden
-                        className="session-activity-file-row-action-icon"
-                      />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          ) : null}
 
           {isExpandable && isExpanded ? (
             <div className="session-activity-preview">
@@ -2022,6 +2327,7 @@ export function WorkspaceSessionActivityPanel({
               </button>
               {!collapsedTurnGroupIds[group.id] ? (
                 <div className="session-activity-turn-group-events">
+                  {renderTurnArtifacts(group)}
                   {group.events.map((event) => renderTimelineEvent(event))}
                 </div>
               ) : null}

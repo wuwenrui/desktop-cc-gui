@@ -169,6 +169,32 @@ describe("useThreadTurnEvents", () => {
     expect(safeMessageActivity).toHaveBeenCalled();
   });
 
+  it("keeps codex provider metadata from thread started events", () => {
+    const { result, dispatch } = makeOptions();
+
+    act(() => {
+      result.current.onThreadStarted("ws-1", {
+        id: "thread-provider-a",
+        preview: "A provider thread",
+        providerProfileId: "provider-a",
+        providerProfileSource: "managed",
+        providerProfileName: "AskUs",
+        providerAvailability: "available",
+      });
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "ensureThread",
+      workspaceId: "ws-1",
+      threadId: "thread-provider-a",
+      engine: "codex",
+      providerProfileId: "provider-a",
+      providerProfileSource: "managed",
+      providerProfileName: "AskUs",
+      providerAvailability: "available",
+    });
+  });
+
   it("does not override custom thread names on thread started", () => {
     const { result, dispatch, getCustomName } = makeOptions();
     getCustomName.mockReturnValue("Custom name");

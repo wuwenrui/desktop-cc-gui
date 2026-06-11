@@ -102,7 +102,7 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     effectiveUiMode, engineModelsAsOptions, engineSelectedModelIdByType, engineSelection, engineStatuses, ensureLaunchTerminal, ensureTerminalWithTitle, ensureWorkspaceThreadListLoaded,
     entry, errorToasts, existing, exitDiffView, expandRightPanel, expandSidebar, filePanelMode, filePassword,
     fileReferenceMode, fileStatus, fileTreeLoadError, files, finishedByAgentUpdate, finishedByDuration, firstAnswer, flushDraggedHeight, force,
-    forkThreadForWorkspace, getGlobalPromptsDir, getPinTimestamp, getThreadRows, getWorkspaceGroupName, getWorkspacePromptsDir, gitCommitDiffs, gitDiffListView,
+    forkThreadForWorkspace, forkSessionFromMessageForWorkspace, getGlobalPromptsDir, getPinTimestamp, getThreadRows, getWorkspaceGroupName, getWorkspacePromptsDir, gitCommitDiffs, gitDiffListView,
     gitDiffViewStyle, gitHistoryPanelHeight, gitHistoryPanelHeightRef, gitIssues, gitIssuesError, gitIssuesLoading, gitIssuesTotal, gitLogAhead,
     gitLogAheadEntries, gitLogBehind, gitLogBehindEntries, gitLogEntries, gitLogError, gitLogLoading, gitLogTotal, gitLogUpstream,
     gitPanelMode, gitPullRequestComments, gitPullRequestCommentsError, gitPullRequestCommentsLoading, gitPullRequestDiffs, gitPullRequestDiffsError, gitPullRequestDiffsLoading, gitPullRequests,
@@ -170,7 +170,7 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     terminalTabs, textareaHeight, threadAccessMode, threadChanged, threadId, threadItemsByThread, threadListCursorByWorkspace, threadListLoadingByWorkspace,
     threadListPagingByWorkspace, threadMode, threadParentById, threadStatusById, historyLoadingByThreadId, historyRestoredAtMsByThread, threads, threadsByWorkspace, timelinePlan, title,
     toggleCompletionEmailIntent, toggleSoloMode, tokenUsageByThread, triggerAutoThreadTitle, trimmed, uiMode, uncachedWorkspaceIds, ungroupedLabel, uniquePaths,
-    unpinThread, updateCloneCopyName, updateCustomInstructions, updatePrompt, updateSharedSessionEngineSelection, updateWorkspaceCodexBin, updateWorkspaceSettings, updateWorktreeBaseRef, updateWorktreeBranch,
+    unpinThread, updateCloneCopyName, updateCustomInstructions, updatePrompt, updateSharedSessionEngineSelection, updateThreadParent, updateWorkspaceCodexBin, updateWorkspaceSettings, updateWorktreeBaseRef, updateWorktreeBranch,
     updateWorktreePublishToOrigin, updateWorktreeSetupScript, updatedAt, updaterState, useSuggestedCloneCopiesFolder, userInputRequests, validModel, viewportHeight,
     wasProcessing, workspace, workspaceActivity, workspaceDropTargetRef, workspaceFilesPollingEnabled, workspaceGroups, workspaceHomeWorkspaceId, workspaceId,
     workspaceNameByPath, workspaceSearchSources, workspaces, workspacesById, workspacesByPath, worktreeApplyError, worktreeApplyLoading,
@@ -680,6 +680,7 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     sessionRadarRecentCompletedSessions,
     activeRateLimits,
     usageShowRemaining: appSettings.usageShowRemaining,
+    showSidebarProviderLabels: appSettings.showSidebarProviderLabels,
     onRefreshAccountRateLimits: handleRefreshAccountRateLimits,
     showMessageAnchors: appSettings.showMessageAnchors,
     accountInfo: activeAccount,
@@ -1196,8 +1197,29 @@ export function useAppShellLayoutNodesSection(ctx: any) {
       }
     },
     onRewind: handleRewindFromMessage,
-    onForkFromMessage: async () => {
-      await startFork("/fork");
+    onForkFromMessage: async (messageId, options) => {
+      if (!activeWorkspace || !activeThreadId) {
+        return;
+      }
+      const forkedThreadId = await forkSessionFromMessageForWorkspace(
+        activeWorkspace.id,
+        activeThreadId,
+        messageId,
+        {
+          activate: true,
+          mode: "messages-only",
+          providerProfileId: options?.providerProfileId ?? null,
+          providerProfile: options?.providerProfile ?? null,
+        },
+      );
+      if (!forkedThreadId) {
+        throw new Error("Fork did not return a child conversation.");
+      }
+      if (forkedThreadId && forkedThreadId !== activeThreadId) {
+        if (typeof updateThreadParent === "function") {
+          updateThreadParent(activeThreadId, [forkedThreadId]);
+        }
+      }
     },
     canStop: canInterrupt,
     isReviewing,

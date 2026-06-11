@@ -20,6 +20,10 @@ export interface WorkspaceSessionCatalogEntry {
   threadKind: string;
   source?: string | null;
   sourceLabel?: string | null;
+  providerProfileId?: string | null;
+  providerProfileSource?: string | null;
+  providerProfileName?: string | null;
+  providerAvailability?: string | null;
   sourceCompleteness?: WorkspaceSessionSourceCompleteness | null;
   sourceStatusReason?: string | null;
   sizeBytes?: number | null;
@@ -59,6 +63,7 @@ export type WorkspaceSessionSourceCompleteness =
 
 export interface WorkspaceSessionCatalogSourceStatus {
   engine: string;
+  sourceKind?: string | null;
   completeness: WorkspaceSessionSourceCompleteness;
   reason?: string | null;
   scannedCandidates?: number | null;

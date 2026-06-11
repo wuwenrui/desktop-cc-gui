@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { isDefaultWorkspacePath } from "./defaultWorkspace";
+import {
+  getDefaultWorkspaceCandidatePaths,
+  isDefaultWorkspacePath,
+} from "./defaultWorkspace";
 
 describe("defaultWorkspace", () => {
   it("matches ccgui default workspace path", () => {
@@ -32,5 +35,20 @@ describe("defaultWorkspace", () => {
     expect(isDefaultWorkspacePath("/Users/chen/.codemoss/workspace/project-a")).toBe(
       false,
     );
+  });
+
+  it("builds default workspace candidate paths from a normalized home path", () => {
+    expect(getDefaultWorkspaceCandidatePaths("/Users/chen/")).toEqual([
+      "/Users/chen/.ccgui/workspace",
+      "/Users/chen/.mossx/workspace",
+      "/Users/chen/.codemoss/workspace",
+      "/Users/chen/com.zhukunpenglinyutong.ccgui/workspace",
+      "/Users/chen/com.zhukunpenglinyutong.mossx/workspace",
+      "/Users/chen/com.zhukunpenglinyutong.codemoss/workspace",
+    ]);
+  });
+
+  it("returns no candidate paths when home path is unavailable", () => {
+    expect(getDefaultWorkspaceCandidatePaths("")).toEqual([]);
   });
 });

@@ -70,7 +70,7 @@ body[data-git-history-resizing="true"] .git-history-dock-resizer::after {
   --git-filetree-tree-line-color: color-mix(in srgb, var(--text-muted, #64748b) 34%, transparent);
   --git-filetree-row-hover-bg: color-mix(in srgb, var(--surface-control-hover, #263044) 56%, transparent);
   --git-filetree-row-active-bg: color-mix(in srgb, var(--accent-primary, #2563eb) 17%, transparent);
-  --git-filetree-badge-font-size: 10px;
+  --git-filetree-badge-font-size: var(--client-caption-font-size, 10px);
   --git-filetree-badge-gap: 2px;
   --git-filetree-badge-pad-y: 1px;
   --git-filetree-badge-pad-x: 8px;
@@ -111,7 +111,7 @@ body[data-git-history-resizing="true"] .git-history-dock-resizer::after {
 
 .git-history-toolbar h2 {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--client-title-font-size, 14px);
   font-weight: 600;
   color: var(--text-stronger);
 }
@@ -121,6 +121,6 @@ body[data-git-history-resizing="true"] .git-history-dock-resizer::after {
 }
 
 .git-history-empty-inline-text {
-  font-size: 12px;
+  font-size: var(--client-content-font-size, 12px);
   color: var(--text-secondary);
 }

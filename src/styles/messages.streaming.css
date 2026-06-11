@@ -1,6 +1,6 @@
 .thinking {
   padding: 0 24px;
-  font-size: 12px;
+  font-size: var(--message-meta-font-size);
   color: var(--text-fainter);
   margin-bottom: 12px;
 }

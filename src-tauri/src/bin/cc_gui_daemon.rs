@@ -146,6 +146,48 @@ mod codex {
     pub(crate) mod launch_profile {
         pub(crate) use crate::codex_launch_profile::*;
     }
+    pub(crate) mod provider_profile {
+        use crate::session_management::CodexProviderBinding;
+
+        pub(crate) const CODEX_DISK_PROVIDER_PROFILE_ID: &str = "__disk__";
+        pub(crate) const CODEX_DISK_PROVIDER_PROFILE_NAME: &str = "磁盘 .codex 配置";
+
+        pub(crate) fn codex_provider_binding_for_profile_id(
+            provider_profile_id: &str,
+        ) -> CodexProviderBinding {
+            let provider_profile_id = provider_profile_id.trim();
+            if provider_profile_id.is_empty()
+                || provider_profile_id == CODEX_DISK_PROVIDER_PROFILE_ID
+            {
+                return CodexProviderBinding {
+                    provider_profile_id: CODEX_DISK_PROVIDER_PROFILE_ID.to_string(),
+                    provider_profile_source: "disk".to_string(),
+                    provider_profile_name: CODEX_DISK_PROVIDER_PROFILE_NAME.to_string(),
+                    provider_availability: "available".to_string(),
+                };
+            }
+            CodexProviderBinding {
+                provider_profile_id: provider_profile_id.to_string(),
+                provider_profile_source: "managed".to_string(),
+                provider_profile_name: provider_profile_id.to_string(),
+                provider_availability: "unavailable".to_string(),
+            }
+        }
+
+        pub(crate) fn codex_runtime_key(workspace_id: &str, provider_profile_id: &str) -> String {
+            let provider_profile_id = provider_profile_id.trim();
+            let provider_profile_id = if provider_profile_id.is_empty() {
+                CODEX_DISK_PROVIDER_PROFILE_ID
+            } else {
+                provider_profile_id
+            };
+            format!("codex::{workspace_id}::{provider_profile_id}")
+        }
+
+        pub(crate) fn legacy_codex_runtime_key(workspace_id: &str) -> String {
+            workspace_id.to_string()
+        }
+    }
     pub(crate) mod rewind {
         pub(crate) use crate::codex_rewind::*;
     }
@@ -877,7 +919,9 @@ async fn handle_rpc_request(
         "read_workspace_file_preview" => {
             let workspace_id = parse_string(&params, "workspaceId")?;
             let path = parse_string(&params, "path")?;
-            let response = state.read_workspace_file_preview(workspace_id, path).await?;
+            let response = state
+                .read_workspace_file_preview(workspace_id, path)
+                .await?;
             serde_json::to_value(response).map_err(|err| err.to_string())
         }
         "list_external_spec_tree" => {
@@ -1567,12 +1611,15 @@ async fn handle_rpc_request(
         }
         "start_thread" => {
             let workspace_id = parse_string(&params, "workspaceId")?;
+            let provider_profile_id = parse_optional_string(&params, "providerProfileId");
             let auto_session =
                 serde_json::from_value::<Option<session_management::AutoSessionMetadata>>(
                     params.get("autoSession").cloned().unwrap_or(Value::Null),
                 )
                 .map_err(|err| err.to_string())?;
-            state.start_thread(workspace_id, auto_session).await
+            state
+                .start_thread(workspace_id, auto_session, provider_profile_id)
+                .await
         }
         "list_claude_sessions" => {
             let workspace_path = parse_string(&params, "workspacePath")?;
@@ -1821,7 +1868,10 @@ async fn handle_rpc_request(
             let workspace_id = parse_string(&params, "workspaceId")?;
             let thread_id = parse_string(&params, "threadId")?;
             let message_id = parse_optional_string(&params, "messageId");
-            state.fork_thread(workspace_id, thread_id, message_id).await
+            let provider_profile_id = parse_optional_string(&params, "providerProfileId");
+            state
+                .fork_thread(workspace_id, thread_id, message_id, provider_profile_id)
+                .await
         }
         "rewind_codex_thread" => {
             let workspace_id = parse_string(&params, "workspaceId")?;

@@ -58,9 +58,9 @@ function isFullTaskRunSurfaceSource(
 }
 
 const STATUS_PRIORITY: Record<TaskRunStatus, number> = {
-  blocked: 100,
-  failed: 95,
-  waiting_input: 90,
+  waiting_input: 100,
+  blocked: 95,
+  failed: 90,
   running: 80,
   planning: 70,
   queued: 60,

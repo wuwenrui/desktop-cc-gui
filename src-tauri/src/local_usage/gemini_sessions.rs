@@ -445,6 +445,11 @@ fn parse_gemini_session_summary(path: &Path) -> Result<Option<LocalUsageSessionS
         summary,
         source: Some("gemini".to_string()),
         provider: Some("google".to_string()),
+        provider_profile_id: None,
+        provider_profile_source: None,
+        provider_profile_name: None,
+        provider_availability: None,
+        physical_path: Some(path.to_string_lossy().to_string()),
         file_size_bytes: fs::metadata(path).ok().map(|metadata| metadata.len()),
         modified_lines: 0,
     }))

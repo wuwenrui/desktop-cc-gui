@@ -2,14 +2,34 @@ import { useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { EngineType } from '../../../../types';
 import { EngineIcon } from '../../../engine/components/EngineIcon';
+import type { ModelInfo } from './types';
+
+const PROMPT_ENHANCER_DIALOG_ENGINE_OPTIONS: EngineType[] = [
+  'claude',
+  'codex',
+  'gemini',
+  'opencode',
+];
 
 interface PromptEnhancerDialogProps {
   isOpen: boolean;
   isLoading: boolean;
   loadingEngine: EngineType;
+  selectedEngine: EngineType;
+  selectedModel: string;
+  modelOptions: ModelInfo[];
+  timeoutSeconds: number;
+  timeoutLimits: {
+    minSeconds: number;
+    maxSeconds: number;
+  };
   originalPrompt: string;
   enhancedPrompt: string;
   canUseEnhanced: boolean;
+  onEngineChange: (engine: EngineType) => void;
+  onModelChange: (modelId: string) => void;
+  onTimeoutChange: (timeoutSeconds: number) => void;
+  onRunEnhancement: () => void;
   onUseEnhanced: () => void;
   onKeepOriginal: () => void;
   onClose: () => void;
@@ -23,17 +43,26 @@ export const PromptEnhancerDialog = ({
   isOpen,
   isLoading,
   loadingEngine,
+  selectedEngine,
+  selectedModel,
+  modelOptions,
+  timeoutSeconds,
+  timeoutLimits,
   originalPrompt,
   enhancedPrompt,
   canUseEnhanced,
+  onEngineChange,
+  onModelChange,
+  onTimeoutChange,
+  onRunEnhancement,
   onUseEnhanced,
   onKeepOriginal,
   onClose,
 }: PromptEnhancerDialogProps) => {
   const { t } = useTranslation();
 
-  const loadingLabel = (() => {
-    switch (loadingEngine) {
+  const getEngineLabel = (engine: EngineType) => {
+    switch (engine) {
       case 'claude':
         return 'Claude Code';
       case 'codex':
@@ -45,7 +74,9 @@ export const PromptEnhancerDialog = ({
       default:
         return 'AI';
     }
-  })();
+  };
+
+  const loadingLabel = getEngineLabel(loadingEngine);
 
   // Handle keyboard events
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -91,6 +122,64 @@ export const PromptEnhancerDialog = ({
 
         {/* Content area */}
         <div className="prompt-enhancer-content">
+          <div className="prompt-enhancer-config" aria-label={t('promptEnhancer.runSettings')}>
+            <label className="prompt-enhancer-field">
+              <span>{t('promptEnhancer.provider')}</span>
+              <select
+                className="prompt-enhancer-select"
+                value={selectedEngine}
+                onChange={(event) => onEngineChange(event.target.value as EngineType)}
+                disabled={isLoading}
+              >
+                {PROMPT_ENHANCER_DIALOG_ENGINE_OPTIONS.map((engine) => (
+                  <option key={engine} value={engine}>
+                    {getEngineLabel(engine)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="prompt-enhancer-field">
+              <span>{t('promptEnhancer.model')}</span>
+              <select
+                className="prompt-enhancer-select"
+                value={selectedModel}
+                onChange={(event) => onModelChange(event.target.value)}
+                disabled={isLoading || modelOptions.length === 0}
+              >
+                {modelOptions.length === 0 ? (
+                  <option value="">{t('promptEnhancer.noModel')}</option>
+                ) : (
+                  modelOptions.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.label || model.id}
+                    </option>
+                  ))
+                )}
+              </select>
+            </label>
+            <label className="prompt-enhancer-field">
+              <span>{t('promptEnhancer.timeoutSeconds')}</span>
+              <input
+                className="prompt-enhancer-timeout"
+                type="number"
+                min={timeoutLimits.minSeconds}
+                max={timeoutLimits.maxSeconds}
+                step={1}
+                value={timeoutSeconds}
+                onChange={(event) => onTimeoutChange(Number(event.target.value))}
+                disabled={isLoading}
+              />
+            </label>
+            <button
+              className="prompt-enhancer-btn primary prompt-enhancer-run-btn"
+              onClick={onRunEnhancement}
+              disabled={isLoading || !originalPrompt.trim()}
+            >
+              <span className="codicon codicon-play" />
+              {t('promptEnhancer.runEnhancement')}
+            </button>
+          </div>
+
           {/* Original prompt */}
           <div className="prompt-section">
             <div className="prompt-section-header">
@@ -119,7 +208,7 @@ export const PromptEnhancerDialog = ({
                   <span>{`${loadingLabel} · ${t('promptEnhancer.enhancing')}`}</span>
                 </div>
               ) : (
-                enhancedPrompt || t('promptEnhancer.enhancing')
+                enhancedPrompt || t('promptEnhancer.readyToEnhance')
               )}
             </div>
           </div>

@@ -18,6 +18,8 @@ mod installer;
 pub(crate) mod launch_profile;
 mod mcp_config;
 mod model_selection;
+mod provider_fork;
+pub(crate) mod provider_profile;
 pub(crate) mod rewind;
 mod run_metadata;
 mod session_runtime;
@@ -28,7 +30,7 @@ pub(crate) mod thread_mode_state;
 use self::args::resolve_workspace_codex_args;
 use self::commit_message::build_commit_message_prompt;
 pub(crate) use self::doctor::{run_claude_doctor_with_settings, run_codex_doctor_with_settings};
-pub(crate) use self::home::resolve_workspace_codex_home;
+pub(crate) use self::home::{resolve_default_codex_home, resolve_workspace_codex_home};
 pub(crate) use self::installer::{
     build_cli_install_plan_with_backend, run_cli_installer_with_progress, CliInstallAction,
     CliInstallBackend, CliInstallEngine, CliInstallProgressEvent, CliInstallStrategy,
@@ -37,6 +39,10 @@ use self::mcp_config::{
     list_global_mcp_servers as list_global_mcp_servers_impl, GlobalMcpServerEntry,
 };
 use self::model_selection::{normalize_model_id, pick_model_from_model_list_response};
+use self::provider_fork::{
+    copy_native_fork_history_to_selected_provider, enrich_native_provider_fork_response,
+};
+use self::provider_profile::{resolve_codex_provider_profile, CODEX_DISK_PROVIDER_PROFILE_ID};
 use self::run_metadata::{extract_json_value, sanitize_run_worktree_name};
 use self::thread_listing::{build_unified_codex_thread_page, resolve_workspace_fallback_model};
 use crate::backend::app_server::{
@@ -49,6 +55,7 @@ use crate::engine::SendMessageParams;
 use crate::event_sink::TauriEventSink;
 use crate::local_usage;
 use crate::remote_backend;
+use crate::session_management::CodexProviderBinding;
 use crate::shared::workspaces_core::disconnect_workspace_session_core;
 use crate::shared::{codex_core, thread_titles_core};
 use crate::state::AppState;
@@ -84,18 +91,59 @@ async fn record_hidden_codex_helper_thread(
     .await;
 }
 
+async fn resolve_thread_provider_profile_id(
+    state: &AppState,
+    workspace_id: &str,
+    thread_id: &str,
+) -> String {
+    let metadata = crate::session_management::read_codex_provider_bindings(
+        state.storage_path.as_path(),
+        workspace_id,
+    )
+    .unwrap_or_default();
+    let stable_key = format!("codex::{workspace_id}::{thread_id}");
+    metadata
+        .get(&stable_key)
+        .or_else(|| metadata.get(thread_id))
+        .or_else(|| metadata.get(&format!("codex:{thread_id}")))
+        .map(|binding| binding.provider_profile_id.clone())
+        .unwrap_or_else(|| CODEX_DISK_PROVIDER_PROFILE_ID.to_string())
+}
+
+async fn record_codex_provider_binding(
+    state: &AppState,
+    workspace_id: &str,
+    thread_id: &str,
+    provider_profile_id: &str,
+) {
+    let binding = match resolve_codex_provider_profile(Some(provider_profile_id)) {
+        Ok(profile) => profile.binding(),
+        Err(_) => CodexProviderBinding::disk().unavailable(),
+    };
+    let _ = crate::session_management::record_codex_provider_binding_core(
+        &state.workspaces,
+        state.storage_path.as_path(),
+        workspace_id.to_string(),
+        thread_id.to_string(),
+        binding,
+    )
+    .await;
+}
+
 pub(crate) use self::session_runtime::ensure_codex_session;
 pub(crate) use self::session_runtime::{
     attach_hook_safe_fallback_metadata, create_session_runtime_recovering_error,
-    ensure_codex_session_without_session_hooks, is_hook_safe_fallback_trigger,
-    is_stopping_runtime_race_error,
+    ensure_codex_session_for_provider, ensure_codex_session_without_session_hooks_for_provider,
+    is_hook_safe_fallback_trigger, is_stopping_runtime_race_error,
 };
-pub(crate) use self::start_thread_retry::start_thread_with_runtime_retry;
 #[cfg(test)]
 use self::start_thread_retry::{
     run_start_thread_with_hook_safe_fallback,
     run_start_thread_with_hook_safe_fallback_and_recovery_probe, run_start_thread_with_retry,
     run_start_thread_with_retry_and_recovery_probe,
+};
+pub(crate) use self::start_thread_retry::{
+    start_thread_with_runtime_retry, start_thread_with_runtime_retry_for_provider,
 };
 
 const DELETE_ARCHIVE_TIMEOUT_MS: u64 = 2_000;
@@ -446,6 +494,7 @@ pub(crate) async fn cli_install_run(
 pub(crate) async fn start_thread(
     workspace_id: String,
     auto_session: Option<crate::session_management::AutoSessionMetadata>,
+    provider_profile_id: Option<String>,
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<Value, String> {
@@ -454,14 +503,35 @@ pub(crate) async fn start_thread(
             &*state,
             app,
             "start_thread",
-            json!({ "workspaceId": workspace_id, "autoSession": auto_session }),
+            json!({
+                "workspaceId": workspace_id,
+                "autoSession": auto_session,
+                "providerProfileId": provider_profile_id
+            }),
         )
         .await;
     }
 
     let resolved_model = resolve_workspace_fallback_model(&state, &workspace_id).await;
-    let response =
-        start_thread_with_runtime_retry(&workspace_id, resolved_model, &state, &app).await?;
+    let normalized_provider_profile_id =
+        codex_core::normalize_provider_profile_id(provider_profile_id.as_deref());
+    let response = start_thread_with_runtime_retry_for_provider(
+        &workspace_id,
+        resolved_model,
+        Some(normalized_provider_profile_id.clone()),
+        &state,
+        &app,
+    )
+    .await?;
+    if let Some(thread_id) = crate::shared::codex_core::extract_thread_id_from_response(&response) {
+        record_codex_provider_binding(
+            &state,
+            &workspace_id,
+            &thread_id,
+            &normalized_provider_profile_id,
+        )
+        .await;
+    }
     if let Some(metadata) = auto_session {
         if let Some(thread_id) =
             crate::shared::codex_core::extract_thread_id_from_response(&response)
@@ -497,9 +567,17 @@ pub(crate) async fn resume_thread(
     }
 
     // Ensure Codex session exists before resuming thread
-    ensure_codex_session(&workspace_id, &state, &app).await?;
+    let provider_profile_id =
+        resolve_thread_provider_profile_id(&state, &workspace_id, &thread_id).await;
+    ensure_codex_session_for_provider(&workspace_id, &provider_profile_id, &state, &app).await?;
 
-    codex_core::resume_thread_core(&state.sessions, workspace_id, thread_id).await
+    codex_core::resume_thread_core(
+        &state.sessions,
+        workspace_id,
+        Some(provider_profile_id),
+        thread_id,
+    )
+    .await
 }
 
 #[tauri::command]
@@ -507,6 +585,11 @@ pub(crate) async fn fork_thread(
     workspace_id: String,
     thread_id: String,
     message_id: Option<String>,
+    provider_profile_id: Option<String>,
+    target_user_turn_index: Option<u32>,
+    target_user_message_text: Option<String>,
+    target_user_message_occurrence: Option<u32>,
+    local_user_message_count: Option<u32>,
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<Value, String> {
@@ -518,15 +601,83 @@ pub(crate) async fn fork_thread(
             json!({
                 "workspaceId": workspace_id,
                 "threadId": thread_id,
-                "messageId": message_id
+                "messageId": message_id,
+                "providerProfileId": provider_profile_id,
+                "targetUserTurnIndex": target_user_turn_index,
+                "targetUserMessageText": target_user_message_text,
+                "targetUserMessageOccurrence": target_user_message_occurrence,
+                "localUserMessageCount": local_user_message_count
             }),
         )
         .await;
     }
 
-    // Ensure Codex session exists before forking thread
-    ensure_codex_session(&workspace_id, &state, &app).await?;
-    codex_core::fork_thread_core(&state.sessions, workspace_id, thread_id, message_id).await
+    let parent_provider_profile_id =
+        resolve_thread_provider_profile_id(&state, &workspace_id, &thread_id).await;
+    let selected_provider_profile_id = provider_profile_id
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| parent_provider_profile_id.clone());
+    let _selected_provider_profile =
+        resolve_codex_provider_profile(Some(&selected_provider_profile_id))?;
+    if selected_provider_profile_id != parent_provider_profile_id {
+        ensure_codex_session_for_provider(
+            &workspace_id,
+            &selected_provider_profile_id,
+            &state,
+            &app,
+        )
+        .await?;
+    }
+    ensure_codex_session_for_provider(&workspace_id, &parent_provider_profile_id, &state, &app)
+        .await?;
+    let resolved_message_id = rewind::resolve_fork_message_id(
+        &state.sessions,
+        workspace_id.clone(),
+        thread_id.clone(),
+        message_id,
+        target_user_turn_index,
+        target_user_message_text,
+        target_user_message_occurrence,
+        local_user_message_count,
+        Some(parent_provider_profile_id.clone()),
+    )
+    .await?;
+    let response = codex_core::fork_thread_core(
+        &state.sessions,
+        workspace_id.clone(),
+        Some(parent_provider_profile_id.clone()),
+        thread_id.clone(),
+        resolved_message_id,
+    )
+    .await?;
+    if let Some(child_thread_id) =
+        crate::shared::codex_core::extract_thread_id_from_response(&response)
+    {
+        copy_native_fork_history_to_selected_provider(
+            &state,
+            &workspace_id,
+            &child_thread_id,
+            &parent_provider_profile_id,
+            &selected_provider_profile_id,
+        )
+        .await?;
+        record_codex_provider_binding(
+            &state,
+            &workspace_id,
+            &child_thread_id,
+            &selected_provider_profile_id,
+        )
+        .await;
+        return Ok(enrich_native_provider_fork_response(
+            response,
+            &child_thread_id,
+            &thread_id,
+            &parent_provider_profile_id,
+            &selected_provider_profile_id,
+        ));
+    }
+    Ok(response)
 }
 
 #[tauri::command]
@@ -559,11 +710,14 @@ pub(crate) async fn rewind_codex_thread(
         .await;
     }
 
-    ensure_codex_session(&workspace_id, &state, &app).await?;
+    let provider_profile_id =
+        resolve_thread_provider_profile_id(&state, &workspace_id, &thread_id).await;
+    ensure_codex_session_for_provider(&workspace_id, &provider_profile_id, &state, &app).await?;
     let rewind_response = rewind::rewind_thread_from_message(
         &state.sessions,
         &state.workspaces,
         workspace_id.clone(),
+        Some(provider_profile_id.clone()),
         thread_id,
         message_id,
         target_user_turn_index,
@@ -583,10 +737,31 @@ pub(crate) async fn rewind_codex_thread(
         .map(ToString::to_string)
         .ok_or_else(|| "codex rewind response missing child thread id".to_string())?;
 
-    disconnect_workspace_session_core(&state.sessions, Some(&state.runtime_manager), &workspace_id)
+    record_codex_provider_binding(
+        &state,
+        &workspace_id,
+        &rewound_thread_id,
+        &provider_profile_id,
+    )
+    .await;
+
+    if provider_profile_id == CODEX_DISK_PROVIDER_PROFILE_ID {
+        disconnect_workspace_session_core(
+            &state.sessions,
+            Some(&state.runtime_manager),
+            &workspace_id,
+        )
         .await;
-    ensure_codex_session(&workspace_id, &state, &app).await?;
-    codex_core::resume_thread_core(&state.sessions, workspace_id, rewound_thread_id).await?;
+        ensure_codex_session_for_provider(&workspace_id, &provider_profile_id, &state, &app)
+            .await?;
+    }
+    codex_core::resume_thread_core(
+        &state.sessions,
+        workspace_id,
+        Some(provider_profile_id),
+        rewound_thread_id,
+    )
+    .await?;
 
     Ok(rewind_response)
 }
@@ -639,7 +814,8 @@ pub(crate) async fn list_mcp_server_status(
         .await;
     }
 
-    codex_core::list_mcp_server_status_core(&state.sessions, workspace_id, cursor, limit).await
+    codex_core::list_mcp_server_status_core(&state.sessions, workspace_id, None, cursor, limit)
+        .await
 }
 
 #[tauri::command]
@@ -659,7 +835,16 @@ pub(crate) async fn archive_thread(
         .await;
     }
 
-    codex_core::archive_thread_core(&state.sessions, workspace_id, thread_id).await
+    let provider_profile_id =
+        resolve_thread_provider_profile_id(&state, &workspace_id, &thread_id).await;
+    ensure_codex_session_for_provider(&workspace_id, &provider_profile_id, &state, &app).await?;
+    codex_core::archive_thread_core(
+        &state.sessions,
+        workspace_id,
+        Some(provider_profile_id),
+        thread_id,
+    )
+    .await
 }
 
 #[tauri::command]
@@ -683,10 +868,13 @@ pub(crate) async fn delete_codex_session(
     if normalized_session_id.is_empty() {
         return Err("session_id is required".to_string());
     }
+    let provider_profile_id =
+        resolve_thread_provider_profile_id(&state, &workspace_id, &normalized_session_id).await;
 
     let archive_result = codex_core::archive_thread_best_effort_core(
         &state.sessions,
         workspace_id.clone(),
+        Some(provider_profile_id.clone()),
         normalized_session_id.clone(),
         Duration::from_millis(DELETE_ARCHIVE_TIMEOUT_MS),
     )
@@ -709,7 +897,9 @@ pub(crate) async fn delete_codex_session(
 
     let session = {
         let sessions = state.sessions.lock().await;
-        sessions.get(&workspace_id).cloned()
+        let session_key =
+            codex_core::session_key_for_provider(&workspace_id, Some(&provider_profile_id));
+        sessions.get(&session_key).cloned()
     };
     if let Some(session) = session {
         session
@@ -759,9 +949,12 @@ pub(crate) async fn delete_codex_sessions(
 
     let mut archive_results = HashMap::new();
     for session_id in &normalized_session_ids {
+        let provider_profile_id =
+            resolve_thread_provider_profile_id(&state, &workspace_id, session_id).await;
         let archive_result = codex_core::archive_thread_best_effort_core(
             &state.sessions,
             workspace_id.clone(),
+            Some(provider_profile_id),
             session_id.clone(),
             Duration::from_millis(DELETE_ARCHIVE_TIMEOUT_MS),
         )
@@ -784,13 +977,17 @@ pub(crate) async fn delete_codex_sessions(
     )
     .await?;
 
-    let session = {
-        let sessions = state.sessions.lock().await;
-        sessions.get(&workspace_id).cloned()
-    };
-    if let Some(session) = session {
-        for result in &delete_results {
-            if result.deleted {
+    for result in &delete_results {
+        if result.deleted {
+            let provider_profile_id =
+                resolve_thread_provider_profile_id(&state, &workspace_id, &result.session_id).await;
+            let session = {
+                let sessions = state.sessions.lock().await;
+                let session_key =
+                    codex_core::session_key_for_provider(&workspace_id, Some(&provider_profile_id));
+                sessions.get(&session_key).cloned()
+            };
+            if let Some(session) = session {
                 session
                     .clear_thread_effective_mode(&result.session_id)
                     .await;
@@ -895,9 +1092,9 @@ pub(crate) async fn send_user_message(
         .await;
     }
 
-    // Ensure Codex session exists before sending message
-    // This handles the case where user switches from Claude to Codex engine
-    ensure_codex_session(&workspace_id, &state, &app).await?;
+    let provider_profile_id =
+        resolve_thread_provider_profile_id(&state, &workspace_id, &thread_id).await;
+    ensure_codex_session_for_provider(&workspace_id, &provider_profile_id, &state, &app).await?;
     let effective_model = if normalized_model.is_some() {
         normalized_model
     } else {
@@ -911,6 +1108,7 @@ pub(crate) async fn send_user_message(
     let response = codex_core::send_user_message_core(
         &state.sessions,
         workspace_id.clone(),
+        Some(provider_profile_id.clone()),
         thread_id.clone(),
         text,
         effective_model,
@@ -927,7 +1125,9 @@ pub(crate) async fn send_user_message(
     if resume_source.as_deref() == Some("queue-fusion-cutover") {
         let session = {
             let sessions = state.sessions.lock().await;
-            sessions.get(&workspace_id).cloned()
+            let session_key =
+                codex_core::session_key_for_provider(&workspace_id, Some(&provider_profile_id));
+            sessions.get(&session_key).cloned()
         };
         if let Some(session) = session {
             session
@@ -947,7 +1147,9 @@ pub(crate) async fn send_user_message(
 
     let session = {
         let sessions = state.sessions.lock().await;
-        sessions.get(&workspace_id).cloned()
+        let session_key =
+            codex_core::session_key_for_provider(&workspace_id, Some(&provider_profile_id));
+        sessions.get(&session_key).cloned()
     };
     let (effective_runtime_mode, fallback_reason) = if let Some(session) = session {
         let runtime_mode = session
@@ -1052,7 +1254,16 @@ pub(crate) async fn turn_interrupt(
         .await;
     }
 
-    codex_core::turn_interrupt_core(&state.sessions, workspace_id, thread_id, turn_id).await
+    let provider_profile_id =
+        resolve_thread_provider_profile_id(&state, &workspace_id, &thread_id).await;
+    codex_core::turn_interrupt_core(
+        &state.sessions,
+        workspace_id,
+        Some(provider_profile_id),
+        thread_id,
+        turn_id,
+    )
+    .await
 }
 
 #[tauri::command]
@@ -1081,7 +1292,9 @@ pub(crate) async fn thread_compact(
         return compact_claude_thread(workspace_id, normalized_thread_id, &state, &app).await;
     }
 
-    ensure_codex_session(&workspace_id, &state, &app).await?;
+    let provider_profile_id =
+        resolve_thread_provider_profile_id(&state, &workspace_id, &normalized_thread_id).await;
+    ensure_codex_session_for_provider(&workspace_id, &provider_profile_id, &state, &app).await?;
     let _ = app.emit(
         "app-server-event",
         AppServerEvent {
@@ -1101,6 +1314,7 @@ pub(crate) async fn thread_compact(
     match codex_core::thread_compact_core(
         &state.sessions,
         workspace_id.clone(),
+        Some(provider_profile_id),
         normalized_thread_id.clone(),
     )
     .await
@@ -1152,7 +1366,18 @@ pub(crate) async fn start_review(
         .await;
     }
 
-    codex_core::start_review_core(&state.sessions, workspace_id, thread_id, target, delivery).await
+    let provider_profile_id =
+        resolve_thread_provider_profile_id(&state, &workspace_id, &thread_id).await;
+    ensure_codex_session_for_provider(&workspace_id, &provider_profile_id, &state, &app).await?;
+    codex_core::start_review_core(
+        &state.sessions,
+        workspace_id,
+        Some(provider_profile_id),
+        thread_id,
+        target,
+        delivery,
+    )
+    .await
 }
 
 #[tauri::command]

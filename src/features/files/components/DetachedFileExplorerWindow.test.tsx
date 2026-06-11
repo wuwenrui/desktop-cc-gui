@@ -184,6 +184,8 @@ describe("DetachedFileExplorerWindow", () => {
     expect(detachedStyle).toContain("--ui-font-family: Test UI Font");
     expect(detachedStyle).toContain("--code-font-family: Test Code Font");
     expect(detachedStyle).toContain("--code-font-size: 15px");
+    expect(detachedStyle).toContain("--client-content-font-size: var(--app-font-size-md)");
+    expect(detachedStyle).toContain("--client-meta-font-size: var(--app-font-size-sm)");
 
     focusState = true;
     rerender(<DetachedFileExplorerWindow />);

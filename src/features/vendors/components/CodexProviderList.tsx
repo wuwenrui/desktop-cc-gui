@@ -4,7 +4,6 @@ import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 import type { CodexProviderConfig } from "../types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
 
 interface CodexProviderListProps {
   providers: CodexProviderConfig[];
@@ -12,7 +11,6 @@ interface CodexProviderListProps {
   onAdd: () => void;
   onEdit: (provider: CodexProviderConfig) => void;
   onDelete: (provider: CodexProviderConfig) => void;
-  onSwitch: (id: string) => void;
 }
 
 export function CodexProviderList({
@@ -21,7 +19,6 @@ export function CodexProviderList({
   onAdd,
   onEdit,
   onDelete,
-  onSwitch,
 }: CodexProviderListProps) {
   const { t } = useTranslation();
   const providerList = Array.isArray(providers) ? providers : [];
@@ -47,10 +44,7 @@ export function CodexProviderList({
         {providerList.map((provider) => (
           <div
             key={provider.id}
-            className={cn(
-              "vendor-card",
-              provider.isActive && "active",
-            )}
+            className="vendor-card"
           >
             <div className="vendor-card-info">
               <div className="vendor-card-name">
@@ -73,23 +67,9 @@ export function CodexProviderList({
               )}
             </div>
             <div className="vendor-card-actions">
-              {provider.isActive ? (
-                <Badge variant="outline" className="text-stone-700 dark:text-stone-200">
-                  <span
-                    aria-hidden="true"
-                    className="size-1.5 rounded-full bg-emerald-500"
-                  />
-                  {t("settings.vendor.inUse")}
-                </Badge>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="xs"
-                  onClick={() => onSwitch(provider.id)}
-                >
-                  {t("settings.vendor.enable")}
-                </Button>
-              )}
+              <Badge variant="outline" className="text-stone-700 dark:text-stone-200">
+                {t("settings.vendor.availableForNewCodexSessions")}
+              </Badge>
               <span className="vendor-card-divider" />
               <Button
                 variant="ghost"

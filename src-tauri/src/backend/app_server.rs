@@ -221,11 +221,13 @@ fn parse_codex_cli_version(version_output: &str) -> Option<String> {
 async fn resolve_codex_tui_compatible_client_version(
     launch_context: &CodexLaunchContext,
 ) -> String {
-    let version_output =
-        check_cli_binary(&launch_context.resolved_bin, launch_context.path_env.clone())
-            .await
-            .ok()
-            .flatten();
+    let version_output = check_cli_binary(
+        &launch_context.resolved_bin,
+        launch_context.path_env.clone(),
+    )
+    .await
+    .ok()
+    .flatten();
 
     version_output
         .as_deref()

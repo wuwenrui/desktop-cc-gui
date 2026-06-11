@@ -196,6 +196,7 @@ const defaultSettings: AppSettings = {
   userMsgColor: "",
   usageShowRemaining: false,
   showMessageAnchors: true,
+  showSidebarProviderLabels: false,
   performanceCompatibilityModeEnabled: false,
   uiFontFamily: DEFAULT_UI_FONT_FAMILY,
   codeFontFamily: DEFAULT_CODE_FONT_FAMILY,
@@ -444,6 +445,7 @@ function normalizeAppSettings(
       settings.detachedExternalChangeAwarenessEnabled !== false,
     detachedExternalChangeWatcherEnabled:
       settings.detachedExternalChangeWatcherEnabled !== false,
+    showSidebarProviderLabels: settings.showSidebarProviderLabels === true,
     codexModeEnforcementEnabled: settings.codexModeEnforcementEnabled !== false,
     // Conversation curtain convergence now depends on the normalized realtime adapters.
     // Keep it enabled even for older persisted settings that still store false.

@@ -435,6 +435,16 @@ pub(crate) struct LocalUsageSessionSummary {
     #[serde(default)]
     pub(crate) provider: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) provider_profile_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) provider_profile_source: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) provider_profile_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) provider_availability: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) physical_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) file_size_bytes: Option<u64>,
     #[serde(default)]
     pub(crate) modified_lines: i64,
@@ -1035,6 +1045,11 @@ pub(crate) struct AppSettings {
     )]
     pub(crate) show_message_anchors: bool,
     #[serde(
+        default = "default_show_sidebar_provider_labels",
+        rename = "showSidebarProviderLabels"
+    )]
+    pub(crate) show_sidebar_provider_labels: bool,
+    #[serde(
         default = "default_performance_compatibility_mode_enabled",
         rename = "performanceCompatibilityModeEnabled"
     )]
@@ -1307,6 +1322,10 @@ fn default_usage_show_remaining() -> bool {
 
 fn default_show_message_anchors() -> bool {
     true
+}
+
+fn default_show_sidebar_provider_labels() -> bool {
+    false
 }
 
 fn default_performance_compatibility_mode_enabled() -> bool {
@@ -1716,6 +1735,7 @@ impl Default for AppSettings {
             user_msg_color: default_user_msg_color(),
             usage_show_remaining: default_usage_show_remaining(),
             show_message_anchors: default_show_message_anchors(),
+            show_sidebar_provider_labels: default_show_sidebar_provider_labels(),
             performance_compatibility_mode_enabled: default_performance_compatibility_mode_enabled(
             ),
             canvas_width_mode: default_canvas_width_mode(),
@@ -1929,6 +1949,7 @@ mod tests {
         assert!(settings.user_msg_color.is_empty());
         assert!(!settings.usage_show_remaining);
         assert!(settings.show_message_anchors);
+        assert!(!settings.show_sidebar_provider_labels);
         assert!(!settings.performance_compatibility_mode_enabled);
         assert_eq!(settings.canvas_width_mode, "narrow");
         assert_eq!(settings.layout_mode, "default");

@@ -9,6 +9,7 @@ use tauri::State;
 use tokio::sync::Mutex;
 use tokio::time::timeout;
 
+use crate::app_paths;
 use crate::codex::home::{resolve_default_codex_home, resolve_workspace_codex_home};
 use crate::state::AppState;
 use crate::types::{
@@ -51,6 +52,8 @@ struct UsageTotals {
 const MAX_ACTIVITY_GAP_MS: i64 = 2 * 60 * 1000;
 const USAGE_LIMIT_SESSIONS: usize = 200;
 const LOCAL_SESSION_SCAN_TIMEOUT: StdDuration = StdDuration::from_secs(60);
+const CODEX_PROVIDER_PROFILE_SOURCE_MANAGED: &str = "managed";
+const CODEX_PROVIDER_PROFILE_AVAILABILITY_UNKNOWN: &str = "unknown";
 
 #[derive(Default, Clone, Copy)]
 struct CostRates {
@@ -58,6 +61,19 @@ struct CostRates {
     output: f64,
     cache_write: f64,
     cache_read: f64,
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct CodexSessionRootResolution {
+    pub(crate) roots: Vec<PathBuf>,
+    pub(crate) provider_home_diagnostics: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct CodexSessionSummaryList {
+    pub(crate) workspace_path: String,
+    pub(crate) sessions: Vec<LocalUsageSessionSummary>,
+    pub(crate) provider_home_diagnostics: Vec<String>,
 }
 
 #[tauri::command]
@@ -165,20 +181,39 @@ pub(crate) async fn list_codex_session_summaries_for_workspace(
     workspace_id: &str,
     limit: usize,
 ) -> Result<(String, Vec<LocalUsageSessionSummary>), String> {
+    let result =
+        list_codex_session_summary_list_for_workspace(workspaces, workspace_id, limit).await?;
+    Ok((result.workspace_path, result.sessions))
+}
+
+pub(crate) async fn list_codex_session_summary_list_for_workspace(
+    workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
+    workspace_id: &str,
+    limit: usize,
+) -> Result<CodexSessionSummaryList, String> {
     let workspace_id = workspace_id.trim();
     if workspace_id.is_empty() {
         return Err("workspace_id is required".to_string());
     }
     let requested_limit = limit.max(1);
-    let (workspace_path_str, workspace_path, sessions_roots) = {
+    let (workspace_path_str, workspace_path, root_resolution) = {
         let workspaces = workspaces.lock().await;
         let entry = workspaces
             .get(workspace_id)
             .ok_or_else(|| "workspace not found".to_string())?;
         let workspace_path = PathBuf::from(&entry.path);
-        let sessions_roots = resolve_sessions_roots(&workspaces, Some(workspace_path.as_path()));
-        (entry.path.clone(), workspace_path, sessions_roots)
+        let root_resolution =
+            resolve_sessions_roots_with_diagnostics(&workspaces, Some(workspace_path.as_path()));
+        (entry.path.clone(), workspace_path, root_resolution)
     };
+    for diagnostic in &root_resolution.provider_home_diagnostics {
+        log::warn!(
+            "[local_usage.codex] provider home source degraded for workspace {}: {}",
+            workspace_id,
+            diagnostic
+        );
+    }
+    let sessions_roots = root_resolution.roots;
     let sessions = timeout(
         LOCAL_SESSION_SCAN_TIMEOUT,
         tokio::task::spawn_blocking(move || {
@@ -194,7 +229,11 @@ pub(crate) async fn list_codex_session_summaries_for_workspace(
     .map_err(|_| "local codex session fallback timed out".to_string())?
     .map_err(|err| err.to_string())??;
 
-    Ok((workspace_path_str, sessions))
+    Ok(CodexSessionSummaryList {
+        workspace_path: workspace_path_str,
+        sessions,
+        provider_home_diagnostics: root_resolution.provider_home_diagnostics,
+    })
 }
 
 pub(crate) async fn list_global_codex_session_summaries(
@@ -202,10 +241,17 @@ pub(crate) async fn list_global_codex_session_summaries(
     limit: usize,
 ) -> Result<Vec<LocalUsageSessionSummary>, String> {
     let requested_limit = limit.max(1);
-    let sessions_roots = {
+    let root_resolution = {
         let workspaces = workspaces.lock().await;
-        resolve_sessions_roots(&workspaces, None)
+        resolve_sessions_roots_with_diagnostics(&workspaces, None)
     };
+    for diagnostic in &root_resolution.provider_home_diagnostics {
+        log::warn!(
+            "[local_usage.codex] provider home source degraded for global scan: {}",
+            diagnostic
+        );
+    }
+    let sessions_roots = root_resolution.roots;
     let sessions = timeout(
         LOCAL_SESSION_SCAN_TIMEOUT,
         tokio::task::spawn_blocking(move || {
@@ -1118,6 +1164,14 @@ fn parse_codex_session_summary(
     };
 
     let summary = summary.or(response_item_user_summary);
+    let provider_profile_id = infer_managed_codex_provider_profile_id_from_session_path(path);
+    let provider_profile_source = provider_profile_id
+        .as_ref()
+        .map(|_| CODEX_PROVIDER_PROFILE_SOURCE_MANAGED.to_string());
+    let provider_availability = provider_profile_id
+        .as_ref()
+        .map(|_| CODEX_PROVIDER_PROFILE_AVAILABILITY_UNKNOWN.to_string());
+    let physical_path = Some(path.to_string_lossy().to_string());
 
     Ok(Some(LocalUsageSessionSummary {
         session_id,
@@ -1130,9 +1184,39 @@ fn parse_codex_session_summary(
         summary,
         source,
         provider,
+        provider_profile_id,
+        provider_profile_source,
+        provider_profile_name: None,
+        provider_availability,
+        physical_path,
         file_size_bytes: fs::metadata(path).ok().map(|metadata| metadata.len()),
         modified_lines,
     }))
+}
+
+fn infer_managed_codex_provider_profile_id_from_session_path(path: &Path) -> Option<String> {
+    for ancestor in path.ancestors() {
+        let segment = ancestor.file_name().and_then(|value| value.to_str())?;
+        if segment != "sessions" && segment != "archived_sessions" {
+            continue;
+        }
+        let provider_home = ancestor.parent()?;
+        let provider_homes_root = provider_home.parent()?;
+        if provider_homes_root
+            .file_name()
+            .and_then(|value| value.to_str())
+            != Some("codex-provider-homes")
+        {
+            continue;
+        }
+        let provider_id = provider_home
+            .file_name()
+            .and_then(|value| value.to_str())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())?;
+        return Some(provider_id.to_string());
+    }
+    None
 }
 
 fn count_apply_patch_changed_lines(input: &str) -> i64 {
@@ -1668,6 +1752,11 @@ fn parse_claude_session_summary(path: &Path) -> Result<Option<LocalUsageSessionS
         summary,
         source: Some("claude".to_string()),
         provider: Some("anthropic".to_string()),
+        provider_profile_id: None,
+        provider_profile_source: None,
+        provider_profile_name: None,
+        provider_availability: None,
+        physical_path: Some(path.to_string_lossy().to_string()),
         file_size_bytes: fs::metadata(path).ok().map(|metadata| metadata.len()),
         modified_lines: 0,
     }))
@@ -2170,6 +2259,74 @@ fn resolve_codex_sessions_roots(codex_home_override: Option<PathBuf>) -> Vec<Pat
     vec![home.join("sessions"), home.join("archived_sessions")]
 }
 
+fn resolve_managed_codex_provider_session_roots() -> (Vec<PathBuf>, Vec<String>) {
+    match app_paths::codex_provider_homes_dir() {
+        Ok(provider_homes_root) => {
+            resolve_managed_codex_provider_session_roots_from_root(&provider_homes_root)
+        }
+        Err(error) => (
+            Vec::new(),
+            vec![format!("codex-provider-homes-unavailable: {error}")],
+        ),
+    }
+}
+
+fn resolve_managed_codex_provider_session_roots_from_root(
+    provider_homes_root: &Path,
+) -> (Vec<PathBuf>, Vec<String>) {
+    let entries = match fs::read_dir(provider_homes_root) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return (Vec::new(), Vec::new());
+        }
+        Err(error) => {
+            return (
+                Vec::new(),
+                vec![format!(
+                    "codex-provider-homes-unreadable:{}:{error}",
+                    provider_homes_root.display()
+                )],
+            );
+        }
+    };
+
+    let mut provider_dirs = Vec::new();
+    let mut diagnostics = Vec::new();
+    for entry_result in entries {
+        let entry = match entry_result {
+            Ok(entry) => entry,
+            Err(error) => {
+                diagnostics.push(format!(
+                    "codex-provider-home-entry-unreadable:{}:{error}",
+                    provider_homes_root.display()
+                ));
+                continue;
+            }
+        };
+        let path = entry.path();
+        match entry.file_type() {
+            Ok(file_type) if file_type.is_dir() => provider_dirs.push(path),
+            Ok(_) => {}
+            Err(error) => diagnostics.push(format!(
+                "codex-provider-home-type-unreadable:{}:{error}",
+                path.display()
+            )),
+        }
+    }
+    provider_dirs.sort_by(|left, right| left.to_string_lossy().cmp(&right.to_string_lossy()));
+
+    let roots = provider_dirs
+        .into_iter()
+        .flat_map(|provider_home| {
+            [
+                provider_home.join("sessions"),
+                provider_home.join("archived_sessions"),
+            ]
+        })
+        .collect();
+    (roots, diagnostics)
+}
+
 fn normalized_sessions_root_key(root: &Path) -> String {
     #[cfg(windows)]
     {
@@ -2182,49 +2339,82 @@ fn normalized_sessions_root_key(root: &Path) -> String {
     }
 }
 
+#[cfg(test)]
 fn merge_codex_session_roots(
     override_home: Option<PathBuf>,
     default_home: Option<PathBuf>,
 ) -> Vec<PathBuf> {
+    merge_codex_session_roots_with_provider_homes(override_home, default_home).roots
+}
+
+fn push_unique_session_roots(
+    roots: &mut Vec<PathBuf>,
+    seen_keys: &mut HashSet<String>,
+    candidates: impl IntoIterator<Item = PathBuf>,
+) {
+    for root in candidates {
+        if seen_keys.insert(normalized_sessions_root_key(&root)) {
+            roots.push(root);
+        }
+    }
+}
+
+fn merge_codex_session_roots_with_provider_homes(
+    override_home: Option<PathBuf>,
+    default_home: Option<PathBuf>,
+) -> CodexSessionRootResolution {
     let mut roots = Vec::new();
     let mut seen_keys = HashSet::new();
-
     for root in resolve_codex_sessions_roots(override_home) {
-        if seen_keys.insert(normalized_sessions_root_key(&root)) {
-            roots.push(root);
-        }
+        push_unique_session_roots(&mut roots, &mut seen_keys, [root]);
     }
 
-    for root in default_home
-        .map(|home| vec![home.join("sessions"), home.join("archived_sessions")])
-        .unwrap_or_default()
-    {
-        if seen_keys.insert(normalized_sessions_root_key(&root)) {
-            roots.push(root);
-        }
-    }
+    push_unique_session_roots(
+        &mut roots,
+        &mut seen_keys,
+        default_home
+            .map(|home| vec![home.join("sessions"), home.join("archived_sessions")])
+            .unwrap_or_default(),
+    );
 
-    roots
+    let (provider_roots, provider_home_diagnostics) =
+        resolve_managed_codex_provider_session_roots();
+    push_unique_session_roots(&mut roots, &mut seen_keys, provider_roots);
+
+    CodexSessionRootResolution {
+        roots,
+        provider_home_diagnostics,
+    }
 }
 
 fn resolve_sessions_roots(
     workspaces: &HashMap<String, WorkspaceEntry>,
     workspace_path: Option<&Path>,
 ) -> Vec<PathBuf> {
+    resolve_sessions_roots_with_diagnostics(workspaces, workspace_path).roots
+}
+
+pub(crate) fn resolve_sessions_roots_with_diagnostics(
+    workspaces: &HashMap<String, WorkspaceEntry>,
+    workspace_path: Option<&Path>,
+) -> CodexSessionRootResolution {
     if let Some(workspace_path) = workspace_path {
         let codex_home_override =
             resolve_workspace_codex_home_for_path(workspaces, Some(workspace_path));
-        return merge_codex_session_roots(codex_home_override, resolve_default_codex_home());
+        return merge_codex_session_roots_with_provider_homes(
+            codex_home_override,
+            resolve_default_codex_home(),
+        );
     }
 
     let mut roots = Vec::new();
     let mut seen_keys = HashSet::new();
 
-    for root in resolve_codex_sessions_roots(None) {
-        if seen_keys.insert(normalized_sessions_root_key(&root)) {
-            roots.push(root);
-        }
-    }
+    push_unique_session_roots(
+        &mut roots,
+        &mut seen_keys,
+        resolve_codex_sessions_roots(None),
+    );
 
     for entry in workspaces.values() {
         let parent_entry = entry
@@ -2234,14 +2424,21 @@ fn resolve_sessions_roots(
         let Some(codex_home) = resolve_workspace_codex_home(entry, parent_entry) else {
             continue;
         };
-        for root in resolve_codex_sessions_roots(Some(codex_home)) {
-            if seen_keys.insert(normalized_sessions_root_key(&root)) {
-                roots.push(root);
-            }
-        }
+        push_unique_session_roots(
+            &mut roots,
+            &mut seen_keys,
+            resolve_codex_sessions_roots(Some(codex_home)),
+        );
     }
 
-    roots
+    let (provider_roots, provider_home_diagnostics) =
+        resolve_managed_codex_provider_session_roots();
+    push_unique_session_roots(&mut roots, &mut seen_keys, provider_roots);
+
+    CodexSessionRootResolution {
+        roots,
+        provider_home_diagnostics,
+    }
 }
 
 fn resolve_workspace_codex_home_for_path(

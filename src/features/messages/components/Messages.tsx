@@ -12,19 +12,10 @@ import {
 import { useTranslation } from "react-i18next";
 import type {
   AccessMode,
-  ApprovalRequest,
   ConversationItem,
-  OpenAppTarget,
-  QueuedMessage,
-  RequestUserInputRequest,
-  RequestUserInputResponse,
-  TurnPlan,
-  WorkspaceInfo,
 } from "../../../types";
 import { isMacPlatform, isWindowsPlatform } from "../../../utils/platform";
 import type { ConversationState } from "../../threads/contracts/conversationCurtainContracts";
-import { ApprovalToasts } from "../../app/components/ApprovalToasts";
-import { RequestUserInputMessage } from "../../app/components/RequestUserInputMessage";
 import { useStreamActivityPhase } from "../../threads/hooks/useStreamActivityPhase";
 import {
   noteThreadVisibleTextRendered,
@@ -33,7 +24,6 @@ import {
   useThreadStreamLatencySnapshot,
 } from "../../threads/utils/streamLatencyDiagnostics";
 import type { AgentTaskScrollRequest } from "../types";
-import type { PresentationProfile } from "../presentation/presentationProfile";
 import { getVisibleApprovalsForThread } from "../../../utils/approvalBatching";
 import {
   MESSAGES_LIVE_AUTO_FOLLOW_FLAG_KEY,
@@ -47,13 +37,14 @@ import { RendererContextMenu } from "../../../components/ui/RendererContextMenu"
 import { appendRendererDiagnostic } from "../../../services/rendererDiagnostics";
 import {
   groupToolItems,
-  shouldHideToolItemForRender,
 } from "../utils/groupToolItems";
 import { MessagesTimeline } from "./MessagesTimeline";
+import { MessagesAnchorRail } from "./MessagesAnchorRail";
 import {
-  collapseConsecutiveReasoningRuns,
-  dedupeAdjacentReasoningItems,
-  isExplicitReasoningSegmentId,
+  MessagesInlineApproval,
+  MessagesInlineUserInput,
+} from "./MessagesInlinePrompts";
+import {
   parseReasoning,
 } from "./messagesReasoning";
 import {
@@ -70,7 +61,6 @@ import {
 } from "./messagesLiveWindow";
 import {
   isAssistantMessageConversationItem,
-  isMessageConversationItem,
   isReasoningConversationItem,
   isUserMessageConversationItem,
 } from "./messageItemPredicates";
@@ -78,6 +68,11 @@ import { parseAgentTaskNotification } from "../utils/agentTaskNotification";
 import { dedupeExitPlanItemsKeepFirst } from "./messagesExitPlan";
 import { buildSuppressedUserMemoryContextMessageIdSet } from "./messagesMemoryContext";
 import { buildSuppressedUserNoteCardContextMessageIdSet } from "./messagesNoteCardContext";
+import { dispatchOpenTaskRunEvent } from "../../agent-orchestration/utils/navigationEvents";
+import {
+  compareTaskRunSurfacePriority,
+  describeTaskRunSurface,
+} from "../../tasks/utils/taskRunSurface";
 import {
   countRenderableCollapsedEntries,
   findLastAssistantMessageIndex,
@@ -92,7 +87,6 @@ import {
   resolveRenderableItems,
   resolveWorkingActivityLabel,
   SCROLL_THRESHOLD_PX,
-  scrollKeyForItems,
   shouldDisplayWorkingActivityLabel,
   shouldHideClaudeReasoningModule,
   isClaudeHistoryTranscriptHeavy,
@@ -100,166 +94,40 @@ import {
   VISIBLE_MESSAGE_WINDOW,
 } from "./messagesRenderUtils";
 import {
+  buildMessageActionTargets,
+  buildMessagesScrollKey,
+  findItemById,
+  findLatestAssistantTextLength,
+  isMessagesScrollNearBottom,
+  mergeReadableRecoveryItems,
+  readHistoryExpansionScrollSnapshot,
+  resolveActiveUserInputRequest,
+  resolveActiveMessageAnchor,
+  resolveCollapsedTimelineItems,
+  resolveVisibleMessageItems,
+  restoreHistoryExpansionScrollPosition,
+  type HistoryExpansionScrollSnapshot,
+  type PreservedReadableWindow,
+} from "./messagesViewModel";
+import {
+  ASSISTANT_FINALIZING_LIVE_WINDOW_MS,
+  CODEX_FINALIZING_LIVE_WINDOW_MS,
+  MESSAGE_JUMP_EVENT_NAME,
+  VISIBLE_TEXT_REPORT_EAGER_PREFIX_CHARS,
+  VISIBLE_TEXT_REPORT_MIN_GROWTH_CHARS,
+  VISIBLE_TEXT_REPORT_MIN_INTERVAL_MS,
+} from "./messagesConstants";
+import {
   resolveAssistantRuntimeReconnectHint,
   resolveRetryMessageForReconnectItem,
-  type RuntimeReconnectRecoveryCallbackResult,
 } from "./runtimeReconnect";
+import type {
+  LastRenderSnapshot,
+  LastVisibleTextReport,
+  MessagesProps,
+} from "./messagesTypes";
 
-const MESSAGE_JUMP_EVENT_NAME = "ccgui:jump-to-message";
-const ASSISTANT_FINALIZING_LIVE_WINDOW_MS = 320;
-const CODEX_FINALIZING_LIVE_WINDOW_MS = 6_000;
-
-type MessageActionTargets = {
-  targetByAssistantId: Map<string, string>;
-  copyTextByAssistantId: Map<string, string>;
-  latestFinalAssistantMessageId: string | null;
-};
-
-type MessagesProps = {
-  items: ConversationItem[];
-  threadId: string | null;
-  workspaceId?: string | null;
-  isThinking: boolean;
-  isHistoryLoading?: boolean;
-  isContextCompacting?: boolean;
-  proxyEnabled?: boolean;
-  proxyUrl?: string | null;
-  processingStartedAt?: number | null;
-  lastDurationMs?: number | null;
-  heartbeatPulse?: number;
-  codexSilentSuspectedAt?: number | null;
-  workspacePath?: string | null;
-  openTargets: OpenAppTarget[];
-  selectedOpenAppId: string;
-  showMessageAnchors?: boolean;
-  showStickyUserBubble?: boolean;
-  codeBlockCopyUseModifier?: boolean;
-  userInputRequests?: RequestUserInputRequest[];
-  approvals?: ApprovalRequest[];
-  workspaces?: WorkspaceInfo[];
-  onUserInputSubmit?: (
-    request: RequestUserInputRequest,
-    response: RequestUserInputResponse,
-  ) => Promise<void> | void;
-  onUserInputDismiss?: (request: RequestUserInputRequest) => void;
-  onApprovalDecision?: (
-    request: ApprovalRequest,
-    decision: "accept" | "decline" | "dismiss",
-  ) => void;
-  onApprovalBatchAccept?: (requests: ApprovalRequest[]) => void;
-  onApprovalRemember?: (request: ApprovalRequest, command: string[]) => void;
-  activeEngine?: "claude" | "codex" | "gemini" | "opencode";
-  claudeThinkingVisible?: boolean;
-  activeCollaborationModeId?: string | null;
-  plan?: TurnPlan | null;
-  isPlanMode?: boolean;
-  isPlanProcessing?: boolean;
-  onOpenDiffPath?: (path: string) => void;
-  onOpenPlanPanel?: () => void;
-  onExitPlanModeExecute?: (
-    mode: Extract<AccessMode, "default" | "full-access">,
-  ) => Promise<void> | void;
-  conversationState?: ConversationState | null;
-  presentationProfile?: PresentationProfile | null;
-  onOpenWorkspaceFile?: (path: string) => void;
-  agentTaskScrollRequest?: AgentTaskScrollRequest | null;
-  onRecoverThreadRuntime?: (
-    workspaceId: string,
-    threadId: string,
-  ) => Promise<RuntimeReconnectRecoveryCallbackResult> | RuntimeReconnectRecoveryCallbackResult;
-  onRecoverThreadRuntimeAndResend?: (
-    workspaceId: string,
-    threadId: string,
-    message: Pick<QueuedMessage, "text" | "images">,
-  ) => Promise<RuntimeReconnectRecoveryCallbackResult> | RuntimeReconnectRecoveryCallbackResult;
-  onThreadRecoveryFork?: () => Promise<void> | void;
-  onForkFromMessage?: (messageId: string) => void;
-  onRewindFromMessage?: (messageId: string) => void;
-};
-
-type HistoryExpansionScrollSnapshot = {
-  scrollHeight: number;
-  scrollTop: number;
-};
-
-type PreservedReadableWindow = {
-  threadId: string | null;
-  turnId: string | null;
-  renderedItems: ConversationItem[];
-  visibleCollapsedHistoryItemCount: number;
-};
-
-const VISIBLE_TEXT_REPORT_MIN_INTERVAL_MS = 120;
-const VISIBLE_TEXT_REPORT_MIN_GROWTH_CHARS = 160;
-const VISIBLE_TEXT_REPORT_EAGER_PREFIX_CHARS = 512;
-
-function findItemById(items: ConversationItem[], itemId: string | null) {
-  if (!itemId) {
-    return null;
-  }
-  for (let index = items.length - 1; index >= 0; index -= 1) {
-    const item = items[index];
-    if (item?.id === itemId) {
-      return item;
-    }
-  }
-  return null;
-}
-
-function readHistoryExpansionScrollSnapshot(
-  container: HTMLDivElement | null,
-): HistoryExpansionScrollSnapshot | null {
-  if (!container) {
-    return null;
-  }
-  const { scrollHeight, scrollTop } = container;
-  if (!Number.isFinite(scrollHeight) || !Number.isFinite(scrollTop)) {
-    return null;
-  }
-  return { scrollHeight, scrollTop };
-}
-
-function restoreHistoryExpansionScrollPosition(
-  container: HTMLDivElement,
-  snapshot: HistoryExpansionScrollSnapshot,
-) {
-  const currentScrollHeight = container.scrollHeight;
-  if (!Number.isFinite(currentScrollHeight)) {
-    return false;
-  }
-  const scrollHeightDelta = currentScrollHeight - snapshot.scrollHeight;
-  const nextScrollTop = snapshot.scrollTop + scrollHeightDelta;
-  if (!Number.isFinite(nextScrollTop)) {
-    return false;
-  }
-  container.scrollTop = Math.max(0, nextScrollTop);
-  return true;
-}
-
-function findLatestAssistantTextLength(items: ConversationItem[]) {
-  for (let index = items.length - 1; index >= 0; index -= 1) {
-    const item = items[index];
-    if (!item || item.kind !== "message" || item.role !== "assistant") {
-      continue;
-    }
-    return item.text.length;
-  }
-  return 0;
-}
-
-function mergeReadableRecoveryItems(
-  preservedItems: ConversationItem[],
-  currentItems: ConversationItem[],
-) {
-  if (currentItems.length === 0) {
-    return preservedItems;
-  }
-  const preservedItemIds = new Set(preservedItems.map((item) => item.id));
-  const appendedCurrentItems = currentItems.filter((item) => !preservedItemIds.has(item.id));
-  return appendedCurrentItems.length > 0
-    ? [...preservedItems, ...appendedCurrentItems]
-    : preservedItems;
-}
+const EMPTY_TASK_RUNS: NonNullable<MessagesProps["taskRuns"]> = [];
 
 export const Messages = memo(function Messages({
   items: legacyItems,
@@ -305,6 +173,7 @@ export const Messages = memo(function Messages({
   onThreadRecoveryFork,
   onForkFromMessage,
   onRewindFromMessage,
+  taskRuns = EMPTY_TASK_RUNS,
 }: MessagesProps) {
   const { t } = useTranslation();
   const isWindowsDesktop = useMemo(() => isWindowsPlatform(), []);
@@ -411,15 +280,7 @@ export const Messages = memo(function Messages({
   const autoScrollRef = useRef(true);
   const anchorUpdateRafRef = useRef<number | null>(null);
   const historyStickyUpdateRafRef = useRef<number | null>(null);
-  const lastRenderSnapshotRef = useRef<{
-    items: ConversationItem[];
-    userInputRequests: RequestUserInputRequest[];
-    conversationState: ConversationState | null;
-    presentationProfile: PresentationProfile | null;
-    isThinking: boolean;
-    heartbeatPulse: number;
-    threadId: string | null;
-  } | null>(null);
+  const lastRenderSnapshotRef = useRef<LastRenderSnapshot | null>(null);
   const preservedReadableWindowRef = useRef<PreservedReadableWindow>({
     threadId: null,
     turnId: null,
@@ -457,11 +318,7 @@ export const Messages = memo(function Messages({
   const planPanelFocusTimeoutRef = useRef<number | null>(null);
   const planPanelFocusNodeRef = useRef<HTMLElement | null>(null);
   const assistantFinalizingTimerRef = useRef<number | null>(null);
-  const lastVisibleTextReportRef = useRef<{
-    itemId: string | null;
-    visibleTextLength: number;
-    reportedAt: number;
-  }>({
+  const lastVisibleTextReportRef = useRef<LastVisibleTextReport>({
     itemId: null,
     visibleTextLength: 0,
     reportedAt: 0,
@@ -479,40 +336,10 @@ export const Messages = memo(function Messages({
       : items;
     return dedupeExitPlanItemsKeepFirst(baseItems);
   }, [isSelectionFrozen, items]);
-  const messageActionTargets = useMemo<MessageActionTargets>(() => {
-    const targetByAssistantId = new Map<string, string>();
-    const copyTextByAssistantId = new Map<string, string>();
-    let latestUserMessageId: string | null = null;
-    let latestFinalAssistantMessageId: string | null = null;
-    let assistantTurnTextParts: string[] = [];
-    for (const item of effectiveItems) {
-      if (item.kind !== "message") {
-        continue;
-      }
-      if (item.role === "user") {
-        latestUserMessageId = item.id;
-        assistantTurnTextParts = [];
-        continue;
-      }
-      if (item.role !== "assistant") {
-        continue;
-      }
-      if (latestUserMessageId) {
-        targetByAssistantId.set(item.id, latestUserMessageId);
-      }
-      assistantTurnTextParts.push(item.text);
-      if (item.isFinal === true) {
-        latestFinalAssistantMessageId = item.id;
-        copyTextByAssistantId.set(item.id, assistantTurnTextParts.join("\n\n"));
-        assistantTurnTextParts = [];
-      }
-    }
-    return {
-      targetByAssistantId,
-      copyTextByAssistantId,
-      latestFinalAssistantMessageId,
-    };
-  }, [effectiveItems]);
+  const messageActionTargets = useMemo(
+    () => buildMessageActionTargets(effectiveItems),
+    [effectiveItems],
+  );
   const liveTailWorkingSet = useMemo(
     () =>
       buildLiveTailWorkingSet(effectiveItems, {
@@ -526,18 +353,15 @@ export const Messages = memo(function Messages({
   const renderSourceItems = liveTailWorkingSet.items;
   const deferredRenderSourceItems = useDeferredValue(renderSourceItems);
   const firstItemIdRef = useRef<string | null>(items[0]?.id ?? null);
-  const activeUserInputRequest =
-    threadId && userInputRequests.length
-      ? (userInputRequests.find(
-          (request) =>
-            request.params.thread_id === threadId &&
-            (!workspaceId || request.workspace_id === workspaceId),
-        ) ?? null)
-      : null;
+  const activeUserInputRequest = resolveActiveUserInputRequest({
+    requests: userInputRequests,
+    threadId,
+    workspaceId,
+  });
   const activeUserInputRequestId = activeUserInputRequest?.request_id ?? null;
   const activeUserInputAnchorItemId =
     activeUserInputRequest?.params.item_id?.trim() || null;
-  const rawScrollKey = `${scrollKeyForItems(effectiveItems)}-${activeUserInputRequestId ?? "no-input"}`;
+  const rawScrollKey = buildMessagesScrollKey(effectiveItems, activeUserInputRequestId);
   // Throttle scrollKey during streaming to avoid flooding the main thread
   // with smooth-scroll animations that block keyboard input.
   const [scrollKey, setScrollKey] = useState(rawScrollKey);
@@ -576,28 +400,12 @@ export const Messages = memo(function Messages({
   );
 
   const isNearBottom = useCallback(
-    (node: HTMLDivElement) =>
-      node.scrollHeight - node.scrollTop - node.clientHeight <= SCROLL_THRESHOLD_PX,
+    (node: HTMLDivElement) => isMessagesScrollNearBottom(node, SCROLL_THRESHOLD_PX),
     [],
   );
 
   const computeActiveAnchor = useCallback(() => {
-    const container = containerRef.current;
-    if (!container) {
-      return null;
-    }
-    const viewportAnchorY =
-      container.scrollTop + Math.min(96, container.clientHeight * 0.32);
-    let bestId: string | null = null;
-    let bestDistance = Number.POSITIVE_INFINITY;
-    for (const [messageId, node] of messageNodeByIdRef.current) {
-      const distance = Math.abs(node.offsetTop - viewportAnchorY);
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        bestId = messageId;
-      }
-    }
-    return bestId;
+    return resolveActiveMessageAnchor(containerRef.current, messageNodeByIdRef.current);
   }, []);
 
   const requestAutoScroll = useCallback(() => {
@@ -745,6 +553,7 @@ export const Messages = memo(function Messages({
     const currentFirstId = effectiveItems[0]?.id ?? null;
     if (currentFirstId !== firstItemIdRef.current) {
       setShowAllHistoryItems(false);
+      setPendingJumpMessageId(null);
       pendingHistoryExpansionScrollSnapshotRef.current = null;
     }
     firstItemIdRef.current = currentFirstId;
@@ -1155,69 +964,25 @@ export const Messages = memo(function Messages({
     activeEngine === "claude" &&
     isThinking;
 
-  const visibleItems = useMemo(() => {
-    const filtered = deferredRenderSourceItems.filter((item) => {
-      if (
-        (activeEngine === "codex" || activeEngine === "claude") &&
-        item.kind === "explore" &&
-        item.status === "exploring"
-      ) {
-        return false;
-      }
-      if (hideClaudeReasoning && item.kind === "reasoning") {
-        return false;
-      }
-      if (item.kind === "tool" && shouldHideToolItemForRender(item)) {
-        return false;
-      }
-      if (item.kind !== "reasoning") {
-        return true;
-      }
-      const parsed = reasoningMetaById.get(item.id);
-      const hasBody = parsed?.hasBody ?? false;
-      if (hasBody) {
-        return true;
-      }
-      if (!parsed?.workingLabel) {
-        return false;
-      }
-      // Gemini realtime segmented reasoning must stay visible as independent
-      // timeline slices instead of being reduced to only the latest title-only row.
-      if (activeEngine === "gemini" && isExplicitReasoningSegmentId(item.id)) {
-        return true;
-      }
-      if (activeEngine === "claude") {
-        return true;
-      }
-      // Keep title-only reasoning visible for Codex canvas and retain the
-      // latest title-only reasoning row for other engines to avoid the
-      // "thinking module disappears" regression in real-time conversations.
-      const keepTitleOnlyReasoning = presentationProfile
-        ? presentationProfile.showReasoningLiveDot
-        : activeEngine === "codex";
-      return keepTitleOnlyReasoning || item.id === latestTitleOnlyReasoningId;
-    });
-    const appendReasoningRuns = activeEngine === "claude" || activeEngine === "gemini";
-    const deduped = dedupeAdjacentReasoningItems(
-      filtered,
+  const visibleItems = useMemo(
+    () =>
+      resolveVisibleMessageItems({
+        items: deferredRenderSourceItems,
+        activeEngine,
+        hideClaudeReasoning,
+        latestTitleOnlyReasoningId,
+        presentationProfile,
+        reasoningMetaById,
+      }),
+    [
+      activeEngine,
+      deferredRenderSourceItems,
+      hideClaudeReasoning,
+      latestTitleOnlyReasoningId,
+      presentationProfile,
       reasoningMetaById,
-      appendReasoningRuns,
-      toConversationEngine(activeEngine),
-    );
-    const collapseReasoningRuns = activeEngine !== "codex";
-    return collapseConsecutiveReasoningRuns(
-      deduped,
-      collapseReasoningRuns,
-      appendReasoningRuns,
-    );
-  }, [
-    activeEngine,
-    deferredRenderSourceItems,
-    hideClaudeReasoning,
-    latestTitleOnlyReasoningId,
-    presentationProfile,
-    reasoningMetaById,
-  ]);
+    ],
+  );
   const timelineSourceItems = useMemo(() => {
     if (activeEngine !== "codex" || !isThinking) {
       return visibleItems;
@@ -1226,96 +991,25 @@ export const Messages = memo(function Messages({
       enableCollaborationBadge,
     });
   }, [activeEngine, enableCollaborationBadge, isThinking, visibleItems]);
-  const { timelineItems, collapsedMiddleStepCount } = useMemo(() => {
-    if (!collapseLiveMiddleStepsEnabled || timelineSourceItems.length <= 2) {
-      return { timelineItems: timelineSourceItems, collapsedMiddleStepCount: 0 };
-    }
-    if (!isThinking) {
-      const firstUserIndex = timelineSourceItems.findIndex(
-        (item) => item.kind === "message" && item.role === "user",
-      );
-      if (firstUserIndex < 0) {
-        return { timelineItems: timelineSourceItems, collapsedMiddleStepCount: 0 };
-      }
-      let lastMessageIndex = -1;
-      for (let index = timelineSourceItems.length - 1; index >= 0; index -= 1) {
-        if (timelineSourceItems[index]?.kind === "message") {
-          lastMessageIndex = index;
-          break;
-        }
-      }
-      if (lastMessageIndex <= firstUserIndex) {
-        return { timelineItems: timelineSourceItems, collapsedMiddleStepCount: 0 };
-      }
-      const nextTimelineItems: ConversationItem[] = [];
-      const hiddenItems: ConversationItem[] = [];
-      for (let index = 0; index < timelineSourceItems.length; index += 1) {
-        const item = timelineSourceItems[index];
-        if (!item) {
-          continue;
-        }
-        if (index < firstUserIndex || index > lastMessageIndex || isMessageConversationItem(item)) {
-          nextTimelineItems.push(item);
-          continue;
-        }
-        hiddenItems.push(item);
-      }
-      const collapsedEntryCount = countRenderableCollapsedEntries(hiddenItems, activeEngine);
-      return hiddenItems.length > 0
-        ? { timelineItems: nextTimelineItems, collapsedMiddleStepCount: collapsedEntryCount }
-        : { timelineItems: timelineSourceItems, collapsedMiddleStepCount: 0 };
-    }
-    let lastUserIndex = -1;
-    for (let index = timelineSourceItems.length - 1; index >= 0; index -= 1) {
-      const candidate = timelineSourceItems[index];
-      if (isUserMessageConversationItem(candidate)) {
-        lastUserIndex = index;
-        break;
-      }
-    }
-    if (lastUserIndex < 0 || lastUserIndex >= timelineSourceItems.length - 2) {
-      return { timelineItems: timelineSourceItems, collapsedMiddleStepCount: 0 };
-    }
-    const lastIndex = timelineSourceItems.length - 1;
-    const nextTimelineItems: ConversationItem[] = [];
-    const hiddenItems: ConversationItem[] = [];
-    for (let index = 0; index < timelineSourceItems.length; index += 1) {
-      const item = timelineSourceItems[index];
-      if (!item) {
-        continue;
-      }
-      const shouldKeepLatestClaudeReasoningVisible =
-        activeEngine === "claude"
-        && latestAssistantMessageId === null
-        && latestReasoningId !== null
-        && item.kind === "reasoning"
-        && item.id === latestReasoningId;
-      if (index <= lastUserIndex || index === lastIndex) {
-        nextTimelineItems.push(item);
-        continue;
-      }
-      if (isMessageConversationItem(item)) {
-        nextTimelineItems.push(item);
-        continue;
-      }
-      if (shouldKeepLatestClaudeReasoningVisible) {
-        nextTimelineItems.push(item);
-        continue;
-      }
-      hiddenItems.push(item);
-    }
-    const collapsedEntryCount = countRenderableCollapsedEntries(hiddenItems, activeEngine);
-    return hiddenItems.length > 0
-      ? { timelineItems: nextTimelineItems, collapsedMiddleStepCount: collapsedEntryCount }
-      : { timelineItems: timelineSourceItems, collapsedMiddleStepCount: 0 };
-  }, [
-    activeEngine,
-    collapseLiveMiddleStepsEnabled,
-    isThinking,
-    latestAssistantMessageId,
-    latestReasoningId,
-    timelineSourceItems,
-  ]);
+  const { timelineItems, collapsedMiddleStepCount } = useMemo(
+    () =>
+      resolveCollapsedTimelineItems({
+        activeEngine,
+        collapseLiveMiddleStepsEnabled,
+        isThinking,
+        latestAssistantMessageId,
+        latestReasoningId,
+        timelineSourceItems,
+      }),
+    [
+      activeEngine,
+      collapseLiveMiddleStepsEnabled,
+      isThinking,
+      latestAssistantMessageId,
+      latestReasoningId,
+      timelineSourceItems,
+    ],
+  );
   const latestReasoningVisibleInTimeline = useMemo(() => {
     if (!latestReasoningId) {
       return false;
@@ -2133,45 +1827,49 @@ export const Messages = memo(function Messages({
   const visibleApprovals = useMemo(() => {
     return getVisibleApprovalsForThread(approvals, workspaceId, threadId);
   }, [approvals, threadId, workspaceId]);
-  const approvalNode =
-    visibleApprovals.length > 0 && onApprovalDecision
-      ? (
-        <div className="messages-inline-approval-slot">
-          <ApprovalToasts
-            approvals={visibleApprovals}
-            workspaces={workspaces}
-            onDecision={onApprovalDecision}
-            onApproveBatch={onApprovalBatchAccept}
-            onRemember={onApprovalRemember}
-            variant="inline"
-          />
-        </div>
-      )
-      : null;
-  const userInputNode =
-    shouldRenderUserInputNode && legacyOnUserInputSubmit
-      ? (
-        <div className="messages-inline-user-input-slot">
-          <RequestUserInputMessage
-            requests={userInputRequests}
-            activeThreadId={threadId ?? null}
-            activeWorkspaceId={workspaceId ?? null}
-            onSubmit={legacyOnUserInputSubmit}
-            onDismiss={legacyOnUserInputDismiss}
-          />
-        </div>
-      )
-      : null;
+  const approvalNode = (
+    <MessagesInlineApproval
+      approvals={visibleApprovals}
+      workspaces={workspaces}
+      onApprovalDecision={onApprovalDecision}
+      onApprovalBatchAccept={onApprovalBatchAccept}
+      onApprovalRemember={onApprovalRemember}
+    />
+  );
+  const userInputNode = (
+    <MessagesInlineUserInput
+      requests={userInputRequests}
+      activeThreadId={threadId ?? null}
+      activeWorkspaceId={workspaceId ?? null}
+      onSubmit={legacyOnUserInputSubmit}
+      onDismiss={legacyOnUserInputDismiss}
+      shouldRender={shouldRenderUserInputNode}
+    />
+  );
   const hasVisibleUserInputRequest =
     shouldRenderUserInputNode &&
     Boolean(legacyOnUserInputSubmit) &&
     activeUserInputRequestId !== null;
+  const linkedConversationRun = useMemo(() => {
+    if (!threadId) {
+      return null;
+    }
+    return taskRuns
+      .filter((run) =>
+        run.linkedThreadId === threadId &&
+        (!workspaceId || run.task.workspaceId === workspaceId),
+      )
+      .sort(compareTaskRunSurfacePriority)[0] ?? null;
+  }, [taskRuns, threadId, workspaceId]);
+  const linkedConversationRunSurface = linkedConversationRun
+    ? describeTaskRunSurface(linkedConversationRun)
+    : null;
 
   const scrollToAnchor = useCallback((messageId: string) => {
     const node = messageNodeByIdRef.current.get(messageId);
     const container = containerRef.current;
     if (!node || !container) {
-      return;
+      return false;
     }
     const containerRect = container.getBoundingClientRect();
     const nodeRect = node.getBoundingClientRect();
@@ -2183,18 +1881,36 @@ export const Messages = memo(function Messages({
       behavior: "smooth",
     });
     setActiveAnchorId((previous) => (previous === messageId ? previous : messageId));
+    return true;
   }, []);
+
+  const requestScrollToAnchor = useCallback((messageId: string) => {
+    if (scrollToAnchor(messageId)) {
+      setPendingJumpMessageId(null);
+      return;
+    }
+    setPendingJumpMessageId((previous) => (previous === messageId ? previous : messageId));
+    if (!showAllHistoryItems) {
+      handleShowAllHistoryItems();
+    }
+  }, [handleShowAllHistoryItems, scrollToAnchor, showAllHistoryItems]);
+
+  const handlePendingJumpTargetReady = useCallback((messageId: string) => {
+    if (pendingJumpMessageId !== messageId) {
+      return;
+    }
+    if (scrollToAnchor(messageId)) {
+      setPendingJumpMessageId(null);
+    }
+  }, [pendingJumpMessageId, scrollToAnchor]);
 
   useEffect(() => {
     if (!pendingJumpMessageId) {
       return;
     }
-    const targetNode = messageNodeByIdRef.current.get(pendingJumpMessageId);
-    if (!targetNode) {
-      return;
+    if (scrollToAnchor(pendingJumpMessageId)) {
+      setPendingJumpMessageId(null);
     }
-    scrollToAnchor(pendingJumpMessageId);
-    setPendingJumpMessageId(null);
   }, [pendingJumpMessageId, timelinePresentationItems, scrollToAnchor]);
 
   useEffect(() => {
@@ -2207,58 +1923,53 @@ export const Messages = memo(function Messages({
       if (!messageId) {
         return;
       }
-      if (!messageNodeByIdRef.current.get(messageId) && !showAllHistoryItems) {
-        setPendingJumpMessageId(messageId);
-        handleShowAllHistoryItems();
-        return;
-      }
-      scrollToAnchor(messageId);
+      requestScrollToAnchor(messageId);
     };
     document.addEventListener(MESSAGE_JUMP_EVENT_NAME, handleJumpToMessage);
     return () => {
       document.removeEventListener(MESSAGE_JUMP_EVENT_NAME, handleJumpToMessage);
     };
-  }, [handleShowAllHistoryItems, scrollToAnchor, showAllHistoryItems]);
+  }, [requestScrollToAnchor]);
 
   return (
     <div
       className={`messages-shell${hasAnchorRail ? " has-anchor-rail" : ""}${enableClaudeRenderSafeMode ? " claude-render-safe" : ""}`}
     >
-      {hasAnchorRail && (
-        <div
-          className="messages-anchor-rail"
-          role="navigation"
-          aria-label={t("messages.anchorNavigation")}
-        >
-          <div className="messages-anchor-track" aria-hidden />
-          {messageAnchors.map((anchor, index) => {
-            const isActive = activeAnchorId === anchor.id;
-            return (
-              <div
-                key={anchor.id}
-                role="button"
-                tabIndex={0}
-                className={`messages-anchor-dot${isActive ? " is-active" : ""}`}
-                style={{ top: `${anchor.position * 100}%` }}
-                onClick={() => scrollToAnchor(anchor.id)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    scrollToAnchor(anchor.id);
-                  }
-                }}
-                aria-label={t("messages.anchorJumpToUser", { index: index + 1 })}
-                title={t("messages.anchorUserTitle", { index: index + 1 })}
-              />
-            );
-          })}
-        </div>
-      )}
+      <MessagesAnchorRail
+        activeAnchorId={activeAnchorId}
+        anchors={messageAnchors}
+        anchorNavigationLabel={t("messages.anchorNavigation")}
+        getJumpLabel={(index) => t("messages.anchorJumpToUser", { index: index + 1 })}
+        getTitle={(index) => t("messages.anchorUserTitle", { index: index + 1 })}
+        onScrollToAnchor={requestScrollToAnchor}
+      />
       <div
         className="messages"
         ref={containerRef}
         onScroll={updateAutoScroll}
       >
+        {linkedConversationRun && linkedConversationRunSurface ? (
+          <div className={`messages-linked-run messages-linked-run--${linkedConversationRunSurface.severity}`}>
+            <div>
+              <span className="messages-linked-run-eyebrow">
+                {t("messages.linkedRunEyebrow", "Linked run")}
+              </span>
+              <strong>{linkedConversationRun.task.title || linkedConversationRun.task.taskId}</strong>
+              <span>
+                {t(`taskCenter.status.${linkedConversationRun.status}`, linkedConversationRun.status)}
+                {" · "}
+                {linkedConversationRunSurface.summary ||
+                  t("taskCenter.unavailable", "Unavailable")}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => dispatchOpenTaskRunEvent(linkedConversationRun.runId)}
+            >
+              {t("messages.openLinkedRun", "Open run detail")}
+            </button>
+          </div>
+        ) : null}
         <MessagesTimeline
           activeCollaborationModeId={activeCollaborationModeId}
           activeEngine={activeEngine}
@@ -2286,6 +1997,8 @@ export const Messages = memo(function Messages({
           messageActionTargetByAssistantId={messageActionTargets.targetByAssistantId}
           messageCopyTextByAssistantId={messageActionTargets.copyTextByAssistantId}
           latestFinalAssistantMessageId={messageActionTargets.latestFinalAssistantMessageId}
+          pendingJumpMessageId={pendingJumpMessageId}
+          onPendingJumpTargetReady={handlePendingJumpTargetReady}
           onForkFromMessage={onForkFromMessage}
           onRewindFromMessage={onRewindFromMessage}
           handleExitPlanModeExecuteForItem={handleExitPlanModeExecuteForItem}

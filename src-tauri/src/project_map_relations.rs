@@ -18,13 +18,13 @@ use file_classification::{
 };
 use path_safety::validate_relative_relationship_path;
 use relation_resolution::{
-    build_indexes, build_symbol_file_index, c_include_specifier, call_candidates_for_line,
-    dedupe_relations, document_path_mentions, evidence, first_quoted_value, import_specifiers,
-    java_declared_type, java_import_specifier, java_package_name, parent_dir_text,
-    path_is_inside_dir, project_file_stem, push_relation, python_import_specifiers,
-    relationship_symbols_for_file, resolve_call_target, resolve_java_import, resolve_python_import,
-    resolve_relative_import, resolve_rust_mod, resolve_rust_use, rust_mod_specifier,
-    rust_use_roots, tauri_command_names,
+    build_indexes, build_java_call_resolution_context, build_symbol_file_index,
+    c_include_specifier, call_candidates_for_line, dedupe_relations, document_path_mentions,
+    evidence, first_quoted_value, import_specifiers, java_declared_type, java_import_specifier,
+    java_package_name, parent_dir_text, path_is_inside_dir, project_file_stem, push_relation,
+    python_import_specifiers, relationship_symbols_for_file, resolve_call_target,
+    resolve_java_call_target, resolve_java_import, resolve_python_import, resolve_relative_import,
+    resolve_rust_mod, resolve_rust_use, rust_mod_specifier, rust_use_roots, tauri_command_names,
 };
 
 use serde::{Deserialize, Serialize};
@@ -804,6 +804,16 @@ fn scan_workspace(
 
     let mut relations = Vec::new();
     for (file, content) in &file_contents {
+        let java_call_context = if file.language == "java" {
+            Some(build_java_call_resolution_context(
+                file,
+                content,
+                &java_file_by_type,
+                &relationship_symbols,
+            ))
+        } else {
+            None
+        };
         for (line_index, line) in content.lines().enumerate() {
             let line_number = line_index + 1;
             if matches!(
@@ -948,9 +958,12 @@ fn scan_workspace(
                 "markdown" | "json" | "toml" | "yaml" | "xml" | "properties" | "text"
             ) {
                 for call_candidate in call_candidates_for_line(line) {
-                    if let Some(target_file_id) =
+                    let target_file_id = if let Some(java_call_context) = &java_call_context {
+                        resolve_java_call_target(&call_candidate, &file.id, java_call_context)
+                    } else {
                         resolve_call_target(&call_candidate, &file.id, &symbol_file_by_key)
-                    {
+                    };
+                    if let Some(target_file_id) = target_file_id {
                         push_relation(
                             &mut relations,
                             "calls",

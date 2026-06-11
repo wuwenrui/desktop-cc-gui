@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import {
   resolvePendingSessionThreadCandidate,
@@ -6,6 +9,8 @@ import {
   resolveTaskThreadId,
   stripComposerKanbanTagsPreserveFormatting,
 } from "./useAppShellSections";
+
+const currentDir = dirname(fileURLToPath(import.meta.url));
 
 describe("stripComposerKanbanTagsPreserveFormatting", () => {
   it("keeps multiline formatting when no kanban tag is present", () => {
@@ -159,5 +164,29 @@ describe("syncKanbanExecutionEngineAndModel", () => {
         effort: null,
       },
     });
+  });
+});
+
+describe("useAppShellSections Kanban execution adapter contract", () => {
+  it("keeps orchestration dispatch wired through the extracted execution section", () => {
+    const sectionsSource = readFileSync(
+      join(currentDir, "useAppShellSections.ts"),
+      "utf8",
+    );
+    const executionSource = readFileSync(
+      join(currentDir, "useAppShellKanbanExecutionSection.ts"),
+      "utf8",
+    );
+    const executionDestructure = sectionsSource.slice(
+      sectionsSource.indexOf("} = useAppShellKanbanExecutionSection(ctx);") - 260,
+      sectionsSource.indexOf("} = useAppShellKanbanExecutionSection(ctx);"),
+    );
+    const executionReturn = executionSource.slice(
+      executionSource.indexOf("  return {"),
+      executionSource.indexOf("  };\n}", executionSource.indexOf("  return {")),
+    );
+
+    expect(executionDestructure).toContain("handleDispatchOrchestrationTask,");
+    expect(executionReturn).toContain("handleDispatchOrchestrationTask,");
   });
 });

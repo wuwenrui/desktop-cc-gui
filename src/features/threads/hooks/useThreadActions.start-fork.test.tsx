@@ -180,6 +180,97 @@ describe("useThreadActions start/fork", () => {
     expect(loadedThreadsRef.current["thread-shared"]).toBe(true);
   });
 
+  it("does not reuse in-flight codex starts across provider profiles", async () => {
+    vi.mocked(startThread)
+      .mockResolvedValueOnce({ result: { thread: { id: "thread-provider-a" } } })
+      .mockResolvedValueOnce({ result: { thread: { id: "thread-provider-b" } } });
+
+    const { result } = renderActions();
+
+    let firstThreadId: string | null = null;
+    let secondThreadId: string | null = null;
+    await act(async () => {
+      firstThreadId = await result.current.startThreadForWorkspace("ws-1", {
+        providerProfileId: "provider-a",
+      });
+      secondThreadId = await result.current.startThreadForWorkspace("ws-1", {
+        providerProfileId: "provider-b",
+      });
+    });
+
+    expect(firstThreadId).toBe("thread-provider-a");
+    expect(secondThreadId).toBe("thread-provider-b");
+    expect(startThread).toHaveBeenNthCalledWith(1, "ws-1", {
+      providerProfileId: "provider-a",
+    });
+    expect(startThread).toHaveBeenNthCalledWith(2, "ws-1", {
+      providerProfileId: "provider-b",
+    });
+  });
+
+  it("keeps provider metadata on the optimistic codex thread summary", async () => {
+    vi.mocked(startThread).mockResolvedValue({
+      result: {
+        thread: {
+          id: "thread-provider-a",
+          providerProfileId: "provider-a",
+          providerProfileSource: "managed",
+          providerProfileName: "AskUs",
+          providerAvailability: "available",
+        },
+      },
+    });
+
+    const { result, dispatch } = renderActions();
+
+    await act(async () => {
+      await result.current.startThreadForWorkspace("ws-1", {
+        providerProfileId: "provider-a",
+      });
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "ensureThread",
+      workspaceId: "ws-1",
+      threadId: "thread-provider-a",
+      engine: "codex",
+      providerProfileId: "provider-a",
+      providerProfileSource: "managed",
+      providerProfileName: "AskUs",
+      providerAvailability: "available",
+    });
+  });
+
+  it("uses selected provider metadata when codex start response only returns the thread id", async () => {
+    vi.mocked(startThread).mockResolvedValue({
+      result: { thread: { id: "thread-provider-local" } },
+    });
+
+    const { result, dispatch } = renderActions();
+
+    await act(async () => {
+      await result.current.startThreadForWorkspace("ws-1", {
+        providerProfileId: "provider-local",
+        providerProfile: {
+          id: "provider-local",
+          name: "老朱2号",
+          source: "managed",
+        },
+      });
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "ensureThread",
+      workspaceId: "ws-1",
+      threadId: "thread-provider-local",
+      engine: "codex",
+      providerProfileId: "provider-local",
+      providerProfileSource: "managed",
+      providerProfileName: "老朱2号",
+      providerAvailability: "available",
+    });
+  });
+
   it("reconnects workspace and retries when codex start thread reports not connected", async () => {
     vi.mocked(startThread)
       .mockRejectedValueOnce(new Error("workspace not connected"))
@@ -330,7 +421,9 @@ describe("useThreadActions start/fork", () => {
     });
 
     expect(threadId).toBe("thread-fork-1");
-    expect(forkThread).toHaveBeenCalledWith("ws-1", "thread-1");
+    expect(forkThread).toHaveBeenCalledWith("ws-1", "thread-1", null, {
+      providerProfileId: null,
+    });
     expect(dispatch).toHaveBeenCalledWith({
       type: "ensureThread",
       workspaceId: "ws-1",
@@ -343,6 +436,54 @@ describe("useThreadActions start/fork", () => {
       threadId: "thread-fork-1",
     });
     expect(loadedThreadsRef.current["thread-fork-1"]).toBe(true);
+  });
+
+  it("passes provider profile when forking a codex thread", async () => {
+    vi.mocked(forkThread).mockResolvedValue({
+      result: { thread: { id: "thread-fork-provider" } },
+    });
+
+    const { result } = renderActions();
+
+    await act(async () => {
+      await result.current.forkThreadForWorkspace("ws-1", "thread-1", {
+        providerProfileId: "provider-b",
+      });
+    });
+
+    expect(forkThread).toHaveBeenCalledWith("ws-1", "thread-1", null, {
+      providerProfileId: "provider-b",
+    });
+  });
+
+  it("keeps selected provider metadata when forking a codex thread", async () => {
+    vi.mocked(forkThread).mockResolvedValue({
+      result: { thread: { id: "thread-fork-local" } },
+    });
+
+    const { result, dispatch } = renderActions();
+
+    await act(async () => {
+      await result.current.forkThreadForWorkspace("ws-1", "thread-1", {
+        providerProfileId: "provider-local",
+        providerProfile: {
+          id: "provider-local",
+          name: "老朱2号",
+          source: "managed",
+        },
+      });
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "ensureThread",
+      workspaceId: "ws-1",
+      threadId: "thread-fork-local",
+      engine: "codex",
+      providerProfileId: "provider-local",
+      providerProfileSource: "managed",
+      providerProfileName: "老朱2号",
+      providerAvailability: "available",
+    });
   });
 
   it("forks a thread without activating when requested", async () => {

@@ -52,5 +52,6 @@ describe("Messages codex live streaming", () => {
     );
     expect(plainTextSurface).toBeNull();
     expect(liveSurface?.textContent).toContain("第 14 条审计结论");
+    expect(container.querySelector(".message.assistant.is-live-streaming")).toBeTruthy();
   });
 });

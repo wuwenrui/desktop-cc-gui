@@ -89,4 +89,61 @@ describe("BrowserContextSummaryCard", () => {
     expect(screen.getByText(/issue screenshot/)).toBeTruthy();
     expect(screen.getByText(/diff display screenshot/)).toBeTruthy();
   });
+
+  it("uses the explicit expired observation state when rendering the summary badge", () => {
+    render(
+      <BrowserContextSummaryCard
+        attachment={{
+          title: "Example Domain",
+          url: "https://example.com/",
+          capturedAt: 100,
+          stale: true,
+          summary: "Example summary",
+          observation: {
+            schemaVersion: 1,
+            observationId: "browser-observation-expired",
+            browserSessionId: "browser-session-1",
+            workspaceId: "workspace-1",
+            capturedAt: 100,
+            state: "expired",
+            staleReasons: ["ttl_expired"],
+            transport: "webview_dom",
+            rendererBinding: "matched",
+            source: {
+              url: "https://example.com/",
+              normalizedUrl: "https://example.com/",
+              origin: "https://example.com",
+              title: "Example Domain",
+              tabLabel: "Example",
+              workspaceLocalAllowed: false,
+            },
+            budget: {
+              charLimit: 12_000,
+              visibleTextLimit: 8_000,
+              elementLimit: 120,
+              formFieldLimit: 80,
+              diagnosticLimit: 50,
+              tokenEstimate: null,
+              truncated: false,
+              omittedElementCount: 0,
+            },
+            privacy: {
+              redactionApplied: false,
+              redactedKinds: [],
+              omittedKinds: ["raw_dom"],
+            },
+            diagnostics: [],
+            omittedCapabilities: [],
+          },
+        }}
+      />,
+    );
+
+    const stateBadge = screen.getByText("expired");
+
+    expect(stateBadge.classList.contains("is-expired")).toBe(true);
+    expect(
+      stateBadge.closest(".browser-context-summary-card")?.classList.contains("is-expired"),
+    ).toBe(true);
+  });
 });

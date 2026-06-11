@@ -1,4 +1,8 @@
 .file-tree-panel {
+  --file-tree-caption-font-size: var(--client-caption-font-size, 10px);
+  --file-tree-meta-font-size: var(--client-meta-font-size, 11px);
+  --file-tree-content-font-size: var(--client-content-font-size, 12px);
+  --file-tree-title-font-size: var(--client-title-font-size, 14px);
   gap: 0;
   overflow: hidden;
 }
@@ -123,7 +127,7 @@
 }
 
 .file-tree-count {
-  font-size: 11px;
+  font-size: var(--file-tree-meta-font-size);
   color: var(--text-faint);
 }
 
@@ -176,7 +180,7 @@
   border: none;
   background: transparent;
   color: inherit;
-  font-size: 12px;
+  font-size: var(--file-tree-content-font-size);
   outline: none;
 }
 
@@ -188,7 +192,7 @@
   border-radius: 6px;
   border: 1px solid transparent;
   color: var(--text-faint);
-  font-size: 11px;
+  font-size: var(--file-tree-meta-font-size);
 }
 
 .file-tree-search-option:hover,
@@ -212,7 +216,7 @@
   border: 1px solid var(--border-subtle);
   background: color-mix(in srgb, var(--surface-secondary) 86%, transparent);
   color: var(--text-emphasis);
-  font-size: 12px;
+  font-size: var(--file-tree-content-font-size);
   padding: 0 10px;
   outline: none;
 }
@@ -299,13 +303,13 @@
 }
 
 .file-tree-empty {
-  font-size: 12px;
+  font-size: var(--file-tree-content-font-size);
   color: var(--text-faint);
 }
 
 .file-tree-search-summary,
 .file-tree-search-limit {
-  font-size: 12px;
+  font-size: var(--file-tree-meta-font-size);
   color: var(--text-faint);
   padding: 2px 2px 6px;
 }
@@ -352,7 +356,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: var(--file-tree-content-font-size);
 }
 
 .file-tree-search-result-count {
@@ -362,7 +366,7 @@
   border-radius: 999px;
   background: color-mix(in srgb, var(--surface-hover) 75%, transparent);
   color: var(--text-faint);
-  font-size: 11px;
+  font-size: var(--file-tree-meta-font-size);
   text-align: center;
 }
 
@@ -384,12 +388,12 @@
 
 .file-tree-search-result-location {
   color: var(--text-faint);
-  font-size: 11px;
+  font-size: var(--file-tree-meta-font-size);
 }
 
 .file-tree-search-result-preview {
   min-width: 0;
-  font-size: 12px;
+  font-size: var(--file-tree-content-font-size);
   color: var(--text-emphasis);
   white-space: nowrap;
   overflow: hidden;
@@ -448,7 +452,7 @@
   outline: none;
   background: transparent;
   color: inherit;
-  font-size: 12px;
+  font-size: var(--file-tree-content-font-size);
 }
 
 .workspace-search-option {
@@ -459,7 +463,7 @@
   border-radius: 6px;
   border: 1px solid transparent;
   color: var(--text-faint);
-  font-size: 11px;
+  font-size: var(--file-tree-meta-font-size);
 }
 
 .workspace-search-option:hover,
@@ -483,7 +487,7 @@
   border: 1px solid var(--border-subtle);
   background: color-mix(in srgb, var(--surface-secondary) 86%, transparent);
   color: var(--text-emphasis);
-  font-size: 12px;
+  font-size: var(--file-tree-content-font-size);
   padding: 0 10px;
   outline: none;
 }
@@ -491,7 +495,7 @@
 .workspace-search-summary,
 .workspace-search-limit,
 .workspace-search-empty {
-  font-size: 12px;
+  font-size: var(--file-tree-meta-font-size);
   color: var(--text-faint);
 }
 
@@ -545,7 +549,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: var(--file-tree-content-font-size);
 }
 
 .workspace-search-result-count {
@@ -555,7 +559,7 @@
   border-radius: 999px;
   background: color-mix(in srgb, var(--surface-hover) 75%, transparent);
   color: var(--text-faint);
-  font-size: 11px;
+  font-size: var(--file-tree-meta-font-size);
   text-align: center;
 }
 
@@ -577,12 +581,12 @@
 
 .workspace-search-result-location {
   color: var(--text-faint);
-  font-size: 11px;
+  font-size: var(--file-tree-meta-font-size);
 }
 
 .workspace-search-result-preview {
   min-width: 0;
-  font-size: 12px;
+  font-size: var(--file-tree-content-font-size);
   color: var(--text-emphasis);
   white-space: nowrap;
   overflow: hidden;
@@ -596,7 +600,7 @@
   min-height: 24px;
   margin: 2px 0 0 15px;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--file-tree-content-font-size);
   line-height: 1;
 }
 
@@ -632,7 +636,7 @@
   border: 1px solid transparent;
   background: transparent;
   color: var(--text-emphasis);
-  font-size: 12px;
+  font-size: var(--file-tree-content-font-size);
   line-height: 1.25;
   text-align: left;
   width: 100%;
@@ -692,7 +696,7 @@
   border: none;
   border-radius: 0;
   background: transparent;
-  font-size: 13px;
+  font-size: var(--file-tree-title-font-size);
   font-weight: 700;
   gap: 2px;
 }
@@ -787,7 +791,7 @@
 
 .file-tree-lazy-state {
   padding: 3px 6px 3px 26px;
-  font-size: 10px;
+  font-size: var(--file-tree-caption-font-size);
   color: var(--text-faint);
 }
 
@@ -798,7 +802,7 @@
   border-radius: 6px;
   background: transparent;
   color: var(--status-error);
-  font-size: 10px;
+  font-size: var(--file-tree-caption-font-size);
   text-align: left;
   padding: 3px 6px;
   cursor: pointer;
@@ -846,7 +850,7 @@
 }
 
 .file-preview-path {
-  font-size: 12px;
+  font-size: var(--file-tree-content-font-size);
   color: var(--text-strong);
   white-space: nowrap;
   overflow: hidden;
@@ -854,7 +858,7 @@
 }
 
 .file-preview-warning {
-  font-size: 10px;
+  font-size: var(--file-tree-caption-font-size);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-faint);
@@ -865,7 +869,7 @@
 }
 
 .file-preview-status {
-  font-size: 12px;
+  font-size: var(--file-tree-meta-font-size);
   color: var(--text-faint);
 }
 
@@ -909,7 +913,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  font-size: 11px;
+  font-size: var(--file-tree-meta-font-size);
   color: var(--text-faint);
 }
 
@@ -924,7 +928,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  font-size: 10px;
+  font-size: var(--file-tree-caption-font-size);
   color: var(--text-fainter);
 }
 
@@ -943,7 +947,7 @@
   align-items: center;
   padding: 6px 12px;
   min-height: 30px;
-  font-size: 12px;
+  font-size: var(--file-tree-content-font-size);
   line-height: 1.2;
   border-radius: 10px;
 }
@@ -1211,14 +1215,14 @@
 }
 
 .new-file-prompt-title {
-  font-size: 15px;
+  font-size: var(--file-tree-title-font-size);
   font-weight: 600;
   color: var(--text-strong);
   letter-spacing: -0.01em;
 }
 
 .new-file-prompt-path {
-  font-size: 12px;
+  font-size: var(--file-tree-meta-font-size);
   color: var(--text-faint);
   font-family: var(--code-font-family);
   overflow: hidden;
@@ -1234,7 +1238,7 @@
   background: var(--surface-card-muted);
   color: var(--text-strong);
   padding: 9px 12px;
-  font-size: 13px;
+  font-size: var(--file-tree-content-font-size);
   font-family: var(--code-font-family);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
@@ -1259,6 +1263,6 @@
 .new-file-prompt-actions button {
   padding: 6px 14px;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: var(--file-tree-content-font-size);
   font-weight: 500;
 }

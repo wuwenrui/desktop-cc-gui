@@ -48,6 +48,7 @@ export type SessionActivityEvent = {
   kind: SessionActivityKind;
   occurredAt: number;
   summary: string;
+  turnSemantic?: string;
   status: SessionActivityEventStatus;
   jumpTarget?: SessionActivityJumpTarget;
   fileChangeStatusLetter?: "A" | "D" | "R" | "M";
