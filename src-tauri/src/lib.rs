@@ -219,6 +219,15 @@ pub fn run() {
             if let Err(error) = app_paths::app_home_dir() {
                 log::warn!("Failed to prepare ccgui home directory: {error}");
             }
+            match skill_installer::cleanup_legacy_sensitive_bundled_skills() {
+                Ok(removed) if removed > 0 => {
+                    log::info!("Removed {removed} legacy bundled sensitive skill files");
+                }
+                Ok(_) => {}
+                Err(error) => {
+                    log::warn!("Failed to clean legacy bundled sensitive skills: {error}");
+                }
+            }
             let state = state::AppState::load(&app.handle());
             app.manage(state);
             renderer_stability::spawn_renderer_heartbeat_watchdog(app.handle().clone());
