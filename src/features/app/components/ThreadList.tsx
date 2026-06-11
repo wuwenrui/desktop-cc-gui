@@ -18,6 +18,7 @@ import { ProxyStatusBadge } from "../../../components/ProxyStatusBadge";
 import { EngineIcon } from "../../engine/components/EngineIcon";
 import { SharedSessionIcon } from "../../shared-session/components/SharedSessionIcon";
 import { ThreadDeleteConfirmBubble } from "../../threads/components/ThreadDeleteConfirmBubble";
+import { resolveCodexProviderLabel } from "../utils/codexProviderLabel";
 import { getExitedSessionRowVisibility } from "../utils/exitedSessionRows";
 
 type ThreadStatusMap = Record<
@@ -60,6 +61,7 @@ type ThreadRowItemProps = {
   isPendingSubagent: boolean;
   isPinned: boolean;
   isProcessing: boolean;
+  showProviderLabels: boolean;
   isSharedThread: boolean;
   isSubagentParent: boolean;
   isSubagentParentCollapsed: boolean;
@@ -71,6 +73,7 @@ type ThreadRowItemProps = {
   onShowThreadMenu: ShowThreadMenuHandler;
   onToggleThreadPin?: (workspaceId: string, threadId: string) => void;
   relativeTime: string | null;
+  runtimeBadge: { label: string; severity: "processing" | "reviewing" } | null;
   selectTargetThreadId: string;
   showProxyBadge: boolean;
   statusClass: string;
@@ -132,6 +135,7 @@ const ThreadRowItem = memo(function ThreadRowItem({
   isPendingSubagent,
   isPinned,
   isProcessing,
+  showProviderLabels,
   isSharedThread,
   isSubagentParent,
   isSubagentParentCollapsed,
@@ -143,6 +147,7 @@ const ThreadRowItem = memo(function ThreadRowItem({
   onShowThreadMenu,
   onToggleThreadPin,
   relativeTime,
+  runtimeBadge,
   selectTargetThreadId,
   showProxyBadge,
   statusClass,
@@ -159,6 +164,8 @@ const ThreadRowItem = memo(function ThreadRowItem({
       ? ({ "--thread-indent": `${indentPx}px` } as CSSProperties)
       : undefined;
   const engineIconType = engineSource as EngineType;
+  const providerLabel = resolveCodexProviderLabel(thread);
+  const isProviderUnavailable = thread.providerAvailability === "unavailable";
   return (
     <Popover
       open={isDeleteConfirmOpen}
@@ -277,6 +284,21 @@ const ThreadRowItem = memo(function ThreadRowItem({
               {isAutoNaming && (
                 <span className="thread-auto-naming">{t("threads.autoNaming")}</span>
               )}
+              {showProviderLabels && providerLabel ? (
+                <span
+                  className={`thread-provider-label${
+                    isProviderUnavailable ? " is-unavailable" : ""
+                  }`}
+                  title={providerLabel}
+                >
+                  {providerLabel}
+                </span>
+              ) : null}
+              {runtimeBadge ? (
+                <span className={`thread-runtime-badge thread-runtime-badge--${runtimeBadge.severity}`}>
+                  {runtimeBadge.label}
+                </span>
+              ) : null}
               {relativeTime ? <span className="thread-time">{relativeTime}</span> : null}
             </div>
           </TooltipTrigger>
@@ -324,6 +346,7 @@ export type ThreadListProps = {
   isPaging: boolean;
   nested?: boolean;
   showLoadOlder?: boolean;
+  showProviderLabels?: boolean;
   moveFolderTargets?: ThreadMoveFolderTarget[];
   hideExitedSessions?: boolean;
   activeWorkspaceId: string | null;
@@ -358,6 +381,7 @@ export function ThreadList({
   isPaging,
   nested,
   showLoadOlder = true,
+  showProviderLabels = false,
   moveFolderTargets = [],
   hideExitedSessions = false,
   activeWorkspaceId,
@@ -480,6 +504,11 @@ export function ThreadList({
         : status?.hasUnread
           ? "unread"
           : "ready";
+    const runtimeBadge = status?.isReviewing
+      ? { label: t("threads.runtimeReviewing"), severity: "reviewing" as const }
+      : status?.isProcessing
+        ? { label: t("threads.runtimeProcessing"), severity: "processing" as const }
+        : null;
     const isProcessing = Boolean(status?.isProcessing);
     const canPin = depth === 0;
     const isPinned = canPin && isThreadPinned(workspaceId, thread.id);
@@ -542,6 +571,7 @@ export function ThreadList({
         isPendingSubagent={isPendingSubagent}
         isPinned={isPinned}
         isProcessing={isProcessing}
+        showProviderLabels={showProviderLabels}
         isSharedThread={isSharedThread}
         isSubagentParent={isSubagentParent}
         isSubagentParentCollapsed={isSubagentParentCollapsed}
@@ -553,6 +583,7 @@ export function ThreadList({
         onShowThreadMenu={onShowThreadMenu}
         onToggleThreadPin={onToggleThreadPin}
         relativeTime={relativeTime}
+        runtimeBadge={runtimeBadge}
         selectTargetThreadId={selectTargetThreadId}
         showProxyBadge={showProxyBadge}
         statusClass={statusClass}

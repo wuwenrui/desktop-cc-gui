@@ -20,7 +20,7 @@
   color: var(--text-subtle);
   padding: 8px 6px;
   border-radius: 12px;
-  font-size: 12px;
+  font-size: var(--client-meta-font-size, 12px);
   font-weight: 600;
   letter-spacing: 0.01em;
   display: flex;

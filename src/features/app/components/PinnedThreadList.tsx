@@ -17,6 +17,7 @@ import { ProxyStatusBadge } from "../../../components/ProxyStatusBadge";
 import { EngineIcon } from "../../engine/components/EngineIcon";
 import { SharedSessionIcon } from "../../shared-session/components/SharedSessionIcon";
 import { ThreadDeleteConfirmBubble } from "../../threads/components/ThreadDeleteConfirmBubble";
+import { resolveCodexProviderLabel } from "../utils/codexProviderLabel";
 
 type ThreadStatusMap = Record<
   string,
@@ -36,6 +37,7 @@ type PinnedThreadListProps = {
   activeThreadId: string | null;
   systemProxyEnabled?: boolean;
   systemProxyUrl?: string | null;
+  showProviderLabels?: boolean;
   threadStatusById: ThreadStatusMap;
   moveFolderTargetsByWorkspaceId?: Record<string, ThreadMoveFolderTarget[]>;
   getThreadTime: (thread: ThreadSummary) => string | null;
@@ -67,6 +69,7 @@ export function PinnedThreadList({
   activeThreadId,
   systemProxyEnabled = false,
   systemProxyUrl = null,
+  showProviderLabels = false,
   threadStatusById,
   moveFolderTargetsByWorkspaceId = {},
   getThreadTime,
@@ -99,6 +102,11 @@ export function PinnedThreadList({
             : status?.hasUnread
               ? "unread"
               : "ready";
+        const runtimeBadge = status?.isReviewing
+          ? { label: t("threads.runtimeReviewing"), severity: "reviewing" as const }
+          : status?.isProcessing
+            ? { label: t("threads.runtimeProcessing"), severity: "processing" as const }
+            : null;
         const isProcessing = Boolean(status?.isProcessing);
         const canPin = depth === 0;
         const isPinned = canPin && isThreadPinned(workspaceId, thread.id);
@@ -122,6 +130,8 @@ export function PinnedThreadList({
           isSharedThread
             ? `Shared Session · ${baseEngineTitle}`
             : baseEngineTitle;
+        const providerLabel = resolveCodexProviderLabel(thread);
+        const isProviderUnavailable = thread.providerAvailability === "unavailable";
         const isDeleteConfirmOpen =
           deleteConfirmWorkspaceId === workspaceId && deleteConfirmThreadId === thread.id;
 
@@ -213,6 +223,21 @@ export function PinnedThreadList({
                     {isAutoNaming && (
                       <span className="thread-auto-naming">{t("threads.autoNaming")}</span>
                     )}
+                    {showProviderLabels && providerLabel ? (
+                      <span
+                        className={`thread-provider-label${
+                          isProviderUnavailable ? " is-unavailable" : ""
+                        }`}
+                        title={providerLabel}
+                      >
+                        {providerLabel}
+                      </span>
+                    ) : null}
+                    {runtimeBadge ? (
+                      <span className={`thread-runtime-badge thread-runtime-badge--${runtimeBadge.severity}`}>
+                        {runtimeBadge.label}
+                      </span>
+                    ) : null}
                     {relativeTime ? <span className="thread-time">{relativeTime}</span> : null}
                   </div>
                 </TooltipTrigger>

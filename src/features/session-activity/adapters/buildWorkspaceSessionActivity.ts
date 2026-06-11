@@ -44,6 +44,7 @@ export type WorkspaceSessionActivityThreadContext = {
   rootThreadId: string;
   relationshipSource: SessionActivityRelationshipSource;
   threadIsProcessing: boolean;
+  inheritedTurnSemantic?: string;
 };
 
 export type WorkspaceSessionActivityContext = {
@@ -120,6 +121,32 @@ function sanitizeReasoningTitle(title: string) {
     .replace(/[`*_~]/g, "")
     .replace(/\[(.*?)\]\(.*?\)/g, "$1")
     .trim();
+}
+
+function summarizeTurnUserMessage(text: string, maxLength = 180) {
+  const normalized = text
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) {
+    return "";
+  }
+  return normalized.length <= maxLength
+    ? normalized
+    : `${normalized.slice(0, maxLength - 1)}…`;
+}
+
+function findLatestUserTurnSemantic(items: ConversationItem[]) {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (item?.kind !== "message" || item.role !== "user") {
+      continue;
+    }
+    const summary = summarizeTurnUserMessage(item.text);
+    if (summary) {
+      return summary;
+    }
+  }
+  return "";
 }
 
 function compactReasoningText(value: string) {
@@ -1164,6 +1191,7 @@ export function buildThreadActivity(args: WorkspaceSessionActivityThreadContext 
   });
   let currentTurnIndex = 0;
   let currentTurnToken = "bootstrap";
+  let currentTurnSemantic = args.inheritedTurnSemantic ?? "";
   const buildExploreSignature = (
     event: Pick<
       SessionActivityEvent,
@@ -1217,6 +1245,7 @@ export function buildThreadActivity(args: WorkspaceSessionActivityThreadContext 
     if (item.kind === "message" && item.role === "user") {
       currentTurnIndex += 1;
       currentTurnToken = item.id || `turn-${currentTurnIndex}`;
+      currentTurnSemantic = summarizeTurnUserMessage(item.text);
       return;
     }
     const sessionRole = args.thread.id === args.rootThreadId ? "root" : "child";
@@ -1267,6 +1296,7 @@ export function buildThreadActivity(args: WorkspaceSessionActivityThreadContext 
         kind: "reasoning",
         occurredAt: occurredAtBase,
         summary: `Thinking · ${summary}`,
+        turnSemantic: currentTurnSemantic || undefined,
         status: reasoningStatus,
         jumpTarget: { type: "thread", threadId: args.thread.id },
         reasoningPreview,
@@ -1299,6 +1329,7 @@ export function buildThreadActivity(args: WorkspaceSessionActivityThreadContext 
             kind: "explore",
             occurredAt,
             summary: label || "Command",
+            turnSemantic: currentTurnSemantic || undefined,
             status: eventStatus,
             commandText: label || "Command",
             commandDescription: detail || undefined,
@@ -1333,6 +1364,7 @@ export function buildThreadActivity(args: WorkspaceSessionActivityThreadContext 
           kind: "explore",
           occurredAt,
           summary: `${summaryPrefix} · ${displayLabel}`,
+          turnSemantic: currentTurnSemantic || undefined,
           status: eventStatus,
           explorePreview: detail || undefined,
           jumpTarget:
@@ -1370,6 +1402,7 @@ export function buildThreadActivity(args: WorkspaceSessionActivityThreadContext 
         kind: "command",
         occurredAt,
         summary: commandMeta.summary || "Command",
+        turnSemantic: currentTurnSemantic || undefined,
         status: eventStatus,
         commandText: commandMeta.commandText,
         commandDescription: commandMeta.commandDescription || undefined,
@@ -1392,6 +1425,7 @@ export function buildThreadActivity(args: WorkspaceSessionActivityThreadContext 
         kind: "subagent",
         occurredAt,
         summary: subagentSummary.summary,
+        turnSemantic: currentTurnSemantic || undefined,
         status: eventStatus,
         jumpTarget: { type: "thread", threadId: args.thread.id },
         subagentType: subagentSummary.subagentType,
@@ -1413,6 +1447,7 @@ export function buildThreadActivity(args: WorkspaceSessionActivityThreadContext 
         kind: "task",
         occurredAt,
         summary: taskSummary,
+        turnSemantic: currentTurnSemantic || undefined,
         status: eventStatus,
         jumpTarget: { type: "thread", threadId: args.thread.id },
       });
@@ -1436,6 +1471,7 @@ export function buildThreadActivity(args: WorkspaceSessionActivityThreadContext 
         kind: "fileChange",
         occurredAt,
         summary: fileChangeSummary.summary,
+        turnSemantic: currentTurnSemantic || undefined,
         status: eventStatus,
         jumpTarget: fileChangeSummary.filePath
           ? {
@@ -1480,6 +1516,7 @@ export function buildThreadActivity(args: WorkspaceSessionActivityThreadContext 
         kind: "task",
         occurredAt,
         summary: inspectionSummary.summary,
+        turnSemantic: currentTurnSemantic || undefined,
         status: eventStatus,
         jumpTarget: inspectionSummary.jumpTarget ?? { type: "thread", threadId: args.thread.id },
         explorePreview: inspectionSummary.preview || undefined,
@@ -1579,6 +1616,7 @@ export function resolveWorkspaceSessionActivityContext({
   );
 
   const rootThread = threadMap.get(rootThreadId) ?? null;
+  const rootTurnSemantic = findLatestUserTurnSemantic(itemsByThread[rootThreadId] ?? []);
 
   return {
     rootThreadId,
@@ -1593,6 +1631,7 @@ export function resolveWorkspaceSessionActivityContext({
         fallbackParentById,
       ),
       threadIsProcessing: Boolean(threadStatusById[thread.id]?.isProcessing),
+      inheritedTurnSemantic: thread.id === rootThreadId ? undefined : rootTurnSemantic || undefined,
     })),
   };
 }

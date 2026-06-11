@@ -1,25 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent, MouseEvent, PointerEvent, WheelEvent } from "react";
+import type { MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
-import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left";
-import ArrowDownRightFromCircle from "lucide-react/dist/esm/icons/arrow-down-right-from-circle";
-import ArrowUpLeftFromCircle from "lucide-react/dist/esm/icons/arrow-up-left-from-circle";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
-import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
 import ChevronUp from "lucide-react/dist/esm/icons/chevron-up";
 import Crosshair from "lucide-react/dist/esm/icons/crosshair";
-import Folder from "lucide-react/dist/esm/icons/folder";
-import Globe2 from "lucide-react/dist/esm/icons/globe-2";
-import HardDrive from "lucide-react/dist/esm/icons/hard-drive";
 import Lightbulb from "lucide-react/dist/esm/icons/lightbulb";
-import ListChecks from "lucide-react/dist/esm/icons/list-checks";
 import ListFilter from "lucide-react/dist/esm/icons/list-filter";
 import Network from "lucide-react/dist/esm/icons/network";
 import RadioTower from "lucide-react/dist/esm/icons/radio-tower";
 import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
 import Sparkles from "lucide-react/dist/esm/icons/sparkles";
-import ZoomIn from "lucide-react/dist/esm/icons/zoom-in";
-import ZoomOut from "lucide-react/dist/esm/icons/zoom-out";
 
 import { cn } from "../../../lib/utils";
 import type { EngineType, ModelOption, WorkspaceInfo } from "../../../types";
@@ -31,12 +21,11 @@ import {
 } from "../../agent-orchestration";
 import { useProjectMapDataset } from "../hooks/useProjectMapDataset";
 import type { ProjectMapDatasetController } from "../hooks/useProjectMapDataset";
+import { useProjectMapGraphInteractionHandlers } from "../hooks/useProjectMapGraphInteractionHandlers";
+import { useProjectMapIntentCanvasHandlers } from "../hooks/useProjectMapIntentCanvasHandlers";
 import {
   PROJECT_MAP_DEFAULT_FOCUS_ZOOM,
   PROJECT_MAP_DEFAULT_OVERVIEW_ZOOM,
-  PROJECT_MAP_GRAPH_HEIGHT,
-  PROJECT_MAP_GRAPH_WIDTH,
-  clampProjectMapGraphZoom,
   buildInteractiveProjectMapLayout,
   buildProjectMapMiniMapProjection,
   buildProjectMapNodeIndex,
@@ -50,13 +39,9 @@ import {
   resolveVisibleProjectMapNodes,
   settleProjectMapLayout,
   type ProjectMapGraphNodePosition,
-  type ProjectMapGraphViewport,
 } from "../utils/interactiveLayout";
 import {
   formatProjectMapDateTime,
-  getProjectMapGenerationQueue,
-  getProjectMapRecentRuns,
-  translateProjectMapNodeKind,
 } from "../utils/display";
 import { buildProjectMapExplainPack } from "../utils/contextBuilder";
 import { buildProjectMapImpactAnalysis } from "../utils/impactAnalysis";
@@ -75,12 +60,8 @@ import {
   searchProjectMapGrouped,
 } from "../utils/navigation";
 import { buildProjectMapActivityProjection } from "../utils/activityProjection";
-import {
-  buildProjectMapHighlightProjection,
-} from "../utils/highlightProjection";
-import {
-  buildProjectMapAdvisorHints,
-} from "../utils/advisorProjections";
+import { buildProjectMapHighlightProjection } from "../utils/highlightProjection";
+import { buildProjectMapAdvisorHints } from "../utils/advisorProjections";
 import {
   buildProjectMapRelationIndex,
   filterProjectMapRelations,
@@ -92,9 +73,7 @@ import {
   ProjectMapRelationshipSection,
   type ProjectMapRelationshipSummaryState,
 } from "./ProjectMapRelationshipSection";
-import {
-  ProjectMapGenerationTaskDrawer,
-} from "./ProjectMapTaskDrawer";
+import { ProjectMapStorageSwitch } from "./ProjectMapStorageSwitch";
 import {
   ProjectMapAdvisorHintsPanel,
   ProjectMapGroupedQueryPanel,
@@ -102,6 +81,7 @@ import {
   ProjectMapRecentActivityPanel,
   type ProjectMapNavigationHistoryItem,
 } from "./ProjectMapWorkbenchPanels";
+import { ProjectMapGraphCanvas } from "./ProjectMapGraphCanvas";
 import {
   DeleteNodeConfirmDialog,
   DetailPanel,
@@ -113,19 +93,36 @@ import {
 import {
   buildProjectMapEvidenceFileIndex,
 } from "../utils/evidenceFileIndex";
-import type { IntentCanvasMode, IntentCanvasOpenRequest } from "../../intent-canvas";
+import type { IntentCanvasOpenRequest } from "../../intent-canvas";
 import type { IntentCanvasCodeSelectionAnchor } from "../../intent-canvas/types";
 import type { ProjectMapHierarchyRelationView } from "./ProjectMapPanelSurfaces";
+import type { ProjectMapOrchestrationDraftState } from "./ProjectMapPanelSurfaces";
+import {
+  MINI_MAP_SIZE,
+  PROJECT_MAP_RELATION_FILTER_ALL,
+  appendUniqueLocalHistory,
+  buildLensIndex,
+  buildNeighborSet,
+  getDetailPanelFocusOffset,
+  getProfileSummary,
+  normalizeLocalHistoryLabel,
+  readCanvasControlsCollapsedPreference,
+  resolveProjectMapOrchestrationWorkspaceId,
+  resolveProjectMapPreferredLanguage,
+  resolveSelectedGenerationModel,
+  writeCanvasControlsCollapsedPreference,
+  type GraphNodeDragState,
+  type GraphViewSnapshot,
+  type GraphViewport,
+  type ProjectMapVisibleSectionState,
+} from "./projectMapPanelModel";
 import type {
   ProjectMapDataset,
   ProjectMapGraphRepairSummary,
   ProjectMapCandidate,
-  ProjectMapLens,
   ProjectMapLayoutPreset,
   ProjectMapNode,
   ProjectMapImpactSourceMetadata,
-    ProjectMapPreferredLanguage,
-  ProjectMapProfile,
   ProjectMapQuickFilterId,
   ProjectMapAdvisorHint,
   ProjectMapQueryResult,
@@ -148,221 +145,6 @@ type ProjectMapPanelProps = {
   onOpenIntentCanvas?: (request: Omit<IntentCanvasOpenRequest, "requestId">) => void;
   onOpenIntentCanvasFromRelationship?: (request: Omit<IntentCanvasOpenRequest, "requestId">) => void;
 };
-
-type GraphViewport = ProjectMapGraphViewport;
-
-type GraphViewSnapshot = {
-  focusNodeId: string | null;
-  selectedNodeId: string | null;
-};
-
-type ProjectMapOrchestrationDraftState =
-  | { status: "idle" }
-  | {
-      status: "created";
-      nodeId: string;
-      taskId: string;
-      taskStatus: string;
-      evidenceCount: number;
-      riskCount: number;
-    }
-  | {
-      status: "failed";
-      nodeId: string;
-      reason: "missing-workspace" | "missing-node";
-    };
-
-type ProjectMapVisibleSectionState = {
-  navigation: boolean;
-  query: boolean;
-  activity: boolean;
-  evidence: boolean;
-  fileRelations: boolean;
-  relations: boolean;
-  advisor: boolean;
-  health: boolean;
-};
-
-type GraphNodeDragState = {
-  pointerId: number;
-  startClientX: number;
-  startClientY: number;
-  nodeIds: string[];
-  originPositions: Map<string, ProjectMapGraphNodePosition>;
-  previewPositions: Map<string, ProjectMapGraphNodePosition>;
-  didMove: boolean;
-};
-
-const ZOOM_STEP = 0.1;
-const MINI_MAP_SIZE = { width: 180, height: 118 };
-const DETAIL_PANEL_FOCUS_OFFSET_MIN = 160;
-const DETAIL_PANEL_FOCUS_OFFSET_MAX = 240;
-const CANVAS_CONTROLS_COLLAPSED_STORAGE_KEY = "ccgui.projectMap.canvasControlsCollapsed";
-const PROJECT_MAP_RELATION_FILTER_ALL = "all";
-const PROJECT_MAP_LOCAL_HISTORY_LIMIT = 6;
-const PROJECT_MAP_QUICK_FILTERS: ProjectMapQuickFilterId[] = [
-  "changed",
-  "affected",
-  "stale",
-  "candidate",
-  "low-confidence",
-  "inferred-relations",
-];
-
-function normalizeLocalHistoryLabel(value: string): string {
-  return value.trim().replace(/\s+/g, " ");
-}
-
-function appendUniqueLocalHistory<T>(
-  current: T[],
-  nextItem: T,
-  getKey: (item: T) => string,
-): T[] {
-  const nextKey = getKey(nextItem);
-  if (!nextKey) {
-    return current;
-  }
-  return [
-    nextItem,
-    ...current.filter((item) => getKey(item) !== nextKey),
-  ].slice(0, PROJECT_MAP_LOCAL_HISTORY_LIMIT);
-}
-
-function readCanvasControlsCollapsedPreference(): boolean {
-  if (typeof window === "undefined" || !window.localStorage) {
-    return true;
-  }
-
-  try {
-    const storedValue = window.localStorage.getItem(CANVAS_CONTROLS_COLLAPSED_STORAGE_KEY);
-    return storedValue === null ? true : storedValue === "true";
-  } catch {
-    return true;
-  }
-}
-
-function writeCanvasControlsCollapsedPreference(collapsed: boolean): void {
-  if (typeof window === "undefined" || !window.localStorage) {
-    return;
-  }
-
-  try {
-    window.localStorage.setItem(CANVAS_CONTROLS_COLLAPSED_STORAGE_KEY, String(collapsed));
-  } catch {
-    // UI preference persistence is best-effort.
-  }
-}
-
-function resolveProjectMapOrchestrationWorkspaceId(input: {
-  activeWorkspace: WorkspaceInfo | null;
-  dataset: ProjectMapDataset;
-  workspaceName?: string | null;
-}): string | null {
-  const ownedRunWorkspaceId =
-    input.dataset.runs.find((run) => run.ownership?.workspaceId)?.ownership?.workspaceId ?? null;
-  const candidates = [
-    input.activeWorkspace?.id,
-    ownedRunWorkspaceId,
-    input.dataset.manifest.storageKey,
-    input.workspaceName,
-  ];
-  for (const candidate of candidates) {
-    if (typeof candidate === "string" && candidate.trim().length > 0) {
-      return candidate.trim();
-    }
-  }
-  return null;
-}
-
-function resolveSelectedGenerationModel(
-  selectedModelId: string | null | undefined,
-  models: ModelOption[] | undefined,
-): string | null {
-  const trimmedSelection = selectedModelId?.trim() ?? "";
-  if (!trimmedSelection) {
-    return null;
-  }
-  const matchedModel = models?.find(
-    (model) => model.id === trimmedSelection || model.model === trimmedSelection,
-  );
-  return matchedModel?.model ?? trimmedSelection;
-}
-
-function getDetailPanelFocusOffset(input: {
-  canvasElement: HTMLDivElement | null;
-  isDetailCollapsed: boolean;
-}): number {
-  if (input.isDetailCollapsed) {
-    return 0;
-  }
-
-  const detailPanel = input.canvasElement?.querySelector<HTMLElement>(".project-map-detail-panel");
-  const detailWidth = detailPanel?.getBoundingClientRect().width ?? 0;
-  const fallbackWidth = 478;
-  const offset = Math.max(
-    DETAIL_PANEL_FOCUS_OFFSET_MIN,
-    (detailWidth > 0 ? detailWidth : fallbackWidth) / 2,
-  );
-  return -Math.min(DETAIL_PANEL_FOCUS_OFFSET_MAX, offset);
-}
-
-function buildLensIndex(lenses: ProjectMapLens[]): Map<string, ProjectMapLens> {
-  return new Map(lenses.map((lens) => [lens.id, lens]));
-}
-
-function buildNeighborSet(
-  nodes: ProjectMapNode[],
-  selectedNodeId: string | null,
-  hoverNodeId: string | null,
-  isFocusedView: boolean,
-): Set<string> {
-  const focusNodeId = hoverNodeId ?? (isFocusedView ? selectedNodeId : null);
-  if (!focusNodeId) {
-    return new Set(nodes.map((node) => node.id));
-  }
-  const focusedNode = nodes.find((node) => node.id === focusNodeId);
-  if (!focusedNode) {
-    return new Set(nodes.map((node) => node.id));
-  }
-  return new Set([
-    focusedNode.id,
-    focusedNode.parentId ?? "",
-    ...focusedNode.children,
-    ...nodes
-      .filter((node) => node.children.includes(focusedNode.id))
-      .map((node) => node.id),
-  ].filter(Boolean));
-}
-
-function getDescendantStats(
-  node: ProjectMapNode,
-  nodeIndex: Map<string, ProjectMapNode>,
-): {
-  count: number;
-  stale: number;
-  candidate: number;
-} {
-  const children = getSortedProjectMapChildren(node, nodeIndex);
-  return {
-    count: children.length,
-    stale: children.filter((child) => child.stale).length,
-    candidate: children.filter((child) => child.candidate).length,
-  };
-}
-
-function getProfileSummary(profile: Partial<ProjectMapProfile> | null | undefined): {
-  language: string;
-  shapes: string;
-} {
-  const language = profile?.primaryLanguage ?? "unknown";
-  const shapes = profile?.shapes?.length ? profile.shapes.join(" · ") : "unknown";
-  return { language, shapes };
-}
-function resolveProjectMapPreferredLanguage(
-  language: string | null | undefined,
-): ProjectMapPreferredLanguage {
-  return language?.toLowerCase().startsWith("zh") ? "zh" : "en";
-}
 
 export function ProjectMapPanel({
   activeWorkspace = null,
@@ -438,7 +220,6 @@ export function ProjectMapPanel({
     readCanvasControlsCollapsedPreference,
   );
   const [isDetailCollapsed, setIsDetailCollapsed] = useState(false);
-  const [isTaskDrawerOpen, setIsTaskDrawerOpen] = useState(false);
   const [candidateBatchMessage, setCandidateBatchMessage] = useState<string | null>(null);
   const [orchestrationDraftState, setOrchestrationDraftState] =
     useState<ProjectMapOrchestrationDraftState>({ status: "idle" });
@@ -865,11 +646,6 @@ export function ProjectMapPanel({
     return entries;
   }, [dataset.candidates]);
   const staleCount = dataset.nodes.filter((node) => node.stale).length;
-  const generationQueue = useMemo(() => getProjectMapGenerationQueue(dataset.runs), [dataset.runs]);
-  const recentRuns = useMemo(() => getProjectMapRecentRuns(dataset.runs), [dataset.runs]);
-  const activeGenerationRun = generationQueue[0] ?? null;
-  const queuedGenerationRuns = generationQueue.slice(1);
-  const previousGenerationQueueCountRef = useRef(generationQueue.length);
   const hubNodes = rootNode ? getSortedProjectMapChildren(rootNode, nodeIndex) : [];
   const detectedLensCount = visibleLenses.filter((lens) => lens.status === "detected").length;
   const candidateLensCount = visibleLenses.filter((lens) => lens.status === "candidate").length;
@@ -1050,13 +826,6 @@ export function ProjectMapPanel({
   );
 
   useEffect(() => {
-    if (generationQueue.length > previousGenerationQueueCountRef.current) {
-      setIsTaskDrawerOpen(true);
-    }
-    previousGenerationQueueCountRef.current = generationQueue.length;
-  }, [generationQueue.length]);
-
-  useEffect(() => {
     if (!graphLayout.rootNodeId || !graphLayout.bounds) {
       return;
     }
@@ -1181,12 +950,16 @@ export function ProjectMapPanel({
     );
   }, []);
 
-  const handleNodeSelect = (node: ProjectMapNode) => {
+  const handlePrepareNodeSelection = useCallback((node: ProjectMapNode) => {
     setHoverNodeId(null);
     setSelectedNodeId(node.id);
     setIsDetailCollapsed(false);
+  }, []);
+
+  const handleNodeSelect = useCallback((node: ProjectMapNode) => {
+    handlePrepareNodeSelection(node);
     setSelectedGraphNodeIds(new Set([node.id]));
-  };
+  }, [handlePrepareNodeSelection]);
 
   const rememberCurrentView = useCallback(() => {
     const snapshot: GraphViewSnapshot = {
@@ -1490,329 +1263,49 @@ export function ProjectMapPanel({
     [onOpenEvidenceFile],
   );
 
-  const updateZoom = (nextZoom: number) => {
-    setViewport((current) => ({
-      ...current,
-      zoom: clampProjectMapGraphZoom(nextZoom),
-    }));
-  };
-
-  const handleCanvasPointerDown = (
-    event: PointerEvent<HTMLDivElement>,
-  ) => {
-    if ((event.target as HTMLElement).closest("button, aside, .project-map-node")) {
-      return;
-    }
-    panStartRef.current = {
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      originX: viewport.pan.x,
-      originY: viewport.pan.y,
-    };
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-  };
-
-  const updateNodeDragPreview = (
-    event: PointerEvent<HTMLDivElement>,
-  ): boolean => {
-    const nodeDrag = nodeDragRef.current;
-    if (!nodeDrag || nodeDrag.pointerId !== event.pointerId) {
-      return false;
-    }
-
-    const deltaX = (event.clientX - nodeDrag.startClientX) / viewport.zoom;
-    const deltaY = (event.clientY - nodeDrag.startClientY) / viewport.zoom;
-    nodeDrag.didMove = nodeDrag.didMove || Math.hypot(deltaX, deltaY) > 3;
-    const previewEntries = nodeDrag.nodeIds.flatMap((nodeId) => {
-      const originPosition = nodeDrag.originPositions.get(nodeId);
-      if (!originPosition) {
-        return [];
-      }
-      return [
-        [
-          nodeId,
-          {
-            ...originPosition,
-            x: Number((originPosition.x + deltaX).toFixed(2)),
-            y: Number((originPosition.y + deltaY).toFixed(2)),
-            pinned: true,
-          },
-        ] as const,
-      ];
-    });
-    nodeDrag.previewPositions = new Map(previewEntries);
-    setDragPreviewPositions(
-      Object.fromEntries(previewEntries),
-    );
-    return true;
-  };
-
-  const finishNodeDrag = (event: PointerEvent<HTMLDivElement>): boolean => {
-    const nodeDrag = nodeDragRef.current;
-    if (!nodeDrag || nodeDrag.pointerId !== event.pointerId) {
-      return false;
-    }
-
-    nodeDragRef.current = null;
-    const draggedPositions = nodeDrag.nodeIds.flatMap((nodeId) => {
-      const previewPosition = nodeDrag.previewPositions.get(nodeId);
-      const originPosition = nodeDrag.originPositions.get(nodeId);
-      return previewPosition ?? originPosition ?? [];
-    });
-    setSelectedGraphNodeIds(new Set(nodeDrag.nodeIds));
-    suppressNextNodeClickRef.current = nodeDrag.didMove;
-    if (draggedPositions.length > 0) {
-      void persistGraphPositions({
-        positions: draggedPositions,
-        pinnedNodeIds: new Set(nodeDrag.nodeIds),
-        updatedAt: new Date().toISOString(),
-      }).finally(() => {
-        setDragPreviewPositions({});
-      });
-    } else {
-      setDragPreviewPositions({});
-    }
-    return true;
-  };
-
-  const handleCanvasPointerMove = (
-    event: PointerEvent<HTMLDivElement>,
-  ) => {
-    if (updateNodeDragPreview(event)) {
-      return;
-    }
-
-    const start = panStartRef.current;
-    if (!start || start.pointerId !== event.pointerId) {
-      return;
-    }
-    setViewport((current) => ({
-      ...current,
-      pan: {
-        x: start.originX + event.clientX - start.startX,
-        y: start.originY + event.clientY - start.startY,
-      },
-    }));
-  };
-
-  const handleCanvasPointerEnd = (event: PointerEvent<HTMLDivElement>) => {
-    if (finishNodeDrag(event)) {
-      return;
-    }
-
-    if (panStartRef.current?.pointerId === event.pointerId) {
-      panStartRef.current = null;
-    }
-  };
-
-  const handleCanvasWheel = (event: WheelEvent<HTMLDivElement>) => {
-    if ((event.target as HTMLElement).closest("button, aside")) {
-      return;
-    }
-
-    event.preventDefault();
-    const canvasRect = event.currentTarget.getBoundingClientRect();
-    const anchor = {
-      x: event.clientX - canvasRect.left - canvasRect.width / 2,
-      y: event.clientY - canvasRect.top - canvasRect.height / 2,
-    };
-    const zoomDelta = event.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP;
-
-    setViewport((current) => {
-      const nextZoom = clampProjectMapGraphZoom(current.zoom + zoomDelta);
-      if (nextZoom === current.zoom) {
-        return current;
-      }
-
-      const anchoredGraphPoint = {
-        x: (anchor.x - current.pan.x) / current.zoom,
-        y: (anchor.y - current.pan.y) / current.zoom,
-      };
-
-      return {
-        zoom: nextZoom,
-        pan: {
-          x: Number((anchor.x - anchoredGraphPoint.x * nextZoom).toFixed(2)),
-          y: Number((anchor.y - anchoredGraphPoint.y * nextZoom).toFixed(2)),
-        },
-      };
-    });
-  };
-
-  const handleNodeKeyDown = (
-    event: KeyboardEvent<HTMLDivElement>,
-    node: ProjectMapNode,
-  ) => {
-    if (event.key !== "Enter" && event.key !== " ") {
-      return;
-    }
-    event.preventDefault();
-    handleNodeSelect(node);
-  };
-
-  const handleNodePointerDown = (
-    event: PointerEvent<HTMLDivElement>,
-    node: ProjectMapNode,
-  ) => {
-    if ((event.target as HTMLElement).closest("button")) {
-      return;
-    }
-    event.stopPropagation();
-    const positionById = new Map(renderGraphLayout.positions.map((position) => [position.id, position]));
-    const nodeIds = selectedGraphNodeIds.has(node.id)
-      ? [...selectedGraphNodeIds].filter((nodeId) => positionById.has(nodeId))
-      : [node.id];
-    const originPositions = new Map(
-      nodeIds.flatMap((nodeId) => {
-        const position = positionById.get(nodeId);
-        return position ? [[nodeId, position]] : [];
-      }),
-    );
-    if (originPositions.size === 0) {
-      return;
-    }
-
-    nodeDragRef.current = {
-      pointerId: event.pointerId,
-      startClientX: event.clientX,
-      startClientY: event.clientY,
-      nodeIds,
-      originPositions,
-      previewPositions: new Map(),
-      didMove: false,
-    };
-    setSelectedNodeId(node.id);
-    setIsDetailCollapsed(false);
-    setSelectedGraphNodeIds(new Set(nodeIds));
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-  };
-
-  const handleNodePointerMove = (event: PointerEvent<HTMLDivElement>) => {
-    if (updateNodeDragPreview(event)) {
-      event.stopPropagation();
-    }
-  };
-
-  const handleNodePointerEnd = (event: PointerEvent<HTMLDivElement>) => {
-    if (finishNodeDrag(event)) {
-      event.stopPropagation();
-    }
-  };
-
-  const handleNodeClick = (
-    event: MouseEvent<HTMLDivElement>,
-    node: ProjectMapNode,
-  ) => {
-    if (suppressNextNodeClickRef.current) {
-      suppressNextNodeClickRef.current = false;
-      event.preventDefault();
-      event.stopPropagation();
-      return;
-    }
-
-    if (event.shiftKey || event.metaKey) {
-      setHoverNodeId(null);
-      setSelectedNodeId(node.id);
-      setIsDetailCollapsed(false);
-      setSelectedGraphNodeIds((current) => {
-        const nextSelection = new Set(current);
-        if (nextSelection.has(node.id)) {
-          nextSelection.delete(node.id);
-        } else {
-          nextSelection.add(node.id);
-        }
-        if (nextSelection.size === 0) {
-          nextSelection.add(node.id);
-        }
-        return nextSelection;
-      });
-      return;
-    }
-
-    handleNodeSelect(node);
-  };
-
-  const handleMiniMapClick = (event: MouseEvent<HTMLButtonElement>) => {
-    if (!miniMapProjection) {
-      return;
-    }
-    const rect = event.currentTarget.getBoundingClientRect();
-    const graphPoint = miniMapProjection.unprojectPoint({
-      x: event.clientX - rect.left,
-      y: event.clientY - rect.top,
-    });
-    const graphCenter = {
-      x: PROJECT_MAP_GRAPH_WIDTH / 2,
-      y: PROJECT_MAP_GRAPH_HEIGHT / 2,
-    };
-    setViewport((current) => ({
-      ...current,
-      pan: {
-        x: Number((-(graphPoint.x - graphCenter.x) * current.zoom).toFixed(2)),
-        y: Number((-(graphPoint.y - graphCenter.y) * current.zoom).toFixed(2)),
-      },
-    }));
-  };
+  const {
+    handleCanvasPointerDown,
+    handleCanvasPointerEnd,
+    handleCanvasPointerMove,
+    handleCanvasWheel,
+    handleMiniMapClick,
+    handleNodeClick,
+    handleNodeKeyDown,
+    handleNodePointerDown,
+    handleNodePointerEnd,
+    handleNodePointerMove,
+    updateZoom,
+  } = useProjectMapGraphInteractionHandlers({
+    miniMapProjection,
+    nodeDragRef,
+    panStartRef,
+    persistGraphPositions,
+    renderGraphLayout,
+    selectedGraphNodeIds,
+    setDragPreviewPositions,
+    setSelectedGraphNodeIds,
+    setViewport,
+    suppressNextNodeClickRef,
+    viewport,
+    onPrepareNodeSelection: handlePrepareNodeSelection,
+    onSelectSingleNode: handleNodeSelect,
+  });
 
   const handleRelationshipScanClick = useCallback(() => {
     setIsFileRelationPanelExpanded(true);
     setRelationshipScanRequestId((current) => current + 1);
   }, []);
 
-  const handleOpenIntentCanvas = useCallback((mode: IntentCanvasMode) => {
-    if (!selectedNode) {
-      return;
-    }
-    onOpenIntentCanvas?.({
-      mode,
-      title: mode === "spotlight"
-        ? `${selectedNode.title} Spotlight`
-        : `${selectedNode.title} Intent Canvas`,
-      summary: selectedNode.summary,
-      source: {
-        projectMapNodeId: selectedNode.id,
-        nodeTitle: selectedNode.title,
-        nodeKind: selectedNode.nodeKind,
-        summary: selectedNode.summary,
-      },
-    });
-    setIsDetailCollapsed(false);
-  }, [onOpenIntentCanvas, selectedNode]);
-
-  const handleOpenIntentCanvasForFile = useCallback((filePath: string) => {
-    const trimmedPath = filePath.trim();
-    if (!trimmedPath) {
-      return;
-    }
-    onOpenIntentCanvas?.({
-      mode: "file",
-      title: `${trimmedPath} Intent Canvas`,
-      summary: selectedNode?.summary ?? "",
-      source: {
-        projectMapNodeId: selectedNode?.id ?? null,
-        nodeTitle: selectedNode?.title ?? null,
-        nodeKind: selectedNode?.nodeKind ?? null,
-        summary: selectedNode?.summary ?? null,
-        filePath: trimmedPath,
-      },
-    });
-    setIsDetailCollapsed(false);
-  }, [onOpenIntentCanvas, selectedNode]);
-
-  const handleOpenIntentCanvasFromRelationship = useCallback((request: Omit<IntentCanvasOpenRequest, "requestId">) => {
-    const enrichedRequest = activeCodeSelectionAnchor && request.seedSemanticGraphs?.length
-      ? {
-          ...request,
-          seedSemanticGraphs: request.seedSemanticGraphs.map((graph) => ({
-            ...graph,
-            sourceSelection: activeCodeSelectionAnchor,
-          })),
-        }
-      : request;
-    onOpenIntentCanvas?.(enrichedRequest);
-    setIsDetailCollapsed(false);
-  }, [activeCodeSelectionAnchor, onOpenIntentCanvas]);
+  const {
+    handleOpenIntentCanvas,
+    handleOpenIntentCanvasForFile,
+    handleOpenIntentCanvasFromRelationship,
+  } = useProjectMapIntentCanvasHandlers({
+    activeCodeSelectionAnchor,
+    selectedNode,
+    onDetailOpen: () => setIsDetailCollapsed(false),
+    onOpenIntentCanvas,
+  });
 
   const handleNodeDrillClick = (
     event: MouseEvent<HTMLButtonElement>,
@@ -1888,34 +1381,10 @@ export function ProjectMapPanel({
                 {t("projectMap.collapseChrome")}
               </button>
               {isPersistenceBacked ? (
-                <div
-                  className="project-map-storage-switch"
-                  role="group"
-                  aria-label={t("projectMap.storage.readLocation")}
-                >
-                  <span className="project-map-storage-label">
-                    <HardDrive aria-hidden />
-                    {t("projectMap.storage.readLocation")}
-                  </span>
-                  <button
-                    type="button"
-                    className={cn(datasetController.activeReadLocation === "global" && "is-active")}
-                    aria-pressed={datasetController.activeReadLocation === "global"}
-                    onClick={() => datasetController.switchReadLocation("global")}
-                  >
-                    <Globe2 aria-hidden />
-                    {t("projectMap.storage.global")}
-                  </button>
-                  <button
-                    type="button"
-                    className={cn(datasetController.activeReadLocation === "project" && "is-active")}
-                    aria-pressed={datasetController.activeReadLocation === "project"}
-                    onClick={() => datasetController.switchReadLocation("project")}
-                  >
-                    <Folder aria-hidden />
-                    {t("projectMap.storage.project")}
-                  </button>
-                </div>
+                <ProjectMapStorageSwitch
+                  activeReadLocation={datasetController.activeReadLocation}
+                  onSwitchReadLocation={datasetController.switchReadLocation}
+                />
               ) : null}
               {candidateCount > 0 ? (
                 <>
@@ -1957,19 +1426,6 @@ export function ProjectMapPanel({
                 {relationshipSummaryState.status === "running"
                   ? t("projectMap.relationship.scanning")
                   : t("projectMap.relationship.scan")}
-              </button>
-              <button
-                className={cn(
-                  "project-map-toolbar-action project-map-task-button",
-                  generationQueue.length > 0 && "has-active-task",
-                )}
-                type="button"
-                aria-expanded={isTaskDrawerOpen}
-                onClick={() => setIsTaskDrawerOpen((current) => !current)}
-              >
-                <ListChecks aria-hidden />
-                {t("projectMap.tasks.button")}
-                <span>{generationQueue.length}</span>
               </button>
               <button
                 className="project-map-toolbar-action project-map-profile-action"
@@ -2364,366 +1820,54 @@ export function ProjectMapPanel({
             </button>
           </div>
         ) : (
-          <div
-            ref={canvasRef}
-            className="project-map-graph-canvas"
-            onPointerDown={handleCanvasPointerDown}
-            onPointerMove={handleCanvasPointerMove}
-            onPointerUp={handleCanvasPointerEnd}
-            onPointerCancel={handleCanvasPointerEnd}
-            onWheel={handleCanvasWheel}
+          <ProjectMapGraphCanvas
+            activeQuickFilters={activeQuickFilters}
+            backToPreviousLabel={backToPreviousLabel}
+            canvasRef={canvasRef}
+            focusNodeId={focusNodeId}
+            hasBackToParentFallback={hasBackToParentFallback}
+            highlightProjection={highlightProjection}
+            isCanvasControlsCollapsed={isCanvasControlsCollapsed}
+            lensIndex={lensIndex}
+            miniMapProjection={miniMapProjection}
+            neighborNodeIds={neighborNodeIds}
+            nodeIndex={nodeIndex}
+            pathResult={pathResult}
+            previousViewSnapshot={previousViewSnapshot}
+            relationFilteredNodeIds={relationFilteredNodeIds}
+            relationRenderEdges={relationRenderEdges}
+            renderGraphLayout={renderGraphLayout}
+            rootNode={rootNode}
+            selectedGraphNodeIds={selectedGraphNodeIds}
+            selectedNode={selectedNode}
+            selectedRelationId={selectedRelationId}
+            selectedRelationNodeIds={selectedRelationNodeIds}
+            viewport={viewport}
+            layoutPreset={dataset.viewState?.layoutPreset ?? "radial"}
+            onAutoLayout={handleAutoLayout}
+            onBackToPreviousView={handleBackToPreviousView}
+            onCanvasControlsToggle={handleCanvasControlsToggle}
+            onCanvasPointerDown={handleCanvasPointerDown}
+            onCanvasPointerEnd={handleCanvasPointerEnd}
+            onCanvasPointerMove={handleCanvasPointerMove}
+            onCanvasWheel={handleCanvasWheel}
+            onLayoutPresetChange={handleLayoutPresetChange}
+            onMiniMapClick={handleMiniMapClick}
+            onNodeClick={handleNodeClick}
+            onNodeDoubleClick={handleDrillIn}
+            onNodeDrillClick={handleNodeDrillClick}
+            onNodeDrillUpClick={handleNodeDrillUpClick}
+            onNodeKeyDown={handleNodeKeyDown}
+            onNodeMouseEnter={setHoverNodeId}
+            onNodeMouseLeave={() => setHoverNodeId(null)}
+            onNodePointerDown={handleNodePointerDown}
+            onNodePointerEnd={handleNodePointerEnd}
+            onNodePointerMove={handleNodePointerMove}
+            onQuickFilterToggle={handleQuickFilterToggle}
+            onResetLayout={handleResetLayout}
+            onResetView={fitGraphToViewport}
+            onZoomChange={updateZoom}
           >
-            <div
-              className={cn(
-                "project-map-canvas-control-group",
-                isCanvasControlsCollapsed && "is-collapsed",
-              )}
-              role="group"
-              aria-label={t("projectMap.canvasControls")}
-            >
-              <button
-                type="button"
-                className="project-map-canvas-controls-toggle"
-                onClick={handleCanvasControlsToggle}
-                aria-expanded={!isCanvasControlsCollapsed}
-                aria-label={
-                  isCanvasControlsCollapsed
-                    ? t("projectMap.expandCanvasControls")
-                    : t("projectMap.collapseCanvasControls")
-                }
-              >
-                {isCanvasControlsCollapsed ? <ChevronRight aria-hidden /> : <ChevronDown aria-hidden />}
-                <span>{t("projectMap.layoutPreset")}</span>
-              </button>
-              {!isCanvasControlsCollapsed ? (
-                <div className="project-map-canvas-controls-content">
-                  <button
-                    type="button"
-                    onClick={() => updateZoom(viewport.zoom - ZOOM_STEP)}
-                    aria-label={t("projectMap.zoomOut")}
-                  >
-                    <ZoomOut aria-hidden />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={fitGraphToViewport}
-                  >
-                    {t("projectMap.resetView")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleAutoLayout}
-                  >
-                    {t("projectMap.autoLayout")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleResetLayout}
-                  >
-                    {t("projectMap.resetLayout")}
-                  </button>
-                  <label className="project-map-layout-preset">
-                    <span>{t("projectMap.layoutPreset")}</span>
-                    <select
-                      value={dataset.viewState?.layoutPreset ?? "radial"}
-                      aria-label={t("projectMap.layoutPreset")}
-                      onChange={(event) =>
-                        handleLayoutPresetChange(event.currentTarget.value as ProjectMapLayoutPreset)
-                      }
-                    >
-                      <option value="radial">{t("projectMap.layoutPresetRadial")}</option>
-                      <option value="tree">{t("projectMap.layoutPresetTree")}</option>
-                      <option value="force">{t("projectMap.layoutPresetForce")}</option>
-                    </select>
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => updateZoom(viewport.zoom + ZOOM_STEP)}
-                    aria-label={t("projectMap.zoomIn")}
-                  >
-                    <ZoomIn aria-hidden />
-                  </button>
-                  {previousViewSnapshot || hasBackToParentFallback ? (
-                    <button
-                      type="button"
-                      onClick={handleBackToPreviousView}
-                    >
-                      <ArrowLeft aria-hidden />
-                      {backToPreviousLabel}
-                    </button>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-            <div
-              className="project-map-quick-filters"
-              role="toolbar"
-              aria-label={t("projectMap.quickFilters.title")}
-            >
-              {PROJECT_MAP_QUICK_FILTERS.map((filterId) => {
-                const isActive = activeQuickFilters.has(filterId);
-                return (
-                  <button
-                    key={filterId}
-                    type="button"
-                    className={cn("project-map-quick-filter-chip", isActive && "is-active")}
-                    aria-pressed={isActive}
-                    onClick={() => handleQuickFilterToggle(filterId)}
-                  >
-                    {t(`projectMap.quickFilters.${filterId}`)}
-                  </button>
-                );
-              })}
-            </div>
-            <div
-              className="project-map-graph-viewport"
-              style={{
-                transform: `translate(${viewport.pan.x}px, ${viewport.pan.y}px) scale(${viewport.zoom})`,
-              }}
-            >
-              <svg
-                className="project-map-graph-lines"
-                viewBox={`0 0 ${PROJECT_MAP_GRAPH_WIDTH} ${PROJECT_MAP_GRAPH_HEIGHT}`}
-                aria-hidden
-              >
-                {renderGraphLayout.edges.map((edge) => {
-                  const isFocused =
-                    neighborNodeIds.has(edge.source.id) &&
-                    neighborNodeIds.has(edge.target.id);
-                  const relationState = highlightProjection.relationStates.get(edge.id);
-                  const isPathEdge = pathResult.edgeKeys.has(`${edge.source.id}::${edge.target.id}`);
-                  const isFilterEdge = highlightProjection.filterRelationIds.has(edge.id);
-                  const isAdvisorEdge = highlightProjection.advisorRelationIds.has(edge.id);
-                  return (
-                    <line
-                      key={edge.id}
-                      x1={edge.source.x}
-                      y1={edge.source.y}
-                      x2={edge.target.x}
-                      y2={edge.target.y}
-                      className={cn(
-                        "project-map-edge",
-                        isFocused && "is-focused",
-                        isPathEdge && "is-path-edge",
-                        isFilterEdge && "is-filter-edge",
-                        isAdvisorEdge && "is-advisor-edge",
-                        relationState?.primary && `is-highlight-${relationState.primary}`,
-                      )}
-                    />
-                  );
-                })}
-                {relationRenderEdges.map(({ indexedRelation, source, target }) => {
-                  const isSelectedRelation = selectedRelationId === indexedRelation.relation.id;
-                  const relationState = highlightProjection.relationStates.get(indexedRelation.relation.id);
-                  return (
-                    <line
-                      key={`relation:${indexedRelation.relation.id}:${source.id}:${target.id}`}
-                      x1={source.x}
-                      y1={source.y}
-                      x2={target.x}
-                      y2={target.y}
-                      className={cn(
-                        "project-map-edge",
-                        "is-relation-edge",
-                        indexedRelation.degraded && "is-degraded",
-                        isSelectedRelation && "is-selected-relation",
-                        highlightProjection.pathRelationIds.has(indexedRelation.relation.id) && "is-path-edge",
-                        highlightProjection.filterRelationIds.has(indexedRelation.relation.id) && "is-filter-edge",
-                        highlightProjection.advisorRelationIds.has(indexedRelation.relation.id) && "is-advisor-edge",
-                        relationState?.primary && `is-highlight-${relationState.primary}`,
-                      )}
-                    />
-                  );
-                })}
-              </svg>
-              {renderGraphLayout.positions.map((position) => {
-                const node = nodeIndex.get(position.id);
-                if (!node) {
-                  return null;
-                }
-                const isSelected = selectedNode?.id === node.id;
-                const isGroupSelected = selectedGraphNodeIds.has(node.id);
-                const isFocused = neighborNodeIds.has(node.id);
-                const isHub = node.parentId === rootNode?.id;
-                const nodeHighlightState = highlightProjection.nodeStates.get(node.id);
-                const isImpactChanged = highlightProjection.activityChangedNodeIds.has(node.id);
-                const isImpactAffected = highlightProjection.activityAffectedNodeIds.has(node.id);
-                const isSearchMatch = highlightProjection.searchNodeIds.has(node.id);
-                const isPathNode = highlightProjection.pathNodeIds.has(node.id);
-                const isQuickFilterMatch = highlightProjection.filterNodeIds.has(node.id);
-                const isAdvisorMatch = highlightProjection.advisorNodeIds.has(node.id);
-                const isRelationFilteredNode = relationFilteredNodeIds.has(node.id);
-                const isSelectedRelationNode = selectedRelationNodeIds.has(node.id);
-                const isNavigationHighlighted =
-                  isSearchMatch ||
-                  isPathNode ||
-                  isImpactChanged ||
-                  isImpactAffected ||
-                  isQuickFilterMatch ||
-                  isAdvisorMatch ||
-                  isRelationFilteredNode ||
-                  isSelectedRelationNode;
-                const descendantStats = getDescendantStats(node, nodeIndex);
-                return (
-                  <div
-                    key={node.id}
-                    className={cn(
-                      "project-map-node",
-                      isHub && "is-hub",
-                      node.id === rootNode?.id && "is-core",
-                      `confidence-${node.confidence}`,
-                      node.stale && "is-stale",
-                      node.candidate && "is-candidate",
-                      isImpactChanged && "is-impact-changed",
-                      isImpactAffected && "is-impact-affected",
-                      isSearchMatch && "is-search-match",
-                      isPathNode && "is-path-node",
-                      isQuickFilterMatch && "is-filter-match",
-                      isAdvisorMatch && "is-advisor-match",
-                      nodeHighlightState?.primary && `is-highlight-${nodeHighlightState.primary}`,
-                      isRelationFilteredNode && "is-relation-filtered-node",
-                      isSelectedRelationNode && "is-selected-relation-node",
-                      isSelected && "is-selected",
-                      isGroupSelected && "is-group-selected",
-                      position.pinned && "is-pinned",
-                      !isFocused && !isNavigationHighlighted && "is-dimmed",
-                    )}
-                    role="button"
-                    tabIndex={0}
-                    style={{ left: position.x, top: position.y }}
-                    onPointerDown={(event) => handleNodePointerDown(event, node)}
-                    onPointerMove={handleNodePointerMove}
-                    onPointerUp={handleNodePointerEnd}
-                    onPointerCancel={handleNodePointerEnd}
-                    onClick={(event) => handleNodeClick(event, node)}
-                    onKeyDown={(event) => handleNodeKeyDown(event, node)}
-                    onDoubleClick={() => handleDrillIn(node)}
-                    onMouseEnter={() => setHoverNodeId(node.id)}
-                    onMouseLeave={() => setHoverNodeId(null)}
-                    aria-pressed={isSelected}
-                    aria-label={`${t("projectMap.nodeAria", { title: node.title })}: ${node.title}`}
-                  >
-                    <span className="project-map-node-kind">
-                      {translateProjectMapNodeKind(t, node.nodeKind)}
-                    </span>
-                    <strong>{node.title}</strong>
-                    <span>{lensIndex.get(node.lensId)?.shortTitle ?? node.lensId}</span>
-                    <span className="project-map-node-status">
-                      {node.stale ? t("projectMap.status.stale") : t("projectMap.status.current")}
-                      {" · "}
-                      {t(`projectMap.confidence.${node.confidence}`)}
-                      {isImpactChanged || isImpactAffected ? (
-                        <>
-                          {" · "}
-                          {isImpactChanged
-                            ? t("projectMap.impact.changed", { defaultValue: "Changed" })
-                            : t("projectMap.impact.affected", { defaultValue: "Affected" })}
-                        </>
-                      ) : null}
-                      {isSearchMatch || isPathNode || isSelectedRelationNode ? (
-                        <>
-                          {" · "}
-                          {isSelectedRelationNode
-                            ? t("projectMap.relations.badge")
-                            : isPathNode
-                            ? t("projectMap.navigation.path.badge")
-                            : t("projectMap.navigation.search.badge")}
-                        </>
-                      ) : null}
-                      {isQuickFilterMatch ? (
-                        <>
-                          {" · "}
-                          {t("projectMap.quickFilters.badge")}
-                        </>
-                      ) : null}
-                      {isAdvisorMatch ? (
-                        <>
-                          {" · "}
-                          {t("projectMap.advisor.badge")}
-                        </>
-                      ) : null}
-                    </span>
-                    {descendantStats.count > 0 ? (
-                      <span className="project-map-node-counts">
-                        {t("projectMap.nodeCounts", {
-                          count: descendantStats.count,
-                          stale: descendantStats.stale,
-                          candidate: descendantStats.candidate,
-                        })}
-                      </span>
-                    ) : null}
-                    <span className="project-map-node-drill-actions">
-                      {focusNodeId === node.id && node.parentId ? (
-                        <button
-                          className="project-map-node-drill-action is-up"
-                          type="button"
-                          onClick={(event) => handleNodeDrillUpClick(event, node)}
-                          aria-label={t("projectMap.drillUpNode", { title: node.title })}
-                          title={t("projectMap.drillUp")}
-                        >
-                          <ArrowUpLeftFromCircle aria-hidden />
-                        </button>
-                      ) : null}
-                      {node.children.length > 0 && node.id !== rootNode?.id ? (
-                        <button
-                          className="project-map-node-drill-action is-down"
-                          type="button"
-                          onClick={(event) => handleNodeDrillClick(event, node)}
-                          aria-label={t("projectMap.drillDownNode", { title: node.title })}
-                          title={t("projectMap.drillDown")}
-                        >
-                          <ArrowDownRightFromCircle aria-hidden />
-                        </button>
-                      ) : null}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-            {miniMapProjection ? (
-              <button
-                className="project-map-mini-map"
-                type="button"
-                aria-label={t("projectMap.miniMap")}
-                onClick={handleMiniMapClick}
-                style={{
-                  width: MINI_MAP_SIZE.width,
-                  height: MINI_MAP_SIZE.height,
-                }}
-              >
-                <svg
-                  viewBox={`0 0 ${MINI_MAP_SIZE.width} ${MINI_MAP_SIZE.height}`}
-                  aria-hidden
-                >
-                  <rect
-                    className="project-map-mini-map-viewport"
-                    x={miniMapProjection.viewport.left}
-                    y={miniMapProjection.viewport.top}
-                    width={Math.max(
-                      8,
-                      miniMapProjection.viewport.right - miniMapProjection.viewport.left,
-                    )}
-                    height={Math.max(
-                      8,
-                      miniMapProjection.viewport.bottom - miniMapProjection.viewport.top,
-                    )}
-                  />
-                  {miniMapProjection.dots.map((dot) => (
-                    <circle
-                      key={dot.id}
-                      className={cn(
-                        "project-map-mini-map-dot",
-                        dot.pinned && "is-pinned",
-                        selectedGraphNodeIds.has(dot.id) && "is-selected",
-                      )}
-                      cx={dot.x}
-                      cy={dot.y}
-                      r={selectedGraphNodeIds.has(dot.id) ? 4 : 3}
-                    />
-                  ))}
-                </svg>
-              </button>
-            ) : null}
 
             <DetailPanel
               node={selectedNode}
@@ -2784,7 +1928,7 @@ export function ProjectMapPanel({
               }
               onOpenIntentCanvasForFile={onOpenIntentCanvas ? handleOpenIntentCanvasForFile : undefined}
             />
-          </div>
+          </ProjectMapGraphCanvas>
         )}
       </main>
       <ProjectMapSettingsPanel
@@ -2807,17 +1951,6 @@ export function ProjectMapPanel({
           void handleConfirmDeleteNode();
         }}
       />
-      {isTaskDrawerOpen ? (
-        <ProjectMapGenerationTaskDrawer
-          activeRun={activeGenerationRun}
-          queuedRuns={queuedGenerationRuns}
-          recentRuns={recentRuns}
-          nodeIndex={nodeIndex}
-          onCancelRun={datasetController.cancelGenerationRun}
-          onClearFinished={datasetController.clearFinishedRuns}
-          onClose={() => setIsTaskDrawerOpen(false)}
-        />
-      ) : null}
     </section>
   );
 }

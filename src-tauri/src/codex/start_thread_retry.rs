@@ -3,7 +3,7 @@ use tauri::AppHandle;
 
 use super::{
     attach_hook_safe_fallback_metadata, create_session_runtime_recovering_error,
-    ensure_codex_session, ensure_codex_session_without_session_hooks,
+    ensure_codex_session_for_provider, ensure_codex_session_without_session_hooks_for_provider,
     is_hook_safe_fallback_trigger, is_stopping_runtime_race_error, normalize_model_id,
 };
 use crate::shared::codex_core;
@@ -179,10 +179,24 @@ pub(crate) async fn start_thread_with_runtime_retry(
     state: &AppState,
     app: &AppHandle,
 ) -> Result<Value, String> {
+    start_thread_with_runtime_retry_for_provider(workspace_id, model, None, state, app).await
+}
+
+pub(crate) async fn start_thread_with_runtime_retry_for_provider(
+    workspace_id: &str,
+    model: Option<String>,
+    provider_profile_id: Option<String>,
+    state: &AppState,
+    app: &AppHandle,
+) -> Result<Value, String> {
     let normalized_model = normalize_model_id(model);
+    let provider_profile_id = provider_profile_id
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| super::provider_profile::CODEX_DISK_PROVIDER_PROFILE_ID.to_string());
     run_start_thread_with_hook_safe_fallback_and_recovery_probe(
         workspace_id,
-        || ensure_codex_session(workspace_id, state, app),
+        || ensure_codex_session_for_provider(workspace_id, &provider_profile_id, state, app),
         || async {
             state
                 .runtime_manager
@@ -190,11 +204,19 @@ pub(crate) async fn start_thread_with_runtime_retry(
                 .record_quarantine_probe("codex", workspace_id, "create-session-stopping-race")
                 .await
         },
-        || ensure_codex_session_without_session_hooks(workspace_id, state, app),
+        || {
+            ensure_codex_session_without_session_hooks_for_provider(
+                workspace_id,
+                &provider_profile_id,
+                state,
+                app,
+            )
+        },
         || {
             codex_core::start_thread_core(
                 &state.sessions,
                 workspace_id.to_string(),
+                Some(provider_profile_id.clone()),
                 normalized_model.clone(),
             )
         },

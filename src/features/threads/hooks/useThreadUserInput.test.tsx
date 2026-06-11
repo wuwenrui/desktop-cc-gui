@@ -262,7 +262,7 @@ describe("useThreadUserInput", () => {
     const { result } = renderHook(() => useThreadUserInput({ dispatch }));
 
     await act(async () => {
-      await result.current.handleUserInputSubmit(request, { answers: {} });
+      await result.current.handleUserInputDismiss(request);
     });
 
     expect(respondToUserInputRequest).toHaveBeenLastCalledWith(
@@ -296,7 +296,7 @@ describe("useThreadUserInput", () => {
     );
   });
 
-  it("settles malformed empty stale responses without throwing from the classifier", async () => {
+  it("keeps empty submit retryable when workspace disconnects", async () => {
     const dispatch = vi.fn();
     vi.mocked(respondToUserInputRequest).mockRejectedValue(
       new Error("workspace not connected"),
@@ -304,14 +304,54 @@ describe("useThreadUserInput", () => {
 
     const { result } = renderHook(() => useThreadUserInput({ dispatch }));
 
-    await act(async () => {
-      await result.current.handleUserInputSubmit(
+    await expect(
+      result.current.handleUserInputSubmit(request, { answers: {} }),
+    ).rejects.toThrow("workspace not connected");
+
+    expect(respondToUserInputRequest).toHaveBeenLastCalledWith(
+      "ws-1",
+      "req-1",
+      {},
+      {
+        threadId: "thread-1",
+        turnId: "turn-1",
+      },
+    );
+    expect(dispatch).toHaveBeenNthCalledWith(1, {
+      type: "markProcessing",
+      threadId: "thread-1",
+      isProcessing: true,
+      timestamp: expect.any(Number),
+    });
+    expect(dispatch).toHaveBeenNthCalledWith(2, {
+      type: "markProcessing",
+      threadId: "thread-1",
+      isProcessing: false,
+      timestamp: expect.any(Number),
+    });
+    expect(dispatch).not.toHaveBeenCalledWith({
+      type: "removeUserInputRequest",
+      requestId: "req-1",
+      workspaceId: "ws-1",
+    });
+  });
+
+  it("keeps malformed empty submit responses retryable", async () => {
+    const dispatch = vi.fn();
+    vi.mocked(respondToUserInputRequest).mockRejectedValue(
+      new Error("workspace not connected"),
+    );
+
+    const { result } = renderHook(() => useThreadUserInput({ dispatch }));
+
+    await expect(
+      result.current.handleUserInputSubmit(
         request,
         { answers: { age: {} } } as unknown as RequestUserInputResponse,
-      );
-    });
+      ),
+    ).rejects.toThrow("workspace not connected");
 
-    expect(dispatch).toHaveBeenNthCalledWith(3, {
+    expect(dispatch).not.toHaveBeenCalledWith({
       type: "removeUserInputRequest",
       requestId: "req-1",
       workspaceId: "ws-1",

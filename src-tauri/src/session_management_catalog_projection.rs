@@ -23,6 +23,10 @@ fn build_claude_catalog_entry_from_fact(
         thread_kind: "native".to_string(),
         source: None,
         source_label: None,
+        provider_profile_id: None,
+        provider_profile_source: None,
+        provider_profile_name: None,
+        provider_availability: None,
         source_completeness: Some(if fact.source_health.eq_ignore_ascii_case("partial") {
             WorkspaceSessionSourceCompleteness::Partial
         } else {
@@ -211,22 +215,67 @@ async fn build_workspace_scope_catalog_data(
             .cloned()
             .unwrap_or_default();
 
-        match local_usage::list_codex_session_summaries_for_workspace(
+        match local_usage::list_codex_session_summary_list_for_workspace(
             workspaces,
             &owner_workspace_id,
             scan_mode.limit(),
         )
         .await
         {
-            Ok((_, sessions)) => {
-                source_statuses.push(build_success_source_status(
+            Ok(summary_list) => {
+                let has_provider_home_diagnostics =
+                    !summary_list.provider_home_diagnostics.is_empty();
+                let disk_session_count = summary_list
+                    .sessions
+                    .iter()
+                    .filter(|summary| summary.provider_profile_id.is_none())
+                    .count();
+                let provider_home_session_count =
+                    summary_list.sessions.len().saturating_sub(disk_session_count);
+                let mut disk_status = build_success_source_status(
                     "codex",
-                    sessions.len(),
+                    disk_session_count,
                     scan_mode,
                     WorkspaceSessionSourceCompleteness::AuthoritativeEmpty,
                     None,
-                ));
-                entries.extend(sessions.into_iter().map(|summary| {
+                );
+                disk_status.source_kind = Some("disk".to_string());
+                source_statuses.push(disk_status);
+
+                if has_provider_home_diagnostics {
+                    partial_sources.push(SESSION_CATALOG_PARTIAL_CODEX.to_string());
+                    let mut status = build_degraded_source_status(
+                        "codex",
+                        "codex-provider-home-source-degraded",
+                    );
+                    status.source_kind = Some("provider-home".to_string());
+                    status.scanned_candidates = Some(provider_home_session_count);
+                    status.diagnostics = summary_list
+                        .provider_home_diagnostics
+                        .iter()
+                        .map(|diagnostic| WorkspaceSessionCatalogDiagnostic {
+                            engine: "codex".to_string(),
+                            code: "codex-provider-home-source-degraded".to_string(),
+                            reason: diagnostic.clone(),
+                            session_id: None,
+                            physical_locator: None,
+                            cwd: None,
+                            candidate_count: None,
+                        })
+                        .collect();
+                    source_statuses.push(status);
+                } else {
+                    let mut provider_home_status = build_success_source_status(
+                        "codex",
+                        provider_home_session_count,
+                        scan_mode,
+                        WorkspaceSessionSourceCompleteness::AuthoritativeEmpty,
+                        None,
+                    );
+                    provider_home_status.source_kind = Some("provider-home".to_string());
+                    source_statuses.push(provider_home_status);
+                }
+                entries.extend(summary_list.sessions.into_iter().map(|summary| {
                     let session_id = summary.session_id.clone();
                     let archived_at =
                         archived_at_for_session(&owner_metadata, &owner_workspace_id, &session_id);
@@ -248,6 +297,10 @@ async fn build_workspace_scope_catalog_data(
                         thread_kind: "native".to_string(),
                         source: summary.source,
                         source_label,
+                        provider_profile_id: summary.provider_profile_id,
+                        provider_profile_source: summary.provider_profile_source,
+                        provider_profile_name: summary.provider_profile_name,
+                        provider_availability: summary.provider_availability,
                         source_completeness: None,
                         source_status_reason: None,
                         size_bytes: summary.file_size_bytes,
@@ -266,7 +319,7 @@ async fn build_workspace_scope_catalog_data(
                         exists_on_disk: false,
                         inconsistency_code: None,
                         delete_mode: None,
-                        physical_path: None,
+                        physical_path: summary.physical_path,
                         children_count: None,
                     };
                     finalize_existing_catalog_entry(entry, &metadata_by_workspace_id)
@@ -403,6 +456,10 @@ async fn build_workspace_scope_catalog_data(
                         thread_kind: "native".to_string(),
                         source: None,
                         source_label: None,
+                        provider_profile_id: None,
+                        provider_profile_source: None,
+                        provider_profile_name: None,
+                        provider_availability: None,
                         source_completeness: None,
                         source_status_reason: None,
                         size_bytes: session.file_size_bytes,
@@ -493,6 +550,10 @@ async fn build_workspace_scope_catalog_data(
                         thread_kind: "native".to_string(),
                         source: None,
                         source_label: None,
+                        provider_profile_id: None,
+                        provider_profile_source: None,
+                        provider_profile_name: None,
+                        provider_availability: None,
                         source_completeness: None,
                         source_status_reason: None,
                         size_bytes: None,

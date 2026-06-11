@@ -182,6 +182,7 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
       models,
       permissionMode = 'bypassPermissions',
       currentProvider = 'claude',
+      providerProfileLabel = null,
       providerAvailability,
       providerVersions,
       providerStatusLabels,
@@ -1108,11 +1109,20 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
     const {
       isEnhancing,
       enhancingEngine,
+      selectedEnhancerEngine,
+      selectedEnhancerModel,
+      enhancerModelOptions,
+      enhancerTimeoutSeconds,
+      timeoutLimits: promptEnhancerTimeoutLimits,
       showEnhancerDialog,
       originalPrompt,
       enhancedPrompt,
       canUseEnhancedPrompt,
       handleEnhancePrompt,
+      handleEnhancerEngineChange,
+      handleEnhancerModelChange,
+      handleEnhancerTimeoutChange,
+      handleRunPromptEnhancement,
       handleUseEnhancedPrompt,
       handleKeepOriginalPrompt,
       handleCloseEnhancerDialog,
@@ -1122,6 +1132,7 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
       getTextContent,
       currentProvider,
       selectedModel,
+      modelGroups: providerModelGroups,
       setHasContent,
       handleInput,
       stageNextCommitOptions,
@@ -1674,6 +1685,7 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
               models={models}
               permissionMode={permissionMode}
               currentProvider={currentProvider}
+              providerProfileLabel={providerProfileLabel}
               workspaceId={workspaceId}
               providerAvailability={providerAvailability}
               providerVersions={providerVersions}
@@ -1743,9 +1755,18 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
                 isOpen: showEnhancerDialog,
                 isLoading: isEnhancing,
                 loadingEngine: enhancingEngine,
+                selectedEngine: selectedEnhancerEngine,
+                selectedModel: selectedEnhancerModel,
+                modelOptions: enhancerModelOptions,
+                timeoutSeconds: enhancerTimeoutSeconds,
+                timeoutLimits: promptEnhancerTimeoutLimits,
                 originalPrompt,
                 enhancedPrompt,
                 canUseEnhanced: canUseEnhancedPrompt,
+                onEngineChange: handleEnhancerEngineChange,
+                onModelChange: handleEnhancerModelChange,
+                onTimeoutChange: handleEnhancerTimeoutChange,
+                onRunEnhancement: handleRunPromptEnhancement,
                 onUseEnhanced: handleUseEnhancedPrompt,
                 onKeepOriginal: handleKeepOriginalPrompt,
                 onClose: handleCloseEnhancerDialog,

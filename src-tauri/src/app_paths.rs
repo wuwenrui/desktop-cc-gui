@@ -31,6 +31,10 @@ pub(crate) fn project_memory_dir() -> Result<PathBuf, String> {
     Ok(app_home_dir()?.join("project-memory"))
 }
 
+pub(crate) fn codex_provider_homes_dir() -> Result<PathBuf, String> {
+    Ok(app_home_dir()?.join("codex-provider-homes"))
+}
+
 pub(crate) fn project_canvas_dir() -> Result<PathBuf, String> {
     Ok(app_home_dir()?.join("project-canvas"))
 }

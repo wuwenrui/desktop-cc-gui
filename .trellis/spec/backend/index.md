@@ -20,6 +20,7 @@
 | [Database Guidelines](./database-guidelines.md) | 文件存储/锁/原子写规范 |
 | [Computer Use Bridge](./computer-use-bridge.md) | Computer Use status-only bridge 的 command / platform / status contract |
 | [Claude Context Usage Contract](./claude-context-usage-contract.md) | Claude home resolution、runtime `context_window`、post-turn `/context` probe 与 `UsageUpdate` payload contract |
+| [Codex Provider-Scoped Runtime Contract](./codex-provider-scoped-runtime.md) | Codex provider profile、provider-scoped `CODEX_HOME`、runtime key、thread binding、fork、stale retry 与 `codex-tui` launch identity contract |
 | [Quality Guidelines](./quality-guidelines.md) | review 门禁与验证命令 |
 
 ## Pre-Development Checklist
@@ -30,3 +31,4 @@
 - 涉及共享状态时，先确认 `AppState` 中锁粒度是否可复用。
 - 涉及 payload 结构变更时，同步检查 frontend `src/services/tauri.ts` mapping。
 - 涉及 Claude usage/context/history 时，先读 [Claude Context Usage Contract](./claude-context-usage-contract.md)。
+- 涉及 Codex provider、`CODEX_HOME`、`start_thread` / `fork_thread` / `turn/start`、Codex history/catalog 或 app-server launch identity 时，先读 [Codex Provider-Scoped Runtime Contract](./codex-provider-scoped-runtime.md)。

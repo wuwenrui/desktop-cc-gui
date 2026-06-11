@@ -20,6 +20,72 @@
   padding: 24px 24px 36px;
 }
 
+.home-chat-recent-conversations {
+  display: flex;
+  align-items: center;
+}
+
+.home-chat-recent-conversations > span {
+  margin: 0;
+  color: var(--home-chat-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.home-chat-recent-conversations button {
+  border: 1px solid var(--home-chat-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--home-chat-surface) 86%, transparent);
+  color: color-mix(in srgb, var(--home-chat-text) 76%, transparent);
+  cursor: pointer;
+}
+
+.home-chat-recent-conversations {
+  width: min(700px, 100%);
+  margin: 0 auto;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.home-chat-recent-conversations button {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.home-chat-recent-conversations-loading {
+  min-height: 30px;
+  padding: 6px 10px;
+  border: 1px solid var(--home-chat-border);
+  border-radius: 999px;
+  color: var(--home-chat-muted);
+  background: color-mix(in srgb, var(--home-chat-surface) 74%, transparent);
+  font-size: 12px;
+}
+
+.home-chat-recent-conversations button {
+  display: inline-grid;
+  gap: 1px;
+  max-width: 240px;
+  min-height: 44px;
+  padding: 6px 12px;
+  border-radius: 14px;
+  text-align: left;
+}
+
+.home-chat-recent-conversations button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-chat-recent-conversations button span:first-child {
+  color: var(--home-chat-text);
+  font-weight: 700;
+}
+
 [data-theme="light"] .home-chat {
   --home-chat-bg: #ffffff;
   --home-chat-surface: #ffffff;

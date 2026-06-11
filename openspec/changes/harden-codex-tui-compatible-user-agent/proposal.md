@@ -69,6 +69,16 @@ The product needs a Codex-only compatibility boundary:
 - `src-tauri/src/engine/claude_history_filter_tests.rs`
   - Adds focused coverage proving `codex-tui + experimentalApi` remains control-plane.
 
+## Spec Sync
+
+- Behavior spec added at `openspec/changes/harden-codex-tui-compatible-user-agent/specs/codex-tui-compatible-user-agent/spec.md`.
+- Executable backend contract is captured in `.trellis/spec/backend/codex-provider-scoped-runtime.md` under the Codex app-server launch identity contract.
+- Current code is the source of truth:
+  - constants: `CODEX_TUI_COMPAT_CLIENT_NAME = "codex-tui"`, `FALLBACK_CODEX_TUI_COMPAT_VERSION = "0.137.0"`, `FALLBACK_TERM_PROGRAM = "Apple_Terminal"`, `FALLBACK_TERM_PROGRAM_VERSION = "470.2"`;
+  - launch path: `spawn_workspace_session_once` applies terminal env hints before `codex app-server` args and optional `CODEX_HOME`;
+  - initialize path: app-server `initialize` payload uses `codex-tui` name/title and resolved/fallback version;
+  - filtering path: GUI control-plane predicate accepts both legacy `ccgui` and new `codex-tui` identities only with structured experimental API signals.
+
 ## Validation Evidence
 
 Executed:

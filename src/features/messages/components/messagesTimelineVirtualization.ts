@@ -90,6 +90,60 @@ export function estimateTimelineProjectionRowSize(row: TimelineProjectionRow) {
   }
 }
 
+export function getActiveLiveTimelineRowKeys(input: {
+  rows: readonly TimelineProjectionRow[];
+  liveAssistantItemId?: string | null;
+  liveReasoningItemId?: string | null;
+}) {
+  const liveItemIds = new Set(
+    [input.liveAssistantItemId, input.liveReasoningItemId].filter(
+      (itemId): itemId is string => typeof itemId === "string" && itemId.length > 0,
+    ),
+  );
+  if (liveItemIds.size === 0) {
+    return [];
+  }
+  return input.rows
+    .filter((row) => {
+      if (row.kind === "entry") {
+        return row.itemIds.some((itemId) => liveItemIds.has(itemId));
+      }
+      if (row.kind === "dockedReasoning") {
+        return liveItemIds.has(row.itemId);
+      }
+      return false;
+    })
+    .map((row) => row.key);
+}
+
+export type TimelineVirtualizerStabilityState =
+  | "stable"
+  | "empty-visible-set"
+  | "active-live-row-missing";
+
+export function classifyTimelineVirtualizerStability(input: {
+  shouldVirtualize: boolean;
+  rowCount: number;
+  hasScrollElement: boolean;
+  virtualItemKeys: ReadonlyArray<unknown>;
+  activeLiveRowKeys: readonly string[];
+  streamingActive: boolean;
+}): TimelineVirtualizerStabilityState {
+  if (!input.shouldVirtualize || !input.hasScrollElement || input.rowCount <= 0) {
+    return "stable";
+  }
+  if (input.virtualItemKeys.length === 0) {
+    return "empty-visible-set";
+  }
+  if (!input.streamingActive || input.activeLiveRowKeys.length === 0) {
+    return "stable";
+  }
+  const visibleKeys = new Set(input.virtualItemKeys.map(String));
+  return input.activeLiveRowKeys.some((rowKey) => !visibleKeys.has(rowKey))
+    ? "active-live-row-missing"
+    : "stable";
+}
+
 export function observeTimelineElementOffset<TScrollElement extends Element>(
   instance: Virtualizer<TScrollElement, Element>,
   callback: (offset: number, isScrolling: boolean) => void,

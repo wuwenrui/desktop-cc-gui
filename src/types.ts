@@ -213,6 +213,10 @@ export type ThreadSummary = {
   source?: string;
   provider?: string;
   sourceLabel?: string;
+  providerProfileId?: string;
+  providerProfileSource?: "disk" | "managed" | string;
+  providerProfileName?: string;
+  providerAvailability?: "available" | "unavailable" | string;
   partialSource?: string;
   isDegraded?: boolean;
   degradedReason?: string;
@@ -237,7 +241,12 @@ export type LightThemePresetId =
   | "vscode-light-modern"
   | "vscode-light-plus"
   | "vscode-github-light"
-  | "vscode-solarized-light";
+  | "vscode-solarized-light"
+  | "vscode-catppuccin-latte"
+  | "vscode-tokyo-day"
+  | "vscode-rose-pine-dawn"
+  | "vscode-everforest-light"
+  | "vscode-ayu-light";
 export type DarkThemePresetId =
   | "vscode-dark-modern"
   | "vscode-dark-plus"
@@ -245,7 +254,12 @@ export type DarkThemePresetId =
   | "vscode-github-dark-dimmed"
   | "vscode-one-dark-pro"
   | "vscode-monokai"
-  | "vscode-solarized-dark";
+  | "vscode-solarized-dark"
+  | "vscode-dracula"
+  | "vscode-nord"
+  | "vscode-catppuccin-mocha"
+  | "vscode-tokyo-night"
+  | "vscode-rose-pine";
 export type ThemePresetId = LightThemePresetId | DarkThemePresetId;
 export type AppMode = "chat" | "kanban" | "gitHistory";
 
@@ -805,6 +819,7 @@ export type AppSettings = {
   userMsgColor: string;
   usageShowRemaining: boolean;
   showMessageAnchors: boolean;
+  showSidebarProviderLabels: boolean;
   performanceCompatibilityModeEnabled: boolean;
   uiFontFamily: string;
   codeFontFamily: string;
@@ -1712,6 +1727,11 @@ export type LocalUsageSessionSummary = {
   summary?: string | null;
   source?: string | null;
   provider?: string | null;
+  providerProfileId?: string | null;
+  providerProfileSource?: string | null;
+  providerProfileName?: string | null;
+  providerAvailability?: string | null;
+  physicalPath?: string | null;
   fileSizeBytes?: number;
   modifiedLines?: number;
 };

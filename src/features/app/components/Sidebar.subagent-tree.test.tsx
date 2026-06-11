@@ -1,5 +1,13 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { createRef } from "react";
 import type { ReactNode, Ref, UIEventHandler } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -461,7 +469,11 @@ describe("Sidebar subagent tree", () => {
       fireEvent.contextMenu(parentRow.closest(".thread-row") as HTMLElement);
     });
     const threadMenu = await screen.findByRole("menu", { name: "threads.threadActions" });
-    fireEvent.mouseEnter(within(threadMenu).getByRole("menuitem", { name: "Move to folder" }));
+    await act(async () => {
+      fireEvent.mouseEnter(
+        within(threadMenu).getByRole("menuitem", { name: "Move to folder" }),
+      );
+    });
     const targetFolderItem = await screen.findByRole("menuitem", {
       name: "Target",
     });
@@ -470,11 +482,22 @@ describe("Sidebar subagent tree", () => {
       fireEvent.click(targetFolderItem);
     });
 
-    expect(assignWorkspaceSessionFolders).toHaveBeenCalledWith(
-      "ws-1",
-      ["claude:parent", "claude:child-a", "claude:child-b"],
-      "folder-target",
-    );
+    await waitFor(() => {
+      expect(assignWorkspaceSessionFolders).toHaveBeenCalledWith(
+        "ws-1",
+        ["claude:parent", "claude:child-a", "claude:child-b"],
+        "folder-target",
+      );
+      const targetFolderGroup = screen
+        .getByRole("treeitem", { name: "Target" })
+        .closest(".workspace-session-folder-group");
+      if (!targetFolderGroup) {
+        throw new Error("Missing target folder group");
+      }
+      expect(within(targetFolderGroup as HTMLElement).getByText("Parent")).toBeTruthy();
+      expect(within(targetFolderGroup as HTMLElement).getByText("Child A")).toBeTruthy();
+      expect(within(targetFolderGroup as HTMLElement).getByText("Child B")).toBeTruthy();
+    });
     expect(assignWorkspaceSessionFolder).not.toHaveBeenCalled();
   });
 });

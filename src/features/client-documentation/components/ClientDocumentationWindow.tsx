@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useAppSettingsController } from "../../app/hooks/useAppSettingsController";
 import { useCodeCssVars } from "../../app/hooks/useCodeCssVars";
+import { buildAppTypographyCssVars } from "../../app/utils/typographyCssVars";
 import { isMacPlatform, isWindowsPlatform } from "../../../utils/platform";
 import {
   CLIENT_DOCUMENTATION_TREE,
@@ -31,14 +32,15 @@ export function ClientDocumentationWindow() {
     }${reduceTransparency ? " reduced-transparency" : ""}`,
     [isMacDesktop, isWindowsDesktop, reduceTransparency],
   );
+  const { codeFontFamily, codeFontSize, uiFontFamily } = appSettings;
   const documentationWindowStyle = useMemo(
     () =>
-      ({
-        "--ui-font-family": appSettings.uiFontFamily,
-        "--code-font-family": appSettings.codeFontFamily,
-        "--code-font-size": `${appSettings.codeFontSize}px`,
+      buildAppTypographyCssVars({
+        codeFontFamily,
+        codeFontSize,
+        uiFontFamily,
       }) as CSSProperties,
-    [appSettings.codeFontFamily, appSettings.codeFontSize, appSettings.uiFontFamily],
+    [codeFontFamily, codeFontSize, uiFontFamily],
   );
   const selectedNode =
     selectedNodeId === null ? defaultNode : findClientDocumentationNode(selectedNodeId);

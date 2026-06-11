@@ -3,10 +3,7 @@ import type { ComponentProps } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  loadOrchestrationTaskStore,
-  listOrchestrationTasksForWorkspace,
-} from "../../agent-orchestration";
+import { loadOrchestrationTaskStore } from "../../agent-orchestration";
 import { resetClientStorageForTests } from "../../../services/clientStorage";
 import { mockProjectMapData } from "../mockProjectMapData";
 import type { ProjectMapDatasetController } from "../hooks/useProjectMapDataset";
@@ -545,7 +542,7 @@ describe("ProjectMapPanel", () => {
     );
   });
 
-  it("creates a persisted orchestration draft from the selected Project Map node without starting a run", () => {
+  it("hides the Project Map orchestration draft entry while task drafting is being redesigned", () => {
     const openNodeGeneration = vi.fn();
     const openOrchestrationTask = vi.fn();
     const datasetController = createDatasetControllerMock({ openNodeGeneration });
@@ -559,38 +556,17 @@ describe("ProjectMapPanel", () => {
       />,
     );
 
-    fireEvent.click(
-      within(screen.getByLabelText("projectMap.detailPanel")).getByRole("button", {
+    expect(
+      within(screen.getByLabelText("projectMap.detailPanel")).queryByRole("button", {
         name: "projectMap.orchestration.createTask",
       }),
-    );
-
-    const tasks = listOrchestrationTasksForWorkspace(
-      loadOrchestrationTaskStore(),
-      mockProjectMapData.manifest.storageKey,
-      { includeArchived: true },
-    );
-    expect(tasks).toHaveLength(1);
-    expect(tasks[0]).toMatchObject({
-      taskId: "project-map-project-core",
-      workspaceId: mockProjectMapData.manifest.storageKey,
-      sourceRefs: [
-        expect.objectContaining({
-          providerId: "project-map",
-          kind: "project_map_node",
-          id: "project-core",
-          label: "项目画像 Project Profile",
-        }),
-      ],
-    });
-    expect(tasks[0]!.evidenceRefs.length).toBeGreaterThan(0);
-    expect(openOrchestrationTask).toHaveBeenCalledWith("project-map-project-core");
+    ).toBeNull();
+    expect(loadOrchestrationTaskStore().tasks).toHaveLength(0);
+    expect(openOrchestrationTask).not.toHaveBeenCalled();
     expect(openNodeGeneration).not.toHaveBeenCalled();
-    const draftStatus = within(screen.getByLabelText("projectMap.detailPanel")).getByRole("status");
-    expect(draftStatus.textContent).toContain("projectMap.orchestration.created");
   });
 
-  it("carries stale, low-confidence, candidate, and missing-evidence risks into a Project Map draft", () => {
+  it("does not expose Project Map draft creation for risky nodes while the task module is hidden", () => {
     const riskyDataset: ProjectMapDataset = {
       ...mockProjectMapData,
       nodes: mockProjectMapData.nodes.map((node) =>
@@ -613,28 +589,12 @@ describe("ProjectMapPanel", () => {
 
     render(<ProjectMapPanel workspaceName="mossx" dataset={riskyDataset} />);
 
-    fireEvent.click(
-      within(screen.getByLabelText("projectMap.detailPanel")).getByRole("button", {
+    expect(
+      within(screen.getByLabelText("projectMap.detailPanel")).queryByRole("button", {
         name: "projectMap.orchestration.createTask",
       }),
-    );
-
-    const [task] = listOrchestrationTasksForWorkspace(
-      loadOrchestrationTaskStore(),
-      riskyDataset.manifest.storageKey,
-      { includeArchived: true },
-    );
-
-    expect(task).toMatchObject({
-      status: "candidate",
-      evidenceRefs: [],
-    });
-    expect(task?.riskMarkers.map((marker) => marker.kind).sort()).toEqual([
-      "candidate_source",
-      "low_confidence",
-      "missing_evidence",
-      "stale_source",
-    ]);
+    ).toBeNull();
+    expect(loadOrchestrationTaskStore().tasks).toHaveLength(0);
   });
 
   it("shows AI organizer action when unassigned discoveries exist", () => {
@@ -1189,18 +1149,19 @@ describe("ProjectMapPanel", () => {
 
   it("accepts all current candidates from the toolbar", async () => {
     const confirmAllCandidates = vi.fn(async () => ({ confirmed: 2, skipped: 1, errors: [] }));
-    renderMockProjectMapPanel({
+    const view = renderMockProjectMapPanel({
       datasetController: createDatasetControllerMock({
         confirmAllCandidates,
       }),
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "projectMap.confirmAllCandidates" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "projectMap.confirmAllCandidates" }));
+      await Promise.resolve();
+    });
 
-    await waitFor(() => expect(confirmAllCandidates).toHaveBeenCalledTimes(1));
-    await waitFor(() =>
-      expect(screen.getByText(/projectMap\.confirmAllCandidatesResult/)).toBeTruthy(),
-    );
+    expect(confirmAllCandidates).toHaveBeenCalledTimes(1);
+    expect(view.container.textContent).toContain("projectMap.confirmAllCandidatesResult");
   });
 
   it("uses candidate badge as a review entry for AI organizer parent-move candidates", () => {
@@ -1621,7 +1582,7 @@ describe("ProjectMapPanel", () => {
     expect(within(evidenceSection).getByText("web/package.json")).toBeTruthy();
   });
 
-  it("shows compact generation tasks without duplicating active runs", () => {
+  it("keeps compact generation tasks hidden while task module entrypoints are deferred", () => {
     const queuedDataset = {
       ...mockProjectMapData,
       runs: [
@@ -1667,28 +1628,11 @@ describe("ProjectMapPanel", () => {
     render(<ProjectMapPanel workspaceName="mossx" dataset={queuedDataset} />);
 
     expect(screen.queryByLabelText("projectMap.tasks.bannerAria")).toBeNull();
-
-    const compactTaskButton = screen.getByRole("button", {
-      name: /projectMap\.tasks\.button|Tasks|任务/,
-    });
-    expect(compactTaskButton).toBeTruthy();
-    fireEvent.click(compactTaskButton);
-
-    const drawer = screen.getByRole("dialog", { name: "projectMap.tasks.drawerTitle" });
-    expect(within(drawer).getAllByText("global_run_1")).toHaveLength(1);
-    expect(within(drawer).getByText("global_run_2")).toBeTruthy();
-    expect(within(drawer).getByText("global_run_done")).toBeTruthy();
-    expect(within(drawer).getByText("Complete Node")).toBeTruthy();
-    expect(within(drawer).getByText(/项目画像 Project Profile · project-core/)).toBeTruthy();
-    expect(within(drawer).getByText("projectMap.tasks.phase.queued")).toBeTruthy();
-    expect(within(drawer).getByLabelText("projectMap.tasks.progressAria")).toBeTruthy();
-    expect(within(drawer).getByLabelText("projectMap.tasks.stopRun")).toBeTruthy();
-    expect(within(drawer).getByLabelText("projectMap.tasks.cancelRun")).toBeTruthy();
-    expect(within(drawer).getByText("projectMap.tasks.clearDone")).toBeTruthy();
-    expect(within(drawer).getByText("projectMap.tasks.closeHint")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /projectMap\.tasks\.button|Tasks|任务/ })).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "projectMap.tasks.drawerTitle" })).toBeNull();
   });
 
-  it("shows failed run categories and diagnostics in the task drawer", () => {
+  it("does not expose failed generation run diagnostics through the deferred task drawer", () => {
     const failedDataset: ProjectMapDataset = {
       ...mockProjectMapData,
       runs: [
@@ -1710,12 +1654,9 @@ describe("ProjectMapPanel", () => {
 
     render(<ProjectMapPanel workspaceName="mossx" dataset={failedDataset} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /projectMap\.tasks\.button|Tasks|任务/ }));
-
-    const drawer = screen.getByRole("dialog", { name: "projectMap.tasks.drawerTitle" });
-    expect(within(drawer).getByText("global_run_failed")).toBeTruthy();
-    expect(within(drawer).getByText("projectMap.tasks.failureCategory.label")).toBeTruthy();
-    expect(within(drawer).getByText("projectMap.tasks.failureCategory.output_parse_failed")).toBeTruthy();
-    expect(within(drawer).getByText("AI output did not contain a JSON object.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /projectMap\.tasks\.button|Tasks|任务/ })).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "projectMap.tasks.drawerTitle" })).toBeNull();
+    expect(screen.queryByText("global_run_failed")).toBeNull();
+    expect(screen.queryByText("AI output did not contain a JSON object.")).toBeNull();
   });
 });

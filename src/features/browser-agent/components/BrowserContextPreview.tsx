@@ -13,6 +13,42 @@ export type BrowserContextPreviewProps = {
   onRemove: () => void;
 };
 
+function browserContextStateClass(state: BrowserContextAttachment["observation"]["state"]): string {
+  switch (state) {
+    case "available":
+      return "is-fresh";
+    case "expired":
+      return "is-expired";
+    case "degraded":
+      return "is-degraded";
+    case "unsupported":
+      return "is-unavailable";
+    case "stale":
+    default:
+      return "is-stale";
+  }
+}
+
+function browserContextStateLabel(
+  state: BrowserContextAttachment["observation"]["state"],
+  t: (key: string) => string,
+): string {
+  switch (state) {
+    case "available":
+      return t("browserAgent.composer.fresh");
+    case "stale":
+      return t("browserAgent.composer.stale");
+    case "expired":
+      return t("browserAgent.composer.expired");
+    case "degraded":
+      return t("browserAgent.composer.degraded");
+    case "unsupported":
+      return t("browserAgent.composer.unsupported");
+    default:
+      return state;
+  }
+}
+
 function formatBrowserSource(url: string): string {
   try {
     const parsedUrl = new URL(url);
@@ -39,11 +75,8 @@ export function BrowserContextPreview({
     () => buildBrowserEvidenceViewModel(attachment),
     [attachment],
   );
-  const stateLabel = evidenceViewModel.observationState === "available"
-    ? t("browserAgent.composer.fresh")
-    : evidenceViewModel.observationState === "stale"
-    ? t("browserAgent.composer.stale")
-    : evidenceViewModel.observationState;
+  const stateLabel = browserContextStateLabel(evidenceViewModel.observationState, t);
+  const stateClass = browserContextStateClass(evidenceViewModel.observationState);
   const diagnostics = attachment.diagnostics.slice(0, 3);
   const counts = attachment.elementCounts;
   const detailSnapshotText =
@@ -55,13 +88,13 @@ export function BrowserContextPreview({
   }, [attachment.snapshotId, attachment.title, attachment.url]);
 
   return (
-    <div className="composer-browser-context-card">
+    <div className={`composer-browser-context-card ${stateClass}`}>
       <div className="composer-browser-context-main">
         <div className="composer-browser-context-title-row">
           <div className="composer-browser-context-kicker">
             {t("browserAgent.composer.visibleSnapshot")}
           </div>
-          <span className={`composer-browser-context-state ${evidenceViewModel.observationState === "available" ? "is-fresh" : "is-stale"}`}>
+          <span className={`composer-browser-context-state ${stateClass}`}>
             {stateLabel}
           </span>
         </div>

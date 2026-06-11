@@ -87,6 +87,39 @@ function isCodexBackgroundHelperThread(
   return hasCodexBackgroundHelperPreview(previewCandidates);
 }
 
+function normalizeThreadProviderMetadataString(value: unknown) {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
+function extractThreadProviderMetadata(thread: Record<string, unknown>) {
+  const sourceLabel = normalizeThreadProviderMetadataString(
+    thread.sourceLabel ?? thread.source_label,
+  );
+  const providerProfileId = normalizeThreadProviderMetadataString(
+    thread.providerProfileId ?? thread.provider_profile_id,
+  );
+  const providerProfileSource = normalizeThreadProviderMetadataString(
+    thread.providerProfileSource ?? thread.provider_profile_source,
+  );
+  const providerProfileName = normalizeThreadProviderMetadataString(
+    thread.providerProfileName ?? thread.provider_profile_name,
+  );
+  const providerAvailability = normalizeThreadProviderMetadataString(
+    thread.providerAvailability ?? thread.provider_availability,
+  );
+  return {
+    ...(sourceLabel ? { sourceLabel } : {}),
+    ...(providerProfileId ? { providerProfileId } : {}),
+    ...(providerProfileSource ? { providerProfileSource } : {}),
+    ...(providerProfileName ? { providerProfileName } : {}),
+    ...(providerAvailability ? { providerAvailability } : {}),
+  };
+}
+
 function isPendingThreadForEngine(
   engine: "claude" | "gemini" | "opencode",
   threadId: string | null | undefined,
@@ -305,7 +338,13 @@ export function useThreadTurnEvents({
       if (isThreadHidden(workspaceId, threadId)) {
         return;
       }
-      dispatch({ type: "ensureThread", workspaceId, threadId, engine: inferEngineFromThreadId(threadId) });
+      dispatch({
+        type: "ensureThread",
+        workspaceId,
+        threadId,
+        engine: inferEngineFromThreadId(threadId),
+        ...extractThreadProviderMetadata(thread),
+      });
       const timestamp = getThreadTimestamp(thread);
       const activityTimestamp = timestamp > 0 ? timestamp : Date.now();
       recordThreadActivity(workspaceId, threadId, activityTimestamp);

@@ -20,6 +20,12 @@ import type {
   EngineDisplayInfo,
   EngineRefreshResult,
 } from "../../engine/hooks/useEngineController";
+import {
+  CODEX_DISK_PROVIDER_PROFILE_ID,
+  CODEX_DISK_PROVIDER_PROFILE_NAME,
+  type CodexProviderProfileSelection,
+  type CodexProviderProfileOption,
+} from "../../threads/constants/codexProviderProfiles";
 
 export type WorkspaceMenuIconKind =
   | "engine-claude"
@@ -37,6 +43,8 @@ export type WorkspaceMenuAction = {
   id: string;
   label: string;
   iconKind: WorkspaceMenuIconKind;
+  badgeLabel?: string;
+  submenuTitle?: string;
   tone?: "default" | "danger";
   deprecated?: boolean;
   unavailable?: boolean;
@@ -45,6 +53,7 @@ export type WorkspaceMenuAction = {
   refreshing?: boolean;
   onSelect: () => void;
   onRefresh?: () => Promise<void> | void;
+  children?: WorkspaceMenuAction[];
 };
 
 export type WorkspaceMenuGroup = {
@@ -70,8 +79,9 @@ type SidebarMenuHandlers = {
   onAddAgent: (
     workspace: WorkspaceInfo,
     engine?: EngineType,
-    options?: { folderId?: string | null },
+    options?: { folderId?: string | null } & CodexProviderProfileSelection,
   ) => Promise<string | null> | string | null | void;
+  codexProviderProfiles?: CodexProviderProfileOption[];
   engineOptions?: EngineDisplayInfo[];
   enabledEngines?: Partial<Record<EngineType, boolean>>;
   onRefreshEngineOptions?: () =>
@@ -163,6 +173,7 @@ export function useSidebarMenus({
   onRenameWorkspaceAlias,
   onAddWorktreeAgent,
   onAddCloneAgent,
+  codexProviderProfiles = [],
 }: SidebarMenuHandlers) {
   const { t } = useTranslation();
   const [workspaceMenuState, setWorkspaceMenuState] =
@@ -510,12 +521,35 @@ export function useSidebarMenus({
         }
         await onAssignNewSessionToFolder?.(workspace.id, threadId, targetFolderId);
       };
-      const runAddAgent = (engine: EngineType) => {
+      const runAddAgent = (
+        engine: EngineType,
+        actionOptions?: CodexProviderProfileSelection,
+      ) => {
+        const creationOptions = {
+          ...(targetFolderId ? { folderId: targetFolderId } : {}),
+          ...(actionOptions?.providerProfileId
+            ? { providerProfileId: actionOptions.providerProfileId }
+            : {}),
+          ...(actionOptions?.providerProfile
+            ? { providerProfile: actionOptions.providerProfile }
+            : {}),
+        };
         if (targetFolderId) {
-          return onAddAgent(workspace, engine, { folderId: targetFolderId });
+          return onAddAgent(workspace, engine, creationOptions);
+        }
+        if (actionOptions?.providerProfileId || actionOptions?.providerProfile) {
+          return onAddAgent(workspace, engine, creationOptions);
         }
         return onAddAgent(workspace, engine);
       };
+      const codexProfiles: CodexProviderProfileOption[] = [
+        {
+          id: CODEX_DISK_PROVIDER_PROFILE_ID,
+          name: CODEX_DISK_PROVIDER_PROFILE_NAME,
+          source: "disk",
+        },
+        ...codexProviderProfiles.filter((profile) => profile.source === "managed"),
+      ];
       const actions = [
         {
           id: "new-session-shared",
@@ -541,11 +575,31 @@ export function useSidebarMenus({
           id: "new-session-codex",
           label: t("workspace.engineCodex"),
           iconKind: "engine-codex",
+          submenuTitle: t("sidebar.codexProviderChoiceTitle"),
           ...resolveEngineActionMeta(workspace, "codex"),
           onSelect: async () => {
-            const threadId = await runAddAgent("codex");
+            const threadId = await runAddAgent("codex", {
+              providerProfileId: CODEX_DISK_PROVIDER_PROFILE_ID,
+            });
             await handleCreatedSession(threadId);
           },
+          children: codexProfiles.map((profile) => ({
+            id: `new-session-codex-provider-${profile.id}`,
+            label: profile.name,
+            badgeLabel:
+              profile.source === "disk"
+                ? t("sidebar.codexProviderDiskConfigLabel")
+                : t("sidebar.codexProviderCustomConfigLabel"),
+            iconKind: "engine-codex" as const,
+            ...resolveEngineActionMeta(workspace, "codex"),
+            onSelect: async () => {
+              const threadId = await runAddAgent("codex", {
+                providerProfileId: profile.id,
+                providerProfile: profile,
+              });
+              await handleCreatedSession(threadId);
+            },
+          })),
         },
         {
           id: "new-session-opencode",
@@ -590,6 +644,7 @@ export function useSidebarMenus({
       onAddAgent,
       onAddSharedAgent,
       onAssignNewSessionToFolder,
+      codexProviderProfiles,
       resolveEngineActionMeta,
       isEngineSessionEntryVisible,
     ],
@@ -615,6 +670,11 @@ export function useSidebarMenus({
           unavailable: action.unavailable,
           statusLabel: action.statusLabel ?? null,
           refreshing: action.refreshing ?? false,
+          children: action.children?.map((child) => ({
+            id: child.id,
+            unavailable: child.unavailable,
+            statusLabel: child.statusLabel ?? null,
+          })) ?? null,
         })) ?? [],
       );
       const nextSignature = JSON.stringify(
@@ -623,6 +683,11 @@ export function useSidebarMenus({
           unavailable: action.unavailable,
           statusLabel: action.statusLabel ?? null,
           refreshing: action.refreshing ?? false,
+          children: action.children?.map((child) => ({
+            id: child.id,
+            unavailable: child.unavailable,
+            statusLabel: child.statusLabel ?? null,
+          })) ?? null,
         })),
       );
       if (prevSignature === nextSignature) {

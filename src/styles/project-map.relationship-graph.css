@@ -1,8 +1,51 @@
 .project-map-relationship-graph-dashboard {
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(190px, 0.38fr) minmax(520px, 1fr) minmax(260px, 0.44fr);
+  grid-template-columns:
+    minmax(190px, var(--relationship-graph-rail-width, 280px))
+    minmax(520px, 1fr)
+    minmax(260px, var(--relationship-graph-inspector-width, 360px));
   min-height: 590px;
   gap: 10px;
+}
+
+.project-map-relationship-graph-resizer {
+  position: absolute;
+  top: 0;
+  z-index: 40;
+  width: 22px;
+  height: 100%;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+}
+
+.project-map-relationship-graph-resizer.is-rail {
+  left: var(--relationship-graph-rail-width, 280px);
+  transform: translateX(-11px);
+}
+
+.project-map-relationship-graph-resizer.is-inspector {
+  right: var(--relationship-graph-inspector-width, 360px);
+  transform: translateX(11px);
+}
+
+.project-map-relationship-graph-resizer::before {
+  position: absolute;
+  inset: 14px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--project-map-border) 56%, transparent);
+  content: "";
+  transition:
+    background 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.project-map-relationship-graph-resizer:hover::before,
+.project-map-relationship-graph-resizer:focus-visible::before {
+  background: color-mix(in srgb, var(--project-map-accent) 66%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--project-map-accent) 18%, transparent);
+  outline: none;
 }
 
 .project-map-relationship-graph-rail,
@@ -451,7 +494,7 @@
   z-index: 2;
   display: grid;
   width: 172px;
-  min-height: 84px;
+  min-height: 92px;
   gap: 3px;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--project-map-border) 70%, transparent);
@@ -491,7 +534,6 @@
   text-transform: uppercase;
 }
 
-.project-map-relationship-graph-node strong,
 .project-map-relationship-graph-node em,
 .project-map-relationship-graph-node small {
   overflow: hidden;
@@ -502,6 +544,11 @@
 .project-map-relationship-graph-node strong {
   color: var(--project-map-text-strong);
   font-size: 12px;
+  line-height: 1.24;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
 }
 
 .project-map-relationship-graph-node em,
@@ -619,7 +666,10 @@
 }
 
 .project-map-relationship-graph-dashboard {
-  grid-template-columns: minmax(240px, 280px) minmax(760px, 1fr) minmax(300px, 360px);
+  grid-template-columns:
+    minmax(240px, var(--relationship-graph-rail-width, 280px))
+    minmax(760px, 1fr)
+    minmax(300px, var(--relationship-graph-inspector-width, 360px));
   height: clamp(660px, 74vh, 900px);
 }
 
@@ -639,11 +689,15 @@
 }
 
 .project-map-relationship-graph-dashboard.is-rail-collapsed {
-  grid-template-columns: minmax(760px, 1fr) minmax(300px, 360px);
+  grid-template-columns:
+    minmax(760px, 1fr)
+    minmax(300px, var(--relationship-graph-inspector-width, 360px));
 }
 
 .project-map-relationship-graph-dashboard.is-inspector-collapsed {
-  grid-template-columns: minmax(240px, 280px) minmax(760px, 1fr);
+  grid-template-columns:
+    minmax(240px, var(--relationship-graph-rail-width, 280px))
+    minmax(760px, 1fr);
 }
 
 .project-map-relationship-graph-dashboard.is-rail-collapsed.is-inspector-collapsed {
@@ -1241,7 +1295,6 @@
   text-transform: uppercase;
 }
 
-.project-map-relationship-graph-node strong,
 .project-map-relationship-graph-node em,
 .project-map-relationship-graph-node small {
   overflow: hidden;
@@ -1252,6 +1305,11 @@
 .project-map-relationship-graph-node strong {
   color: var(--project-map-text-strong);
   font-size: 12px;
+  line-height: 1.24;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
 }
 
 .project-map-relationship-graph-node em,
@@ -1369,7 +1427,10 @@
 }
 
 .project-map-relationship-graph-dashboard {
-  grid-template-columns: minmax(240px, 280px) minmax(760px, 1fr) minmax(300px, 360px);
+  grid-template-columns:
+    minmax(240px, var(--relationship-graph-rail-width, 280px))
+    minmax(760px, 1fr)
+    minmax(300px, var(--relationship-graph-inspector-width, 360px));
   height: clamp(660px, 74vh, 900px);
 }
 

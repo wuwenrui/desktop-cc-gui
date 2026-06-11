@@ -317,6 +317,142 @@ fn merge_codex_session_roots_keeps_override_and_default_roots() {
     assert!(roots.contains(&default_home.join("archived_sessions")));
 }
 
+#[test]
+fn resolve_managed_codex_provider_session_roots_includes_sessions_and_archives() {
+    let base = std::env::temp_dir().join(format!("ccgui-provider-homes-roots-{}", Uuid::new_v4()));
+    let provider_homes_root = base.join("codex-provider-homes");
+    let provider_a = provider_homes_root.join("provider-a");
+    let provider_b = provider_homes_root.join("provider-b");
+    fs::create_dir_all(provider_a.join("sessions")).expect("create provider a sessions");
+    fs::create_dir_all(provider_b.join("archived_sessions")).expect("create provider b archives");
+    fs::write(provider_homes_root.join("README.md"), "not a provider").expect("write marker");
+
+    let (roots, diagnostics) =
+        resolve_managed_codex_provider_session_roots_from_root(&provider_homes_root);
+
+    assert!(diagnostics.is_empty());
+    assert!(roots.contains(&provider_a.join("sessions")));
+    assert!(roots.contains(&provider_a.join("archived_sessions")));
+    assert!(roots.contains(&provider_b.join("sessions")));
+    assert!(roots.contains(&provider_b.join("archived_sessions")));
+
+    fs::remove_dir_all(base).ok();
+}
+
+#[test]
+fn parse_codex_summary_from_provider_home_projects_provider_profile_id() {
+    let base =
+        std::env::temp_dir().join(format!("ccgui-provider-homes-summary-{}", Uuid::new_v4()));
+    let provider_homes_root = base.join("codex-provider-homes");
+    let provider_sessions_root = provider_homes_root.join("provider-a").join("sessions");
+    let day_key = "2026-01-19";
+    let session_path = write_named_session_file(
+        &provider_sessions_root,
+        day_key,
+        "provider-session",
+        &[
+            r#"{"timestamp":"2026-01-19T12:00:00.000Z","type":"session_meta","payload":{"id":"provider-session","cwd":"/tmp/project-alpha"}}"#
+                .to_string(),
+            r#"{"timestamp":"2026-01-19T12:00:05.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hello"}]}}"#
+                .to_string(),
+        ],
+    );
+
+    let summary = parse_codex_session_summary(&session_path, Some(Path::new("/tmp/project-alpha")))
+        .expect("parse summary")
+        .expect("summary exists");
+
+    assert_eq!(summary.session_id, "provider-session");
+    assert_eq!(summary.provider_profile_id.as_deref(), Some("provider-a"));
+    assert_eq!(summary.provider_profile_source.as_deref(), Some("managed"));
+    assert_eq!(summary.provider_availability.as_deref(), Some("unknown"));
+    assert_eq!(
+        summary.physical_path.as_deref(),
+        Some(session_path.to_string_lossy().as_ref())
+    );
+
+    fs::remove_dir_all(base).ok();
+}
+
+#[test]
+fn scan_codex_summaries_merges_disk_and_multiple_provider_homes_for_workspace() {
+    let base = std::env::temp_dir().join(format!("ccgui-provider-homes-merge-{}", Uuid::new_v4()));
+    let disk_root = base.join("disk").join("sessions");
+    let provider_a_root = base
+        .join("codex-provider-homes")
+        .join("provider-a")
+        .join("sessions");
+    let provider_b_root = base
+        .join("codex-provider-homes")
+        .join("provider-b")
+        .join("sessions");
+    let day_key = "2026-01-19";
+    write_named_session_file(
+        &disk_root,
+        day_key,
+        "disk-session",
+        &[r#"{"timestamp":"2026-01-19T12:00:00.000Z","type":"session_meta","payload":{"id":"disk-session","cwd":"/tmp/project-alpha"}}"#.to_string()],
+    );
+    write_named_session_file(
+        &provider_a_root,
+        day_key,
+        "provider-a-session",
+        &[r#"{"timestamp":"2026-01-19T12:01:00.000Z","type":"session_meta","payload":{"id":"provider-a-session","cwd":"/tmp/project-alpha"}}"#.to_string()],
+    );
+    write_named_session_file(
+        &provider_b_root,
+        day_key,
+        "provider-b-session",
+        &[r#"{"timestamp":"2026-01-19T12:02:00.000Z","type":"session_meta","payload":{"id":"provider-b-session","cwd":"/tmp/project-alpha"}}"#.to_string()],
+    );
+
+    let summaries = scan_codex_session_summaries(
+        Some(Path::new("/tmp/project-alpha")),
+        &[disk_root, provider_a_root, provider_b_root],
+    )
+    .expect("scan summaries");
+    let by_id = summaries
+        .into_iter()
+        .map(|summary| (summary.session_id.clone(), summary))
+        .collect::<HashMap<_, _>>();
+
+    assert!(by_id.contains_key("disk-session"));
+    assert_eq!(
+        by_id["provider-a-session"].provider_profile_id.as_deref(),
+        Some("provider-a")
+    );
+    assert_eq!(
+        by_id["provider-b-session"].provider_profile_id.as_deref(),
+        Some("provider-b")
+    );
+
+    fs::remove_dir_all(base).ok();
+}
+
+#[test]
+fn scan_codex_provider_home_summary_excludes_other_workspace() {
+    let base = std::env::temp_dir().join(format!("ccgui-provider-homes-scope-{}", Uuid::new_v4()));
+    let provider_root = base
+        .join("codex-provider-homes")
+        .join("provider-a")
+        .join("sessions");
+    let day_key = "2026-01-19";
+    write_named_session_file(
+        &provider_root,
+        day_key,
+        "other-workspace-session",
+        &[r#"{"timestamp":"2026-01-19T12:00:00.000Z","type":"session_meta","payload":{"id":"other-workspace-session","cwd":"/tmp/project-beta"}}"#.to_string()],
+    );
+
+    let summaries =
+        scan_codex_session_summaries(Some(Path::new("/tmp/project-alpha")), &[provider_root])
+            .expect("scan summaries");
+
+    assert!(summaries.is_empty());
+
+    fs::remove_dir_all(base).ok();
+}
+
 #[cfg(windows)]
 #[test]
 fn merge_codex_session_roots_dedupes_case_and_separator_variants() {

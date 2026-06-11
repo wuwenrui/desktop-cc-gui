@@ -187,6 +187,7 @@ type ComposerProps = {
   // Engine props
   engines?: EngineDisplayInfo[];
   selectedEngine?: EngineType;
+  providerProfileLabel?: string | null;
   onSelectEngine?: (engine: EngineType) => void;
   // Model props
   models: { id: string; displayName: string; model: string }[];
@@ -448,6 +449,7 @@ export const Composer = memo(function Composer({
   isSharedSession = false,
   engines,
   selectedEngine,
+  providerProfileLabel = null,
   onSelectEngine,
   models,
   selectedModelId,
@@ -2363,6 +2365,7 @@ export const Composer = memo(function Composer({
               onTextChange={handleTextChangeWithHistory}
               selectedModelId={selectedModelId}
               selectedEngine={selectedEngine}
+              providerProfileLabel={providerProfileLabel}
               isSharedSession={isSharedSession}
               engines={engines}
               onSelectEngine={onSelectEngine}

@@ -28,7 +28,6 @@ import { useGitActions } from "./features/git/hooks/useGitActions";
 import { useAutoExitEmptyDiff } from "./features/git/hooks/useAutoExitEmptyDiff";
 import { useModels } from "./features/models/hooks/useModels";
 import { useCollaborationModes } from "./features/collaboration/hooks/useCollaborationModes";
-import { useCollaborationModeSelection } from "./features/collaboration/hooks/useCollaborationModeSelection";
 import { useSkills } from "./features/skills/hooks/useSkills";
 import { useCustomCommands } from "./features/commands/hooks/useCustomCommands";
 import { useCustomPrompts } from "./features/prompts/hooks/useCustomPrompts";
@@ -52,8 +51,6 @@ import { useUpdaterController } from "./features/app/hooks/useUpdaterController"
 import { useGitHistoryPanelResize } from "./features/app/hooks/useGitHistoryPanelResize";
 import { useReleaseNotes } from "./features/update/hooks/useReleaseNotes";
 import { useErrorToasts } from "./features/notifications/hooks/useErrorToasts";
-import { useComposerShortcuts } from "./features/composer/hooks/useComposerShortcuts";
-import { useComposerMenuActions } from "./features/composer/hooks/useComposerMenuActions";
 import { useComposerEditorState } from "./features/composer/hooks/useComposerEditorState";
 import { useDictationController } from "./features/app/hooks/useDictationController";
 import { useComposerController } from "./features/app/hooks/useComposerController";
@@ -69,7 +66,6 @@ import { useLiveEditPreview } from "./features/live-edit-preview/hooks/useLiveEd
 import { useGitHubPanelController } from "./features/app/hooks/useGitHubPanelController";
 import { useSettingsModalState } from "./features/app/hooks/useSettingsModalState";
 import { useLoadingProgressDialogState } from "./features/app/hooks/useLoadingProgressDialogState";
-import { usePersistComposerSettings } from "./features/app/hooks/usePersistComposerSettings";
 import { useSyncSelectedDiffPath } from "./features/app/hooks/useSyncSelectedDiffPath";
 import { useMenuAcceleratorController } from "./features/app/hooks/useMenuAcceleratorController";
 import { useAppMenuEvents } from "./features/app/hooks/useAppMenuEvents";
@@ -97,7 +93,6 @@ import {
 } from "./features/workspaces/components/WorkspaceHome";
 import { SpecHub } from "./features/spec/components/SpecHub";
 import { SearchPalette } from "./features/search/components/SearchPalette";
-import { shouldHideHomeOnThreadActivation } from "./features/home/utils/homeVisibility";
 import { forceRefreshAgents } from "./features/composer/components/ChatInputBox/providers";
 import { recordSearchResultOpen } from "./features/search/ranking/recencyStore";
 import type { SearchContentFilter, SearchResult, SearchScope } from "./features/search/types";
@@ -119,7 +114,6 @@ import type {
   AccessMode,
   AppMode,
   ComposerEditorSettings,
-  EngineType,
   MessageSendOptions,
 } from "./types";
 import { useCodeCssVars } from "./features/app/hooks/useCodeCssVars";
@@ -141,16 +135,6 @@ import { useAppShellLayoutNodesSection } from "./app-shell-parts/useAppShellLayo
 import { renderAppShell } from "./app-shell-parts/renderAppShell";
 import { invoke } from "@tauri-apps/api/core";
 import { OnboardingWizard } from "./features/onboarding/OnboardingWizard";
-import {
-  getEffectiveSelectedEffort,
-  getEffectiveModels,
-  getEffectiveReasoningOptions,
-  getEffectiveReasoningSupported,
-  getEffectiveSelectedModelId,
-  getReasoningOptionsForModel,
-  getNextEngineSelectedModelId,
-  upsertEngineSelectedModelId,
-} from "./app-shell-parts/modelSelection";
 import { useOpenCodeSelection } from "./app-shell-parts/useOpenCodeSelection";
 import { useSelectedAgentSession } from "./app-shell-parts/useSelectedAgentSession";
 import { useSelectedComposerSession } from "./app-shell-parts/useSelectedComposerSession";
@@ -165,12 +149,12 @@ import { useAppShellWorkspaceFlowsSection } from "./app-shell-parts/useAppShellW
 import { defineRuntimeThreadShellBoundary } from "./app-shell-parts/runtimeThreadBoundary";
 import { useAppShellWorkspaceHomeState } from "./app-shell-parts/useAppShellWorkspaceHomeState";
 import { useModelConfigRefresh } from "./app-shell-parts/useModelConfigRefresh";
+import { useAppShellComposerModelSection } from "./app-shell-parts/useAppShellComposerModelSection";
+import { useAppShellViewStateSection } from "./app-shell-parts/useAppShellViewStateSection";
+import { defineAppShellRuntimeActions } from "./app-shell-parts/appShellActionBoundaries";
 
 const ONBOARDED_STORAGE_KEY = "lawyer-copilot.onboarded";
 
-// Detect the real Tauri desktop runtime without importing a named export that
-// existing partial `@tauri-apps/api/core` test mocks do not provide. Mirrors
-// the convention in features/browser-agent/components/BrowserDock.tsx.
 function isTauriRuntime(): boolean {
   if (typeof window === "undefined") {
     return false;
@@ -182,13 +166,7 @@ function isTauriRuntime(): boolean {
 
 export function AppShell() {
   const { t } = useTranslation();
-  // First-run onboarding gate: show the wizard until a Claude provider is
-  // configured. localStorage acts as the synchronous gate (no flicker); we
-  // confirm against the runtime config once on mount so existing installs
-  // skip the wizard automatically.
   const [onboarded, setOnboarded] = useState<boolean>(() => {
-    // Only gate the real desktop runtime. Non-Tauri contexts (tests, web
-    // preview) always render the shell directly.
     if (!isTauriRuntime()) {
       return true;
     }
@@ -208,17 +186,13 @@ export function AppShell() {
         if (cancelled) {
           return;
         }
-        // 只有配置了「我们的 new-api」才算已 onboarded；用户机器原有的
-        // default/官方 claude 配置(providerId="default")不应跳过向导。
         const alreadyConfigured =
           (config?.providerId ?? config?.provider_id) === "new-api";
         if (alreadyConfigured) {
           setOnboarded(true);
         }
       })
-      .catch(() => {
-        // Treat probe failure as "not yet configured" and keep showing the wizard.
-      });
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
@@ -227,7 +201,7 @@ export function AppShell() {
     try {
       localStorage.setItem(ONBOARDED_STORAGE_KEY, "true");
     } catch {
-      // Ignore storage write failures; in-memory state still gates this session.
+      // Storage failure only affects persistence; current session still proceeds.
     }
     setOnboarded(true);
   }, []);
@@ -719,31 +693,6 @@ export function AppShell() {
     reorderTask: kanbanReorderTask,
   } = useKanbanStore(workspaces);
 
-  const [engineSelectedModelIdByType, setEngineSelectedModelIdByType] =
-    useState<Partial<Record<EngineType, string | null>>>({});
-  const activeEngineSelectedModelId = engineSelectedModelIdByType[activeEngine] ?? null;
-  const effectiveModels = useMemo(() => {
-    return getEffectiveModels(activeEngine, models, engineModelsAsOptions);
-  }, [activeEngine, models, engineModelsAsOptions]);
-
-  useEffect(() => {
-    const nextDefault = getNextEngineSelectedModelId({
-      activeEngine,
-      engineModelsAsOptions,
-      currentSelection: activeEngineSelectedModelId,
-    });
-    if (!nextDefault) {
-      return;
-    }
-    setEngineSelectedModelIdByType((prev) => {
-      return upsertEngineSelectedModelId({
-        activeEngine,
-        nextModelId: nextDefault,
-        previousSelectionByEngine: prev,
-      });
-    });
-  }, [activeEngine, engineModelsAsOptions, activeEngineSelectedModelId]);
-
   // Sync accessMode when switching engines (Codex forces full-access, Claude restores saved mode)
   useEffect(() => {
     if (activeEngine === "codex") {
@@ -980,6 +929,7 @@ export function AppShell() {
     forkThreadForWorkspace,
     forkSessionFromMessageForWorkspace,
     forkClaudeSessionFromMessageForWorkspace,
+    updateThreadParent,
     listThreadsForWorkspace,
     loadOlderThreadsForWorkspace,
     resetWorkspaceThreads,
@@ -1094,258 +1044,48 @@ export function AppShell() {
     resolveCanonicalThreadId,
     onDebug: addDebugEntry,
   });
-  const hasActiveComposerThread = activeThreadId !== null;
-  const effectiveSelectedModelId = useMemo(() => {
-    return getEffectiveSelectedModelId({
-      activeEngine,
-      selectedModelId,
-      activeThreadSelectedModelId: selectedComposerSelection?.modelId ?? null,
-      hasActiveThread: hasActiveComposerThread,
-      codexModels: models,
-      engineModelsAsOptions,
-      engineSelectedModelIdByType,
-    });
-  }, [
-    activeEngine,
-    models,
-    engineModelsAsOptions,
-    engineSelectedModelIdByType,
-    hasActiveComposerThread,
-    selectedComposerSelection,
-    selectedModelId,
-  ]);
-  const effectiveSelectedModel = useMemo(() => {
-    return effectiveModels.find((model) => model.id === effectiveSelectedModelId) ?? null;
-  }, [effectiveModels, effectiveSelectedModelId]);
-  const persistedGlobalComposerModelId = useMemo(() => {
-    return getEffectiveSelectedModelId({
-      activeEngine: "codex",
-      selectedModelId,
-      activeThreadSelectedModelId: null,
-      hasActiveThread: false,
-      codexModels: models,
-      engineModelsAsOptions: [],
-      engineSelectedModelIdByType: {},
-    });
-  }, [models, selectedModelId]);
-  const persistedGlobalComposerModel = useMemo(() => {
-    return (
-      models.find((model) => model.id === persistedGlobalComposerModelId) ?? null
-    );
-  }, [models, persistedGlobalComposerModelId]);
-  const persistedGlobalComposerReasoningOptions = useMemo(() => {
-    return getReasoningOptionsForModel(persistedGlobalComposerModel);
-  }, [persistedGlobalComposerModel]);
-  const persistedGlobalComposerEffort = useMemo(() => {
-    return getEffectiveSelectedEffort({
-      activeEngine: "codex",
-      hasActiveThread: false,
-      selectedEffort,
-      activeThreadSelection: null,
-      reasoningOptions: persistedGlobalComposerReasoningOptions,
-    });
-  }, [persistedGlobalComposerReasoningOptions, selectedEffort]);
-  const modelReasoningOptions = useMemo(() => {
-    return getReasoningOptionsForModel(effectiveSelectedModel);
-  }, [effectiveSelectedModel]);
-  const effectiveReasoningOptions = useMemo(() => {
-    return getEffectiveReasoningOptions(activeEngine, modelReasoningOptions);
-  }, [activeEngine, modelReasoningOptions]);
-  const effectiveReasoningSupported = useMemo(() => {
-    return getEffectiveReasoningSupported(activeEngine, modelReasoningOptions.length > 0);
-  }, [activeEngine, modelReasoningOptions.length]);
-  const effectiveSelectedEffort = useMemo(() => {
-    return getEffectiveSelectedEffort({
-      activeEngine,
-      hasActiveThread: hasActiveComposerThread,
-      selectedEffort,
-      activeThreadSelection: selectedComposerSelection,
-      reasoningOptions: effectiveReasoningOptions,
-    });
-  }, [
-    activeEngine,
+  const {
+    collaborationModePayload,
+    effectiveModels,
     effectiveReasoningOptions,
-    hasActiveComposerThread,
-    selectedEffort,
-    selectedComposerSelection,
-  ]);
-  const resolvedModel = effectiveSelectedModel?.model ?? effectiveSelectedModelId ?? null;
-  const resolvedModelSource = effectiveSelectedModel?.source ?? "unknown";
-  const resolvedEffort = effectiveReasoningSupported ? effectiveSelectedEffort : null;
-  const handleSelectModel = useCallback(
-    (id: string | null) => {
-      if (id === null) {
-        return;
-      }
-      const nextSelectedModel =
-        effectiveModels.find((model) => model.id === id) ?? null;
-      if (!nextSelectedModel) {
-        return;
-      }
-      const nextSelectedEffort =
-        getEffectiveSelectedEffort({
-          activeEngine,
-          hasActiveThread: hasActiveComposerThread,
-          selectedEffort: effectiveSelectedEffort,
-          activeThreadSelection:
-            hasActiveComposerThread || activeEngine === "claude"
-              ? {
-                  modelId: nextSelectedModel.id,
-                  effort: effectiveSelectedEffort,
-                }
-              : null,
-          reasoningOptions: getEffectiveReasoningOptions(
-            activeEngine,
-            getReasoningOptionsForModel(nextSelectedModel),
-          ),
-        });
-      if (import.meta.env.DEV) {
-        console.info("[model/select]", {
-          activeEngine,
-          selectedModelId: nextSelectedModel.id,
-        });
-      }
-      if (activeEngine === "codex" && !hasActiveComposerThread) {
-        setSelectedModelId(nextSelectedModel.id);
-      } else if (activeEngine !== "codex") {
-        setEngineSelectedModelIdByType((prev) => ({
-          ...prev,
-          [activeEngine]: nextSelectedModel.id,
-        }));
-      }
-      handleSelectComposerSelection({
-        modelId: nextSelectedModel.id,
-        effort: nextSelectedEffort,
-      });
-    },
-    [
-      activeEngine,
-      effectiveModels,
-      effectiveSelectedEffort,
-      handleSelectComposerSelection,
-      hasActiveComposerThread,
-      setSelectedModelId,
-    ],
-  );
-  const handleSelectComposerEffort = useCallback(
-    (effort: string | null) => {
-      const nextEffort = getEffectiveSelectedEffort({
-        activeEngine,
-        hasActiveThread: hasActiveComposerThread,
-        selectedEffort: effort,
-        activeThreadSelection:
-          hasActiveComposerThread || activeEngine === "claude"
-            ? {
-                modelId: effectiveSelectedModelId,
-                effort,
-              }
-            : null,
-        reasoningOptions: effectiveReasoningOptions,
-      });
-      if (activeEngine === "codex" && !hasActiveComposerThread) {
-        setSelectedEffort(nextEffort);
-      }
-      handleSelectComposerSelection({
-        modelId: effectiveSelectedModelId,
-        effort: nextEffort,
-      });
-    },
-    [
-      activeEngine,
-      effectiveSelectedModelId,
-      effectiveReasoningOptions,
-      handleSelectComposerSelection,
-      hasActiveComposerThread,
-      setSelectedEffort,
-    ],
-  );
-  const { collaborationModePayload } = useCollaborationModeSelection({
-    selectedCollaborationMode,
-    selectedCollaborationModeId,
-    selectedEffort: resolvedEffort,
+    effectiveReasoningSupported,
+    effectiveSelectedEffort,
+    effectiveSelectedModel,
+    effectiveSelectedModelId,
+    engineSelectedModelIdByType,
+    handleSelectComposerEffort,
+    handleSelectModel,
+    resolvedEffort,
     resolvedModel,
-  });
-  const threadAccessMode = accessMode;
-  composerSelectionResolverRef.current = {
-    id: effectiveSelectedModelId,
-    model: resolvedModel,
-    source: resolvedModelSource,
-    effort: resolvedEffort,
-    collaborationMode: collaborationModePayload,
-  };
-  useEffect(() => {
-    if (
-      activeEngine !== "codex" ||
-      !activeThreadId ||
-      !selectedComposerSelection ||
-      !modelsReady
-    ) {
-      return;
-    }
-    const needsModelRepair =
-      selectedComposerSelection.modelId !== null &&
-      selectedComposerSelection.modelId !== effectiveSelectedModelId;
-    const needsEffortRepair =
-      selectedComposerSelection.effort !== effectiveSelectedEffort;
-    if (!needsModelRepair && !needsEffortRepair) {
-      return;
-    }
-    persistComposerSelectionForThread(activeWorkspaceId, activeThreadId, {
-      modelId: effectiveSelectedModelId,
-      effort: effectiveSelectedEffort,
-    });
-  }, [
+    setEngineSelectedModelIdByType,
+    threadAccessMode,
+  } = useAppShellComposerModelSection({
+    accessMode,
     activeEngine,
     activeThreadId,
     activeWorkspaceId,
-    effectiveSelectedEffort,
-    effectiveSelectedModelId,
+    appSettings,
+    appSettingsLoading,
+    applySelectedCollaborationMode,
+    collaborationModes,
+    composerInputRef,
+    composerSelectionResolverRef,
+    engineModelsAsOptions,
+    globalSelectionReady,
+    handleSelectComposerSelection,
+    handleSetAccessMode,
+    models,
     modelsReady,
     persistComposerSelectionForThread,
-    selectedComposerSelection,
-  ]);
-  usePersistComposerSettings({
-    enabled: !hasActiveComposerThread,
-    appSettingsLoading,
-    selectionReady: globalSelectionReady,
-    selectedModelId: persistedGlobalComposerModelId,
-    selectedEffort: persistedGlobalComposerEffort,
-    setAppSettings,
     queueSaveSettings,
-  });
-  useComposerShortcuts({
-    textareaRef: composerInputRef,
-    modelShortcut: appSettings.composerModelShortcut,
-    accessShortcut: appSettings.composerAccessShortcut,
-    reasoningShortcut: appSettings.composerReasoningShortcut,
-    collaborationShortcut: appSettings.composerCollaborationShortcut,
-    models: effectiveModels,
-    collaborationModes,
-    selectedModelId: effectiveSelectedModelId,
-    onSelectModel: handleSelectModel,
+    selectedCollaborationMode,
     selectedCollaborationModeId,
-    onSelectCollaborationMode: applySelectedCollaborationMode,
-    accessMode,
-    onSelectAccessMode: handleSetAccessMode,
-    reasoningOptions: effectiveReasoningOptions,
-    selectedEffort: effectiveSelectedEffort,
-    onSelectEffort: handleSelectComposerEffort,
-    reasoningSupported: effectiveReasoningSupported,
-  });
-  useComposerMenuActions({
-    models: effectiveModels,
-    selectedModelId: effectiveSelectedModelId,
-    onSelectModel: handleSelectModel,
-    collaborationModes,
-    selectedCollaborationModeId,
-    onSelectCollaborationMode: applySelectedCollaborationMode,
-    accessMode,
-    onSelectAccessMode: handleSetAccessMode,
-    reasoningOptions: effectiveReasoningOptions,
-    selectedEffort: effectiveSelectedEffort,
-    onSelectEffort: handleSelectComposerEffort,
-    reasoningSupported: effectiveReasoningSupported,
-    onFocusComposer: () => composerInputRef.current?.focus(),
+    selectedComposerSelection,
+    selectedEffort,
+    selectedModelId,
+    setAppSettings,
+    setSelectedEffort,
+    setSelectedModelId,
   });
   const {
     selectedAgent,
@@ -1591,63 +1331,40 @@ export function AppShell() {
     selectedCollaborationModeId,
     setSelectedCollaborationModeId,
   ]);
-  const isPlanMode = selectedCollaborationMode?.mode === "plan";
-  const hasPlanData = Boolean(
-    activePlan && (activePlan.steps.length > 0 || activePlan.explanation)
-  );
-  const [isPlanPanelDismissed, setIsPlanPanelDismissed] = useState(false);
-  const hasActivePlan = hasPlanData && !isPlanPanelDismissed;
-  useEffect(() => {
-    setIsPlanPanelDismissed(false);
-  }, [activeThreadId]);
-  const openPlanPanel = useCallback(() => {
-    setIsPlanPanelDismissed(false);
-    expandRightPanel();
-  }, [expandRightPanel]);
-  const closePlanPanel = useCallback(() => {
-    setIsPlanPanelDismissed(true);
-  }, []);
-  const showKanban = appMode === "kanban";
-  const showGitHistory = appMode === "gitHistory";
-  const [selectedKanbanTaskId, setSelectedKanbanTaskId] = useState<string | null>(null);
-  const [workspaceHomeWorkspaceId, setWorkspaceHomeWorkspaceId] = useState<string | null>(null);
-  const showHome = (!activeWorkspace || homeOpen) && !showKanban;
-  const showWorkspaceHome = Boolean(
-    activeWorkspace &&
-      !showHome &&
-      workspaceHomeWorkspaceId === activeWorkspace.id &&
-      !activeThreadId &&
-      appMode === "chat" &&
-      (isCompact ? (isTablet ? tabletTab : activeTab) === "codex" : activeTab !== "spec"),
-  );
-  useEffect(() => {
-    if (!showHome || activeWorkspaceId || !homeWorkspaceDefaultId) {
-      return;
-    }
-    setActiveWorkspaceId(homeWorkspaceDefaultId);
-    setActiveThreadId(null, homeWorkspaceDefaultId);
-  }, [
+  const {
+    closePlanPanel,
+    hasActivePlan,
+    hasPlanData,
+    isPlanMode,
+    isPlanPanelDismissed,
+    openPlanPanel,
+    selectedKanbanTaskId,
+    setIsPlanPanelDismissed,
+    setSelectedKanbanTaskId,
+    setWorkspaceHomeWorkspaceId,
+    showGitHistory,
+    showHome,
+    showKanban,
+    showWorkspaceHome,
+    workspaceHomeWorkspaceId,
+  } = useAppShellViewStateSection({
+    activePlan,
+    activeTab,
+    activeThreadId,
+    activeWorkspace,
     activeWorkspaceId,
+    appMode,
+    expandRightPanel,
+    homeOpen,
     homeWorkspaceDefaultId,
+    isCompact,
+    isTablet,
+    selectedCollaborationMode,
     setActiveThreadId,
     setActiveWorkspaceId,
-    showHome,
-  ]);
-  useEffect(() => {
-    if (
-      !shouldHideHomeOnThreadActivation({
-        homeOpen,
-        activeThreadId,
-      })
-    ) {
-      return;
-    }
-    setHomeOpen(false);
-  }, [
-    activeThreadId,
-    homeOpen,
     setHomeOpen,
-  ]);
+    tabletTab,
+  });
   const canInterrupt = activeThreadId
     ? threadStatusById[activeThreadId]?.isProcessing ?? false
     : false;
@@ -2185,10 +1902,15 @@ export function AppShell() {
     toggleCompletionEmailIntent,
     updateSharedSessionEngineSelection,
   });
+  const runtimeActions = defineAppShellRuntimeActions({
+    handleToggleRuntimeConsole,
+    handleToggleTerminalPanel,
+  });
 
   const agent = selectedAgent;
   const appShellContext = {
     ...APP_SHELL_LEGACY_CONTEXT_DEFAULTS,
+    ...runtimeActions,
     runtimeThreadBoundary,
     GitHubPanelData, RECENT_THREAD_LIMIT, SettingsView, accessMode, accountByWorkspace, accountSwitching, activeAccount, activeDiffError,
     activeDiffLoading, activeDiffs, activeDraft, activeEditorFilePath, activeEditorLineRange, activeEngine, activeGitRoot, activeImages,
@@ -2271,7 +1993,7 @@ export function AppShell() {
     terminalTabs, textareaHeight, threadAccessMode, threadItemsByThread, threadListCursorByWorkspace, threadListLoadingByWorkspace,
     threadListPagingByWorkspace, threadParentById, threadStatusById, historyLoadingByThreadId, historyRestoredAtMsByThread, threadsByWorkspace, timelinePlan,
     tokenUsageByThread, toggleCompletionEmailIntent, triggerAutoThreadTitle, ungroupedLabel, unpinThread,
-    updateCloneCopyName, updateCustomInstructions, updatePrompt, updateSharedSessionEngineSelection, updateWorkspaceCodexBin, updateWorkspaceSettings, updateWorktreeBaseRef, updateWorktreeBranch, updateWorktreePublishToOrigin,
+    updateCloneCopyName, updateCustomInstructions, updatePrompt, updateSharedSessionEngineSelection, updateThreadParent, updateWorkspaceCodexBin, updateWorkspaceSettings, updateWorktreeBaseRef, updateWorktreeBranch, updateWorktreePublishToOrigin,
     updateWorktreeSetupScript, updaterState, useSuggestedCloneCopiesFolder, userInputRequests,
     workspaceActivity, workspaceDropTargetRef, workspaceFilesPollingEnabled, workspaceGroups, workspaceHomeWorkspaceId, workspaceNameByPath,
     homeWorkspaceDefaultId,

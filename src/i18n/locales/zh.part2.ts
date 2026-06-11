@@ -1724,10 +1724,10 @@ const zhPart2 = {
     summary: "{{workspace}} · {{total}} 个待处理项 · {{providers}} 个来源可用",
     workspaceUnknown: "未知 workspace",
     loadingTitle: "正在读取任务编排视图",
-    loadingDescription: "正在聚合本地任务草案、Project Map 候选和 TaskRun 上下文。",
+    loadingDescription: "正在聚合 Project Map 候选、已存在的任务草案和 TaskRun 上下文。",
     emptyTitle: "当前 workspace 还没有编排任务",
     emptyDescription:
-      "可以从 Project Map 节点创建任务草案，也可以新增手动任务。缺少 OpenSpec/Trellis 不会影响这个中心打开。",
+      "这里暂时只展示已存在的编排上下文和运行状态；任务创建入口会在任务模块重构后重新开放。",
     degradedTitle: "部分 provider 已降级",
     unavailable: "暂不可用",
     noRefs: "暂无来源引用",
@@ -1908,6 +1908,11 @@ const zhPart2 = {
     unavailable: "暂不可用",
     noArtifacts: "暂无产物",
     noBrowserEvidence: "暂无关联浏览器证据",
+    browserEvidenceCandidates: "候选项",
+    source: {
+      kanban: "看板",
+      orchestration: "编排",
+    },
     browserEvidenceState: {
       available: "可用",
       stale: "已过时",

@@ -9,6 +9,8 @@
 - [x] Fall back to `0.137.0` when Codex CLI version parsing fails.
 - [x] Keep internal GUI control-plane filtering compatible with legacy `ccgui`.
 - [x] Add `codex-tui` as an accepted GUI control-plane identity.
+- [x] Sync behavior into OpenSpec requirement spec.
+- [x] Sync executable launch identity contract into Trellis backend code-spec.
 
 ## 2. Tests
 
@@ -21,4 +23,4 @@
 
 - [ ] Verify relay-side request logs after launching the updated client against the target relay.
 - [ ] Run broader Rust regression for `backend::app_server` and `engine::claude_history` if closure requires wider confidence.
-- [ ] Sync into mainline OpenSpec specs only after runtime relay evidence is confirmed.
+- [ ] Record relay-side request-log evidence after launching the updated client against the target relay.

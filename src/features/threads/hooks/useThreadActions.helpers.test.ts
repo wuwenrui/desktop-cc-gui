@@ -3,8 +3,9 @@ import { describe, expect, it } from "vitest";
 import type { ConversationItem, ThreadSummary } from "../../../types";
 import {
   isRetainableEngineContinuitySummary,
-  mergeDegradedClaudeContinuitySummaries,
   mergeCodexCatalogSessionSummaries,
+  mergeDegradedClaudeContinuitySummaries,
+  mergeDegradedCodexContinuitySummaries,
   mergeGeminiSessionSummaries,
   seedLastGoodEngineIntoMerged,
   selectRecoveredNewThreadDecision,
@@ -425,6 +426,67 @@ describe("useThreadActions.helpers", () => {
     expect(merged.find((thread) => thread.id === "claude:session-1")?.name).toBe(
       "Owner custom title",
     );
+  });
+
+  it("projects provider-backed Codex metadata from catalog rows", () => {
+    const merged = mergeCodexCatalogSessionSummaries(
+      [],
+      [
+        {
+          sessionId: "codex-provider-session",
+          workspaceId: "workspace-1",
+          title: "Provider restored session",
+          updatedAt: 120,
+          engine: "codex",
+          providerProfileId: "provider-a",
+          providerProfileSource: "managed",
+          providerProfileName: "AskUs",
+          providerAvailability: "available",
+          sourceLabel: "AskUs",
+        },
+      ],
+      "workspace-1",
+      {},
+      () => undefined,
+    );
+
+    expect(merged[0]).toMatchObject({
+      id: "codex-provider-session",
+      engineSource: "codex",
+      providerProfileId: "provider-a",
+      providerProfileSource: "managed",
+      providerProfileName: "AskUs",
+      providerAvailability: "available",
+      sourceLabel: "AskUs",
+    });
+  });
+
+  it("preserves provider-backed Codex rows during degraded continuity", () => {
+    const merged = mergeDegradedCodexContinuitySummaries(
+      [],
+      [
+        {
+          id: "codex-provider-session",
+          name: "Provider restored session",
+          updatedAt: 120,
+          engineSource: "codex",
+          threadKind: "native",
+          providerProfileId: "provider-a",
+          providerProfileSource: "managed",
+          providerProfileName: "AskUs",
+          providerAvailability: "available",
+        },
+      ],
+    );
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toMatchObject({
+      id: "codex-provider-session",
+      providerProfileId: "provider-a",
+      providerProfileSource: "managed",
+      providerProfileName: "AskUs",
+      providerAvailability: "available",
+    });
   });
 
   it("does not resurrect excluded Claude rows during degraded continuity", () => {

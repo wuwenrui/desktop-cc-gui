@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { BrowserContextAttachment, BrowserDiagnostic } from "../types";
+import type { BrowserContextAttachment, BrowserDiagnostic, BrowserObservationState } from "../types";
 import {
   buildBrowserEvidenceCopyText,
   buildBrowserEvidenceViewModel,
@@ -26,6 +26,7 @@ type BrowserContextSummaryCardAttachment = Pick<
 > & {
   visibleTextExcerpt?: BrowserContextAttachment["visibleTextExcerpt"];
   elementCounts?: BrowserContextAttachment["elementCounts"];
+  observation?: BrowserContextAttachment["observation"];
   diagnostics?: BrowserContextSummaryDiagnostic[];
   privacy?: BrowserContextSummaryPrivacy;
   budget?: BrowserContextSummaryBudget;
@@ -40,6 +41,42 @@ type BrowserContextSummaryCardAttachment = Pick<
 export type BrowserContextSummaryCardProps = {
   attachment: BrowserContextSummaryCardAttachment;
 };
+
+function browserContextSummaryStateClass(state: BrowserObservationState): string {
+  switch (state) {
+    case "available":
+      return "is-available";
+    case "expired":
+      return "is-expired";
+    case "degraded":
+      return "is-degraded";
+    case "unsupported":
+      return "is-unavailable";
+    case "stale":
+    default:
+      return "is-stale";
+  }
+}
+
+function browserContextSummaryStateLabel(
+  state: BrowserObservationState,
+  t: (key: string) => string,
+): string {
+  switch (state) {
+    case "available":
+      return t("messages.browserContextState.available");
+    case "stale":
+      return t("messages.browserContextState.stale");
+    case "expired":
+      return t("messages.browserContextState.expired");
+    case "degraded":
+      return t("messages.browserContextState.degraded");
+    case "unsupported":
+      return t("messages.browserContextState.unsupported");
+    default:
+      return state;
+  }
+}
 
 function formatBrowserSource(url: string): string {
   try {
@@ -82,6 +119,7 @@ export function BrowserContextSummaryCard({
     () => buildBrowserEvidenceViewModel(attachment),
     [attachment],
   );
+  const stateClass = browserContextSummaryStateClass(evidenceViewModel.observationState);
   const diagnostics = attachment.diagnostics?.slice(0, 2) ?? [];
   const summary = useMemo(
     () =>
@@ -114,17 +152,13 @@ export function BrowserContextSummaryCard({
   };
 
   return (
-    <div className="browser-context-summary-card">
+    <div className={`browser-context-summary-card ${stateClass}`}>
       <div className="browser-context-summary-header">
         <div className="browser-context-summary-kicker">
           {t("messages.browserContextSummary")}
         </div>
-        <span className={`browser-context-summary-state ${evidenceViewModel.observationState === "available" ? "is-available" : "is-stale"}`}>
-          {evidenceViewModel.observationState === "available"
-            ? t("messages.browserContextState.available")
-            : evidenceViewModel.observationState === "stale"
-            ? t("messages.browserContextState.stale")
-            : evidenceViewModel.observationState}
+        <span className={`browser-context-summary-state ${stateClass}`}>
+          {browserContextSummaryStateLabel(evidenceViewModel.observationState, t)}
         </span>
       </div>
       <div className="browser-context-summary-title-line" title={attachment.title ?? attachment.url}>

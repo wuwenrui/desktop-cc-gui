@@ -5,7 +5,7 @@ import {
   useRef,
   useState,
 } from "react";
-import type { DragEvent, MouseEvent } from "react";
+import type { MouseEvent } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
@@ -14,9 +14,7 @@ import { emitTo } from "@tauri-apps/api/event";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import LoaderCircle from "lucide-react/dist/esm/icons/loader-circle";
-import Plus from "lucide-react/dist/esm/icons/plus";
 import TreePine from "lucide-react/dist/esm/icons/tree-pine";
-import FileIcon from "../../../components/FileIcon";
 import type { PanelTabId } from "../../layout/components/PanelTabs";
 import {
   createWorkspaceDirectory,
@@ -28,7 +26,6 @@ import {
   trashWorkspaceItem,
   writeWorkspaceFile,
   type WorkspaceDirectoryEntry,
-  type WorkspaceDirectoryChildState,
 } from "../../../services/tauri";
 import type { GitFileStatus, OpenAppTarget } from "../../../types";
 import { languageFromPath } from "../../../utils/syntax";
@@ -43,17 +40,22 @@ import {
   type DetachedFileTreeDragBridgePayload,
 } from "../detachedFileTreeDragBridge";
 import {
-  bindChatDropTargetsForTreeDrag,
-  clearFileTreeDragBridge,
-  createWindowsFileTreeDragImage,
   CROSS_WINDOW_TREE_DRAG_REBROADCAST_THROTTLE_MS,
-  insertPathsIntoChat,
-  isWindowsDragPreviewRuntime,
-  setFileTreeDragBridge,
-  setFileTreeDragPosition,
-  triggerChatInputInsertFromTreeDrag,
 } from "../utils/fileTreeDragBridge";
 import { FilePreviewPopover } from "./FilePreviewPopover";
+import {
+  FileTreeNewFilePrompt,
+  FileTreeNewFolderPrompt,
+  FileTreeRenamePrompt,
+  type RenamePromptState,
+} from "./FileTreePrompts";
+import {
+  FileTreeNodeBranch,
+  FileTreeVirtualRow,
+  type FileTreeRowHandlers,
+  type FileTreeRowRefs,
+  type FileTreeRowState,
+} from "./FileTreeRows";
 import { FileTreeRootActions } from "./FileTreeRootActions";
 import {
   clampRendererContextMenuPosition,
@@ -61,33 +63,26 @@ import {
   type RendererContextMenuItem,
   type RendererContextMenuState,
 } from "../../../components/ui/RendererContextMenu";
-
-type FileTreeNode = {
-  name: string;
-  path: string;
-  type: "file" | "folder";
-  children: FileTreeNode[];
-  isLazyLoadable?: boolean;
-  childState?: WorkspaceDirectoryChildState;
-  hasMore?: boolean;
-};
-
-type VisibleTreeNodeEntry = {
-  path: string;
-  type: "file" | "folder" | "root";
-  depth: number;
-  node: FileTreeNode | null;
-};
-
-type VisibleFileTreeRow =
-  | { kind: "node"; entry: VisibleTreeNodeEntry & { node: FileTreeNode } }
-  | {
-      kind: "lazy-state";
-      path: string;
-      depth: number;
-      state: "loading" | "error" | "empty";
-      error: string | null;
-    };
+import {
+  EMPTY_DIRECTORIES,
+  EMPTY_DIRECTORY_METADATA,
+  EMPTY_SET,
+  FILE_TREE_VIRTUALIZATION_THRESHOLD,
+  buildTree,
+  filterDeletedFileTreePathFromMap,
+  filterDeletedFileTreePathFromSet,
+  filterSuppressedFileTreePaths,
+  getGitignoredFolderAncestorPaths,
+  isGitignoredFileTreeNode,
+  isImagePath,
+  isSameOrDescendantFileTreePath,
+  isSpecialDirectoryPath,
+  isSuppressedFileTreePath,
+  resolveWorkspaceRootLabel,
+  type FileTreeNode,
+  type VisibleFileTreeRow,
+  type VisibleTreeNodeEntry,
+} from "./fileTreePanelInternals";
 
 type FileTreeClipboardItem = {
   workspaceId: string;
@@ -100,12 +95,6 @@ type FileTreeOperationNotice = {
   id: string;
   tone: "success" | "error" | "info";
   message: string;
-};
-
-type RenamePromptState = {
-  path: string;
-  kind: "file" | "folder";
-  currentName: string;
 };
 
 type FileTreePanelProps = {
@@ -144,385 +133,6 @@ type FileOpenLocation = {
   line: number;
   column: number;
 };
-
-type FileTreeBuildNode = {
-  name: string;
-  path: string;
-  type: "file" | "folder";
-  children: Map<string, FileTreeBuildNode>;
-  isLazyLoadable: boolean;
-  childState?: WorkspaceDirectoryChildState;
-  hasMore: boolean;
-};
-
-const EMPTY_DIRECTORIES: string[] = [];
-const EMPTY_SET: Set<string> = new Set();
-const SPECIAL_DEPENDENCY_DIRECTORIES = new Set([
-  "node_modules",
-  ".pnpm-store",
-  ".yarn",
-  "bower_components",
-  "vendor",
-  ".venv",
-  "venv",
-  "env",
-  "__pypackages__",
-  "Pods",
-  "Carthage",
-  ".m2",
-  ".ivy2",
-  ".cargo",
-]);
-const SPECIAL_BUILD_ARTIFACT_DIRECTORIES = new Set([
-  "target",
-  "dist",
-  "build",
-  "out",
-  "coverage",
-  ".next",
-  ".nuxt",
-  ".svelte-kit",
-  ".angular",
-  ".parcel-cache",
-  ".turbo",
-  ".cache",
-  ".gradle",
-  "CMakeFiles",
-  "bin",
-  "obj",
-  "__pycache__",
-  ".pytest_cache",
-  ".mypy_cache",
-  ".tox",
-  ".dart_tool",
-]);
-const EMPTY_DIRECTORY_METADATA: WorkspaceDirectoryEntry[] = [];
-const FILE_TREE_VIRTUALIZATION_THRESHOLD = 250;
-
-function isSameOrDescendantFileTreePath(path: string, rootPath: string) {
-  return path === rootPath || path.startsWith(`${rootPath}/`);
-}
-
-function isSuppressedFileTreePath(path: string, suppressedPaths: Set<string>) {
-  for (const suppressedPath of suppressedPaths) {
-    if (isSameOrDescendantFileTreePath(path, suppressedPath)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function filterSuppressedFileTreePaths(paths: Set<string>, suppressedPaths: Set<string>) {
-  if (suppressedPaths.size === 0 || paths.size === 0) {
-    return paths;
-  }
-  let changed = false;
-  const next = new Set<string>();
-  paths.forEach((path) => {
-    if (isSuppressedFileTreePath(path, suppressedPaths)) {
-      changed = true;
-      return;
-    }
-    next.add(path);
-  });
-  return changed ? next : paths;
-}
-
-function filterDeletedFileTreePathFromSet(paths: Set<string>, deletedPath: string) {
-  if (paths.size === 0) {
-    return paths;
-  }
-  let changed = false;
-  const next = new Set<string>();
-  paths.forEach((path) => {
-    if (isSameOrDescendantFileTreePath(path, deletedPath)) {
-      changed = true;
-      return;
-    }
-    next.add(path);
-  });
-  return changed ? next : paths;
-}
-
-function filterDeletedFileTreePathFromMap<T>(valuesByPath: Map<string, T>, deletedPath: string) {
-  if (valuesByPath.size === 0) {
-    return valuesByPath;
-  }
-  let changed = false;
-  const next = new Map<string, T>();
-  valuesByPath.forEach((value, path) => {
-    if (isSameOrDescendantFileTreePath(path, deletedPath)) {
-      changed = true;
-      return;
-    }
-    next.set(path, value);
-  });
-  return changed ? next : valuesByPath;
-}
-
-function getFileTreePathLeaf(path: string) {
-  return path.split("/").filter(Boolean).pop() ?? path;
-}
-
-function isDirectlyGitignoredFolderPath(path: string, ignoredDirectories: Set<string>) {
-  if (ignoredDirectories.has(path)) {
-    return true;
-  }
-  const pathLeaf = getFileTreePathLeaf(path);
-  for (const ignoredDirectory of ignoredDirectories) {
-    if (!ignoredDirectory) {
-      continue;
-    }
-    const ignoredLeaf = getFileTreePathLeaf(ignoredDirectory);
-    if (
-      pathLeaf === ignoredDirectory ||
-      pathLeaf === ignoredLeaf
-    ) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function isGitignoredFileTreeNode(
-  node: FileTreeNode,
-  ignoredFiles: Set<string>,
-  ignoredDirectories: Set<string>,
-  memo: Map<string, boolean>,
-): boolean {
-  const memoized = memo.get(node.path);
-  if (memoized !== undefined) {
-    return memoized;
-  }
-  if (node.type === "file") {
-    const ignored = ignoredFiles.has(node.path) ||
-      Array.from(ignoredDirectories).some((ignoredDirectory) =>
-        isSameOrDescendantFileTreePath(node.path, ignoredDirectory),
-      );
-    memo.set(node.path, ignored);
-    return ignored;
-  }
-  if (isDirectlyGitignoredFolderPath(node.path, ignoredDirectories)) {
-    memo.set(node.path, true);
-    return true;
-  }
-  const ignored = node.children.length > 0 &&
-    node.children.every((child) =>
-      isGitignoredFileTreeNode(child, ignoredFiles, ignoredDirectories, memo),
-    );
-  memo.set(node.path, ignored);
-  return ignored;
-}
-
-function getGitignoredFolderAncestorPaths(
-  folderPaths: Set<string>,
-  ignoredDirectories: Set<string>,
-) {
-  const ancestors = new Set<string>();
-  if (folderPaths.size === 0 || ignoredDirectories.size === 0) {
-    return ancestors;
-  }
-
-  folderPaths.forEach((folderPath) => {
-    if (!isDirectlyGitignoredFolderPath(folderPath, ignoredDirectories)) {
-      return;
-    }
-    const parts = folderPath.split("/").filter(Boolean);
-    for (let index = 1; index < parts.length; index += 1) {
-      ancestors.add(parts.slice(0, index).join("/"));
-    }
-  });
-
-  return ancestors;
-}
-
-function isSpecialDirectoryPath(path: string) {
-  const leaf = path.split("/").filter(Boolean).pop() ?? "";
-  if (!leaf) {
-    return false;
-  }
-  return (
-    SPECIAL_DEPENDENCY_DIRECTORIES.has(leaf) ||
-    SPECIAL_BUILD_ARTIFACT_DIRECTORIES.has(leaf) ||
-    leaf.startsWith("cmake-build-")
-  );
-}
-
-function buildTree(
-  files: string[],
-  directories: string[],
-  lazyLoadableDirectories: Set<string>,
-  directoryMetadataByPath: Map<string, WorkspaceDirectoryEntry>,
-): { nodes: FileTreeNode[]; folderPaths: Set<string> } {
-  const root = new Map<string, FileTreeBuildNode>();
-  const addNode = (
-    map: Map<string, FileTreeBuildNode>,
-    name: string,
-    path: string,
-    type: "file" | "folder",
-    isLazyLoadable = false,
-    childState?: WorkspaceDirectoryChildState,
-    hasMore = false,
-  ) => {
-    const existing = map.get(name);
-    if (existing) {
-      if (type === "folder") {
-        existing.type = "folder";
-      }
-      if (isLazyLoadable) {
-        existing.isLazyLoadable = true;
-      }
-      if (childState) {
-        existing.childState = childState;
-      }
-      if (hasMore) {
-        existing.hasMore = true;
-      }
-      return existing;
-    }
-    const node: FileTreeBuildNode = {
-      name,
-      path,
-      type,
-      children: new Map(),
-      isLazyLoadable,
-      childState,
-      hasMore,
-    };
-    map.set(name, node);
-    return node;
-  };
-
-  const insertPath = (path: string, leafType: "file" | "folder") => {
-    const parts = path.split("/").filter(Boolean);
-    if (parts.length === 0) {
-      return;
-    }
-    let currentMap = root;
-    let currentPath = "";
-    parts.forEach((segment, index) => {
-      const isLeaf = index === parts.length - 1;
-      const nextPath = currentPath ? `${currentPath}/${segment}` : segment;
-      const nodeType: "file" | "folder" = isLeaf ? leafType : "folder";
-      const metadata = nodeType === "folder" ? directoryMetadataByPath.get(nextPath) : undefined;
-      const node = addNode(
-        currentMap,
-        segment,
-        nextPath,
-        nodeType,
-        nodeType === "folder" && lazyLoadableDirectories.has(nextPath),
-        metadata?.child_state,
-        Boolean(metadata?.has_more),
-      );
-      if (nodeType === "folder") {
-        currentMap = node.children;
-        currentPath = nextPath;
-      }
-    });
-  };
-
-  directories.forEach((path) => insertPath(path, "folder"));
-  files.forEach((path) => insertPath(path, "file"));
-
-  const folderPaths = new Set<string>();
-
-  const sortNodes = (a: FileTreeBuildNode, b: FileTreeBuildNode) => {
-    if (a.type !== b.type) {
-      return a.type === "folder" ? -1 : 1;
-    }
-    return a.name.localeCompare(b.name);
-  };
-
-  const collapseFolderChain = (
-    start: FileTreeBuildNode,
-  ): { node: FileTreeBuildNode; label: string; path: string } => {
-    let node = start;
-    const labels = [start.name];
-    let path = start.path;
-
-    for (;;) {
-      const children = Array.from(node.children.values());
-      const hasDirectFile = children.some((child) => child.type === "file");
-      const directFolders = children.filter((child) => child.type === "folder");
-      const hasLazyLoadableChild = directFolders.some((child) => child.isLazyLoadable);
-      if (node.isLazyLoadable || hasDirectFile || hasLazyLoadableChild || directFolders.length !== 1) {
-        break;
-      }
-      const next = directFolders[0];
-      if (!next) {
-        break;
-      }
-      labels.push(next.name);
-      node = next;
-      path = node.path;
-    }
-
-    return {
-      node,
-      label: labels.join("."),
-      path,
-    };
-  };
-
-  const toArray = (map: Map<string, FileTreeBuildNode>): FileTreeNode[] => {
-    const nodes = Array.from(map.values())
-      .sort(sortNodes)
-      .map((node) => {
-        if (node.type === "folder") {
-          const collapsed = collapseFolderChain(node);
-          folderPaths.add(collapsed.path);
-          return {
-            name: collapsed.label,
-            path: collapsed.path,
-            type: "folder" as const,
-            children: toArray(collapsed.node.children),
-            isLazyLoadable: collapsed.node.isLazyLoadable,
-            childState: collapsed.node.childState,
-            hasMore: collapsed.node.hasMore,
-          };
-        }
-        return {
-          name: node.name,
-          path: node.path,
-          type: "file" as const,
-          children: [],
-        };
-      });
-    return nodes;
-  };
-
-  return { nodes: toArray(root), folderPaths };
-}
-
-const imageExtensions = new Set([
-  "png",
-  "jpg",
-  "jpeg",
-  "gif",
-  "svg",
-  "webp",
-  "avif",
-  "bmp",
-  "heic",
-  "heif",
-  "tif",
-  "tiff",
-]);
-
-function isImagePath(path: string) {
-  const ext = path.split(".").pop()?.toLowerCase() ?? "";
-  return imageExtensions.has(ext);
-}
-
-function resolveWorkspaceRootLabel(workspacePath: string, workspaceName?: string) {
-  const fromName = workspaceName?.trim();
-  if (fromName) {
-    return fromName;
-  }
-  const normalizedPath = workspacePath.replace(/[\\/]+$/, "");
-  const segments = normalizedPath.split(/[\\/]/).filter(Boolean);
-  return segments.at(-1) || normalizedPath || "workspace";
-}
 
 export function FileTreePanel({
   workspaceId,
@@ -2018,442 +1628,39 @@ export function FileTreePanel({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [selectedNodePath, selectedNodeType, trashItem, copyPath]);
 
-  const renderVirtualTreeRow = (row: VisibleFileTreeRow) => {
-    if (row.kind === "lazy-state") {
-      if (row.state === "loading") {
-        return (
-          <div
-            className="file-tree-lazy-state"
-            style={{ paddingLeft: `${row.depth * 10 + 16}px` }}
-          >
-            {t("files.loadingFiles")}
-          </div>
-        );
-      }
-      if (row.state === "error") {
-        return (
-          <button
-            type="button"
-            className="file-tree-lazy-retry"
-            style={{ marginLeft: `${row.depth * 10}px` }}
-            onClick={() => void loadLazyDirectoryChildren(row.path)}
-            title={row.error ?? undefined}
-          >
-            {t("files.retryLoadFiles")}
-          </button>
-        );
-      }
-      return (
-        <div
-          className="file-tree-lazy-state"
-          style={{ paddingLeft: `${row.depth * 10 + 16}px` }}
-        >
-          {t("files.noFilesAvailable")}
-        </div>
-      );
-    }
-
-    const node = row.entry.node;
-    const depth = row.entry.depth;
-    const isFolder = node.type === "folder";
-    const isLazyFolder = isFolder && (node.isLazyLoadable ?? false);
-    const hasChildren = isFolder && node.children.length > 0;
-    const canExpand = isFolder && (hasChildren || isLazyFolder);
-    const isExpanded = canExpand && expandedFolders.has(node.path);
-    const rawGitStatus = isFolder
-      ? folderGitStatusMap.get(node.path) ?? null
-      : gitStatusMap.get(node.path) ?? null;
-    const fileGitStatus =
-      isFolder && rawGitStatus?.toUpperCase() === "D"
-        ? "M"
-        : rawGitStatus;
-    const gitStatusClass = fileGitStatus
-      ? ` git-${fileGitStatus.toLowerCase()}`
-      : "";
-    const isGitignored = isFolder
-      ? isDirectlyGitignoredFolderPath(node.path, mergedGitignoredDirectories) ||
-        gitignoredTreeNodeMap.get(node.path) === true
-      : mergedGitignoredFiles.has(node.path);
-    const isSelected = selectedNodePaths.has(node.path);
-    const isPrimarySelection = selectedNodePath === node.path;
-
-    return (
-      <div className="file-tree-row-wrap">
-        <button
-          type="button"
-          className={`file-tree-row${isFolder ? " is-folder" : " is-file"}${isGitignored ? " is-gitignored" : ""}${isSelected ? " is-selected" : ""}${isPrimarySelection ? " is-primary" : ""}`}
-          style={{ paddingLeft: `${depth * 10}px` }}
-          onClick={(event) => {
-            const isToggleSelect = event.metaKey || event.ctrlKey;
-            if (event.shiftKey) {
-              setRangeSelection(node.path, node.type);
-              return;
-            }
-            if (isToggleSelect) {
-              togglePathSelection(node.path, node.type);
-              return;
-            }
-            setSingleSelection(node.path, node.type);
-          }}
-          onDoubleClick={(event) => {
-            event.preventDefault();
-            if (isFolder) {
-              if (!canExpand) {
-                return;
-              }
-              toggleFolderExpandedState(node.path, isLazyFolder);
-              return;
-            }
-            if (onOpenFile) {
-              onOpenFile(node.path);
-              return;
-            }
-            openPreview(node.path, event.currentTarget);
-          }}
-          onContextMenu={(event) => {
-            if (!selectedNodePaths.has(node.path)) {
-              setSingleSelection(node.path, node.type);
-            } else {
-              setSelectedNodePath(node.path);
-              setSelectedNodeType(node.type);
-            }
-            showContextMenu(event, node.path, isFolder);
-          }}
-          draggable
-          onDragStart={(event: DragEvent<HTMLButtonElement>) => {
-            const dragSourcePaths = isSelected ? orderedSelectedNodePaths : [node.path];
-            const uniqueSourcePaths = Array.from(new Set(dragSourcePaths));
-            if (uniqueSourcePaths.length === 0) {
-              return;
-            }
-            if (!isSelected) {
-              setSingleSelection(node.path, node.type);
-            }
-            if (
-              typeof window !== "undefined" &&
-              (window.__fileTreeDragActive === true ||
-                typeof window.__fileTreeDragCleanup === "function")
-            ) {
-              clearFileTreeDragBridge();
-            }
-            const absolutePaths = uniqueSourcePaths.map((path) => resolvePath(path));
-            activeCrossWindowDragPathsRef.current = absolutePaths;
-            lastCrossWindowDragBroadcastRef.current = Date.now();
-            dragImageCleanupRef.current?.();
-            dragImageCleanupRef.current = null;
-            setFileTreeDragBridge(absolutePaths);
-            window.__fileTreeDragCleanup = bindChatDropTargetsForTreeDrag(absolutePaths);
-            setFileTreeDragPosition(event.clientX, event.clientY);
-            broadcastCrossWindowTreeDrag({ type: "start", paths: absolutePaths });
-            if (!event.dataTransfer) {
-              return;
-            }
-            const encodedPaths = JSON.stringify(absolutePaths);
-            event.dataTransfer.effectAllowed = "copy";
-            event.dataTransfer.setData("application/x-ccgui-file-paths", encodedPaths);
-            event.dataTransfer.setData("text/plain", absolutePaths.join("\n"));
-            if (
-              isWindowsDragPreviewRuntime() &&
-              typeof event.dataTransfer.setDragImage === "function"
-            ) {
-              const preview = createWindowsFileTreeDragImage(
-                absolutePaths[0] ?? "",
-                absolutePaths.length,
-                isFolder,
-              );
-              if (preview) {
-                event.dataTransfer.setDragImage(preview.element, 18, 14);
-                dragImageCleanupRef.current = preview.cleanup;
-              }
-            }
-          }}
-          onDrag={(event: DragEvent<HTMLButtonElement>) => {
-            setFileTreeDragPosition(event.clientX, event.clientY);
-            rebroadcastCrossWindowTreeDrag();
-          }}
-          onDragEnd={(event: DragEvent<HTMLButtonElement>) => {
-            activeCrossWindowDragPathsRef.current = [];
-            lastCrossWindowDragBroadcastRef.current = 0;
-            dragImageCleanupRef.current?.();
-            dragImageCleanupRef.current = null;
-            if (typeof window !== "undefined" && window.__fileTreeDragDropped === true) {
-              clearFileTreeDragBridge();
-              return;
-            }
-            const inserted = triggerChatInputInsertFromTreeDrag(
-              event,
-              window.__fileTreeDragPaths ?? [],
-            );
-            if (!inserted) {
-              const fallbackPaths = window.__fileTreeDragPaths ?? [];
-              const hasChatInput = Boolean(document.querySelector(".chat-input-box"));
-              if (hasChatInput && fallbackPaths.length > 0) {
-                insertPathsIntoChat(fallbackPaths);
-              }
-            }
-            clearFileTreeDragBridge();
-          }}
-        >
-          {isFolder && canExpand ? (
-            <span
-              className={`file-tree-chevron${isExpanded ? " is-open" : ""}`}
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                toggleFolderExpandedState(node.path, isLazyFolder);
-              }}
-            >
-              ›
-            </span>
-          ) : (
-            <span className="file-tree-spacer" aria-hidden />
-          )}
-          <span className="file-tree-icon" aria-hidden>
-            <FileIcon filePath={node.name} isFolder={isFolder} isOpen={isExpanded} />
-          </span>
-          <span className={`file-tree-name${gitStatusClass}`}>{node.name}</span>
-        </button>
-        <button
-          type="button"
-          className={`ghost icon-button file-tree-action${isSelected ? " is-visible" : ""}`}
-          onMouseDown={(event) => {
-            event.stopPropagation();
-          }}
-          onClick={(event) => {
-            event.stopPropagation();
-            const absolutePath = resolvePath(node.path);
-            if (typeof window !== "undefined" && window.handleFilePathFromJava) {
-              window.handleFilePathFromJava(absolutePath);
-              return;
-            }
-            const mentionText = `@${absolutePath}${node.type === "file" ? " " : ""}`;
-            onInsertText?.(mentionText);
-          }}
-          aria-label={t("files.mentionFile", { name: node.name })}
-          title={t("files.mentionInChat")}
-        >
-          <Plus size={10} aria-hidden />
-        </button>
-      </div>
-    );
+  const fileTreeRowState: FileTreeRowState = {
+    expandedFolders,
+    loadingLazyDirectories,
+    lazyDirectoryLoadErrors,
+    folderGitStatusMap,
+    gitStatusMap,
+    mergedGitignoredDirectories,
+    mergedGitignoredFiles,
+    gitignoredTreeNodeMap,
+    selectedNodePaths,
+    selectedNodePath,
+    orderedSelectedNodePaths,
   };
-
-  const renderNode = (node: FileTreeNode, depth: number) => {
-    const isFolder = node.type === "folder";
-    const isLazyFolder = isFolder && (node.isLazyLoadable ?? false);
-    const hasChildren = isFolder && node.children.length > 0;
-    const canExpand = isFolder && (hasChildren || isLazyFolder);
-    const isExpanded = canExpand && expandedFolders.has(node.path);
-    const isLazyLoading = isLazyFolder && loadingLazyDirectories.has(node.path);
-    const lazyLoadError = isLazyFolder ? lazyDirectoryLoadErrors.get(node.path) ?? null : null;
-    const rawGitStatus = isFolder
-      ? folderGitStatusMap.get(node.path) ?? null
-      : gitStatusMap.get(node.path) ?? null;
-    const fileGitStatus =
-      isFolder && rawGitStatus?.toUpperCase() === "D"
-        ? "M"
-        : rawGitStatus;
-    const gitStatusClass = fileGitStatus
-      ? ` git-${fileGitStatus.toLowerCase()}`
-      : "";
-    const isGitignored = isFolder
-      ? isDirectlyGitignoredFolderPath(node.path, mergedGitignoredDirectories) ||
-        gitignoredTreeNodeMap.get(node.path) === true
-      : mergedGitignoredFiles.has(node.path);
-    const isSelected = selectedNodePaths.has(node.path);
-    const isPrimarySelection = selectedNodePath === node.path;
-    return (
-      <div key={node.path}>
-        <div className="file-tree-row-wrap">
-          <button
-            type="button"
-            className={`file-tree-row${isFolder ? " is-folder" : " is-file"}${isGitignored ? " is-gitignored" : ""}${isSelected ? " is-selected" : ""}${isPrimarySelection ? " is-primary" : ""}`}
-            style={{ paddingLeft: `${depth * 10}px` }}
-            onClick={(event) => {
-              const isToggleSelect = event.metaKey || event.ctrlKey;
-              if (event.shiftKey) {
-                setRangeSelection(node.path, node.type);
-                return;
-              }
-              if (isToggleSelect) {
-                togglePathSelection(node.path, node.type);
-                return;
-              }
-              setSingleSelection(node.path, node.type);
-            }}
-            onDoubleClick={(event) => {
-              event.preventDefault();
-              if (isFolder) {
-                if (!canExpand) {
-                  return;
-                }
-                toggleFolderExpandedState(node.path, isLazyFolder);
-                return;
-              }
-              if (onOpenFile) {
-                onOpenFile(node.path);
-                return;
-              }
-              openPreview(node.path, event.currentTarget);
-            }}
-            onContextMenu={(event) => {
-              if (!selectedNodePaths.has(node.path)) {
-                setSingleSelection(node.path, node.type);
-              } else {
-                setSelectedNodePath(node.path);
-                setSelectedNodeType(node.type);
-              }
-              showContextMenu(event, node.path, isFolder);
-            }}
-            draggable
-            onDragStart={(event: DragEvent<HTMLButtonElement>) => {
-              const dragSourcePaths = isSelected
-                ? orderedSelectedNodePaths
-                : [node.path];
-              const uniqueSourcePaths = Array.from(new Set(dragSourcePaths));
-              if (uniqueSourcePaths.length === 0) {
-                return;
-              }
-              if (!isSelected) {
-                setSingleSelection(node.path, node.type);
-              }
-              if (
-                typeof window !== "undefined" &&
-                (window.__fileTreeDragActive === true ||
-                  typeof window.__fileTreeDragCleanup === "function")
-              ) {
-                clearFileTreeDragBridge();
-              }
-              const absolutePaths = uniqueSourcePaths.map((path) => resolvePath(path));
-              activeCrossWindowDragPathsRef.current = absolutePaths;
-              lastCrossWindowDragBroadcastRef.current = Date.now();
-              dragImageCleanupRef.current?.();
-              dragImageCleanupRef.current = null;
-              setFileTreeDragBridge(absolutePaths);
-              window.__fileTreeDragCleanup = bindChatDropTargetsForTreeDrag(absolutePaths);
-              setFileTreeDragPosition(event.clientX, event.clientY);
-              broadcastCrossWindowTreeDrag({
-                type: "start",
-                paths: absolutePaths,
-              });
-              if (!event.dataTransfer) {
-                return;
-              }
-              const encodedPaths = JSON.stringify(absolutePaths);
-              event.dataTransfer.effectAllowed = "copy";
-              event.dataTransfer.setData("application/x-ccgui-file-paths", encodedPaths);
-              event.dataTransfer.setData("text/plain", absolutePaths.join("\n"));
-              if (isWindowsDragPreviewRuntime() && typeof event.dataTransfer.setDragImage === "function") {
-                const preview = createWindowsFileTreeDragImage(
-                  absolutePaths[0] ?? "",
-                  absolutePaths.length,
-                  isFolder,
-                );
-                if (preview) {
-                  event.dataTransfer.setDragImage(preview.element, 18, 14);
-                  dragImageCleanupRef.current = preview.cleanup;
-                }
-              }
-            }}
-            onDrag={(event: DragEvent<HTMLButtonElement>) => {
-              setFileTreeDragPosition(event.clientX, event.clientY);
-              rebroadcastCrossWindowTreeDrag();
-            }}
-            onDragEnd={(event: DragEvent<HTMLButtonElement>) => {
-              activeCrossWindowDragPathsRef.current = [];
-              lastCrossWindowDragBroadcastRef.current = 0;
-              dragImageCleanupRef.current?.();
-              dragImageCleanupRef.current = null;
-              if (typeof window !== "undefined" && window.__fileTreeDragDropped === true) {
-                clearFileTreeDragBridge();
-                return;
-              }
-              const inserted = triggerChatInputInsertFromTreeDrag(
-                event,
-                window.__fileTreeDragPaths ?? [],
-              );
-              if (!inserted) {
-                const fallbackPaths = window.__fileTreeDragPaths ?? [];
-                const hasChatInput = Boolean(document.querySelector(".chat-input-box"));
-                if (hasChatInput && fallbackPaths.length > 0) {
-                  // Fallback channel for runtimes where native HTML drag does not expose
-                  // stable dragover/drop coordinates across panes.
-                  insertPathsIntoChat(fallbackPaths);
-                }
-              }
-              clearFileTreeDragBridge();
-            }}
-          >
-            {isFolder && canExpand ? (
-              <span
-                className={`file-tree-chevron${isExpanded ? " is-open" : ""}`}
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  toggleFolderExpandedState(node.path, isLazyFolder);
-                }}
-              >
-                ›
-              </span>
-            ) : (
-              <span className="file-tree-spacer" aria-hidden />
-            )}
-            <span className="file-tree-icon" aria-hidden>
-              <FileIcon filePath={node.name} isFolder={isFolder} isOpen={isExpanded} />
-            </span>
-            <span className={`file-tree-name${gitStatusClass}`}>{node.name}</span>
-          </button>
-          <button
-            type="button"
-            className={`ghost icon-button file-tree-action${isSelected ? " is-visible" : ""}`}
-            onMouseDown={(event) => {
-              // Keep row click from stealing the pointer sequence on dense list rows.
-              event.stopPropagation();
-            }}
-            onClick={(event) => {
-              event.stopPropagation();
-              const absolutePath = resolvePath(node.path);
-              // Prefer ChatInputBox bridge so `+` follows the same render/update
-              // path as native @ file-reference insertion.
-              if (typeof window !== "undefined" && window.handleFilePathFromJava) {
-                window.handleFilePathFromJava(absolutePath);
-                return;
-              }
-              // Fallback for non-ChatInputBox contexts.
-              const mentionText = `@${absolutePath}${node.type === "file" ? " " : ""}`;
-              onInsertText?.(mentionText);
-            }}
-            aria-label={t("files.mentionFile", { name: node.name })}
-            title={t("files.mentionInChat")}
-          >
-            <Plus size={10} aria-hidden />
-          </button>
-        </div>
-        {hasChildren && isExpanded && (
-          <div className="file-tree-children">
-            {node.children.map((child) => renderNode(child, depth + 1))}
-          </div>
-        )}
-        {isLazyFolder && isExpanded && node.children.length === 0 && (
-          <div className="file-tree-children">
-            {isLazyLoading ? (
-              <div className="file-tree-lazy-state">{t("files.loadingFiles")}</div>
-            ) : lazyLoadError ? (
-              <button
-                type="button"
-                className="file-tree-lazy-retry"
-                onClick={() => void loadLazyDirectoryChildren(node.path)}
-                title={lazyLoadError}
-              >
-                {t("files.retryLoadFiles")}
-              </button>
-            ) : (
-              <div className="file-tree-lazy-state">{t("files.noFilesAvailable")}</div>
-            )}
-          </div>
-        )}
-      </div>
-    );
+  const fileTreeRowHandlers: FileTreeRowHandlers = {
+    setRangeSelection,
+    togglePathSelection,
+    setSingleSelection,
+    setSelectedNodePath,
+    setSelectedNodeType,
+    toggleFolderExpandedState,
+    loadLazyDirectoryChildren,
+    openPreview,
+    showContextMenu,
+    resolvePath,
+    broadcastCrossWindowTreeDrag,
+    rebroadcastCrossWindowTreeDrag,
+    onOpenFile,
+    onInsertText,
+  };
+  const fileTreeRowRefs: FileTreeRowRefs = {
+    activeCrossWindowDragPathsRef,
+    lastCrossWindowDragBroadcastRef,
+    dragImageCleanupRef,
   };
 
   return (
@@ -2563,13 +1770,29 @@ export function FileTreePanel({
                   className="file-tree-virtual-row"
                   style={{ transform: `translateY(${virtualRow.start}px)` }}
                 >
-                  {renderVirtualTreeRow(row)}
+                  <FileTreeVirtualRow
+                    row={row}
+                    state={fileTreeRowState}
+                    handlers={fileTreeRowHandlers}
+                    refs={fileTreeRowRefs}
+                    t={t}
+                  />
                 </div>
               );
             })}
           </div>
         ) : (
-          nodes.map((node) => renderNode(node, 1))
+          nodes.map((node) => (
+            <FileTreeNodeBranch
+              key={node.path}
+              node={node}
+              depth={1}
+              state={fileTreeRowState}
+              handlers={fileTreeRowHandlers}
+              refs={fileTreeRowRefs}
+              t={t}
+            />
+          ))
         )}
       </div>
       {previewPath && previewAnchor
@@ -2624,124 +1847,37 @@ export function FileTreePanel({
         </div>
       ) : null}
       {renamePrompt !== null && (
-        <div className="new-file-prompt" role="dialog" aria-modal="true">
-          <div className="new-file-prompt-backdrop" onClick={cancelRename} />
-          <div className="new-file-prompt-card">
-            <div className="new-file-prompt-title">{t("files.renameItem")}</div>
-            <div className="new-file-prompt-path">{renamePrompt.currentName}</div>
-            <input
-              id="rename-file-tree-item"
-              ref={renameInputRef}
-              className="new-file-prompt-input"
-              value={renameDraftName}
-              onChange={(event) => setRenameDraftName(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  void confirmRename();
-                }
-                if (event.key === "Escape") {
-                  event.preventDefault();
-                  cancelRename();
-                }
-              }}
-              placeholder={t("files.renameNamePlaceholder")}
-              aria-label={t("files.renameNamePlaceholder")}
-            />
-            <div className="new-file-prompt-actions">
-              <button type="button" onClick={cancelRename}>
-                {t("files.cancel")}
-              </button>
-              <button type="button" onClick={() => void confirmRename()}>
-                {t("files.renameItem")}
-              </button>
-            </div>
-          </div>
-        </div>
+        <FileTreeRenamePrompt
+          prompt={renamePrompt}
+          draftName={renameDraftName}
+          inputRef={renameInputRef}
+          t={t}
+          onDraftNameChange={setRenameDraftName}
+          onCancel={cancelRename}
+          onConfirm={() => void confirmRename()}
+        />
       )}
       {newFileParent !== null && (
-        <div className="new-file-prompt" role="dialog" aria-modal="true">
-          <div className="new-file-prompt-backdrop" onClick={cancelNewFile} />
-          <div className="new-file-prompt-card">
-            <div className="new-file-prompt-title">{t("files.newFile")}</div>
-            {newFileParent && (
-              <div className="new-file-prompt-path">{newFileParent}/</div>
-            )}
-            <input
-              id="new-file-name"
-              ref={newFileInputRef}
-              className="new-file-prompt-input"
-              placeholder={t("files.newFileNamePlaceholder")}
-              value={newFileName}
-              onChange={(e) => setNewFileName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Escape") {
-                  e.preventDefault();
-                  cancelNewFile();
-                }
-                if (e.key === "Enter" && newFileName.trim()) {
-                  e.preventDefault();
-                  void confirmNewFile();
-                }
-              }}
-            />
-            <div className="new-file-prompt-actions">
-              <button type="button" className="ghost" onClick={cancelNewFile}>
-                {t("files.cancel")}
-              </button>
-              <button
-                type="button"
-                className="primary"
-                disabled={!newFileName.trim()}
-                onClick={() => void confirmNewFile()}
-              >
-                {t("files.newFile")}
-              </button>
-            </div>
-          </div>
-        </div>
+        <FileTreeNewFilePrompt
+          parent={newFileParent}
+          name={newFileName}
+          inputRef={newFileInputRef}
+          t={t}
+          onNameChange={setNewFileName}
+          onCancel={cancelNewFile}
+          onConfirm={() => void confirmNewFile()}
+        />
       )}
       {newFolderParent !== null && (
-        <div className="new-file-prompt" role="dialog" aria-modal="true">
-          <div className="new-file-prompt-backdrop" onClick={cancelNewFolder} />
-          <div className="new-file-prompt-card">
-            <div className="new-file-prompt-title">{t("files.newFolder")}</div>
-            {newFolderParent && (
-              <div className="new-file-prompt-path">{newFolderParent}/</div>
-            )}
-            <input
-              id="new-folder-name"
-              ref={newFolderInputRef}
-              className="new-file-prompt-input"
-              placeholder={t("files.newFolderNamePlaceholder")}
-              value={newFolderName}
-              onChange={(e) => setNewFolderName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Escape") {
-                  e.preventDefault();
-                  cancelNewFolder();
-                }
-                if (e.key === "Enter" && newFolderName.trim()) {
-                  e.preventDefault();
-                  void confirmNewFolder();
-                }
-              }}
-            />
-            <div className="new-file-prompt-actions">
-              <button type="button" className="ghost" onClick={cancelNewFolder}>
-                {t("files.cancel")}
-              </button>
-              <button
-                type="button"
-                className="primary"
-                disabled={!newFolderName.trim()}
-                onClick={() => void confirmNewFolder()}
-              >
-                {t("files.newFolder")}
-              </button>
-            </div>
-          </div>
-        </div>
+        <FileTreeNewFolderPrompt
+          parent={newFolderParent}
+          name={newFolderName}
+          inputRef={newFolderInputRef}
+          t={t}
+          onNameChange={setNewFolderName}
+          onCancel={cancelNewFolder}
+          onConfirm={() => void confirmNewFolder()}
+        />
       )}
     </aside>
   );

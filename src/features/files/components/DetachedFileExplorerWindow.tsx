@@ -4,6 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useTranslation } from "react-i18next";
 import { useAppSettingsController } from "../../app/hooks/useAppSettingsController";
 import { useCodeCssVars } from "../../app/hooks/useCodeCssVars";
+import { buildAppTypographyCssVars } from "../../app/utils/typographyCssVars";
 import { useWorkspaceFiles } from "../../workspaces/hooks/useWorkspaceFiles";
 import { useWindowFocusState } from "../../layout/hooks/useWindowFocusState";
 import { DEFAULT_OPEN_APP_ID, DEFAULT_OPEN_APP_TARGETS } from "../../app/constants";
@@ -60,13 +61,15 @@ export function DetachedFileExplorerWindow() {
     }${reduceTransparency ? " reduced-transparency" : ""}`,
     [isMacDesktop, isWindowsDesktop, reduceTransparency],
   );
+  const { codeFontFamily, codeFontSize, uiFontFamily } = appSettings;
   const detachedWindowStyle = useMemo(
-    () => ({
-      "--ui-font-family": appSettings.uiFontFamily,
-      "--code-font-family": appSettings.codeFontFamily,
-      "--code-font-size": `${appSettings.codeFontSize}px`,
-    }) as CSSProperties,
-    [appSettings.codeFontFamily, appSettings.codeFontSize, appSettings.uiFontFamily],
+    () =>
+      buildAppTypographyCssVars({
+        codeFontFamily,
+        codeFontSize,
+        uiFontFamily,
+      }) as CSSProperties,
+    [codeFontFamily, codeFontSize, uiFontFamily],
   );
   const activeWorkspace = useMemo(
     () => (session ? buildDetachedWorkspaceInfo(session) : null),

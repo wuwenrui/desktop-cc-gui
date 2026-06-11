@@ -27,6 +27,11 @@ const LIGHT_THEME_PRESET_MODERN: &str = "vscode-light-modern";
 const LIGHT_THEME_PRESET_PLUS: &str = "vscode-light-plus";
 const LIGHT_THEME_PRESET_GITHUB: &str = "vscode-github-light";
 const LIGHT_THEME_PRESET_SOLARIZED: &str = "vscode-solarized-light";
+const LIGHT_THEME_PRESET_CATPPUCCIN_LATTE: &str = "vscode-catppuccin-latte";
+const LIGHT_THEME_PRESET_TOKYO_DAY: &str = "vscode-tokyo-day";
+const LIGHT_THEME_PRESET_ROSE_PINE_DAWN: &str = "vscode-rose-pine-dawn";
+const LIGHT_THEME_PRESET_EVERFOREST: &str = "vscode-everforest-light";
+const LIGHT_THEME_PRESET_AYU: &str = "vscode-ayu-light";
 const DARK_THEME_PRESET_MODERN: &str = "vscode-dark-modern";
 const DARK_THEME_PRESET_PLUS: &str = "vscode-dark-plus";
 const DARK_THEME_PRESET_GITHUB: &str = "vscode-github-dark";
@@ -34,6 +39,11 @@ const DARK_THEME_PRESET_GITHUB_DIMMED: &str = "vscode-github-dark-dimmed";
 const DARK_THEME_PRESET_ONE_DARK_PRO: &str = "vscode-one-dark-pro";
 const DARK_THEME_PRESET_MONOKAI: &str = "vscode-monokai";
 const DARK_THEME_PRESET_SOLARIZED: &str = "vscode-solarized-dark";
+const DARK_THEME_PRESET_DRACULA: &str = "vscode-dracula";
+const DARK_THEME_PRESET_NORD: &str = "vscode-nord";
+const DARK_THEME_PRESET_CATPPUCCIN_MOCHA: &str = "vscode-catppuccin-mocha";
+const DARK_THEME_PRESET_TOKYO_NIGHT: &str = "vscode-tokyo-night";
+const DARK_THEME_PRESET_ROSE_PINE: &str = "vscode-rose-pine";
 
 fn sanitize_ui_scale(scale: f64) -> f64 {
     if !scale.is_finite() || scale < UI_SCALE_MIN || scale > UI_SCALE_MAX {
@@ -76,7 +86,12 @@ fn sanitize_light_theme_preset_id(preset_id: &str) -> String {
         LIGHT_THEME_PRESET_MODERN
         | LIGHT_THEME_PRESET_PLUS
         | LIGHT_THEME_PRESET_GITHUB
-        | LIGHT_THEME_PRESET_SOLARIZED => preset_id.to_string(),
+        | LIGHT_THEME_PRESET_SOLARIZED
+        | LIGHT_THEME_PRESET_CATPPUCCIN_LATTE
+        | LIGHT_THEME_PRESET_TOKYO_DAY
+        | LIGHT_THEME_PRESET_ROSE_PINE_DAWN
+        | LIGHT_THEME_PRESET_EVERFOREST
+        | LIGHT_THEME_PRESET_AYU => preset_id.to_string(),
         _ => LIGHT_THEME_PRESET_MODERN.to_string(),
     }
 }
@@ -89,7 +104,12 @@ fn sanitize_dark_theme_preset_id(preset_id: &str) -> String {
         | DARK_THEME_PRESET_GITHUB_DIMMED
         | DARK_THEME_PRESET_ONE_DARK_PRO
         | DARK_THEME_PRESET_MONOKAI
-        | DARK_THEME_PRESET_SOLARIZED => preset_id.to_string(),
+        | DARK_THEME_PRESET_SOLARIZED
+        | DARK_THEME_PRESET_DRACULA
+        | DARK_THEME_PRESET_NORD
+        | DARK_THEME_PRESET_CATPPUCCIN_MOCHA
+        | DARK_THEME_PRESET_TOKYO_NIGHT
+        | DARK_THEME_PRESET_ROSE_PINE => preset_id.to_string(),
         _ => DARK_THEME_PRESET_MODERN.to_string(),
     }
 }
@@ -100,13 +120,23 @@ fn sanitize_theme_preset_id(preset_id: &str) -> String {
         | LIGHT_THEME_PRESET_PLUS
         | LIGHT_THEME_PRESET_GITHUB
         | LIGHT_THEME_PRESET_SOLARIZED
+        | LIGHT_THEME_PRESET_CATPPUCCIN_LATTE
+        | LIGHT_THEME_PRESET_TOKYO_DAY
+        | LIGHT_THEME_PRESET_ROSE_PINE_DAWN
+        | LIGHT_THEME_PRESET_EVERFOREST
+        | LIGHT_THEME_PRESET_AYU
         | DARK_THEME_PRESET_MODERN
         | DARK_THEME_PRESET_PLUS
         | DARK_THEME_PRESET_GITHUB
         | DARK_THEME_PRESET_GITHUB_DIMMED
         | DARK_THEME_PRESET_ONE_DARK_PRO
         | DARK_THEME_PRESET_MONOKAI
-        | DARK_THEME_PRESET_SOLARIZED => preset_id.to_string(),
+        | DARK_THEME_PRESET_SOLARIZED
+        | DARK_THEME_PRESET_DRACULA
+        | DARK_THEME_PRESET_NORD
+        | DARK_THEME_PRESET_CATPPUCCIN_MOCHA
+        | DARK_THEME_PRESET_TOKYO_NIGHT
+        | DARK_THEME_PRESET_ROSE_PINE => preset_id.to_string(),
         _ => DARK_THEME_PRESET_MODERN.to_string(),
     }
 }
@@ -116,7 +146,12 @@ fn resolve_theme_preset_appearance(preset_id: &str) -> &'static str {
         LIGHT_THEME_PRESET_MODERN
         | LIGHT_THEME_PRESET_PLUS
         | LIGHT_THEME_PRESET_GITHUB
-        | LIGHT_THEME_PRESET_SOLARIZED => THEME_LIGHT,
+        | LIGHT_THEME_PRESET_SOLARIZED
+        | LIGHT_THEME_PRESET_CATPPUCCIN_LATTE
+        | LIGHT_THEME_PRESET_TOKYO_DAY
+        | LIGHT_THEME_PRESET_ROSE_PINE_DAWN
+        | LIGHT_THEME_PRESET_EVERFOREST
+        | LIGHT_THEME_PRESET_AYU => THEME_LIGHT,
         _ => THEME_DARK,
     }
 }
@@ -339,10 +374,14 @@ mod tests {
         sanitize_dark_theme_preset_id, sanitize_layout_mode, sanitize_light_theme_preset_id,
         sanitize_theme, sanitize_theme_preset_id, sanitize_ui_mode, sanitize_ui_scale,
         set_codex_unified_exec_official_override_core, update_app_settings_core, validate_ui_scale,
-        DARK_THEME_PRESET_GITHUB, DARK_THEME_PRESET_GITHUB_DIMMED, DARK_THEME_PRESET_MODERN,
-        DARK_THEME_PRESET_MONOKAI, DARK_THEME_PRESET_ONE_DARK_PRO, DARK_THEME_PRESET_PLUS,
-        DARK_THEME_PRESET_SOLARIZED, LIGHT_THEME_PRESET_GITHUB, LIGHT_THEME_PRESET_MODERN,
-        LIGHT_THEME_PRESET_PLUS, LIGHT_THEME_PRESET_SOLARIZED, UI_SCALE_DEFAULT,
+        DARK_THEME_PRESET_CATPPUCCIN_MOCHA, DARK_THEME_PRESET_DRACULA, DARK_THEME_PRESET_GITHUB,
+        DARK_THEME_PRESET_GITHUB_DIMMED, DARK_THEME_PRESET_MODERN, DARK_THEME_PRESET_MONOKAI,
+        DARK_THEME_PRESET_NORD, DARK_THEME_PRESET_ONE_DARK_PRO, DARK_THEME_PRESET_PLUS,
+        DARK_THEME_PRESET_ROSE_PINE, DARK_THEME_PRESET_SOLARIZED, DARK_THEME_PRESET_TOKYO_NIGHT,
+        LIGHT_THEME_PRESET_AYU, LIGHT_THEME_PRESET_CATPPUCCIN_LATTE, LIGHT_THEME_PRESET_EVERFOREST,
+        LIGHT_THEME_PRESET_GITHUB, LIGHT_THEME_PRESET_MODERN, LIGHT_THEME_PRESET_PLUS,
+        LIGHT_THEME_PRESET_ROSE_PINE_DAWN, LIGHT_THEME_PRESET_SOLARIZED,
+        LIGHT_THEME_PRESET_TOKYO_DAY, UI_SCALE_DEFAULT,
     };
     use crate::types::{AppSettings, CodexUnifiedExecPolicy};
     use tokio::sync::Mutex;
@@ -469,6 +508,26 @@ mod tests {
             LIGHT_THEME_PRESET_SOLARIZED
         );
         assert_eq!(
+            sanitize_light_theme_preset_id(LIGHT_THEME_PRESET_CATPPUCCIN_LATTE),
+            LIGHT_THEME_PRESET_CATPPUCCIN_LATTE
+        );
+        assert_eq!(
+            sanitize_light_theme_preset_id(LIGHT_THEME_PRESET_TOKYO_DAY),
+            LIGHT_THEME_PRESET_TOKYO_DAY
+        );
+        assert_eq!(
+            sanitize_light_theme_preset_id(LIGHT_THEME_PRESET_ROSE_PINE_DAWN),
+            LIGHT_THEME_PRESET_ROSE_PINE_DAWN
+        );
+        assert_eq!(
+            sanitize_light_theme_preset_id(LIGHT_THEME_PRESET_EVERFOREST),
+            LIGHT_THEME_PRESET_EVERFOREST
+        );
+        assert_eq!(
+            sanitize_light_theme_preset_id(LIGHT_THEME_PRESET_AYU),
+            LIGHT_THEME_PRESET_AYU
+        );
+        assert_eq!(
             sanitize_dark_theme_preset_id(DARK_THEME_PRESET_PLUS),
             DARK_THEME_PRESET_PLUS
         );
@@ -493,8 +552,36 @@ mod tests {
             DARK_THEME_PRESET_SOLARIZED
         );
         assert_eq!(
+            sanitize_dark_theme_preset_id(DARK_THEME_PRESET_DRACULA),
+            DARK_THEME_PRESET_DRACULA
+        );
+        assert_eq!(
+            sanitize_dark_theme_preset_id(DARK_THEME_PRESET_NORD),
+            DARK_THEME_PRESET_NORD
+        );
+        assert_eq!(
+            sanitize_dark_theme_preset_id(DARK_THEME_PRESET_CATPPUCCIN_MOCHA),
+            DARK_THEME_PRESET_CATPPUCCIN_MOCHA
+        );
+        assert_eq!(
+            sanitize_dark_theme_preset_id(DARK_THEME_PRESET_TOKYO_NIGHT),
+            DARK_THEME_PRESET_TOKYO_NIGHT
+        );
+        assert_eq!(
+            sanitize_dark_theme_preset_id(DARK_THEME_PRESET_ROSE_PINE),
+            DARK_THEME_PRESET_ROSE_PINE
+        );
+        assert_eq!(
             sanitize_theme_preset_id(LIGHT_THEME_PRESET_GITHUB),
             LIGHT_THEME_PRESET_GITHUB
+        );
+        assert_eq!(
+            sanitize_theme_preset_id(LIGHT_THEME_PRESET_CATPPUCCIN_LATTE),
+            LIGHT_THEME_PRESET_CATPPUCCIN_LATTE
+        );
+        assert_eq!(
+            sanitize_theme_preset_id(DARK_THEME_PRESET_TOKYO_NIGHT),
+            DARK_THEME_PRESET_TOKYO_NIGHT
         );
     }
 
@@ -506,6 +593,12 @@ mod tests {
         assert_eq!(resolve_window_theme_preference(&settings), "light");
 
         settings.custom_theme_preset_id = DARK_THEME_PRESET_ONE_DARK_PRO.to_string();
+        assert_eq!(resolve_window_theme_preference(&settings), "dark");
+
+        settings.custom_theme_preset_id = LIGHT_THEME_PRESET_ROSE_PINE_DAWN.to_string();
+        assert_eq!(resolve_window_theme_preference(&settings), "light");
+
+        settings.custom_theme_preset_id = DARK_THEME_PRESET_CATPPUCCIN_MOCHA.to_string();
         assert_eq!(resolve_window_theme_preference(&settings), "dark");
     }
 

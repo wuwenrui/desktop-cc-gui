@@ -21,6 +21,10 @@
   --sidebar-default-badge-text: #ffffff;
   --sidebar-default-badge-border: rgba(59, 130, 246, 0.62);
   --sidebar-default-badge-bg: rgba(59, 130, 246, 0.24);
+  --sidebar-caption-font-size: var(--client-caption-font-size, 10px);
+  --sidebar-meta-font-size: var(--client-meta-font-size, 12px);
+  --sidebar-content-font-size: var(--client-content-font-size, 14px);
+  --sidebar-title-font-size: var(--client-title-font-size, 14px);
   padding: 0 var(--sidebar-padding) 12px;
   background: var(--surface-sidebar);
   backdrop-filter: none;

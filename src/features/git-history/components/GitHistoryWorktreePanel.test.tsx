@@ -119,8 +119,12 @@ describe("GitHistoryWorktreePanel", () => {
   async function chooseCodexEnglishCommitMessage() {
     fireEvent.click(screen.getByRole("button", { name: "Generate commit message" }));
     fireEvent.click(await screen.findByRole("menuitem", { name: "Use Codex engine" }));
-    const englishItem = await screen.findByRole("menuitem", {
-      name: "Generate English commit message",
+    const englishItem = await waitFor(() => {
+      const item = screen.getByRole("menuitem", {
+        name: "Generate English commit message",
+      });
+      expect(item).toBeTruthy();
+      return item;
     });
     await act(async () => {
       fireEvent.click(englishItem);

@@ -361,18 +361,16 @@ describe("McpSection", () => {
     rerender(<McpSection activeWorkspace={workspace} activeEngine="opencode" />);
 
     await waitFor(() => {
-      expect(screen.getByText("Session overview")).toBeTruthy();
+      expect(screen.getAllByText("2 servers · 0 tools").length).toBeGreaterThan(0);
+      const switchedOverviewCard = screen
+        .getByText("Selected engine")
+        .closest(".settings-mcp-overview-card");
+      expect(switchedOverviewCard).toBeTruthy();
+      expect(within(switchedOverviewCard as HTMLElement).getByText("OpenCode")).toBeTruthy();
+      expect(screen.getByText("browser")).toBeTruthy();
+      expect(screen.getByText("docs")).toBeTruthy();
+      expect(screen.queryByText("search_repos")).toBeNull();
     });
-
-    expect(screen.getAllByText("2 servers · 0 tools").length).toBeGreaterThan(0);
-    const switchedOverviewCard = screen
-      .getByText("Selected engine")
-      .closest(".settings-mcp-overview-card");
-    expect(switchedOverviewCard).toBeTruthy();
-    expect(within(switchedOverviewCard as HTMLElement).getByText("OpenCode")).toBeTruthy();
-    expect(screen.getByText("browser")).toBeTruthy();
-    expect(screen.getByText("docs")).toBeTruthy();
-    expect(screen.queryByText("search_repos")).toBeNull();
   });
 
   it("shows bridge-backed config servers for Gemini and strips runtime tool prefixes case-insensitively", async () => {

@@ -19,13 +19,18 @@ Markdown file preview MUST consume a stable document snapshot rather than every 
 - **THEN** the preview MAY advance to the new snapshot
 - **AND** it MUST use debounce or hash-equivalent guarding to avoid rebuilding the preview for unchanged content
 
+#### Scenario: fast renderer consumes the same stable snapshot
+- **WHEN** file preview uses the fast Markdown renderer
+- **THEN** the renderer MUST compile from the stable document snapshot and content hash
+- **AND** annotation state, hover state, outline panel state, Mermaid tab state, and localized labels MUST NOT change the compiled Markdown document identity
+
 ### Requirement: Markdown compile work MUST be cached independently from annotation UI state
 
-The system MUST separate Markdown compile work from annotation state, hover state, and localized labels.
+The system MUST separate Markdown compile work from annotation state, hover state, outline state, and localized labels.
 
 #### Scenario: annotation draft typing does not recompile markdown
 - **WHEN** the user types into an AI annotation draft in Markdown preview
-- **THEN** the system MUST NOT re-run full Markdown normalization, frontmatter extraction, line-map construction, or block-key generation for the same content hash
+- **THEN** the system MUST NOT re-run full Markdown normalization, frontmatter extraction, line-map construction, block-key generation, fast HTML compilation, sanitizer work, or outline extraction for the same content hash
 - **AND** only the annotation overlay or affected annotation UI MAY update
 
 #### Scenario: same content rerender reuses compiled markdown model
@@ -67,9 +72,14 @@ Mermaid diagrams, KaTeX formulas, large tables, and large code blocks MUST not f
 - **THEN** the system SHOULD defer expensive rendering for that block
 - **AND** the rest of the preview MUST remain readable and interactive
 
+#### Scenario: fast renderer heavy metadata is stable
+- **WHEN** the fast renderer emits metadata for Mermaid, math, table, or large code blocks
+- **THEN** the metadata key MUST be stable for the same document identity, source line range, language, and block content
+- **AND** same-content UI updates MUST NOT drop the block's cached rendered state
+
 ### Requirement: Large Markdown files MUST use deterministic bounded rendering
 
-Large Markdown preview MUST choose degradation, progressive rendering, or virtualization through deterministic document metrics.
+Large Markdown preview MUST choose degradation, progressive rendering, fast document rendering, or virtualization through deterministic document metrics.
 
 #### Scenario: render budget uses document metrics
 - **WHEN** the system chooses a Markdown preview render strategy
@@ -78,8 +88,13 @@ Large Markdown preview MUST choose degradation, progressive rendering, or virtua
 
 #### Scenario: large markdown does not mount all expensive content at once
 - **WHEN** a Markdown file exceeds the rich preview budget
-- **THEN** the preview MUST use a bounded strategy such as low-cost fallback, progressive block rendering, or block virtualization
+- **THEN** the preview MUST use a bounded strategy such as low-cost fallback, progressive block rendering, fast sanitized document rendering, or block virtualization
 - **AND** it MUST NOT attempt unbounded full-document rich rendering that can freeze the UI indefinitely
+
+#### Scenario: renderer profile can select fast html without changing behavior semantics
+- **WHEN** deterministic metrics select a fast HTML renderer profile
+- **THEN** the preview MUST preserve file-preview Markdown semantics for supported block types
+- **AND** the strategy change MUST be observable through renderer diagnostics or data attributes for tests
 
 ### Requirement: Markdown block rendering correctness MUST be type-specific and regression-tested
 
@@ -102,12 +117,17 @@ Markdown preview performance optimizations MUST preserve rendered output semanti
 
 ### Requirement: Markdown preview partial refresh MUST not amplify local UI changes
 
-Markdown preview MUST keep non-content UI updates local to the affected block, overlay, or interaction island.
+Markdown preview MUST keep non-content UI updates local to the affected block, overlay, outline, or interaction island.
 
 #### Scenario: annotation update does not recreate unrelated blocks
 - **WHEN** an annotation marker, draft composer, hover state, or same-content refresh changes
 - **THEN** the preview MUST update only the affected annotation overlay or affected block presentation
-- **AND** unrelated Markdown block subtrees MUST keep their identity and local rendered state
+- **AND** unrelated Markdown block subtrees or HTML document regions MUST keep their identity and local rendered state
+
+#### Scenario: outline navigation does not repaint the markdown body
+- **WHEN** the user navigates or filters the Markdown outline
+- **THEN** the Markdown body MUST NOT be remounted for unchanged content
+- **AND** any active heavy block state MUST remain visible
 
 ### Requirement: Markdown preview interaction state MUST survive non-content refreshes
 
@@ -130,4 +150,60 @@ Markdown preview MUST preserve user interaction state inside stable rendered blo
 - **AND** an unrelated annotation overlay or parent preview state changes
 - **THEN** that heavy block MUST preserve its local interaction state
 - **AND** unrelated overlay updates MUST NOT recreate the heavy block subtree in a way that drops visible rendered output
+
+### Requirement: Markdown file preview MUST support a fast sanitized document renderer
+
+The file Markdown preview SHALL support rendering the Markdown body through a parser-produced sanitized HTML document surface rather than a React component tree for every Markdown node.
+
+#### Scenario: fast renderer mounts sanitized document HTML
+- **WHEN** the renderer profile selects the fast Markdown renderer
+- **THEN** the Markdown body MAY be mounted as sanitized HTML under the file-preview Markdown namespace
+- **AND** React MUST NOT need to own every paragraph, list item, table cell, and inline node as an application component
+- **AND** the mounted HTML MUST strip dangerous attributes, event handlers, and unsafe URL schemes before display
+
+#### Scenario: fast renderer keeps interaction islands isolated
+- **WHEN** the fast renderer encounters links, annotations, wide tables, code blocks, KaTeX formulas, or Mermaid blocks
+- **THEN** it MUST expose stable metadata, source-line anchors, placeholders, or delegated events for those interactions
+- **AND** heavy or interactive blocks MUST be hydrated locally without remounting the full Markdown document body
+
+#### Scenario: fast renderer failure falls back inside file preview
+- **WHEN** fast Markdown compilation, sanitization, or interaction island hydration fails
+- **THEN** the failure MUST remain inside the file-preview renderer boundary
+- **AND** the user MUST receive either the existing ReactMarkdown file-preview fallback or another readable file-preview fallback
+- **AND** message Markdown renderer MUST NOT become the fallback target
+
+### Requirement: Markdown preview outline MUST be parser-derived and source-line stable
+
+Markdown preview outline/Toc MUST be derived from Markdown parser tokens, heading metadata, or an equivalent compile-time source map rather than from repeated mounted-DOM scans.
+
+#### Scenario: outline entries are extracted during compile
+- **WHEN** a Markdown document contains heading tokens
+- **THEN** the compile result MUST include outline entries with heading depth, title, stable anchor, ordinal, and original source line range
+- **AND** duplicate headings MUST receive stable disambiguated anchors
+
+#### Scenario: outline does not force document recompilation
+- **WHEN** the user opens, filters, expands, collapses, or navigates the Markdown outline
+- **THEN** the system MUST NOT recompile the Markdown body for unchanged source content
+- **AND** outline state updates MUST remain local to the outline/navigation surface
+
+#### Scenario: outline jump uses source-line or heading anchors
+- **WHEN** the user activates an outline item
+- **THEN** the preview MUST scroll to the corresponding heading/source-line anchor when rendered
+- **AND** if the target is outside a bounded/progressive projection, the preview MUST reveal the target block or clearly indicate that the target is not yet rendered before attempting the final scroll
+
+### Requirement: Markdown compile pipeline MUST be Worker-ready
+
+The Markdown compile pipeline SHALL be pure and serializable so expensive parse/sanitize/outline work can move off the main thread without changing visible behavior.
+
+#### Scenario: compile request and result are serializable
+- **WHEN** fast Markdown compile is implemented
+- **THEN** its input SHOULD be expressible as raw markdown, document identity, renderer profile, theme/options, and feature flags
+- **AND** its output SHOULD be expressible as sanitized or sanitizer-ready HTML, outline entries, source-line anchors, heavy block metadata, and diagnostics
+- **AND** compile code SHOULD NOT depend on React component instances or mounted DOM
+
+#### Scenario: stale async compile result cannot overwrite newer preview
+- **WHEN** Markdown compile is performed asynchronously in a Worker or equivalent async adapter
+- **AND** a newer document snapshot has superseded the compile request
+- **THEN** the stale result MUST be ignored
+- **AND** the preview MUST remain bound to the latest stable snapshot
 

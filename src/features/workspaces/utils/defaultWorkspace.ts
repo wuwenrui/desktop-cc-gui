@@ -7,6 +7,10 @@ const DEFAULT_WORKSPACE_SUFFIXES = [
   "/com.zhukunpenglinyutong.codemoss/workspace",
 ];
 
+function normalizeWorkspaceHomePath(path: string): string {
+  return path.replace(/\\/g, "/").replace(/\/+$/, "");
+}
+
 export function normalizeWorkspacePath(path: string): string {
   return path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
 }
@@ -14,4 +18,12 @@ export function normalizeWorkspacePath(path: string): string {
 export function isDefaultWorkspacePath(path: string): boolean {
   const normalized = normalizeWorkspacePath(path);
   return DEFAULT_WORKSPACE_SUFFIXES.some((suffix) => normalized.endsWith(suffix));
+}
+
+export function getDefaultWorkspaceCandidatePaths(homePath: string): string[] {
+  const normalizedHomePath = normalizeWorkspaceHomePath(homePath);
+  if (!normalizedHomePath) {
+    return [];
+  }
+  return DEFAULT_WORKSPACE_SUFFIXES.map((suffix) => `${normalizedHomePath}${suffix}`);
 }

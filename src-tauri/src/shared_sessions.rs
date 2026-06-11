@@ -917,6 +917,7 @@ pub async fn send_shared_session_message(
             let response = codex_core::send_user_message_core(
                 &state.sessions,
                 workspace_id.clone(),
+                None,
                 native_thread_id.clone(),
                 outbound_text,
                 model,

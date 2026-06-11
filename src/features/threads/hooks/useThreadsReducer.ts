@@ -102,6 +102,77 @@ const PENDING_THREAD_LAST_AGENT_ANCHOR_TTL_MS = 5 * 60 * 1000;
 type GeneratedImageItem = Extract<ConversationItem, { kind: "generatedImage" }>;
 const emptyItems: Record<string, ConversationItem[]> = {};
 
+type ThreadProviderBindingFields = Pick<
+  ThreadSummary,
+  | "sourceLabel"
+  | "providerProfileId"
+  | "providerProfileSource"
+  | "providerProfileName"
+  | "providerAvailability"
+>;
+
+function normalizeProviderBindingValue(value: string | null | undefined) {
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim()
+    : undefined;
+}
+
+function providerBindingFromEnsureThreadAction(
+  action: Extract<ThreadAction, { type: "ensureThread" }>,
+): Partial<ThreadProviderBindingFields> {
+  const sourceLabel = normalizeProviderBindingValue(action.sourceLabel);
+  const providerProfileId = normalizeProviderBindingValue(action.providerProfileId);
+  const providerProfileSource = normalizeProviderBindingValue(
+    action.providerProfileSource,
+  );
+  const providerProfileName = normalizeProviderBindingValue(action.providerProfileName);
+  const providerAvailability = normalizeProviderBindingValue(action.providerAvailability);
+  return {
+    ...(sourceLabel ? { sourceLabel } : {}),
+    ...(providerProfileId ? { providerProfileId } : {}),
+    ...(providerProfileSource ? { providerProfileSource } : {}),
+    ...(providerProfileName ? { providerProfileName } : {}),
+    ...(providerAvailability ? { providerAvailability } : {}),
+  };
+}
+
+function providerBindingFieldsEqual(
+  left: Partial<ThreadProviderBindingFields>,
+  right: Partial<ThreadProviderBindingFields>,
+) {
+  return (
+    (left.sourceLabel ?? undefined) === (right.sourceLabel ?? undefined) &&
+    (left.providerProfileId ?? undefined) ===
+      (right.providerProfileId ?? undefined) &&
+    (left.providerProfileSource ?? undefined) ===
+      (right.providerProfileSource ?? undefined) &&
+    (left.providerProfileName ?? undefined) ===
+      (right.providerProfileName ?? undefined) &&
+    (left.providerAvailability ?? undefined) ===
+      (right.providerAvailability ?? undefined)
+  );
+}
+
+function mergeProviderBindingFields<T extends ThreadSummary>(
+  incoming: T,
+  existing?: ThreadSummary,
+): T {
+  if (!existing) {
+    return incoming;
+  }
+  return {
+    ...incoming,
+    sourceLabel: incoming.sourceLabel ?? existing.sourceLabel,
+    providerProfileId: incoming.providerProfileId ?? existing.providerProfileId,
+    providerProfileSource:
+      incoming.providerProfileSource ?? existing.providerProfileSource,
+    providerProfileName:
+      incoming.providerProfileName ?? existing.providerProfileName,
+    providerAvailability:
+      incoming.providerAvailability ?? existing.providerAvailability,
+  };
+}
+
 export const initialState: ThreadState = {
   activeThreadIdByWorkspace: {},
   itemsByThread: emptyItems,
@@ -186,16 +257,31 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
         if (
           (!action.engine || existing.engineSource) &&
           action.folderId === undefined &&
-          action.autoSession === undefined
+          action.autoSession === undefined &&
+          action.sourceLabel === undefined &&
+          action.providerProfileId === undefined &&
+          action.providerProfileSource === undefined &&
+          action.providerProfileName === undefined &&
+          action.providerAvailability === undefined
         ) {
           return state;
         }
+        const providerBindingPatch = providerBindingFromEnsureThreadAction(action);
         const updated = {
           ...existing,
           engineSource: action.engine ?? existing.engineSource,
           folderId: action.folderId ?? existing.folderId,
           autoSession: action.autoSession ?? existing.autoSession ?? null,
+          ...providerBindingPatch,
         };
+        if (
+          updated.engineSource === existing.engineSource &&
+          updated.folderId === existing.folderId &&
+          updated.autoSession === existing.autoSession &&
+          providerBindingFieldsEqual(updated, existing)
+        ) {
+          return state;
+        }
         const nextList = [...list];
         nextList[existingIndex] = updated;
         return {
@@ -241,7 +327,11 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
 
           // Rename thread inline (similar to renameThreadId action)
           const updatedThread = attachReplacedThreadId(
-            { ...pendingThread, id: newThreadId },
+            {
+              ...pendingThread,
+              id: newThreadId,
+              ...providerBindingFromEnsureThreadAction(action),
+            },
             oldThreadId,
           );
           const nextList = [...list];
@@ -344,6 +434,7 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
         engineSource: action.engine,
         folderId: action.folderId ?? null,
         autoSession: action.autoSession ?? null,
+        ...providerBindingFromEnsureThreadAction(action),
       };
       return {
         ...state,
@@ -1957,7 +2048,18 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
             const name = shouldPreferExistingThreadName(existing.name, thread.name)
               ? existing.name
               : thread.name;
-            return { ...thread, name, engineSource, threadKind, selectedEngine, nativeThreadIds, autoSession };
+            return mergeProviderBindingFields(
+              {
+                ...thread,
+                name,
+                engineSource,
+                threadKind,
+                selectedEngine,
+                nativeThreadIds,
+                autoSession,
+              },
+              existing,
+            );
           }
           return thread;
         });
@@ -2021,16 +2123,42 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
         })
         : [];
       finalizedCodexToPreserve.forEach((thread) => preservedThreadIds.add(thread.id));
+      const locallyAcceptedCodexToPreserve = existingThreads.filter((thread) => {
+        const threadId = thread.id;
+        if (
+          (thread.engineSource ?? "codex") !== "codex" ||
+          !state.codexAcceptedTurnByThread[threadId] ||
+          threadId === activeThreadId ||
+          hidden[threadId] ||
+          isHiddenAutomaticThread(thread) ||
+          newThreadIds.has(threadId) ||
+          preservedThreadIds.has(threadId)
+        ) {
+          return false;
+        }
+        return true;
+      });
+      locallyAcceptedCodexToPreserve.forEach((thread) => {
+        preservedThreadIds.add(thread.id);
+      });
       const mergedVisibleThreads =
-        pendingToPreserve.length > 0 || finalizedCodexToPreserve.length > 0
+        pendingToPreserve.length > 0 ||
+        finalizedCodexToPreserve.length > 0 ||
+        locallyAcceptedCodexToPreserve.length > 0
           ? activeThreadId && visibleThreads[0]?.id === activeThreadId
             ? [
               visibleThreads[0],
               ...finalizedCodexToPreserve,
+              ...locallyAcceptedCodexToPreserve,
               ...pendingToPreserve,
               ...visibleThreads.slice(1),
             ]
-            : [...finalizedCodexToPreserve, ...pendingToPreserve, ...visibleThreads]
+            : [
+              ...finalizedCodexToPreserve,
+              ...locallyAcceptedCodexToPreserve,
+              ...pendingToPreserve,
+              ...visibleThreads,
+            ]
           : visibleThreads;
       return {
         ...state,

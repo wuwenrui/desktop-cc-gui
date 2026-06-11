@@ -121,6 +121,58 @@ function getVariableObjectLiteralKeys(sourceFile, variableName) {
   );
 }
 
+function getInitializerObjectLiteral(initializer) {
+  if (!initializer) {
+    return null;
+  }
+  if (ts.isObjectLiteralExpression(initializer)) {
+    return initializer;
+  }
+  if (
+    ts.isCallExpression(initializer) &&
+    initializer.arguments.length > 0 &&
+    ts.isObjectLiteralExpression(initializer.arguments[0])
+  ) {
+    return initializer.arguments[0];
+  }
+  return null;
+}
+
+function collectLocalObjectLiteralSourceKeys(rootNode) {
+  const sourceKeys = new Map();
+  visitNode(rootNode, (node) => {
+    if (
+      !ts.isVariableDeclaration(node) ||
+      !ts.isIdentifier(node.name)
+    ) {
+      return;
+    }
+    const objectLiteral = getInitializerObjectLiteral(node.initializer);
+    if (!objectLiteral) {
+      return;
+    }
+    sourceKeys.set(node.name.text, collectObjectLiteralOwnKeys(objectLiteral));
+  });
+  return sourceKeys;
+}
+
+function collectObjectLiteralEffectiveKeys(objectLiteral, sourceKeysByIdentifier) {
+  const keys = collectObjectLiteralOwnKeys(objectLiteral);
+  for (const property of objectLiteral.properties) {
+    if (!ts.isSpreadAssignment(property) || !ts.isIdentifier(property.expression)) {
+      continue;
+    }
+    const spreadKeys = sourceKeysByIdentifier.get(property.expression.text);
+    if (!spreadKeys) {
+      continue;
+    }
+    for (const key of spreadKeys) {
+      keys.add(key);
+    }
+  }
+  return keys;
+}
+
 function checkObjectLiteralShorthandBindings(sourceFile, variableName, checker) {
   const objectLiteral = getVariableObjectLiteral(sourceFile, variableName);
   const issues = [];
@@ -270,13 +322,17 @@ function getCtxDestructureKeys(sourceFile, functionName, checker) {
 function getReturnObjectKeys(sourceFile, functionName) {
   const fn = findFunctionDeclaration(sourceFile, functionName);
   const keys = new Set();
+  const sourceKeysByIdentifier = collectLocalObjectLiteralSourceKeys(fn.body);
   visitNode(fn.body, (node) => {
     if (
       ts.isReturnStatement(node) &&
       node.expression &&
       ts.isObjectLiteralExpression(node.expression)
     ) {
-      for (const key of collectObjectLiteralOwnKeys(node.expression)) {
+      for (const key of collectObjectLiteralEffectiveKeys(
+        node.expression,
+        sourceKeysByIdentifier,
+      )) {
         keys.add(key);
       }
     }

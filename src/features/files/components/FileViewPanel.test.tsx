@@ -918,6 +918,7 @@ describe("FileViewPanel markdown modes", () => {
     const preview = await screen.findByTestId("file-markdown-preview");
     expect(preview.querySelector(".fvp-markdown-source-annotation-list")).toBeNull();
     expect(screen.getByRole("heading", { name: "Title" })).toBeTruthy();
+    await screen.findByRole("button", { name: "Show outline" });
 
     fireEvent.click(screen.getByRole("button", { name: /files\.annotateForAi L3/i }));
     fireEvent.change(screen.getByPlaceholderText(/files\.annotationPlaceholder/i), {

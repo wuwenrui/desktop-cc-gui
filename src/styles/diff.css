@@ -1,9 +1,9 @@
 .diff-panel,
 .git-history-workbench {
-  --git-filetree-name-font-size: var(--git-filetree-file-name-font-size, calc(var(--code-font-size, 11px) + 2px));
+  --git-filetree-name-font-size: var(--git-filetree-file-name-font-size, var(--client-content-font-size, calc(var(--code-font-size, 11px) + 2px)));
   --git-filetree-name-font-weight: var(--git-filetree-file-name-font-weight, 560);
-  --git-filetree-path-font-size: var(--git-filetree-file-path-font-size, var(--code-font-size, 11px));
-  --git-filetree-status-font-size: var(--git-filetree-file-status-font-size, var(--code-font-size, 10px));
+  --git-filetree-path-font-size: var(--git-filetree-file-path-font-size, var(--client-meta-font-size, var(--code-font-size, 11px)));
+  --git-filetree-status-font-size: var(--git-filetree-file-status-font-size, var(--client-meta-font-size, var(--code-font-size, 10px)));
   --git-filetree-status-font-weight: var(--git-filetree-file-status-font-weight, 600);
 }
 
@@ -26,7 +26,7 @@
   --git-filetree-tree-line-color: color-mix(in srgb, var(--text-muted, #64748b) 34%, transparent);
   --git-filetree-row-hover-bg: color-mix(in srgb, var(--surface-control-hover) 58%, transparent);
   --git-filetree-row-active-bg: color-mix(in srgb, var(--surface-active) 56%, transparent);
-  --git-filetree-badge-font-size: var(--code-font-size, 10px);
+  --git-filetree-badge-font-size: var(--client-caption-font-size, var(--code-font-size, 10px));
   --git-filetree-badge-gap: 2px;
   --git-filetree-badge-pad-y: 1px;
   --git-filetree-badge-pad-x: 8px;

@@ -43,6 +43,7 @@ export const ButtonArea = ({
   streamActivityPhase = 'idle',
   permissionMode = 'bypassPermissions',
   currentProvider = 'claude',
+  providerProfileLabel = null,
   providerAvailability,
   providerVersions,
   reasoningEffort = null,
@@ -488,6 +489,11 @@ export const ButtonArea = ({
         </div>
 
         <div className="button-area-right">
+          {providerProfileLabel ? (
+            <span className="button-area-provider-tag" title={providerProfileLabel}>
+              {providerProfileLabel}
+            </span>
+          ) : null}
           {isLoading ? (
             <button
               className={`submit-button stop-button is-${resolvedStopButtonPhase}`}

@@ -7,7 +7,6 @@ import ChevronUp from "lucide-react/dist/esm/icons/chevron-up";
 import Copy from "lucide-react/dist/esm/icons/copy";
 import Terminal from "lucide-react/dist/esm/icons/terminal";
 import { AgentIcon } from "../../../components/AgentIcon";
-import { ImagePreviewOverlay } from "../../../components/common/ImagePreviewOverlay";
 import { hydrateClaudeDeferredImage } from "../../../services/tauri";
 import type { ConversationItem, QueuedMessage } from "../../../types";
 import { DiffBlock } from "../../git/components/DiffBlock";
@@ -42,13 +41,12 @@ import { LocalImage } from "./LocalImage";
 import { Markdown } from "./Markdown";
 import {
   parseIntentCanvasContextSummaries,
-  type IntentCanvasContextCount,
-  type IntentCanvasContextSummary,
 } from "../../intent-canvas/utils/messageContext";
+import { IntentCanvasContextSummaryCard } from "./IntentCanvasContextSummaryCard";
+import { NoteCardContextSummaryCard } from "./NoteCardContextSummaryCard";
 import { parseMemoryContextSummary } from "./messagesMemoryContext";
 import {
   parseNoteCardContextSummary,
-  type NoteCardContextSummary,
 } from "./messagesNoteCardContext";
 import { parseReasoning } from "./messagesReasoning";
 import {
@@ -130,145 +128,6 @@ type MessageRowProps = {
   suppressMemorySummaryCard?: boolean;
   suppressNoteCardSummaryCard?: boolean;
 };
-
-function IntentCanvasContextMetric({
-  label,
-  value,
-}: {
-  label: string;
-  value: IntentCanvasContextCount;
-}) {
-  const isComplete = value.total === value.sent && value.omitted === 0;
-  return (
-    <span className={`intent-canvas-context-summary-metric${isComplete ? " is-complete" : " is-compressed"}`}>
-      <strong>{label}</strong>
-      <code>{value.sent}/{value.total}</code>
-      {value.omitted > 0 ? <em>-{value.omitted}</em> : null}
-    </span>
-  );
-}
-
-function IntentCanvasContextSummaryCard({
-  summary,
-}: {
-  summary: IntentCanvasContextSummary;
-}) {
-  const { t } = useTranslation();
-  const [payloadDialogOpen, setPayloadDialogOpen] = useState(false);
-  useEffect(() => {
-    if (!payloadDialogOpen) {
-      return undefined;
-    }
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setPayloadDialogOpen(false);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [payloadDialogOpen]);
-  const payloadTitleId = `${summary.attachmentId}-intent-canvas-payload-title`;
-  const payloadDialogNode =
-    payloadDialogOpen && typeof document !== "undefined"
-      ? createPortal(
-        <div
-          className="memory-context-payload-dialog-overlay intent-canvas-context-payload-dialog-overlay"
-          role="presentation"
-          onClick={() => setPayloadDialogOpen(false)}
-        >
-          <div
-            className="memory-context-payload-dialog intent-canvas-context-payload-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={payloadTitleId}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="memory-context-payload-dialog-header">
-              <div>
-                <h3 id={payloadTitleId}>
-                  {t("messages.intentCanvasContextJsonDetailsTitle")}
-                </h3>
-                <p>{t("messages.intentCanvasContextJsonDetailsHint")}</p>
-              </div>
-              <button
-                type="button"
-                className="memory-context-payload-dialog-close"
-                aria-label={t("messages.intentCanvasContextCloseJson")}
-                onClick={() => setPayloadDialogOpen(false)}
-              >
-                <span aria-hidden="true">×</span>
-              </button>
-            </div>
-            <div className="memory-context-payload-dialog-body">
-              <div className="intent-canvas-context-payload-dialog-meta">
-                <span>{t("messages.intentCanvasContextJsonComplete")}</span>
-                <span>{t("messages.intentCanvasContextRawCanvasNotSent")}</span>
-                <span>{t("messages.intentCanvasContextPayloadChars", { count: summary.payloadCharacters })}</span>
-                <span>{t("messages.intentCanvasContextCompressionMode", { mode: summary.compressionMode })}</span>
-              </div>
-              <pre className="memory-context-payload-dialog-code intent-canvas-context-payload-dialog-code">
-                <code>{summary.rawPayload}</code>
-              </pre>
-            </div>
-          </div>
-        </div>,
-        document.body,
-      )
-      : null;
-  return (
-    <>
-      <section className="intent-canvas-context-summary-card">
-        <div className="intent-canvas-context-summary-head">
-          <div>
-            <span className="intent-canvas-context-summary-kicker">
-              {t("messages.intentCanvasContextKicker")}
-            </span>
-            <h3>{summary.title}</h3>
-          </div>
-          <span className={`intent-canvas-context-summary-state${summary.truncated ? " is-compressed" : " is-complete"}`}>
-            {summary.truncated
-              ? t("messages.intentCanvasContextCompressed")
-              : t("messages.intentCanvasContextComplete")}
-          </span>
-        </div>
-        <div className="intent-canvas-context-summary-audit">
-          <span>{t("messages.intentCanvasContextJsonComplete")}</span>
-          <span>{t("messages.intentCanvasContextRawCanvasNotSent")}</span>
-          <span>{t("messages.intentCanvasContextPayloadChars", { count: summary.payloadCharacters })}</span>
-          <span>{t("messages.intentCanvasContextCompressionMode", { mode: summary.compressionMode })}</span>
-        </div>
-        <div className="intent-canvas-context-summary-metrics">
-          <IntentCanvasContextMetric
-            label={t("messages.intentCanvasContextSemanticNodes")}
-            value={summary.semanticNodes}
-          />
-          <IntentCanvasContextMetric
-            label={t("messages.intentCanvasContextSemanticEdges")}
-            value={summary.semanticEdges}
-          />
-          <IntentCanvasContextMetric
-            label={t("messages.intentCanvasContextEvidence")}
-            value={summary.evidence}
-          />
-          <IntentCanvasContextMetric
-            label={t("messages.intentCanvasContextVisualText")}
-            value={summary.visualTextBlocks}
-          />
-        </div>
-        <button
-          type="button"
-          className="intent-canvas-context-summary-detail-button"
-          onClick={() => setPayloadDialogOpen(true)}
-        >
-          {t("messages.intentCanvasContextViewJson")}
-        </button>
-      </section>
-      {payloadDialogNode}
-    </>
-  );
-}
 
 type DeferredImageState = {
   status: "idle" | "loading" | "loaded" | "error";
@@ -646,202 +505,6 @@ function normalizeNoteCardImageIdentity(value: string) {
   }
   return normalized;
 }
-
-const COLLAPSED_NOTE_CARD_IMAGE_PREVIEW_COUNT = 1;
-const COLLAPSED_NOTE_CARD_BODY_PREVIEW_MAX_CHARS = 96;
-
-function buildNoteCardBodyPreview(bodyMarkdown: string) {
-  const normalized = bodyMarkdown
-    .replace(/```[\s\S]*?```/g, "[code]")
-    .replace(/`([^`]+)`/g, "$1")
-    .replace(/!\[[^\]]*\]\([^)]+\)/g, "")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/^[>\-*\d.\s#]+/gm, "")
-    .replace(/\r?\n+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (!normalized) {
-    return "";
-  }
-  return normalized.length > COLLAPSED_NOTE_CARD_BODY_PREVIEW_MAX_CHARS
-    ? `${normalized.slice(0, COLLAPSED_NOTE_CARD_BODY_PREVIEW_MAX_CHARS).trimEnd()}...`
-    : normalized;
-}
-
-const NoteCardContextSummaryCard = memo(function NoteCardContextSummaryCard({
-  summary,
-  workspaceId = null,
-  codeBlockCopyUseModifier,
-  onOpenFileLink,
-  onOpenFileLinkMenu,
-}: {
-  summary: NoteCardContextSummary;
-  workspaceId?: string | null;
-  codeBlockCopyUseModifier?: boolean;
-  onOpenFileLink?: (path: string) => void;
-  onOpenFileLinkMenu?: (event: React.MouseEvent, path: string) => void;
-}) {
-  const { t } = useTranslation();
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [imagePreview, setImagePreview] = useState<{
-    src: string;
-    localPath: string;
-    alt: string;
-  } | null>(null);
-  const summarySignature = useMemo(
-    () =>
-      summary.notes
-        .map((note) =>
-          [
-            note.title,
-            note.archived ? "1" : "0",
-            note.bodyMarkdown,
-            note.attachments.map((attachment) => attachment.absolutePath).join("|"),
-          ].join("::"),
-        )
-        .join("###"),
-    [summary.notes],
-  );
-
-  useEffect(() => {
-    setIsExpanded(false);
-  }, [summarySignature]);
-
-  return (
-    <>
-      <div className="note-card-context-summary-card">
-        <div className="note-card-context-summary-head">
-          <div className="note-card-context-summary-head-copy">
-            <span className="note-card-context-summary-title">
-              {t("messages.noteCardContextSummary")}
-            </span>
-            <span className="note-card-context-summary-count">
-              {t("messages.noteCardContextSummaryCount", {
-                count: summary.notes.length,
-              })}
-            </span>
-          </div>
-          <button
-            type="button"
-            className="note-card-context-summary-toggle"
-            onClick={() => setIsExpanded((current) => !current)}
-            aria-expanded={isExpanded}
-            aria-label={
-              isExpanded
-                ? t("messages.noteCardContextCollapse")
-                : t("messages.noteCardContextExpand")
-            }
-            title={
-              isExpanded
-                ? t("messages.noteCardContextCollapse")
-                : t("messages.noteCardContextExpand")
-            }
-          >
-            <span className="note-card-context-summary-toggle-label">
-              {isExpanded
-                ? t("messages.noteCardContextCollapse")
-                : t("messages.noteCardContextExpand")}
-            </span>
-            <span className="note-card-context-summary-toggle-icon" aria-hidden>
-              {isExpanded ? <ChevronUp size={14} aria-hidden /> : <ChevronDown size={14} aria-hidden />}
-            </span>
-          </button>
-        </div>
-        <div className="note-card-context-summary-list">
-          {summary.notes.map((note, index) => {
-            const noteTitle = note.title.trim() || t("noteCards.untitled");
-            const bodyPreview = buildNoteCardBodyPreview(note.bodyMarkdown);
-            const visibleAttachments = isExpanded
-              ? note.attachments
-              : note.attachments.slice(0, COLLAPSED_NOTE_CARD_IMAGE_PREVIEW_COUNT);
-            return (
-              <article
-                key={`${noteTitle}-${index}`}
-                className={`note-card-context-summary-note${isExpanded ? " is-expanded" : " is-collapsed"}`}
-              >
-                <div className="note-card-context-summary-note-head">
-                  <strong>{noteTitle}</strong>
-                  <span className="note-card-context-summary-note-meta">
-                    {note.archived ? (
-                      <span className="note-card-context-summary-note-badge">
-                        {t("composer.noteCardArchivedBadge")}
-                      </span>
-                    ) : null}
-                    {note.attachments.length > 0 ? (
-                      <span className="note-card-context-summary-note-badge">
-                        {t("noteCards.imageCount", { count: note.attachments.length })}
-                      </span>
-                    ) : null}
-                  </span>
-                </div>
-                {isExpanded ? (
-                  note.bodyMarkdown ? (
-                    <Markdown
-                      value={note.bodyMarkdown}
-                      className="markdown note-card-context-summary-markdown"
-                      workspaceId={workspaceId}
-                      codeBlockStyle="message"
-                      codeBlockCopyUseModifier={codeBlockCopyUseModifier}
-                      onOpenFileLink={onOpenFileLink}
-                      onOpenFileLinkMenu={onOpenFileLinkMenu}
-                    />
-                  ) : null
-                ) : bodyPreview ? (
-                  <p className="note-card-context-summary-preview">{bodyPreview}</p>
-                ) : null}
-                {visibleAttachments.length > 0 ? (
-                  <div className="note-card-context-summary-images" role="list">
-                    {visibleAttachments.map((attachment, attachmentIndex) => {
-                      const src =
-                        normalizeMessageImageSrc(attachment.absolutePath)
-                        || attachment.absolutePath;
-                      const alt =
-                        attachment.fileName || `${noteTitle} image ${attachmentIndex + 1}`;
-                      return (
-                        <button
-                          key={`${noteTitle}-${attachment.absolutePath}-${attachmentIndex}`}
-                          type="button"
-                          className="note-card-context-summary-image"
-                          role="listitem"
-                          onClick={() =>
-                            setImagePreview({
-                              src,
-                              localPath: attachment.absolutePath,
-                              alt,
-                            })
-                          }
-                          aria-label={alt}
-                          title={alt}
-                        >
-                          <LocalImage
-                            src={src}
-                            localPath={attachment.absolutePath}
-                            workspaceId={workspaceId}
-                            alt={alt}
-                            loading="lazy"
-                          />
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : null}
-              </article>
-            );
-          })}
-        </div>
-      </div>
-      {imagePreview ? (
-        <ImagePreviewOverlay
-          src={imagePreview.src}
-          localPath={imagePreview.localPath}
-          workspaceId={workspaceId}
-          alt={imagePreview.alt}
-          onClose={() => setImagePreview(null)}
-        />
-      ) : null}
-    </>
-  );
-});
 
 export const WorkingIndicator = memo(function WorkingIndicator({
   isThinking,
@@ -1897,8 +1560,15 @@ export const MessageRow = memo(function MessageRow({
     </div>
   ) : null;
 
+  const messageClassName = [
+    "message",
+    item.role,
+    agentTaskNotification ? "message-agent-task" : "",
+    item.role === "assistant" && isStreaming ? "is-live-streaming" : "",
+  ].filter(Boolean).join(" ");
+
   return (
-    <div className={`message ${item.role}${agentTaskNotification ? " message-agent-task" : ""}`}>
+    <div className={messageClassName}>
       {hasExternalAgentBadge ? (
         <div className="message-user-layout">
           {agentBadgeNode}

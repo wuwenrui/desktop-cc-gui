@@ -18,6 +18,7 @@ const ORCHESTRATION_DISPATCH_ENGINES = ["codex", "claude", "gemini"] as const;
 const ORCHESTRATION_QUEUE_STATUS_ORDER = ["todo", "queued", "running", "failed", "dispatched", "review", "done", "archived"] as const;
 const QUEUED_RUN_STATUSES = new Set<TaskRunRecord["status"]>(["queued", "planning"]);
 const RUNNING_RUN_STATUSES = new Set<TaskRunRecord["status"]>(["running", "waiting_input", "blocked"]);
+const TASK_MODULE_ENTRYPOINTS_ENABLED = false;
 
 export type OrchestrationDispatchEngine = (typeof ORCHESTRATION_DISPATCH_ENGINES)[number];
 type OrchestrationQueueStatus = (typeof ORCHESTRATION_QUEUE_STATUS_ORDER)[number];
@@ -449,7 +450,7 @@ export function OrchestrationCenterView({
   selectedTaskId = null,
   onOpenSourceRef,
   onConfirmDispatch,
-  onCreateManualTask,
+  onCreateManualTask: _onCreateManualTask,
   onCancelRun,
   onReviewAction,
   onArchiveTask,
@@ -478,14 +479,6 @@ export function OrchestrationCenterView({
   const [dispatchModelOptions, setDispatchModelOptions] =
     useState<OrchestrationModelOption[]>(modelOptions);
   const dispatchDraftEngine = dispatchDraft?.engine ?? null;
-  const [manualDraftOpen, setManualDraftOpen] = useState(false);
-  const [manualDraft, setManualDraft] = useState({
-    title: "",
-    scopeSummary: "",
-    acceptanceSummary: "",
-    promptSummary: "",
-    preferredEngine: "codex" as OrchestrationDispatchEngine,
-  });
   useEffect(() => {
     if (selectedTaskId) {
       setLocalSelectedTaskId(selectedTaskId);
@@ -608,35 +601,6 @@ export function OrchestrationCenterView({
     setFilters((currentFilters) => ({ ...currentFilters, [key]: value }));
   };
   const resetFilters = () => setFilters(createDefaultQueueFilters(workspaceId));
-  const canCreateManualDraft = Boolean(workspaceId && onCreateManualTask);
-  const canSubmitManualDraft =
-    canCreateManualDraft &&
-    manualDraft.title.trim().length > 0 &&
-    manualDraft.scopeSummary.trim().length > 0 &&
-    manualDraft.acceptanceSummary.trim().length > 0;
-  const submitManualDraft = () => {
-    if (!canSubmitManualDraft) {
-      return;
-    }
-    const createdTask = onCreateManualTask?.({
-      title: manualDraft.title,
-      scopeSummary: manualDraft.scopeSummary,
-      acceptanceSummary: manualDraft.acceptanceSummary,
-      promptSummary: manualDraft.promptSummary,
-      preferredEngine: manualDraft.preferredEngine,
-    }) ?? null;
-    if (createdTask) {
-      setLocalSelectedTaskId(createdTask.taskId);
-    }
-    setManualDraft({
-      title: "",
-      scopeSummary: "",
-      acceptanceSummary: "",
-      promptSummary: "",
-      preferredEngine: "codex",
-    });
-    setManualDraftOpen(false);
-  };
   const openDispatchGate = (task: OrchestrationTask) => {
     setDispatchDraft({
       taskId: task.taskId,
@@ -710,89 +674,7 @@ export function OrchestrationCenterView({
             {t("agentOrchestration.action.backToProjectMap")}
           </button>
         ) : null}
-        {onCreateManualTask ? (
-          <button
-            className="orchestration-center__back"
-            type="button"
-            disabled={!workspaceId}
-            onClick={() => setManualDraftOpen((open) => !open)}
-          >
-            {t("agentOrchestration.manual.open")}
-          </button>
-        ) : null}
       </header>
-
-      {manualDraftOpen ? (
-        <section className="orchestration-center__manual-draft" aria-label={t("agentOrchestration.manual.title")}>
-          <div>
-            <p className="orchestration-center__eyebrow">{t("agentOrchestration.manual.eyebrow")}</p>
-            <h4>{t("agentOrchestration.manual.title")}</h4>
-            <p>{t("agentOrchestration.manual.description")}</p>
-          </div>
-          <label>
-            <span>{t("agentOrchestration.manual.fieldTitle")}</span>
-            <input
-              value={manualDraft.title}
-              onChange={(event) =>
-                setManualDraft((current) => ({ ...current, title: event.currentTarget.value }))
-              }
-            />
-          </label>
-          <label>
-            <span>{t("agentOrchestration.manual.fieldScope")}</span>
-            <textarea
-              value={manualDraft.scopeSummary}
-              onChange={(event) =>
-                setManualDraft((current) => ({ ...current, scopeSummary: event.currentTarget.value }))
-              }
-            />
-          </label>
-          <label>
-            <span>{t("agentOrchestration.manual.fieldAcceptance")}</span>
-            <textarea
-              value={manualDraft.acceptanceSummary}
-              onChange={(event) =>
-                setManualDraft((current) => ({ ...current, acceptanceSummary: event.currentTarget.value }))
-              }
-            />
-          </label>
-          <label>
-            <span>{t("agentOrchestration.manual.fieldPrompt")}</span>
-            <textarea
-              value={manualDraft.promptSummary}
-              onChange={(event) =>
-                setManualDraft((current) => ({ ...current, promptSummary: event.currentTarget.value }))
-              }
-            />
-          </label>
-          <label>
-            <span>{t("agentOrchestration.dispatch.engine")}</span>
-            <select
-              value={manualDraft.preferredEngine}
-              onChange={(event) =>
-                setManualDraft((current) => ({
-                  ...current,
-                  preferredEngine: event.currentTarget.value as OrchestrationDispatchEngine,
-                }))
-              }
-            >
-              {ORCHESTRATION_DISPATCH_ENGINES.map((engine) => (
-                <option key={engine} value={engine}>
-                  {engine}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="orchestration-center__review-actions">
-            <button type="button" onClick={() => setManualDraftOpen(false)}>
-              {t("agentOrchestration.manual.cancel")}
-            </button>
-            <button type="button" disabled={!canSubmitManualDraft} onClick={submitManualDraft}>
-              {t("agentOrchestration.manual.create")}
-            </button>
-          </div>
-        </section>
-      ) : null}
 
       {degradedProviders.length > 0 ? (
         <div className="orchestration-center__degraded" role="status">
@@ -946,7 +828,7 @@ export function OrchestrationCenterView({
                     {t("agentOrchestration.actions.openSource")}
                   </button>
                 ) : null}
-                {canDispatchTask(selectedTask, selectedLinkedRuns) && onConfirmDispatch ? (
+                {TASK_MODULE_ENTRYPOINTS_ENABLED && canDispatchTask(selectedTask, selectedLinkedRuns) && onConfirmDispatch ? (
                   <button
                     type="button"
                     aria-label={`${t("agentOrchestration.dispatch.openLabel", {
@@ -968,7 +850,7 @@ export function OrchestrationCenterView({
                   {t("agentOrchestration.detail.missingLinkedRun")}
                 </p>
               ) : null}
-              {dispatchDraft?.taskId === selectedTask.taskId ? (
+              {TASK_MODULE_ENTRYPOINTS_ENABLED && dispatchDraft?.taskId === selectedTask.taskId ? (
                 <section className="orchestration-center__dispatch-gate" aria-label={t("agentOrchestration.dispatch.title")}>
                   <div>
                     <p className="orchestration-center__eyebrow">{t("agentOrchestration.dispatch.eyebrow")}</p>

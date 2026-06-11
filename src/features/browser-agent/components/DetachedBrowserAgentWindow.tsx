@@ -4,6 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useTranslation } from "react-i18next";
 import { useAppSettingsController } from "../../app/hooks/useAppSettingsController";
 import { useCodeCssVars } from "../../app/hooks/useCodeCssVars";
+import { buildAppTypographyCssVars } from "../../app/utils/typographyCssVars";
 import { isMacPlatform, isWindowsPlatform } from "../../../utils/platform";
 import { requestBrowserContextAttachment } from "../state/browserContextAttachmentCommands";
 import {
@@ -31,14 +32,15 @@ export function DetachedBrowserAgentWindow() {
     }${reduceTransparency ? " reduced-transparency" : ""}`,
     [isMacDesktop, isWindowsDesktop, reduceTransparency],
   );
+  const { codeFontFamily, codeFontSize, uiFontFamily } = appSettings;
   const detachedWindowStyle = useMemo(
     () =>
-      ({
-        "--ui-font-family": appSettings.uiFontFamily,
-        "--code-font-family": appSettings.codeFontFamily,
-        "--code-font-size": `${appSettings.codeFontSize}px`,
+      buildAppTypographyCssVars({
+        codeFontFamily,
+        codeFontSize,
+        uiFontFamily,
       }) as CSSProperties,
-    [appSettings.codeFontFamily, appSettings.codeFontSize, appSettings.uiFontFamily],
+    [codeFontFamily, codeFontSize, uiFontFamily],
   );
   const workspaceId = session?.workspaceId ?? null;
 

@@ -143,12 +143,17 @@ function isEmptyResponse(response: RequestUserInputResponse) {
 function isStaleSettledRequestError(
   error: unknown,
   response: RequestUserInputResponse,
+  settlementKind: "submit" | "dismiss",
 ) {
   const normalizedMessage = getErrorMessage(error).toLowerCase();
   if (normalizedMessage.includes("unknown request_id for askuserquestion")) {
     return true;
   }
-  return isEmptyResponse(response) && normalizedMessage.includes("workspace not connected");
+  return (
+    settlementKind === "dismiss" &&
+    isEmptyResponse(response) &&
+    normalizedMessage.includes("workspace not connected")
+  );
 }
 
 export function useThreadUserInput({
@@ -159,9 +164,13 @@ export function useThreadUserInput({
     async (
       request: RequestUserInputRequest,
       response: RequestUserInputResponse,
-      options?: { recordSubmittedItem?: boolean },
+      options?: {
+        recordSubmittedItem?: boolean;
+        settlementKind?: "submit" | "dismiss";
+      },
     ) => {
       const recordSubmittedItem = options?.recordSubmittedItem ?? true;
+      const settlementKind = options?.settlementKind ?? "submit";
       const rawThreadId = request.params.thread_id;
       const resolvedThreadId =
         (rawThreadId
@@ -211,7 +220,7 @@ export function useThreadUserInput({
             timestamp: Date.now(),
           });
         }
-        if (isStaleSettledRequestError(error, response)) {
+        if (isStaleSettledRequestError(error, response, settlementKind)) {
           dispatch({
             type: "removeUserInputRequest",
             requestId: request.request_id,
@@ -270,7 +279,10 @@ export function useThreadUserInput({
 
   const handleUserInputSubmit = useCallback(
     async (request: RequestUserInputRequest, response: RequestUserInputResponse) => {
-      await settleUserInputRequest(request, response, { recordSubmittedItem: true });
+      await settleUserInputRequest(request, response, {
+        recordSubmittedItem: true,
+        settlementKind: "submit",
+      });
     },
     [settleUserInputRequest],
   );
@@ -280,7 +292,7 @@ export function useThreadUserInput({
       await settleUserInputRequest(
         request,
         { answers: {} },
-        { recordSubmittedItem: false },
+        { recordSubmittedItem: false, settlementKind: "dismiss" },
       );
     },
     [settleUserInputRequest],

@@ -217,7 +217,7 @@ describe("OrchestrationCenterView", () => {
     expect(archiveTask).not.toHaveBeenCalled();
   });
 
-  it("sends todo tasks to Task Center through the dispatch action", () => {
+  it("hides Task Center dispatch while the task module entrypoints are disabled", () => {
     const confirmDispatch = vi.fn();
     const task = makeTask({
       status: "ready",
@@ -236,25 +236,11 @@ describe("OrchestrationCenterView", () => {
       />,
     );
 
-    fireEvent.click(
-      screen.getByRole("button", { name: /agentOrchestration\.dispatch\.openLabel/ }),
-    );
-    fireEvent.change(screen.getByLabelText("agentOrchestration.dispatch.model"), {
-      target: { value: "claude-sonnet-4" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "agentOrchestration.dispatch.confirm" }));
-
-    expect(confirmDispatch).toHaveBeenCalledWith(
-      expect.objectContaining({
-        task,
-        workspaceId: "ws-1",
-        engine: "claude",
-        model: "claude-sonnet-4",
-        threadStrategy: "choose_thread",
-        promptSummary: "Review API node with evidence context.",
-        acceptanceSummary: "API task has been reviewed.",
-      }),
-    );
+    expect(
+      screen.queryByRole("button", { name: /agentOrchestration\.dispatch\.openLabel/ }),
+    ).toBeNull();
+    expect(screen.queryByLabelText("agentOrchestration.dispatch.model")).toBeNull();
+    expect(confirmDispatch).not.toHaveBeenCalled();
   });
 
   it("hides dispatch when execution is not wired", () => {

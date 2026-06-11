@@ -175,6 +175,58 @@ fn apply_thread_entry_folder_assignments(
     }
 }
 
+fn apply_thread_entry_provider_bindings(
+    entries: &mut [Value],
+    provider_binding_by_session_id: &HashMap<
+        String,
+        crate::session_management::CodexProviderBinding,
+    >,
+) {
+    if provider_binding_by_session_id.is_empty() {
+        return;
+    }
+    for entry in entries {
+        let Some(entry_map) = entry.as_object_mut() else {
+            continue;
+        };
+        let Some(session_id) = entry_map
+            .get("id")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        else {
+            continue;
+        };
+        let prefixed = format!("codex:{session_id}");
+        let binding = provider_binding_by_session_id
+            .get(session_id)
+            .or_else(|| provider_binding_by_session_id.get(&prefixed));
+        let Some(binding) = binding else {
+            continue;
+        };
+        entry_map.insert(
+            "providerProfileId".to_string(),
+            Value::String(binding.provider_profile_id.clone()),
+        );
+        entry_map.insert(
+            "providerProfileSource".to_string(),
+            Value::String(binding.provider_profile_source.clone()),
+        );
+        entry_map.insert(
+            "providerProfileName".to_string(),
+            Value::String(binding.provider_profile_name.clone()),
+        );
+        entry_map.insert(
+            "providerAvailability".to_string(),
+            Value::String(binding.provider_availability.clone()),
+        );
+        entry_map.insert(
+            "sourceLabel".to_string(),
+            Value::String(binding.provider_profile_name.clone()),
+        );
+    }
+}
+
 fn is_codex_background_helper_text(value: &str) -> bool {
     let preview = value.trim();
     if preview.is_empty() {
@@ -507,6 +559,7 @@ async fn load_all_live_codex_thread_entries(
             codex_core::list_threads_core(
                 &state.sessions,
                 workspace_id.to_string(),
+                None,
                 cursor.clone(),
                 Some(UNIFIED_CODEX_PAGE_SIZE),
             ),
@@ -658,7 +711,13 @@ pub(crate) async fn build_unified_codex_thread_page(
         workspace_id,
     )
     .unwrap_or_default();
+    let provider_binding_by_session_id = session_management::read_codex_provider_bindings(
+        state.storage_path.as_path(),
+        workspace_id,
+    )
+    .unwrap_or_default();
     apply_thread_entry_folder_assignments(&mut data, &folder_id_by_session_id);
+    apply_thread_entry_provider_bindings(&mut data, &provider_binding_by_session_id);
     let next_cursor = if page_offset + data.len() < merged_entries.len() {
         Some(build_unified_codex_cursor(page_offset + data.len()))
     } else {

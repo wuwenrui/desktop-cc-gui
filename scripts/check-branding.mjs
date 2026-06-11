@@ -86,9 +86,9 @@ const ALLOWED_LINE_PATTERNS = [
     line: /^\s*\| "\.(?:mossx|codemoss)"$/,
   },
   {
-    path: /^src\/features\/files\/components\/FileViewPanel\.tsx$/,
+    path: /^src\/features\/files\/utils\/fileMarkdownFeatureFlags\.ts$/,
     line:
-      /readBooleanStorageFlag\("ccgui\.fileMarkdown(?:Bounded)?FastHtml"\) \|\| readBooleanStorageFlag\("mossx\.fileMarkdown(?:Bounded)?FastHtml"\)/,
+      /readBooleanStorageFlag\("(?:ccgui|mossx)\.fileMarkdown(?:Bounded)?FastHtml"\)/,
   },
 ];
 

@@ -42,6 +42,7 @@ import {
   respondToServerRequest,
   respondToUserInputRequest,
   sendUserMessage,
+  startThread,
   startReview,
   writeGlobalAgentsMd,
   writeGlobalCodexConfigToml,
@@ -1178,6 +1179,37 @@ describe("tauri invoke wrappers", () => {
       workspaceId: "ws-9",
       threadId: "thread-9",
       messageId: null,
+      providerProfileId: null,
+      targetUserTurnIndex: null,
+      targetUserMessageText: null,
+      targetUserMessageOccurrence: null,
+      localUserMessageCount: null,
+    });
+  });
+
+  it("maps providerProfileId for start_thread and fork_thread", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValue({});
+
+    await startThread("ws-9", { providerProfileId: "provider-a" });
+    await forkThread("ws-9", "thread-9", null, {
+      providerProfileId: "provider-b",
+    });
+
+    expect(invokeMock).toHaveBeenNthCalledWith(1, "start_thread", {
+      workspaceId: "ws-9",
+      autoSession: null,
+      providerProfileId: "provider-a",
+    });
+    expect(invokeMock).toHaveBeenNthCalledWith(2, "fork_thread", {
+      workspaceId: "ws-9",
+      threadId: "thread-9",
+      messageId: null,
+      providerProfileId: "provider-b",
+      targetUserTurnIndex: null,
+      targetUserMessageText: null,
+      targetUserMessageOccurrence: null,
+      localUserMessageCount: null,
     });
   });
 
@@ -1240,6 +1272,35 @@ describe("tauri invoke wrappers", () => {
       workspaceId: "ws-9",
       threadId: "thread-9",
       messageId: "msg-9",
+      providerProfileId: null,
+      targetUserTurnIndex: null,
+      targetUserMessageText: null,
+      targetUserMessageOccurrence: null,
+      localUserMessageCount: null,
+    });
+  });
+
+  it("maps codex provider fork anchor hints for fork_thread", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({});
+
+    await forkThread("ws-9", "thread-9", "msg-9", {
+      providerProfileId: "provider-b",
+      targetUserTurnIndex: 2.8,
+      targetUserMessageText: " 继续这里 ",
+      targetUserMessageOccurrence: 1,
+      localUserMessageCount: 3,
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith("fork_thread", {
+      workspaceId: "ws-9",
+      threadId: "thread-9",
+      messageId: "msg-9",
+      providerProfileId: "provider-b",
+      targetUserTurnIndex: 2,
+      targetUserMessageText: "继续这里",
+      targetUserMessageOccurrence: 1,
+      localUserMessageCount: 3,
     });
   });
 

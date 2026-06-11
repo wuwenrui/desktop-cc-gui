@@ -1,9 +1,9 @@
 # Project Context
 
 - Type: OpenSpec Workspace
-- Updated At: 2026-06-06T00:00:00+08:00
+- Updated At: 2026-06-10T00:00:00+08:00
 - Scope: governance snapshot for the current `mossx` repository workspace
-- Product version fact: `ccgui@0.5.4` from `package.json` and `src-tauri/tauri.conf.json`
+- Product version fact: `ccgui@0.5.8` from `package.json` and `src-tauri/tauri.conf.json`
 
 ## Domain
 
@@ -20,7 +20,7 @@ The product in this repository is `ccgui`: a Tauri 2 desktop AI engineering work
 - Change workflow artifacts: `openspec/changes/<change-id>/{proposal,design,tasks,verification}.md`
 - Archive: `openspec/changes/archive/*`
 - Implementation rules: `.trellis/spec/**`
-- Current workspace state: active changes = `7`, archive/main spec counts were not refreshed in this stage-writeback pass
+- Current workspace state: tracked active changes = `5`, archive changes = `451`, main specs = `320`
 
 ## Entry Surfaces
 
@@ -54,60 +54,44 @@ The product in this repository is `ccgui`: a Tauri 2 desktop AI engineering work
 
 ## Current Inventory
 
-- Active changes: `7`
-- Archive changes: not refreshed in this pass
-- Main specs: not refreshed in this pass
-- Completed task sets still active: `4`
-- In-progress task sets: `3`
+- Active changes: `5`
+- Archive changes: `451`
+- Main specs: `320`
+- Completed task sets still active: `0`
+- In-progress task sets: `5`
 
 ## Active Changes
 
-### `add-intent-canvas-workspace-files`
+### `add-codex-provider-scoped-session-launch`
 
-- Task state: complete (`20/20`).
-- Current artifact fact: proposal and design have been stage-written back on 2026-06-06.
-- Product boundary: Intent Canvas is a workspace-level user-authored intent artifact, not a confirmed implementation fact and not a Project Map semantic graph replacement.
-- Core direction: persisted `.mossx/canvases/**` documents, Excalidraw-backed editor, Project Map bridge, Composer staging, structured context send path.
-- Action: keep visible as completed active work until verify / sync / archive decision.
+- Task state: in progress (`32/35`).
+- Current artifact fact: provider-scoped Codex launch implementation is largely complete; remaining closure work covers final manual evidence and cleanup follow-through.
+- Product boundary: Codex provider selection is a creation/fork-time launch profile, not a global active provider switch.
+- Action: keep active until remaining validation and archive closure are complete.
 
-### `add-project-map-intent-canvas-context`
+### `add-custom-theme-palette-presets`
 
-- Task state: complete (`8/8`).
-- Current artifact fact: completed active work related to Project Map Intent Canvas context bridge.
-- Action: keep visible until closure decision.
+- Task state: in progress (`10/11`).
+- Current artifact fact: custom theme palette preset work is mostly complete and pending its final closure item.
+- Action: keep active until final verification and archive decision.
 
-### `fix-project-map-file-navigation-completeness`
+### `harden-codex-provider-session-catalog-recovery`
 
-- Task state: complete (`17/17`).
-- Current artifact fact: completed active fix for Project Map file navigation completeness.
-- Action: keep visible until closure decision.
+- Task state: in progress (`27/28`).
+- Current artifact fact: provider-home session catalog recovery is implemented with one manual restart verification item remaining.
+- Action: keep active until the managed-provider restart/manual mutation evidence is recorded.
 
-### `add-project-map-api-contract-view`
+### `harden-codex-tui-compatible-user-agent`
 
-- Task state: in progress (`13/48`).
-- Current artifact fact: proposal and design have been stage-written back on 2026-06-06.
-- Product boundary: API contract graph stays isolated from file relationship scan artifacts and Project Map semantic graph.
-- Core direction: independent API contract scan branch, unified contract graph, group-first API view, endpoint inspector, evidence/confidence/redaction, multi-language adapter matrix.
-- Current phase: API View Alpha; parser adapter, canonical merge, method chain, filters/search hierarchy, ownership/stale gates remain next-batch work.
-- Action: keep active as a planning/execution change.
-
-### `add-project-map-relationship-dashboard`
-
-- Task state: complete (`95/95`).
-- Current artifact fact: completed relationship dashboard / explorer work remains visible as active pending archive.
-- Action: keep visible until closure decision.
-
-### `harden-file-markdown-preview-rendering`
-
-- Task state: in progress (`0/28`).
-- Current artifact fact: active hardening work for file markdown preview rendering.
+- Task state: in progress (`15/18`).
+- Current artifact fact: Codex TUI-compatible user-agent hardening remains active with remaining validation/closure items.
 - Action: keep active as planning/execution work.
 
-### `harden-windows-ask-user-question-resume`
+### `harden-realtime-composer-status-panel-performance`
 
-- Task state: in progress (`17/18`).
-- Current artifact fact: nearly complete Windows ask-user-question resume hardening.
-- Action: keep active until final task completion and closure decision.
+- Task state: in progress (`3/7`).
+- Current artifact fact: active performance hardening proposal currently lacks spec deltas, so `openspec validate --all --strict --no-interactive` reports this change as invalid until deltas are added or the change is explicitly scoped as no-spec.
+- Action: keep active and resolve the no-delta validation blocker before archive.
 
 ## Recent Archive / Sync Snapshot
 
@@ -118,6 +102,20 @@ The previous workspace snapshot archived 13 completed 0.5.4 changes and synced t
 ### 2026-05-28 Closure Baseline
 
 The earlier closure pass archived 51 explicitly verified active changes across closure batches and synced main specs where the delta had not already been incorporated. This included session management, markdown preview, stale-thread recovery, runtime stability, governance evidence, file reference, email controls, Project Map closure work, performance gates, workspace session catalog, reasoning effort support, composer control surface, file rendering scheduler, and harness/performance governance.
+
+### 2026-06-10 Closure Batch
+
+Archived 7 verified changes and synced their delta specs into main specs:
+
+- `extend-client-font-size-coverage`
+- `add-semantic-diff-review`
+- `deepen-semantic-diff-review`
+- `harden-live-message-canvas-rendering`
+- `polish-project-map-files-api-mvp`
+- `refine-project-map-api-contract-detail-view`
+- `harden-file-markdown-preview-rendering`
+
+Validation: `openspec validate --specs --strict --no-interactive` passed for all 320 main specs. Full `openspec validate --all --strict --no-interactive` is currently blocked by the pre-existing active change `harden-realtime-composer-status-panel-performance`, which has no spec delta.
 
 ## Code Fact Snapshot
 
@@ -182,6 +180,7 @@ npm run check:large-files
 ## Update History
 
 - 2026-06-06: Stage-writeback refresh. Active change list corrected to the current seven active directories. `add-project-map-api-contract-view` and `add-intent-canvas-workspace-files` proposal/design artifacts received stage assessment and implementation calibration notes. Archive/main spec counts were intentionally not refreshed in this pass.
+- 2026-06-10: Archived 7 verified changes and synced their deltas into main specs. Current tracked counts are active=5, archive=451, specs=320. Spec-only strict validation passed; full strict validation remains blocked by active change `harden-realtime-composer-status-panel-performance` missing deltas.
 - 2026-06-01: Refreshed project documentation snapshot. Current counts were active=2, archive=402, specs=303. Active changes were `add-agent-task-orchestration-center` and `harden-model-structured-output-normalization`; the former remained 0.5.5 planning/execution work, while the latter was completed active work pending archive/closure decision.
 - 2026-05-30: Archived 13 completed 0.5.4 changes after syncing delta specs into main specs. Previous workspace counts were active=2, archive=391, specs=299.
 - 2026-05-28: Archived `fix-user-input-dismiss-settlement` after strict OpenSpec validation, focused Vitest coverage, typecheck, and lint. Previous workspace counts were active=4, archive=370, specs=291.

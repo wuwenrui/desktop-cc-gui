@@ -41,6 +41,7 @@ type WorktreeSectionProps = {
   activeThreadId: string | null;
   systemProxyEnabled?: boolean;
   systemProxyUrl?: string | null;
+  showProviderLabels?: boolean;
   moveFolderTargetsByWorkspaceId?: Record<string, ThreadMoveFolderTarget[]>;
   getThreadRows: (
     threads: ThreadSummary[],
@@ -100,6 +101,7 @@ export function WorktreeSection({
   activeThreadId,
   systemProxyEnabled = false,
   systemProxyUrl = null,
+  showProviderLabels = false,
   moveFolderTargetsByWorkspaceId = EMPTY_MOVE_FOLDER_TARGETS_BY_WORKSPACE_ID,
   getThreadRows,
   getThreadTime,
@@ -289,6 +291,7 @@ export function WorktreeSection({
                     activeThreadId={activeThreadId}
                     systemProxyEnabled={systemProxyEnabled}
                     systemProxyUrl={systemProxyUrl}
+                    showProviderLabels={showProviderLabels}
                     threadStatusById={threadStatusById}
                     moveFolderTargets={moveFolderTargets}
                     getThreadTime={getThreadTime}

@@ -20,22 +20,6 @@
   color: var(--project-map-warning);
 }
 
-.project-map-relationship-repair-strip {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  gap: 6px;
-  color: var(--project-map-text-muted);
-  font-size: 10px;
-}
-
-.project-map-relationship-repair-strip strong,
-.project-map-relationship-repair-strip span {
-  border: 1px solid color-mix(in srgb, var(--project-map-border) 72%, transparent);
-  border-radius: 999px;
-  padding: 4px 7px;
-}
-
 .project-map-relationship-workspace-header {
   display: flex;
   min-width: 0;
@@ -237,7 +221,7 @@
 
 .project-map-relationship-read-workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.42fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
 }
 
@@ -249,25 +233,52 @@
   gap: 10px;
 }
 
-.project-map-relationship-read-profile,
+.project-map-relationship-read-hero,
 .project-map-relationship-read-side > section,
-.project-map-relationship-read-relation-groups {
+.project-map-relationship-read-route {
   display: grid;
   min-width: 0;
-  gap: 8px;
+  gap: 10px;
   border: 1px solid color-mix(in srgb, var(--project-map-border) 70%, transparent);
-  border-radius: 12px;
-  padding: 10px;
+  border-radius: 16px;
+  padding: 14px;
   background:
     linear-gradient(
       145deg,
-      color-mix(in srgb, var(--project-map-surface-strong) 70%, transparent),
+      color-mix(in srgb, var(--project-map-surface-strong) 76%, transparent),
       color-mix(in srgb, var(--project-map-surface) 92%, transparent)
     );
 }
 
-.project-map-relationship-read-profile > span,
-.project-map-relationship-read-relation-groups h5,
+.project-map-relationship-read-hero {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 12% 20%, color-mix(in srgb, var(--project-map-accent) 16%, transparent), transparent 34%),
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--project-map-surface-strong) 84%, transparent),
+      color-mix(in srgb, var(--project-map-surface) 94%, transparent)
+    );
+}
+
+.project-map-relationship-read-hero > div,
+.project-map-relationship-read-route > header,
+.project-map-relationship-read-step div,
+.project-map-relationship-read-checklist {
+  min-width: 0;
+}
+
+.project-map-relationship-read-hero > div,
+.project-map-relationship-read-route > header {
+  display: grid;
+  gap: 4px;
+}
+
+.project-map-relationship-read-hero span,
+.project-map-relationship-read-route > header span,
+.project-map-relationship-read-checklist > span,
 .project-map-relationship-read-side h5,
 .project-map-relationship-read-chip-list strong {
   margin: 0;
@@ -278,24 +289,26 @@
   text-transform: uppercase;
 }
 
-.project-map-relationship-read-profile strong {
+.project-map-relationship-read-hero strong {
   overflow: hidden;
   color: var(--project-map-text-strong);
-  font-size: 17px;
+  font-size: 20px;
+  line-height: 1.15;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.project-map-relationship-read-profile p {
+.project-map-relationship-read-hero p,
+.project-map-relationship-read-route > header p,
+.project-map-relationship-read-checklist p {
   overflow: hidden;
   margin: 0;
   color: var(--project-map-text-muted);
   font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.5;
 }
 
-.project-map-relationship-read-profile div,
+.project-map-relationship-read-hero dl,
 .project-map-relationship-read-metrics {
   display: flex;
   min-width: 0;
@@ -303,7 +316,40 @@
   gap: 6px;
 }
 
-.project-map-relationship-read-profile small,
+.project-map-relationship-read-hero dl {
+  justify-content: flex-end;
+  margin: 0;
+}
+
+.project-map-relationship-read-hero dl > div {
+  display: grid;
+  min-width: 78px;
+  gap: 3px;
+  border: 1px solid color-mix(in srgb, var(--project-map-border) 62%, transparent);
+  border-radius: 12px;
+  padding: 8px 10px;
+  background: color-mix(in srgb, var(--project-map-surface-strong) 62%, transparent);
+}
+
+.project-map-relationship-read-hero dt,
+.project-map-relationship-read-hero dd {
+  margin: 0;
+}
+
+.project-map-relationship-read-hero dt {
+  color: var(--project-map-text-muted);
+  font-size: 9px;
+  font-weight: 760;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.project-map-relationship-read-hero dd {
+  color: var(--project-map-text-strong);
+  font-size: 15px;
+  font-weight: 860;
+}
+
 .project-map-relationship-read-metrics span,
 .project-map-relationship-read-chip-list span {
   border: 1px solid color-mix(in srgb, var(--project-map-border) 68%, transparent);
@@ -313,70 +359,702 @@
   font-size: 10px;
 }
 
-.project-map-relationship-read-relation-group {
-  display: grid;
-  gap: 6px;
-  border: 1px solid color-mix(in srgb, var(--project-map-border) 58%, transparent);
-  border-radius: 10px;
-  padding: 8px;
-  background: color-mix(in srgb, var(--project-map-surface-strong) 46%, transparent);
+.project-map-relationship-read-route > header {
+  border-bottom: 1px solid color-mix(in srgb, var(--project-map-border) 62%, transparent);
+  padding-bottom: 10px;
 }
 
-.project-map-relationship-read-relation-group > header {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  color: var(--project-map-text-muted);
-  font-size: 10px;
-}
-
-.project-map-relationship-read-relation-group > header strong {
+.project-map-relationship-read-route > header strong {
   color: var(--project-map-text-strong);
+  font-size: 14px;
+  font-weight: 860;
 }
 
-.project-map-relationship-read-edge-row {
+.project-map-relationship-read-route ol {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.project-map-relationship-read-route li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 10px;
+  padding: 0 0 12px;
+}
+
+.project-map-relationship-read-route li::before {
+  content: "";
+  position: absolute;
+  top: 18px;
+  bottom: -2px;
+  left: 15px;
+  width: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--project-map-border) 72%, transparent);
+}
+
+.project-map-relationship-read-route li:last-child {
+  padding-bottom: 0;
+}
+
+.project-map-relationship-read-route li:last-child::before {
+  display: none;
+}
+
+.project-map-relationship-read-step {
   display: grid;
   min-width: 0;
-  gap: 4px;
+  grid-column: 1 / -1;
+  grid-template-columns: 32px minmax(0, 1fr) minmax(150px, auto);
+  gap: 10px;
+  align-items: center;
   border: 1px solid color-mix(in srgb, var(--project-map-border) 64%, transparent);
-  border-radius: 9px;
-  padding: 8px;
-  background: color-mix(in srgb, var(--project-map-surface-strong) 72%, transparent);
+  border-radius: 14px;
+  padding: 10px;
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--project-map-surface-strong) 78%, transparent),
+      color-mix(in srgb, var(--project-map-surface) 90%, transparent)
+    );
   color: var(--project-map-text-muted);
-  text-align: left;
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--project-map-shadow) 8%, transparent);
+}
+
+.project-map-relationship-read-step.is-actionable {
   cursor: pointer;
 }
 
-.project-map-relationship-read-edge-row.is-active {
+.project-map-relationship-read-step.is-active,
+.project-map-relationship-read-step.is-actionable:hover {
   border-color: color-mix(in srgb, var(--project-map-accent) 58%, transparent);
-  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--project-map-accent) 72%, transparent);
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--project-map-accent) 12%, var(--project-map-surface-strong)),
+      color-mix(in srgb, var(--project-map-surface) 92%, transparent)
+    );
 }
 
-.project-map-relationship-read-edge-row span,
-.project-map-relationship-read-edge-row strong,
-.project-map-relationship-read-edge-row em,
-.project-map-relationship-read-edge-row small {
+.project-map-relationship-read-step > span {
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--project-map-accent) 42%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--project-map-accent) 10%, transparent);
+  color: var(--project-map-accent);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.project-map-relationship-read-step small {
+  color: var(--project-map-accent);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 840;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.project-map-relationship-read-step strong {
+  display: block;
   overflow: hidden;
+  color: var(--project-map-text-strong);
+  font-size: 12px;
+  font-weight: 850;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.project-map-relationship-read-edge-row span {
-  color: var(--project-map-accent);
-  font-size: 10px;
-  font-weight: 800;
-}
-
-.project-map-relationship-read-edge-row strong {
-  color: var(--project-map-text-strong);
-  font-size: 12px;
-}
-
-.project-map-relationship-read-edge-row em,
-.project-map-relationship-read-edge-row small {
+.project-map-relationship-read-step p,
+.project-map-relationship-read-step em {
+  display: block;
+  overflow: hidden;
+  margin: 0;
   color: var(--project-map-text-muted);
   font-size: 10px;
   font-style: normal;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-map-relationship-read-step mark {
+  overflow: hidden;
+  justify-self: end;
+  max-width: 260px;
+  border: 1px solid color-mix(in srgb, var(--project-map-border) 62%, transparent);
+  border-radius: 999px;
+  padding: 5px 8px;
+  background: color-mix(in srgb, var(--project-map-surface-strong) 70%, transparent);
+  color: var(--project-map-text-muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-map-relationship-read-route li.is-layer-entry .project-map-relationship-read-step > span {
+  border-color: color-mix(in srgb, var(--project-map-accent) 58%, transparent);
+}
+
+.project-map-relationship-read-route li.is-layer-focus .project-map-relationship-read-step > span {
+  border-color: color-mix(in srgb, var(--project-map-success, var(--project-map-accent)) 52%, transparent);
+  background: color-mix(in srgb, var(--project-map-success, var(--project-map-accent)) 10%, transparent);
+  color: var(--project-map-success, var(--project-map-accent));
+}
+
+.project-map-relationship-read-route li.is-layer-dependency .project-map-relationship-read-step > span {
+  border-color: color-mix(in srgb, var(--project-map-warning) 46%, transparent);
+  background: color-mix(in srgb, var(--project-map-warning) 10%, transparent);
+  color: var(--project-map-warning);
+}
+
+.project-map-relationship-read-anatomy,
+.project-map-relationship-read-methods {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+  border: 1px solid color-mix(in srgb, var(--project-map-border) 70%, transparent);
+  border-radius: 18px;
+  padding: 14px;
+  background:
+    radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--project-map-accent) 9%, transparent), transparent 40%),
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--project-map-surface-strong) 78%, transparent),
+      color-mix(in srgb, var(--project-map-surface) 93%, transparent)
+    );
+}
+
+.project-map-relationship-read-anatomy > header,
+.project-map-relationship-read-methods > header {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  border-bottom: 1px solid color-mix(in srgb, var(--project-map-border) 58%, transparent);
+  padding-bottom: 10px;
+}
+
+.project-map-relationship-read-anatomy > header span,
+.project-map-relationship-read-methods > header span,
+.project-map-relationship-read-current-file > span {
+  color: var(--project-map-accent);
+  font-size: 10px;
+  font-weight: 840;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.project-map-relationship-read-anatomy > header strong,
+.project-map-relationship-read-methods > header strong {
+  color: var(--project-map-text-strong);
+  font-size: 14px;
+  font-weight: 880;
+}
+
+.project-map-relationship-read-anatomy > header p,
+.project-map-relationship-read-methods > header p {
+  margin: 0;
+  color: var(--project-map-text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.project-map-relationship-read-anatomy-graph {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(210px, 0.92fr) minmax(240px, 0.78fr) minmax(240px, 1.1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.project-map-relationship-read-lane {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  max-height: 510px;
+  align-content: start;
+  gap: 8px;
+  overflow: auto;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--project-map-accent) 48%, transparent) transparent;
+}
+
+.project-map-relationship-read-lane h5,
+.project-map-relationship-read-verify-row > strong {
+  margin: 0;
+  color: var(--project-map-text-muted);
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.project-map-relationship-read-lane.is-incoming::after,
+.project-map-relationship-read-current-file::before,
+.project-map-relationship-read-current-file::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--project-map-accent) 70%, transparent));
+  pointer-events: none;
+}
+
+.project-map-relationship-read-lane.is-incoming::after {
+  right: -14px;
+  width: 14px;
+}
+
+.project-map-relationship-read-current-file {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+  border: 1px solid color-mix(in srgb, var(--project-map-accent) 48%, var(--project-map-border));
+  border-radius: 22px;
+  padding: 14px;
+  background:
+    radial-gradient(circle at 50% 20%, color-mix(in srgb, var(--project-map-accent) 22%, transparent), transparent 52%),
+    color-mix(in srgb, var(--project-map-surface-strong) 86%, transparent);
+  box-shadow:
+    0 0 0 6px color-mix(in srgb, var(--project-map-accent) 5%, transparent),
+    0 18px 44px color-mix(in srgb, var(--project-map-shadow) 16%, transparent);
+  text-align: center;
+}
+
+.project-map-relationship-read-current-file::before {
+  left: -14px;
+  width: 14px;
+  transform: rotate(180deg);
+}
+
+.project-map-relationship-read-current-file::after {
+  right: -14px;
+  width: 14px;
+}
+
+.project-map-relationship-read-current-file strong {
+  overflow-wrap: anywhere;
+  color: var(--project-map-text-strong);
+  font-size: 16px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.project-map-relationship-read-current-file p {
+  overflow-wrap: anywhere;
+  margin: 0;
+  color: var(--project-map-text-muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.project-map-relationship-read-current-file div {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+
+.project-map-relationship-read-current-file em,
+.project-map-relationship-read-relation-card header span,
+.project-map-relationship-read-method-chain em {
+  border: 1px solid color-mix(in srgb, var(--project-map-border) 64%, transparent);
+  border-radius: 999px;
+  padding: 3px 7px;
+  color: var(--project-map-text-muted);
+  font-size: 10px;
+  font-style: normal;
+}
+
+.project-map-relationship-read-action {
+  display: inline-flex;
+  min-width: 0;
+  height: 20px;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  border-radius: 6px;
+  padding: 0 3px;
+  background: transparent;
+  color: var(--project-map-accent);
+  font-size: 10px;
+  font-weight: 780;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.project-map-relationship-read-action svg {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  stroke-width: 2.2;
+}
+
+.project-map-relationship-read-action:hover {
+  background: color-mix(in srgb, var(--project-map-accent) 9%, transparent);
+  color: var(--project-map-text-strong);
+}
+
+.project-map-relationship-read-relation-card {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  border: 1px solid color-mix(in srgb, var(--project-map-border) 66%, transparent);
+  border-radius: 14px;
+  padding: 8px 9px;
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--project-map-surface-strong) 78%, transparent),
+      color-mix(in srgb, var(--project-map-surface) 94%, transparent)
+    );
+}
+
+.project-map-relationship-read-relation-card.is-active {
+  border-color: color-mix(in srgb, var(--project-map-accent) 68%, transparent);
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--project-map-accent) 78%, transparent);
+}
+
+.project-map-relationship-read-relation-card.is-lane-outgoing {
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--project-map-success, var(--project-map-accent)) 56%, transparent);
+}
+
+.project-map-relationship-read-relation-card.is-lane-incoming {
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--project-map-accent) 56%, transparent);
+}
+
+.project-map-relationship-read-relation-card.is-lane-verify {
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--project-map-warning) 54%, transparent);
+}
+
+.project-map-relationship-read-relation-card header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.project-map-relationship-read-relation-card header strong,
+.project-map-relationship-read-method-tab strong {
+  overflow-wrap: anywhere;
+  color: var(--project-map-text-strong);
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.25;
+}
+
+.project-map-relationship-read-relation-card p,
+.project-map-relationship-read-relation-card small,
+.project-map-relationship-read-method-tab span,
+.project-map-relationship-read-method-chain p {
+  margin: 0;
+  color: var(--project-map-text-muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.project-map-relationship-read-relation-card code {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--project-map-border) 62%, transparent);
+  border-radius: 9px;
+  padding: 5px 7px;
+  background: color-mix(in srgb, var(--project-map-code-bg, var(--project-map-surface-strong)) 72%, transparent);
+  color: var(--project-map-text-strong);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-map-relationship-read-relation-card div {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.project-map-relationship-read-current-file > .project-map-relationship-read-action {
+  justify-self: center;
+}
+
+.project-map-relationship-read-verify-row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 120px repeat(auto-fit, minmax(190px, 1fr));
+  gap: 8px;
+  align-items: start;
+  border-top: 1px dashed color-mix(in srgb, var(--project-map-border) 72%, transparent);
+  padding-top: 10px;
+}
+
+.project-map-relationship-read-method-grid {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(210px, 0.32fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.project-map-relationship-read-method-grid nav {
+  display: grid;
+  min-width: 0;
+  max-height: 520px;
+  align-content: start;
+  gap: 7px;
+  overflow: auto;
+  padding-right: 3px;
+}
+
+.project-map-relationship-read-method-tab {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  border: 1px solid color-mix(in srgb, var(--project-map-border) 64%, transparent);
+  border-radius: 13px;
+  padding: 9px;
+  background: color-mix(in srgb, var(--project-map-surface-strong) 68%, transparent);
+  text-align: left;
+  cursor: pointer;
+}
+
+.project-map-relationship-read-method-tab.is-active {
+  border-color: color-mix(in srgb, var(--project-map-accent) 64%, transparent);
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--project-map-accent) 13%, var(--project-map-surface-strong)),
+      color-mix(in srgb, var(--project-map-surface) 92%, transparent)
+    );
+}
+
+.project-map-relationship-read-method-chain {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 10px;
+  border: 1px solid color-mix(in srgb, var(--project-map-border) 66%, transparent);
+  border-radius: 16px;
+  padding: 12px;
+  background: color-mix(in srgb, var(--project-map-surface-strong) 62%, transparent);
+}
+
+.project-map-relationship-read-method-chain > header {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.project-map-relationship-read-method-chain > header div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.project-map-relationship-read-method-chain > header span,
+.project-map-relationship-read-method-incoming strong {
+  color: var(--project-map-accent);
+  font-size: 10px;
+  font-weight: 840;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.project-map-relationship-read-method-chain > header strong {
+  overflow-wrap: anywhere;
+  color: var(--project-map-text-strong);
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.project-map-relationship-read-method-incoming {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  border: 1px dashed color-mix(in srgb, var(--project-map-accent) 34%, var(--project-map-border));
+  border-radius: 12px;
+  padding: 8px;
+}
+
+.project-map-relationship-read-chain,
+.project-map-relationship-read-chain ol {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.project-map-relationship-read-chain ol {
+  margin-left: 18px;
+  padding-left: 16px;
+  border-left: 2px solid color-mix(in srgb, var(--project-map-accent) 32%, transparent);
+}
+
+.project-map-relationship-read-chain-node {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.project-map-relationship-read-chain-node > article {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid color-mix(in srgb, var(--project-map-border) 64%, transparent);
+  border-radius: 13px;
+  padding: 8px;
+  background: color-mix(in srgb, var(--project-map-surface) 82%, transparent);
+}
+
+.project-map-relationship-read-chain-node.is-focus > article {
+  border-color: color-mix(in srgb, var(--project-map-accent) 54%, transparent);
+  background: color-mix(in srgb, var(--project-map-accent) 10%, var(--project-map-surface));
+}
+
+.project-map-relationship-read-chain-node > article > button:first-child {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  justify-items: start;
+  border-color: transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.project-map-relationship-read-chain-node > article > button:first-child strong {
+  overflow-wrap: anywhere;
+  color: var(--project-map-text-strong);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.project-map-relationship-read-chain-node > article > button:first-child span {
+  overflow: hidden;
+  max-width: 100%;
+  color: var(--project-map-text-muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-map-relationship-read-method-flow {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 10px 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.project-map-relationship-read-method-flow li {
+  position: relative;
+  display: grid;
+  flex: 1 1 190px;
+  min-width: 180px;
+}
+
+.project-map-relationship-read-method-flow li:not(:last-child)::after {
+  content: "→";
+  position: absolute;
+  top: 50%;
+  right: -14px;
+  color: color-mix(in srgb, var(--project-map-accent) 74%, transparent);
+  font-size: 14px;
+  font-weight: 900;
+  transform: translateY(-50%);
+}
+
+.project-map-relationship-read-method-flow article {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+  border: 1px solid color-mix(in srgb, var(--project-map-border) 64%, transparent);
+  border-radius: 15px;
+  padding: 9px 10px;
+  background:
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--project-map-surface-strong) 74%, transparent),
+      color-mix(in srgb, var(--project-map-surface) 92%, transparent)
+    );
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--project-map-shadow) 8%, transparent);
+}
+
+.project-map-relationship-read-method-flow li.is-start article {
+  border-color: color-mix(in srgb, var(--project-map-accent) 58%, transparent);
+  background: color-mix(in srgb, var(--project-map-accent) 10%, var(--project-map-surface));
+}
+
+.project-map-relationship-read-method-flow li.is-end article {
+  border-style: dashed;
+  background: color-mix(in srgb, var(--project-map-success, var(--project-map-accent)) 8%, var(--project-map-surface));
+}
+
+.project-map-relationship-read-method-flow span {
+  color: var(--project-map-accent);
+  font-size: 10px;
+  font-weight: 860;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.project-map-relationship-read-method-flow strong {
+  overflow-wrap: anywhere;
+  color: var(--project-map-text-strong);
+  font-size: 12px;
+  font-weight: 880;
+  line-height: 1.28;
+}
+
+.project-map-relationship-read-method-flow div {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.project-map-relationship-read-method-snippet {
+  max-height: 360px;
+  overflow: auto;
+  border: 1px solid color-mix(in srgb, var(--project-map-border) 66%, transparent);
+  border-radius: 14px;
+  margin: 2px 0 0;
+  padding: 12px;
+  background:
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--project-map-code-bg, var(--project-map-surface-strong)) 82%, transparent),
+      color-mix(in srgb, var(--project-map-surface) 94%, transparent)
+    );
+  color: var(--project-map-text-strong);
+  font-size: 11px;
+  line-height: 1.55;
+  scrollbar-width: thin;
+  white-space: pre;
+}
+
+.project-map-relationship-read-method-snippet code {
+  font-family: inherit;
 }
 
 .project-map-relationship-read-chip-list {
@@ -403,13 +1081,59 @@
   color: var(--project-map-warning);
 }
 
+.project-map-relationship-read-checklist {
+  gap: 8px;
+}
+
+.project-map-relationship-read-checklist h5,
+.project-map-relationship-read-summary-card h5 {
+  margin: 0;
+}
+
+.project-map-relationship-read-checklist ol {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.project-map-relationship-read-checklist li {
+  position: relative;
+  border: 1px solid color-mix(in srgb, var(--project-map-border) 62%, transparent);
+  border-radius: 11px;
+  padding: 8px 8px 8px 28px;
+  background: color-mix(in srgb, var(--project-map-surface-strong) 58%, transparent);
+  color: var(--project-map-text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.project-map-relationship-read-checklist li::before {
+  content: "";
+  position: absolute;
+  top: 11px;
+  left: 10px;
+  width: 8px;
+  height: 8px;
+  border: 2px solid color-mix(in srgb, var(--project-map-accent) 64%, transparent);
+  border-radius: 999px;
+}
+
+.project-map-relationship-read-summary-card {
+  gap: 8px;
+}
+
 .project-map-stage.is-file-relations-focused .project-map-relationship-dashboard {
   min-height: 0;
 }
 
 .project-map-stage.is-file-relations-focused .project-map-relationship-graph-dashboard {
   min-height: min(74vh, 820px);
-  grid-template-columns: minmax(210px, 0.28fr) minmax(720px, 1fr) minmax(300px, 0.34fr);
+  grid-template-columns:
+    minmax(210px, var(--relationship-graph-rail-width, 280px))
+    minmax(720px, 1fr)
+    minmax(300px, var(--relationship-graph-inspector-width, 360px));
 }
 
 .project-map-stage.is-file-relations-focused .project-map-relationship-graph-rail,
@@ -424,6 +1148,21 @@
 @media (max-width: 1180px) {
   .project-map-relationship-read-workspace,
   .project-map-stage.is-file-relations-focused .project-map-relationship-graph-dashboard {
+    grid-template-columns: 1fr;
+  }
+
+  .project-map-relationship-read-anatomy-graph,
+  .project-map-relationship-read-method-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .project-map-relationship-read-current-file::before,
+  .project-map-relationship-read-current-file::after,
+  .project-map-relationship-read-lane.is-incoming::after {
+    display: none;
+  }
+
+  .project-map-relationship-read-verify-row {
     grid-template-columns: 1fr;
   }
 }
@@ -538,17 +1277,24 @@
 
 .project-map-stage.is-file-relations-focused
   .project-map-relationship-graph-dashboard:not(.is-rail-collapsed):not(.is-inspector-collapsed) {
-  grid-template-columns: minmax(240px, 280px) minmax(760px, 1fr) minmax(300px, 360px);
+  grid-template-columns:
+    minmax(240px, var(--relationship-graph-rail-width, 280px))
+    minmax(760px, 1fr)
+    minmax(300px, var(--relationship-graph-inspector-width, 360px));
 }
 
 .project-map-stage.is-file-relations-focused
   .project-map-relationship-graph-dashboard.is-rail-collapsed:not(.is-inspector-collapsed) {
-  grid-template-columns: minmax(760px, 1fr) minmax(300px, 360px);
+  grid-template-columns:
+    minmax(760px, 1fr)
+    minmax(300px, var(--relationship-graph-inspector-width, 360px));
 }
 
 .project-map-stage.is-file-relations-focused
   .project-map-relationship-graph-dashboard:not(.is-rail-collapsed).is-inspector-collapsed {
-  grid-template-columns: minmax(240px, 280px) minmax(760px, 1fr);
+  grid-template-columns:
+    minmax(240px, var(--relationship-graph-rail-width, 280px))
+    minmax(760px, 1fr);
 }
 
 .project-map-stage.is-file-relations-focused

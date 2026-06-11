@@ -1,11 +1,15 @@
-import { lazy, Suspense, useCallback, useDeferredValue, useEffect, useMemo, useReducer, useRef, useState, type DragEvent, type MouseEvent, type ReactNode, type RefObject } from "react";
+import { lazy, Suspense, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Sidebar } from "../../app/components/Sidebar";
 import { HomeChat } from "../../home/components/HomeChat";
 import { MainHeader } from "../../app/components/MainHeader";
-import { TopbarSessionTabs } from "../../app/components/TopbarSessionTabs";
 import { Messages } from "../../messages/components/Messages";
 import { MessageForkConfirmDialog } from "../../messages/components/MessageForkConfirmDialog";
+import {
+  CODEX_DISK_PROVIDER_PROFILE_ID,
+  type CodexProviderProfileSelection,
+  type CodexProviderProfileOption,
+} from "../../threads/constants/codexProviderProfiles";
 import { UpdateToast } from "../../update/components/UpdateToast";
 import { ErrorToasts } from "../../notifications/components/ErrorToasts";
 import { GlobalRuntimeNoticeDock } from "../../notifications/components/GlobalRuntimeNoticeDock";
@@ -13,24 +17,18 @@ import {
   Composer,
   type ComposerRewindDialogRequest,
 } from "../../composer/components/Composer";
+import { resolveCodexProviderLabel } from "../../app/utils/codexProviderLabel";
 import { GitDiffViewer } from "../../git/components/GitDiffViewer";
 import { buildCanonicalGitChanges } from "../../git/utils/gitChangeModel";
 import { FileTreePanel } from "../../files/components/FileTreePanel";
-import {
-  clampRendererContextMenuPosition,
-  RendererContextMenu,
-  type RendererContextMenuState,
-} from "../../../components/ui/RendererContextMenu";
 import { WorkspaceSearchPanel } from "../../search/components/WorkspaceSearchPanel";
 import { PromptPanel } from "../../prompts/components/PromptPanel";
 import { ProjectMemoryPanel } from "../../project-memory/components/ProjectMemoryPanel";
-import { ProjectMapPanel, type ProjectMapDatasetController } from "../../project-map";
+import { ProjectMapPanel } from "../../project-map";
 import { IntentCanvasManager } from "../../intent-canvas/components/IntentCanvasManager";
 import type {
   CanvasSemanticGraph,
   IntentCanvasCodeSelectionAnchor,
-  IntentCanvasDocument,
-  IntentCanvasOpenRequest,
 } from "../../intent-canvas/types";
 import { pushErrorToast } from "../../../services/toasts";
 import { buildGitStatusProjectMapImpactInput } from "../../project-map/utils/impactSources";
@@ -69,65 +67,20 @@ import { useStatusPanelData } from "../../status-panel/hooks/useStatusPanelData"
 import { useGlobalRuntimeNoticeDock } from "../../notifications/hooks/useGlobalRuntimeNoticeDock";
 import { buildSpecWorkspaceSnapshot } from "../../../lib/spec-core/runtime";
 import type { SpecWorkspaceSnapshot } from "../../../lib/spec-core/types";
-import type { AgentTaskScrollRequest } from "../../messages/types";
-import type { SubagentInfo, TabType } from "../../status-panel/types";
+import type { TabType } from "../../status-panel/types";
 import type {
-  EditorHighlightTarget,
   EditorNavigationLocation,
-  EditorNavigationTarget,
   OpenFileOptions,
 } from "../../app/hooks/useGitPanelController";
-import type { ReviewPromptState, ReviewPromptStep } from "../../threads/hooks/useReviewPrompt";
-import type { WorkspaceLaunchScriptsState } from "../../app/hooks/useWorkspaceLaunchScripts";
 import type {
-  AccessMode,
-  AppMode,
-  ApprovalRequest,
-  BranchInfo,
-  CollaborationModeOption,
-  ConversationItem,
-  ComposerEditorSettings,
   CustomCommandOption,
-  CustomPromptOption,
-  AccountSnapshot,
-  DebugEntry,
-  DictationSessionState,
-  DictationTranscript,
   EngineType,
-  GitFileStatus,
-  GitHubIssue,
-  GitHubPullRequestComment,
-  GitHubPullRequest,
-  GitLogEntry,
-  MessageSendOptions,
-  ModelOption,
-  OpenCodeAgentOption,
-  OpenAppTarget,
-  QueuedMessage,
-  RateLimitSnapshot,
   RequestUserInputRequest,
-  RequestUserInputResponse,
-  SkillOption,
-  SelectedAgentOption,
   ThreadSummary,
-  ThreadTokenUsage,
-  TurnPlan,
-  UiMode,
-  WorkspaceInfo,
 } from "../../../types";
 import { getClientStoreSync } from "../../../services/clientStorage";
-import {
-  isEditableShortcutTarget,
-  matchesShortcutForPlatform,
-} from "../../../utils/shortcuts";
+import { getCodexProviders } from "../../../services/tauri";
 import { normalizeSpecRootInput } from "../../spec/pathUtils";
-import type { EngineDisplayInfo } from "../../engine/hooks/useEngineController";
-import type { UpdateState } from "../../update/hooks/useUpdater";
-import type { TerminalSessionState } from "../../terminal/hooks/useTerminalSession";
-import type { TerminalTab } from "../../terminal/hooks/useTerminalTabs";
-import type { ErrorToast } from "../../../services/toasts";
-import type { LoadingProgressDialogConfig } from "../../app/hooks/useLoadingProgressDialogState";
-import type { WorkspaceDirectoryEntry } from "../../../services/tauri";
 import type {
   CodeAnnotationBridgeProps,
   CodeAnnotationDraftInput,
@@ -141,42 +94,23 @@ import type {
   ConversationEngine,
   ConversationState,
 } from "../../threads/contracts/conversationCurtainContracts";
-import type { RuntimeReconnectRecoveryCallbackResult } from "../../messages/components/runtimeReconnect";
 import { resolveDiffPathFromWorkspacePath } from "../../../utils/workspacePaths";
 import { resolvePresentationProfile } from "../../messages/presentation/presentationProfile";
-import {
-  appendQueuedHandoffBubbleIfNeeded,
-  type QueuedHandoffBubble,
-} from "../../threads/utils/queuedHandoffBubble";
+import { appendQueuedHandoffBubbleIfNeeded } from "../../threads/utils/queuedHandoffBubble";
 import { isBackgroundRenderGatingEnabled } from "../../threads/utils/realtimePerfFlags";
 import { useWorkspaceSessionActivity } from "../../session-activity/hooks/useWorkspaceSessionActivity";
 import { useClientUiVisibility } from "../../client-ui-visibility/hooks/useClientUiVisibility";
-import type { SessionRadarEntry } from "../../session-activity/hooks/useSessionRadarFeed";
 import {
   getHomeWorkspaceOptions,
   resolveHomeWorkspaceId,
 } from "../../home/utils/homeWorkspaceOptions";
 import { deriveRewindWorkspaceGitState } from "./rewindWorkspaceGitState";
-import {
-  TOPBAR_SESSION_TAB_MAX,
-  buildTopbarSessionTabItems,
-  createEmptyTopbarSessionWindows,
-  dismissAllTopbarSessionTabs,
-  dismissCompletedTopbarSessionTabs,
-  dismissTopbarSessionTab,
-  dismissTopbarSessionTabsToLeft,
-  dismissTopbarSessionTabsToRight,
-  pickAdjacentOpenSessionTab,
-  pickAdjacentTopbarSessionFallbackTab,
-  pruneTopbarSessionWindows,
-  recordTopbarSessionActivation,
-  type TopbarSessionWindows,
-} from "./topbarSessionTabs";
 import { buildWorkspaceHeaderGroups } from "./workspaceHeaderGroups";
 import { loadCodeSelectionRelationshipGraph } from "./codeSelectionRelationshipGraph";
 import { resolveRuntimeLifecycleForComposer } from "./runtimeLifecycle";
 import { focusUserInputRequestCard } from "./userInputRequestFocus";
 import { dispatchMessageJumpEvent } from "./messageJumpEvent";
+import { useLayoutTopbarSessionTabs } from "./useLayoutTopbarSessionTabs";
 import {
   buildCompactEmptyNode,
   buildCompactGitBackNode,
@@ -197,638 +131,34 @@ function HeavyPanelFallback() {
   return <div className="heavy-panel-fallback" aria-hidden="true" />;
 }
 
-type ThreadActivityStatus = {
-  isProcessing: boolean;
-  hasUnread: boolean;
-  isReviewing: boolean;
-  isContextCompacting?: boolean;
-  processingStartedAt?: number | null;
-  lastDurationMs?: number | null;
-  heartbeatPulse?: number;
-  codexCompactionSource?: "auto" | "manual" | null;
-  codexCompactionLifecycleState?: "idle" | "compacting" | "completed";
-  codexCompactionCompletedAt?: number | null;
-  lastTokenUsageUpdatedAt?: number | null;
-  codexSilentSuspectedAt?: number | null;
-  codexSilentSuspectedSource?: string | null;
-};
-
-type GitDiffViewerItem = {
-  path: string;
-  status: string;
-  diff: string;
-  isImage?: boolean;
-  oldImageData?: string | null;
-  newImageData?: string | null;
-  oldImageMime?: string | null;
-  newImageMime?: string | null;
-};
-
-type GitDiffListView = "flat" | "tree";
-
-type WorktreeRenameState = {
-  name: string;
-  error: string | null;
-  notice: string | null;
-  isSubmitting: boolean;
-  isDirty: boolean;
-  upstream?: {
-    oldBranch: string;
-    newBranch: string;
-    error: string | null;
-    isSubmitting: boolean;
-    onConfirm: () => void;
-  } | null;
-  onFocus: () => void;
-  onChange: (value: string) => void;
-  onCancel: () => void;
-  onCommit: () => void;
-};
-
-type LayoutNodesOptions = {
-  workspaces: WorkspaceInfo[];
-  groupedWorkspaces: Array<{
-    id: string | null;
-    name: string;
-    workspaces: WorkspaceInfo[];
-  }>;
-  hasWorkspaceGroups: boolean;
-  deletingWorktreeIds: Set<string>;
-  threadsByWorkspace: Record<string, ThreadSummary[]>;
-  threadParentById: Record<string, string>;
-  threadStatusById: Record<string, ThreadActivityStatus>;
-  historyLoadingByThreadId: Record<string, boolean>;
-  historyRestoredAtMsByThread?: Record<string, number | null | undefined>;
-  runningSessionCountByWorkspaceId: Record<string, number>;
-  recentCompletedSessionCountByWorkspaceId: Record<string, number>;
-  hydratedThreadListWorkspaceIds: ReadonlySet<string>;
-  threadListLoadingByWorkspace: Record<string, boolean>;
-  threadListPagingByWorkspace: Record<string, boolean>;
-  threadListCursorByWorkspace: Record<string, string | null>;
-  activeWorkspaceId: string | null;
-  activeThreadId: string | null;
-  activeTurnId?: string | null;
-  systemProxyEnabled?: boolean;
-  systemProxyUrl?: string | null;
-  activeItems: ConversationItem[];
-  activeQueuedHandoffBubble: QueuedHandoffBubble | null;
-  threadItemsByThread: Record<string, ConversationItem[]>;
-  sessionRadarRunningSessions: SessionRadarEntry[];
-  sessionRadarRecentCompletedSessions: SessionRadarEntry[];
-  activeRateLimits: RateLimitSnapshot | null;
-  usageShowRemaining: boolean;
-  /** lawyer-shell：界面模式（Sidebar 导航过滤用）。 */
-  uiMode?: UiMode;
-  /** lawyer-shell：把目录注册为 workspace 并激活（我的案件用）。 */
-  onOpenCaseWorkspacePath?: (path: string) => Promise<void> | void;
-  onRefreshAccountRateLimits?: () => Promise<void> | void;
-  showMessageAnchors: boolean;
-  accountInfo: AccountSnapshot | null;
-  onSwitchAccount: () => void;
-  onCancelSwitchAccount: () => void;
-  accountSwitching: boolean;
-  codeBlockCopyUseModifier: boolean;
-  openAppTargets: OpenAppTarget[];
-  openAppIconById: Record<string, string>;
-  selectedOpenAppId: string;
-  onSelectOpenAppId: (id: string) => void;
-  approvals: ApprovalRequest[];
-  userInputRequests: RequestUserInputRequest[];
-  handleApprovalDecision: (
-    request: ApprovalRequest,
-    decision: "accept" | "decline" | "dismiss",
-  ) => void;
-  handleApprovalBatchAccept: (requests: ApprovalRequest[]) => void;
-  handleApprovalRemember: (
-    request: ApprovalRequest,
-    command: string[],
-  ) => void;
-  handleUserInputSubmit: (
-    request: RequestUserInputRequest,
-    response: RequestUserInputResponse,
-  ) => Promise<void> | void;
-  handleUserInputDismiss: (request: RequestUserInputRequest) => void;
-  onRecoverThreadRuntime?: (
-    workspaceId: string,
-    threadId: string,
-  ) => Promise<RuntimeReconnectRecoveryCallbackResult> | RuntimeReconnectRecoveryCallbackResult;
-  onRecoverThreadRuntimeAndResend?: (
-    workspaceId: string,
-    threadId: string,
-    message: Pick<QueuedMessage, "text" | "images">,
-  ) => Promise<RuntimeReconnectRecoveryCallbackResult> | RuntimeReconnectRecoveryCallbackResult;
-  onThreadRecoveryFork?: () => Promise<void> | void;
-  handleExitPlanModeExecute?: (
-    mode: Extract<AccessMode, "default" | "full-access">,
-  ) => Promise<void> | void;
-  onOpenSettings: () => void;
-  onOpenExperimentalSettings: () => void;
-  onOpenDictationSettings?: () => void;
-  onOpenDebug: () => void;
-  showDebugButton: boolean;
-  onAddWorkspace: () => void;
-  onSelectHome: () => void;
-  onSelectWorkspace: (workspaceId: string) => void;
-  onConnectWorkspace: (workspace: WorkspaceInfo) => Promise<void>;
-  onAddAgent: (
-    workspace: WorkspaceInfo,
-    engine?: EngineType,
-    options?: { folderId?: string | null },
-  ) => Promise<string | null>;
-  engineOptions?: EngineDisplayInfo[];
-  enabledEngines?: Partial<Record<EngineType, boolean>>;
-  onRefreshEngineOptions?: () =>
-    | Promise<import("../../engine/hooks/useEngineController").EngineRefreshResult | void>
-    | import("../../engine/hooks/useEngineController").EngineRefreshResult
-    | void;
-  onAddSharedAgent: (workspace: WorkspaceInfo) => Promise<string | null>;
-  onAddWorktreeAgent: (workspace: WorkspaceInfo) => Promise<void>;
-  onAddCloneAgent: (workspace: WorkspaceInfo) => Promise<void>;
-  onToggleWorkspaceCollapse: (workspaceId: string, collapsed: boolean) => void;
-  onSelectThread: (workspaceId: string, threadId: string) => void;
-  onDeleteThread: (workspaceId: string, threadId: string) => void;
-  onArchiveThread: (workspaceId: string, threadId: string) => void;
-  deleteConfirmThreadId?: string | null;
-  deleteConfirmWorkspaceId?: string | null;
-  deleteConfirmBusy?: boolean;
-  onCancelDeleteConfirm?: () => void;
-  onConfirmDeleteConfirm?: () => void;
-  onSyncThread: (workspaceId: string, threadId: string) => void;
-  pinThread: (workspaceId: string, threadId: string) => boolean;
-  unpinThread: (workspaceId: string, threadId: string) => void;
-  isThreadPinned: (workspaceId: string, threadId: string) => boolean;
-  isThreadAutoNaming: (workspaceId: string, threadId: string) => boolean;
-  getPinTimestamp: (workspaceId: string, threadId: string) => number | null;
-  pinnedThreadsVersion: number;
-  onRenameThread: (workspaceId: string, threadId: string) => void;
-  onAutoNameThread: (workspaceId: string, threadId: string) => void;
-  onOpenClaudeTui?: (input: {
-    workspaceId: string;
-    workspacePath: string;
-    sessionId: string;
-  }) => void;
-  onDeleteWorkspace: (workspaceId: string) => void;
-  onDeleteWorktree: (workspaceId: string) => void;
-  onRenameWorkspaceAlias: (workspace: WorkspaceInfo) => void;
-  onLoadOlderThreads: (workspaceId: string) => void;
-  onReloadWorkspaceThreads: (workspaceId: string) => void;
-  onQuickReloadWorkspaceThreads?: (workspaceId: string) => void;
-  workspaceDropTargetRef: RefObject<HTMLElement | null>;
-  isWorkspaceDropActive: boolean;
-  workspaceDropText: string;
-  onWorkspaceDragOver: (event: DragEvent<HTMLElement>) => void;
-  onWorkspaceDragEnter: (event: DragEvent<HTMLElement>) => void;
-  onWorkspaceDragLeave: (event: DragEvent<HTMLElement>) => void;
-  onWorkspaceDrop: (event: DragEvent<HTMLElement>) => void;
-  appMode: AppMode;
-  isPhone: boolean;
-  isTablet: boolean;
-  onAppModeChange: (mode: AppMode) => void;
-  onOpenHomeChat: () => void;
-  onOpenMemory: () => void;
-  onOpenProjectMemory: () => void;
-  onOpenContextLedgerMemory?: (memoryId: string) => void;
-  onOpenContextLedgerNote?: (noteId: string) => void;
-  onOpenReleaseNotes: () => void;
-  onOpenEnvironment: () => void;
-  onOpenGlobalSearch: () => void;
-  globalSearchShortcut: string | null;
-  openChatShortcut: string | null;
-  openKanbanShortcut: string | null;
-  showLoadingProgressDialog?: (config: LoadingProgressDialogConfig) => string;
-  hideLoadingProgressDialog?: (requestId: string) => void;
-  cycleOpenSessionPrevShortcut: string | null;
-  cycleOpenSessionNextShortcut: string | null;
-  closeCurrentSessionShortcut: string | null;
-  saveFileShortcut: string | null;
-  findInFileShortcut: string | null;
-  toggleGitDiffListViewShortcut: string | null;
-  onOpenSpecHub: () => void;
-  onOpenWorkspaceHome: () => void;
-  updaterState: UpdateState;
-  onUpdate: () => void;
-  onDismissUpdate: () => void;
-  errorToasts: ErrorToast[];
-  onDismissErrorToast: (id: string) => void;
-  latestAgentRuns: Array<{
-    threadId: string;
-    message: string;
-    timestamp: number;
-    projectName: string;
-    groupName?: string | null;
-    workspaceId: string;
-    isProcessing: boolean;
-  }>;
-  isLoadingLatestAgents: boolean;
-  onSelectHomeThread: (workspaceId: string, threadId: string) => void;
-  onSelectHomeWorkspace: (workspaceId: string) => void;
-  activeWorkspace: WorkspaceInfo | null;
-  activeParentWorkspace: WorkspaceInfo | null;
-  worktreeLabel: string | null;
-  worktreeRename?: WorktreeRenameState;
-  isWorktreeWorkspace: boolean;
-  branchName: string;
-  branches: BranchInfo[];
-  onCheckoutBranch: (name: string) => Promise<void>;
-  onCreateBranch: (name: string) => Promise<void>;
-  onCopyThread: () => void | Promise<void>;
-  onLockPanel?: () => void;
-  onToggleTerminal: () => void;
-  showTerminalButton: boolean;
-  launchScript: string | null;
-  launchScriptEditorOpen: boolean;
-  launchScriptDraft: string;
-  launchScriptSaving: boolean;
-  launchScriptError: string | null;
-  onRunLaunchScript: () => void;
-  onOpenLaunchScriptEditor: () => void;
-  onCloseLaunchScriptEditor: () => void;
-  onLaunchScriptDraftChange: (value: string) => void;
-  onSaveLaunchScript: () => void;
-  launchScriptsState?: WorkspaceLaunchScriptsState;
-  mainHeaderActionsNode?: ReactNode;
-  browserDockOpen?: boolean;
-  onCloseBrowserDock?: () => void;
-  centerMode: "chat" | "diff" | "editor" | "memory" | "projectMap" | "intentCanvas";
-  setCenterMode: (mode: "chat" | "diff" | "editor" | "memory" | "projectMap" | "intentCanvas") => void;
-  editorSplitCompanion: "chat" | "projectMap";
-  setEditorSplitCompanion: (companion: "chat" | "projectMap") => void;
-  editorSplitLayout: "vertical" | "horizontal";
-  onToggleEditorSplitLayout: () => void;
-  isEditorFileMaximized: boolean;
-  onToggleEditorFileMaximized: () => void;
-  editorFilePath: string | null;
-  editorNavigationTarget: EditorNavigationTarget | null;
-  editorHighlightTarget: EditorHighlightTarget | null;
-  openEditorTabs: string[];
-  onActivateEditorTab: (path: string) => void;
-  onCloseEditorTab: (path: string) => void;
-  onCloseAllEditorTabs: () => void;
-  onActiveEditorLineRangeChange: (range: { startLine: number; endLine: number } | null) => void;
-  onOpenFile: (
-    path: string,
-    location?: EditorNavigationLocation,
-    options?: OpenFileOptions,
-  ) => void;
-    externalChangeMonitoringEnabled?: boolean;
-    externalChangeTransportMode?: "watcher" | "polling";
-    externalChangeApplyMode?: "auto" | "manual";
-    externalChangeAutoApplyDebounceMs?: number;
-    liveEditPreviewEnabled?: boolean;
-  onToggleLiveEditPreview?: () => void;
-  onExitEditor: () => void;
-  onExitDiff: () => void;
-  activeTab: "projects" | "codex" | "spec" | "git" | "log";
-  onSelectTab: (tab: "projects" | "codex" | "spec" | "git" | "log") => void;
-  tabletNavTab: "codex" | "spec" | "git" | "log";
-  gitPanelMode: "diff" | "log" | "issues" | "prs";
-  onGitPanelModeChange: (mode: "diff" | "log" | "issues" | "prs") => void;
-  onOpenGitHistoryPanel: () => void;
-  onOpenProjectMap: () => void;
-  intentCanvasOpenRequest?: IntentCanvasOpenRequest | null;
-  onOpenIntentCanvas?: (request?: Omit<IntentCanvasOpenRequest, "requestId">) => void;
-  onIntentCanvasOpenRequestConsumed?: (requestId: number) => void;
-  onAttachIntentCanvasToThread?: (document: IntentCanvasDocument) => Promise<void> | void;
-  pendingIntentCanvasDocuments?: IntentCanvasDocument[];
-  onRemovePendingIntentCanvas?: (documentId: string) => void;
-  gitDiffViewStyle: "split" | "unified";
-  gitDiffListView: GitDiffListView;
-  onGitDiffListViewChange: (view: "flat" | "tree") => void;
-  worktreeApplyLabel: string;
-  worktreeApplyTitle: string | null;
-  worktreeApplyLoading: boolean;
-  worktreeApplyError: string | null;
-  worktreeApplySuccess: boolean;
-  onApplyWorktreeChanges?: () => void | Promise<void>;
-  filePanelMode: "git" | "files" | "search" | "notes" | "prompts" | "memory" | "activity" | "radar";
-  onFilePanelModeChange: (mode: "git" | "files" | "search" | "notes" | "prompts" | "memory" | "activity" | "radar") => void;
-  focusedProjectMemoryId?: string | null;
-  focusedProjectMemoryRequestKey?: number;
-  focusedWorkspaceNoteId?: string | null;
-  focusedWorkspaceNoteRequestKey?: number;
-  fileTreeLoading: boolean;
-  fileTreeLoadError?: string | null;
-  onRefreshFiles?: () => void;
-  onOpenDetachedFileExplorer?: (initialFilePath?: string | null) => void;
-  onToggleRuntimeConsole: () => void;
-  runtimeConsoleVisible: boolean;
-  gitStatus: {
-    branchName: string;
-    files: GitFileStatus[];
-    stagedFiles: GitFileStatus[];
-    unstagedFiles: GitFileStatus[];
-    totalAdditions: number;
-    totalDeletions: number;
-    error: string | null;
-  };
-  fileStatus: string;
-  selectedDiffPath: string | null;
-  diffScrollRequestId: number;
-  onSelectDiff: (path: string | null) => void;
-  gitLogEntries: GitLogEntry[];
-  gitLogTotal: number;
-  gitLogAhead: number;
-  gitLogBehind: number;
-  gitLogAheadEntries: GitLogEntry[];
-  gitLogBehindEntries: GitLogEntry[];
-  gitLogUpstream: string | null;
-  selectedCommitSha: string | null;
-  onSelectCommit: (entry: GitLogEntry) => void;
-  gitLogError: string | null;
-  gitLogLoading: boolean;
-  refreshGitDiffs: () => void;
-  queueGitStatusRefresh: () => void;
-  gitIssues: GitHubIssue[];
-  gitIssuesTotal: number;
-  gitIssuesLoading: boolean;
-  gitIssuesError: string | null;
-  gitPullRequests: GitHubPullRequest[];
-  gitPullRequestsTotal: number;
-  gitPullRequestsLoading: boolean;
-  gitPullRequestsError: string | null;
-  selectedPullRequestNumber: number | null;
-  selectedPullRequest: GitHubPullRequest | null;
-  selectedPullRequestComments: GitHubPullRequestComment[];
-  selectedPullRequestCommentsLoading: boolean;
-  selectedPullRequestCommentsError: string | null;
-  onSelectPullRequest: (pullRequest: GitHubPullRequest) => void;
-  gitRemoteUrl: string | null;
-  gitRoot: string | null;
-  gitRootCandidates: string[];
-  gitRootScanDepth: number;
-  gitRootScanLoading: boolean;
-  gitRootScanError: string | null;
-  gitRootScanHasScanned: boolean;
-  onGitRootScanDepthChange: (depth: number) => void;
-  onScanGitRoots: () => void;
-  onSelectGitRoot: (path: string) => void;
-  onClearGitRoot: () => void;
-  onPickGitRoot: () => void | Promise<void>;
-  onStageGitAll: () => Promise<void>;
-  onStageGitFile: (path: string) => Promise<void>;
-  onUnstageGitFile: (path: string) => Promise<void>;
-  onRevertGitFile: (path: string) => Promise<void>;
-  onRevertAllGitChanges: () => Promise<void>;
-  gitDiffs: GitDiffViewerItem[];
-  gitDiffLoading: boolean;
-  gitDiffError: string | null;
-  onDiffActivePathChange?: (path: string) => void;
-  onGitDiffViewStyleChange: (style: "split" | "unified") => void;
-  commitMessage: string;
-  commitMessageLoading: boolean;
-  commitMessageError: string | null;
-  onCommitMessageChange: (value: string) => void;
-  onGenerateCommitMessage: (
-    language?: "zh" | "en",
-    engine?: "codex" | "claude" | "gemini" | "opencode",
-    selectedPaths?: string[],
-  ) => void | Promise<void>;
-  onCommit?: (selectedPaths?: string[]) => void | Promise<void>;
-  onCommitAndPush?: (selectedPaths?: string[]) => void | Promise<void>;
-  onCommitAndSync?: (selectedPaths?: string[]) => void | Promise<void>;
-  onPush?: () => void | Promise<void>;
-  onSync?: () => void | Promise<void>;
-  commitLoading?: boolean;
-  pushLoading?: boolean;
-  syncLoading?: boolean;
-  commitError?: string | null;
-  pushError?: string | null;
-  syncError?: string | null;
-  commitsAhead?: number;
-  onSendPrompt: (text: string) => void | Promise<void>;
-  onSendPromptToNewAgent: (text: string) => void | Promise<void>;
-  onCreatePrompt: (data: {
-    scope: "workspace" | "global";
-    name: string;
-    description?: string | null;
-    argumentHint?: string | null;
-    content: string;
-  }) => void | Promise<void>;
-  onUpdatePrompt: (data: {
-    path: string;
-    name: string;
-    description?: string | null;
-    argumentHint?: string | null;
-    content: string;
-  }) => void | Promise<void>;
-  onDeletePrompt: (path: string) => void | Promise<void>;
-  onMovePrompt: (data: { path: string; scope: "workspace" | "global" }) => void | Promise<void>;
-  onRevealWorkspacePrompts: () => void | Promise<void>;
-  onRevealGeneralPrompts: () => void | Promise<void>;
-  canRevealGeneralPrompts: boolean;
-  onSend: (
-    text: string,
-    images: string[],
-    options?: MessageSendOptions,
-  ) => void | Promise<void>;
-  onQueue: (
-    text: string,
-    images: string[],
-    options?: MessageSendOptions,
-  ) => void | Promise<void>;
-  onRequestContextCompaction?: () => Promise<void> | void;
-  onStop: () => void;
-  completionEmailSelected?: boolean;
-  completionEmailDisabled?: boolean;
-  onToggleCompletionEmail?: () => void;
-  onRewind?: (
-    userMessageId: string,
-    options?: { mode?: "messages-and-files" | "messages-only" | "files-only" },
-  ) => void | Promise<void>;
-  onForkFromMessage?: (userMessageId: string) => void | Promise<void>;
-  canStop: boolean;
-  isReviewing: boolean;
-  isProcessing: boolean;
-  steerEnabled: boolean;
-  reviewPrompt: ReviewPromptState;
-  onReviewPromptClose: () => void;
-  onReviewPromptShowPreset: () => void;
-  onReviewPromptChoosePreset: (
-    preset: Exclude<ReviewPromptStep, "preset"> | "uncommitted",
-  ) => void;
-  highlightedPresetIndex: number;
-  onReviewPromptHighlightPreset: (index: number) => void;
-  highlightedBranchIndex: number;
-  onReviewPromptHighlightBranch: (index: number) => void;
-  highlightedCommitIndex: number;
-  onReviewPromptHighlightCommit: (index: number) => void;
-  onReviewPromptKeyDown: (event: {
-    key: string;
-    shiftKey?: boolean;
-    preventDefault: () => void;
-  }) => boolean;
-  onReviewPromptSelectBranch: (value: string) => void;
-  onReviewPromptSelectBranchAtIndex: (index: number) => void;
-  onReviewPromptConfirmBranch: () => Promise<void>;
-  onReviewPromptSelectCommit: (sha: string, title: string) => void;
-  onReviewPromptSelectCommitAtIndex: (index: number) => void;
-  onReviewPromptConfirmCommit: () => Promise<void>;
-  onReviewPromptUpdateCustomInstructions: (value: string) => void;
-  onReviewPromptConfirmCustom: () => Promise<void>;
-  activeTokenUsage: ThreadTokenUsage | null;
-  contextDualViewEnabled?: boolean;
-  codexAutoCompactionEnabled?: boolean;
-  codexAutoCompactionThresholdPercent?: number;
-  onCodexAutoCompactionSettingsChange?: (patch: {
-    enabled?: boolean;
-    thresholdPercent?: number;
-  }) => Promise<void> | void;
-  activeQueue: QueuedMessage[];
-  draftText: string;
-  onDraftChange: (next: string) => void;
-  activeImages: string[];
-  onPickImages: () => void | Promise<void>;
-  onAttachImages: (paths: string[]) => void;
-  onRemoveImage: (path: string) => void;
-  prefillDraft: QueuedMessage | null;
-  onPrefillHandled: (id: string) => void;
-  insertText: QueuedMessage | null;
-  onInsertHandled: (id: string) => void;
-  onEditQueued: (item: QueuedMessage) => void;
-  onDeleteQueued: (id: string) => void;
-  onFuseQueued: (id: string) => void | Promise<void>;
-  canFuseActiveQueue: boolean;
-  activeFusingMessageId: string | null;
-  collaborationModes: CollaborationModeOption[];
-  collaborationModesEnabled: boolean;
-  selectedCollaborationModeId: string | null;
-  onSelectCollaborationMode: (id: string | null) => void;
-  // Engine props
-  engines?: EngineDisplayInfo[];
-  selectedEngine?: EngineType;
-  usePresentationProfile?: boolean;
-  onSelectEngine?: (engine: EngineType) => void;
-  // Model props
-  models: ModelOption[];
-  selectedModelId: string | null;
-  projectMapDatasetController?: ProjectMapDatasetController;
-  onSelectModel: (id: string | null) => void;
-  onDispatchOrchestrationTask?: (
-    confirmation: OrchestrationDispatchConfirmation,
-  ) => Promise<{ ok: boolean; taskId?: string | null; reason?: string }> | { ok: boolean; taskId?: string | null; reason?: string };
-  reasoningOptions: string[];
-  selectedEffort: string | null;
-  onSelectEffort: (effort: string | null) => void;
-  claudeThinkingVisible?: boolean;
-  onResolvedClaudeThinkingVisibleChange?: (enabled: boolean) => void;
-  reasoningSupported: boolean;
-  opencodeAgents: OpenCodeAgentOption[];
-  selectedOpenCodeAgent: string | null;
-  onSelectOpenCodeAgent: (agentId: string | null) => void;
-  selectedAgent: SelectedAgentOption | null;
-  onSelectAgent: (agent: SelectedAgentOption | null) => void;
-  onOpenAgentSettings: () => void;
-  onOpenPromptSettings: () => void;
-  onOpenModelSettings: (providerId?: string) => void;
-  onRefreshModelConfig?: (providerId?: string) => Promise<void> | void;
-  isModelConfigRefreshing?: boolean;
-  opencodeVariantOptions: string[];
-  selectedOpenCodeVariant: string | null;
-  onSelectOpenCodeVariant: (variant: string | null) => void;
-  accessMode: AccessMode;
-  onSelectAccessMode: (mode: AccessMode) => void;
-  skills: SkillOption[];
-  customSkillDirectories?: string[];
-  prompts: CustomPromptOption[];
-  commands?: CustomCommandOption[];
-  files: string[];
-  directories: string[];
-  directoryMetadata: WorkspaceDirectoryEntry[];
-  gitignoredFiles: Set<string>;
-  gitignoredDirectories: Set<string>;
-  onInsertComposerText: (text: string) => void;
-  textareaRef: RefObject<HTMLTextAreaElement | null>;
-  composerEditorSettings: ComposerEditorSettings;
-  composerSendShortcut: "enter" | "cmdEnter";
-  textareaHeight: number;
-  onTextareaHeightChange: (height: number) => void;
-  dictationEnabled: boolean;
-  dictationState: DictationSessionState;
-  dictationLevel: number;
-  onToggleDictation: () => void;
-  dictationTranscript: DictationTranscript | null;
-  onDictationTranscriptHandled: (id: string) => void;
-  dictationError: string | null;
-  onDismissDictationError: () => void;
-  dictationHint: string | null;
-  onDismissDictationHint: () => void;
-  showComposer: boolean;
-  composerSendLabel?: string;
-  composerLinkedKanbanPanels: {
-    id: string;
-    name: string;
-    workspaceId: string;
-    createdAt?: number;
-  }[];
-  selectedComposerKanbanPanelId: string | null;
-  composerKanbanContextMode: "new" | "inherit";
-  onSelectComposerKanbanPanel: (panelId: string | null) => void;
-  onComposerKanbanContextModeChange: (mode: "new" | "inherit") => void;
-  onOpenComposerKanbanPanel: (panelId: string) => void;
-  activeComposerFilePath: string | null;
-  activeComposerFileLineRange: { startLine: number; endLine: number } | null;
-  activeCodeSelectionAnchor: IntentCanvasCodeSelectionAnchor | null;
-  onActiveCodeSelectionAnchorChange: (anchor: IntentCanvasCodeSelectionAnchor | null) => void;
-  fileReferenceMode: "path" | "none";
-  onFileReferenceModeChange: (mode: "path" | "none") => void;
-  plan: TurnPlan | null;
-  isPlanMode: boolean;
-  onOpenPlanPanel: () => void;
-  onClosePlanPanel: () => void;
-  bottomStatusPanelExpanded: boolean;
-  agentTaskScrollRequest?: AgentTaskScrollRequest | null;
-  onSelectSubagent?: (agent: SubagentInfo) => void;
-  debugEntries: DebugEntry[];
-  debugOpen: boolean;
-  terminalOpen: boolean;
-  terminalTabs: TerminalTab[];
-  activeTerminalId: string | null;
-  onSelectTerminal: (terminalId: string) => void;
-  onNewTerminal: () => void;
-  onCloseTerminal: (terminalId: string) => void;
-  terminalState: TerminalSessionState | null;
-  onClearDebug: () => void;
-  onCopyDebug: () => void;
-  onResizeDebug: (event: MouseEvent<Element>) => void;
-  onResizeTerminal: (event: MouseEvent<Element>) => void;
-  onBackFromDiff: () => void;
-  onGoProjects: () => void;
-};
-
-type LayoutNodesResult = {
-  codeAnnotationBridgeProps: CodeAnnotationBridgeProps;
-  sidebarNode: ReactNode;
-  messagesNode: ReactNode;
-  composerNode: ReactNode;
-  approvalToastsNode: ReactNode;
-  updateToastNode: ReactNode;
-  errorToastsNode: ReactNode;
-  globalRuntimeNoticeDockNode: ReactNode;
-  homeNode: ReactNode;
-  mainHeaderNode: ReactNode;
-  desktopTopbarLeftNode: ReactNode;
-  tabletNavNode: ReactNode;
-  tabBarNode: ReactNode;
-  rightPanelToolbarNode: ReactNode;
-  gitDiffPanelNode: ReactNode;
-  gitDiffViewerNode: ReactNode;
-  fileViewPanelNode: ReactNode;
-  projectMapPanelNode: ReactNode;
-  intentCanvasPanelNode: ReactNode;
-  browserDockNode: ReactNode;
-  planPanelNode: ReactNode;
-  debugPanelNode: ReactNode;
-  debugPanelFullNode: ReactNode;
-  terminalDockNode: ReactNode;
-  compactEmptyCodexNode: ReactNode;
-  compactEmptySpecNode: ReactNode;
-  compactEmptyGitNode: ReactNode;
-  compactGitBackNode: ReactNode;
-};
-
-type RightPanelTabSelection = LayoutNodesOptions["filePanelMode"] | "projectMap" | "intentCanvas";
-
+import type {
+  LayoutNodesOptions,
+  LayoutNodesResult,
+  RightPanelTabSelection,
+} from "./layoutNodesTypes";
 const EMPTY_COMMANDS: CustomCommandOption[] = [];
+let lastOrchestrationProjectionSignature: string | null = null;
+
+function buildOrchestrationProjectionSignature(
+  orchestrationTaskStore: ReturnType<typeof useOrchestrationTaskStore>,
+  taskRuns: ReturnType<typeof useTaskRunStore>["runs"],
+): string {
+  return JSON.stringify({
+    tasks: orchestrationTaskStore.tasks.map((task) => ({
+      taskId: task.taskId,
+      status: task.status,
+      reviewState: task.reviewState,
+      linkedRunIds: task.linkedRunIds,
+    })),
+    runs: taskRuns.map((run) => ({
+      runId: run.runId,
+      taskId: run.task.taskId,
+      orchestrationTaskId: run.task.orchestrationTaskId,
+      status: run.status,
+      updatedAt: run.updatedAt,
+    })),
+  });
+}
 
 function toConversationEngine(engine: EngineType | undefined): ConversationEngine {
   if (engine === "claude" || engine === "gemini" || engine === "opencode") {
@@ -873,35 +203,10 @@ function resolveActiveConversationEngine(
   return toConversationEngine(threadEngine ?? selectedEngine);
 }
 
-function toTopbarTabKey(workspaceId: string, threadId: string): string {
-  return `${workspaceId}::${threadId}`;
-}
-
 export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   const { t } = useTranslation();
   const clientUiVisibility = useClientUiVisibility();
   const onOpenFile = options.onOpenFile;
-  const [, forceTopbarSessionRender] = useReducer((value: number) => value + 1, 0);
-  const [topbarTabContextMenu, setTopbarTabContextMenu] =
-    useState<RendererContextMenuState | null>(null);
-  const topbarSessionWindowsRef = useRef<TopbarSessionWindows>(
-    createEmptyTopbarSessionWindows(),
-  );
-  const pendingTopbarSelectionRef = useRef<{
-    workspaceId: string;
-    threadId: string;
-    setAt: number;
-  } | null>(null);
-  const dismissedTopbarTabKeysRef = useRef<Set<string>>(new Set());
-  const lastActivationRef = useRef<{
-    initialized: boolean;
-    workspaceId: string | null;
-    threadId: string | null;
-  }>({
-    initialized: false,
-    workspaceId: null,
-    threadId: null,
-  });
   const [preferredDockStatusTab, setPreferredDockStatusTab] = useState<{
     tab: TabType;
     requestKey: number;
@@ -910,6 +215,9 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     useState<ComposerRewindDialogRequest | null>(null);
   const [forkConfirmUserMessageId, setForkConfirmUserMessageId] =
     useState<string | null>(null);
+  const [codexProviderProfiles, setCodexProviderProfiles] = useState<
+    CodexProviderProfileOption[]
+  >([]);
   const rewindDialogRequestSerialRef = useRef(0);
   const activeThreadStatus = options.activeThreadId
     ? options.threadStatusById[options.activeThreadId] ?? null
@@ -920,6 +228,33 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
           (thread) => thread.id === options.activeThreadId,
         ) ?? null
       : null;
+  const activeProviderProfileLabel = activeThreadSummary
+    ? resolveCodexProviderLabel(activeThreadSummary)
+    : null;
+  useEffect(() => {
+    let cancelled = false;
+    getCodexProviders()
+      .then((providers) => {
+        if (cancelled) {
+          return;
+        }
+        setCodexProviderProfiles(
+          providers.map((provider) => ({
+            id: provider.id,
+            name: provider.name,
+            source: "managed",
+          })),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCodexProviderProfiles([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const historyRestoredAtMsByThread = options.historyRestoredAtMsByThread ?? {};
   const activeHistoryRestoredAtMs = options.activeThreadId
     ? historyRestoredAtMsByThread[options.activeThreadId] ?? null
@@ -1135,367 +470,22 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     return buildWorkspaceHeaderGroups(options.groupedWorkspaces, options.workspaces);
   }, [options.groupedWorkspaces, options.workspaces]);
 
-  topbarSessionWindowsRef.current = pruneTopbarSessionWindows(
-    topbarSessionWindowsRef.current,
-    options.threadsByWorkspace,
-  );
-  const currentActivation = {
-    workspaceId: options.activeWorkspaceId,
-    threadId: options.activeThreadId,
-  };
-  if (!lastActivationRef.current.initialized) {
-    lastActivationRef.current = {
-      initialized: true,
-      workspaceId: currentActivation.workspaceId,
-      threadId: currentActivation.threadId,
-    };
-  } else {
-    const isActivationChanged =
-      currentActivation.workspaceId !== lastActivationRef.current.workspaceId ||
-      currentActivation.threadId !== lastActivationRef.current.threadId;
-    if (
-      isActivationChanged &&
-      currentActivation.workspaceId &&
-      currentActivation.threadId
-    ) {
-      dismissedTopbarTabKeysRef.current.delete(
-        toTopbarTabKey(
-          currentActivation.workspaceId,
-          currentActivation.threadId,
-        ),
-      );
-      topbarSessionWindowsRef.current = recordTopbarSessionActivation(
-        topbarSessionWindowsRef.current,
-        currentActivation.workspaceId,
-        currentActivation.threadId,
-        options.threadsByWorkspace,
-        TOPBAR_SESSION_TAB_MAX,
-      );
-    }
-    lastActivationRef.current = {
-      initialized: true,
-      workspaceId: currentActivation.workspaceId,
-      threadId: currentActivation.threadId,
-    };
-  }
-  if (currentActivation.workspaceId && currentActivation.threadId) {
-    const activeKey = toTopbarTabKey(
-      currentActivation.workspaceId,
-      currentActivation.threadId,
-    );
-    const activeExists = topbarSessionWindowsRef.current.tabs.some(
-      (tab) =>
-        tab.workspaceId === currentActivation.workspaceId &&
-        tab.threadId === currentActivation.threadId,
-    );
-    if (!activeExists && !dismissedTopbarTabKeysRef.current.has(activeKey)) {
-      topbarSessionWindowsRef.current = recordTopbarSessionActivation(
-        topbarSessionWindowsRef.current,
-        currentActivation.workspaceId,
-        currentActivation.threadId,
-        options.threadsByWorkspace,
-        TOPBAR_SESSION_TAB_MAX,
-      );
-    }
-  }
-  const pendingSelection = pendingTopbarSelectionRef.current;
-  if (
-    pendingSelection &&
-    pendingSelection.workspaceId === options.activeWorkspaceId &&
-    pendingSelection.threadId === options.activeThreadId
-  ) {
-    pendingTopbarSelectionRef.current = null;
-  } else if (
-    pendingSelection &&
-    Date.now() - pendingSelection.setAt > 1800
-  ) {
-    pendingTopbarSelectionRef.current = null;
-  }
-  const highlightedWorkspaceId =
-    pendingTopbarSelectionRef.current?.workspaceId ?? options.activeWorkspaceId;
-  const highlightedThreadId =
-    pendingTopbarSelectionRef.current?.threadId ?? options.activeThreadId;
-  const selectedWorkspaceId = options.activeWorkspaceId;
-  const selectedThreadId = options.activeThreadId;
-  const selectThread = options.onSelectThread;
-  const selectWorkspace = options.onSelectWorkspace;
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.repeat) {
-        return;
-      }
-      if (
-        isEditableShortcutTarget(event.target) ||
-        isEditableShortcutTarget(document.activeElement)
-      ) {
-        return;
-      }
-      const matchesNext = matchesShortcutForPlatform(
-        event,
-        options.cycleOpenSessionNextShortcut,
-      );
-      const matchesPrev = matchesShortcutForPlatform(
-        event,
-        options.cycleOpenSessionPrevShortcut,
-      );
-      if (!matchesNext && !matchesPrev) {
-        return;
-      }
-      const targetTab = pickAdjacentOpenSessionTab(
-        topbarSessionWindowsRef.current,
-        options.activeWorkspaceId,
-        options.activeThreadId,
-        matchesNext ? "next" : "prev",
-      );
-      if (!targetTab) {
-        return;
-      }
-      event.preventDefault();
-      pendingTopbarSelectionRef.current = {
-        workspaceId: targetTab.workspaceId,
-        threadId: targetTab.threadId,
-        setAt: Date.now(),
-      };
-      forceTopbarSessionRender();
-      selectThread(targetTab.workspaceId, targetTab.threadId);
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [
-    options.activeThreadId,
-    options.activeWorkspaceId,
-    options.cycleOpenSessionNextShortcut,
-    options.cycleOpenSessionPrevShortcut,
-    selectThread,
-  ]);
-
-  const topbarSessionTabItems = buildTopbarSessionTabItems(
-    highlightedWorkspaceId,
-    highlightedThreadId,
-    options.threadsByWorkspace,
-    topbarSessionWindowsRef.current,
-    t("threads.untitledThread"),
-    {
-      codex: t("settings.projectSessionEngineCodex"),
-      claude: t("settings.projectSessionEngineClaude"),
-      gemini: t("settings.projectSessionEngineGemini"),
-      opencode: t("settings.projectSessionEngineOpencode"),
-    },
-  );
-  const applyTopbarWindowMutation = useCallback(
-    (
-      mutate: (windows: TopbarSessionWindows) => TopbarSessionWindows,
-      fallbackWorkspaceId: string,
-    ) => {
-      const previousWindows = topbarSessionWindowsRef.current;
-      const nextWindows = mutate(previousWindows);
-      if (nextWindows === previousWindows) {
-        return;
-      }
-      const previousTabKeys = new Set(
-        previousWindows.tabs.map((tab) => toTopbarTabKey(tab.workspaceId, tab.threadId)),
-      );
-      const nextTabKeys = new Set(
-        nextWindows.tabs.map((tab) => toTopbarTabKey(tab.workspaceId, tab.threadId)),
-      );
-      previousTabKeys.forEach((tabKey) => {
-        if (!nextTabKeys.has(tabKey)) {
-          dismissedTopbarTabKeysRef.current.add(tabKey);
-        }
-      });
-      topbarSessionWindowsRef.current = nextWindows;
-      if (pendingTopbarSelectionRef.current) {
-        const pendingKey = toTopbarTabKey(
-          pendingTopbarSelectionRef.current.workspaceId,
-          pendingTopbarSelectionRef.current.threadId,
-        );
-        if (!nextTabKeys.has(pendingKey)) {
-          pendingTopbarSelectionRef.current = null;
-        }
-      }
-      const activeWorkspaceId = selectedWorkspaceId;
-      const activeThreadId = selectedThreadId;
-      const activeKey =
-        activeWorkspaceId && activeThreadId
-          ? toTopbarTabKey(activeWorkspaceId, activeThreadId)
-          : null;
-      const isActiveRemoved = Boolean(activeKey && !nextTabKeys.has(activeKey));
-      forceTopbarSessionRender();
-      if (!isActiveRemoved || !activeWorkspaceId || !activeThreadId) {
-        return;
-      }
-      const fallbackTab = pickAdjacentTopbarSessionFallbackTab(
-        previousWindows,
-        nextWindows,
-        activeWorkspaceId,
-        activeThreadId,
-      );
-      if (fallbackTab) {
-        pendingTopbarSelectionRef.current = {
-          workspaceId: fallbackTab.workspaceId,
-          threadId: fallbackTab.threadId,
-          setAt: Date.now(),
-        };
-        forceTopbarSessionRender();
-        selectThread(fallbackTab.workspaceId, fallbackTab.threadId);
-        return;
-      }
-      selectWorkspace(activeWorkspaceId || fallbackWorkspaceId);
-    },
-    [selectedThreadId, selectedWorkspaceId, selectThread, selectWorkspace],
-  );
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.repeat) {
-        return;
-      }
-      if (!matchesShortcutForPlatform(event, options.closeCurrentSessionShortcut)) {
-        return;
-      }
-      event.preventDefault();
-      if (!options.activeWorkspaceId || !options.activeThreadId) {
-        return;
-      }
-      applyTopbarWindowMutation(
-        (windows) =>
-          dismissTopbarSessionTab(
-            windows,
-            options.activeWorkspaceId ?? "",
-            options.activeThreadId ?? "",
-          ),
-        options.activeWorkspaceId,
-      );
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [
-    applyTopbarWindowMutation,
-    options.activeThreadId,
-    options.activeWorkspaceId,
-    options.closeCurrentSessionShortcut,
-  ]);
-  const threadStatusById = options.threadStatusById;
-  const showTopbarTabMenu = useCallback(
-    (
-      position: { x: number; y: number },
-      workspaceId: string,
-      threadId: string,
-    ) => {
-      const currentWindows = topbarSessionWindowsRef.current;
-      const targetIndex = currentWindows.tabs.findIndex(
-        (tab) => tab.workspaceId === workspaceId && tab.threadId === threadId,
-      );
-      if (targetIndex < 0) {
-        return;
-      }
-      const hasLeftTabs = targetIndex > 0;
-      const hasRightTabs = targetIndex < currentWindows.tabs.length - 1;
-      const hasCompletedTabs = currentWindows.tabs.some(
-        (tab) => threadStatusById[tab.threadId]?.isProcessing === false,
-      );
-      const clampedPosition = clampRendererContextMenuPosition(position.x, position.y, {
-        width: 260,
-        height: 220,
-      });
-      setTopbarTabContextMenu({
-        ...clampedPosition,
-        label: t("threads.topbarSessionTabsAriaLabel"),
-        items: [
-          {
-            type: "item",
-            id: "close-tab",
-            label: t("threads.closeTab"),
-            onSelect: () => {
-              applyTopbarWindowMutation(
-                (windows) => dismissTopbarSessionTab(windows, workspaceId, threadId),
-                workspaceId,
-              );
-            },
-          },
-          {
-            type: "item",
-            id: "close-left-tabs",
-            label: t("threads.closeLeftTabs"),
-            disabled: !hasLeftTabs,
-            onSelect: () => {
-              applyTopbarWindowMutation(
-                (windows) => dismissTopbarSessionTabsToLeft(windows, workspaceId, threadId),
-                workspaceId,
-              );
-            },
-          },
-          {
-            type: "item",
-            id: "close-right-tabs",
-            label: t("threads.closeRightTabs"),
-            disabled: !hasRightTabs,
-            onSelect: () => {
-              applyTopbarWindowMutation(
-                (windows) => dismissTopbarSessionTabsToRight(windows, workspaceId, threadId),
-                workspaceId,
-              );
-            },
-          },
-          {
-            type: "item",
-            id: "close-all-tabs",
-            label: t("threads.closeAllTabs"),
-            onSelect: () => {
-              applyTopbarWindowMutation(
-                (windows) => dismissAllTopbarSessionTabs(windows),
-                workspaceId,
-              );
-            },
-          },
-          {
-            type: "item",
-            id: "close-completed-tabs",
-            label: t("threads.closeCompletedTabs"),
-            disabled: !hasCompletedTabs,
-            onSelect: () => {
-              applyTopbarWindowMutation(
-                (windows) => dismissCompletedTopbarSessionTabs(windows, threadStatusById),
-                workspaceId,
-              );
-            },
-          },
-        ],
-      });
-    },
-    [applyTopbarWindowMutation, t, threadStatusById],
-  );
-  const sessionTabsNode =
-    !options.isPhone && !options.isTablet && showTopSessionTabs ? (
-      <TopbarSessionTabs
-        tabs={topbarSessionTabItems}
-        ariaLabel={t("threads.topbarSessionTabsAriaLabel")}
-        onSelectThread={(workspaceId, threadId) => {
-          const isCurrentTab =
-            workspaceId === options.activeWorkspaceId &&
-            threadId === options.activeThreadId;
-          if (isCurrentTab) {
-            return;
-          }
-          pendingTopbarSelectionRef.current = {
-            workspaceId,
-            threadId,
-            setAt: Date.now(),
-          };
-          forceTopbarSessionRender();
-          options.onSelectThread(workspaceId, threadId);
-        }}
-        onCloseThread={(workspaceId, threadId) => {
-          applyTopbarWindowMutation(
-            (windows) => dismissTopbarSessionTab(windows, workspaceId, threadId),
-            workspaceId,
-          );
-        }}
-        onShowTabMenu={showTopbarTabMenu}
-      />
-    ) : null;
+  const { contextMenuNode: topbarTabContextMenuNode, sessionTabsNode } =
+    useLayoutTopbarSessionTabs({
+      activeThreadId: options.activeThreadId,
+      activeWorkspaceId: options.activeWorkspaceId,
+      closeCurrentSessionShortcut: options.closeCurrentSessionShortcut,
+      cycleOpenSessionNextShortcut: options.cycleOpenSessionNextShortcut,
+      cycleOpenSessionPrevShortcut: options.cycleOpenSessionPrevShortcut,
+      isPhone: options.isPhone,
+      isTablet: options.isTablet,
+      showTopSessionTabs,
+      threadStatusById: options.threadStatusById,
+      threadsByWorkspace: options.threadsByWorkspace,
+      t,
+      onSelectThread: options.onSelectThread,
+      onSelectWorkspace: options.onSelectWorkspace,
+    });
 
   const sidebarNode = (
     <Sidebar
@@ -1519,11 +509,15 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       systemProxyUrl={options.systemProxyUrl}
       accountRateLimits={options.activeRateLimits}
       usageShowRemaining={options.usageShowRemaining}
+      showProviderLabels={options.showSidebarProviderLabels}
+      uiMode={options.uiMode}
+      onOpenCaseWorkspacePath={options.onOpenCaseWorkspacePath}
       accountInfo={options.accountInfo}
       onSwitchAccount={options.onSwitchAccount}
       onCancelSwitchAccount={options.onCancelSwitchAccount}
       accountSwitching={options.accountSwitching}
       onOpenSettings={options.onOpenSettings}
+      onOpenEnvironment={options.onOpenEnvironment}
       onOpenDebug={options.onOpenDebug}
       showDebugButton={options.showDebugButton}
       onAddWorkspace={options.onAddWorkspace}
@@ -1575,7 +569,6 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       onLockPanel={options.onLockPanel}
       onOpenProjectMemory={options.onOpenProjectMemory}
       onOpenReleaseNotes={options.onOpenReleaseNotes}
-      onOpenEnvironment={options.onOpenEnvironment}
       onOpenGlobalSearch={options.onOpenGlobalSearch}
       globalSearchShortcut={options.globalSearchShortcut}
       openChatShortcut={options.openChatShortcut}
@@ -1587,8 +580,6 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       showTerminalButton={options.showTerminalButton}
       isTerminalOpen={options.terminalOpen}
       onToggleTerminal={options.onToggleTerminal}
-      uiMode={options.uiMode}
-      onOpenCaseWorkspacePath={options.onOpenCaseWorkspacePath}
     />
   );
 
@@ -1658,11 +649,44 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     setForkConfirmUserMessageId(null);
   }, []);
   const handleConfirmForkFromMessage = useCallback(
-    async (messageId: string) => {
-      await onForkFromMessage?.(messageId);
+    async (
+      messageId: string,
+      options?: CodexProviderProfileSelection,
+    ) => {
+      await onForkFromMessage?.(messageId, options);
     },
     [onForkFromMessage],
   );
+  const codexForkProviderProfiles = useMemo<CodexProviderProfileOption[]>(() => {
+    const profilesById = new Map<string, CodexProviderProfileOption>();
+    for (const profile of codexProviderProfiles) {
+      profilesById.set(profile.id, profile);
+    }
+    const activeProviderId =
+      activeThreadSummary?.providerProfileId?.trim() ||
+      CODEX_DISK_PROVIDER_PROFILE_ID;
+    if (
+      activeProviderId !== CODEX_DISK_PROVIDER_PROFILE_ID &&
+      !profilesById.has(activeProviderId)
+    ) {
+      profilesById.set(activeProviderId, {
+        id: activeProviderId,
+        name:
+          activeThreadSummary?.providerProfileName?.trim() ||
+          activeProviderId,
+        source:
+          activeThreadSummary?.providerProfileSource === "managed"
+            ? "managed"
+            : "disk",
+      });
+    }
+    return Array.from(profilesById.values());
+  }, [
+    activeThreadSummary?.providerProfileId,
+    activeThreadSummary?.providerProfileName,
+    activeThreadSummary?.providerProfileSource,
+    codexProviderProfiles,
+  ]);
   const handleOpenRewindDialogFromMessage = useCallback((messageId: string) => {
     const normalizedMessageId = messageId.trim();
     if (!normalizedMessageId) {
@@ -1680,6 +704,8 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       current?.requestId === requestId ? null : current,
     );
   }, []);
+
+  const taskRunStore = useTaskRunStore();
 
   const messagesNode = useMemo(() => (
     <>
@@ -1732,11 +758,17 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         lastDurationMs={activeThreadStatus?.lastDurationMs ?? null}
         heartbeatPulse={heartbeatPulseRef.current ?? 0}
         codexSilentSuspectedAt={activeThreadStatus?.codexSilentSuspectedAt ?? null}
+        taskRuns={taskRunStore.runs}
       />
       <MessageForkConfirmDialog
         userMessageId={forkConfirmUserMessageId}
         onCancel={handleCancelForkConfirm}
         onConfirm={handleConfirmForkFromMessage}
+        showProviderSelector={conversationEngine === "codex"}
+        defaultProviderProfileId={
+          activeThreadSummary?.providerProfileId ?? CODEX_DISK_PROVIDER_PROFILE_ID
+        }
+        providerProfiles={codexForkProviderProfiles}
       />
     </>
   ), [
@@ -1764,6 +796,8 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     forkConfirmUserMessageId,
     handleCancelForkConfirm,
     handleConfirmForkFromMessage,
+    activeThreadSummary?.providerProfileId,
+    codexForkProviderProfiles,
     options.onRewind,
     handleOpenRewindDialogFromMessage,
     options.handleApprovalDecision,
@@ -1788,6 +822,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     activeThreadStatus?.processingStartedAt,
     activeThreadStatus?.lastDurationMs,
     activeThreadStatus?.codexSilentSuspectedAt,
+    taskRunStore.runs,
     // heartbeatPulse removed from deps — uses ref to avoid
     // recreating messagesNode on every heartbeat tick
   ]
@@ -1956,6 +991,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         isSharedSession={isSharedSession}
         engines={options.engines}
         selectedEngine={options.selectedEngine}
+        providerProfileLabel={activeProviderProfileLabel}
         onSelectEngine={options.onSelectEngine}
         models={options.models}
         selectedModelId={options.selectedModelId}
@@ -2056,13 +1092,6 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   const composerNode = renderComposerNode(false);
   const homeComposerNode = renderComposerNode(false);
   const approvalToastsNode = null;
-  const topbarTabContextMenuNode = topbarTabContextMenu ? (
-    <RendererContextMenu
-      menu={topbarTabContextMenu}
-      onClose={() => setTopbarTabContextMenu(null)}
-      className="renderer-context-menu topbar-session-context-menu"
-    />
-  ) : null;
 
   const updateToastNode = (
     <UpdateToast
@@ -2577,7 +1606,6 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     [options.gitStatus.files],
   );
   const orchestrationTaskStore = useOrchestrationTaskStore();
-  const taskRunStore = useTaskRunStore();
   const [isOrchestrationCenterOpen, setIsOrchestrationCenterOpen] = useState(false);
   const [selectedOrchestrationTaskId, setSelectedOrchestrationTaskId] = useState<string | null>(null);
   const [projectMapSourceFocusNodeId, setProjectMapSourceFocusNodeId] = useState<string | null>(null);
@@ -2659,6 +1687,15 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     if (orchestrationTaskStore.tasks.length === 0 || taskRunStore.runs.length === 0) {
       return;
     }
+
+    const projectionSignature = buildOrchestrationProjectionSignature(
+      orchestrationTaskStore,
+      taskRunStore.runs,
+    );
+    if (lastOrchestrationProjectionSignature === projectionSignature) {
+      return;
+    }
+    lastOrchestrationProjectionSignature = projectionSignature;
 
     const projectedStore = projectLinkedTaskRunsToOrchestrationStore({
       orchestrationStore: orchestrationTaskStore,

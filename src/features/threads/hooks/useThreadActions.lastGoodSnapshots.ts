@@ -26,11 +26,34 @@ export function findCatalogSourceStatusForEngine(
   if (!normalizedEngine) {
     return null;
   }
-  return (
-    sourceStatuses?.find(
+  const matching =
+    sourceStatuses?.filter(
       (status) => status.engine.trim().toLowerCase() === normalizedEngine,
-    ) ?? null
-  );
+    ) ?? [];
+  return matching.sort(
+    (left, right) =>
+      sourceCompletenessPriority(right.completeness) -
+      sourceCompletenessPriority(left.completeness),
+  )[0] ?? null;
+}
+
+function sourceCompletenessPriority(
+  completeness: WorkspaceSessionCatalogSourceStatus["completeness"] | undefined,
+): number {
+  switch (completeness) {
+    case "degraded":
+      return 4;
+    case "partial":
+      return 3;
+    case "uncertain_empty":
+      return 2;
+    case "complete":
+      return 1;
+    case "authoritative_empty":
+      return 0;
+    default:
+      return -1;
+  }
 }
 
 export function isIncompleteCatalogSourceStatus(

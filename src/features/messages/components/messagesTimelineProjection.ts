@@ -52,6 +52,16 @@ export function groupedEntryContainsItemId(entry: GroupedEntry, itemId: string):
   return getGroupedEntryItemIds(entry).includes(itemId);
 }
 
+export function findTimelineProjectionRowIndexByItemId(
+  rows: readonly TimelineProjectionRow[],
+  itemId: string,
+) {
+  if (!itemId) {
+    return -1;
+  }
+  return rows.findIndex((row) => row.kind === "entry" && row.itemIds.includes(itemId));
+}
+
 export function getGroupedEntryProjectionKey(entry: GroupedEntry): string {
   if (entry.kind === "item") {
     const task = entry.item.kind === "message" ? parseAgentTaskNotification(entry.item.text) : null;

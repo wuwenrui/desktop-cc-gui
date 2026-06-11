@@ -112,7 +112,16 @@ describe("layout swapped platform guard", () => {
     expect(leftAnchorRule).toContain("var(--titlebar-inset-left, 0px)");
     expect(rightAnchorRule).toContain("right: 10px;");
     expect(baseCss).not.toContain(".titlebar-sidebar-toggle.titlebar-toggle-left {");
-    expect(baseCss).not.toContain(".titlebar-sidebar-toggle.titlebar-toggle-right {");
+  });
+
+  it("offsets the Windows swapped floating sidebar restore control from window controls", () => {
+    const selector =
+      ".app.windows-desktop.layout-swapped .titlebar-sidebar-toggle.titlebar-toggle-right";
+    const safeZoneRule = getCssRuleBlock(baseCss, selector);
+
+    expect(safeZoneRule).toContain("right: calc(");
+    expect(safeZoneRule).toContain("var(--titlebar-window-controls-width)");
+    expect(safeZoneRule).toContain("var(--titlebar-toggle-side-gap)");
   });
 
   it("keeps the expanded sidebar titlebar toggle icon-only", () => {

@@ -186,6 +186,39 @@ fn resolve_target_message_id(
         })
 }
 
+#[allow(dead_code)]
+fn resolve_fork_anchor_message_id(
+    user_messages: &[UserMessageCandidate],
+    requested_message_id: Option<&str>,
+    target_user_turn_index: usize,
+    target_user_message_text: Option<&str>,
+    target_user_message_occurrence: Option<usize>,
+    local_user_message_count: Option<usize>,
+    thread_id: &str,
+) -> Result<Option<String>, String> {
+    if user_messages.is_empty() {
+        return Ok(None);
+    }
+
+    match resolve_target_message_id(
+        user_messages,
+        requested_message_id,
+        target_user_turn_index,
+        target_user_message_text,
+        target_user_message_occurrence,
+        local_user_message_count,
+        thread_id,
+    ) {
+        Ok(resolved_message_id) => Ok(Some(resolved_message_id)),
+        Err(error) => {
+            if target_user_turn_index >= user_messages.len() {
+                return Ok(user_messages.last().map(|candidate| candidate.id.clone()));
+            }
+            Err(error)
+        }
+    }
+}
+
 fn finalize_rewind_success(
     child_thread_id: String,
     resolved_message_id: String,
@@ -211,7 +244,10 @@ fn finalize_rewind_success(
 
 #[cfg(test)]
 mod tests {
-    use super::{finalize_rewind_success, resolve_target_message_id, UserMessageCandidate};
+    use super::{
+        finalize_rewind_success, resolve_fork_anchor_message_id, resolve_target_message_id,
+        UserMessageCandidate,
+    };
     use serde_json::json;
 
     fn user_message(id: &str, text: &str) -> UserMessageCandidate {
@@ -317,6 +353,40 @@ mod tests {
     }
 
     #[test]
+    fn resolve_fork_anchor_message_id_falls_back_to_last_runtime_user_message() {
+        let runtime_user_messages = vec![user_message("u1", "first"), user_message("u2", "second")];
+
+        let resolved = resolve_fork_anchor_message_id(
+            &runtime_user_messages,
+            Some("local-third"),
+            2,
+            None,
+            None,
+            Some(3),
+            "thread-1",
+        )
+        .expect("fork anchor should tolerate local/runtime tail drift");
+
+        assert_eq!(resolved.as_deref(), Some("u2"));
+    }
+
+    #[test]
+    fn resolve_fork_anchor_message_id_omits_anchor_when_runtime_has_no_user_messages() {
+        let resolved = resolve_fork_anchor_message_id(
+            &[],
+            Some("local-first"),
+            0,
+            None,
+            None,
+            Some(1),
+            "thread-1",
+        )
+        .expect("empty runtime history should allow full-thread fork fallback");
+
+        assert_eq!(resolved, None);
+    }
+
+    #[test]
     fn finalize_rewind_success_returns_truncated_payload_after_archive() {
         let payload = finalize_rewind_success(
             "thread-child".to_string(),
@@ -338,6 +408,7 @@ pub(crate) async fn rewind_thread_from_message(
     sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
     workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
     workspace_id: String,
+    provider_profile_id: Option<String>,
     thread_id: String,
     message_id: Option<String>,
     target_user_turn_index: u32,
@@ -357,6 +428,7 @@ pub(crate) async fn rewind_thread_from_message(
     let resume_response = codex_core::resume_thread_core(
         sessions,
         workspace_id.clone(),
+        provider_profile_id.clone(),
         normalized_thread_id.clone(),
     )
     .await?;
@@ -378,6 +450,7 @@ pub(crate) async fn rewind_thread_from_message(
     let fork_response = codex_core::fork_thread_core(
         sessions,
         workspace_id.clone(),
+        provider_profile_id.clone(),
         normalized_thread_id.clone(),
         Some(resolved_message_id.clone()),
     )
@@ -406,6 +479,7 @@ pub(crate) async fn rewind_thread_from_message(
             let _ = codex_core::archive_thread_core(
                 sessions,
                 workspace_id.clone(),
+                provider_profile_id.clone(),
                 child_thread_id.clone(),
             )
             .await;
@@ -416,6 +490,7 @@ pub(crate) async fn rewind_thread_from_message(
     let archive_result = codex_core::archive_thread_core(
         sessions,
         workspace_id.clone(),
+        provider_profile_id,
         normalized_thread_id.clone(),
     )
     .await;
@@ -426,4 +501,81 @@ pub(crate) async fn rewind_thread_from_message(
         commit_result.deleted_count,
         archive_result,
     )
+}
+
+#[allow(dead_code)]
+pub(crate) async fn resolve_fork_message_id(
+    sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
+    workspace_id: String,
+    parent_thread_id: String,
+    message_id: Option<String>,
+    target_user_turn_index: Option<u32>,
+    target_user_message_text: Option<String>,
+    target_user_message_occurrence: Option<u32>,
+    local_user_message_count: Option<u32>,
+    provider_profile_id: Option<String>,
+) -> Result<Option<String>, String> {
+    let normalized_parent_thread_id = parent_thread_id.trim().to_string();
+    if normalized_parent_thread_id.is_empty() {
+        return Err("thread_id is required".to_string());
+    }
+    let has_anchor_hint = message_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .is_some()
+        || target_user_turn_index.is_some()
+        || target_user_message_text
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .is_some()
+        || target_user_message_occurrence.is_some()
+        || local_user_message_count.is_some();
+    if !has_anchor_hint {
+        return Ok(None);
+    }
+
+    let resume_response = codex_core::resume_thread_core(
+        sessions,
+        workspace_id.clone(),
+        provider_profile_id,
+        normalized_parent_thread_id.clone(),
+    )
+    .await
+    .map_err(|error| {
+        format!(
+            "[CODEX_FORK_PARENT_RESUME_FAILED] workspaceId={workspace_id}; parentThreadId={normalized_parent_thread_id}; reason={error}"
+        )
+    })?;
+    let user_messages = collect_user_messages_from_thread(&resume_response);
+    let target_user_turn_index = target_user_turn_index
+        .map(|value| value as usize)
+        .or_else(|| {
+            message_id.as_deref().and_then(|requested_message_id| {
+                user_messages
+                    .iter()
+                    .position(|candidate| candidate.id == requested_message_id.trim())
+            })
+        })
+        .unwrap_or_else(|| user_messages.len().saturating_sub(1));
+    let resolved_message_id = resolve_fork_anchor_message_id(
+        &user_messages,
+        message_id.as_deref(),
+        target_user_turn_index,
+        target_user_message_text.as_deref(),
+        target_user_message_occurrence
+            .map(|value| value as usize)
+            .filter(|value| *value > 0),
+        local_user_message_count
+            .map(|value| value as usize)
+            .filter(|value| *value > 0),
+        normalized_parent_thread_id.as_str(),
+    )
+    .map_err(|error| {
+        format!(
+            "[CODEX_FORK_ANCHOR_NOT_FOUND] workspaceId={workspace_id}; parentThreadId={normalized_parent_thread_id}; reason={error}"
+        )
+    })?;
+    Ok(resolved_message_id)
 }

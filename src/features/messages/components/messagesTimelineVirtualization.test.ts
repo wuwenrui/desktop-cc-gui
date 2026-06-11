@@ -1,8 +1,10 @@
 import type { Virtualizer } from "@tanstack/react-virtual";
 import { describe, expect, it, vi } from "vitest";
 import {
+  classifyTimelineVirtualizerStability,
   estimateTimelineProjectionRowSize,
   estimateTimelineProjectionRenderWeight,
+  getActiveLiveTimelineRowKeys,
   observeTimelineElementOffset,
   shouldVirtualizeTimelineRows,
   TIMELINE_VIRTUALIZATION_MIN_RENDER_WEIGHT,
@@ -100,6 +102,78 @@ describe("messagesTimelineVirtualization", () => {
     };
 
     expect(estimateTimelineProjectionRenderWeight(imageRow)).toBeGreaterThan(40);
+  });
+
+  it("finds active live row keys from item and docked reasoning rows", () => {
+    const rows: TimelineProjectionRow[] = [
+      {
+        kind: "entry",
+        key: "item:message:assistant-live",
+        entry: {
+          kind: "item",
+          item: {
+            id: "assistant-live",
+            kind: "message",
+            role: "assistant",
+            text: "streaming",
+          },
+        },
+        itemIds: ["assistant-live"],
+        hasActiveUserInputAnchor: false,
+      },
+      {
+        kind: "dockedReasoning",
+        key: "claude-live:reasoning-live",
+        itemId: "reasoning-live",
+      },
+      { kind: "workingIndicator", key: "working-indicator" },
+    ];
+
+    expect(getActiveLiveTimelineRowKeys({
+      rows,
+      liveAssistantItemId: "assistant-live",
+      liveReasoningItemId: "reasoning-live",
+    })).toEqual(["item:message:assistant-live", "claude-live:reasoning-live"]);
+  });
+
+  it("classifies empty virtualizer output as suspicious only when rows can render", () => {
+    expect(classifyTimelineVirtualizerStability({
+      shouldVirtualize: true,
+      rowCount: 8,
+      hasScrollElement: true,
+      virtualItemKeys: [],
+      activeLiveRowKeys: [],
+      streamingActive: false,
+    })).toBe("empty-visible-set");
+
+    expect(classifyTimelineVirtualizerStability({
+      shouldVirtualize: true,
+      rowCount: 8,
+      hasScrollElement: false,
+      virtualItemKeys: [],
+      activeLiveRowKeys: [],
+      streamingActive: false,
+    })).toBe("stable");
+  });
+
+  it("classifies missing active live rows during streaming", () => {
+    expect(classifyTimelineVirtualizerStability({
+      shouldVirtualize: true,
+      rowCount: 8,
+      hasScrollElement: true,
+      virtualItemKeys: ["item:message:older", "working-indicator"],
+      activeLiveRowKeys: ["item:message:assistant-live"],
+      streamingActive: true,
+    })).toBe("active-live-row-missing");
+
+    expect(classifyTimelineVirtualizerStability({
+      shouldVirtualize: true,
+      rowCount: 8,
+      hasScrollElement: true,
+      virtualItemKeys: ["item:message:assistant-live", "working-indicator"],
+      activeLiveRowKeys: ["item:message:assistant-live"],
+      streamingActive: true,
+    })).toBe("stable");
   });
 
   it("clears pending scroll-end fallback when virtualizer unmounts", () => {

@@ -2,21 +2,36 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { engineSendMessageSync } from '../../../../../services/tauri';
 import type { EngineType } from '../../../../../types';
 import { getNormalizedAssistantMessageText } from '../../../../../utils/threadItemsAssistantText';
+import type { ModelInfo, ProviderId } from '../types';
+import type { ProviderModelGroup } from '../modelOptions';
 
 const PROMPT_ENHANCER_FAILURE_MESSAGE = 'Failed to enhance prompt';
 const PROMPT_ENHANCER_WORKSPACE_MESSAGE = 'Workspace is not ready for prompt enhancement';
 const PROMPT_ENHANCER_FALLBACK_FAILURE_MESSAGE =
   'Prompt enhancement failed. Please keep the original prompt and try again.';
 const PROMPT_ENHANCER_EMPTY_FALLBACK_MESSAGE = 'Codex returned an empty prompt enhancement';
-const PROMPT_ENHANCER_TIMEOUT_MS = 60_000;
-const PROMPT_ENHANCER_TIMEOUT_MESSAGE =
-  `Prompt enhancement timed out after ${PROMPT_ENHANCER_TIMEOUT_MS / 1000} seconds. Please try again.`;
+const PROMPT_ENHANCER_DEFAULT_TIMEOUT_SECONDS = 60;
+const PROMPT_ENHANCER_MIN_TIMEOUT_SECONDS = 5;
+const PROMPT_ENHANCER_MAX_TIMEOUT_SECONDS = 300;
 const PROMPT_ENHANCER_AUTO_SESSION = {
   sessionPurpose: 'prompt-enhancer',
   visibility: 'hidden',
   ownerFeature: 'composer',
   autoArchive: true,
   createdBy: 'system',
+} as const;
+
+export const PROMPT_ENHANCER_ENGINE_OPTIONS: EngineType[] = [
+  'claude',
+  'codex',
+  'gemini',
+  'opencode',
+];
+
+export const PROMPT_ENHANCER_TIMEOUT_LIMITS = {
+  defaultSeconds: PROMPT_ENHANCER_DEFAULT_TIMEOUT_SECONDS,
+  minSeconds: PROMPT_ENHANCER_MIN_TIMEOUT_SECONDS,
+  maxSeconds: PROMPT_ENHANCER_MAX_TIMEOUT_SECONDS,
 } as const;
 
 function buildPromptEnhancerInstruction(originalPrompt: string, engine: EngineType): string {
@@ -58,6 +73,62 @@ function normalizeEnhancerEngine(currentProvider: string): EngineType {
     default:
       return 'claude';
   }
+}
+
+function isPromptEnhancerProviderId(engine: EngineType): engine is ProviderId {
+  return engine === 'claude' || engine === 'codex' || engine === 'gemini' || engine === 'opencode';
+}
+
+function resolveEnhancerModelOptions(
+  modelGroups: ProviderModelGroup[],
+  engine: EngineType,
+): ModelInfo[] {
+  if (!isPromptEnhancerProviderId(engine)) {
+    return [];
+  }
+  return modelGroups.find((group) => group.providerId === engine)?.models ?? [];
+}
+
+function resolveDefaultEnhancerModelId(
+  modelGroups: ProviderModelGroup[],
+  engine: EngineType,
+  currentModelId: string,
+): string {
+  const modelOptions = resolveEnhancerModelOptions(modelGroups, engine);
+  if (modelOptions.length === 0) {
+    return '';
+  }
+  if (currentModelId.trim().length > 0 && modelOptions.some((model) => model.id === currentModelId)) {
+    return currentModelId;
+  }
+  return modelOptions[0]?.id ?? '';
+}
+
+function resolveRuntimeEnhancerModel(
+  modelGroups: ProviderModelGroup[],
+  engine: EngineType,
+  modelId: string,
+): string | null {
+  const trimmedModelId = modelId.trim();
+  if (!trimmedModelId) {
+    return null;
+  }
+  const model = resolveEnhancerModelOptions(modelGroups, engine).find((entry) => entry.id === trimmedModelId);
+  return ((model as ModelInfo & { model?: string } | undefined)?.model ?? trimmedModelId).trim() || null;
+}
+
+function normalizeEnhancerTimeoutSeconds(timeoutSeconds: number): number {
+  if (!Number.isFinite(timeoutSeconds)) {
+    return PROMPT_ENHANCER_DEFAULT_TIMEOUT_SECONDS;
+  }
+  return Math.min(
+    PROMPT_ENHANCER_MAX_TIMEOUT_SECONDS,
+    Math.max(PROMPT_ENHANCER_MIN_TIMEOUT_SECONDS, Math.round(timeoutSeconds)),
+  );
+}
+
+function buildPromptEnhancerTimeoutMessage(timeoutSeconds: number): string {
+  return `Prompt enhancement timed out after ${timeoutSeconds} seconds. Please try again.`;
 }
 
 function resolveErrorMessage(error: unknown): string {
@@ -149,7 +220,9 @@ async function requestEnhancedPrompt(options: {
   engine: EngineType;
   model: string | null;
   sessionId: string;
+  timeoutSeconds: number;
 }): Promise<string> {
+  const timeoutSeconds = normalizeEnhancerTimeoutSeconds(options.timeoutSeconds);
   const response = await withTimeout(
     engineSendMessageSync(options.workspaceId, {
       text: options.prompt,
@@ -160,8 +233,8 @@ async function requestEnhancedPrompt(options: {
       sessionId: options.sessionId,
       autoSession: PROMPT_ENHANCER_AUTO_SESSION,
     }),
-    PROMPT_ENHANCER_TIMEOUT_MS,
-    PROMPT_ENHANCER_TIMEOUT_MESSAGE,
+    timeoutSeconds * 1000,
+    buildPromptEnhancerTimeoutMessage(timeoutSeconds),
   );
   return normalizeEnhancedPromptResponse(response.text);
 }
@@ -172,6 +245,7 @@ interface UsePromptEnhancerOptions {
   getTextContent: () => string;
   currentProvider: string;
   selectedModel: string;
+  modelGroups: ProviderModelGroup[];
   setHasContent: (hasContent: boolean) => void;
   handleInput: () => void;
   stageNextCommitOptions?: (options: {
@@ -185,11 +259,20 @@ interface UsePromptEnhancerOptions {
 interface UsePromptEnhancerReturn {
   isEnhancing: boolean;
   enhancingEngine: EngineType;
+  selectedEnhancerEngine: EngineType;
+  selectedEnhancerModel: string;
+  enhancerModelOptions: ModelInfo[];
+  enhancerTimeoutSeconds: number;
+  timeoutLimits: typeof PROMPT_ENHANCER_TIMEOUT_LIMITS;
   showEnhancerDialog: boolean;
   originalPrompt: string;
   enhancedPrompt: string;
   canUseEnhancedPrompt: boolean;
   handleEnhancePrompt: () => void;
+  handleEnhancerEngineChange: (engine: EngineType) => void;
+  handleEnhancerModelChange: (modelId: string) => void;
+  handleEnhancerTimeoutChange: (timeoutSeconds: number) => void;
+  handleRunPromptEnhancement: () => void;
   handleUseEnhancedPrompt: () => void;
   handleKeepOriginalPrompt: () => void;
   handleCloseEnhancerDialog: () => void;
@@ -201,12 +284,20 @@ export function usePromptEnhancer({
   getTextContent,
   currentProvider,
   selectedModel,
+  modelGroups,
   setHasContent,
   handleInput,
   stageNextCommitOptions,
 }: UsePromptEnhancerOptions): UsePromptEnhancerReturn {
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [enhancingEngine, setEnhancingEngine] = useState<EngineType>('claude');
+  const [selectedEnhancerEngine, setSelectedEnhancerEngine] = useState<EngineType>(
+    normalizeEnhancerEngine(currentProvider),
+  );
+  const [selectedEnhancerModel, setSelectedEnhancerModel] = useState('');
+  const [enhancerTimeoutSeconds, setEnhancerTimeoutSeconds] = useState(
+    PROMPT_ENHANCER_DEFAULT_TIMEOUT_SECONDS,
+  );
   const [showEnhancerDialog, setShowEnhancerDialog] = useState(false);
   const [originalPrompt, setOriginalPrompt] = useState('');
   const [enhancedPrompt, setEnhancedPrompt] = useState('');
@@ -228,30 +319,66 @@ export function usePromptEnhancer({
 
   const handleEnhancePrompt = useCallback(() => {
     const content = getTextContent().trim();
+    if (!content) {
+      return;
+    }
+
+    activeRequestIdRef.current += 1;
+    const defaultEngine = normalizeEnhancerEngine(currentProvider);
+    setSelectedEnhancerEngine(defaultEngine);
+    setSelectedEnhancerModel(resolveDefaultEnhancerModelId(modelGroups, defaultEngine, selectedModel));
+    setOriginalPrompt(content);
+    setEnhancedPrompt('');
+    setCanUseEnhancedPrompt(false);
+    setShowEnhancerDialog(true);
+    setIsEnhancing(false);
+  }, [currentProvider, getTextContent, modelGroups, selectedModel]);
+
+  const handleEnhancerEngineChange = useCallback((engine: EngineType) => {
+    if (!PROMPT_ENHANCER_ENGINE_OPTIONS.includes(engine)) {
+      return;
+    }
+    setSelectedEnhancerEngine(engine);
+    setSelectedEnhancerModel(resolveDefaultEnhancerModelId(modelGroups, engine, ''));
+    setCanUseEnhancedPrompt(false);
+    setEnhancedPrompt('');
+  }, [modelGroups]);
+
+  const handleEnhancerModelChange = useCallback((modelId: string) => {
+    setSelectedEnhancerModel(modelId);
+    setCanUseEnhancedPrompt(false);
+    setEnhancedPrompt('');
+  }, []);
+
+  const handleEnhancerTimeoutChange = useCallback((timeoutSeconds: number) => {
+    setEnhancerTimeoutSeconds(normalizeEnhancerTimeoutSeconds(timeoutSeconds));
+  }, []);
+
+  const handleRunPromptEnhancement = useCallback(() => {
+    const content = originalPrompt.trim();
     if (!content || isEnhancing) {
       return;
     }
 
     if (!workspaceId || workspaceId.trim().length === 0) {
-      setOriginalPrompt(content);
       setEnhancedPrompt(PROMPT_ENHANCER_WORKSPACE_MESSAGE);
       setCanUseEnhancedPrompt(false);
-      setShowEnhancerDialog(true);
       setIsEnhancing(false);
       return;
     }
 
     const requestId = activeRequestIdRef.current + 1;
     activeRequestIdRef.current = requestId;
-    const engine = normalizeEnhancerEngine(currentProvider);
+    const engine = selectedEnhancerEngine;
+    const timeoutSeconds = normalizeEnhancerTimeoutSeconds(enhancerTimeoutSeconds);
     const prompt = buildPromptEnhancerInstruction(content, engine);
     const fallbackPrompt =
       engine === 'claude' ? buildPromptEnhancerInstruction(content, 'codex') : null;
-    const requestModel = selectedModel.trim().length > 0 ? selectedModel : null;
+    const requestModel = resolveRuntimeEnhancerModel(modelGroups, engine, selectedEnhancerModel);
     const requestSessionId = buildIsolatedSessionId();
 
     setEnhancingEngine(engine);
-    setOriginalPrompt(content);
+    setEnhancerTimeoutSeconds(timeoutSeconds);
     setEnhancedPrompt('');
     setCanUseEnhancedPrompt(false);
     setShowEnhancerDialog(true);
@@ -265,6 +392,7 @@ export function usePromptEnhancer({
           engine,
           model: requestModel,
           sessionId: requestSessionId,
+          timeoutSeconds,
         });
         if (activeRequestIdRef.current !== requestId) {
           return;
@@ -289,6 +417,7 @@ export function usePromptEnhancer({
               engine: 'codex',
               model: null,
               sessionId: buildIsolatedSessionId(),
+              timeoutSeconds,
             });
             if (activeRequestIdRef.current !== requestId) {
               return;
@@ -321,10 +450,12 @@ export function usePromptEnhancer({
       }
     })();
   }, [
-    currentProvider,
-    getTextContent,
+    enhancerTimeoutSeconds,
     isEnhancing,
-    selectedModel,
+    modelGroups,
+    originalPrompt,
+    selectedEnhancerEngine,
+    selectedEnhancerModel,
     workspaceId,
   ]);
 
@@ -353,11 +484,20 @@ export function usePromptEnhancer({
   return {
     isEnhancing,
     enhancingEngine,
+    selectedEnhancerEngine,
+    selectedEnhancerModel,
+    enhancerModelOptions: resolveEnhancerModelOptions(modelGroups, selectedEnhancerEngine),
+    enhancerTimeoutSeconds,
+    timeoutLimits: PROMPT_ENHANCER_TIMEOUT_LIMITS,
     showEnhancerDialog,
     originalPrompt,
     enhancedPrompt,
     canUseEnhancedPrompt,
     handleEnhancePrompt,
+    handleEnhancerEngineChange,
+    handleEnhancerModelChange,
+    handleEnhancerTimeoutChange,
+    handleRunPromptEnhancement,
     handleUseEnhancedPrompt,
     handleKeepOriginalPrompt: closeEnhancerDialog,
     handleCloseEnhancerDialog: closeEnhancerDialog,

@@ -55,6 +55,7 @@ pub(crate) async fn list_workspace_session_archive_evidence_core(
     if source_statuses.is_empty() {
         source_statuses.push(WorkspaceSessionCatalogSourceStatus {
             engine: "archive-metadata".to_string(),
+            source_kind: None,
             completeness: WorkspaceSessionSourceCompleteness::Complete,
             reason: None,
             scanned_candidates: Some(scanned_metadata_entries),
