@@ -10,6 +10,8 @@ Runtime performance closure evidence SHALL classify client interaction scenarios
 - **THEN** each scenario MUST be classified as `measured`, `proxy`, `manual-only`, or `unsupported`
 - **AND** the report MUST explain the classification and list the next action for non-measured scenarios.
 
+## ADDED Requirements
+
 ### Requirement: Realtime Visible Lag Budgets SHALL Use Correlated Milestones
 
 Realtime performance budgets SHALL use correlated turn milestones rather than isolated first-token or fixture-only timings.

@@ -1,4 +1,4 @@
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: File Reference Index MUST Be Available Without Blocking High-Frequency Input
 

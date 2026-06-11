@@ -77,15 +77,11 @@ The system MUST treat validation noise as a stability defect when it comes from 
 
 Runtime performance closure evidence SHALL classify client interaction scenarios by evidence strength before an optimization is considered release-grade.
 
-#### Scenario: evidence source is explicit
-- **WHEN** a performance report covers Composer typing, file editor typing, realtime streaming, thread switching, sidebar projection, or session catalog hydration
-- **THEN** each scenario MUST be classified as `measured`, `proxy`, `manual-only`, or `unsupported`
-- **AND** the report MUST explain the classification and list the next action for non-measured scenarios
+#### Scenario: realtime evidence source is explicit
 
-#### Scenario: proxy evidence cannot prove release-grade improvement
-- **WHEN** a scenario is validated only by jsdom, static render count, pure helper tests, or fixture-only latency estimates
-- **THEN** the report MUST classify it as proxy evidence
-- **AND** it MUST NOT claim release-grade measured improvement without browser, Tauri, WebView, React Profiler, PerformanceObserver evidence, or equivalent runtime signal
+- **WHEN** a performance report covers realtime streaming visible lag, render amplification, terminal settlement, Composer typing, file editor typing, thread switching, sidebar projection, or session catalog hydration
+- **THEN** each scenario MUST be classified as `measured`, `proxy`, `manual-only`, or `unsupported`
+- **AND** the report MUST explain the classification and list the next action for non-measured scenarios.
 
 ### Requirement: Client Interaction Budgets SHALL Track User-Visible Latency
 
@@ -157,4 +153,20 @@ Runtime evidence gate artifacts MUST 在 observed values 旁暴露 budget metada
 - **WHEN** local or CI performance checklist reads runtime evidence gate artifacts
 - **THEN** it MUST determine pass, fail, or unsupported from structured fields without scraping narrative markdown
 - **AND** unsupported or proxy evidence MUST NOT be reported as release-grade measured evidence
+
+### Requirement: Realtime Visible Lag Budgets SHALL Use Correlated Milestones
+
+Realtime performance budgets SHALL use correlated turn milestones rather than isolated first-token or fixture-only timings.
+
+#### Scenario: visible text lag budget uses ingress-to-visible timing
+
+- **WHEN** realtime visible lag evidence is collected
+- **THEN** the report SHOULD compute lag from first assistant text ingress to first visible text growth where measured timing exists
+- **AND** it MUST preserve evidence class when the path is only fixture/proxy observable.
+
+#### Scenario: render amplification budget remains content-safe
+
+- **WHEN** render amplification evidence is collected
+- **THEN** the report MAY include counts, durations, queue depths, and milestone deltas
+- **AND** it MUST NOT include prompt text, assistant output body, tool output body, or terminal output content.
 
