@@ -1109,3 +1109,61 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 808: 收口本迭代已完成任务
+
+**Date**: 2026-06-12
+**Task**: 收口本迭代已完成任务
+**Branch**: `feature/v0.5.9`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+本次按用户要求收口本迭代 P0 / performance task 状态漂移。
+
+主要动作：
+- 使用 `python3 ./.trellis/scripts/task.py archive <task> --no-commit` 将 8 个已由 OpenSpec archive 验证的 Trellis tasks 移入 `.trellis/tasks/archive/2026-06/`。
+- 提交任务归档：`c646bcc0 chore(trellis): 收口本迭代已完成任务`。
+- 未修改业务代码，仅维护 Trellis task 状态。
+
+归档任务：
+- `06-01-browser-dock-phase3-observation-core`
+- `06-10-refresh-v059-performance-baseline`
+- `06-10-enforce-bundle-budget-gate`
+- `06-10-harden-file-editor-typing-latency`
+- `06-10-parallelize-bootstrap-locale-loading`
+- `06-10-split-startup-css-loading`
+- `06-11-lazy-markdown-runtime`
+- `06-11-split-app-shell-performance-boundaries`
+
+验证结果：
+- `npx openspec list`：当前 active changes 只剩 5 个 P1 resource / renderer budget proposals。
+- `npx openspec validate --specs --strict --no-interactive`：328 passed, 0 failed。
+- `python3 ./.trellis/scripts/task.py list --mine`：6 月已完成任务不再出现在 active list。
+- active P0 只剩 3 个 4 月遗留 planning tasks，未在本次误关：`split-engine-opencode-command-surface`、`split-git-branch-commands`、`split-runtime-session-lifecycle`。
+
+后续建议：
+- 单独判断 4 月 3 个 P0 的真实归属：保留 backlog、降级，或另开收口。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c646bcc0` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
