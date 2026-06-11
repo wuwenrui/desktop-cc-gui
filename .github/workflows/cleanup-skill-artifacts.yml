@@ -1,0 +1,165 @@
+name: Cleanup Skill Artifacts
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  macos_aarch64:
+    name: macos cleanup artifact (aarch64)
+    runs-on: macos-latest
+    environment: release
+    env:
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      TAURI_SIGNING_PRIVATE_KEY_B64: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_B64 }}
+      LAWYER_COPILOT_UPDATE_BASE_URL: ${{ vars.LAWYER_COPILOT_UPDATE_BASE_URL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+          cache-bin: false
+
+      - name: Install CMake
+        run: brew install cmake
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Configure updater endpoint
+        run: node scripts/configure-updater-endpoint.mjs
+
+      - name: Assert sensitive skills are not bundled
+        run: |
+          set -euo pipefail
+          test ! -e "skills/制度审查.md"
+          test ! -e "skills/劳动用工小助理/SKILL.md"
+          test ! -e "skills/合同起草与审查.md"
+          test ! -e "skills/律师函（催款类）.md"
+          test ! -e "skills/撰写不良资产尽调报告.md"
+          test ! -e "skills/法律意见.md"
+          test ! -e "skills/破产业务小助手.md"
+
+      - name: Build macOS app bundle
+        env:
+          NODE_OPTIONS: "--max-old-space-size=8192"
+        run: |
+          set -euo pipefail
+          export TAURI_SIGNING_PRIVATE_KEY="$TAURI_SIGNING_PRIVATE_KEY_B64"
+          npm run tauri -- build --bundles app
+
+      - name: Package macOS artifacts
+        run: |
+          set -euo pipefail
+          VERSION=$(python3 - <<'PY'
+          import json
+          from pathlib import Path
+          print(json.loads(Path("src-tauri/tauri.conf.json").read_text())["version"])
+          PY
+          )
+          mkdir -p cleanup-artifacts
+          APP_PATH=$(find src-tauri/target/release/bundle/macos -maxdepth 1 -name '*.app' | head -n 1)
+          if [ -z "$APP_PATH" ]; then
+            echo "No .app bundle found" >&2
+            exit 1
+          fi
+          APP_NAME=$(basename "$APP_PATH")
+          codesign --force --deep --sign - "$APP_PATH"
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          ditto -c -k --keepParent "$APP_PATH" "cleanup-artifacts/LawyerCopilot_${VERSION}_cleanup_aarch64.zip"
+          bash scripts/create-dmg.sh "$APP_PATH" "cleanup-artifacts/LawyerCopilot_${VERSION}_cleanup_aarch64.dmg"
+          COPYFILE_DISABLE=1 tar -czf "cleanup-artifacts/LawyerCopilot_cleanup_aarch64.app.tar.gz" \
+            -C src-tauri/target/release/bundle/macos "$APP_NAME"
+          mkdir -p "$HOME/.tauri"
+          printf '%s' "$TAURI_SIGNING_PRIVATE_KEY_B64" > "$HOME/.tauri/ccgui.key"
+          npm run tauri signer sign -- \
+            -f "$HOME/.tauri/ccgui.key" \
+            -p "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" \
+            "cleanup-artifacts/LawyerCopilot_cleanup_aarch64.app.tar.gz"
+
+      - name: Upload macOS cleanup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cleanup-macos-aarch64
+          retention-days: 14
+          path: |
+            cleanup-artifacts/LawyerCopilot_*_cleanup_aarch64.dmg
+            cleanup-artifacts/LawyerCopilot_*_cleanup_aarch64.zip
+            cleanup-artifacts/LawyerCopilot_cleanup_aarch64.app.tar.gz
+            cleanup-artifacts/LawyerCopilot_cleanup_aarch64.app.tar.gz.sig
+
+  windows_x64:
+    name: windows cleanup artifact (x64)
+    runs-on: windows-latest
+    environment: release
+    env:
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      TAURI_SIGNING_PRIVATE_KEY_B64: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_B64 }}
+      LAWYER_COPILOT_UPDATE_BASE_URL: ${{ vars.LAWYER_COPILOT_UPDATE_BASE_URL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+          cache-bin: false
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Configure updater endpoint
+        shell: pwsh
+        run: node scripts/configure-updater-endpoint.mjs
+
+      - name: Assert sensitive skills are not bundled
+        shell: pwsh
+        run: |
+          if (Test-Path "skills/制度审查.md") { exit 1 }
+          if (Test-Path "skills/劳动用工小助理/SKILL.md") { exit 1 }
+          if (Test-Path "skills/合同起草与审查.md") { exit 1 }
+          if (Test-Path "skills/律师函（催款类）.md") { exit 1 }
+          if (Test-Path "skills/撰写不良资产尽调报告.md") { exit 1 }
+          if (Test-Path "skills/法律意见.md") { exit 1 }
+          if (Test-Path "skills/破产业务小助手.md") { exit 1 }
+
+      - name: Build Windows installer
+        shell: pwsh
+        env:
+          NODE_OPTIONS: "--max-old-space-size=8192"
+        run: |
+          $env:TAURI_SIGNING_PRIVATE_KEY = $env:TAURI_SIGNING_PRIVATE_KEY_B64
+          npm run tauri -- build --config src-tauri/tauri.windows.conf.json --bundles nsis
+
+      - name: Upload Windows cleanup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cleanup-windows-x64
+          retention-days: 14
+          path: |
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/nsis/*.exe.sig
