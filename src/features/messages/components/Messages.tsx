@@ -415,9 +415,16 @@ export const Messages = memo(function Messages({
     if (!bottomRef.current) {
       return;
     }
+    const container = containerRef.current;
+    const shouldScroll =
+      autoScrollRef.current ||
+      (container ? isNearBottom(container) : true);
+    if (!shouldScroll) {
+      return;
+    }
     // Always use instant for programmatic scroll requests to avoid blocking input
     bottomRef.current.scrollIntoView({ behavior: "instant", block: "end" });
-  }, [liveAutoFollowEnabled]);
+  }, [isNearBottom, liveAutoFollowEnabled]);
 
   const scrollToAgentTaskCard = useCallback((request: AgentTaskScrollRequest | null) => {
     if (!request) {
@@ -1496,12 +1503,11 @@ export const Messages = memo(function Messages({
       return;
     }
     const nearBottom = isNearBottom(container);
-    autoScrollRef.current = liveAutoFollowEnabled ? true : nearBottom;
+    autoScrollRef.current = nearBottom;
     scheduleAnchorUpdate("scroll");
     scheduleStickyHeaderUpdate("scroll");
   }, [
     isNearBottom,
-    liveAutoFollowEnabled,
     scheduleAnchorUpdate,
     scheduleStickyHeaderUpdate,
   ]);
@@ -1741,7 +1747,6 @@ export const Messages = memo(function Messages({
     }
     const container = containerRef.current;
     const shouldScroll =
-      liveAutoFollowEnabled ||
       autoScrollRef.current ||
       (container ? isNearBottom(container) : true);
     if (!shouldScroll) {

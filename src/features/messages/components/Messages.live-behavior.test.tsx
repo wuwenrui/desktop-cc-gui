@@ -765,7 +765,7 @@ describe("Messages live behavior", () => {
     scrollSpy.mockRestore();
   });
 
-  it("keeps auto-follow working after manual scroll when enabled", async () => {
+  it("pauses auto-follow after manual scroll away from the bottom", async () => {
     window.localStorage.setItem("ccgui.messages.live.autoFollow", "1");
     const scrollSpy = vi
       .spyOn(HTMLElement.prototype, "scrollIntoView")
@@ -789,15 +789,11 @@ describe("Messages live behavior", () => {
       />,
     );
 
-    const scroller = container.querySelector(".messages") as HTMLDivElement | null;
-    expect(scroller).toBeTruthy();
-    if (!scroller) {
-      throw new Error("expected messages scroller");
-    }
-    Object.defineProperty(scroller, "scrollHeight", { value: 2000, configurable: true });
-    Object.defineProperty(scroller, "clientHeight", { value: 500, configurable: true });
-    Object.defineProperty(scroller, "scrollTop", { value: 400, writable: true, configurable: true });
-    fireEvent.scroll(scroller);
+    const scroller = getMessagesScroller(container);
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 20));
+    });
+    await scrollMessages(scroller, 400);
 
     const baselineCalls = scrollSpy.mock.calls.length;
 
@@ -826,9 +822,10 @@ describe("Messages live behavior", () => {
       />,
     );
 
-    await waitFor(() => {
-      expect(scrollSpy.mock.calls.length).toBeGreaterThan(baselineCalls);
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 160));
     });
+    expect(scrollSpy).toHaveBeenCalledTimes(baselineCalls);
     scrollSpy.mockRestore();
   });
 
