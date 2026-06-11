@@ -77,3 +77,21 @@ roadmap `P1-06`、`P1-07`、`P1-08`、`P1-14` 都落在同一条 backend-to-rend
 - `npm run lint`
 - `cargo test --manifest-path src-tauri/Cargo.toml`
 - `openspec validate backend-io-cache-and-bridge-payload-budget --strict --no-interactive`
+
+## Execution Order / 执行顺序
+
+- **Position**: Step 3 of 5
+- **Predecessors**:
+  - Step 1 `composer-and-message-row-render-budget` —— `rendererDiagnostics` 字段 schema 已就位。
+  - Step 2 `renderer-resource-backpressure` —— listener owner registry 与 `eventBackpressure` 抽象已就位（后端 scan 完成后的 UI 通知复用此抽象）。
+- **Successors**:
+  - Step 4 `workspace-tree-and-large-file-listing-budget` 必须**复用**本 change 的 `ScanCache` 抽象和 `payloadBudget` 注解，本 change 完成后 Step 4 才能开。
+- **Required Public Artifacts / 本 change 必须对外暴露**:
+  1. **`ScanCache<K, V>` Rust 抽象**（签名建议：`pub struct ScanCache<K, V> { ... }`，提供 `get_or_compute`、`invalidate`、`invalidate_matching`）—— Step 4 在 `workspaces/files.rs` 直接复用。
+  2. **统一缓存键规范**：`rootHash + mtimeSignature + providerIdentity + scanOptionsHash` —— Step 4 的 `FileTreePanel` snapshot cache 沿用同一规范。
+  3. **`spawn_blocking` 包装宏 / helper** —— Step 4 涉及 `workspaces/files.rs` 的 `list_workspace_files` CPU-heavy 路径统一走此 helper。
+  4. **Tauri invoke `payloadBudget` 注解格式**（DTO 字段注释 + dev/perf 日志协议）—— Step 4 改 `list_workspace_files` 时直接套用。
+  5. **后端 timing 透出到 frontend perf report 协议**（`durationMs` / `cacheHit` / `partial` 字段）—— Step 4 的 `FileTreePanel` 复用。
+  6. `runtime-performance-evidence-gates` 新增 `backend.*` / `bridge.*` 字段占位。
+- **Cross-Change Constraint**: 本 change 改 `workspaces/files.rs` 时**只动 ScanCache 接入与 spawn_blocking 一致性**（不动物理分页契约），Step 4 才动 `list_workspace_files` 的分页 / 子树 on-demand 契约。两者必须分两次 commit，避免契约与缓存层同时改动增加回滚成本。
+- **Blocking Rule**: `ScanCache` 抽象未落地、`payloadBudget` 协议未确定前，Step 4 不应启动。

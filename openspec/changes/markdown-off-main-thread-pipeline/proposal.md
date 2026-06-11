@@ -76,3 +76,24 @@ roadmap `P1-04 大 Markdown 离主线程解析` 的真实背景是：P0 `lazy-ma
 - `npm run typecheck`
 - `npm run lint`
 - `openspec validate markdown-off-main-thread-pipeline --strict --no-interactive`
+
+## Execution Order / 执行顺序
+
+- **Position**: Step 5 of 5（串行链最末）
+- **Predecessors**（软依赖，本 change 可较早启动，但**正式落 evidence gate 字段时必须等**）:
+  - Step 1 `composer-and-message-row-render-budget` —— `runtime-performance-evidence-gates` 字段 schema 已就位（避免本 change 新增字段时与 composer / messages 字段命名冲突）。
+  - Step 2 `renderer-resource-backpressure` —— `eventBackpressure` 抽象已就位（worker 主线程 fallback 通知可复用此抽象）。
+  - Step 3 `backend-io-cache-and-bridge-payload-budget` —— 后端 timing 透出到 frontend perf report 协议已就位（本 change 的 parse duration 复用此协议）。
+  - Step 4 `workspace-tree-and-large-file-listing-budget` —— per-workspace shared file index 已就位（`FileMarkdownFastPreview` 可受益，但不是硬依赖）。
+- **Successors**: 无（串行链终点）。
+- **Reused Artifacts / 本 change 必须复用**:
+  1. `rendererDiagnostics` 字段命名（`messages.markdown.parse.*`）—— 与 Step 1 / 2 / 3 / 4 前缀对齐。
+  2. `eventBackpressure` 抽象 —— worker 启动失败 / stale / cancellation 通知复用（如果本 change 决定走 `eventBackpressure`）。
+  3. `runtime-performance-evidence-gates` 已有字段的命名风格 —— 新增 `markdown.parse.*` 字段保持一致。
+- **Required Public Artifacts / 本 change 必须对外暴露**:
+  1. **`markdownParseWorker` 协议**（`{ messageId, contentHash, source, options }` → `{ ast, tokens, durationMs, parseMode, evidence }`）—— 独立可复用，无下游消费方。
+  2. **`markdownParseCache` 抽象**（`{ get, set, invalidate }`，键 = `messageId + contentHash`）—— 独立可复用。
+  3. `runtime-performance-evidence-gates` 新增 `markdown.parse.*` 字段。
+- **Cross-Change Constraint**: 本 change 是串行链终点，启动时间可早于 Step 4，但任何对 `runtime-performance-evidence-gates.json` / `runtime-performance-evidence-gates.md` 的写入必须**等 Step 1-4 全部合并后再批量追加**，避免 gate 文档被两个分支同时改。
+- **Parallelism Note**: 本 change 的代码实现（worker / cache / fallback）可与 Step 3 / Step 4 并行开发在独立 worktree；只需在最后合并 evidence gate 文档时串行落盘。
+- **Blocking Rule**: 前 4 个 change 全部 `openspec validate` 通过 + commit 合入前，本 change 不应提交 evidence gate 文档变更。

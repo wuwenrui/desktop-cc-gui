@@ -1,5 +1,12 @@
 # Tasks / 任务
 
+## Execution Step / 执行步序
+
+- **Step**: 1 of 5 (P1 串行链)
+- **Predecessor 提案**: 见 `proposal.md` 的 Execution Order 段
+- **本 change 任务未通过验收前，串行链下游不应启动**
+
+
 ## Evidence / 证据先行
 
 - [ ] 记录当前 `useComposerEditorState`、ChatInputBox value path、`MessagesRows.tsx` 的 subscription / render chain。

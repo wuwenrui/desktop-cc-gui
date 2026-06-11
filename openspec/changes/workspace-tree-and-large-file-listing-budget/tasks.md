@@ -1,5 +1,12 @@
 # Tasks / 任务
 
+## Execution Step / 执行步序
+
+- **Step**: 4 of 5 (P1 串行链)
+- **Predecessor 提案**: 见 `proposal.md` 的 Execution Order 段
+- **本 change 任务未通过验收前，串行链下游不应启动**
+
+
 ## Evidence / 证据先行
 
 - [ ] Audit `workspaces/files.rs` 的 `limit_hit` / `scan_state` / directory children 现有 contract 与 tests。

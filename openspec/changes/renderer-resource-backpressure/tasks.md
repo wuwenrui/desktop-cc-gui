@@ -1,5 +1,12 @@
 # Tasks / 任务
 
+## Execution Step / 执行步序
+
+- **Step**: 2 of 5 (P1 串行链)
+- **Predecessor 提案**: 见 `proposal.md` 的 Execution Order 段
+- **本 change 任务未通过验收前，串行链下游不应启动**
+
+
 ## Inventory / 盘点
 
 - [ ] Audit `services/events.ts` terminal/runtime subscriptions and current consumers.

@@ -81,3 +81,19 @@ roadmap `P1-11 Terminal / Runtime 输出背压`、`P1-12 Listener / Polling / Ti
 - `npm run typecheck`
 - `npm run lint`
 - `openspec validate renderer-resource-backpressure --strict --no-interactive`
+
+## Execution Order / 执行顺序
+
+- **Position**: Step 2 of 5
+- **Predecessors**:
+  - Step 1 `composer-and-message-row-render-budget` 必须已落地 —— Composer 状态已与 shell 解耦，本 change 才能安全拆 `app-shell.tsx` 的 listener owner 边界，否则会撞改 `useComposerEditorState` 的同一段。
+- **Successors**:
+  - Step 3 `backend-io-cache-and-bridge-payload-budget` 改 `services/tauri.ts` 周边时，listener owner 协议已就绪。
+  - Step 4 `workspace-tree-and-large-file-listing-budget` 改 `useWorkspaceFiles` / `FileTreePanel` listener 时，复用本 change 的 owner registry。
+- **Required Public Artifacts / 本 change 必须对外暴露**:
+  1. `app-shell.tsx` listener owner registry 协议（`@owner bootstrap|shell|workspace|panel|modal` 注释 + lint 规则）。
+  2. `rendererDiagnostics` 暴露 backpressure / listener / media 字段命名（与 Step 1/3/4 约定前缀，例：`events.backpressure.queueDepth` / `media.retained.count`）。
+  3. `eventBackpressure` 抽象公共 API（`{ subscribe, push, flush, queueDepth, droppedCount }`）—— Step 3 / 4 复用。
+  4. `useFocusRefresh` hook 公共契约 —— 后续 change 改 focus 触发的刷新统一走这条路径。
+- **Cross-Change Constraint**: `services/rendererDiagnostics.ts` 与 `services/events.ts` 字段命名必须与 Step 1 / 3 预先对齐（建议在 Step 1 落地时同步在本仓 issue 或 `.trellis/spec/` 留 schema 占位）。
+- **Blocking Rule**: listener owner registry 协议未就绪前，Step 3 / 4 涉及 shell 改动的部分不应启动。

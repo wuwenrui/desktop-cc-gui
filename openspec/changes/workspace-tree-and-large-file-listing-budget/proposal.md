@@ -76,3 +76,26 @@ roadmap `P1-13 Workspace 文件树与打开路径性能` 指出打开大 workspa
 - `npm run typecheck`
 - `npm run lint`
 - `openspec validate workspace-tree-and-large-file-listing-budget --strict --no-interactive`
+
+## Execution Order / 执行顺序
+
+- **Position**: Step 4 of 5
+- **Predecessors**（硬依赖，全部必须先落地）:
+  - Step 1 `composer-and-message-row-render-budget` —— `rendererDiagnostics` schema 命名约定已就位。
+  - Step 2 `renderer-resource-backpressure` —— `app-shell.tsx` listener owner registry 与 `useFocusRefresh` 已就位（`FileTreePanel` 是 panel-level owner）。
+  - Step 3 `backend-io-cache-and-bridge-payload-budget` —— **`ScanCache<K, V>` 抽象、统一缓存键规范、`spawn_blocking` helper、Tauri invoke `payloadBudget` 注解格式**全部必须先有。
+- **Successors**:
+  - Step 5 `markdown-off-main-thread-pipeline` 不依赖本 change，本 change 完成后 Step 5 仍可独立推进。
+- **Reused Artifacts / 本 change 必须复用**:
+  1. `ScanCache<K, V>` —— `workspaces/files.rs` 的 file tree snapshot cache 直接实例化此抽象。
+  2. 统一缓存键规范（`rootHash + ignoreConfigHash + maxMtime`）—— 沿用 Step 3 范式。
+  3. `spawn_blocking` helper —— `list_workspace_files` 的分页 / 子树 on-demand 走此 helper。
+  4. Tauri invoke `payloadBudget` 注解 —— `list_workspace_files` 的 IPC 响应套用此注解。
+  5. `useFocusRefresh` hook —— file tree 焦点刷新复用 Step 2 的合并 wave。
+  6. `rendererDiagnostics` 字段命名（`workspaces.file.*`）—— 与 Step 1 / 2 / 3 前缀对齐。
+- **Required Public Artifacts / 本 change 必须对外暴露**:
+  1. **Per-workspace 共享 file index**（file tree 与 search 共享）—— 在 `useWorkspaceFiles` 与 P0-09 的 normalized file index 之间建立桥接。
+  2. `list_workspace_files` 分页 / 子树 on-demand 契约（depth / offset / limit）。
+  3. `runtime-performance-evidence-gates` 新增 `workspaces.file.listing.*` 字段。
+- **Cross-Change Constraint**: `workspaces/files.rs` 的修改需与 Step 3 的 ScanCache 接入 commit 严格分离（先 Step 3 commit，再本 change commit），避免物理文件 `workspaces/files.rs` 的同一段被两次串行改动交叉 review。
+- **Blocking Rule**: Step 3 `ScanCache` 抽象未落地，本 change 不应启动 `workspaces/files.rs` 任何实质改动。
