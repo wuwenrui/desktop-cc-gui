@@ -1167,3 +1167,61 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 809: 落地 P1 性能预算链路
+
+**Date**: 2026-06-12
+**Task**: 落地 P1 性能预算链路
+**Branch**: `feature/v0.5.9`
+
+### Summary
+
+实现 renderer/backend/workspace/markdown 性能预算链路，补齐 runtime evidence gate 与相关回归测试。
+
+### Main Changes
+
+## Session Summary
+
+本次提交落地 P1 performance chain 的主要实现与证据更新：
+
+- 新增 backend payload/cache budget substrate：`src-tauri/src/backend_budget.rs`，并接入 workspace file listing / git bridge metadata。
+- 新增 renderer resource backpressure substrate：event backpressure、listener owner、focus refresh wave、media resource owner、renderer diagnostics。
+- 强化 composer/message row render budget：ChatInputBox value-path 隔离、input history stale-drop、MessagesRows render diagnostics。
+- 增加 workspace tree large-file listing budget：file tree sourceVersion、listing budget metadata、shared workspace file index。
+- 增加 markdown precompute pipeline：`messageMarkdownPrecompute` 与 fast markdown worker 复用路径。
+- 更新 runtime evidence gate 生成脚本、JSON/Markdown 报告和 OpenSpec active change proposal/tasks。
+
+## Verification
+
+- `npm run typecheck` passed
+- `npm run lint` passed
+- `npm run test` passed: 658 test files completed
+- `openspec validate --all --strict --no-interactive` passed: 333 items
+- `npm run check:runtime-evidence-gates` passed
+- `npm run check:runtime-contracts` passed
+- `npx vitest run src/app-shell-parts/useAppShellLayoutNodesSection.test.ts src/features/threads/hooks/useThreads.engine-source.test.tsx` passed
+- `git diff --check` passed
+
+## Notes
+
+During verification, `TaskCreateModal.test.tsx` exposed an async state assertion race after global test cleanup became stricter. The test now waits for the generated title value instead of reading synchronously. Runtime contract verification also exposed that `updateThreadParent` was used by `useAppShellLayoutNodesSection` but not fully surfaced through `AppShell` / `useThreads`; the contract chain is now explicit and verified.
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f7ae0a99` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
