@@ -22,7 +22,14 @@ export type PanelTabId =
   | "memory"
   | "activity";
 
-export type PanelToolbarTabId = PanelTabId | "projectMap" | "intentCanvas";
+// FanBox 右栏新增的两个语义面板（OpenSpec: add-fanbox-dialogue-cockpit）。
+// 改动复用 "git"、日志复用 "activity"，不新造重复面板状态。
+export type PanelToolbarTabId =
+  | PanelTabId
+  | "projectMap"
+  | "intentCanvas"
+  | "evidence"
+  | "memoryInspector";
 
 type PanelTab = {
   id: PanelToolbarTabId;
@@ -70,6 +77,9 @@ const tabIcons: Record<PanelToolbarTabId, ReactNode> = {
   intentCanvas: <PenLine aria-hidden />,
   activity: <Activity aria-hidden />,
   prompts: <ScrollText aria-hidden />,
+  // FanBox 语义面板不进图标行（tabIds 未收录），仅为类型完整性提供条目。
+  evidence: <ScrollText aria-hidden />,
+  memoryInspector: <Brain aria-hidden />,
 };
 
 const tabI18nKeys: Record<PanelToolbarTabId, string> = {
@@ -83,6 +93,8 @@ const tabI18nKeys: Record<PanelToolbarTabId, string> = {
   intentCanvas: "panels.intentCanvas",
   activity: "panels.activity",
   prompts: "panels.prompts",
+  evidence: "fanbox.tabs.evidence",
+  memoryInspector: "fanbox.tabs.memory",
 };
 
 export function PanelTabs({

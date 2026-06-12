@@ -65,7 +65,9 @@ type FilePanelMode =
   | "prompts"
   | "memory"
   | "activity"
-  | "radar";
+  | "radar"
+  | "evidence"
+  | "memoryInspector";
 
 type Translator = (key: string) => string;
 

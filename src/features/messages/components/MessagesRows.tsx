@@ -44,6 +44,7 @@ import {
 } from "../../intent-canvas/utils/messageContext";
 import { IntentCanvasContextSummaryCard } from "./IntentCanvasContextSummaryCard";
 import { NoteCardContextSummaryCard } from "./NoteCardContextSummaryCard";
+import { TurnSourceSummary } from "../../session-evidence/TurnSourceSummary";
 import { parseMemoryContextSummary } from "./messagesMemoryContext";
 import {
   parseNoteCardContextSummary,
@@ -1282,6 +1283,9 @@ export const MessageRow = memo(function MessageRow({
           />
         )
       )}
+      {/* FanBox 来源摘要块：仅 assistant；无 tool-call 信号时组件自身返回 null
+          （OpenSpec: add-fanbox-dialogue-cockpit）。流式中的不完整块由 derive 跳过。 */}
+      {item.role === "assistant" ? <TurnSourceSummary text={item.text} /> : null}
       {lightboxIndex !== null && imageItems.length > 0 && (
         <ImageLightbox
           images={imageItems}

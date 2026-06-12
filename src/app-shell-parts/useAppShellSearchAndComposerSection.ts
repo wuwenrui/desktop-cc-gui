@@ -23,7 +23,7 @@ import {
 type AppShellTab = "projects" | "codex" | "spec" | "git" | "log";
 type CenterMode = "chat" | "diff" | "editor" | "memory" | "projectMap" | "intentCanvas";
 type DiffSource = "local" | "pr" | "commit";
-type FilePanelMode = "git" | "files" | "search" | "notes" | "prompts" | "memory" | "activity" | "radar";
+type FilePanelMode = "git" | "files" | "search" | "notes" | "prompts" | "memory" | "activity" | "radar" | "evidence" | "memoryInspector";
 type GitPanelMode = "diff" | "log" | "issues" | "prs";
 
 type ComposerSearchLegacyPassthrough = Record<string, unknown>;

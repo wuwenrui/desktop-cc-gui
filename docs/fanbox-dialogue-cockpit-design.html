@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lawyer Copilot Dialogue Cockpit</title>
+  <style>
+:root{color-scheme:dark;--charcoal:#111512;--panel:#171d19;--panel-2:#202820;--line:rgba(235,229,214,.14);--paper:#f3ead6;--paper-2:#d7c8aa;--paper-3:#a79776;--green:#7df06a;--green-soft:rgba(125,240,106,.15);--red:#d46b5c;--blue:#67b8ff;--gold:#c7a15a;--ink:#10130f;--muted:#8d968d;--radius:8px;--shadow:0 22px 48px rgba(0,0,0,.34)}*{box-sizing:border-box}body{min-height:100vh;margin:0;overflow:hidden;color:var(--paper);background:linear-gradient(90deg,rgba(199,161,90,.07) 1px,transparent 1px),linear-gradient(0deg,rgba(103,184,255,.045) 1px,transparent 1px),var(--charcoal);background-size:42px 42px,42px 42px,auto;font-family:"Avenir Next","Segoe UI","PingFang SC",sans-serif;letter-spacing:0}button,input,textarea{font:inherit}.shell{display:grid;grid-template-rows:56px minmax(0,1fr);height:100vh;min-width:980px;border:1px solid var(--line)}.topbar{display:grid;grid-template-columns:minmax(260px,330px) minmax(360px,1fr) auto;align-items:center;gap:14px;padding:0 16px;background:rgba(17,21,18,.94);border-bottom:1px solid var(--line);backdrop-filter:blur(18px)}.brand{display:flex;align-items:center;gap:11px;min-width:0}.brand-mark{display:grid;place-items:center;width:34px;height:34px;color:var(--ink);background:var(--paper);border:2px solid var(--green);border-radius:8px;box-shadow:0 0 24px rgba(125,240,106,.2);font-family:Georgia,"Songti SC",serif;font-size:15px;font-weight:900}.brand-copy{min-width:0}.brand-copy strong,.section-title strong{display:block;overflow:hidden;font-family:Georgia,"Songti SC",serif;font-size:16px;text-overflow:ellipsis;white-space:nowrap}.brand-copy span,.section-title span{display:block;margin-top:2px;overflow:hidden;color:var(--muted);font-size:11px;text-overflow:ellipsis;text-transform:uppercase;white-space:nowrap}.global-search{display:flex;align-items:center;gap:10px;height:36px;min-width:0;padding:0 12px;color:var(--paper-2);background:rgba(235,229,214,.08);border:1px solid rgba(235,229,214,.18);border-radius:6px;font-family:"SF Mono","Cascadia Code",monospace;font-size:12px}.global-search svg{flex:0 0 auto;color:var(--green)}.global-search span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.top-actions{display:flex;gap:8px;align-items:center}.chip{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 10px;color:var(--paper);background:rgba(235,229,214,.08);border:1px solid rgba(235,229,214,.16);border-radius:999px;white-space:nowrap}.pulse{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 12px var(--green)}.workspace{display:grid;grid-template-columns:64px minmax(238px,290px) minmax(450px,1fr) minmax(310px,370px);min-height:0}.rail{display:flex;flex-direction:column;gap:9px;padding:14px 8px;background:#0b0e0c;border-right:1px solid var(--line)}.icon-btn{display:grid;place-items:center;width:46px;height:46px;color:var(--paper-2);background:transparent;border:1px solid transparent;border-radius:7px;cursor:pointer}.icon-btn.active,.icon-btn:hover{color:var(--green);background:var(--green-soft);border-color:rgba(125,240,106,.35)}.left,.evidence{min-height:0;overflow:auto;background:rgba(23,29,25,.9)}.left{border-right:1px solid var(--line)}.evidence{border-left:1px solid var(--line)}.pane-head{display:flex;align-items:center;justify-content:space-between;height:52px;padding:0 14px;border-bottom:1px solid var(--line)}.section-title{min-width:0}.counter{color:var(--muted);font-family:"SF Mono","Cascadia Code",monospace;font-size:11px;white-space:nowrap}.case-strip{display:grid;gap:8px;padding:12px;border-bottom:1px solid var(--line)}.case-item{display:grid;gap:5px;padding:10px;color:var(--paper-2);background:rgba(235,229,214,.06);border:1px solid rgba(235,229,214,.12);border-radius:var(--radius)}.case-item.active{color:var(--paper);background:rgba(125,240,106,.11);border-color:rgba(125,240,106,.35);box-shadow:inset 3px 0 var(--green)}.case-item strong{overflow:hidden;font-size:13px;text-overflow:ellipsis;white-space:nowrap}.case-item small{color:var(--muted);font-family:"SF Mono","Cascadia Code",monospace;font-size:11px}.heat-list{display:grid;gap:4px;padding:10px}.file-row{display:grid;grid-template-columns:24px minmax(0,1fr) auto;align-items:center;gap:8px;min-height:34px;padding:0 8px;color:var(--paper-2);border:1px solid transparent;border-radius:6px;cursor:pointer}.file-row.active,.file-row:hover{color:var(--green);background:rgba(125,240,106,.11);border-color:rgba(125,240,106,.28)}.file-icon{width:20px;height:23px;border-radius:4px;background:var(--blue);box-shadow:inset 0 -5px rgba(0,0,0,.16)}.file-icon.red{background:var(--red)}.file-icon.gold{background:var(--gold)}.file-row span{overflow:hidden;font-size:12px;text-overflow:ellipsis;white-space:nowrap}.heat{min-width:24px;height:20px;padding:0 7px;color:var(--ink);background:var(--green);border-radius:999px;font-family:"SF Mono","Cascadia Code",monospace;font-size:11px;font-weight:800;text-align:center;line-height:20px}.chat{display:grid;grid-template-rows:52px minmax(0,1fr) 132px;min-height:0;background:radial-gradient(circle at 20% 0,rgba(125,240,106,.11),transparent 28%),radial-gradient(circle at 100% 30%,rgba(103,184,255,.10),transparent 34%),var(--panel)}.chat-head{display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-bottom:1px solid var(--line)}.chat-head h1{margin:0;font-family:Georgia,"Songti SC",serif;font-size:17px}.mode-switch{display:inline-grid;grid-template-columns:repeat(3,auto);gap:3px;padding:3px;background:rgba(235,229,214,.08);border:1px solid rgba(235,229,214,.14);border-radius:999px}.mode-switch button{height:26px;padding:0 10px;color:var(--paper-2);background:transparent;border:0;border-radius:999px;cursor:pointer;font-size:12px}.mode-switch button.active{color:var(--ink);background:var(--green);font-weight:800}.messages{display:grid;align-content:start;gap:14px;min-height:0;padding:18px;overflow:auto}.message{display:grid;grid-template-columns:38px minmax(0,1fr);gap:10px;max-width:820px}.message.user{justify-self:end;grid-template-columns:minmax(0,1fr) 38px}.avatar{display:grid;place-items:center;width:38px;height:38px;color:var(--ink);background:var(--paper);border-radius:8px;font-family:Georgia,"Songti SC",serif;font-weight:900}.message.user .avatar{background:var(--green);grid-column:2}.bubble{padding:13px 14px;color:var(--paper);background:rgba(235,229,214,.08);border:1px solid rgba(235,229,214,.14);border-radius:8px;box-shadow:0 10px 24px rgba(0,0,0,.18)}.message.user .bubble{grid-column:1;grid-row:1;color:var(--ink);background:var(--paper);border-color:rgba(255,255,255,.28)}.bubble p{margin:0;font-size:14px;line-height:1.65}.bubble p+p{margin-top:8px}.tool-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:11px}.tool-box{padding:9px;color:var(--paper-2);background:rgba(0,0,0,.2);border:1px solid rgba(235,229,214,.12);border-radius:6px;font-size:12px}.tool-box strong{display:block;margin-bottom:4px;color:var(--green);font-family:"SF Mono","Cascadia Code",monospace;font-size:11px}.composer{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:14px 16px;background:rgba(17,21,18,.9);border-top:1px solid var(--line)}.composer-box{min-height:84px;padding:12px;color:var(--paper);background:rgba(235,229,214,.07);border:1px solid rgba(235,229,214,.16);border-radius:8px;resize:none;outline:0}.send-stack{display:grid;gap:8px;width:132px}.primary,.secondary{border:0;border-radius:8px;cursor:pointer;font-weight:800}.primary{color:var(--ink);background:var(--green)}.secondary{color:var(--paper-2);background:rgba(235,229,214,.08);border:1px solid rgba(235,229,214,.15)}.right-section{padding:12px;border-bottom:1px solid var(--line)}.section-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}.section-row h2{margin:0;font-family:Georgia,"Songti SC",serif;font-size:15px}.section-row span{color:var(--muted);font-family:"SF Mono","Cascadia Code",monospace;font-size:11px}.evidence-item,.change-item,.memory-item{padding:11px;background:rgba(235,229,214,.065);border:1px solid rgba(235,229,214,.13);border-radius:var(--radius)}.evidence-item+.evidence-item,.change-item+.change-item,.memory-item+.memory-item{margin-top:8px}.evidence-item strong,.change-item strong,.memory-item strong{display:block;margin-bottom:5px;color:var(--paper);font-size:13px}.evidence-item p,.memory-item p{margin:0;color:var(--paper-2);font-size:12px;line-height:1.55}.change-item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;cursor:pointer}.change-item.active{border-color:rgba(125,240,106,.4);box-shadow:inset 4px 0 var(--green)}.change-item small{color:var(--muted);font-family:"SF Mono","Cascadia Code",monospace;font-size:11px}.badge{display:inline-flex;align-items:center;height:22px;padding:0 8px;color:var(--ink);background:var(--paper-3);border-radius:999px;font-size:11px;font-weight:800;white-space:nowrap}.badge.hot{background:var(--red)}.badge.ok{background:var(--green)}.status-flow{display:grid;gap:8px}.status-line{display:grid;grid-template-columns:20px minmax(0,1fr) auto;gap:8px;align-items:center;min-height:34px;color:var(--paper-2);font-size:12px}.status-line i{width:8px;height:8px;margin-left:6px;background:var(--green);border-radius:50%;box-shadow:0 0 10px var(--green)}.status-line span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.status-line small{color:var(--muted);font-family:"SF Mono","Cascadia Code",monospace;font-size:11px;white-space:nowrap}@media (max-width:1180px){.shell{min-width:860px}.topbar{grid-template-columns:250px minmax(300px,1fr)}.top-actions{display:none}.workspace{grid-template-columns:56px 248px minmax(420px,1fr)}.evidence{display:none}.rail{padding-inline:5px}.icon-btn{width:44px}}
+</style>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">法</div>
+        <div class="brand-copy">
+          <strong>律师助理 · 对话驾驶舱</strong>
+          <span>conversation first, evidence always visible</span>
+        </div>
+      </div>
+      <div class="global-search">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M11 19a8 8 0 1 1 5.3-2l3.4 3.3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <span>搜索案件、文件、会话、skill、命令</span>
+      </div>
+      <div class="top-actions">
+        <div class="chip"><span class="pulse"></span>正在生成审查意见</div>
+        <div class="chip">余额 ¥42.80</div>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <nav class="rail" aria-label="主导航">
+        <button class="icon-btn active" title="对话" aria-label="对话">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 5h16v10H8l-4 4z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="icon-btn" title="文件" aria-label="文件">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 5h6l2 2h8v12H4z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="icon-btn" title="记忆" aria-label="记忆">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6 4h12v16l-6-3-6 3z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="icon-btn" title="高级日志" aria-label="高级日志">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M5 7l4 4-4 4M11 17h8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </nav>
+
+      <aside class="left">
+        <div class="pane-head">
+          <div class="section-title">
+            <strong>当前案件</strong>
+            <span>workspaces</span>
+          </div>
+          <span class="counter">3 active</span>
+        </div>
+        <div class="case-strip">
+          <div class="case-item active">
+            <strong>股权转让协议审查</strong>
+            <small>合同审查 · 12 个文件</small>
+          </div>
+          <div class="case-item">
+            <strong>劳动仲裁证据整理</strong>
+            <small>证据目录 · 8 个文件</small>
+          </div>
+          <div class="case-item">
+            <strong>破产债权申报</strong>
+            <small>材料核对 · 21 个文件</small>
+          </div>
+        </div>
+
+        <div class="pane-head">
+          <div class="section-title">
+            <strong>改动热区</strong>
+            <span>agent changed</span>
+          </div>
+          <span class="counter">live</span>
+        </div>
+        <div class="heat-list">
+          <div class="file-row active" data-change="risk">
+            <i class="file-icon red"></i><span>风险清单.md</span><b class="heat">8</b>
+          </div>
+          <div class="file-row" data-change="contract">
+            <i class="file-icon"></i><span>股权转让协议.docx</span><b class="heat">5</b>
+          </div>
+          <div class="file-row" data-change="memo">
+            <i class="file-icon gold"></i><span>客户沟通纪要.md</span><b class="heat">3</b>
+          </div>
+          <div class="file-row" data-change="quote">
+            <i class="file-icon"></i><span>法条依据摘录.md</span><b class="heat">2</b>
+          </div>
+        </div>
+      </aside>
+
+      <section class="chat">
+        <div class="chat-head">
+          <h1>股权转让协议审查</h1>
+          <div class="mode-switch" aria-label="工作模式">
+            <button class="active">对话</button>
+            <button>文件</button>
+            <button>日志</button>
+          </div>
+        </div>
+
+        <div class="messages" id="messages">
+          <article class="message user">
+            <div class="avatar">我</div>
+            <div class="bubble">
+              <p>帮我审查这份股权转让协议，重点看付款、交割、违约责任和工商变更风险。</p>
+            </div>
+          </article>
+
+          <article class="message">
+            <div class="avatar">法</div>
+            <div class="bubble">
+              <p>已按四个维度完成第一轮审查。最需要先处理的是付款先后顺序和工商变更条件不一致，可能导致买方付款后无法完成股权登记。</p>
+              <p>我已把风险点写入《风险清单.md》，并标出需要你确认的 3 个事实问题。</p>
+              <div class="tool-summary">
+                <div class="tool-box"><strong>文件</strong>4 个文件被引用</div>
+                <div class="tool-box"><strong>记忆</strong>匹配到 2 条项目约定</div>
+                <div class="tool-box"><strong>Skill</strong>合同审查已触发</div>
+              </div>
+            </div>
+          </article>
+
+          <article class="message user">
+            <div class="avatar">我</div>
+            <div class="bubble">
+              <p>把风险分成“必须修改”和“建议优化”，同时给客户一个非技术版说明。</p>
+            </div>
+          </article>
+
+          <article class="message">
+            <div class="avatar">法</div>
+            <div class="bubble">
+              <p>已分层整理。必须修改项有 4 条，建议优化项有 6 条。客户说明会避免法言法语，保留对应条款编号，方便你回到协议正文核对。</p>
+              <p id="focusText">当前高亮：风险清单.md，第 2 部分“交割条件与付款节点冲突”。</p>
+            </div>
+          </article>
+        </div>
+
+        <div class="composer">
+          <textarea class="composer-box" aria-label="输入消息">继续把必须修改项改成律师函式措辞，并引用对应协议条款。</textarea>
+          <div class="send-stack">
+            <button class="primary">发送</button>
+            <button class="secondary">附文件</button>
+            <button class="secondary">高级日志</button>
+          </div>
+        </div>
+      </section>
+
+      <aside class="evidence">
+        <div class="right-section">
+          <div class="section-row">
+            <h2>证据栏</h2>
+            <span>grounded</span>
+          </div>
+          <div class="evidence-item">
+            <strong>引用来源</strong>
+            <p>协议第 4.2、5.1、7.3 条；客户沟通纪要第 12 行；历史审查偏好 2 条。</p>
+          </div>
+          <div class="evidence-item">
+            <strong>AI 做了什么</strong>
+            <p>读取协议、拆分风险、生成客户说明、同步风险清单。</p>
+          </div>
+        </div>
+
+        <div class="right-section">
+          <div class="section-row">
+            <h2>改动收件箱</h2>
+            <span>session</span>
+          </div>
+          <div class="change-item active" data-change="risk">
+            <div><strong>风险清单.md</strong><small>8 writes · clean</small></div>
+            <span class="badge hot">hot</span>
+          </div>
+          <div class="change-item" data-change="contract">
+            <div><strong>股权转让协议.docx</strong><small>5 reads · cited</small></div>
+            <span class="badge">source</span>
+          </div>
+          <div class="change-item" data-change="memo">
+            <div><strong>客户沟通纪要.md</strong><small>3 reads · memory</small></div>
+            <span class="badge ok">ok</span>
+          </div>
+        </div>
+
+        <div class="right-section">
+          <div class="section-row">
+            <h2>项目记忆</h2>
+            <span>2 matched</span>
+          </div>
+          <div class="memory-item">
+            <strong>客户偏好</strong>
+            <p>输出先给结论，再给条款依据；避免长篇法理展开。</p>
+          </div>
+          <div class="memory-item">
+            <strong>团队约定</strong>
+            <p>所有风险项必须区分“必须修改 / 建议优化 / 待确认”。</p>
+          </div>
+        </div>
+
+        <div class="right-section">
+          <div class="section-row">
+            <h2>任务状态</h2>
+            <span>no terminal</span>
+          </div>
+          <div class="status-flow">
+            <div class="status-line"><i></i><span>风险清单已保存</span><small>14:32</small></div>
+            <div class="status-line"><i></i><span>条款引用已校验</span><small>14:33</small></div>
+            <div class="status-line"><i></i><span>等待你确认交割事实</span><small>now</small></div>
+          </div>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <script>
+    const focusText = document.getElementById("focusText");
+    const data = {
+      risk: "当前高亮：风险清单.md，第 2 部分“交割条件与付款节点冲突”。",
+      contract: "当前高亮：股权转让协议.docx，第 4.2 条“付款条件”。",
+      memo: "当前高亮：客户沟通纪要.md，客户要求“先付款后工商变更”。",
+      quote: "当前高亮：法条依据摘录.md，公司登记与股权变更依据。"
+    };
+
+    function activate(key) {
+      focusText.textContent = data[key] || data.risk;
+      document.querySelectorAll("[data-change]").forEach((node) => {
+        node.classList.toggle("active", node.dataset.change === key);
+      });
+    }
+
+    document.querySelectorAll("[data-change]").forEach((node) => {
+      node.addEventListener("click", () => activate(node.dataset.change));
+    });
+  </script>
+</body>
+</html>

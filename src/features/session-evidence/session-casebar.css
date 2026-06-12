@@ -1,0 +1,298 @@
+/*
+ * 会话 casebar + 文件/证据视图样式（OpenSpec: add-fanbox-dialogue-cockpit）。
+ * 新增文件(fork-friendly)，全部用主题 token，自动跟随明暗主题。
+ */
+
+.session-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.session-stage-chat {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/*
+ * casebar 必须 position:relative + z-index 抬到消息层之上，并给不透明背景。
+ * 原因：`.main .messages-full` 带 `padding-top: calc(12px + topbar高度)`，
+ * 该规则原本假设消息区紧贴顶栏；插入 casebar 后，白底 `.messages`
+ * 会在绘制层序上盖住透明的 casebar。抬层 + 不透明背景彻底规避覆盖。
+ */
+.session-casebar {
+  position: relative;
+  z-index: 2;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 18px;
+  background: var(--surface-messages, #fff);
+  border-bottom: 1px solid var(--border-subtle, rgba(15, 23, 36, 0.08));
+}
+
+.session-casebar-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong, #0e1118);
+}
+
+.session-casebar-switch {
+  display: inline-flex;
+  background: var(--surface-control, rgba(15, 23, 36, 0.08));
+  border-radius: 9px;
+  padding: 2px;
+  gap: 1px;
+  flex-shrink: 0;
+}
+
+.session-casebar-switch button {
+  font-family: inherit;
+  font-size: 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted, rgba(17, 20, 28, 0.7));
+  border-radius: 7px;
+  padding: 4px 12px;
+  cursor: pointer;
+}
+
+.session-casebar-switch button.is-active {
+  background: var(--surface-card-strong, #fff);
+  color: var(--text-strong, #0e1118);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(15, 23, 36, 0.1);
+}
+
+/* ---- 文件 / 证据 视图 ---- */
+.session-board {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.session-board-empty {
+  margin: 28px auto;
+  max-width: 360px;
+  text-align: center;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-faint, rgba(17, 20, 28, 0.5));
+}
+
+.session-file-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--border-subtle, rgba(15, 23, 36, 0.08));
+  border-radius: 11px;
+  padding: 11px 14px;
+  background: var(--surface-card-strong, #fff);
+}
+
+.session-file-mark {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-dim, rgba(17, 20, 28, 0.35));
+  flex-shrink: 0;
+}
+
+.session-file-mark.is-hot {
+  background: var(--status-warning, rgba(215, 120, 20, 0.9));
+}
+
+.session-file-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.session-file-main strong {
+  display: block;
+  font-size: 13px;
+  color: var(--text-strong, #0e1118);
+  margin-bottom: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-file-main p {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--text-subtle, rgba(17, 20, 28, 0.6));
+  display: flex;
+  gap: 10px;
+}
+
+.session-file-main p .is-hot {
+  color: var(--status-warning, rgba(215, 120, 20, 0.9));
+}
+
+.session-file-num {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--status-warning, rgba(215, 120, 20, 0.9));
+  flex-shrink: 0;
+}
+
+/* ---- 文件视图双区：分区标签 + 工作区文件树 ---- */
+.session-board-section {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--text-faint, rgba(17, 20, 28, 0.5));
+  margin-top: 4px;
+}
+
+.session-ws {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.session-ws-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.session-ws-search {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 10px;
+  border: 1px solid var(--border-subtle, rgba(15, 23, 36, 0.08));
+  border-radius: 8px;
+  background: var(--surface-card-strong, #fff);
+  color: var(--text-strong, #0e1118);
+}
+
+.session-ws-search:focus {
+  outline: none;
+  border-color: var(--info, rgba(45, 93, 170, 0.7));
+}
+
+.session-ws-toolbar > button {
+  font: inherit;
+  font-size: 11.5px;
+  border: 1px solid var(--border-subtle, rgba(15, 23, 36, 0.08));
+  border-radius: 8px;
+  background: var(--surface-card-strong, #fff);
+  color: var(--text-muted, rgba(17, 20, 28, 0.7));
+  padding: 5px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.session-ws-toolbar > button:hover {
+  background: var(--surface-control, rgba(15, 23, 36, 0.06));
+}
+
+.session-ws-tree {
+  border: 1px solid var(--border-subtle, rgba(15, 23, 36, 0.08));
+  border-radius: 11px;
+  background: var(--surface-card-strong, #fff);
+  padding: 6px 6px;
+}
+
+.session-ws-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text-muted, rgba(17, 20, 28, 0.7));
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.session-ws-row:hover {
+  background: var(--surface-control, rgba(15, 23, 36, 0.06));
+}
+
+.session-ws-row.is-folder .session-ws-name {
+  font-weight: 600;
+  color: var(--text-strong, #0e1118);
+}
+
+.session-ws-caret {
+  flex-shrink: 0;
+  color: var(--text-dim, rgba(17, 20, 28, 0.35));
+  transition: transform 0.15s ease;
+}
+
+.session-ws-caret.is-open {
+  transform: rotate(90deg);
+}
+
+.session-ws-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-ws-badge {
+  font-style: normal;
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.session-ws-badge.is-edit {
+  color: var(--status-warning, rgba(215, 120, 20, 0.9));
+  background: rgba(215, 120, 20, 0.12);
+}
+
+.session-ws-badge.is-read {
+  color: var(--info, rgba(45, 93, 170, 0.9));
+  background: rgba(45, 93, 170, 0.1);
+}
+
+.session-fact-card {
+  border: 1px solid var(--border-subtle, rgba(15, 23, 36, 0.08));
+  border-radius: 11px;
+  padding: 13px 15px;
+  background: var(--surface-card-strong, #fff);
+}
+
+.session-fact-card strong {
+  display: block;
+  font-size: 13px;
+  color: var(--text-strong, #0e1118);
+  margin-bottom: 5px;
+}
+
+.session-fact-card p {
+  margin: 0 0 4px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-muted, rgba(17, 20, 28, 0.7));
+  word-break: break-all;
+}

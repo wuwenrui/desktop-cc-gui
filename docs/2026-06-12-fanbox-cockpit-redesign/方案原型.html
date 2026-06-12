@@ -1,0 +1,542 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>对话优先 · FanBox 精华中改版 · 可点击方案原型</title>
+<!--
+  方案原型：对话优先的 FanBox 精华中改版
+  =========================================
+  设计原则（FanBox 精髓提炼自 docs/fanbox-light-dialogue-cockpit-v3.html）：
+    用户始终用「对话」完成工作，但随时知道三件事——
+    AI 引用了什么（证据）/ 改了什么（改动）/ 下一步卡在哪里（待确认）。
+    透明但不打扰：摘要嵌进对话，细节收进右栏，终端藏进「日志」。
+
+  与 v3 原型的区别（即「结合现有界面」的关键）：
+    - 用真实 app 的 themes.light.css token + 13px 紧凑桌面比例，
+      而非 v3 的 18-22px 展示比例，确保和你现有界面同语言。
+    - 左侧栏、顶栏 Skill 市场/用量徽标沿用现状（fork 红线，不动）。
+
+  可交互：
+    - 会话顶「对话 / 文件 / 证据」三视图切换
+    - 右栏「证据 / 改动 / 记忆 / 日志」四 tab 切换
+    - AI 卡片内摘要块点击 → 联动右栏对应 tab（FanBox 核心动线）
+    - 右上角「方案标注」开关：打开看改动说明，关闭看纯净效果
+    - 「模拟窄屏」按钮：演示右栏收起为浮层、不裁切
+-->
+<style>
+  :root {
+    /* ==== 真实主题 token（themes.light.css 原值）==== */
+    --text-primary:#1a1d24; --text-strong:#0e1118;
+    --text-muted:rgba(17,20,28,.7); --text-subtle:rgba(17,20,28,.6);
+    --text-faint:rgba(17,20,28,.5); --text-dim:rgba(17,20,28,.35);
+    --surface-hover:rgba(15,23,36,.06); --surface-control:rgba(15,23,36,.08);
+    --surface-control-hover:rgba(15,23,36,.12);
+    --border-subtle:rgba(15,23,36,.08); --border-strong:rgba(15,23,36,.14);
+    --text-accent:rgba(45,93,170,.7); --status-success:rgba(30,155,110,.9);
+    --status-warning:rgba(215,120,20,.9); --status-error:rgba(200,45,45,.9);
+    --bubble-user:#0078d4; --shell-bg:#eeeff3; --sidebar-bg:#eceef2;
+    --main-bg:#ffffff; --main-radius:16px; --popover:rgba(255,255,255,.99);
+    /* FanBox 语义色（取自现状状态色，克制使用） */
+    --evi-hot:rgba(215,120,20,.9); --evi-hot-soft:rgba(215,120,20,.1);
+    --evi-ref:rgba(45,93,170,.85); --evi-ref-soft:rgba(45,93,170,.1);
+    --evi-mem:rgba(30,155,110,.9); --evi-mem-soft:rgba(30,155,110,.1);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;
+    background:#e3e5ea;color:var(--text-primary);font-size:13px;
+    -webkit-font-smoothing:antialiased;
+    display:flex;flex-direction:column;align-items:center;padding:20px 18px 36px;
+  }
+  .proto-bar{
+    width:1380px;max-width:97vw;display:flex;align-items:center;gap:14px;margin-bottom:12px;
+  }
+  .proto-bar strong{font-size:14px;color:#2a2f3a;font-weight:600;}
+  .proto-bar .sub{color:#8a90a0;font-size:12px;flex:1;}
+  .proto-bar button{
+    font:inherit;font-size:12px;border:1px solid #c4c9d4;background:#fff;color:#3a4150;
+    border-radius:8px;padding:5px 12px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;
+  }
+  .proto-bar button:hover{background:#f3f5f8;}
+  .proto-bar button.on{background:var(--bubble-user);color:#fff;border-color:var(--bubble-user);}
+
+  /* ==== 窗口 ==== */
+  .window{
+    width:1380px;max-width:97vw;height:840px;background:var(--shell-bg);
+    border-radius:12px;box-shadow:0 24px 70px rgba(20,24,40,.28),0 0 0 1px rgba(0,0,0,.08);
+    display:flex;flex-direction:column;overflow:hidden;position:relative;
+  }
+  .titlebar{height:38px;flex-shrink:0;display:flex;align-items:center;padding:0 14px;gap:8px;}
+  .traffic{display:flex;gap:8px;}
+  .traffic i{width:12px;height:12px;border-radius:50%;display:block;}
+  .traffic i:nth-child(1){background:#ff5f57;}
+  .traffic i:nth-child(2){background:#febc2e;}
+  .traffic i:nth-child(3){background:#28c840;}
+  .titlebar .app{flex:1;text-align:center;font-size:12px;color:var(--text-faint);font-weight:500;}
+  .shell{flex:1;display:flex;min-height:0;padding:0 10px 10px;}
+
+  /* ==== 左侧栏（沿用现状，不改）==== */
+  .sidebar{width:210px;flex-shrink:0;display:flex;flex-direction:column;padding:4px 8px 10px;min-height:0;}
+  .nav-item{
+    width:100%;min-height:32px;display:inline-flex;align-items:center;gap:8px;padding:0 8px;
+    border-radius:8px;border:none;background:transparent;color:var(--text-strong);font-size:13px;
+    text-align:left;cursor:pointer;font-family:inherit;
+  }
+  .nav-item:hover{background:var(--surface-hover);}
+  .nav-item.active{background:var(--surface-hover);font-weight:500;}
+  .nav-item svg{width:16px;height:16px;flex-shrink:0;}
+  .nav-item .t{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .sb-label{padding:12px 8px 4px;font-size:11px;font-weight:600;color:var(--text-dim);letter-spacing:.04em;}
+  .ws-item{
+    width:100%;min-height:30px;display:flex;align-items:center;gap:8px;padding:0 8px;border-radius:8px;
+    font-size:13px;color:var(--text-muted);cursor:pointer;border:none;background:transparent;
+    text-align:left;font-family:inherit;
+  }
+  .ws-item:hover{background:var(--surface-hover);}
+  .ws-item.active{background:var(--surface-hover);color:var(--text-strong);font-weight:500;}
+  .ws-item svg{width:14px;height:14px;flex-shrink:0;color:var(--text-faint);}
+  .ws-item .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;}
+  .ws-item .tag{font-size:10px;color:var(--text-accent);background:var(--evi-ref-soft);border-radius:5px;padding:1px 5px;}
+  .sb-scroll{flex:1;overflow-y:auto;min-height:0;}
+  .sb-bottom{margin-top:6px;}
+
+  /* ==== 主区 ==== */
+  .main{
+    flex:1;min-width:0;background:var(--main-bg);border-radius:var(--main-radius);
+    display:flex;flex-direction:column;overflow:hidden;box-shadow:0 0 0 1px rgba(15,23,36,.05);position:relative;
+  }
+  .topbar{
+    height:44px;flex-shrink:0;display:flex;align-items:center;gap:10px;padding:0 14px 0 18px;
+    border-bottom:1px solid var(--border-subtle);
+  }
+  .crumb{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-strong);min-width:0;}
+  .crumb svg{width:15px;height:15px;color:var(--text-faint);flex-shrink:0;}
+  .crumb b{font-weight:600;}
+  .crumb .sep{color:var(--text-dim);}
+  .crumb .case{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .tb-actions{margin-left:auto;display:flex;align-items:center;gap:6px;}
+  .tb-btn{
+    width:28px;height:28px;border-radius:7px;border:none;background:transparent;color:var(--text-faint);
+    cursor:pointer;display:inline-flex;align-items:center;justify-content:center;
+  }
+  .tb-btn:hover{background:var(--surface-control);color:var(--text-strong);}
+  .tb-btn svg{width:16px;height:16px;}
+  .tb-market{
+    font-size:12px;color:var(--text-strong);border:1px solid var(--border-subtle);border-radius:7px;
+    padding:4px 10px;cursor:pointer;background:transparent;font-family:inherit;display:inline-flex;align-items:center;gap:5px;
+  }
+  .tb-market:hover{background:var(--surface-control);}
+  .tb-market svg{width:14px;height:14px;color:var(--text-accent);}
+  .tb-usage{
+    font-size:11px;color:var(--status-error);background:rgba(200,45,45,.08);border:1px solid rgba(200,45,45,.2);
+    border-radius:999px;padding:3px 10px;display:inline-flex;align-items:center;gap:5px;
+  }
+  .tb-usage::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--status-error);}
+
+  .body{flex:1;display:flex;min-height:0;}
+
+  /* ==== 会话区 ==== */
+  .conversation{flex:1;min-width:0;display:flex;flex-direction:column;min-height:0;}
+  .casebar{
+    flex-shrink:0;display:flex;align-items:center;gap:14px;padding:12px 20px 10px;
+    border-bottom:1px solid var(--border-subtle);
+  }
+  .case-title{display:flex;flex-direction:column;gap:1px;min-width:0;}
+  .case-title small{font-size:11px;color:var(--text-faint);}
+  .case-title strong{font-size:14px;color:var(--text-strong);font-weight:600;}
+  .view-switch{margin-left:auto;display:inline-flex;background:var(--surface-control);border-radius:9px;padding:2px;gap:1px;}
+  .view-switch button{
+    font:inherit;font-size:12px;border:none;background:transparent;color:var(--text-muted);
+    border-radius:7px;padding:4px 12px;cursor:pointer;
+  }
+  .view-switch button.active{background:#fff;color:var(--text-strong);font-weight:600;box-shadow:0 1px 3px rgba(15,23,36,.1);}
+
+  .stage{flex:1;overflow-y:auto;min-height:0;}
+  .messages{padding:20px 24px;display:flex;flex-direction:column;gap:16px;}
+  .msg{display:flex;gap:10px;max-width:840px;}
+  .msg.user{align-self:flex-end;flex-direction:row-reverse;}
+  .avatar{
+    width:26px;height:26px;border-radius:8px;flex-shrink:0;display:grid;place-items:center;
+    font-size:11px;font-weight:600;
+  }
+  .msg.user .avatar{background:var(--bubble-user);color:#fff;}
+  .msg:not(.user) .avatar{background:var(--surface-control);color:var(--text-muted);}
+  .bubble{font-size:13px;line-height:1.65;color:var(--text-primary);}
+  .msg.user .bubble{
+    background:var(--bubble-user);color:#fff;border-radius:14px 14px 4px 14px;padding:9px 14px;max-width:560px;
+  }
+  .msg:not(.user) .bubble{max-width:680px;}
+  .bubble p+p{margin-top:7px;}
+
+  /* FanBox 摘要块（AI 卡片核心） */
+  .source-grid{display:flex;gap:8px;margin-top:11px;flex-wrap:wrap;}
+  .source-card{
+    flex:1;min-width:150px;border:1px solid var(--border-subtle);border-radius:10px;padding:9px 11px;
+    cursor:pointer;background:#fff;transition:border-color .14s,transform .14s,box-shadow .14s;
+    display:flex;flex-direction:column;gap:3px;position:relative;overflow:hidden;
+  }
+  .source-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;}
+  .source-card.ref::before{background:var(--evi-ref);}
+  .source-card.mem::before{background:var(--evi-mem);}
+  .source-card.hot::before{background:var(--evi-hot);}
+  .source-card:hover{border-color:var(--border-strong);transform:translateY(-1px);box-shadow:0 6px 18px rgba(15,23,36,.08);}
+  .source-card .sc-head{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-faint);}
+  .source-card .sc-head svg{width:13px;height:13px;}
+  .source-card .sc-main{font-size:13px;color:var(--text-strong);font-weight:600;}
+  .source-card .sc-sub{font-size:11px;color:var(--text-subtle);}
+  .source-card .sc-go{position:absolute;right:9px;top:9px;font-size:10px;color:var(--text-accent);opacity:0;transition:opacity .14s;}
+  .source-card:hover .sc-go{opacity:1;}
+
+  /* 文件视图 / 证据视图 */
+  .board{padding:20px 24px;display:flex;flex-direction:column;gap:10px;}
+  .file-card{
+    display:flex;align-items:center;gap:12px;border:1px solid var(--border-subtle);border-radius:11px;padding:12px 14px;background:#fff;
+  }
+  .file-mark{width:8px;height:8px;border-radius:50%;background:var(--text-dim);flex-shrink:0;}
+  .file-mark.hot{background:var(--evi-hot);}
+  .file-mark.gold{background:var(--status-warning);}
+  .file-card .fc-main{flex:1;min-width:0;}
+  .file-card .fc-main strong{font-size:13px;color:var(--text-strong);display:block;margin-bottom:2px;}
+  .file-card .fc-main p{font-size:12px;color:var(--text-subtle);line-height:1.5;}
+  .file-card .fc-num{font-size:15px;font-weight:700;color:var(--evi-hot);flex-shrink:0;}
+  .fact-card{
+    border:1px solid var(--border-subtle);border-radius:11px;padding:13px 15px;background:#fff;
+  }
+  .fact-card strong{font-size:13px;color:var(--text-strong);display:block;margin-bottom:4px;}
+  .fact-card p{font-size:12.5px;color:var(--text-muted);line-height:1.6;}
+  .fact-card.accent{border-color:var(--evi-ref);background:var(--evi-ref-soft);}
+
+  /* 输入框 */
+  .composer-wrap{flex-shrink:0;padding:10px 20px 16px;}
+  .composer{border:1px solid var(--border-strong);border-radius:14px;background:#fff;padding:9px 12px 8px;box-shadow:0 1px 4px rgba(15,23,36,.04);}
+  .composer:focus-within{border-color:rgba(77,153,255,.5);}
+  .model-row{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-faint);margin-bottom:7px;flex-wrap:wrap;}
+  .model-row .star{color:var(--text-accent);}
+  .model-pill{font-size:10px;color:var(--text-muted);background:var(--surface-control);border-radius:5px;padding:1px 7px;}
+  .input-row{display:flex;align-items:flex-end;gap:8px;}
+  .input-row .plus,.input-row .send{
+    width:30px;height:30px;border-radius:8px;border:none;cursor:pointer;display:grid;place-items:center;flex-shrink:0;
+  }
+  .input-row .plus{background:var(--surface-control);color:var(--text-muted);}
+  .input-row .send{background:var(--bubble-user);color:#fff;}
+  .input-row .prompt{flex:1;font-size:13px;line-height:1.5;color:var(--text-primary);padding:5px 0;min-height:40px;}
+  .input-row .prompt .hint{display:block;font-size:11px;color:var(--text-dim);margin-top:4px;}
+
+  /* ==== 右侧栏（FanBox 四 tab）==== */
+  .inspector{
+    width:344px;flex-shrink:0;border-left:1px solid var(--border-subtle);display:flex;flex-direction:column;min-height:0;
+    background:var(--main-bg);
+  }
+  .insp-tabs{flex-shrink:0;display:flex;padding:8px 10px 0;gap:2px;border-bottom:1px solid var(--border-subtle);}
+  .insp-tabs button{
+    flex:1;font:inherit;font-size:12px;border:none;background:transparent;color:var(--text-muted);
+    padding:7px 4px 9px;cursor:pointer;position:relative;display:inline-flex;align-items:center;justify-content:center;gap:5px;
+  }
+  .insp-tabs button .dot{width:5px;height:5px;border-radius:50%;}
+  .insp-tabs button[data-p="evidence"] .dot{background:var(--evi-ref);}
+  .insp-tabs button[data-p="changes"] .dot{background:var(--evi-hot);}
+  .insp-tabs button[data-p="memory"] .dot{background:var(--evi-mem);}
+  .insp-tabs button[data-p="logs"] .dot{background:var(--text-dim);}
+  .insp-tabs button.active{color:var(--text-strong);font-weight:600;}
+  .insp-tabs button.active::after{content:"";position:absolute;left:8px;right:8px;bottom:-1px;height:2px;background:var(--text-strong);border-radius:2px;}
+  .panel-scroll{flex:1;overflow-y:auto;min-height:0;padding:12px;}
+  .right-title{display:flex;align-items:baseline;justify-content:space-between;margin:6px 2px 8px;}
+  .right-title span{font-size:12px;font-weight:600;color:var(--text-strong);}
+  .right-title small{font-size:11px;color:var(--text-faint);}
+  .e-card{border:1px solid var(--border-subtle);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:#fff;position:relative;overflow:hidden;}
+  .e-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:transparent;}
+  .e-card.hot::before{background:var(--evi-hot);}
+  .e-card.ok::before{background:var(--evi-mem);}
+  .e-card.ref::before{background:var(--evi-ref);}
+  .e-card strong{font-size:12.5px;color:var(--text-strong);display:block;margin-bottom:3px;}
+  .e-card p{font-size:12px;color:var(--text-muted);line-height:1.55;}
+  .badge-row{display:flex;gap:6px;margin-top:7px;}
+  .badge{font-size:10.5px;color:var(--text-subtle);background:var(--surface-control);border-radius:5px;padding:1px 7px;}
+  .status-list{flex-shrink:0;border-top:1px solid var(--border-subtle);padding:9px 12px;display:flex;flex-direction:column;gap:6px;}
+  .status-row{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--text-muted);}
+  .status-row i{width:6px;height:6px;border-radius:50%;background:var(--status-success);flex-shrink:0;}
+  .status-row small{margin-left:auto;color:var(--text-dim);font-size:10.5px;}
+
+  /* 日志 tab 内的终端降级提示 */
+  .log-terminal{
+    margin-top:8px;border:1px solid var(--border-subtle);border-radius:10px;overflow:hidden;background:#1a1d24;
+  }
+  .log-terminal .lt-head{display:flex;align-items:center;gap:6px;padding:7px 10px;border-bottom:1px solid rgba(255,255,255,.08);}
+  .log-terminal .lt-head span{font-size:11px;color:rgba(255,255,255,.55);}
+  .log-terminal .lt-head .lt-open{margin-left:auto;font-size:10.5px;color:rgba(120,170,255,.9);cursor:pointer;}
+  .log-terminal pre{padding:9px 11px;font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:10.5px;line-height:1.7;color:rgba(255,255,255,.7);white-space:pre-wrap;}
+
+  /* 窄屏右栏收起为浮层 */
+  .inspector.collapsed{display:none;}
+  .insp-fab{
+    display:none;position:absolute;right:14px;bottom:84px;z-index:20;
+    align-items:center;gap:6px;background:var(--bubble-user);color:#fff;border:none;border-radius:999px;
+    padding:8px 14px;font:inherit;font-size:12px;cursor:pointer;box-shadow:0 6px 20px rgba(0,120,212,.35);
+  }
+  .window.narrow .inspector{
+    position:absolute;right:0;top:0;bottom:0;z-index:25;box-shadow:-16px 0 40px rgba(15,23,36,.18);
+    transform:translateX(100%);transition:transform .22s cubic-bezier(.3,.8,.4,1);
+  }
+  .window.narrow .inspector.show{transform:none;}
+  .window.narrow .insp-fab{display:inline-flex;}
+
+  /* 方案标注层 */
+  .annot{
+    position:absolute;z-index:40;background:rgba(20,24,36,.94);color:#fff;font-size:10.5px;line-height:1.5;
+    border-radius:7px;padding:6px 9px;max-width:210px;pointer-events:none;display:none;
+    box-shadow:0 8px 24px rgba(0,0,0,.3);
+  }
+  .annot b{color:#7fb0ff;font-weight:600;}
+  .annot .delta{display:inline-block;margin-top:3px;font-size:9.5px;color:#ffd27f;}
+  body.show-annot .annot{display:block;}
+  body.show-annot [data-annot]{outline:1.5px dashed rgba(77,153,255,.5);outline-offset:-1px;border-radius:8px;}
+
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:rgba(15,23,36,.18);border-radius:4px;}
+  ::-webkit-scrollbar-thumb:hover{background:rgba(15,23,36,.32);}
+  ::-webkit-scrollbar-track{background:transparent;}
+</style>
+</head>
+<body>
+
+<div class="proto-bar">
+  <strong>对话优先 · FanBox 精华中改版</strong>
+  <span class="sub">可点击方案原型 · 真实 themes.light.css 比例 · 三视图/四tab/摘要联动可点</span>
+  <button id="annotBtn" onclick="toggleAnnot()">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16v-4"/><path d="M12 8h.01"/><circle cx="12" cy="12" r="10"/></svg>
+    方案标注
+  </button>
+  <button onclick="toggleNarrow()" id="narrowBtn">模拟窄屏</button>
+</div>
+
+<div class="window" id="win">
+  <div class="titlebar">
+    <div class="traffic"><i></i><i></i><i></i></div>
+    <div class="app">LawyerCopilot</div>
+    <div style="width:52px"></div>
+  </div>
+
+  <div class="shell">
+    <!-- 左侧栏：沿用现状 -->
+    <nav class="sidebar" data-annot="left">
+      <button class="nav-item active">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+        <span class="t">首页</span>
+      </button>
+      <button class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg>
+        <span class="t">面试模式</span>
+      </button>
+      <button class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>
+        <span class="t">lawhub</span>
+      </button>
+      <div class="sb-label">工作区</div>
+      <div class="sb-scroll">
+        <button class="ws-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h7l2 2h7v10H4z"/></svg><span class="t">workspace</span><span class="tag">Default</span></button>
+        <button class="ws-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h7l2 2h7v10H4z"/></svg><span class="t">expense-audit-v2</span></button>
+        <button class="ws-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h7l2 2h7v10H4z"/></svg><span class="t">powei</span></button>
+      </div>
+      <div class="sb-bottom">
+        <button class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span class="t">设置</span></button>
+      </div>
+    </nav>
+
+    <!-- 主区 -->
+    <main class="main">
+      <header class="topbar" data-annot="topbar">
+        <div class="crumb">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h7l2 2h7v10H4z"/></svg>
+          <b>workspace</b><span class="sep">›</span><span class="case">股权转让协议审查</span>
+        </div>
+        <div class="tb-actions">
+          <button class="tb-btn" title="运行 / 终端"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m8 5 11 7-11 7z"/></svg></button>
+          <button class="tb-btn" title="文件"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h7l2 2h7v10H4z"/></svg></button>
+          <button class="tb-btn" title="搜索"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m20 20-3-3"/></svg></button>
+          <button class="tb-market" title="Skill 市场"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>Skill 市场</button>
+          <span class="tb-usage">¥12.40</span>
+        </div>
+      </header>
+
+      <div class="body">
+        <section class="conversation">
+          <div class="casebar" data-annot="casebar">
+            <div class="case-title">
+              <small>今天想构建什么？</small>
+              <strong>股权转让协议审查</strong>
+            </div>
+            <div class="view-switch" aria-label="会话视图">
+              <button class="active" data-view="chat">对话</button>
+              <button data-view="files">文件</button>
+              <button data-view="evidence">证据</button>
+            </div>
+          </div>
+
+          <div class="stage" id="stage"><!-- JS 渲染 --></div>
+
+          <div class="composer-wrap" data-annot="composer">
+            <div class="composer">
+              <div class="model-row">
+                <span class="star">✺</span>
+                <span>Claude Code / claude-opus-4-8</span>
+                <span class="model-pill">自动模式</span>
+                <span class="model-pill">完整访问</span>
+              </div>
+              <div class="input-row">
+                <button class="plus"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg></button>
+                <div class="prompt">
+                  继续把必须修改项改成律师函式措辞，并引用对应协议条款。
+                  <span class="hint">@引用文件 · @@引用记忆 · /选择技能 · #唤起智能体</span>
+                </div>
+                <button class="send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="m4 12 16-8-5 16-3-6z"/></svg></button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 右栏 -->
+        <aside class="inspector" id="inspector" data-annot="inspector">
+          <div class="insp-tabs">
+            <button class="active" data-p="evidence"><span class="dot"></span>证据</button>
+            <button data-p="changes"><span class="dot"></span>改动</button>
+            <button data-p="memory"><span class="dot"></span>记忆</button>
+            <button data-p="logs"><span class="dot"></span>日志</button>
+          </div>
+          <div class="panel-scroll" id="panel"><!-- JS 渲染 --></div>
+          <div class="status-list">
+            <div class="status-row"><i></i><span>风险清单已保存</span><small>14:32</small></div>
+            <div class="status-row"><i></i><span>条款引用已校验</span><small>14:33</small></div>
+            <div class="status-row"><i style="background:var(--status-warning)"></i><span>等待你确认交割事实</span><small>now</small></div>
+          </div>
+        </aside>
+        <button class="insp-fab" onclick="toggleInspector()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+          证据 · 3 项待确认
+        </button>
+      </div>
+    </main>
+  </div>
+
+  <!-- 方案标注 -->
+  <div class="annot" data-for="left" style="left:228px;top:120px">沿用现状<b> Sidebar.tsx</b><br>左侧导航/工作区/lawhub 分组不动<span class="delta">改动量：0（红线保留）</span></div>
+  <div class="annot" data-for="topbar" style="left:50%;top:64px">沿用现状<b> MainTopbar.tsx</b><br>Skill 市场 + 用量徽标保留<span class="delta">改动量：0（FORK-PATCHES 红线）</span></div>
+  <div class="annot" data-for="casebar" style="left:50%;top:128px">新增<b> 会话顶 casebar</b><br>对话/文件/证据三视图切换器，复用现有 centerMode（DesktopLayout.tsx:31）<span class="delta">改动量：中 · 新组件 + 接现有视图模式</span></div>
+  <div class="annot" data-for="inspector" style="right:14px;top:128px">重组<b> PanelTabs.tsx</b><br>现有 10 个开发者 tab → 收敛映射为 证据/改动/记忆/日志 四类用户语言<span class="delta">改动量：中 · 映射现有 git/files/memory/terminal 面板</span></div>
+  <div class="annot" data-for="composer" style="right:360px;bottom:120px">沿用现状<b> Composer</b><br>输入框为主交互不动<span class="delta">改动量：0</span></div>
+</div>
+
+<script>
+const stage=document.getElementById('stage'), panel=document.getElementById('panel');
+
+const ICON={
+  file:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>',
+  brain:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5a3 3 0 1 0-5.99.1 3 3 0 0 0-2 5.18A3 3 0 0 0 6 16a3 3 0 0 0 6 .5 3 3 0 0 0 6-.5 3 3 0 0 0 1.99-5.72 3 3 0 0 0-2-5.18A3 3 0 0 0 12 5Z"/></svg>',
+  edit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
+  alert:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg>',
+  term:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="1.8"><path d="m4 17 6-6-6-6"/><path d="M12 19h8"/></svg>'
+};
+
+// ===== 会话三视图 =====
+const VIEWS={
+  chat:`<div class="messages">
+    <div class="msg user"><div class="avatar">我</div><div class="bubble"><p>帮我审查这份股权转让协议，重点看付款、交割、违约责任和工商变更风险。</p></div></div>
+    <div class="msg"><div class="avatar">AI</div><div class="bubble">
+      <p>已完成第一轮审查。最需要先处理的是<b>付款顺序和工商变更条件不一致</b>，可能导致买方付款后无法完成股权登记。</p>
+      <p>风险清单已生成，需要你确认的事实问题放到了右侧证据栏。</p>
+      <div class="source-grid">
+        <div class="source-card ref" onclick="jump('evidence')">
+          <div class="sc-head">${ICON.file}引用文件</div><div class="sc-main">4 个文件</div><div class="sc-sub">协议 + 沟通纪要</div><span class="sc-go">查看 →</span></div>
+        <div class="source-card mem" onclick="jump('memory')">
+          <div class="sc-head">${ICON.brain}项目记忆</div><div class="sc-main">匹配 2 条</div><div class="sc-sub">客户偏好 + 团队约定</div><span class="sc-go">查看 →</span></div>
+        <div class="source-card hot" onclick="jump('changes')">
+          <div class="sc-head">${ICON.edit}改动热区</div><div class="sc-main">8 次更新</div><div class="sc-sub">风险清单.md</div><span class="sc-go">查看 →</span></div>
+      </div>
+    </div></div>
+    <div class="msg user"><div class="avatar">我</div><div class="bubble"><p>把风险分成"必须修改"和"建议优化"，同时给客户一个非技术版说明。</p></div></div>
+    <div class="msg"><div class="avatar">AI</div><div class="bubble">
+      <p>已分层整理。必须修改项 <b>4 条</b>，建议优化项 <b>6 条</b>。客户说明已避免法言法语，并保留对应条款编号。</p>
+      <p>下一步建议：先确认交割前置条件，再决定是否把付款节点改为分期或监管账户。</p>
+      <div class="source-grid">
+        <div class="source-card hot" onclick="jump('changes')">
+          <div class="sc-head">${ICON.edit}改动热区</div><div class="sc-main">+ 客户说明.md</div><div class="sc-sub">新增非技术版</div><span class="sc-go">查看 →</span></div>
+        <div class="source-card ref" onclick="jump('evidence')">
+          <div class="sc-head">${ICON.alert}待确认</div><div class="sc-main">3 项</div><div class="sc-sub">交割 / 材料 / 账户</div><span class="sc-go">查看 →</span></div>
+      </div>
+    </div></div>
+  </div>`,
+  files:`<div class="board">
+    <div class="file-card"><i class="file-mark hot"></i><div class="fc-main"><strong>风险清单.md</strong><p>AI 本轮主要改动文件，集中在"付款节点"和"工商变更风险"。点右栏"改动"看完整收件箱。</p></div><b class="fc-num">8</b></div>
+    <div class="file-card"><i class="file-mark"></i><div class="fc-main"><strong>股权转让协议.docx</strong><p>主引用源，条款 4.2、5.1、7.3 已进入证据栏（只读，未改原合同）。</p></div><b class="fc-num" style="color:var(--evi-ref)">5</b></div>
+    <div class="file-card"><i class="file-mark gold"></i><div class="fc-main"><strong>客户沟通纪要.md</strong><p>提取客户事实：先付款、后工商变更，存在履行顺序冲突。</p></div><b class="fc-num" style="color:var(--status-warning)">3</b></div>
+  </div>`,
+  evidence:`<div class="board">
+    <div class="fact-card"><strong>为什么这么判断</strong><p>付款条款要求买方先支付大部分价款，但工商变更材料未作为明确前置条件，导致付款后登记失败风险。</p></div>
+    <div class="fact-card"><strong>给用户的下一步</strong><p>确认买方材料是否齐备；若不齐备，建议改成分期付款、监管账户或交割后付款。</p></div>
+    <div class="fact-card accent"><strong>FanBox 精华落点</strong><p>用户仍用对话完成工作，但始终知道 AI 引用了什么、改了什么、下一步卡在哪里。</p></div>
+  </div>`
+};
+
+// ===== 右栏四 tab =====
+const PANELS={
+  evidence:`<div class="right-title"><span>工作证据</span><small>4 文件 · 2 记忆</small></div>
+    <div class="e-card ref"><strong>引用来源</strong><p>股权转让协议第 4.2、5.1、7.3 条；客户沟通纪要第 12 行。</p><div class="badge-row"><span class="badge">条款编号</span><span class="badge">客户事实</span></div></div>
+    <div class="e-card hot"><strong>改动热区</strong><p>风险清单.md 更新 8 次，集中在"交割条件与付款节点冲突"。</p></div>
+    <div class="e-card ok"><strong>项目记忆</strong><p>客户偏好：先给结论，再给条款依据；所有风险必须分层。</p></div>
+    <div class="right-title"><span>待确认</span><small>3 项</small></div>
+    <div class="e-card"><strong>工商变更材料</strong><p>买方是否已提供完整登记材料？缺失时不应设置一次性全额付款。</p></div>
+    <div class="e-card"><strong>监管账户</strong><p>客户是否接受共管账户或分期付款安排？</p></div>`,
+  changes:`<div class="right-title"><span>改动收件箱</span><small>本会话</small></div>
+    <div class="e-card hot"><strong>风险清单.md</strong><p>8 次更新，生成"必须修改 / 建议优化 / 待确认"三层结构。</p></div>
+    <div class="e-card"><strong>客户说明.md</strong><p>新增非技术版说明，可直接发客户确认。</p></div>
+    <div class="e-card"><strong>股权转让协议.docx</strong><p>只读引用源，未直接改原合同。</p></div>`,
+  memory:`<div class="right-title"><span>项目记忆</span><small>匹配 2 条</small></div>
+    <div class="e-card ok"><strong>客户偏好</strong><p>先给结论，再给条款依据；避免长篇法理。</p></div>
+    <div class="e-card ok"><strong>团队约定</strong><p>风险项必须区分"必须修改 / 建议优化 / 待确认"。</p></div>`,
+  logs:`<div class="right-title"><span>高级日志</span><small>开发者排障</small></div>
+    <div class="e-card"><strong>普通用户无需命令行</strong><p>日常只看保存、引用、错误状态；需要排障时才展开完整终端。</p></div>
+    <div class="log-terminal"><div class="lt-head">${ICON.term}<span>terminal · 已折叠</span><span class="lt-open">展开终端 ↗</span></div><pre>14:32 ✓ 风险清单.md saved
+14:33 ✓ clause refs verified (4.2 / 5.1 / 7.3)
+14:33 … awaiting user fact: delivery precondition</pre></div>`
+};
+
+function renderView(v){
+  stage.innerHTML=VIEWS[v];
+  document.querySelectorAll('.view-switch button').forEach(b=>b.classList.toggle('active',b.dataset.view===v));
+}
+function renderPanel(p){
+  panel.innerHTML=PANELS[p];
+  document.querySelectorAll('.insp-tabs button').forEach(b=>b.classList.toggle('active',b.dataset.p===p));
+}
+function jump(p){
+  renderPanel(p);
+  if(document.getElementById('win').classList.contains('narrow')){
+    document.getElementById('inspector').classList.add('show');
+  }
+  const el=document.querySelector(`.insp-tabs button[data-p="${p}"]`);
+  if(el){el.animate([{background:'var(--surface-active)'},{background:'transparent'}],{duration:600});}
+}
+
+document.querySelectorAll('.view-switch button').forEach(b=>b.onclick=()=>renderView(b.dataset.view));
+document.querySelectorAll('.insp-tabs button').forEach(b=>b.onclick=()=>renderPanel(b.dataset.p));
+
+// 方案标注
+function toggleAnnot(){
+  document.body.classList.toggle('show-annot');
+  document.getElementById('annotBtn').classList.toggle('on',document.body.classList.contains('show-annot'));
+}
+// 窄屏模拟
+function toggleNarrow(){
+  const w=document.getElementById('win'), insp=document.getElementById('inspector');
+  const on=w.classList.toggle('narrow');
+  document.getElementById('narrowBtn').classList.toggle('on',on);
+  if(!on)insp.classList.remove('show');
+}
+function toggleInspector(){document.getElementById('inspector').classList.toggle('show');}
+
+renderView('chat');
+renderPanel('evidence');
+</script>
+</body>
+</html>

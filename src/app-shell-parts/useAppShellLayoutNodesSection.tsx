@@ -26,6 +26,7 @@ import {
   configureDetachedExternalChangeMonitor,
 } from "../services/tauri";
 import { openOrFocusBrowserAgentDockWindow } from "../features/browser-agent/browserAgentDockWindow";
+import { useFanboxInspectorBridge } from "../features/session-evidence/useFanboxInspectorBridge";
 import { shouldEnableMainFileExternalChangeMonitoring } from "./fileExternalMonitoring";
 import {
   getThreadSelectDiffCleanupAction,
@@ -177,6 +178,23 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     worktreeApplySuccess, worktreeCreateResult, worktreeLabel, worktreePrompt, worktreeRename, worktreeSetupScriptState,
     sessionRadarRunningSessions, sessionRadarRecentCompletedSessions, runningSessionCountByWorkspaceId, recentCompletedSessionCountByWorkspaceId,
   } = ctx;
+
+  // FanBox 右栏联动：消息摘要块点击 → 切到映射面板并展开右栏
+  // （OpenSpec: add-fanbox-dialogue-cockpit, Decision 2；与 onOpenProjectMemory 同套路）。
+  useFanboxInspectorBridge(
+    useCallback(
+      (mode) => {
+        setAppMode("chat");
+        setFilePanelMode(mode);
+        expandRightPanel();
+        if (isCompact) {
+          setActiveTab("git");
+        }
+      },
+      [expandRightPanel, isCompact, setActiveTab, setAppMode, setFilePanelMode],
+    ),
+  );
+
   const pendingIntentCanvasDocuments = useMemo(
     () => (activeThreadId ? pendingIntentCanvasByThreadId[activeThreadId] ?? [] : []),
     [activeThreadId, pendingIntentCanvasByThreadId],
@@ -1291,6 +1309,7 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     onSelectEngine: handleSelectConversationEngine,
     models: effectiveModels,
     selectedModelId: effectiveSelectedModelId,
+    visionModelId: appSettings.visionModelId,
     projectMapDatasetController,
     onSelectModel: handleSelectModel,
     onDispatchOrchestrationTask: handleDispatchOrchestrationTask,

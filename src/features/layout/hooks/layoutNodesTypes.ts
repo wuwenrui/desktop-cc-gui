@@ -364,8 +364,9 @@ export type LayoutNodesOptions = {
   worktreeApplyError: string | null;
   worktreeApplySuccess: boolean;
   onApplyWorktreeChanges?: () => void | Promise<void>;
-  filePanelMode: "git" | "files" | "search" | "notes" | "prompts" | "memory" | "activity" | "radar";
-  onFilePanelModeChange: (mode: "git" | "files" | "search" | "notes" | "prompts" | "memory" | "activity" | "radar") => void;
+  // "evidence" / "memoryInspector" 为 FanBox 右栏新增语义面板（OpenSpec: add-fanbox-dialogue-cockpit）。
+  filePanelMode: "git" | "files" | "search" | "notes" | "prompts" | "memory" | "activity" | "radar" | "evidence" | "memoryInspector";
+  onFilePanelModeChange: (mode: "git" | "files" | "search" | "notes" | "prompts" | "memory" | "activity" | "radar" | "evidence" | "memoryInspector") => void;
   focusedProjectMemoryId?: string | null;
   focusedProjectMemoryRequestKey?: number;
   focusedWorkspaceNoteId?: string | null;
@@ -568,6 +569,7 @@ export type LayoutNodesOptions = {
   // Model props
   models: ModelOption[];
   selectedModelId: string | null;
+  visionModelId: string;
   projectMapDatasetController?: ProjectMapDatasetController;
   onSelectModel: (id: string | null) => void;
   onDispatchOrchestrationTask?: (

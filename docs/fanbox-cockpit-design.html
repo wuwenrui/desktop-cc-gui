@@ -1,0 +1,923 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lawyer Copilot FanBox Cockpit Design</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #101411;
+      --ink-2: #18201b;
+      --ink-3: #24312a;
+      --paper: #f0eadf;
+      --paper-2: #dfd2bf;
+      --paper-3: #bba887;
+      --green: #80f66b;
+      --green-2: #b3ff9b;
+      --red: #c64a3b;
+      --red-2: #ff7c66;
+      --blue: #67b7ff;
+      --brass: #c79b45;
+      --muted: #879186;
+      --shadow: rgba(0, 0, 0, .45);
+      --radius: 8px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      overflow: hidden;
+      color: var(--paper);
+      background:
+        linear-gradient(90deg, rgba(199, 155, 69, .08) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(128, 246, 107, .05) 1px, transparent 1px),
+        var(--ink);
+      background-size: 48px 48px, 48px 48px, auto;
+      font-family: "Avenir Next", "Segoe UI", "PingFang SC", sans-serif;
+      letter-spacing: 0;
+    }
+
+    button {
+      font: inherit;
+    }
+
+    .app {
+      display: grid;
+      grid-template-rows: 58px 1fr;
+      height: 100vh;
+      min-width: 1024px;
+      border: 1px solid rgba(240, 234, 223, .12);
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: 300px 1fr auto;
+      align-items: center;
+      gap: 16px;
+      padding: 0 18px;
+      background: rgba(16, 20, 17, .92);
+      border-bottom: 1px solid rgba(240, 234, 223, .15);
+      -webkit-backdrop-filter: blur(18px);
+      backdrop-filter: blur(18px);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .mark {
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      color: var(--ink);
+      background: var(--green);
+      box-shadow: 0 0 0 1px rgba(128, 246, 107, .35), 0 0 22px rgba(128, 246, 107, .25);
+      clip-path: polygon(12% 0, 88% 0, 100% 50%, 88% 100%, 12% 100%, 0 50%);
+      font-family: Georgia, "Songti SC", serif;
+      font-weight: 900;
+    }
+
+    .brand-title {
+      min-width: 0;
+    }
+
+    .brand-title strong {
+      display: block;
+      overflow: hidden;
+      font-family: Georgia, "Songti SC", serif;
+      font-size: 17px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .brand-title span {
+      display: block;
+      margin-top: 2px;
+      overflow: hidden;
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .command {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      height: 38px;
+      min-width: 360px;
+      padding: 0 14px;
+      color: var(--paper-2);
+      background: rgba(240, 234, 223, .08);
+      border: 1px solid rgba(240, 234, 223, .16);
+      border-radius: 6px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .03);
+    }
+
+    .command svg {
+      flex: 0 0 auto;
+      color: var(--green);
+    }
+
+    .command span {
+      overflow: hidden;
+      font-family: "SF Mono", "Cascadia Code", monospace;
+      font-size: 12px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      height: 34px;
+      padding: 0 11px;
+      color: var(--paper);
+      background: rgba(240, 234, 223, .08);
+      border: 1px solid rgba(240, 234, 223, .16);
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: var(--green);
+      box-shadow: 0 0 12px var(--green);
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 70px minmax(270px, 330px) minmax(420px, 1fr) minmax(310px, 380px);
+      min-height: 0;
+    }
+
+    .rail {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 16px 10px;
+      background: #0b0e0c;
+      border-right: 1px solid rgba(240, 234, 223, .12);
+    }
+
+    .rail button {
+      display: grid;
+      place-items: center;
+      width: 48px;
+      height: 48px;
+      color: var(--paper-2);
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .rail button.active,
+    .rail button:hover {
+      color: var(--green);
+      background: rgba(128, 246, 107, .1);
+      border-color: rgba(128, 246, 107, .32);
+    }
+
+    .file-pane,
+    .right-pane {
+      min-height: 0;
+      background: rgba(18, 25, 21, .88);
+      border-right: 1px solid rgba(240, 234, 223, .12);
+    }
+
+    .right-pane {
+      overflow: auto;
+      border-right: 0;
+      border-left: 1px solid rgba(240, 234, 223, .12);
+    }
+
+    .pane-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 48px;
+      padding: 0 14px;
+      border-bottom: 1px solid rgba(240, 234, 223, .12);
+    }
+
+    .pane-head h2 {
+      margin: 0;
+      font-family: Georgia, "Songti SC", serif;
+      font-size: 15px;
+      font-weight: 800;
+    }
+
+    .pane-head small {
+      color: var(--muted);
+      font-family: "SF Mono", "Cascadia Code", monospace;
+      font-size: 11px;
+    }
+
+    .file-search {
+      margin: 12px;
+      padding: 10px 12px;
+      color: var(--paper-3);
+      background: rgba(0, 0, 0, .2);
+      border: 1px solid rgba(240, 234, 223, .12);
+      border-radius: 6px;
+      font-family: "SF Mono", "Cascadia Code", monospace;
+      font-size: 12px;
+    }
+
+    .tree {
+      display: grid;
+      gap: 4px;
+      padding: 0 10px 14px;
+    }
+
+    .node {
+      display: grid;
+      grid-template-columns: 28px 1fr auto;
+      align-items: center;
+      gap: 8px;
+      min-height: 34px;
+      padding: 0 9px;
+      color: var(--paper-2);
+      border: 1px solid transparent;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .node:hover {
+      background: rgba(240, 234, 223, .06);
+      border-color: rgba(240, 234, 223, .12);
+    }
+
+    .node.active {
+      color: var(--green-2);
+      background: rgba(128, 246, 107, .12);
+      border-color: rgba(128, 246, 107, .34);
+    }
+
+    .node .icon {
+      width: 22px;
+      height: 24px;
+      border-radius: 3px;
+      background: var(--paper-3);
+      box-shadow: inset 0 -5px rgba(0, 0, 0, .16);
+    }
+
+    .node .icon.folder {
+      background: var(--brass);
+      clip-path: polygon(0 18%, 36% 18%, 44% 0, 100% 0, 100% 100%, 0 100%);
+    }
+
+    .node .icon.red {
+      background: var(--red);
+    }
+
+    .node .icon.blue {
+      background: var(--blue);
+    }
+
+    .node .name {
+      overflow: hidden;
+      font-size: 13px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .heat {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 26px;
+      height: 20px;
+      color: var(--ink);
+      background: var(--green);
+      border-radius: 999px;
+      font-family: "SF Mono", "Cascadia Code", monospace;
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .stage {
+      display: grid;
+      grid-template-rows: minmax(0, 1fr) 250px;
+      min-height: 0;
+      background:
+        radial-gradient(circle at 0 0, rgba(128, 246, 107, .14), transparent 32%),
+        var(--ink-2);
+    }
+
+    .preview {
+      min-height: 0;
+      padding: 18px;
+      overflow: hidden;
+    }
+
+    .document {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      height: 100%;
+      overflow: hidden;
+      color: #1a1814;
+      background: var(--paper);
+      border: 1px solid rgba(255, 255, 255, .18);
+      border-radius: var(--radius);
+      box-shadow: 0 24px 48px var(--shadow);
+    }
+
+    .doc-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 48px;
+      padding: 0 16px;
+      background: #e2d5bf;
+      border-bottom: 1px solid rgba(16, 20, 17, .18);
+    }
+
+    .doc-top strong {
+      font-family: Georgia, "Songti SC", serif;
+      font-size: 16px;
+    }
+
+    .doc-top span {
+      color: #625945;
+      font-family: "SF Mono", "Cascadia Code", monospace;
+      font-size: 11px;
+    }
+
+    .doc-body {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 220px;
+      min-height: 0;
+    }
+
+    .code {
+      margin: 0;
+      padding: 18px;
+      overflow: auto;
+      color: #102016;
+      font-family: "SF Mono", "Cascadia Code", monospace;
+      font-size: 12px;
+      line-height: 1.65;
+      white-space: pre-wrap;
+    }
+
+    .mark-line {
+      display: inline-block;
+      padding: 0 4px;
+      color: #06120a;
+      background: rgba(128, 246, 107, .48);
+      border-left: 3px solid #19971f;
+    }
+
+    .evidence {
+      padding: 16px;
+      background: rgba(16, 20, 17, .08);
+      border-left: 1px solid rgba(16, 20, 17, .14);
+    }
+
+    .evidence h3,
+    .card h3 {
+      margin: 0 0 10px;
+      font-family: Georgia, "Songti SC", serif;
+      font-size: 14px;
+    }
+
+    .stack {
+      display: grid;
+      gap: 10px;
+    }
+
+    .mini {
+      padding: 10px;
+      color: #241f16;
+      background: rgba(255, 255, 255, .34);
+      border: 1px solid rgba(16, 20, 17, .14);
+      border-radius: 6px;
+      font-size: 12px;
+    }
+
+    .mini b {
+      display: block;
+      margin-bottom: 4px;
+      color: #111710;
+    }
+
+    .terminal {
+      display: grid;
+      grid-template-rows: 38px 1fr;
+      min-height: 0;
+      margin: 0 18px 18px;
+      overflow: hidden;
+      background: #050805;
+      border: 1px solid rgba(128, 246, 107, .28);
+      border-radius: var(--radius);
+      box-shadow: 0 0 32px rgba(128, 246, 107, .12);
+    }
+
+    .terminal-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      color: var(--green-2);
+      background: rgba(128, 246, 107, .08);
+      border-bottom: 1px solid rgba(128, 246, 107, .22);
+      font-family: "SF Mono", "Cascadia Code", monospace;
+      font-size: 12px;
+    }
+
+    .terminal-body {
+      margin: 0;
+      padding: 13px 14px;
+      overflow: auto;
+      color: var(--green-2);
+      font-family: "SF Mono", "Cascadia Code", monospace;
+      font-size: 12px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+    }
+
+    .right-section {
+      padding: 12px;
+      border-bottom: 1px solid rgba(240, 234, 223, .1);
+    }
+
+    .right-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      color: var(--paper-2);
+    }
+
+    .right-title h2 {
+      margin: 0;
+      font-family: Georgia, "Songti SC", serif;
+      font-size: 15px;
+    }
+
+    .right-title span {
+      color: var(--muted);
+      font-family: "SF Mono", "Cascadia Code", monospace;
+      font-size: 11px;
+    }
+
+    .card {
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+      color: var(--paper-2);
+      background: rgba(240, 234, 223, .07);
+      border: 1px solid rgba(240, 234, 223, .13);
+      border-radius: var(--radius);
+    }
+
+    .card + .card {
+      margin-top: 8px;
+    }
+
+    .change {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      cursor: pointer;
+    }
+
+    .change.active {
+      border-color: rgba(128, 246, 107, .42);
+      box-shadow: inset 4px 0 var(--green);
+    }
+
+    .change b {
+      overflow: hidden;
+      font-size: 13px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .change small,
+    .card small {
+      color: var(--muted);
+      font-family: "SF Mono", "Cascadia Code", monospace;
+      font-size: 11px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: 22px;
+      padding: 0 8px;
+      color: var(--ink);
+      background: var(--paper-3);
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .badge.hot {
+      background: var(--red-2);
+    }
+
+    .badge.ok {
+      background: var(--green);
+    }
+
+    .meter {
+      height: 7px;
+      overflow: hidden;
+      background: rgba(0, 0, 0, .28);
+      border-radius: 99px;
+    }
+
+    .meter span {
+      display: block;
+      height: 100%;
+      background: linear-gradient(90deg, var(--green), var(--blue));
+      border-radius: inherit;
+    }
+
+    .timeline {
+      display: grid;
+      grid-template-columns: repeat(16, 1fr);
+      gap: 3px;
+      height: 44px;
+      align-items: end;
+    }
+
+    .timeline span {
+      min-height: 8px;
+      background: rgba(128, 246, 107, .28);
+      border: 1px solid rgba(128, 246, 107, .22);
+      border-radius: 2px 2px 0 0;
+    }
+
+    .timeline span:nth-child(3n) {
+      background: rgba(198, 74, 59, .44);
+      border-color: rgba(198, 74, 59, .32);
+    }
+
+    .skill-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .skill {
+      min-height: 74px;
+      padding: 10px;
+      background: rgba(0, 0, 0, .16);
+      border: 1px solid rgba(240, 234, 223, .12);
+      border-radius: 6px;
+    }
+
+    .skill strong {
+      display: block;
+      overflow: hidden;
+      margin-bottom: 8px;
+      color: var(--paper);
+      font-size: 12px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .skill small {
+      color: var(--muted);
+      font-family: "SF Mono", "Cascadia Code", monospace;
+      font-size: 11px;
+    }
+
+    .route {
+      display: grid;
+      grid-template-columns: 74px 1fr;
+      gap: 10px;
+      align-items: center;
+      font-size: 12px;
+    }
+
+    .route strong {
+      color: var(--green-2);
+      font-family: "SF Mono", "Cascadia Code", monospace;
+    }
+
+    @media (max-width: 1160px) {
+      .app {
+        min-width: 820px;
+      }
+
+      .layout {
+        grid-template-columns: 58px 260px minmax(380px, 1fr);
+      }
+
+      .right-pane {
+        display: none;
+      }
+
+      .topbar {
+        grid-template-columns: 250px 1fr;
+      }
+
+      .top-actions {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="mark">LC</div>
+        <div class="brand-title">
+          <strong>律师助理 · 项目驾驶舱</strong>
+          <span>/Users/wuwenrui/Desktop/code/wwr/icu/lawyer-copilot</span>
+        </div>
+      </div>
+      <div class="command">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span>搜索文件、会话、skill、命令；content: 可查全文</span>
+      </div>
+      <div class="top-actions">
+        <div class="pill"><span class="dot"></span>Codex 正在等待输入</div>
+        <div class="pill">余额 ¥42.80</div>
+      </div>
+    </header>
+
+    <main class="layout">
+      <nav class="rail" aria-label="主导航">
+        <button class="active" title="驾驶舱" aria-label="驾驶舱">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M4 13a8 8 0 0 1 16 0" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <path d="M12 13l4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <path d="M5 19h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+        <button title="文件" aria-label="文件">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M4 5h6l2 2h8v12H4z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <button title="记忆" aria-label="记忆">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M6 4h12v16l-6-3-6 3z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <button title="Skill" aria-label="Skill">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+            <path d="M12 8v8M8.5 10l7 4M15.5 10l-7 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </nav>
+
+      <aside class="file-pane">
+        <div class="pane-head">
+          <h2>文件热区</h2>
+          <small>12 changed</small>
+        </div>
+        <div class="file-search">content: project cockpit</div>
+        <div class="tree">
+          <div class="node"><span class="icon folder"></span><span class="name">src/features/files</span><span></span></div>
+          <div class="node active" data-file="FileExplorerWorkspace.tsx"><span class="icon blue"></span><span class="name">FileExplorerWorkspace.tsx</span><span class="heat">8</span></div>
+          <div class="node" data-file="external_changes.rs"><span class="icon red"></span><span class="name">external_changes.rs</span><span class="heat">5</span></div>
+          <div class="node" data-file="TerminalDock.tsx"><span class="icon blue"></span><span class="name">TerminalDock.tsx</span><span class="heat">4</span></div>
+          <div class="node"><span class="icon folder"></span><span class="name">src/features/project-memory</span><span></span></div>
+          <div class="node" data-file="ProjectMemoryPanel.tsx"><span class="icon blue"></span><span class="name">ProjectMemoryPanel.tsx</span><span class="heat">3</span></div>
+          <div class="node"><span class="icon folder"></span><span class="name">src/features/skill-market</span><span></span></div>
+          <div class="node" data-file="SkillMarketButton.tsx"><span class="icon blue"></span><span class="name">SkillMarketButton.tsx</span><span class="heat">2</span></div>
+          <div class="node"><span class="icon folder"></span><span class="name">src-tauri/src</span><span></span></div>
+          <div class="node" data-file="terminal.rs"><span class="icon red"></span><span class="name">terminal.rs</span><span class="heat">2</span></div>
+        </div>
+      </aside>
+
+      <section class="stage">
+        <div class="preview">
+          <article class="document">
+            <div class="doc-top">
+              <strong id="docTitle">FileExplorerWorkspace.tsx</strong>
+              <span>agent diff · autosynced · watcher</span>
+            </div>
+            <div class="doc-body">
+              <pre class="code" id="codePane">type CockpitSurfaceProps = {
+  workspaceId: string;
+  activeFilePath: string | null;
+  terminalId: string;
+  changeInbox: AgentFileChange[];
+};
+
+export function CockpitSurface(props: CockpitSurfaceProps) {
+  const currentChange = useHighlightedChange(props.changeInbox);
+  const memory = useProjectMemoryTimeline(props.workspaceId);
+
+  return (
+    &lt;FanboxCockpitFrame&gt;
+      &lt;FileHeatTree activePath={props.activeFilePath} /&gt;
+      &lt;LivePreview change={currentChange} /&gt;
+      &lt;TerminalDock terminalId={props.terminalId} /&gt;
+      <span class="mark-line">&lt;ChangeInbox items={props.changeInbox} replayable /&gt;</span>
+      &lt;ProjectMemoryStrip items={memory} /&gt;
+    &lt;/FanboxCockpitFrame&gt;
+  );
+}</pre>
+              <aside class="evidence">
+                <h3>证据包</h3>
+                <div class="stack">
+                  <div class="mini"><b>变更来源</b>Codex run · 14:32:08</div>
+                  <div class="mini"><b>影响范围</b>文件面板、终端联动、Project Memory</div>
+                  <div class="mini"><b>下一步</b>生成 OpenSpec change draft</div>
+                </div>
+              </aside>
+            </div>
+          </article>
+        </div>
+
+        <section class="terminal">
+          <div class="terminal-head">
+            <span>terminal · codex resume --last</span>
+            <span>cwd: lawyer-copilot</span>
+          </div>
+          <pre class="terminal-body" id="terminalPane">$ codex resume
+codex: loaded project context
+edit  src/features/files/components/FileExplorerWorkspace.tsx
+edit  src-tauri/src/workspaces/external_changes.rs
+test  vitest FileViewPanel.external-change.test.tsx
+idle  waiting for user input</pre>
+        </section>
+      </section>
+
+      <aside class="right-pane">
+        <div class="right-section">
+          <div class="right-title">
+            <h2>变更收件箱</h2>
+            <span>session replay</span>
+          </div>
+          <div class="card change active" data-target="FileExplorerWorkspace.tsx">
+            <div>
+              <b>FileExplorerWorkspace.tsx</b>
+              <small>UI shell · 8 writes · clean refresh</small>
+            </div>
+            <span class="badge hot">hot</span>
+          </div>
+          <div class="card change" data-target="external_changes.rs">
+            <div>
+              <b>external_changes.rs</b>
+              <small>watcher event · 5 writes · Rust</small>
+            </div>
+            <span class="badge">watch</span>
+          </div>
+          <div class="card change" data-target="TerminalDock.tsx">
+            <div>
+              <b>TerminalDock.tsx</b>
+              <small>tabs · 4 writes · resize</small>
+            </div>
+            <span class="badge ok">ready</span>
+          </div>
+          <div class="timeline" aria-label="session replay timeline">
+            <span style="height: 18px"></span><span style="height: 28px"></span><span style="height: 36px"></span><span style="height: 14px"></span>
+            <span style="height: 31px"></span><span style="height: 22px"></span><span style="height: 40px"></span><span style="height: 26px"></span>
+            <span style="height: 34px"></span><span style="height: 17px"></span><span style="height: 29px"></span><span style="height: 38px"></span>
+            <span style="height: 24px"></span><span style="height: 42px"></span><span style="height: 28px"></span><span style="height: 19px"></span>
+          </div>
+        </div>
+
+        <div class="right-section">
+          <div class="right-title">
+            <h2>项目记忆</h2>
+            <span>40 sessions</span>
+          </div>
+          <div class="card">
+            <h3>上次约定</h3>
+            <div class="route"><strong>PlanFirst</strong><span>行为变更先建 OpenSpec，执行落到 Trellis。</span></div>
+            <div class="route"><strong>Fork</strong><span>新增文件优先，减少上游合并冲突。</span></div>
+            <div class="route"><strong>Gate</strong><span>typecheck、test、runtime contracts 合并前必须可追溯。</span></div>
+          </div>
+        </div>
+
+        <div class="right-section">
+          <div class="right-title">
+            <h2>Skills X-ray</h2>
+            <span>budget 68%</span>
+          </div>
+          <div class="skill-grid">
+            <div class="skill"><strong>codedebug</strong><small>23 hits · healthy</small><div class="meter"><span style="width: 82%"></span></div></div>
+            <div class="skill"><strong>frontend-design</strong><small>7 hits · active</small><div class="meter"><span style="width: 52%"></span></div></div>
+            <div class="skill"><strong>plan-from-requirements</strong><small>4 hits · quiet</small><div class="meter"><span style="width: 24%"></span></div></div>
+            <div class="skill"><strong>security-reviewer</strong><small>2 hits · enabled</small><div class="meter"><span style="width: 16%"></span></div></div>
+          </div>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <script>
+    const snippets = {
+      "FileExplorerWorkspace.tsx": {
+        title: "FileExplorerWorkspace.tsx",
+        code: `type CockpitSurfaceProps = {
+  workspaceId: string;
+  activeFilePath: string | null;
+  terminalId: string;
+  changeInbox: AgentFileChange[];
+};
+
+export function CockpitSurface(props: CockpitSurfaceProps) {
+  const currentChange = useHighlightedChange(props.changeInbox);
+  const memory = useProjectMemoryTimeline(props.workspaceId);
+
+  return (
+    <FanboxCockpitFrame>
+      <FileHeatTree activePath={props.activeFilePath} />
+      <LivePreview change={currentChange} />
+      <TerminalDock terminalId={props.terminalId} />
+      <ChangeInbox items={props.changeInbox} replayable />
+      <ProjectMemoryStrip items={memory} />
+    </FanboxCockpitFrame>
+  );
+}`,
+        terminal: "$ codex resume\ncodex: loaded project context\nedit  src/features/files/components/FileExplorerWorkspace.tsx\nedit  src-tauri/src/workspaces/external_changes.rs\ntest  vitest FileViewPanel.external-change.test.tsx\nidle  waiting for user input"
+      },
+      "external_changes.rs": {
+        title: "external_changes.rs",
+        code: `fn emit_agent_change_event(
+    app: &AppHandle,
+    workspace_id: &str,
+    normalized_path: String,
+    signature: Option<&FileSignature>,
+) {
+    let payload = build_event(
+        workspace_id,
+        normalized_path,
+        signature.as_ref(),
+        "watcher",
+        "agent-write-detected",
+        None,
+    );
+    emit_external_change_event(app, &payload);
+}`,
+        terminal: "$ cargo test external_changes\nrunning 8 tests\ntest emits_workspace_relative_paths ... ok\ntest dedupes_bursty_agent_writes ... ok\ntest falls_back_to_polling ... ok\nresult: ok"
+      },
+      "TerminalDock.tsx": {
+        title: "TerminalDock.tsx",
+        code: `export function TerminalDock(props: TerminalDockProps) {
+  return (
+    <section className="terminal-panel cockpit-linked">
+      <TerminalTabs terminals={props.terminals} />
+      <TerminalPanel containerRef={props.containerRef} />
+      <AgentHandoffGlow state={props.agentState} />
+    </section>
+  );
+}`,
+        terminal: "$ npm exec vitest -- src/features/terminal/hooks/useTerminalTabs.test.tsx\n3 files changed since last run\nTerminal tabs keep session order\nTerminal dock exposes active agent state\nresult: pass"
+      }
+    };
+
+    const docTitle = document.getElementById("docTitle");
+    const codePane = document.getElementById("codePane");
+    const terminalPane = document.getElementById("terminalPane");
+
+    function activate(name) {
+      const data = snippets[name] || snippets["FileExplorerWorkspace.tsx"];
+      docTitle.textContent = data.title;
+      codePane.textContent = data.code;
+      terminalPane.textContent = data.terminal;
+
+      document.querySelectorAll(".change").forEach((item) => {
+        item.classList.toggle("active", item.dataset.target === name);
+      });
+      document.querySelectorAll(".node").forEach((item) => {
+        item.classList.toggle("active", item.dataset.file === name);
+      });
+    }
+
+    document.querySelectorAll(".change").forEach((item) => {
+      item.addEventListener("click", () => activate(item.dataset.target));
+    });
+    document.querySelectorAll(".node[data-file]").forEach((item) => {
+      item.addEventListener("click", () => activate(item.dataset.file));
+    });
+  </script>
+</body>
+</html>

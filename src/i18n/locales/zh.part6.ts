@@ -272,6 +272,57 @@ const zhPart6 = {
       priorityDetail: "优先读取该目录，再回退到工作区默认 openspec。",
     },
   },
+  // FanBox 对话工作台（OpenSpec: add-fanbox-dialogue-cockpit）
+  fanbox: {
+    summary: {
+      cited: "引用文件",
+      citedCount: "{{count}} 个文件",
+      changed: "改动热区",
+      changedCount: "{{count}} 次更新",
+      view: "查看",
+    },
+    tabs: {
+      evidence: "证据",
+      changes: "改动",
+      memory: "记忆",
+      logs: "日志",
+      more: "更多面板",
+    },
+    evidence: {
+      title: "工作证据",
+      citedTitle: "引用来源",
+      hotTitle: "改动热区",
+      readsLabel: "次引用",
+      editsLabel: "次改动",
+      empty: "本会话还没有引用或改动。AI 读取、修改文件后会在这里出现证据。",
+    },
+    memoryPanel: {
+      title: "项目记忆",
+      open: "打开完整记忆视图",
+      empty: "还没有项目记忆条目。",
+    },
+    logs: {
+      title: "活动日志",
+      terminalNote: "日常使用无需命令行，仅高级排障时展开完整终端。",
+      openTerminal: "展开终端",
+    },
+    casebar: {
+      viewChat: "对话",
+      viewFiles: "文件",
+      viewEvidence: "证据",
+      filesEmpty: "还没有文件活动。AI 读取或修改的文件会在这里出现。",
+      evidenceEmpty: "还没有证据。最近一次回复的引用与改动会在这里出现。",
+      latestReply: "最近回复摘要",
+      sessionSection: "本轮会话",
+      workspaceSection: "完整工作区",
+      searchPlaceholder: "搜索文件…",
+      expandAll: "展开全部",
+      collapseAll: "收起全部",
+      workspaceEmpty: "工作区暂无文件。",
+      editsBadge: "改{{count}}次",
+      readsBadge: "引用{{count}}次",
+    },
+  },
 };
 
 export default zhPart6;

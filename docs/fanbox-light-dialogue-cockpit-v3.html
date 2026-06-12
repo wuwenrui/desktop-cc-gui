@@ -1,0 +1,763 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lawyer Copilot Light Dialogue Cockpit V3</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #fbfbfa;
+      --sidebar: #e9edf2;
+      --sidebar-line: #d8dde5;
+      --ink: #232733;
+      --ink-2: #414652;
+      --muted: #8d94a1;
+      --line: #e4e6eb;
+      --card: #ffffff;
+      --soft: #f5f6f8;
+      --blue: #4d7dff;
+      --blue-soft: #edf2ff;
+      --red: #d95f50;
+      --green: #2fa96b;
+      --green-soft: #e9f8ef;
+      --orange: #d97855;
+      --gold: #c39745;
+      --shadow: 0 18px 42px rgba(28, 34, 45, .10);
+      --radius: 12px;
+      --mono: "SF Mono", "Cascadia Code", Menlo, monospace;
+      --sans: "Avenir Next", "Segoe UI", "PingFang SC", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #f4f5f7;
+      color: var(--ink);
+      font-family: var(--sans);
+      letter-spacing: 0;
+    }
+    button { font: inherit; }
+
+    .window {
+      display: grid;
+      grid-template-columns: 440px minmax(760px, 1fr);
+      width: 100vw;
+      height: 100vh;
+      background: var(--bg);
+      border: 1px solid #cfd4dc;
+      border-radius: 18px;
+      overflow: hidden;
+    }
+
+    .sidebar {
+      display: grid;
+      grid-template-rows: 66px auto 1fr 58px;
+      min-height: 0;
+      background: var(--sidebar);
+      border-right: 1px solid var(--sidebar-line);
+    }
+
+    .traffic {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 14px;
+      border-bottom: 1px solid var(--sidebar-line);
+    }
+    .traffic i {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      display: block;
+    }
+    .traffic i:nth-child(1) { background: #ff5f57; }
+    .traffic i:nth-child(2) { background: #ffbd2e; }
+    .traffic i:nth-child(3) { background: #28c840; }
+    .collapse {
+      margin-left: auto;
+      color: #69707a;
+      border: 0;
+      background: transparent;
+      font-size: 18px;
+    }
+
+    .nav {
+      display: grid;
+      gap: 8px;
+      padding: 18px 22px 20px;
+      border-bottom: 1px solid var(--sidebar-line);
+    }
+    .nav-row {
+      display: grid;
+      grid-template-columns: 28px 1fr auto;
+      align-items: center;
+      gap: 12px;
+      min-height: 38px;
+      color: var(--ink);
+      font-size: 18px;
+      font-weight: 700;
+    }
+    .nav-row svg { color: #252b36; }
+    .shortcut {
+      padding: 3px 12px;
+      color: #747b87;
+      background: #d7dbe2;
+      border: 1px solid #cbd0d9;
+      border-radius: 10px;
+      font-family: var(--mono);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .workspaces {
+      min-height: 0;
+      overflow: auto;
+      padding: 22px 20px;
+    }
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      color: #a1a7b2;
+      font-size: 18px;
+      font-weight: 700;
+    }
+    .workspace-row {
+      display: grid;
+      grid-template-columns: 28px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 10px;
+      min-height: 43px;
+      padding: 0 10px;
+      color: #666d78;
+      border-radius: 12px;
+      font-family: var(--mono);
+      font-size: 18px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .workspace-row.active {
+      color: #4d535d;
+      background: #dce0e6;
+    }
+    .workspace-row span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .tag {
+      padding: 2px 10px;
+      color: var(--blue);
+      background: #ccd9ff;
+      border: 1px solid #9fb7ff;
+      border-radius: 999px;
+      font-size: 15px;
+    }
+    .settings {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 0 26px;
+      color: #303642;
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .main {
+      display: grid;
+      grid-template-rows: 66px minmax(0, 1fr);
+      min-width: 0;
+      background: var(--bg);
+    }
+    .topbar {
+      display: grid;
+      grid-template-columns: minmax(240px, 1fr) auto;
+      align-items: center;
+      padding: 0 22px 0 38px;
+      border-bottom: 1px solid var(--line);
+    }
+    .crumb {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+      font-family: var(--mono);
+      font-size: 22px;
+      font-weight: 800;
+    }
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      color: #4f5663;
+    }
+    .toolbar button {
+      border: 0;
+      background: transparent;
+      color: inherit;
+      padding: 0;
+      display: grid;
+      place-items: center;
+    }
+    .market {
+      font-family: var(--mono);
+      font-size: 20px;
+      font-weight: 900;
+      color: #222733;
+    }
+    .usage {
+      padding: 8px 15px;
+      color: #d7544c;
+      background: #fff3f2;
+      border: 1px solid #f1c6c3;
+      border-radius: 999px;
+      font-size: 16px;
+      font-weight: 800;
+    }
+
+    .body {
+      display: grid;
+      grid-template-columns: minmax(680px, 1fr) 390px;
+      min-height: 0;
+    }
+    .conversation {
+      display: grid;
+      grid-template-rows: 76px minmax(0, 1fr) 178px;
+      min-height: 0;
+      background: linear-gradient(180deg, #fff 0%, #fbfbfa 48%, #f8f9fb 100%);
+    }
+    .casebar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 36px;
+    }
+    .case-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+      color: var(--ink);
+      font-family: var(--mono);
+      font-size: 18px;
+      font-weight: 900;
+    }
+    .case-title span {
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .mode {
+      display: inline-grid;
+      grid-template-columns: repeat(3, auto);
+      gap: 4px;
+      padding: 4px;
+      background: var(--soft);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+    }
+    .mode button {
+      height: 30px;
+      padding: 0 14px;
+      border: 0;
+      border-radius: 999px;
+      color: #68707c;
+      background: transparent;
+      font-weight: 800;
+    }
+    .mode button.active {
+      color: #fff;
+      background: #252b36;
+    }
+
+    .messages {
+      min-height: 0;
+      overflow: auto;
+      padding: 16px 36px 28px;
+    }
+    .message {
+      display: grid;
+      grid-template-columns: 42px minmax(0, 780px);
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+    .message.user {
+      grid-template-columns: minmax(0, 760px) 42px;
+      justify-content: end;
+    }
+    .avatar {
+      display: grid;
+      place-items: center;
+      width: 42px;
+      height: 42px;
+      color: #fff;
+      background: #252b36;
+      border-radius: 12px;
+      font-weight: 900;
+    }
+    .message.user .avatar {
+      grid-column: 2;
+      background: var(--blue);
+    }
+    .bubble {
+      padding: 16px 18px;
+      color: var(--ink);
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      box-shadow: 0 6px 18px rgba(28, 34, 45, .06);
+      font-size: 16px;
+      line-height: 1.65;
+    }
+    .message.user .bubble {
+      grid-column: 1;
+      grid-row: 1;
+      background: #f7f9ff;
+      border-color: #d9e2ff;
+    }
+    .bubble p { margin: 0; }
+    .bubble p + p { margin-top: 8px; }
+
+    .source-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .source-card {
+      padding: 10px;
+      background: var(--soft);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      font-size: 14px;
+      line-height: 1.4;
+    }
+    .source-card strong {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--blue);
+      font-family: var(--mono);
+      font-size: 13px;
+    }
+
+    .composer-wrap {
+      padding: 0 36px 24px;
+    }
+    .composer {
+      display: grid;
+      grid-template-rows: 54px minmax(82px, 1fr);
+      overflow: hidden;
+      background: var(--card);
+      border: 1px solid #dfe2e8;
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+    }
+    .model-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 18px;
+      border-bottom: 1px solid var(--line);
+      color: var(--ink-2);
+      font-family: var(--mono);
+      font-size: 16px;
+      font-weight: 800;
+    }
+    .star {
+      color: var(--orange);
+      font-size: 24px;
+      line-height: 1;
+    }
+    .model-pill {
+      padding: 4px 9px;
+      color: #858b95;
+      background: #f1f2f4;
+      border: 1px solid #d6d9df;
+      border-radius: 9px;
+      font-family: var(--sans);
+      font-size: 14px;
+      font-weight: 800;
+    }
+    .input-row {
+      display: grid;
+      grid-template-columns: 48px minmax(0, 1fr) 48px;
+      gap: 10px;
+      align-items: end;
+      padding: 16px 18px 14px;
+    }
+    .plus,
+    .send {
+      display: grid;
+      place-items: center;
+      width: 36px;
+      height: 36px;
+      color: #747b86;
+      background: #f3f4f6;
+      border: 1px solid #dfe2e8;
+      border-radius: 11px;
+    }
+    .send {
+      color: #fff;
+      background: var(--blue);
+      border-color: var(--blue);
+    }
+    .prompt {
+      min-height: 66px;
+      color: var(--ink-2);
+      font-size: 18px;
+      line-height: 1.55;
+    }
+    .prompt .hint {
+      color: #9aa1ac;
+      font-weight: 700;
+    }
+
+    .inspector {
+      display: grid;
+      grid-template-rows: 48px minmax(0, 1fr) 150px;
+      min-height: 0;
+      border-left: 1px solid var(--line);
+      background: #fff;
+    }
+    .inspector-tabs {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 0 20px;
+      border-bottom: 1px solid var(--line);
+    }
+    .inspector-tabs button {
+      border: 0;
+      background: transparent;
+      color: #4c5360;
+      font-size: 15px;
+      font-weight: 900;
+    }
+    .inspector-tabs button.active {
+      color: var(--blue);
+    }
+    .panel-scroll {
+      min-height: 0;
+      overflow: auto;
+      padding: 18px 20px;
+    }
+    .right-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      color: var(--ink);
+      font-size: 18px;
+      font-weight: 900;
+    }
+    .right-title small {
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 13px;
+    }
+    .e-card {
+      padding: 13px;
+      margin-bottom: 10px;
+      background: #fbfbfc;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+    .e-card.hot {
+      background: #fff8f7;
+      border-color: #f0cbc6;
+      box-shadow: inset 4px 0 var(--red);
+    }
+    .e-card.ok {
+      background: var(--green-soft);
+      border-color: #c9ecd7;
+    }
+    .e-card strong {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--ink);
+      font-size: 15px;
+      font-weight: 900;
+    }
+    .e-card p,
+    .e-card small {
+      margin: 0;
+      color: #656d79;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    .badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .badge {
+      padding: 4px 8px;
+      color: var(--ink-2);
+      background: #eef1f5;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .status-list {
+      padding: 14px 20px;
+      border-top: 1px solid var(--line);
+      background: #fbfbfc;
+    }
+    .status-row {
+      display: grid;
+      grid-template-columns: 14px minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      height: 34px;
+      color: #5e6571;
+      font-size: 14px;
+    }
+    .status-row i {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+    }
+    .status-row span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .status-row small {
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+    .file-board,.evidence-board{display:grid;gap:14px;max-width:860px;margin:0 auto}.file-card,.fact-card{padding:18px;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 8px 22px rgba(28,34,45,.06)}.file-card{display:grid;grid-template-columns:42px minmax(0,1fr) auto;gap:14px;align-items:center}.file-mark{width:38px;height:44px;border-radius:9px;background:var(--blue);box-shadow:inset 0 -9px rgba(0,0,0,.12)}.file-mark.hot{background:var(--red)}.file-mark.gold{background:var(--gold)}.file-card strong,.fact-card strong{display:block;margin-bottom:5px;color:var(--ink);font-size:16px}.file-card p,.fact-card p{margin:0;color:#626a76;font-size:14px;line-height:1.55}.hot-num{padding:5px 10px;color:#fff;background:var(--red);border-radius:999px;font-family:var(--mono);font-weight:900}.nav-row,.workspace-row,.mode button,.inspector-tabs button{cursor:pointer}
+
+    @media (max-width: 1540px) {
+      .window { grid-template-columns: 360px minmax(660px, 1fr); }
+      .body { grid-template-columns: minmax(640px, 1fr); }
+      .inspector { display: none; }
+      .usage { display: none; }
+      .nav-row { font-size: 16px; }
+      .workspace-row { font-size: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="window">
+    <aside class="sidebar">
+      <div class="traffic">
+        <i></i><i></i><i></i>
+        <button class="collapse" aria-label="收起侧栏">⇤</button>
+      </div>
+      <nav class="nav" aria-label="主导航">
+        <div class="nav-row">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 11 12 4l8 7v9H5v-9z" stroke="currentColor" stroke-width="2"/></svg>
+          <span>首页</span>
+        </div>
+        <div class="nav-row">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM16.5 14v6M13.5 17h6" stroke="currentColor" stroke-width="2"/></svg>
+          <span>面板模式</span><b class="shortcut">⌘K</b>
+        </div>
+        <div class="nav-row">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="m20 20-4-4m2-5a7 7 0 1 1-14 0 7 7 0 0 1 14 0z" stroke="currentColor" stroke-width="2"/></svg>
+          <span>搜索</span><b class="shortcut">⌘O</b>
+        </div>
+        <div class="nav-row">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M5 9h14v10H5zM8 9V6h8v3M8 13h8" stroke="currentColor" stroke-width="2"/></svg>
+          <span>Skill 市场</span>
+        </div>
+        <div class="nav-row">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6 17h11a4 4 0 0 0 0-8 6 6 0 0 0-11.7 2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          <span>Lawhub</span>
+        </div>
+      </nav>
+      <div class="workspaces">
+        <div class="section-head"><span>工作区</span><span>⊞</span></div>
+        <div class="workspace-row active" data-workspace="workspace">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M3 6h7l2 2h9v10H3z" stroke="currentColor" stroke-width="2"/></svg>
+          <span>workspace</span><b class="tag">Default</b>
+        </div>
+        <div class="workspace-row" data-workspace="casepilot">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M3 6h7l2 2h9v10H3z" stroke="currentColor" stroke-width="2"/></svg>
+          <span>casepilot</span>
+        </div>
+        <div class="workspace-row" data-workspace="expense-audit-v2">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M3 6h7l2 2h9v10H3z" stroke="currentColor" stroke-width="2"/></svg>
+          <span>expense-audit-v2</span>
+        </div>
+        <div class="workspace-row" data-workspace="puwei">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M3 6h7l2 2h9v10H3z" stroke="currentColor" stroke-width="2"/></svg>
+          <span>puwei</span>
+        </div>
+        <div class="workspace-row" data-workspace="wechat_article_gen">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M3 6h7l2 2h9v10H3z" stroke="currentColor" stroke-width="2"/></svg>
+          <span>wechat_article_gen...</span>
+        </div>
+      </div>
+      <div class="settings">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8z" stroke="currentColor" stroke-width="2"/><path d="M4 12h2m12 0h2M12 4v2m0 12v2" stroke="currentColor" stroke-width="2"/></svg>
+        <span>设置</span>
+      </div>
+    </aside>
+
+    <section class="main">
+      <header class="topbar">
+        <div class="crumb">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M3 6h7l2 2h9v10H3z" stroke="currentColor" stroke-width="2"/></svg>
+          <span>workspace › 股权转让协议审查</span>
+        </div>
+        <div class="toolbar">
+          <button title="运行">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="m8 5 11 7-11 7z" stroke="currentColor" stroke-width="2"/></svg>
+          </button>
+          <button title="文件">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 6h7l2 2h7v10H4z" stroke="currentColor" stroke-width="2"/></svg>
+          </button>
+          <button title="搜索">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="m20 20-4-4m2-5a7 7 0 1 1-14 0 7 7 0 0 1 14 0z" stroke="currentColor" stroke-width="2"/></svg>
+          </button>
+          <span class="market">Skill 市场</span>
+          <span class="usage">● 用量不可用</span>
+        </div>
+      </header>
+
+      <div class="body">
+        <main class="conversation">
+          <div class="casebar">
+            <div class="case-title">
+              <span>今天想构建什么？</span>
+              <strong>向 AI 提问吧</strong>
+            </div>
+            <div class="mode" aria-label="会话模式">
+              <button class="active" data-mode="chat">对话</button>
+              <button data-mode="files">文件</button>
+              <button data-mode="evidence">证据</button>
+            </div>
+          </div>
+
+          <div class="messages">
+            <article class="message user">
+              <div class="avatar">我</div>
+              <div class="bubble">
+                <p>帮我审查这份股权转让协议，重点看付款、交割、违约责任和工商变更风险。</p>
+              </div>
+            </article>
+            <article class="message">
+              <div class="avatar">AI</div>
+              <div class="bubble">
+                <p>已完成第一轮审查。最需要先处理的是付款顺序和工商变更条件不一致，可能导致买方付款后无法完成股权登记。</p>
+                <p>我已生成风险清单，并把需要你确认的事实问题放到右侧证据栏。</p>
+                <div class="source-grid">
+                  <div class="source-card"><strong>引用文件</strong>4 个文件被使用</div>
+                  <div class="source-card"><strong>项目记忆</strong>匹配 2 条偏好</div>
+                  <div class="source-card"><strong>改动热区</strong>风险清单 8 次更新</div>
+                </div>
+              </div>
+            </article>
+            <article class="message user">
+              <div class="avatar">我</div>
+              <div class="bubble">
+                <p>把风险分成“必须修改”和“建议优化”，同时给客户一个非技术版说明。</p>
+              </div>
+            </article>
+            <article class="message">
+              <div class="avatar">AI</div>
+              <div class="bubble">
+                <p>已分层整理。必须修改项有 4 条，建议优化项有 6 条。客户说明已避免法言法语，并保留对应条款编号。</p>
+                <p>下一步建议：先确认交割前置条件，再决定是否把付款节点改为分期或监管账户。</p>
+              </div>
+            </article>
+          </div>
+
+          <div class="composer-wrap">
+            <div class="composer">
+              <div class="model-row">
+                <span class="star">✺</span>
+                <span>Claude Code / claude-opus-4-7[1m]</span>
+                <span class="model-pill">自动模式</span>
+                <span class="model-pill">完整访问</span>
+              </div>
+              <div class="input-row">
+                <button class="plus" aria-label="添加附件">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2"/></svg>
+                </button>
+                <div class="prompt">
+                  继续把必须修改项改成律师函式措辞，并引用对应协议条款。<br>
+                  <span class="hint">@引用文件，@@引用记忆，$选择技能，#唤起智能体</span>
+                </div>
+                <button class="send" aria-label="发送">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="m4 12 16-8-5 16-3-6z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <aside class="inspector">
+          <div class="inspector-tabs">
+            <button class="active" data-panel="evidence">证据</button>
+            <button data-panel="changes">改动</button>
+            <button data-panel="memory">记忆</button>
+            <button data-panel="logs">日志</button>
+          </div>
+          <div class="panel-scroll">
+            <div class="right-title">
+              <span>工作证据</span>
+              <small>4 文件 · 2 记忆</small>
+            </div>
+            <div class="e-card">
+              <strong>引用来源</strong>
+              <p>股权转让协议第 4.2、5.1、7.3 条；客户沟通纪要第 12 行。</p>
+              <div class="badge-row"><span class="badge">条款编号</span><span class="badge">客户事实</span></div>
+            </div>
+            <div class="e-card hot">
+              <strong>改动热区</strong>
+              <p>风险清单.md 更新 8 次，集中在“交割条件与付款节点冲突”。</p>
+            </div>
+            <div class="e-card ok">
+              <strong>项目记忆</strong>
+              <p>客户偏好：先给结论，再给条款依据；所有风险必须分层。</p>
+            </div>
+            <div class="right-title">
+              <span>待确认</span>
+              <small>3 项</small>
+            </div>
+            <div class="e-card">
+              <strong>工商变更材料</strong>
+              <p>买方是否已经提供完整登记材料？缺失时不应设置一次性全额付款。</p>
+            </div>
+            <div class="e-card">
+              <strong>监管账户</strong>
+              <p>客户是否接受共管账户或分期付款安排？</p>
+            </div>
+          </div>
+          <div class="status-list">
+            <div class="status-row"><i></i><span>风险清单已保存</span><small>14:32</small></div>
+            <div class="status-row"><i></i><span>条款引用已校验</span><small>14:33</small></div>
+            <div class="status-row"><i></i><span>等待你确认交割事实</span><small>now</small></div>
+          </div>
+        </aside>
+      </div>
+    </section>
+  </div>
+  <script>
+    const q=(s)=>document.querySelector(s),qa=(s)=>[...document.querySelectorAll(s)],messages=q(".messages"),panel=q(".panel-scroll"),crumb=q(".crumb span"),status=q(".status-list");
+    const views={
+      chat:messages.innerHTML,
+      files:`<div class="file-board"><div class="file-card"><i class="file-mark hot"></i><div><strong>风险清单.md</strong><p>AI 本轮主要改动文件，集中在“付款节点”和“工商变更风险”。点击右侧“改动”可看完整改动收件箱。</p></div><b class="hot-num">8</b></div><div class="file-card"><i class="file-mark"></i><div><strong>股权转让协议.docx</strong><p>作为主引用源使用，条款 4.2、5.1、7.3 已进入证据栏。</p></div><b class="hot-num">5</b></div><div class="file-card"><i class="file-mark gold"></i><div><strong>客户沟通纪要.md</strong><p>提取客户事实：先付款、后工商变更，存在履行顺序冲突。</p></div><b class="hot-num">3</b></div></div>`,
+      evidence:`<div class="evidence-board"><div class="fact-card"><strong>为什么这么判断</strong><p>付款条款要求买方先支付大部分价款，但工商变更材料未作为明确前置条件，导致付款后登记失败风险。</p></div><div class="fact-card"><strong>给用户的下一步</strong><p>确认买方材料是否齐备；如果不齐备，建议改成分期付款、监管账户或交割后付款。</p></div><div class="fact-card"><strong>FanBox 精华落点</strong><p>用户仍用对话完成工作，但始终知道 AI 引用了什么、改了什么、下一步卡在哪里。</p></div></div>`
+    };
+    const panels={
+      evidence:panel.innerHTML,
+      changes:`<div class="right-title"><span>改动收件箱</span><small>session</small></div><div class="e-card hot"><strong>风险清单.md</strong><p>8 次更新，生成“必须修改/建议优化/待确认”三层结构。</p></div><div class="e-card"><strong>客户说明.md</strong><p>新增非技术版说明，方便直接发给客户确认。</p></div><div class="e-card"><strong>股权转让协议.docx</strong><p>只读引用源，没有直接改原合同。</p></div>`,
+      memory:`<div class="right-title"><span>项目记忆</span><small>2 matched</small></div><div class="e-card ok"><strong>客户偏好</strong><p>先给结论，再给条款依据；避免长篇法理。</p></div><div class="e-card ok"><strong>团队约定</strong><p>风险项必须区分“必须修改 / 建议优化 / 待确认”。</p></div>`,
+      logs:`<div class="right-title"><span>高级日志</span><small>hidden terminal</small></div><div class="e-card"><strong>不用命令行</strong><p>普通用户只看保存、引用、错误状态；开发者需要排障时才打开完整日志。</p></div><div class="e-card"><strong>14:33</strong><p>条款引用已校验，等待用户确认交割事实。</p></div>`
+    };
+    qa(".mode button").forEach(b=>b.onclick=()=>{qa(".mode button").forEach(x=>x.classList.remove("active"));b.classList.add("active");messages.innerHTML=views[b.dataset.mode];});
+    qa(".inspector-tabs button").forEach(b=>b.onclick=()=>{qa(".inspector-tabs button").forEach(x=>x.classList.remove("active"));b.classList.add("active");panel.innerHTML=panels[b.dataset.panel];});
+    qa(".workspace-row").forEach(r=>r.onclick=()=>{qa(".workspace-row").forEach(x=>x.classList.remove("active"));r.classList.add("active");crumb.textContent=`${r.dataset.workspace} › 股权转让协议审查`;});
+  </script>
+</body>
+</html>

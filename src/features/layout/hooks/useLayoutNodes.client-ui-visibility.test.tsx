@@ -907,6 +907,12 @@ describe("useLayoutNodes client UI visibility", () => {
     expect(onOpenFile).toHaveBeenCalledWith("src/App.tsx");
   });
 
+  // FanBox 改版后（OpenSpec: add-fanbox-dialogue-cockpit）旧图标 PanelTabs
+  // 折叠在「···」浮层里，先展开再断言（spec: existing tabs survive behind overflow）。
+  const openLegacyPanelTabsOverflow = () => {
+    fireEvent.click(screen.getByRole("button", { name: "fanbox.tabs.more" }));
+  };
+
   it("toggles the Project Map toolbar icon off from full Project Map mode", async () => {
     clientUiVisibilityMock.visiblePanels.add("rightActivityToolbar");
     clientUiVisibilityMock.visibleControls.add("rightToolbar.projectMap");
@@ -919,6 +925,7 @@ describe("useLayoutNodes client UI visibility", () => {
     );
 
     render(<>{result.current.rightPanelToolbarNode}</>);
+    openLegacyPanelTabsOverflow();
     expect(screen.getByTestId("panel-tabs").dataset.active).toBe("projectMap");
 
     fireEvent.click(screen.getByRole("button", { name: "projectMap" }));
@@ -938,6 +945,7 @@ describe("useLayoutNodes client UI visibility", () => {
     );
 
     render(<>{result.current.rightPanelToolbarNode}</>);
+    openLegacyPanelTabsOverflow();
     expect(screen.getByTestId("panel-tabs").dataset.active).toBe("files");
 
     fireEvent.click(screen.getByRole("button", { name: "projectMap" }));
@@ -958,6 +966,7 @@ describe("useLayoutNodes client UI visibility", () => {
     );
 
     render(<>{result.current.rightPanelToolbarNode}</>);
+    openLegacyPanelTabsOverflow();
     expect(screen.getByTestId("panel-tabs").dataset.active).toBe("projectMap");
 
     fireEvent.click(screen.getByRole("button", { name: "projectMap" }));
@@ -982,6 +991,7 @@ describe("useLayoutNodes client UI visibility", () => {
     );
 
     render(<>{result.current.rightPanelToolbarNode}</>);
+    openLegacyPanelTabsOverflow();
     expect(screen.getByTestId("panel-tabs").dataset.active).toBe("files");
 
     fireEvent.click(screen.getByRole("button", { name: "projectMap" }));
@@ -1007,6 +1017,7 @@ describe("useLayoutNodes client UI visibility", () => {
     );
 
     render(<>{result.current.rightPanelToolbarNode}</>);
+    openLegacyPanelTabsOverflow();
 
     fireEvent.click(screen.getByRole("button", { name: "projectMap" }));
 
@@ -1026,6 +1037,7 @@ describe("useLayoutNodes client UI visibility", () => {
     );
 
     render(<>{result.current.rightPanelToolbarNode}</>);
+    openLegacyPanelTabsOverflow();
 
     expect(screen.queryByRole("button", { name: "projectMap" })).toBeNull();
     expect(screen.getByRole("button", { name: "files" })).toBeTruthy();

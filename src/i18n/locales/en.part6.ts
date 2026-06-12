@@ -468,6 +468,57 @@ const enPart6 = {
         "Read this root first, then fall back to workspace openspec.",
     },
   },
+  // FanBox dialogue cockpit (OpenSpec: add-fanbox-dialogue-cockpit)
+  fanbox: {
+    summary: {
+      cited: "Cited files",
+      citedCount: "{{count}} files",
+      changed: "Change hotspots",
+      changedCount: "{{count}} edits",
+      view: "View",
+    },
+    tabs: {
+      evidence: "Evidence",
+      changes: "Changes",
+      memory: "Memory",
+      logs: "Logs",
+      more: "More panels",
+    },
+    evidence: {
+      title: "Session evidence",
+      citedTitle: "Cited sources",
+      hotTitle: "Change hotspots",
+      readsLabel: "reads",
+      editsLabel: "edits",
+      empty: "No citations or changes in this session yet. Evidence appears here as the AI reads and edits files.",
+    },
+    memoryPanel: {
+      title: "Project memory",
+      open: "Open full memory view",
+      empty: "No project memory entries yet.",
+    },
+    logs: {
+      title: "Activity log",
+      terminalNote: "Daily use needs no command line. Open the full terminal only for advanced troubleshooting.",
+      openTerminal: "Open terminal",
+    },
+    casebar: {
+      viewChat: "Chat",
+      viewFiles: "Files",
+      viewEvidence: "Evidence",
+      filesEmpty: "No file activity yet. Files the AI reads or edits will appear here.",
+      evidenceEmpty: "No evidence yet. The latest reply's citations and changes will appear here.",
+      latestReply: "Latest reply digest",
+      sessionSection: "This session",
+      workspaceSection: "Workspace",
+      searchPlaceholder: "Search files…",
+      expandAll: "Expand all",
+      collapseAll: "Collapse all",
+      workspaceEmpty: "No files in the workspace yet.",
+      editsBadge: "{{count}} edits",
+      readsBadge: "{{count}} reads",
+    },
+  },
 };
 
 export default enPart6;

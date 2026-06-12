@@ -166,8 +166,19 @@ export function useGitPanelController({
   const [gitDiffListView, setGitDiffListViewState] = useState<"flat" | "tree">(
     () => readGitDiffListView(activeWorkspace?.id),
   );
+  // "evidence" / "memoryInspector" 为 FanBox 右栏新增语义面板
+  // （OpenSpec: add-fanbox-dialogue-cockpit；改动复用 git、日志复用 activity）。
   const [filePanelMode, setFilePanelMode] = useState<
-    "git" | "files" | "search" | "notes" | "prompts" | "memory" | "activity" | "radar"
+    | "git"
+    | "files"
+    | "search"
+    | "notes"
+    | "prompts"
+    | "memory"
+    | "activity"
+    | "radar"
+    | "evidence"
+    | "memoryInspector"
   >("files");
   const [selectedPullRequest, setSelectedPullRequest] =
     useState<GitHubPullRequest | null>(null);

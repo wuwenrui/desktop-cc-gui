@@ -1,6 +1,7 @@
 import type { MouseEvent, ReactNode } from "react";
 import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left";
-import { PanelTabs, type PanelToolbarTabId } from "../components/PanelTabs";
+import type { PanelToolbarTabId } from "../components/PanelTabs";
+import { FanBoxPanelTabs } from "../components/FanBoxPanelTabs";
 import { TerminalDock } from "../../terminal/components/TerminalDock";
 import { TerminalPanel } from "../../terminal/components/TerminalPanel";
 import { DebugPanel } from "../../debug/components/DebugPanel";
@@ -63,9 +64,11 @@ export function buildRightPanelToolbarNode({
     return null;
   }
 
+  // FanBox 四文字 tab 为主，现有图标 PanelTabs 折叠进「···」
+  // （OpenSpec: add-fanbox-dialogue-cockpit, Decision 3）。
   return (
     <div className="right-panel-toolbar">
-      <PanelTabs
+      <FanBoxPanelTabs
         active={active}
         onSelect={onSelect}
         liveStates={{

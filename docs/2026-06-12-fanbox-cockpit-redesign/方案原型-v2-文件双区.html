@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FanBox v2 · 文件视图双区 · 可点击原型</title>
+<!--
+  第二版方案原型：casebar「文件」视图升级为双区
+  ============================================
+  上区「本会话文件」：AI 本轮读过/改过 + 用户 @引用 的文件（带读/改热度）——现状能力
+  下区「工作区文件」：完整案件文件夹树，可展开/折叠/打开——新增（把藏在右栏「···」里的
+                      完整文件树提到会话视图，律师随时翻案卷）
+  呼应点：本轮碰过的文件，在下区文件树里同步打热度标记（橙=改动/蓝=引用），
+          一个视图既看「本轮重点」又看「案件全貌」。
+
+  真实 themes.light.css token + 13px 紧凑桌面比例，与现有界面同语言。
+  默认停在「文件」视图，直接展示双区效果。
+  可点：三视图切换 / 文件树展开折叠 / 右栏四 tab。
+-->
+<style>
+  :root{
+    --text-primary:#1a1d24;--text-strong:#0e1118;--text-muted:rgba(17,20,28,.7);
+    --text-subtle:rgba(17,20,28,.6);--text-faint:rgba(17,20,28,.5);--text-dim:rgba(17,20,28,.35);
+    --surface-hover:rgba(15,23,36,.06);--surface-control:rgba(15,23,36,.08);
+    --border-subtle:rgba(15,23,36,.08);--border-strong:rgba(15,23,36,.14);
+    --text-accent:rgba(45,93,170,.7);--status-success:rgba(30,155,110,.9);
+    --status-warning:rgba(215,120,20,.9);--status-error:rgba(200,45,45,.9);
+    --bubble-user:#0078d4;--shell-bg:#eeeff3;--main-bg:#fff;--main-radius:16px;
+    --evi-hot:rgba(215,120,20,.9);--evi-hot-soft:rgba(215,120,20,.1);
+    --evi-ref:rgba(45,93,170,.85);--evi-ref-soft:rgba(45,93,170,.1);
+    --evi-mem:rgba(30,155,110,.9);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;
+    background:#e3e5ea;color:var(--text-primary);font-size:13px;-webkit-font-smoothing:antialiased;
+    display:flex;flex-direction:column;align-items:center;padding:20px 18px 36px;}
+  .proto-bar{width:1380px;max-width:97vw;display:flex;align-items:center;gap:14px;margin-bottom:12px;}
+  .proto-bar strong{font-size:14px;color:#2a2f3a;font-weight:600;}
+  .proto-bar .sub{color:#8a90a0;font-size:12px;flex:1;}
+
+  .window{width:1380px;max-width:97vw;height:840px;background:var(--shell-bg);border-radius:12px;
+    box-shadow:0 24px 70px rgba(20,24,40,.28),0 0 0 1px rgba(0,0,0,.08);
+    display:flex;flex-direction:column;overflow:hidden;}
+  .titlebar{height:38px;flex-shrink:0;display:flex;align-items:center;padding:0 14px;gap:8px;}
+  .traffic{display:flex;gap:8px;}
+  .traffic i{width:12px;height:12px;border-radius:50%;display:block;}
+  .traffic i:nth-child(1){background:#ff5f57;}.traffic i:nth-child(2){background:#febc2e;}.traffic i:nth-child(3){background:#28c840;}
+  .titlebar .app{flex:1;text-align:center;font-size:12px;color:var(--text-faint);font-weight:500;}
+  .shell{flex:1;display:flex;min-height:0;padding:0 10px 10px;}
+
+  /* 左栏 */
+  .sidebar{width:200px;flex-shrink:0;display:flex;flex-direction:column;padding:4px 8px 10px;min-height:0;}
+  .nav-item{width:100%;min-height:32px;display:inline-flex;align-items:center;gap:8px;padding:0 8px;
+    border-radius:8px;border:none;background:transparent;color:var(--text-strong);font-size:13px;
+    text-align:left;cursor:pointer;font-family:inherit;}
+  .nav-item:hover{background:var(--surface-hover);}
+  .nav-item svg{width:16px;height:16px;flex-shrink:0;}
+  .nav-item .t{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .sb-label{padding:12px 8px 4px;font-size:11px;font-weight:600;color:var(--text-dim);letter-spacing:.04em;}
+  .ws-item{width:100%;min-height:30px;display:flex;align-items:center;gap:8px;padding:0 8px;border-radius:8px;
+    font-size:13px;color:var(--text-muted);cursor:pointer;border:none;background:transparent;text-align:left;font-family:inherit;}
+  .ws-item.active{background:var(--surface-hover);color:var(--text-strong);font-weight:500;}
+  .ws-item svg{width:14px;height:14px;flex-shrink:0;color:var(--text-faint);}
+  .ws-item .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;}
+  .ws-item .tag{font-size:10px;color:var(--text-accent);background:var(--evi-ref-soft);border-radius:5px;padding:1px 5px;}
+
+  /* 主区 */
+  .main{flex:1;min-width:0;background:var(--main-bg);border-radius:var(--main-radius);
+    display:flex;flex-direction:column;overflow:hidden;box-shadow:0 0 0 1px rgba(15,23,36,.05);}
+  .topbar{height:44px;flex-shrink:0;display:flex;align-items:center;gap:10px;padding:0 14px 0 18px;border-bottom:1px solid var(--border-subtle);}
+  .crumb{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-strong);min-width:0;}
+  .crumb svg{width:15px;height:15px;color:var(--text-faint);flex-shrink:0;}
+  .crumb b{font-weight:600;}.crumb .sep{color:var(--text-dim);}
+  .tb-actions{margin-left:auto;display:flex;align-items:center;gap:6px;}
+  .tb-btn{width:28px;height:28px;border-radius:7px;border:none;background:transparent;color:var(--text-faint);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;}
+  .tb-btn:hover{background:var(--surface-control);color:var(--text-strong);}
+  .tb-btn svg{width:16px;height:16px;}
+  .tb-market{font-size:12px;color:var(--text-strong);border:1px solid var(--border-subtle);border-radius:7px;padding:4px 10px;cursor:pointer;background:transparent;font-family:inherit;display:inline-flex;align-items:center;gap:5px;}
+  .tb-market svg{width:14px;height:14px;color:var(--text-accent);}
+  .tb-usage{font-size:11px;color:var(--status-error);background:rgba(200,45,45,.08);border:1px solid rgba(200,45,45,.2);border-radius:999px;padding:3px 10px;display:inline-flex;align-items:center;gap:5px;}
+  .tb-usage::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--status-error);}
+
+  .body{flex:1;display:flex;min-height:0;}
+  .conversation{flex:1;min-width:0;display:flex;flex-direction:column;min-height:0;}
+
+  /* casebar */
+  .casebar{flex-shrink:0;display:flex;align-items:center;gap:14px;padding:8px 18px;border-bottom:1px solid var(--border-subtle);}
+  .case-title{font-size:13px;font-weight:600;color:var(--text-strong);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .view-switch{margin-left:auto;display:inline-flex;background:var(--surface-control);border-radius:9px;padding:2px;gap:1px;}
+  .view-switch button{font:inherit;font-size:12px;border:none;background:transparent;color:var(--text-muted);border-radius:7px;padding:4px 12px;cursor:pointer;}
+  .view-switch button.active{background:#fff;color:var(--text-strong);font-weight:600;box-shadow:0 1px 3px rgba(15,23,36,.1);}
+
+  .stage{flex:1;overflow-y:auto;min-height:0;}
+
+  /* === 文件视图双区 === */
+  .files-view{display:flex;flex-direction:column;min-height:100%;}
+  .file-section-head{display:flex;align-items:center;gap:8px;padding:13px 22px 7px;}
+  .file-section-head .fsh-title{font-size:12px;font-weight:600;color:var(--text-strong);}
+  .file-section-head .fsh-sub{font-size:11px;color:var(--text-faint);}
+  .file-section-head .fsh-line{flex:1;height:1px;background:var(--border-subtle);margin-left:4px;}
+
+  /* 上区：本会话文件 */
+  .session-files{padding:0 18px 4px;display:flex;flex-direction:column;gap:8px;}
+  .session-file-card{display:flex;align-items:center;gap:12px;border:1px solid var(--border-subtle);border-radius:11px;padding:11px 14px;background:#fff;cursor:pointer;transition:border-color .14s,transform .14s,box-shadow .14s;}
+  .session-file-card:hover{border-color:var(--border-strong);transform:translateY(-1px);box-shadow:0 6px 16px rgba(15,23,36,.07);}
+  .sfc-mark{width:8px;height:8px;border-radius:50%;background:var(--text-dim);flex-shrink:0;}
+  .sfc-mark.hot{background:var(--evi-hot);}.sfc-mark.ref{background:var(--evi-ref);}
+  .sfc-main{flex:1;min-width:0;}
+  .sfc-main strong{font-size:13px;color:var(--text-strong);display:block;margin-bottom:2px;}
+  .sfc-main p{font-size:11.5px;color:var(--text-subtle);display:flex;gap:10px;}
+  .sfc-main p .hot{color:var(--evi-hot);}.sfc-main p .ref{color:var(--evi-ref);}
+  .sfc-num{font-size:15px;font-weight:700;flex-shrink:0;}
+  .sfc-num.hot{color:var(--evi-hot);}.sfc-num.ref{color:var(--evi-ref);}
+
+  /* 下区：工作区文件树 */
+  .ws-tree{padding:2px 12px 16px;}
+  .tree-row{display:flex;align-items:center;gap:6px;min-height:28px;padding:0 8px;border-radius:7px;cursor:pointer;font-size:13px;color:var(--text-muted);user-select:none;}
+  .tree-row:hover{background:var(--surface-hover);}
+  .tree-row.is-dir{color:var(--text-strong);font-weight:500;}
+  .tree-row .chev{width:14px;height:14px;flex-shrink:0;color:var(--text-faint);transition:transform .15s;}
+  .tree-row .chev.open{transform:rotate(90deg);}
+  .tree-row .ico{width:15px;height:15px;flex-shrink:0;color:var(--text-faint);}
+  .tree-row.is-dir .ico{color:var(--text-accent);}
+  .tree-row .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .tree-row .touch{flex-shrink:0;width:7px;height:7px;border-radius:50%;}
+  .tree-row .touch.hot{background:var(--evi-hot);}
+  .tree-row .touch.ref{background:var(--evi-ref);}
+  .tree-row .badge{flex-shrink:0;font-size:10px;padding:1px 6px;border-radius:5px;font-weight:600;}
+  .tree-row .badge.hot{color:var(--evi-hot);background:var(--evi-hot-soft);}
+  .tree-row .badge.ref{color:var(--evi-ref);background:var(--evi-ref-soft);}
+  .tree-row .badge.new{color:var(--status-success);background:rgba(30,155,110,.1);}
+  .tree-children{overflow:hidden;}
+
+  .ws-tree-toolbar{display:flex;align-items:center;gap:8px;padding:0 20px 8px;}
+  .ws-tree-toolbar .wt-search{flex:1;height:28px;border:1px solid var(--border-subtle);border-radius:8px;background:var(--surface-control);padding:0 10px;font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;}
+  .ws-tree-toolbar .wt-search svg{width:13px;height:13px;color:var(--text-faint);}
+  .ws-tree-toolbar .wt-act{font-size:11px;color:var(--text-faint);border:1px solid var(--border-subtle);border-radius:7px;padding:4px 9px;cursor:pointer;background:transparent;font-family:inherit;}
+  .ws-tree-toolbar .wt-act:hover{background:var(--surface-control);color:var(--text-strong);}
+
+  /* 对话/证据视图（简化保留） */
+  .messages{padding:20px 24px;display:flex;flex-direction:column;gap:16px;}
+  .msg{display:flex;gap:10px;max-width:840px;}
+  .msg.user{align-self:flex-end;flex-direction:row-reverse;}
+  .avatar{width:26px;height:26px;border-radius:8px;flex-shrink:0;display:grid;place-items:center;font-size:11px;font-weight:600;}
+  .msg.user .avatar{background:var(--bubble-user);color:#fff;}.msg:not(.user) .avatar{background:var(--surface-control);color:var(--text-muted);}
+  .bubble{font-size:13px;line-height:1.65;}
+  .msg.user .bubble{background:var(--bubble-user);color:#fff;border-radius:14px 14px 4px 14px;padding:9px 14px;max-width:560px;}
+  .msg:not(.user) .bubble{max-width:680px;color:var(--text-primary);}
+  .board{padding:20px 24px;display:flex;flex-direction:column;gap:10px;}
+  .fact-card{border:1px solid var(--border-subtle);border-radius:11px;padding:13px 15px;background:#fff;}
+  .fact-card strong{font-size:13px;color:var(--text-strong);display:block;margin-bottom:4px;}
+  .fact-card p{font-size:12.5px;color:var(--text-muted);line-height:1.6;}
+  .fact-card.accent{border-color:var(--evi-ref);background:var(--evi-ref-soft);}
+
+  /* composer */
+  .composer-wrap{flex-shrink:0;padding:10px 20px 16px;}
+  .composer{border:1px solid var(--border-strong);border-radius:14px;background:#fff;padding:9px 12px 8px;box-shadow:0 1px 4px rgba(15,23,36,.04);}
+  .model-row{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-faint);margin-bottom:7px;}
+  .model-pill{font-size:10px;color:var(--text-muted);background:var(--surface-control);border-radius:5px;padding:1px 7px;}
+  .input-row{display:flex;align-items:flex-end;gap:8px;}
+  .input-row .plus,.input-row .send{width:30px;height:30px;border-radius:8px;border:none;cursor:pointer;display:grid;place-items:center;flex-shrink:0;}
+  .input-row .plus{background:var(--surface-control);color:var(--text-muted);}.input-row .send{background:var(--bubble-user);color:#fff;}
+  .input-row .prompt{flex:1;font-size:13px;color:var(--text-primary);padding:5px 0;min-height:30px;}
+  .input-row .prompt .hint{display:block;font-size:11px;color:var(--text-dim);margin-top:4px;}
+  .input-row svg{width:16px;height:16px;}
+
+  /* 右栏 */
+  .inspector{width:300px;flex-shrink:0;border-left:1px solid var(--border-subtle);display:flex;flex-direction:column;min-height:0;background:var(--main-bg);}
+  .insp-tabs{flex-shrink:0;display:flex;padding:8px 10px 0;gap:2px;border-bottom:1px solid var(--border-subtle);}
+  .insp-tabs button{flex:1;font:inherit;font-size:12px;border:none;background:transparent;color:var(--text-muted);padding:7px 4px 9px;cursor:pointer;position:relative;display:inline-flex;align-items:center;justify-content:center;gap:5px;}
+  .insp-tabs button .dot{width:5px;height:5px;border-radius:50%;}
+  .insp-tabs button[data-p="evidence"] .dot{background:var(--evi-ref);}
+  .insp-tabs button[data-p="changes"] .dot{background:var(--evi-hot);}
+  .insp-tabs button[data-p="memory"] .dot{background:var(--evi-mem);}
+  .insp-tabs button[data-p="logs"] .dot{background:var(--text-dim);}
+  .insp-tabs button.active{color:var(--text-strong);font-weight:600;}
+  .insp-tabs button.active::after{content:"";position:absolute;left:8px;right:8px;bottom:-1px;height:2px;background:var(--text-strong);border-radius:2px;}
+  .panel-scroll{flex:1;overflow-y:auto;min-height:0;padding:12px;}
+  .right-title{display:flex;align-items:baseline;justify-content:space-between;margin:6px 2px 8px;}
+  .right-title span{font-size:12px;font-weight:600;color:var(--text-strong);}
+  .right-title small{font-size:11px;color:var(--text-faint);}
+  .e-card{border:1px solid var(--border-subtle);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:#fff;position:relative;overflow:hidden;}
+  .e-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:transparent;}
+  .e-card.hot::before{background:var(--evi-hot);}.e-card.ok::before{background:var(--evi-mem);}.e-card.ref::before{background:var(--evi-ref);}
+  .e-card strong{font-size:12.5px;color:var(--text-strong);display:block;margin-bottom:3px;}
+  .e-card p{font-size:12px;color:var(--text-muted);line-height:1.55;}
+
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:rgba(15,23,36,.18);border-radius:4px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+</style>
+</head>
+<body>
+
+<div class="proto-bar">
+  <strong>FanBox v2 · 文件视图双区</strong>
+  <span class="sub">默认停在「文件」视图 · 上区=本会话碰过的文件 · 下区=完整工作区文件树（可展开/折叠）· 三视图与四tab可点</span>
+</div>
+
+<div class="window">
+  <div class="titlebar"><div class="traffic"><i></i><i></i><i></i></div><div class="app">LawyerCopilot</div><div style="width:52px"></div></div>
+  <div class="shell">
+    <nav class="sidebar">
+      <button class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="t">首页</span></button>
+      <button class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg><span class="t">面板模式</span></button>
+      <button class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg><span class="t">lawhub</span></button>
+      <div class="sb-label">工作区</div>
+      <button class="ws-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h7l2 2h7v10H4z"/></svg><span class="t">workspace</span><span class="tag">Default</span></button>
+      <button class="ws-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h7l2 2h7v10H4z"/></svg><span class="t">expense-audit-v2</span></button>
+    </nav>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="crumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h7l2 2h7v10H4z"/></svg><b>workspace</b><span class="sep">›</span><span>股权转让协议审查</span></div>
+        <div class="tb-actions">
+          <button class="tb-btn" title="运行"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m8 5 11 7-11 7z"/></svg></button>
+          <button class="tb-market"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>Skill 市场</button>
+          <span class="tb-usage">¥12.40</span>
+        </div>
+      </header>
+
+      <div class="body">
+        <section class="conversation">
+          <div class="casebar">
+            <div class="case-title">股权转让协议审查</div>
+            <div class="view-switch">
+              <button data-view="chat">对话</button>
+              <button class="active" data-view="files">文件</button>
+              <button data-view="evidence">证据</button>
+            </div>
+          </div>
+          <div class="stage" id="stage"></div>
+          <div class="composer-wrap">
+            <div class="composer">
+              <div class="model-row"><span>✺ Claude Code / claude-opus-4-8</span><span class="model-pill">自动模式</span><span class="model-pill">完整访问</span></div>
+              <div class="input-row">
+                <button class="plus"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg></button>
+                <div class="prompt">继续把必须修改项改成律师函式措辞。<span class="hint">@引用文件 · @@引用记忆 · /选择技能 · #唤起智能体</span></div>
+                <button class="send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="m4 12 16-8-5 16-3-6z"/></svg></button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <aside class="inspector">
+          <div class="insp-tabs">
+            <button class="active" data-p="evidence"><span class="dot"></span>证据</button>
+            <button data-p="changes"><span class="dot"></span>改动</button>
+            <button data-p="memory"><span class="dot"></span>记忆</button>
+            <button data-p="logs"><span class="dot"></span>日志</button>
+          </div>
+          <div class="panel-scroll" id="panel"></div>
+        </aside>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+const stage=document.getElementById('stage'),panel=document.getElementById('panel');
+
+const ICON={
+  folder:'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>',
+  file:'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>',
+  chev:'<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m9 18 6-6-6-6"/></svg>',
+  search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m20 20-3-3"/></svg>'
+};
+
+// 工作区文件树（律师案件目录；touch=本轮碰过的热度标记）
+const TREE=[
+  {n:'案件卷宗',dir:true,open:true,children:[
+    {n:'20260610_民事起诉状_原告.pdf'},
+    {n:'证据材料',dir:true,open:false,children:[
+      {n:'证据1_股权转让协议.pdf'},
+      {n:'证据2_工商登记材料.pdf'},
+    ]},
+  ]},
+  {n:'工作底稿',dir:true,open:true,children:[
+    {n:'风险清单.md',touch:'hot',badge:'改8次'},
+    {n:'客户说明.md',touch:'hot',badge:'新增'},
+    {n:'案情分析.md'},
+  ]},
+  {n:'资料收集',dir:true,open:true,children:[
+    {n:'原始文件',dir:true,open:true,children:[
+      {n:'股权转让协议.docx',touch:'ref',badge:'引用5次'},
+      {n:'客户沟通纪要.md',touch:'ref',badge:'引用3次'},
+    ]},
+    {n:'往来函件',dir:true,open:false,children:[
+      {n:'20260520_律师函_发函.pdf'},
+    ]},
+  ]},
+  {n:'办案记录.md'},
+];
+
+function renderTree(nodes,depth){
+  let html='';
+  for(const node of nodes){
+    const pad=8+depth*15;
+    const touch=node.touch?`<span class="touch ${node.touch}"></span>`:'';
+    const badge=node.badge?`<span class="badge ${node.touch==='hot'?(node.badge==='新增'?'new':'hot'):'ref'}">${node.badge}</span>`:'';
+    if(node.dir){
+      const open=node.open?'open':'';
+      html+=`<div class="tree-children">
+        <div class="tree-row is-dir" style="padding-left:${pad}px" onclick="toggleDir(this)">
+          ${ICON.chev.replace('class="chev"',`class="chev ${open}"`)}${ICON.folder}<span class="nm">${node.n}</span>
+        </div>
+        <div class="tree-children" style="${node.open?'':'display:none'}">${renderTree(node.children,depth+1)}</div>
+      </div>`;
+    }else{
+      html+=`<div class="tree-row" style="padding-left:${pad+14}px" title="点击在编辑器打开">
+        ${ICON.file}<span class="nm">${node.n}</span>${touch}${badge}
+      </div>`;
+    }
+  }
+  return html;
+}
+function toggleDir(rowEl){
+  const chev=rowEl.querySelector('.chev');
+  const kids=rowEl.nextElementSibling;
+  const open=kids.style.display!=='none';
+  kids.style.display=open?'none':'';
+  chev.classList.toggle('open',!open);
+}
+
+const VIEWS={
+  chat:()=>`<div class="messages">
+    <div class="msg user"><div class="avatar">我</div><div class="bubble">帮我审查这份股权转让协议，重点看付款、交割、违约责任和工商变更风险。</div></div>
+    <div class="msg"><div class="avatar">AI</div><div class="bubble">已完成第一轮审查。最需要先处理的是付款顺序和工商变更条件不一致。风险清单已生成，详见「文件」视图。</div></div>
+  </div>`,
+  files:()=>`<div class="files-view">
+    <div class="file-section-head"><span class="fsh-title">本会话文件</span><span class="fsh-sub">AI 本轮读过/改过 · 3 个</span><span class="fsh-line"></span></div>
+    <div class="session-files">
+      <div class="session-file-card"><i class="sfc-mark hot"></i><div class="sfc-main"><strong>风险清单.md</strong><p><span class="hot">改 8 次</span><span>AI 本轮主要改动</span></p></div><b class="sfc-num hot">8</b></div>
+      <div class="session-file-card"><i class="sfc-mark ref"></i><div class="sfc-main"><strong>股权转让协议.docx</strong><p><span class="ref">引用 5 次</span><span>主引用源，条款 4.2/5.1/7.3</span></p></div><b class="sfc-num ref">5</b></div>
+      <div class="session-file-card"><i class="sfc-mark ref"></i><div class="sfc-main"><strong>客户沟通纪要.md</strong><p><span class="ref">引用 3 次</span><span>提取客户事实：履行顺序冲突</span></p></div><b class="sfc-num ref">3</b></div>
+    </div>
+    <div class="file-section-head"><span class="fsh-title">工作区文件</span><span class="fsh-sub">完整案件文件夹 · 可展开浏览</span><span class="fsh-line"></span></div>
+    <div class="ws-tree-toolbar">
+      <div class="wt-search">${ICON.search}搜索案件文件…</div>
+      <button class="wt-act" onclick="setAllDirs(true)">全部展开</button>
+      <button class="wt-act" onclick="setAllDirs(false)">全部折叠</button>
+    </div>
+    <div class="ws-tree" id="wsTree">${renderTree(TREE,0)}</div>
+  </div>`,
+  evidence:()=>`<div class="board">
+    <div class="fact-card"><strong>为什么这么判断</strong><p>付款条款要求买方先支付大部分价款，但工商变更材料未作为明确前置条件，导致付款后登记失败风险。</p></div>
+    <div class="fact-card accent"><strong>FanBox 精华落点</strong><p>用户用对话完成工作，「文件」视图既看本轮 AI 碰过的重点文件，又能翻完整案件目录——重点与全貌一屏可见。</p></div>
+  </div>`
+};
+const PANELS={
+  evidence:`<div class="right-title"><span>工作证据</span><small>3 文件</small></div>
+    <div class="e-card ref"><strong>引用来源</strong><p>股权转让协议第 4.2、5.1、7.3 条；客户沟通纪要第 12 行。</p></div>
+    <div class="e-card hot"><strong>改动热区</strong><p>风险清单.md 更新 8 次，集中在交割条件与付款节点冲突。</p></div>`,
+  changes:`<div class="right-title"><span>改动收件箱</span><small>本会话</small></div>
+    <div class="e-card hot"><strong>风险清单.md</strong><p>8 次更新，生成必须修改/建议优化/待确认三层结构。</p></div>
+    <div class="e-card"><strong>客户说明.md</strong><p>新增非技术版说明。</p></div>`,
+  memory:`<div class="right-title"><span>项目记忆</span><small>匹配 2 条</small></div>
+    <div class="e-card ok"><strong>客户偏好</strong><p>先给结论，再给条款依据。</p></div>`,
+  logs:`<div class="right-title"><span>高级日志</span><small>开发者排障</small></div>
+    <div class="e-card"><strong>普通用户无需命令行</strong><p>日常只看保存、引用、错误状态；排障时才展开终端。</p></div>`
+};
+
+function setAllDirs(open){
+  document.querySelectorAll('#wsTree .tree-row.is-dir').forEach(row=>{
+    const kids=row.nextElementSibling, chev=row.querySelector('.chev');
+    kids.style.display=open?'':'none';
+    chev.classList.toggle('open',open);
+  });
+}
+function renderView(v){
+  stage.innerHTML=VIEWS[v]();
+  document.querySelectorAll('.view-switch button').forEach(b=>b.classList.toggle('active',b.dataset.view===v));
+}
+function renderPanel(p){
+  panel.innerHTML=PANELS[p];
+  document.querySelectorAll('.insp-tabs button').forEach(b=>b.classList.toggle('active',b.dataset.p===p));
+}
+document.querySelectorAll('.view-switch button').forEach(b=>b.onclick=()=>renderView(b.dataset.view));
+document.querySelectorAll('.insp-tabs button').forEach(b=>b.onclick=()=>renderPanel(b.dataset.p));
+
+renderView('files');
+renderPanel('evidence');
+</script>
+</body>
+</html>

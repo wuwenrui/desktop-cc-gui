@@ -4,6 +4,7 @@ import { Sidebar } from "../../app/components/Sidebar";
 import { HomeChat } from "../../home/components/HomeChat";
 import { MainHeader } from "../../app/components/MainHeader";
 import { Messages } from "../../messages/components/Messages";
+import { SessionStage } from "../../session-evidence/SessionStage";
 import { MessageForkConfirmDialog } from "../../messages/components/MessageForkConfirmDialog";
 import {
   CODEX_DISK_PROVIDER_PROFILE_ID,
@@ -60,6 +61,9 @@ import { patchTaskRun, saveTaskRunStore } from "../../tasks/utils/taskRunStorage
 import { WorkspaceNoteCardPanel } from "../../note-cards/components/WorkspaceNoteCardPanel";
 import { WorkspaceSessionActivityPanel } from "../../session-activity/components/WorkspaceSessionActivityPanel";
 import { WorkspaceSessionRadarPanel } from "../../session-activity/components/WorkspaceSessionRadarPanel";
+import { EvidencePanel } from "../components/EvidencePanel";
+import { MemoryInspectorPanel } from "../components/MemoryInspectorPanel";
+import { LogsPanel } from "../components/LogsPanel";
 import { TabBar } from "../../app/components/TabBar";
 import { TabletNav } from "../../app/components/TabletNav";
 import { StatusPanel } from "../../status-panel/components/StatusPanel";
@@ -707,6 +711,18 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
 
   const messagesNode = useMemo(() => (
     <>
+      {/* FanBox casebar 三视图（OpenSpec: add-fanbox-dialogue-cockpit Decision 4）：
+          有活动会话时包一层 SessionStage（对话/文件/证据），无会话时透传。 */}
+      <SessionStage
+        sessionKey={options.activeThreadId ?? null}
+        title={
+          activeThreadSummary?.name ?? options.activeWorkspace?.name ?? ""
+        }
+        items={options.activeItems}
+        workspaceFiles={options.files}
+        workspaceDirectories={options.directories}
+        onOpenFile={options.onOpenFile}
+      >
       <Messages
         items={options.activeItems}
         threadId={options.activeThreadId ?? null}
@@ -758,6 +774,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         codexSilentSuspectedAt={activeThreadStatus?.codexSilentSuspectedAt ?? null}
         taskRuns={taskRunStore.runs}
       />
+      </SessionStage>
       <MessageForkConfirmDialog
         userMessageId={forkConfirmUserMessageId}
         onCancel={handleCancelForkConfirm}
@@ -795,6 +812,8 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     handleCancelForkConfirm,
     handleConfirmForkFromMessage,
     activeThreadSummary?.providerProfileId,
+    activeThreadSummary?.name,
+    options.activeWorkspace?.name,
     codexForkProviderProfiles,
     options.onRewind,
     handleOpenRewindDialogFromMessage,
@@ -813,6 +832,8 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     options.onOpenPlanPanel,
     options.handleExitPlanModeExecute,
     options.onOpenFile,
+    options.files,
+    options.directories,
     options.agentTaskScrollRequest,
     isThreadThinking,
     activeThreadHistoryLoading,
@@ -993,6 +1014,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         onSelectEngine={options.onSelectEngine}
         models={options.models}
         selectedModelId={options.selectedModelId}
+        visionModelId={options.visionModelId}
         onSelectModel={options.onSelectModel}
         reasoningOptions={options.reasoningOptions}
         selectedEffort={options.selectedEffort}
@@ -1318,6 +1340,9 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     onSelect: handleRightPanelTabSelect,
   });
 
+  // FanBox 证据面板数据源：当前会话全部条目（面板内窄化出 user/assistant 文本，
+  // 引用来源 = AI Read + 用户 @文件引用；OpenSpec: add-fanbox-dialogue-cockpit）。
+
   let gitDiffPanelNode: ReactNode;
   if (options.filePanelMode === "files" && options.activeWorkspace) {
     gitDiffPanelNode = (
@@ -1400,17 +1425,32 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       />
     );
   } else if (options.filePanelMode === "activity") {
+    // FanBox「日志」外壳：终端降级说明 + 展开终端入口；activity 面板内容本身不改
+    // （OpenSpec: add-fanbox-dialogue-cockpit, Decision 3）。
     gitDiffPanelNode = (
-      <WorkspaceSessionActivityPanel
+      <LogsPanel onToggleTerminal={options.onToggleTerminal}>
+        <WorkspaceSessionActivityPanel
+          workspaceId={options.activeWorkspace?.id ?? null}
+          workspacePath={options.activeWorkspace?.path ?? null}
+          viewModel={workspaceActivity}
+          onOpenDiffPath={handleOpenDiffFromActivity}
+          onSelectThread={options.onSelectThread}
+          liveEditPreviewEnabled={options.liveEditPreviewEnabled}
+          onToggleLiveEditPreview={options.onToggleLiveEditPreview}
+          onRefreshGitStatus={options.queueGitStatusRefresh}
+          {...codeAnnotationBridgeProps}
+        />
+      </LogsPanel>
+    );
+  } else if (options.filePanelMode === "evidence") {
+    // FanBox「证据」面板（OpenSpec: add-fanbox-dialogue-cockpit, Decision 3）。
+    gitDiffPanelNode = <EvidencePanel items={options.activeItems} />;
+  } else if (options.filePanelMode === "memoryInspector") {
+    // FanBox「记忆」面板：只读速览 + 完整记忆视图入口。
+    gitDiffPanelNode = (
+      <MemoryInspectorPanel
         workspaceId={options.activeWorkspace?.id ?? null}
-        workspacePath={options.activeWorkspace?.path ?? null}
-        viewModel={workspaceActivity}
-        onOpenDiffPath={handleOpenDiffFromActivity}
-        onSelectThread={options.onSelectThread}
-        liveEditPreviewEnabled={options.liveEditPreviewEnabled}
-        onToggleLiveEditPreview={options.onToggleLiveEditPreview}
-        onRefreshGitStatus={options.queueGitStatusRefresh}
-        {...codeAnnotationBridgeProps}
+        onOpenMemory={options.onOpenMemory}
       />
     );
   } else if (options.filePanelMode === "radar") {
