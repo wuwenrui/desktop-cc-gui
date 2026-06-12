@@ -1,0 +1,77 @@
+# Journal - wuwenrui (Part 1)
+
+> AI development session journal
+> Started: 2026-06-01
+
+---
+
+
+
+## Session 1: lawyer-shell MVP first cut
+
+**Date**: 2026-06-10
+**Task**: lawyer-shell MVP first cut
+**Branch**: `feat/lawyer-shell`
+
+### Summary
+
+Add lawyer mode shell: uiMode setting (default developer), LAWYER_VISIBLE_NAV sidebar filtering, local case registry (app client store lawyerCases), CaseHomePage with new-case wizard creating workspace + standard dir skeleton, quick actions dispatching SELECT_SKILL_EVENT. OpenSpec change add-lawyer-mode-shell. 22 new vitest passed; typecheck/lint/cargo check/gates clean.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ed46163a` | (see git log) |
+| `7675038e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+## Session 2: FanBox 改版、lawhub 技能概览与 0.5.26 发布准备
+
+**Date**: 2026-06-12
+**Task**: FanBox 对话优先改版 + lawhub 技能分组概览 + PPT 列表修缮 + 菜单品牌名 + 发布
+**Branch**: `main`
+
+### Summary
+
+FanBox 对话优先工作台（casebar 三视图 + 右栏四 tab + 会话文件双区，复用 FileTreePanel 数据源做工作区树热度标记）；lawhub 技能概览抽屉（什么时候用/能做什么/怎么用，能力卡点击出子技能介绍，文件树移除）；bundled 技能启动补装（install_missing_skills 只补缺不覆盖，修复"点击无 chip"）；新增制作技能/文件转Markdown/视觉OCR bundled skills；PPT 列表创建时间倒序 + 组头折叠 + 38vh 内滚 + open_workspace_path_default 修系统打开；macOS 菜单 hide/quit/about 统一 LawyerCopilot（useMenuLocalization APP_NAME 运行时覆盖是根因）；vision 预检工作流与端点域名迁移一并入库。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e430ecee` | feat(vision): 新增视觉模型预检工作流与可配置视觉模型设置 |
+| `bbaab2bc` | feat(vendors): 旧 IP 端点一次性迁移到正式域名 |
+| `934dd189` | feat(lawhub): 技能分组概览抽屉、bundled 技能启动补装与 PPT 列表修缮 |
+| `2e5158c3` | feat(fanbox): 对话优先工作台改版与会话文件双区视图 |
+| `5d36173b` | fix(menu): macOS 菜单项统一品牌名 LawyerCopilot |
+| `253be249` | chore(build): 精简 openssl 静态链接说明与修复脚本 |
+
+### Testing
+
+- [OK] vitest：session-evidence 42、lawhub 17、skill-market 42、app 388 全绿
+- [OK] cargo test：skill_installer 5/5、menu 4/4
+- [OK] typecheck + eslint 干净
+- [OK] 真机探针：文件双区/倒序/内滚/系统打开/chip 注入/概览抽屉/能力卡介绍逐项实测
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 合并 upstream/main、跑全量门禁、push 触发 0.5.26 构建
