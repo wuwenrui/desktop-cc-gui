@@ -181,12 +181,13 @@ pub(crate) fn build_menu<R: tauri::Runtime>(
             &check_updates_item,
             &settings_item,
             &PredefinedMenuItem::separator(handle)?,
-            &PredefinedMenuItem::services(handle, None)?,
+            &PredefinedMenuItem::services(handle, Some("服务"))?,
             &PredefinedMenuItem::separator(handle)?,
-            &PredefinedMenuItem::hide(handle, None)?,
-            &PredefinedMenuItem::hide_others(handle, None)?,
+            // 预定义项默认用包名（cc-gui）拼文案，必须显式传品牌名。
+            &PredefinedMenuItem::hide(handle, Some(&format!("隐藏 {app_name}")))?,
+            &PredefinedMenuItem::hide_others(handle, Some("隐藏其他"))?,
             &PredefinedMenuItem::separator(handle)?,
-            &PredefinedMenuItem::quit(handle, None)?,
+            &PredefinedMenuItem::quit(handle, Some(&format!("退出 {app_name}")))?,
         ],
     )?;
 

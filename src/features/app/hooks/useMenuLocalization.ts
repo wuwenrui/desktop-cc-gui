@@ -2,7 +2,9 @@ import { useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { updateMenuLabels } from "../../../services/tauri";
 
-const APP_NAME = "ccgui";
+// 品牌名：与 menu.rs APP_DISPLAY_NAME、tauri.conf productName 一致。
+// i18n 同步会在运行时覆盖 Rust 侧菜单文案，这里写错整个菜单就回退旧名。
+const APP_NAME = "LawyerCopilot";
 
 type MenuLabelUpdate = {
   id: string;
