@@ -1011,6 +1011,8 @@ pub(crate) struct AppSettings {
     pub(crate) last_composer_model_id: Option<String>,
     #[serde(default, rename = "lastComposerReasoningEffort")]
     pub(crate) last_composer_reasoning_effort: Option<String>,
+    #[serde(default = "default_vision_model_id", rename = "visionModelId")]
+    pub(crate) vision_model_id: String,
     #[serde(default = "default_ui_scale", rename = "uiScale")]
     pub(crate) ui_scale: f64,
     #[serde(default = "default_theme", rename = "theme")]
@@ -1498,6 +1500,10 @@ fn default_dictation_model_id() -> String {
     "base".to_string()
 }
 
+fn default_vision_model_id() -> String {
+    "qwen3-vl-flash".to_string()
+}
+
 fn default_dictation_hold_key() -> String {
     "alt".to_string()
 }
@@ -1726,6 +1732,7 @@ impl Default for AppSettings {
             cycle_workspace_prev_shortcut: default_cycle_workspace_prev_shortcut(),
             last_composer_model_id: None,
             last_composer_reasoning_effort: None,
+            vision_model_id: default_vision_model_id(),
             ui_scale: 1.0,
             theme: default_theme(),
             light_theme_preset_id: default_light_theme_preset_id(),
@@ -1941,6 +1948,7 @@ mod tests {
         );
         assert!(settings.last_composer_model_id.is_none());
         assert!(settings.last_composer_reasoning_effort.is_none());
+        assert_eq!(settings.vision_model_id, "qwen3-vl-flash");
         assert!((settings.ui_scale - 1.0).abs() < f64::EPSILON);
         assert_eq!(settings.theme, "system");
         assert_eq!(settings.light_theme_preset_id, "vscode-light-modern");

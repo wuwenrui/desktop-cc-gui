@@ -194,6 +194,7 @@ pub(crate) fn invoke_handler(
         crate::workspaces::update_workspace_codex_bin,
         crate::workspaces::connect_workspace,
         crate::workspaces::list_workspace_files,
+        crate::workspaces::workspace_file_times,
         crate::workspaces::list_workspace_directory_children,
         crate::workspaces::list_external_absolute_directory_children,
         crate::workspaces::search_workspace_text,
@@ -218,6 +219,7 @@ pub(crate) fn invoke_handler(
         crate::workspaces::run_workspace_command,
         crate::workspaces::run_spec_command,
         crate::workspaces::open_workspace_in,
+        crate::workspaces::open_workspace_path_default,
         crate::workspaces::open_new_window,
         crate::workspaces::configure_detached_external_change_monitor,
         crate::workspaces::clear_detached_external_change_monitor,
@@ -387,9 +389,11 @@ pub(crate) fn invoke_handler(
         // Lawyer copilot: claude CLI self-check + native installer
         crate::claude_installer::check_claude_cli,
         crate::claude_installer::install_claude_cli,
-        // Lawyer copilot: skill 市场（下载/更新平台 skill）
+        // Lawyer copilot: skill 市场（下载/更新平台 skill + 本地结构查看）
         crate::skill_market::market_add_skill,
         crate::skill_market::market_list_installed,
+        crate::skill_market::market_skill_tree,
+        crate::skill_market::market_skill_file,
         // Lawyer copilot: site model auto-load
         crate::vendors::fetch_site_models
     ]

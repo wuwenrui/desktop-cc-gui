@@ -1,5 +1,6 @@
 import Store from "lucide-react/dist/esm/icons/store";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { OPEN_SKILL_MARKET_EVENT } from "./skillMarketDialog";
 import { SkillMarketPanel } from "./SkillMarketPanel";
 
 /**
@@ -7,9 +8,16 @@ import { SkillMarketPanel } from "./SkillMarketPanel";
  *
  * 新增文件(fork-friendly)：自包含按钮 + overlay，复用与主菜单一致的
  * `sidebar-primary-nav-*` 样式；上游只需在主菜单插入一行 `<SkillMarketNavItem />`。
+ * 弹窗同时响应 `ccgui:open-skill-market` 事件，供 lawhub「添加技能」等入口共用。
  */
 export function SkillMarketNavItem() {
   const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const onOpen = () => setOpen(true);
+    window.addEventListener(OPEN_SKILL_MARKET_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_SKILL_MARKET_EVENT, onOpen);
+  }, []);
 
   return (
     <>

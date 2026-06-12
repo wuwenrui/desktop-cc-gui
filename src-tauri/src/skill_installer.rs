@@ -127,10 +127,22 @@ pub fn cleanup_legacy_sensitive_bundled_skills() -> Result<usize, String> {
 /// Recursively copy every `.md` file from `src` into `dst`, preserving the
 /// directory layout. Returns the number of `.md` files copied.
 pub fn install_skills(src: &Path, dst: &Path) -> Result<usize, String> {
-    install_skills_inner(src, dst, Path::new(""))
+    install_skills_inner(src, dst, Path::new(""), true)
 }
 
-fn install_skills_inner(src: &Path, dst: &Path, relative_dir: &Path) -> Result<usize, String> {
+/// Like [`install_skills`] but never overwrites existing files — only fills
+/// gaps. Safe to run on every startup: bundled skills added after the user's
+/// onboarding land automatically, while user edits stay untouched.
+pub fn install_missing_skills(src: &Path, dst: &Path) -> Result<usize, String> {
+    install_skills_inner(src, dst, Path::new(""), false)
+}
+
+fn install_skills_inner(
+    src: &Path,
+    dst: &Path,
+    relative_dir: &Path,
+    overwrite: bool,
+) -> Result<usize, String> {
     std::fs::create_dir_all(dst).map_err(|e| e.to_string())?;
     let mut n = 0;
     for entry in std::fs::read_dir(src).map_err(|e| e.to_string())? {
@@ -141,16 +153,36 @@ fn install_skills_inner(src: &Path, dst: &Path, relative_dir: &Path) -> Result<u
         };
         let relative_path = relative_dir.join(name);
         if p.is_dir() {
-            n += install_skills_inner(&p, &dst.join(name), &relative_path)?;
+            n += install_skills_inner(&p, &dst.join(name), &relative_path, overwrite)?;
         } else if p.extension().and_then(|s| s.to_str()) == Some("md") {
             if is_sensitive_bundled_skill_path(&relative_path) {
                 continue;
             }
-            std::fs::copy(&p, dst.join(name)).map_err(|e| e.to_string())?;
+            let target = dst.join(name);
+            if !overwrite && target.exists() {
+                continue;
+            }
+            std::fs::copy(&p, target).map_err(|e| e.to_string())?;
             n += 1;
         }
     }
     Ok(n)
+}
+
+/// Startup hook: clean legacy sensitive skills, then fill in bundled skills
+/// missing from `~/.claude/skills/`（onboarding 之后新增的 bundled skill
+/// 对老用户也要可用——侧栏点击靠已安装列表解析，缺文件就会"点了没反应"）。
+pub fn sync_bundled_skills_on_startup(app: &tauri::AppHandle) -> Result<usize, String> {
+    use tauri::Manager;
+    let resource = app
+        .path()
+        .resource_dir()
+        .map_err(|e| e.to_string())?
+        .join("skills");
+    let home = dirs::home_dir().ok_or("no home")?;
+    let skills_root = home.join(".claude").join("skills");
+    let _ = remove_legacy_sensitive_bundled_skills(&skills_root);
+    install_missing_skills(&resource, &skills_root)
 }
 
 /// Tauri command: copy all bundled skills (`<resource_dir>/skills`) into
@@ -262,6 +294,30 @@ mod tests {
         assert!(dst.join("制作PPT.md").exists());
         assert!(!dst.join("制度审查.md").exists());
         assert!(!dst.join("劳动用工小助理").join("SKILL.md").exists());
+
+        fs::remove_dir_all(&base).ok();
+    }
+
+    #[test]
+    fn install_missing_fills_gaps_without_overwriting_user_edits() {
+        let base = temp_dir("fill_gaps");
+        let src = base.join("src");
+        let dst = base.join("dst");
+        fs::create_dir_all(&src).unwrap();
+        fs::create_dir_all(&dst).unwrap();
+        fs::write(src.join("既有技能.md"), "bundled v2").unwrap();
+        fs::write(src.join("新技能.md"), "brand new").unwrap();
+        fs::write(dst.join("既有技能.md"), "user edited").unwrap();
+
+        let copied = install_missing_skills(&src, &dst).unwrap();
+
+        assert_eq!(copied, 1, "only the missing skill should be copied");
+        assert_eq!(
+            fs::read_to_string(dst.join("既有技能.md")).unwrap(),
+            "user edited",
+            "existing files must never be overwritten"
+        );
+        assert_eq!(fs::read_to_string(dst.join("新技能.md")).unwrap(), "brand new");
 
         fs::remove_dir_all(&base).ok();
     }

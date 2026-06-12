@@ -1910,12 +1910,7 @@ export function Sidebar({
               </span>
             </button>
             <SkillMarketNavItem />
-            <LawhubNavSection
-              activeWorkspaceId={activeWorkspaceId}
-              workspacePath={
-                workspaces.find((workspace) => workspace.id === activeWorkspaceId)?.path ?? null
-              }
-            />
+            <LawhubNavSection activeWorkspaceId={activeWorkspaceId} />
           </nav>
           <ScrollArea
             className={`sidebar-content-column${scrollFade.top ? " fade-top" : ""}${

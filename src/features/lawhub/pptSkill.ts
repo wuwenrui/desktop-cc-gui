@@ -11,6 +11,12 @@ export const SELECT_SKILL_EVENT = "ccgui:select-skill";
 
 /** 与 bundled skill `skills/制作PPT.md` 的 frontmatter `name` 一致。 */
 export const PPT_SKILL_NAME = "制作PPT";
+/** 与 bundled skill `skills/文件转Markdown.md` 的 frontmatter `name` 一致。 */
+export const FILE_TO_MARKDOWN_SKILL_NAME = "文件转Markdown";
+/** 与 bundled skill `skills/视觉OCR.md` 的 frontmatter `name` 一致。 */
+export const VISION_OCR_SKILL_NAME = "视觉OCR";
+/** 与 bundled skill `skills/制作技能.md` 的 frontmatter `name` 一致。 */
+export const MAKE_SKILL_SKILL_NAME = "制作技能";
 
 export type SelectSkillEventDetail = { name: string };
 
@@ -27,4 +33,19 @@ export function dispatchSelectSkill(name: string): void {
 /** 触发「制作 PPT」skill（lawhub 菜单按钮用）。 */
 export function triggerPptSkill(): void {
   dispatchSelectSkill(PPT_SKILL_NAME);
+}
+
+/** 触发「文件转 Markdown」skill（lawhub 菜单按钮用）。 */
+export function triggerFileToMarkdownSkill(): void {
+  dispatchSelectSkill(FILE_TO_MARKDOWN_SKILL_NAME);
+}
+
+/** 触发「视觉 OCR」skill（lawhub 菜单按钮用）。 */
+export function triggerVisionOcrSkill(): void {
+  dispatchSelectSkill(VISION_OCR_SKILL_NAME);
+}
+
+/** 触发「制作技能」skill（lawhub 菜单按钮用）。 */
+export function triggerMakeSkillSkill(): void {
+  dispatchSelectSkill(MAKE_SKILL_SKILL_NAME);
 }

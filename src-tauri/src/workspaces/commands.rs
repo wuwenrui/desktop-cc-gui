@@ -2058,6 +2058,39 @@ pub(crate) async fn list_workspace_files(
     .map_err(|err| format!("failed to join workspace file scan task: {err}"))
 }
 
+/// 批量取工作区文件的创建时间（ms since epoch；取不到 created 回退 modified）。
+/// 路径必须落在工作区根内，越界或不存在返回 None。供 lawhub PPT 列表倒序用。
+fn workspace_file_created_ms(canonical_root: &Path, relative_path: &str) -> Option<u64> {
+    let canonical = std::fs::canonicalize(canonical_root.join(relative_path)).ok()?;
+    if !canonical.starts_with(canonical_root) {
+        return None;
+    }
+    let metadata = std::fs::metadata(&canonical).ok()?;
+    let time = metadata.created().or_else(|_| metadata.modified()).ok()?;
+    time.duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .map(|duration| duration.as_millis() as u64)
+}
+
+#[tauri::command]
+pub(crate) async fn workspace_file_times(
+    workspace_id: String,
+    paths: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<Option<u64>>, String> {
+    let root = workspaces_core::resolve_workspace_root(&state.workspaces, &workspace_id).await?;
+    tokio::task::spawn_blocking(move || {
+        let canonical_root = std::fs::canonicalize(&root)
+            .map_err(|err| format!("Failed to resolve workspace root: {err}"))?;
+        Ok(paths
+            .iter()
+            .map(|relative| workspace_file_created_ms(&canonical_root, relative))
+            .collect())
+    })
+    .await
+    .map_err(|err| format!("failed to join file time task: {err}"))?
+}
+
 #[tauri::command]
 pub(crate) async fn list_workspace_directory_children(
     workspace_id: String,
@@ -2162,6 +2195,26 @@ pub(crate) async fn search_workspace_text(
         search_workspace_text_inner(root, &query, &options)
     })
     .await?
+}
+
+/// 用系统默认程序打开工作区内文件。走 Rust 侧 opener 插件（不受 JS capability
+/// 的 open-path scope 限制，glob 不匹配点目录的问题也不存在）；路径必须落在
+/// 工作区根内，越界拒绝。lawhub PPT 产物「点击预览」用。
+#[tauri::command]
+pub(crate) async fn open_workspace_path_default(
+    workspace_id: String,
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let root = workspaces_core::resolve_workspace_root(&state.workspaces, &workspace_id).await?;
+    let canonical_root = std::fs::canonicalize(&root)
+        .map_err(|err| format!("Failed to resolve workspace root: {err}"))?;
+    let canonical = std::fs::canonicalize(canonical_root.join(&path))
+        .map_err(|err| format!("Failed to resolve path {path}: {err}"))?;
+    if !canonical.starts_with(&canonical_root) {
+        return Err(format!("Path {path} escapes the workspace root"));
+    }
+    tauri_plugin_opener::open_path(&canonical, None::<&str>).map_err(|err| err.to_string())
 }
 
 #[tauri::command]

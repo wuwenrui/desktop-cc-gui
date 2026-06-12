@@ -219,13 +219,15 @@ pub fn run() {
             if let Err(error) = app_paths::app_home_dir() {
                 log::warn!("Failed to prepare ccgui home directory: {error}");
             }
-            match skill_installer::cleanup_legacy_sensitive_bundled_skills() {
-                Ok(removed) if removed > 0 => {
-                    log::info!("Removed {removed} legacy bundled sensitive skill files");
+            // 清理历史误捆绑的敏感 skill + 补装 onboarding 后新增的 bundled skill
+            //（只补缺不覆盖，用户改动不受影响）。
+            match skill_installer::sync_bundled_skills_on_startup(&app.handle()) {
+                Ok(installed) if installed > 0 => {
+                    log::info!("Installed {installed} missing bundled skill files");
                 }
                 Ok(_) => {}
                 Err(error) => {
-                    log::warn!("Failed to clean legacy bundled sensitive skills: {error}");
+                    log::warn!("Failed to sync bundled skills: {error}");
                 }
             }
             let state = state::AppState::load(&app.handle());

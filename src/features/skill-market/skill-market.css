@@ -26,7 +26,8 @@
 
 /* ---- 模态卡片(Tauri 窗口透明，背景必须实色) ---- */
 .skill-market-dialog {
-  width: min(720px, 100%);
+  width: min(980px, 100%);
+  height: min(84vh, 760px);
   max-height: min(84vh, 760px);
   display: flex;
   flex-direction: column;
@@ -301,6 +302,37 @@
   font-weight: 550;
   color: var(--status-success, #78ebbe);
   padding: 0 4px;
+}
+
+/* ---- 双栏布局：列表 + 装前预览 ---- */
+.skill-market-panel-split {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.skill-market-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 14px;
+}
+
+.skill-market-body .skill-market-list {
+  width: 360px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.skill-market-item {
+  cursor: pointer;
+}
+
+.skill-market-item.is-selected {
+  border-color: var(--border-accent, rgba(77, 153, 255, 0.5));
+  box-shadow: 0 0 0 1px
+    color-mix(in srgb, var(--border-accent, rgba(77, 153, 255, 0.5)) 60%, transparent);
 }
 
 /* ---- 滚动条 ---- */

@@ -109,6 +109,113 @@
   color: var(--text-faint);
 }
 
+/* lawhub 分组标签（PPT / 技能） */
+.lawhub-group-label {
+  padding: 8px 8px 3px 30px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  user-select: none;
+}
+
+/* PPT 组头：标签本身是折叠开关（数量徽标 + chevron 右对齐） */
+.lawhub-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-align: left;
+}
+
+.lawhub-group-toggle:hover {
+  color: var(--text-muted);
+}
+
+.lawhub-group-toggle-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.lawhub-group-toggle svg {
+  flex-shrink: 0;
+  color: var(--text-faint);
+}
+
+.lawhub-group-count {
+  flex-shrink: 0;
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--surface-control);
+  color: var(--text-muted);
+}
+
+/* 产物列表限高内滚：文件再多也不撑爆侧栏主菜单区 */
+.lawhub-file-list {
+  max-height: 38vh;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.lawhub-show-all {
+  display: block;
+  width: 100%;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  padding: 4px 8px 4px 30px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.lawhub-show-all:hover {
+  color: var(--text-strong);
+}
+
+/* lawhub 已装技能行 */
+.lawhub-skill-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lawhub-skill-icon {
+  flex-shrink: 0;
+  color: var(--text-faint);
+}
+
+.lawhub-skill-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lawhub-file-publish {
+  display: inline-flex;
+  align-items: center;
+}
+
+.lawhub-add-skill {
+  color: var(--text-faint);
+}
+
+.lawhub-add-skill:hover {
+  color: var(--text-strong);
+}
+
 .lawhub-subitem {
   padding-left: 30px;
 }

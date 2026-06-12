@@ -28,10 +28,18 @@ export type SkillListResp = {
   total: number;
 };
 
-/** 已装索引：name -> {skill_id, version}（与 Rust `market_list_installed` 对齐）。 */
-export type InstalledIndex = Record<string, { skill_id: number; version: number }>;
+/** 已装索引条目（与 Rust `InstalledEntry` 对齐；旧索引无 installed_at/display_name）。 */
+export type InstalledEntry = {
+  skill_id: number;
+  version: number;
+  installed_at?: number | null;
+  display_name?: string | null;
+};
 
-async function parseError(res: Response): Promise<string> {
+/** 已装索引：name -> InstalledEntry（与 Rust `market_list_installed` 对齐）。 */
+export type InstalledIndex = Record<string, InstalledEntry>;
+
+export async function parseError(res: Response): Promise<string> {
   try {
     const body = (await res.json()) as { detail?: unknown };
     if (typeof body?.detail === "string") {

@@ -123,6 +123,7 @@ import {
 import { IntentCanvasAttachmentCard } from "../../intent-canvas/components/IntentCanvasAttachmentCard";
 import type { IntentCanvasDocument } from "../../intent-canvas/types";
 import { resolveBrowserNavigationUrl } from "../utils/browserNavigation";
+import { buildVisionSendOptions } from "../../vision/visionRouting";
 
 type RewindExecutionOptions = {
   mode?: RewindMode;
@@ -192,6 +193,7 @@ type ComposerProps = {
   // Model props
   models: { id: string; displayName: string; model: string }[];
   selectedModelId: string | null;
+  visionModelId?: string | null;
   onSelectModel: (id: string) => void;
   reasoningOptions: string[];
   selectedEffort: string | null;
@@ -453,6 +455,7 @@ export const Composer = memo(function Composer({
   onSelectEngine,
   models,
   selectedModelId,
+  visionModelId = null,
   onSelectModel,
   reasoningOptions,
   selectedEffort,
@@ -1462,7 +1465,7 @@ export const Composer = memo(function Composer({
       const shouldReferenceMemory = memoryReferenceMode !== "off";
       const browserContextAttachment = browserContext.attachment;
       const hasBrowserContextAttachment = Boolean(browserContextAttachment);
-      const sendOptions =
+      const contextSendOptions =
         selectedMemoryIds.length > 0 ||
         selectedNoteCardIds.length > 0 ||
         shouldReferenceMemory ||
@@ -1476,6 +1479,11 @@ export const Composer = memo(function Composer({
               ...(browserContextAttachment ? { browserContextAttachment } : {}),
             }
           : undefined;
+      const sendOptions = buildVisionSendOptions({
+        currentOptions: contextSendOptions,
+        selectedSkills,
+        visionModelId,
+      });
       const sendResult = onSend(
         resolvedFinalTextWithAnnotations,
         mergedImages,
@@ -1556,6 +1564,7 @@ export const Composer = memo(function Composer({
       selectedSkillNames,
       setSelectedManualMemories,
       text,
+      visionModelId,
       carryOverContextChipKeys,
       carryOverManualMemoryIds,
       carryOverNoteCardIds,

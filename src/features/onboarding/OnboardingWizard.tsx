@@ -11,7 +11,7 @@ import {
 } from "../vendors/components/SiteModelPicker";
 import { STORAGE_KEYS } from "../vendors/types";
 
-const NEW_API_HOST = "http://47.239.143.243:3000";
+const NEW_API_HOST = "https://model.codingrui.work";
 
 type Step = "key" | "models";
 

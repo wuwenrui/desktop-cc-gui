@@ -3,6 +3,8 @@ import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { useRef, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ComposerEditorSettings, CustomCommandOption, SkillOption } from "../../../types";
+import { FILE_TO_MARKDOWN_SKILL_NAME } from "../../vision/visionRouting";
+import { dispatchSelectSkill } from "../../lawhub/pptSkill";
 import { Composer } from "./Composer";
 
 vi.mock("../../../services/dragDrop", () => ({
@@ -49,8 +51,9 @@ vi.mock("./ChatInputBox/ChatInputBoxAdapter", () => ({
 type HarnessProps = {
   skills?: SkillOption[];
   commands?: CustomCommandOption[];
-  onSend?: (text: string, images: string[]) => void;
+  onSend?: (text: string, images: string[], options?: unknown) => void;
   activeThreadId?: string;
+  visionModelId?: string | null;
 };
 
 function ComposerHarness({
@@ -58,6 +61,7 @@ function ComposerHarness({
   commands = [],
   onSend = () => {},
   activeThreadId = "thread-1",
+  visionModelId = null,
 }: HarnessProps) {
   const [draftText, setDraftText] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -88,6 +92,7 @@ function ComposerHarness({
       selectedEngine="claude"
       models={[]}
       selectedModelId={null}
+      visionModelId={visionModelId}
       onSelectModel={() => {}}
       reasoningOptions={[]}
       selectedEffort={null}
@@ -251,5 +256,48 @@ describe("Composer context source grouping", () => {
     });
 
     expect(onSend.mock.calls[0]?.[0]).toBe("帮我看一下");
+  });
+
+  it("requests hidden vision preflight without overriding the main model", async () => {
+    const onSend = vi.fn();
+    const view = render(
+      <ComposerHarness
+        onSend={onSend}
+        visionModelId="qwen-vl-max"
+        skills={[
+          {
+            name: FILE_TO_MARKDOWN_SKILL_NAME,
+            path: "/repo/skills/文件转Markdown.md",
+            source: "bundled",
+            description: "convert",
+          },
+        ]}
+      />,
+    );
+
+    await act(async () => {
+      dispatchSelectSkill(FILE_TO_MARKDOWN_SKILL_NAME);
+    });
+
+    const textarea = getTextarea(view.container);
+    const value = "转换这个截图";
+    await act(async () => {
+      fireEvent.change(textarea, {
+        target: {
+          value,
+          selectionStart: value.length,
+        },
+      });
+      fireEvent.keyDown(textarea, { key: "Enter", bubbles: true });
+    });
+
+    expect(onSend.mock.calls[0]?.[2]).toEqual({
+      visionPreflight: {
+        mode: "file-to-markdown",
+        model: "qwen-vl-max",
+        skillName: FILE_TO_MARKDOWN_SKILL_NAME,
+      },
+    });
+    expect(onSend.mock.calls[0]?.[2]).not.toHaveProperty("model");
   });
 });

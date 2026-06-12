@@ -45,3 +45,28 @@ fn macos_private_api_feature_matches_config() {
         );
     }
 }
+
+#[test]
+fn macos_git2_uses_vendored_libgit2() {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let cargo_path = manifest_dir.join("Cargo.toml");
+    let cargo_contents = fs::read_to_string(&cargo_path)
+        .unwrap_or_else(|error| panic!("Failed to read {cargo_path:?}: {error}"));
+    let cargo: Value = toml::from_str(&cargo_contents)
+        .unwrap_or_else(|error| panic!("Failed to parse Cargo.toml: {error}"));
+    let features = cargo
+        .get("target")
+        .and_then(|target| target.get("cfg(target_os = \"macos\")"))
+        .and_then(|target| target.get("dependencies"))
+        .and_then(|dependencies| dependencies.get("git2"))
+        .and_then(|git2| git2.get("features"))
+        .and_then(|features| features.as_array())
+        .unwrap_or_else(|| panic!("macOS git2 dependency must declare features"));
+
+    assert!(
+        features
+            .iter()
+            .any(|feature| feature.as_str() == Some("vendored-libgit2")),
+        "macOS git2 dependency must enable vendored-libgit2 to avoid Homebrew libgit2 dylib runtime dependency"
+    );
+}
