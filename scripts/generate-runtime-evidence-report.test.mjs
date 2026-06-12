@@ -7,6 +7,7 @@ const {
   buildBackendBridgeSummary,
   buildLargeFileSummary,
   buildPerfEvidence,
+  buildRealtimeProfileEvidence,
   buildRendererResourceSummary,
   buildRealtimeSummary,
   buildMarkdownPrecomputeSummary,
@@ -97,6 +98,50 @@ test("buildPerfEvidence classifies composer input fixture evidence as proxy", ()
   assert.equal(evidence[0]?.scenario, "S-CI-50");
   assert.equal(evidence[0]?.evidenceClass, "proxy");
   assert.match(evidence[0]?.reason ?? "", /Fixture/);
+});
+
+test("buildRealtimeProfileEvidence maps profiler artifact metrics into prop-chain evidence", () => {
+  const evidence = buildRealtimeProfileEvidence([
+    {
+      scenario: "S-IO-FP",
+      metric: "thread_row_rerender_count_per_1000_delta",
+      value: 1,
+      unit: "count",
+      evidenceClass: "proxy",
+      notes: "ThreadList selector fixture",
+    },
+  ]);
+
+  assert.deepEqual(evidence[0], {
+    source: "docs/perf/realtime-profile.jsonl",
+    scenario: "S-IO-FP",
+    metric: "thread_row_rerender_count_per_1000_delta",
+    value: 1,
+    unit: "count",
+    evidenceClass: "proxy",
+    budget: null,
+    reason: "ThreadList selector fixture",
+    nextAction: "Promote proxy fixture evidence to measured live-session evidence when available.",
+  });
+});
+
+test("buildRealtimeProfileEvidence accepts backend file I/O metrics", () => {
+  const evidence = buildRealtimeProfileEvidence([
+    {
+      scenario: "S-IO-FS",
+      metric: "file_io_command_wall_ms_p95",
+      value: 12.5,
+      unit: "ms",
+      evidenceClass: "measured",
+      notes: "run_blocking_file_io wall time",
+    },
+  ]);
+
+  assert.equal(evidence[0]?.source, "docs/perf/realtime-profile.jsonl");
+  assert.equal(evidence[0]?.scenario, "S-IO-FS");
+  assert.equal(evidence[0]?.metric, "file_io_command_wall_ms_p95");
+  assert.equal(evidence[0]?.value, 12.5);
+  assert.equal(evidence[0]?.evidenceClass, "measured");
 });
 
 test("buildRealtimeSummary keeps malformed proxy values from looking bounded", () => {

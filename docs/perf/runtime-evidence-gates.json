@@ -1,11 +1,12 @@
 {
   "schemaVersion": "1.0",
-  "generatedAt": "2026-06-12T11:08:33.439Z",
+  "generatedAt": "2026-06-12T13:24:15.959Z",
   "sources": {
     "perfBaseline": "docs/perf/baseline.json",
     "composerBaseline": "docs/perf/composer-baseline.json",
     "browserScroll": "docs/perf/long-list-browser-scroll.json",
     "realtimeTurnTrace": "docs/perf/realtime-turn-trace.json",
+    "realtimeProfile": null,
     "largeFileWatchlist": ".artifacts/large-files-near-threshold.json",
     "openSpec": "openspec list --json"
   },
@@ -1286,13 +1287,13 @@
     ],
     "inProgress": [
       {
-        "name": "realtime-input-and-io-isolation-2026-06",
-        "tasks": "58/68",
+        "name": "frontend-prop-chain-stability-2026-06",
+        "tasks": "43/45",
         "recommendation": "not-archive-ready"
       },
       {
-        "name": "frontend-prop-chain-stability-2026-06",
-        "tasks": "26/45",
+        "name": "realtime-input-and-io-isolation-2026-06",
+        "tasks": "63/68",
         "recommendation": "not-archive-ready"
       }
     ],
@@ -1326,7 +1327,7 @@
   ],
   "largeFileSummary": {
     "source": ".artifacts/large-files-near-threshold.json",
-    "generatedAt": "2026-06-12T10:45:48.365Z",
+    "generatedAt": "2026-06-12T11:58:18.940Z",
     "status": "warn",
     "candidates": [
       {

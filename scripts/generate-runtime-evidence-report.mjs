@@ -10,6 +10,7 @@ const PERF_BASELINE_PATH = "docs/perf/baseline.json";
 const COMPOSER_BASELINE_PATH = "docs/perf/composer-baseline.json";
 const BROWSER_SCROLL_PATH = "docs/perf/long-list-browser-scroll.json";
 const REALTIME_TURN_TRACE_PATH = "docs/perf/realtime-turn-trace.json";
+const REALTIME_PROFILE_PATH = "docs/perf/realtime-profile.jsonl";
 const LARGE_FILE_WATCHLIST_PATH = ".artifacts/large-files-near-threshold.json";
 const OUTPUT_JSON_PATH = "docs/perf/runtime-evidence-gates.json";
 const OUTPUT_PERF_MARKDOWN_PATH = "docs/perf/runtime-evidence-gates.md";
@@ -52,6 +53,19 @@ async function readJsonIfExists(path) {
     return null;
   }
   return JSON.parse(await readFile(absolutePath, "utf-8"));
+}
+
+async function readJsonlIfExists(path) {
+  const absolutePath = repoPath(path);
+  if (!existsSync(absolutePath)) {
+    return null;
+  }
+  const content = await readFile(absolutePath, "utf-8");
+  return content
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
 }
 
 async function writeText(path, value) {
@@ -175,6 +189,55 @@ function buildPerfEvidence(fragments) {
 
 function findMetric(perfEvidence, scenario, metric) {
   return perfEvidence.find((entry) => entry.scenario === scenario && entry.metric === metric);
+}
+
+function normalizeEvidenceClass(value, fallback = "proxy") {
+  return value === "measured" || value === "proxy" || value === "unsupported"
+    ? value
+    : fallback;
+}
+
+function metricFromRealtimeProfileEntry(entry) {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+    return null;
+  }
+  const scenario = typeof entry.scenario === "string" ? entry.scenario : "S-IO-FP";
+  const metric = typeof entry.metric === "string"
+    ? entry.metric
+    : typeof entry.name === "string"
+      ? entry.name
+      : null;
+  const value = toFiniteNumber(entry.value ?? entry.count ?? entry.renderCount);
+  if (!metric || value === null) {
+    return null;
+  }
+
+  return {
+    source: REALTIME_PROFILE_PATH,
+    scenario,
+    metric,
+    value,
+    unit: typeof entry.unit === "string" ? entry.unit : "count",
+    evidenceClass: normalizeEvidenceClass(entry.evidenceClass, "proxy"),
+    budget: entry.budget ?? null,
+    reason:
+      typeof entry.notes === "string"
+        ? entry.notes
+        : "Profiler artifact evidence from realtime-profile.jsonl.",
+    nextAction:
+      typeof entry.nextAction === "string"
+        ? entry.nextAction
+        : "Promote proxy fixture evidence to measured live-session evidence when available.",
+  };
+}
+
+function buildRealtimeProfileEvidence(profileEntries) {
+  if (!Array.isArray(profileEntries)) {
+    return [];
+  }
+  return profileEntries
+    .map(metricFromRealtimeProfileEntry)
+    .filter((entry) => entry !== null);
 }
 
 function toFiniteNumber(value) {
@@ -868,6 +931,7 @@ async function main() {
   const composerBaseline = await readJsonIfExists(COMPOSER_BASELINE_PATH);
   const browserScroll = await readJsonIfExists(BROWSER_SCROLL_PATH);
   const realtimeTurnTrace = await readJsonIfExists(REALTIME_TURN_TRACE_PATH);
+  const realtimeProfile = await readJsonlIfExists(REALTIME_PROFILE_PATH);
   const largeFileReport = await readJsonIfExists(LARGE_FILE_WATCHLIST_PATH);
   const openSpecState = runJson("openspec", ["list", "--json"]);
   const performanceEvidence = buildPerfEvidence([
@@ -875,6 +939,7 @@ async function main() {
     { path: COMPOSER_BASELINE_PATH, fragment: composerBaseline },
     { path: BROWSER_SCROLL_PATH, fragment: browserScroll },
   ]);
+  performanceEvidence.push(...buildRealtimeProfileEvidence(realtimeProfile));
   // Enrich baseline rows in place; the function mutates and returns the same array.
   const realtimeTraceBudgets = buildRealtimeTraceBudgets(performanceEvidence);
   const report = {
@@ -885,6 +950,7 @@ async function main() {
       composerBaseline: existsSync(repoPath(COMPOSER_BASELINE_PATH)) ? COMPOSER_BASELINE_PATH : null,
       browserScroll: existsSync(repoPath(BROWSER_SCROLL_PATH)) ? BROWSER_SCROLL_PATH : null,
       realtimeTurnTrace: existsSync(repoPath(REALTIME_TURN_TRACE_PATH)) ? REALTIME_TURN_TRACE_PATH : null,
+      realtimeProfile: existsSync(repoPath(REALTIME_PROFILE_PATH)) ? REALTIME_PROFILE_PATH : null,
       largeFileWatchlist: existsSync(repoPath(LARGE_FILE_WATCHLIST_PATH)) ? LARGE_FILE_WATCHLIST_PATH : null,
       openSpec: "openspec list --json",
     },
@@ -919,6 +985,7 @@ export const runtimeEvidenceReportInternals = {
   buildWorkspaceFileListingSummary,
   buildMarkdownPrecomputeSummary,
   buildPerfEvidence,
+  buildRealtimeProfileEvidence,
   buildRendererResourceSummary,
   buildRealtimeSummary,
   buildRealtimeTraceBudgets,

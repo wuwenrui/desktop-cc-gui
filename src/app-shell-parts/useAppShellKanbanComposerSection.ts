@@ -1,28 +1,30 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { homeDir } from "@tauri-apps/api/path";
-import {
-  ensureWorkspacePathDir,
-  isWebServiceRuntime,
-} from "../services/tauri";
-import {
-  resolveKanbanThreadCreationStrategy,
-} from "../features/kanban/utils/contextMode";
+import { ensureWorkspacePathDir, isWebServiceRuntime } from "../services/tauri";
+import { resolveKanbanThreadCreationStrategy } from "../features/kanban/utils/contextMode";
 import { deriveKanbanTaskTitle } from "../features/kanban/utils/taskTitle";
 import {
   getDefaultWorkspaceCandidatePaths,
   isDefaultWorkspacePath,
 } from "../features/workspaces/utils/defaultWorkspace";
-import type { MessageSendOptions, ThreadSummary, WorkspaceInfo } from "../types";
+import type {
+  MessageSendOptions,
+  ThreadSummary,
+  WorkspaceInfo,
+} from "../types";
 import type { KanbanPanel } from "../features/kanban/types";
 import type { KanbanContextMode } from "../features/kanban/utils/contextMode";
 import { stripComposerKanbanTagsPreserveFormatting } from "./useAppShellSections.kanbanHelpers";
+import type { UseAppShellSectionsContext } from "./useAppShellSectionsTypes";
 
 type ComposerKanbanPanelOption = Pick<
   KanbanPanel,
   "id" | "name" | "workspaceId" | "createdAt"
 >;
 
-export function useAppShellKanbanComposerSection(ctx: any) {
+export function useAppShellKanbanComposerSection(
+  ctx: UseAppShellSectionsContext,
+) {
   const {
     activeWorkspace,
     workspaces,
@@ -59,7 +61,10 @@ export function useAppShellKanbanComposerSection(ctx: any) {
   } = ctx;
   const typedWorkspaces = workspaces as WorkspaceInfo[];
   const typedKanbanPanels = kanbanPanels as KanbanPanel[];
-  const typedThreadsByWorkspace = threadsByWorkspace as Record<string, ThreadSummary[]>;
+  const typedThreadsByWorkspace = threadsByWorkspace as Record<
+    string,
+    ThreadSummary[]
+  >;
 
   const [selectedComposerKanbanPanelId, setSelectedComposerKanbanPanelId] =
     useState<string | null>(null);
@@ -87,12 +92,16 @@ export function useAppShellKanbanComposerSection(ctx: any) {
     }
     return Array.from(paths);
   }, [activeWorkspace, typedWorkspaces]);
-  const composerLinkedKanbanPanels = useMemo<ComposerKanbanPanelOption[]>(() => {
+  const composerLinkedKanbanPanels = useMemo<
+    ComposerKanbanPanelOption[]
+  >(() => {
     if (composerKanbanWorkspacePaths.length === 0) {
       return [];
     }
     return typedKanbanPanels
-      .filter((panel) => composerKanbanWorkspacePaths.includes(panel.workspaceId))
+      .filter((panel) =>
+        composerKanbanWorkspacePaths.includes(panel.workspaceId),
+      )
       .slice()
       .sort((a, b) => b.createdAt - a.createdAt || a.sortOrder - b.sortOrder)
       .map((panel) => ({
@@ -117,7 +126,9 @@ export function useAppShellKanbanComposerSection(ctx: any) {
 
   const handleOpenComposerKanbanPanel = useCallback(
     (panelId: string) => {
-      const panel = composerLinkedKanbanPanels.find((entry) => entry.id === panelId);
+      const panel = composerLinkedKanbanPanels.find(
+        (entry) => entry.id === panelId,
+      );
       if (!panel) {
         return;
       }
@@ -179,13 +190,10 @@ export function useAppShellKanbanComposerSection(ctx: any) {
   );
 
   const handleComposerSendWithKanban = useCallback(
-    async (
-      text: string,
-      images: string[],
-      options?: MessageSendOptions,
-    ) => {
+    async (text: string, images: string[], options?: MessageSendOptions) => {
       const trimmedOriginalText = text.trim();
-      const { panelId, cleanText } = resolveComposerKanbanPanel(trimmedOriginalText);
+      const { panelId, cleanText } =
+        resolveComposerKanbanPanel(trimmedOriginalText);
       const textForSending = cleanText;
 
       // HomeChat send: no active workspace yet. Select or create one, then
@@ -194,7 +202,9 @@ export function useAppShellKanbanComposerSection(ctx: any) {
         let workspace: WorkspaceInfo | null = null;
         if (isWebServiceRuntime()) {
           workspace =
-            typedWorkspaces.find((entry) => isDefaultWorkspacePath(entry.path)) ??
+            typedWorkspaces.find((entry) =>
+              isDefaultWorkspacePath(entry.path),
+            ) ??
             typedWorkspaces.find((entry) => entry.kind === "main") ??
             typedWorkspaces[0] ??
             null;
@@ -205,7 +215,8 @@ export function useAppShellKanbanComposerSection(ctx: any) {
               if (!resolvedHome) {
                 throw new Error("Unable to resolve default workspace path.");
               }
-              const preferredPaths = getDefaultWorkspaceCandidatePaths(resolvedHome);
+              const preferredPaths =
+                getDefaultWorkspaceCandidatePaths(resolvedHome);
 
               let createdWorkspacePath: string | null = null;
               let lastError: unknown = null;
@@ -219,12 +230,17 @@ export function useAppShellKanbanComposerSection(ctx: any) {
                 }
               }
               if (!createdWorkspacePath) {
-                throw lastError ?? new Error("Failed to create default workspace path.");
+                throw (
+                  lastError ??
+                  new Error("Failed to create default workspace path.")
+                );
               }
               const normalizedDefaultPath = normalizePath(createdWorkspacePath);
-              workspace = typedWorkspaces.find(
-                (entry) => normalizePath(entry.path) === normalizedDefaultPath,
-              ) ?? null;
+              workspace =
+                typedWorkspaces.find(
+                  (entry) =>
+                    normalizePath(entry.path) === normalizedDefaultPath,
+                ) ?? null;
               if (!workspace) {
                 workspace = await addWorkspaceFromPath(createdWorkspacePath);
               }
@@ -244,9 +260,10 @@ export function useAppShellKanbanComposerSection(ctx: any) {
             return;
           }
           const normalizedDefaultPath = normalizePath(defaultWorkspacePath);
-          workspace = typedWorkspaces.find(
-            (entry) => normalizePath(entry.path) === normalizedDefaultPath,
-          ) ?? null;
+          workspace =
+            typedWorkspaces.find(
+              (entry) => normalizePath(entry.path) === normalizedDefaultPath,
+            ) ?? null;
           if (!workspace) {
             try {
               workspace = await addWorkspaceFromPath(defaultWorkspacePath);
@@ -321,18 +338,16 @@ export function useAppShellKanbanComposerSection(ctx: any) {
         | "claude";
       const activeThreadEngine =
         activeThreadId && activeWorkspaceId
-          ? (
-              typedThreadsByWorkspace[activeWorkspaceId]?.find(
-                (thread) => thread.id === activeThreadId,
-              )?.engineSource ?? null
-            )
+          ? (typedThreadsByWorkspace[activeWorkspaceId]?.find(
+              (thread) => thread.id === activeThreadId,
+            )?.engineSource ?? null)
           : null;
       const isActiveThreadInWorkspace = Boolean(
         activeWorkspaceId &&
-          activeThreadId &&
-          typedThreadsByWorkspace[activeWorkspaceId]?.some(
-            (thread) => thread.id === activeThreadId,
-          ),
+        activeThreadId &&
+        typedThreadsByWorkspace[activeWorkspaceId]?.some(
+          (thread) => thread.id === activeThreadId,
+        ),
       );
       const threadCreationStrategy = resolveKanbanThreadCreationStrategy({
         mode: composerKanbanContextMode,
@@ -385,11 +400,15 @@ export function useAppShellKanbanComposerSection(ctx: any) {
         );
       }
 
-      const taskDescription = textForSending.length > 0 ? textForSending : trimmedOriginalText;
+      const taskDescription =
+        textForSending.length > 0 ? textForSending : trimmedOriginalText;
       const taskFallbackTitle =
-        composerLinkedKanbanPanels.find((panel) => panel.id === panelId)?.name ||
-        "Kanban Task";
-      const taskTitle = deriveKanbanTaskTitle(taskDescription, taskFallbackTitle);
+        composerLinkedKanbanPanels.find((panel) => panel.id === panelId)
+          ?.name || "Kanban Task";
+      const taskTitle = deriveKanbanTaskTitle(
+        taskDescription,
+        taskFallbackTitle,
+      );
       const createdTask = kanbanCreateTask({
         workspaceId: workspace.path,
         panelId,
@@ -442,27 +461,22 @@ export function useAppShellKanbanComposerSection(ctx: any) {
   );
 
   const handleComposerSendWithEditorFallback = useCallback(
-    async (
-      text: string,
-      images: string[],
-      options?: MessageSendOptions,
-    ) => {
+    async (text: string, images: string[], options?: MessageSendOptions) => {
       await handleComposerSendWithKanban(text, images, options);
     },
     [handleComposerSendWithKanban],
   );
 
   const handleComposerQueueWithEditorFallback = useCallback(
-    async (
-      text: string,
-      images: string[],
-      options?: MessageSendOptions,
-    ) => {
-      await handleComposerQueue(text, images, mergeSelectedAgentOption(options));
+    async (text: string, images: string[], options?: MessageSendOptions) => {
+      await handleComposerQueue(
+        text,
+        images,
+        mergeSelectedAgentOption(options),
+      );
     },
     [handleComposerQueue, mergeSelectedAgentOption],
   );
-
 
   return {
     selectedComposerKanbanPanelId,

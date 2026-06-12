@@ -30,8 +30,20 @@ import {
   getThreadSelectDiffCleanupAction,
   shouldPreserveEditorOnThreadSelect,
 } from "./threadEditorPreservation";
+import {
+  flattenAppShellDomainContexts,
+  type AppShellDomainContexts,
+} from "./appShellDomainContexts";
 
 type AppShellLayoutNodesContext = Record<string, any>;
+
+export type AppShellLayoutNodesSectionInput = {
+  appShellDomainContexts: AppShellDomainContexts;
+  searchAndComposerSection: Record<string, any>;
+  sections: Record<string, any>;
+  isPullRequestComposer: any;
+  isPullRequestComposerFromSections: any;
+};
 
 type WorkspaceAliasPromptState = {
   workspaceId: string;
@@ -50,138 +62,466 @@ function formatWorkspaceAliasError(error: unknown) {
 }
 
 function reportMainFileExternalChangeMonitorCleanupError(error: unknown) {
-  console.warn("[files] Failed to clear main file external change monitor", error);
+  console.warn(
+    "[files] Failed to clear main file external change monitor",
+    error,
+  );
 }
 
-function resolveProjectMapSelectedGenerationModel(selectedModelId: string | null, models: any[]): string | null {
+function resolveProjectMapSelectedGenerationModel(
+  selectedModelId: string | null,
+  models: any[],
+): string | null {
   const trimmedSelection = selectedModelId?.trim() ?? "";
   if (!trimmedSelection) {
     return null;
   }
   const matchedModel = models?.find(
-    (model) => model.id === trimmedSelection || model.model === trimmedSelection,
+    (model) =>
+      model.id === trimmedSelection || model.model === trimmedSelection,
   );
   return matchedModel?.model ?? trimmedSelection;
 }
 
-export function useAppShellLayoutNodesSection(ctx: AppShellLayoutNodesContext) {
+function flattenAppShellLayoutNodesContext(
+  input: AppShellLayoutNodesSectionInput,
+): AppShellLayoutNodesContext {
+  return {
+    ...flattenAppShellDomainContexts(input.appShellDomainContexts),
+    ...input.searchAndComposerSection,
+    ...input.sections,
+    isPullRequestComposer: input.isPullRequestComposer,
+    isPullRequestComposerFromSections: input.isPullRequestComposerFromSections,
+    sections: input.sections,
+  };
+}
+
+export function useAppShellLayoutNodesSection(
+  input: AppShellLayoutNodesSectionInput,
+) {
+  const ctx = flattenAppShellLayoutNodesContext(input);
   const clientUiVisibility = useClientUiVisibility();
   const [workspaceAliasPrompt, setWorkspaceAliasPrompt] =
     useState<WorkspaceAliasPromptState | null>(null);
-  const [mainFileExternalChangeTransportMode, setMainFileExternalChangeTransportMode] =
-    useState<"watcher" | "polling">("polling");
-  const [focusedProjectMemoryId, setFocusedProjectMemoryId] = useState<string | null>(null);
-  const [focusedProjectMemoryRequestKey, setFocusedProjectMemoryRequestKey] = useState(0);
-  const [focusedWorkspaceNoteId, setFocusedWorkspaceNoteId] = useState<string | null>(null);
-  const [focusedWorkspaceNoteRequestKey, setFocusedWorkspaceNoteRequestKey] = useState(0);
+  const [
+    mainFileExternalChangeTransportMode,
+    setMainFileExternalChangeTransportMode,
+  ] = useState<"watcher" | "polling">("polling");
+  const [focusedProjectMemoryId, setFocusedProjectMemoryId] = useState<
+    string | null
+  >(null);
+  const [focusedProjectMemoryRequestKey, setFocusedProjectMemoryRequestKey] =
+    useState(0);
+  const [focusedWorkspaceNoteId, setFocusedWorkspaceNoteId] = useState<
+    string | null
+  >(null);
+  const [focusedWorkspaceNoteRequestKey, setFocusedWorkspaceNoteRequestKey] =
+    useState(0);
   const [intentCanvasOpenRequest, setIntentCanvasOpenRequest] =
     useState<IntentCanvasOpenRequest | null>(null);
-  const [activeIntentCanvasCodeSelectionAnchor, setActiveIntentCanvasCodeSelectionAnchor] =
-    useState<IntentCanvasCodeSelectionAnchor | null>(null);
+  const [
+    activeIntentCanvasCodeSelectionAnchor,
+    setActiveIntentCanvasCodeSelectionAnchor,
+  ] = useState<IntentCanvasCodeSelectionAnchor | null>(null);
   const intentCanvasOpenRequestSequenceRef = useRef(0);
   const [pendingIntentCanvasByThreadId, setPendingIntentCanvasByThreadId] =
     useState<Record<string, IntentCanvasDocument[]>>({});
   const {
-    accessMode, accountSwitching, activeAccount, activeDiffError,
-    activeDiffLoading, activeDiffs, activeDraft, activeEditorFilePath,
-    activeEditorLineRange, activeEngine, activeFusingMessageId, activeGitRoot,
-    activeImages, activeItems, activeParentWorkspace, activePlan,
-    activeQueue, activeQueuedHandoffBubble, activeRateLimits, activeTab,
-    agentTaskScrollRequest, activeTerminalId, activeThreadId, activeTokenUsage,
-    activeWorkspace, activeWorkspaceId, addDebugEntry, alertError,
-    appMode, appSettings, applySelectedCollaborationMode, approvals,
-    attachImages, branches, canFuseActiveQueue, canInterrupt,
-    centerMode, choosePreset, claudeThinkingVisible, clearDebugEntries,
-    clearDictationError, clearDictationHint, clearDictationTranscript, closePlanPanel,
-    closeReviewPrompt, closeSettings, collaborationModes, collaborationModesEnabled,
-    collapseSidebar, commands, commitError, commitLoading,
-    commitMessage, commitMessageError, commitMessageLoading, completionEmailIntentByThread,
-    composerEditorSettings, composerInputRef, composerInsert, composerKanbanContextMode,
-    composerLinkedKanbanPanels, composerSendLabel, confirmBranch, confirmCommit,
-    confirmCustom, connectWorkspace, debugEntries, debugOpen,
-    deleteThreadPrompt, deletingWorktreeIds, dictationError, dictationHint,
-    dictationLevel, dictationReady, dictationState, dictationTranscript,
-    diffScrollRequestId, diffSource, directories, directoryMetadata,
-    dismissErrorToast, dismissUpdate, dropOverlayActive, dropOverlayText,
-    editorHighlightTarget, editorNavigationTarget, editorSplitCompanion, editorSplitLayout,
-    effectiveModels, effectiveReasoningSupported, effectiveSelectedModelId, ensureWorkspaceThreadListLoaded,
-    errorToasts, exitDiffView, expandRightPanel, filePanelMode,
-    fileReferenceMode, fileStatus, fileTreeLoadError, fileTreeSourceVersion, files,
-    forkThreadForWorkspace, forkSessionFromMessageForWorkspace, getPinTimestamp, gitDiffListView,
-    gitDiffViewStyle, gitIssues, gitIssuesError, gitIssuesLoading,
-    gitIssuesTotal, gitLogAhead, gitLogAheadEntries, gitLogBehind,
-    gitLogBehindEntries, gitLogEntries, gitLogError, gitLogLoading,
-    gitLogTotal, gitLogUpstream, gitPanelMode, gitPullRequestComments,
-    gitPullRequestCommentsError, gitPullRequestCommentsLoading, gitPullRequests, gitPullRequestsError,
-    gitPullRequestsLoading, gitPullRequestsTotal, gitRemoteUrl, gitRootCandidates,
-    gitRootScanDepth, gitRootScanError, gitRootScanHasScanned, gitRootScanLoading,
-    gitStatus, gitignoredDirectories, gitignoredFiles, groupedWorkspaces,
-    handleActivateWorkspaceFileTab, handleActiveDiffPath, handleAddAgent, handleAddCloneAgent,
-    handleAddWorkspace, handleAddWorktreeAgent, handleAppModeChange, handleApplyWorktreeChanges,
-    handleApprovalBatchAccept, handleApprovalDecision, handleApprovalRemember, handleCancelSwitchAccount,
-    handleCheckoutBranch, handleCloseAllWorkspaceFileTabs, handleCloseWorkspaceFileTab, handleCommit,
-    handleCommitAndPush, handleCommitAndSync, handleCommitMessageChange, handleComposerQueueWithEditorFallback,
-    handleComposerSendWithEditorFallback, handleCopyDebug, handleCopyThread, handleCreateBranch,
-    handleCreatePrompt, handleDebugClick, handleDeletePrompt, handleDeleteQueued,
-    handleDeleteThreadPromptCancel, handleDeleteThreadPromptConfirm, handleDraftChange, handleEditQueued,
-    handleExitWorkspaceEditor, handleGenerateCommitMessage, handleGitPanelModeChange, handleInsertComposerText,
-    handleDispatchOrchestrationTask, handleLockPanel, handleMovePrompt, handleOpenComposerKanbanPanel,
-    handleOpenDetachedFileExplorer, handleOpenHomeChat, handleOpenModelSettings, handleRefreshModelConfig,
-    handleOpenSearchPalette, handleOpenSpecHub, handleOpenClientDocumentation, handleResolvedClaudeThinkingVisibleChange,
-    handleOpenWorkspaceFile, handleOpenWorkspaceHome, handlePickGitRoot, handlePush,
-    handleRefreshAccountRateLimits, handleRenameThread, handleRevealGeneralPrompts, handleRevealWorkspacePrompts,
-    handleRevertAllGitChanges, handleRevertGitFile, handleReviewPromptKeyDown, handleRewindFromMessage,
-    handleSelectAgent, handleSelectCommit, handleSelectDiffForPanel, handleSelectHomeWorkspace,
-    handleSelectModel, handleSelectOpenAppId, handleSelectOpenCodeAgent, handleSelectOpenCodeVariant,
-    handleSelectPullRequest, handleSelectWorkspaceInstance, handleSendPrompt, handleSendPromptToNewAgent,
-    handleSelectStatusPanelSubagent, handleSetAccessMode, handleSetGitRoot, handleStageGitAll,
-    handleStageGitFile, handleStartSharedConversation, handleSwitchAccount, handleFuseQueued,
-    handleSync, handleToggleDictation, handleToggleRuntimeConsole, handleToggleTerminalPanel,
-    handleUnstageGitFile, handleUpdatePrompt, handleUserInputDismiss, handleUserInputSubmitWithPlanApply,
-    handleExitPlanModeExecute, handleWorkspaceDragEnter, handleWorkspaceDragLeave, handleWorkspaceDragOver,
-    handleWorkspaceDrop, highlightedBranchIndex, highlightedCommitIndex, highlightedPresetIndex,
-    availableEngines, hydratedThreadListWorkspaceIdsRef, interruptTurn, isCompact,
-    isDeleteThreadPromptBusy, isEditorFileMaximized, isFilesLoading, isLoadingLatestAgents,
-    isModelConfigRefreshing, isPhone, isPlanMode, isPlanPanelDismissed,
-    isProcessing, isReviewing, isSoloMode, isTablet,
-    isThreadAutoNaming, isThreadPinned, isWorktreeWorkspace, latestAgentRuns,
-    launchScriptState, launchScriptsState, listThreadsForWorkspaceTracked, liveEditPreviewEnabled,
-    loadOlderThreadsForWorkspace, handleOpenClaudeTui, onCloseTerminal, onDebugPanelResizeStart,
-    onNewTerminal, onSelectTerminal, onTerminalPanelResizeStart, onTextareaHeightChange,
-    openAppIconById, openCodeAgents, openDeleteThreadPrompt, openFileTabs,
-    openPlanPanel, openReleaseNotes, openSettings, pickImages,
-    pinThread, pinnedThreadsVersion, prefillDraft, prompts,
-    pushError, pushLoading, queueGitStatusRefresh, queueSaveSettings,
-    reasoningOptions, refreshEngines, refreshFiles, refreshGitDiffs,
-    refreshThread, removeImage, removeWorkspace, removeWorktree,
-    resetPullRequestSelection, reviewPrompt, rightPanelCollapsed, runtimeRunState,
-    scanGitRoots, selectBranch, selectBranchAtIndex, selectCommit,
-    selectCommitAtIndex, selectWorkspace, selectedAgent, selectedCollaborationModeId,
-    selectedCommitSha, selectedComposerKanbanPanelId, selectedDiffPath, selectedEffort,
-    selectedOpenCodeAgent, selectedOpenCodeVariant, selectedPullRequest, sendUserMessageToThread,
-    setActiveEditorLineRange, setActiveEngine, setActiveTab, setActiveThreadId,
-    setActiveWorkspaceId, setAppMode, setCenterMode, setComposerInsert,
-    setComposerKanbanContextMode, setEditorSplitCompanion, setEditorSplitLayout, setFilePanelMode,
-    setFileReferenceMode, setGitDiffListView, setGitDiffViewStyle, setGitRootScanDepth,
-    setHighlightedBranchIndex, setHighlightedCommitIndex, setHighlightedPresetIndex, setIsEditorFileMaximized,
-    setLiveEditPreviewEnabled, setPrefillDraft, setSelectedCommitSha, setSelectedComposerKanbanPanelId,
-    setSelectedDiffPath, setSelectedEffort, setHomeOpen, setWorkspaceHomeWorkspaceId,
-    showComposer, showLoadingProgressDialog, hideLoadingProgressDialog, showDebugButton,
-    showPresetStep, sidebarToggleProps, skills, soloModeEnabled,
-    startCompact, startFork, startThreadForWorkspace, startUpdate,
-    syncError, syncLoading, t, tabletTab,
-    terminalOpen, terminalState, terminalTabs, textareaHeight,
-    threadItemsByThread, threadListCursorByWorkspace, threadListLoadingByWorkspace, threadListPagingByWorkspace,
-    threadParentById, threadStatusById, historyLoadingByThreadId, historyRestoredAtMsByThread,
-    threadsByWorkspace, toggleCompletionEmailIntent, toggleSoloMode, triggerAutoThreadTitle,
-    unpinThread, updateCustomInstructions, updateSharedSessionEngineSelection, updateThreadParent,
-    updateWorkspaceSettings, updaterState, userInputRequests, workspaceDropTargetRef,
-    workspaceGroups, workspaces, workspacesById, worktreeApplyError,
-    worktreeApplyLoading, worktreeApplySuccess, worktreeLabel, worktreeRename,
-    sessionRadarRunningSessions, sessionRadarRecentCompletedSessions, runningSessionCountByWorkspaceId, recentCompletedSessionCountByWorkspaceId,
+    accessMode,
+    accountSwitching,
+    activeAccount,
+    activeDiffError,
+    activeDiffLoading,
+    activeDiffs,
+    activeDraft,
+    activeEditorFilePath,
+    activeEditorLineRange,
+    activeEngine,
+    activeFusingMessageId,
+    activeGitRoot,
+    activeImages,
+    activeItems,
+    activeParentWorkspace,
+    activePlan,
+    activeQueue,
+    activeQueuedHandoffBubble,
+    activeRateLimits,
+    activeTab,
+    agentTaskScrollRequest,
+    activeTerminalId,
+    activeThreadId,
+    activeTokenUsage,
+    activeWorkspace,
+    activeWorkspaceId,
+    addDebugEntry,
+    alertError,
+    appMode,
+    appSettings,
+    applySelectedCollaborationMode,
+    approvals,
+    attachImages,
+    branches,
+    canFuseActiveQueue,
+    canInterrupt,
+    centerMode,
+    choosePreset,
+    claudeThinkingVisible,
+    clearDebugEntries,
+    clearDictationError,
+    clearDictationHint,
+    clearDictationTranscript,
+    closePlanPanel,
+    closeReviewPrompt,
+    closeSettings,
+    collaborationModes,
+    collaborationModesEnabled,
+    collapseSidebar,
+    commands,
+    commitError,
+    commitLoading,
+    commitMessage,
+    commitMessageError,
+    commitMessageLoading,
+    completionEmailIntentByThread,
+    composerEditorSettings,
+    composerInputRef,
+    composerInsert,
+    composerKanbanContextMode,
+    composerLinkedKanbanPanels,
+    composerSendLabel,
+    confirmBranch,
+    confirmCommit,
+    confirmCustom,
+    connectWorkspace,
+    debugEntries,
+    debugOpen,
+    deleteThreadPrompt,
+    deletingWorktreeIds,
+    dictationError,
+    dictationHint,
+    dictationLevel,
+    dictationReady,
+    dictationState,
+    dictationTranscript,
+    diffScrollRequestId,
+    diffSource,
+    directories,
+    directoryMetadata,
+    dismissErrorToast,
+    dismissUpdate,
+    dropOverlayActive,
+    dropOverlayText,
+    editorHighlightTarget,
+    editorNavigationTarget,
+    editorSplitCompanion,
+    editorSplitLayout,
+    effectiveModels,
+    effectiveReasoningSupported,
+    effectiveSelectedModelId,
+    ensureWorkspaceThreadListLoaded,
+    errorToasts,
+    exitDiffView,
+    expandRightPanel,
+    filePanelMode,
+    fileReferenceMode,
+    fileStatus,
+    fileTreeLoadError,
+    fileTreeSourceVersion,
+    files,
+    forkThreadForWorkspace,
+    forkSessionFromMessageForWorkspace,
+    getPinTimestamp,
+    gitDiffListView,
+    gitDiffViewStyle,
+    gitIssues,
+    gitIssuesError,
+    gitIssuesLoading,
+    gitIssuesTotal,
+    gitLogAhead,
+    gitLogAheadEntries,
+    gitLogBehind,
+    gitLogBehindEntries,
+    gitLogEntries,
+    gitLogError,
+    gitLogLoading,
+    gitLogTotal,
+    gitLogUpstream,
+    gitPanelMode,
+    gitPullRequestComments,
+    gitPullRequestCommentsError,
+    gitPullRequestCommentsLoading,
+    gitPullRequests,
+    gitPullRequestsError,
+    gitPullRequestsLoading,
+    gitPullRequestsTotal,
+    gitRemoteUrl,
+    gitRootCandidates,
+    gitRootScanDepth,
+    gitRootScanError,
+    gitRootScanHasScanned,
+    gitRootScanLoading,
+    gitStatus,
+    gitignoredDirectories,
+    gitignoredFiles,
+    groupedWorkspaces,
+    handleActivateWorkspaceFileTab,
+    handleActiveDiffPath,
+    handleAddAgent,
+    handleAddCloneAgent,
+    handleAddWorkspace,
+    handleAddWorktreeAgent,
+    handleAppModeChange,
+    handleApplyWorktreeChanges,
+    handleApprovalBatchAccept,
+    handleApprovalDecision,
+    handleApprovalRemember,
+    handleCancelSwitchAccount,
+    handleCheckoutBranch,
+    handleCloseAllWorkspaceFileTabs,
+    handleCloseWorkspaceFileTab,
+    handleCommit,
+    handleCommitAndPush,
+    handleCommitAndSync,
+    handleCommitMessageChange,
+    handleComposerQueueWithEditorFallback,
+    handleComposerSendWithEditorFallback,
+    handleCopyDebug,
+    handleCopyThread,
+    handleCreateBranch,
+    handleCreatePrompt,
+    handleDebugClick,
+    handleDeletePrompt,
+    handleDeleteQueued,
+    handleDeleteThreadPromptCancel,
+    handleDeleteThreadPromptConfirm,
+    handleDraftChange,
+    handleEditQueued,
+    handleExitWorkspaceEditor,
+    handleGenerateCommitMessage,
+    handleGitPanelModeChange,
+    handleInsertComposerText,
+    handleDispatchOrchestrationTask,
+    handleLockPanel,
+    handleMovePrompt,
+    handleOpenComposerKanbanPanel,
+    handleOpenDetachedFileExplorer,
+    handleOpenHomeChat,
+    handleOpenModelSettings,
+    handleRefreshModelConfig,
+    handleOpenSearchPalette,
+    handleOpenSpecHub,
+    handleOpenClientDocumentation,
+    handleResolvedClaudeThinkingVisibleChange,
+    handleOpenWorkspaceFile,
+    handleOpenWorkspaceHome,
+    handlePickGitRoot,
+    handlePush,
+    handleRefreshAccountRateLimits,
+    handleRenameThread,
+    handleRevealGeneralPrompts,
+    handleRevealWorkspacePrompts,
+    handleRevertAllGitChanges,
+    handleRevertGitFile,
+    handleReviewPromptKeyDown,
+    handleRewindFromMessage,
+    handleSelectAgent,
+    handleSelectCommit,
+    handleSelectDiffForPanel,
+    handleSelectHomeWorkspace,
+    handleSelectModel,
+    handleSelectOpenAppId,
+    handleSelectOpenCodeAgent,
+    handleSelectOpenCodeVariant,
+    handleSelectPullRequest,
+    handleSelectWorkspaceInstance,
+    handleSendPrompt,
+    handleSendPromptToNewAgent,
+    handleSelectStatusPanelSubagent,
+    handleSetAccessMode,
+    handleSetGitRoot,
+    handleStageGitAll,
+    handleStageGitFile,
+    handleStartSharedConversation,
+    handleSwitchAccount,
+    handleFuseQueued,
+    handleSync,
+    handleToggleDictation,
+    handleToggleRuntimeConsole,
+    handleToggleTerminalPanel,
+    handleUnstageGitFile,
+    handleUpdatePrompt,
+    handleUserInputDismiss,
+    handleUserInputSubmitWithPlanApply,
+    handleExitPlanModeExecute,
+    handleWorkspaceDragEnter,
+    handleWorkspaceDragLeave,
+    handleWorkspaceDragOver,
+    handleWorkspaceDrop,
+    highlightedBranchIndex,
+    highlightedCommitIndex,
+    highlightedPresetIndex,
+    availableEngines,
+    hydratedThreadListWorkspaceIdsRef,
+    interruptTurn,
+    isCompact,
+    isDeleteThreadPromptBusy,
+    isEditorFileMaximized,
+    isFilesLoading,
+    isLoadingLatestAgents,
+    isModelConfigRefreshing,
+    isPhone,
+    isPlanMode,
+    isPlanPanelDismissed,
+    isProcessing,
+    isReviewing,
+    isSoloMode,
+    isTablet,
+    isThreadAutoNaming,
+    isThreadPinned,
+    isWorktreeWorkspace,
+    latestAgentRuns,
+    launchScriptState,
+    launchScriptsState,
+    listThreadsForWorkspaceTracked,
+    liveEditPreviewEnabled,
+    loadOlderThreadsForWorkspace,
+    handleOpenClaudeTui,
+    onCloseTerminal,
+    onDebugPanelResizeStart,
+    onNewTerminal,
+    onSelectTerminal,
+    onTerminalPanelResizeStart,
+    onTextareaHeightChange,
+    openAppIconById,
+    openCodeAgents,
+    openDeleteThreadPrompt,
+    openFileTabs,
+    openPlanPanel,
+    openReleaseNotes,
+    openSettings,
+    pickImages,
+    pinThread,
+    pinnedThreadsVersion,
+    prefillDraft,
+    prompts,
+    pushError,
+    pushLoading,
+    queueGitStatusRefresh,
+    queueSaveSettings,
+    reasoningOptions,
+    refreshEngines,
+    refreshFiles,
+    refreshGitDiffs,
+    refreshThread,
+    removeImage,
+    removeWorkspace,
+    removeWorktree,
+    resetPullRequestSelection,
+    reviewPrompt,
+    rightPanelCollapsed,
+    runtimeRunState,
+    scanGitRoots,
+    selectBranch,
+    selectBranchAtIndex,
+    selectCommit,
+    selectCommitAtIndex,
+    selectWorkspace,
+    selectedAgent,
+    selectedCollaborationModeId,
+    selectedCommitSha,
+    selectedComposerKanbanPanelId,
+    selectedDiffPath,
+    selectedEffort,
+    selectedOpenCodeAgent,
+    selectedOpenCodeVariant,
+    selectedPullRequest,
+    sendUserMessageToThread,
+    setActiveEditorLineRange,
+    setActiveEngine,
+    setActiveTab,
+    setActiveThreadId,
+    setActiveWorkspaceId,
+    setAppMode,
+    setCenterMode,
+    setComposerInsert,
+    setComposerKanbanContextMode,
+    setEditorSplitCompanion,
+    setEditorSplitLayout,
+    setFilePanelMode,
+    setFileReferenceMode,
+    setGitDiffListView,
+    setGitDiffViewStyle,
+    setGitRootScanDepth,
+    setHighlightedBranchIndex,
+    setHighlightedCommitIndex,
+    setHighlightedPresetIndex,
+    setIsEditorFileMaximized,
+    setLiveEditPreviewEnabled,
+    setPrefillDraft,
+    setSelectedCommitSha,
+    setSelectedComposerKanbanPanelId,
+    setSelectedDiffPath,
+    setSelectedEffort,
+    setHomeOpen,
+    setWorkspaceHomeWorkspaceId,
+    showComposer,
+    showLoadingProgressDialog,
+    hideLoadingProgressDialog,
+    showDebugButton,
+    showPresetStep,
+    sidebarToggleProps,
+    skills,
+    soloModeEnabled,
+    startCompact,
+    startFork,
+    startThreadForWorkspace,
+    startUpdate,
+    syncError,
+    syncLoading,
+    t,
+    tabletTab,
+    terminalOpen,
+    terminalState,
+    terminalTabs,
+    textareaHeight,
+    threadItemsByThread,
+    threadListCursorByWorkspace,
+    threadListLoadingByWorkspace,
+    threadListPagingByWorkspace,
+    threadParentById,
+    threadStatusById,
+    historyLoadingByThreadId,
+    historyRestoredAtMsByThread,
+    threadsByWorkspace,
+    toggleCompletionEmailIntent,
+    toggleSoloMode,
+    triggerAutoThreadTitle,
+    unpinThread,
+    updateCustomInstructions,
+    updateSharedSessionEngineSelection,
+    updateThreadParent,
+    updateWorkspaceSettings,
+    updaterState,
+    userInputRequests,
+    workspaceDropTargetRef,
+    workspaceGroups,
+    workspaces,
+    workspacesById,
+    worktreeApplyError,
+    worktreeApplyLoading,
+    worktreeApplySuccess,
+    worktreeLabel,
+    worktreeRename,
+    sessionRadarRunningSessions,
+    sessionRadarRecentCompletedSessions,
+    runningSessionCountByWorkspaceId,
+    recentCompletedSessionCountByWorkspaceId,
   } = ctx;
   const pendingIntentCanvasDocuments = useMemo(
-    () => (activeThreadId ? pendingIntentCanvasByThreadId[activeThreadId] ?? [] : []),
+    () =>
+      activeThreadId
+        ? (pendingIntentCanvasByThreadId[activeThreadId] ?? [])
+        : [],
     [activeThreadId, pendingIntentCanvasByThreadId],
   );
 
@@ -195,7 +535,9 @@ export function useAppShellLayoutNodesSection(ctx: AppShellLayoutNodesContext) {
         ...documents.map((document) =>
           formatIntentCanvasThreadContext(document, activeWorkspace?.name),
         ),
-      ].filter(Boolean).join("\n\n");
+      ]
+        .filter(Boolean)
+        .join("\n\n");
     },
     [activeWorkspace?.name],
   );
@@ -221,16 +563,19 @@ export function useAppShellLayoutNodesSection(ctx: AppShellLayoutNodesContext) {
     [activeWorkspace?.name],
   );
 
-  const clearPendingIntentCanvasForThread = useCallback((targetThreadId: string) => {
-    setPendingIntentCanvasByThreadId((current) => {
-      if (!current[targetThreadId]?.length) {
-        return current;
-      }
-      const next = { ...current };
-      delete next[targetThreadId];
-      return next;
-    });
-  }, []);
+  const clearPendingIntentCanvasForThread = useCallback(
+    (targetThreadId: string) => {
+      setPendingIntentCanvasByThreadId((current) => {
+        if (!current[targetThreadId]?.length) {
+          return current;
+        }
+        const next = { ...current };
+        delete next[targetThreadId];
+        return next;
+      });
+    },
+    [],
+  );
 
   const handleRemovePendingIntentCanvas = useCallback(
     (documentId: string) => {
@@ -239,7 +584,9 @@ export function useAppShellLayoutNodesSection(ctx: AppShellLayoutNodesContext) {
       }
       setPendingIntentCanvasByThreadId((current) => {
         const currentDocuments = current[activeThreadId] ?? [];
-        const nextDocuments = currentDocuments.filter((document) => document.id !== documentId);
+        const nextDocuments = currentDocuments.filter(
+          (document) => document.id !== documentId,
+        );
         if (nextDocuments.length === currentDocuments.length) {
           return current;
         }
@@ -261,7 +608,10 @@ export function useAppShellLayoutNodesSection(ctx: AppShellLayoutNodesContext) {
     async (text: string, images: string[], options?: any) => {
       const stagedDocuments = pendingIntentCanvasDocuments;
       const nextText = appendPendingIntentCanvasContext(text, stagedDocuments);
-      const nextOptions = appendPendingIntentCanvasSendOptions(stagedDocuments, options);
+      const nextOptions = appendPendingIntentCanvasSendOptions(
+        stagedDocuments,
+        options,
+      );
       await handleComposerSendWithEditorFallback(nextText, images, nextOptions);
       if (activeThreadId && stagedDocuments.length > 0) {
         clearPendingIntentCanvasForThread(activeThreadId);
@@ -281,8 +631,15 @@ export function useAppShellLayoutNodesSection(ctx: AppShellLayoutNodesContext) {
     async (text: string, images: string[], options?: any) => {
       const stagedDocuments = pendingIntentCanvasDocuments;
       const nextText = appendPendingIntentCanvasContext(text, stagedDocuments);
-      const nextOptions = appendPendingIntentCanvasSendOptions(stagedDocuments, options);
-      await handleComposerQueueWithEditorFallback(nextText, images, nextOptions);
+      const nextOptions = appendPendingIntentCanvasSendOptions(
+        stagedDocuments,
+        options,
+      );
+      await handleComposerQueueWithEditorFallback(
+        nextText,
+        images,
+        nextOptions,
+      );
       if (activeThreadId && stagedDocuments.length > 0) {
         clearPendingIntentCanvasForThread(activeThreadId);
       }
@@ -299,11 +656,12 @@ export function useAppShellLayoutNodesSection(ctx: AppShellLayoutNodesContext) {
 
   const handleSelectConversationEngine = useCallback(
     async (engine: "claude" | "codex" | "gemini" | "opencode") => {
-      const thread = activeWorkspaceId && activeThreadId
-        ? (threadsByWorkspace[activeWorkspaceId] ?? []).find(
-            (entry: any) => entry.id === activeThreadId,
-          )
-        : null;
+      const thread =
+        activeWorkspaceId && activeThreadId
+          ? (threadsByWorkspace[activeWorkspaceId] ?? []).find(
+              (entry: any) => entry.id === activeThreadId,
+            )
+          : null;
       const nextEngine =
         thread?.threadKind === "shared"
           ? normalizeSharedSessionEngine(engine)
@@ -313,7 +671,11 @@ export function useAppShellLayoutNodesSection(ctx: AppShellLayoutNodesContext) {
         return;
       }
       if (thread?.threadKind === "shared") {
-        updateSharedSessionEngineSelection(activeWorkspaceId, activeThreadId, nextEngine);
+        updateSharedSessionEngineSelection(
+          activeWorkspaceId,
+          activeThreadId,
+          nextEngine,
+        );
       }
     },
     [
@@ -329,16 +691,24 @@ export function useAppShellLayoutNodesSection(ctx: AppShellLayoutNodesContext) {
   const mainFileExternalChangeWatcherEnabled =
     appSettings.detachedExternalChangeWatcherEnabled !== false;
   const projectMapGenerationModel = useMemo(
-    () => resolveProjectMapSelectedGenerationModel(effectiveSelectedModelId, effectiveModels),
+    () =>
+      resolveProjectMapSelectedGenerationModel(
+        effectiveSelectedModelId,
+        effectiveModels,
+      ),
     [effectiveModels, effectiveSelectedModelId],
   );
-  const projectMapDatasetController = useProjectMapDataset(activeWorkspace ?? null, {
-    generationDefaults: {
-      engine: activeEngine ?? null,
-      model: projectMapGenerationModel,
+  const projectMapDatasetController = useProjectMapDataset(
+    activeWorkspace ?? null,
+    {
+      generationDefaults: {
+        engine: activeEngine ?? null,
+        model: projectMapGenerationModel,
+      },
     },
-  });
-  const activeWorkspaceExternalChangeId = activeWorkspace?.id ?? activeWorkspaceId ?? null;
+  );
+  const activeWorkspaceExternalChangeId =
+    activeWorkspace?.id ?? activeWorkspaceId ?? null;
   const activeWorkspaceExternalChangePath = activeWorkspace?.path ?? null;
   const enableMainFileExternalChangeMonitoring =
     mainFileExternalChangeAwarenessEnabled &&
@@ -356,8 +726,9 @@ export function useAppShellLayoutNodesSection(ctx: AppShellLayoutNodesContext) {
     ) {
       setMainFileExternalChangeTransportMode("polling");
       if (activeWorkspaceExternalChangeId) {
-        void clearDetachedExternalChangeMonitor(activeWorkspaceExternalChangeId)
-          .catch(reportMainFileExternalChangeMonitorCleanupError);
+        void clearDetachedExternalChangeMonitor(
+          activeWorkspaceExternalChangeId,
+        ).catch(reportMainFileExternalChangeMonitorCleanupError);
       }
       return;
     }
@@ -385,8 +756,9 @@ export function useAppShellLayoutNodesSection(ctx: AppShellLayoutNodesContext) {
 
     return () => {
       active = false;
-      void clearDetachedExternalChangeMonitor(activeWorkspaceExternalChangeId)
-        .catch(reportMainFileExternalChangeMonitorCleanupError);
+      void clearDetachedExternalChangeMonitor(
+        activeWorkspaceExternalChangeId,
+      ).catch(reportMainFileExternalChangeMonitorCleanupError);
     };
   }, [
     activeEditorFilePath,
@@ -395,23 +767,20 @@ export function useAppShellLayoutNodesSection(ctx: AppShellLayoutNodesContext) {
     enableMainFileExternalChangeMonitoring,
     mainFileExternalChangeWatcherEnabled,
   ]);
-  const handleRenameWorkspaceAlias = useCallback(
-    (workspace: WorkspaceInfo) => {
-      const currentAlias =
-        typeof workspace?.settings?.projectAlias === "string"
-          ? workspace.settings.projectAlias
-          : "";
-      setWorkspaceAliasPrompt({
-        workspaceId: workspace.id,
-        workspaceName: workspace.name,
-        alias: currentAlias,
-        originalAlias: currentAlias.trim(),
-        error: null,
-        isSaving: false,
-      });
-    },
-    [],
-  );
+  const handleRenameWorkspaceAlias = useCallback((workspace: WorkspaceInfo) => {
+    const currentAlias =
+      typeof workspace?.settings?.projectAlias === "string"
+        ? workspace.settings.projectAlias
+        : "";
+    setWorkspaceAliasPrompt({
+      workspaceId: workspace.id,
+      workspaceName: workspace.name,
+      alias: currentAlias,
+      originalAlias: currentAlias.trim(),
+      error: null,
+      isSaving: false,
+    });
+  }, []);
   const handleWorkspaceAliasPromptChange = useCallback((alias: string) => {
     setWorkspaceAliasPrompt((prev) =>
       prev
@@ -535,11 +904,14 @@ export function useAppShellLayoutNodesSection(ctx: AppShellLayoutNodesContext) {
     ],
   );
 
-  const handleIntentCanvasOpenRequestConsumed = useCallback((requestId: number) => {
-    setIntentCanvasOpenRequest((current) =>
-      current?.requestId === requestId ? null : current,
-    );
-  }, []);
+  const handleIntentCanvasOpenRequestConsumed = useCallback(
+    (requestId: number) => {
+      setIntentCanvasOpenRequest((current) =>
+        current?.requestId === requestId ? null : current,
+      );
+    },
+    [],
+  );
 
   const handleAttachIntentCanvasToThread = useCallback(
     async (document: IntentCanvasDocument) => {
@@ -620,7 +992,10 @@ export function useAppShellLayoutNodesSection(ctx: AppShellLayoutNodesContext) {
     window.addEventListener("browser-agent:toggle-dock", handleExternalToggle);
     window.addEventListener("browser-agent:open-dock", handleExternalOpen);
     return () => {
-      window.removeEventListener("browser-agent:toggle-dock", handleExternalToggle);
+      window.removeEventListener(
+        "browser-agent:toggle-dock",
+        handleExternalToggle,
+      );
       window.removeEventListener("browser-agent:open-dock", handleExternalOpen);
     };
   }, [activeWorkspace?.name, activeWorkspaceId, alertError]);
@@ -719,9 +1094,9 @@ export function useAppShellLayoutNodesSection(ctx: AppShellLayoutNodesContext) {
         resolveWorkspace: (targetWorkspaceId) =>
           (typeof workspacesById?.get === "function"
             ? workspacesById.get(targetWorkspaceId)
-            : workspacesById?.[targetWorkspaceId])
-          ?? workspaces.find((entry: any) => entry.id === targetWorkspaceId)
-          ?? null,
+            : workspacesById?.[targetWorkspaceId]) ??
+          workspaces.find((entry: any) => entry.id === targetWorkspaceId) ??
+          null,
         refreshThread,
         forkThreadForWorkspace,
         startThreadForWorkspace,
@@ -800,7 +1175,8 @@ export function useAppShellLayoutNodesSection(ctx: AppShellLayoutNodesContext) {
         targetWorkspaceId: workspaceId,
         activeEditorFilePath,
       });
-      const diffCleanupAction = getThreadSelectDiffCleanupAction(preserveEditor);
+      const diffCleanupAction =
+        getThreadSelectDiffCleanupAction(preserveEditor);
       closeSettings();
       if (diffCleanupAction === "clear-selected-diff") {
         setSelectedDiffPath(null);
@@ -819,7 +1195,9 @@ export function useAppShellLayoutNodesSection(ctx: AppShellLayoutNodesContext) {
       setActiveThreadId(threadId, workspaceId);
       // Auto-switch engine based on thread's engineSource
       const threads = threadsByWorkspace[workspaceId] ?? [];
-      const thread = threads.find((threadEntry: { id: string }) => threadEntry.id === threadId);
+      const thread = threads.find(
+        (threadEntry: { id: string }) => threadEntry.id === threadId,
+      );
       if (thread?.engineSource) {
         setActiveEngine(thread.engineSource);
       }
@@ -830,7 +1208,9 @@ export function useAppShellLayoutNodesSection(ctx: AppShellLayoutNodesContext) {
     },
     onArchiveThread: async (workspaceId, threadId) => {
       try {
-        const response = await archiveWorkspaceSessions(workspaceId, [threadId]);
+        const response = await archiveWorkspaceSessions(workspaceId, [
+          threadId,
+        ]);
         const mutationResult = response.results.find(
           (result: any) => result.sessionId === threadId,
         );
@@ -874,8 +1254,8 @@ export function useAppShellLayoutNodesSection(ctx: AppShellLayoutNodesContext) {
         label: "thread/title manual trigger",
         payload: { workspaceId, threadId },
       });
-      void triggerAutoThreadTitle(workspaceId, threadId, { force: true }).then(
-        (title: string | null | undefined) => {
+      void triggerAutoThreadTitle(workspaceId, threadId, { force: true })
+        .then((title: string | null | undefined) => {
           if (!title) {
             addDebugEntry({
               id: `${Date.now()}-thread-title-manual-empty`,
@@ -893,16 +1273,16 @@ export function useAppShellLayoutNodesSection(ctx: AppShellLayoutNodesContext) {
             label: "thread/title manual generated",
             payload: { workspaceId, threadId, title },
           });
-        },
-      ).catch((error: unknown) => {
-        addDebugEntry({
-          id: `${Date.now()}-thread-title-manual-error`,
-          timestamp: Date.now(),
-          source: "error",
-          label: "thread/title manual error",
-          payload: error instanceof Error ? error.message : String(error),
+        })
+        .catch((error: unknown) => {
+          addDebugEntry({
+            id: `${Date.now()}-thread-title-manual-error`,
+            timestamp: Date.now(),
+            source: "error",
+            label: "thread/title manual error",
+            payload: error instanceof Error ? error.message : String(error),
+          });
         });
-      });
     },
     onOpenClaudeTui: handleOpenClaudeTui,
     onDeleteWorkspace: (workspaceId) => {
@@ -926,16 +1306,25 @@ export function useAppShellLayoutNodesSection(ctx: AppShellLayoutNodesContext) {
       }
       const targets =
         workspace.kind === "main"
-          ? [workspace, ...workspaces.filter((candidate: WorkspaceInfo) => candidate.parentId === workspace.id)]
+          ? [
+              workspace,
+              ...workspaces.filter(
+                (candidate: WorkspaceInfo) =>
+                  candidate.parentId === workspace.id,
+              ),
+            ]
           : [workspace];
-      void Promise.allSettled(targets.map((target) => listThreadsForWorkspaceTracked(target)));
+      void Promise.allSettled(
+        targets.map((target) => listThreadsForWorkspaceTracked(target)),
+      );
     },
     onReloadWorkspaceThreads: async (workspaceId) => {
       const workspace = workspacesById.get(workspaceId);
       if (!workspace) {
         return;
       }
-      const workspaceName = workspace.name || t("workspace.noWorkspaceSelected");
+      const workspaceName =
+        workspace.name || t("workspace.noWorkspaceSelected");
       const detailLines = [
         t("workspace.reloadWorkspaceThreadsEffectRefresh"),
         t("workspace.reloadWorkspaceThreadsEffectDisplayOnly"),
@@ -956,9 +1345,17 @@ export function useAppShellLayoutNodesSection(ctx: AppShellLayoutNodesContext) {
       }
       const targets =
         workspace.kind === "main"
-          ? [workspace, ...workspaces.filter((candidate: WorkspaceInfo) => candidate.parentId === workspace.id)]
+          ? [
+              workspace,
+              ...workspaces.filter(
+                (candidate: WorkspaceInfo) =>
+                  candidate.parentId === workspace.id,
+              ),
+            ]
           : [workspace];
-      void Promise.allSettled(targets.map((target) => listThreadsForWorkspaceTracked(target)));
+      void Promise.allSettled(
+        targets.map((target) => listThreadsForWorkspaceTracked(target)),
+      );
     },
     updaterState,
     onUpdate: startUpdate,
@@ -1001,7 +1398,8 @@ export function useAppShellLayoutNodesSection(ctx: AppShellLayoutNodesContext) {
         rightPanelCollapsed={rightPanelCollapsed}
         sidebarToggleProps={mainHeaderSidebarToggleProps}
         showRuntimeConsoleButton={
-          !isCompact && clientUiVisibility.isControlVisible("topTool.runtimeConsole")
+          !isCompact &&
+          clientUiVisibility.isControlVisible("topTool.runtimeConsole")
         }
         isRuntimeConsoleVisible={runtimeRunState.runtimeConsoleVisible}
         onToggleRuntimeConsole={handleToggleRuntimeConsole}
@@ -1011,7 +1409,8 @@ export function useAppShellLayoutNodesSection(ctx: AppShellLayoutNodesContext) {
         isTerminalOpen={terminalOpen}
         onToggleTerminal={handleToggleTerminalPanel}
         showSoloButton={
-          soloModeEnabled && clientUiVisibility.isControlVisible("topTool.focus")
+          soloModeEnabled &&
+          clientUiVisibility.isControlVisible("topTool.focus")
         }
         isSoloMode={isSoloMode}
         onToggleSoloMode={toggleSoloMode}
@@ -1022,7 +1421,8 @@ export function useAppShellLayoutNodesSection(ctx: AppShellLayoutNodesContext) {
             : undefined
         }
         showClientDocumentationButton={
-          !isCompact && clientUiVisibility.isControlVisible("topTool.clientDocumentation")
+          !isCompact &&
+          clientUiVisibility.isControlVisible("topTool.clientDocumentation")
         }
         onOpenClientDocumentation={handleOpenClientDocumentation}
       />
@@ -1062,11 +1462,11 @@ export function useAppShellLayoutNodesSection(ctx: AppShellLayoutNodesContext) {
     onCloseAllEditorTabs: handleCloseAllWorkspaceFileTabs,
     onActiveEditorLineRangeChange: setActiveEditorLineRange,
     onOpenFile: handleOpenWorkspaceFile,
-      externalChangeMonitoringEnabled: enableMainFileExternalChangeMonitoring,
-      externalChangeTransportMode: mainFileExternalChangeTransportMode,
-      externalChangeApplyMode: liveEditPreviewEnabled ? "auto" : "manual",
-      externalChangeAutoApplyDebounceMs: liveEditPreviewEnabled ? 700 : 0,
-      onExitEditor: handleExitWorkspaceEditor,
+    externalChangeMonitoringEnabled: enableMainFileExternalChangeMonitoring,
+    externalChangeTransportMode: mainFileExternalChangeTransportMode,
+    externalChangeApplyMode: liveEditPreviewEnabled ? "auto" : "manual",
+    externalChangeAutoApplyDebounceMs: liveEditPreviewEnabled ? 700 : 0,
+    onExitEditor: handleExitWorkspaceEditor,
     onExitDiff: () => {
       setCenterMode("chat");
       handleSelectDiffForPanel(null);
@@ -1077,7 +1477,9 @@ export function useAppShellLayoutNodesSection(ctx: AppShellLayoutNodesContext) {
     gitPanelMode,
     onGitPanelModeChange: handleGitPanelModeChange,
     onOpenGitHistoryPanel: () => {
-      setAppMode((current: string) => (current === "gitHistory" ? "chat" : "gitHistory"));
+      setAppMode((current: string) =>
+        current === "gitHistory" ? "chat" : "gitHistory",
+      );
     },
     onOpenProjectMap: () => {
       closeSettings();
@@ -1124,7 +1526,8 @@ export function useAppShellLayoutNodesSection(ctx: AppShellLayoutNodesContext) {
     gitPullRequestsError,
     selectedPullRequestNumber: selectedPullRequest?.number ?? null,
     selectedPullRequest: diffSource === "pr" ? selectedPullRequest : null,
-    selectedPullRequestComments: diffSource === "pr" ? gitPullRequestComments : [],
+    selectedPullRequestComments:
+      diffSource === "pr" ? gitPullRequestComments : [],
     selectedPullRequestCommentsLoading: gitPullRequestCommentsLoading,
     selectedPullRequestCommentsError: gitPullRequestCommentsError,
     onSelectPullRequest: (pullRequest) => {
@@ -1252,14 +1655,16 @@ export function useAppShellLayoutNodesSection(ctx: AppShellLayoutNodesContext) {
     activeTokenUsage,
     contextDualViewEnabled: activeEngine === "codex",
     codexAutoCompactionEnabled: appSettings.codexAutoCompactionEnabled,
-    codexAutoCompactionThresholdPercent: appSettings.codexAutoCompactionThresholdPercent,
+    codexAutoCompactionThresholdPercent:
+      appSettings.codexAutoCompactionThresholdPercent,
     onCodexAutoCompactionSettingsChange: async (patch) => {
       await queueSaveSettings({
         ...appSettings,
         codexAutoCompactionEnabled:
           patch.enabled ?? appSettings.codexAutoCompactionEnabled,
         codexAutoCompactionThresholdPercent:
-          patch.thresholdPercent ?? appSettings.codexAutoCompactionThresholdPercent,
+          patch.thresholdPercent ??
+          appSettings.codexAutoCompactionThresholdPercent,
       });
     },
     activeQueue,
@@ -1309,7 +1714,8 @@ export function useAppShellLayoutNodesSection(ctx: AppShellLayoutNodesContext) {
     selectedEffort,
     onSelectEffort: setSelectedEffort,
     claudeThinkingVisible,
-    onResolvedClaudeThinkingVisibleChange: handleResolvedClaudeThinkingVisibleChange,
+    onResolvedClaudeThinkingVisibleChange:
+      handleResolvedClaudeThinkingVisibleChange,
     reasoningSupported: effectiveReasoningSupported,
     opencodeAgents: openCodeAgents,
     selectedOpenCodeAgent,
@@ -1465,12 +1871,34 @@ export function useAppShellLayoutNodesSection(ctx: AppShellLayoutNodesContext) {
     onOpenWorkspaceHome: handleOpenWorkspaceHome,
   });
 
-
-
   return {
-    sidebarNode, messagesNode, composerNode, approvalToastsNode, updateToastNode, errorToastsNode, globalRuntimeNoticeDockNode, homeNode, mainHeaderNode,
-    desktopTopbarLeftNode, tabletNavNode, tabBarNode, rightPanelToolbarNode, gitDiffPanelNode, gitDiffViewerNode, fileViewPanelNode, projectMapPanelNode, intentCanvasPanelNode, browserDockNode, planPanelNode,
-    debugPanelNode, debugPanelFullNode, terminalDockNode, compactEmptyCodexNode, compactEmptySpecNode, compactEmptyGitNode, compactGitBackNode,
+    sidebarNode,
+    messagesNode,
+    composerNode,
+    approvalToastsNode,
+    updateToastNode,
+    errorToastsNode,
+    globalRuntimeNoticeDockNode,
+    homeNode,
+    mainHeaderNode,
+    desktopTopbarLeftNode,
+    tabletNavNode,
+    tabBarNode,
+    rightPanelToolbarNode,
+    gitDiffPanelNode,
+    gitDiffViewerNode,
+    fileViewPanelNode,
+    projectMapPanelNode,
+    intentCanvasPanelNode,
+    browserDockNode,
+    planPanelNode,
+    debugPanelNode,
+    debugPanelFullNode,
+    terminalDockNode,
+    compactEmptyCodexNode,
+    compactEmptySpecNode,
+    compactEmptyGitNode,
+    compactGitBackNode,
     codeAnnotationBridgeProps,
     workspaceAliasPromptNode,
   };

@@ -38,34 +38,45 @@
 - [x] useEffect 互斥订阅: `isAppServerEventBatchConsumerEnabled()===true` 时挂 batch channel,fallback 挂 single
 - [x] batch 入口按 `(workspaceId, normalizedPath)` latest-wins coalesce 后,再透传到既有 handleEvent / in-flight queue
 - [x] generation stale-drop 保护沿用既有 useFileExternalSync in-flight/generation 机制
-- [x] Vitest: `coalesceDetachedExternalFileChangeBatch` 覆盖 same-path latest-wins / cross-path preserved / case-insensitive coalesce;既有 `useFileExternalSync.test.tsx` 覆盖 stale polling / clean update / dirty conflict 路径;Rust 端 debouncer 4 个 inline tests 覆盖 same-path coalesce / cross-path preserved / cross-flush regression / no-empty-batch
+- [x] Vitest: `coalesceDetachedExternalFileChangeBatch` 覆盖 same-path latest-wins / cross-path preserved / case-insensitive coalesce;既有 `useFileExternalSync.test.tsx` 覆盖 stale polling / clean update / dirty conflict / in-flight late refresh 不覆盖 dirty local content 路径(9 tests);Rust 端 debouncer 4 个 inline tests 覆盖 same-path coalesce / cross-path preserved / cross-flush regression / no-empty-batch
 - [x] 跑 targeted Vitest / typecheck / lint / full `npm run test` 通过
 
 ### §3 App shell domain context 拆分(后续 session)
 
 - [ ] 把 `appShellContext` 的 200+ key 按 6 域分组,移到 `appShellDomainContexts.ts`
-- [ ] 4 个 section hook 改输入类型,只收相关 domain
-- [ ] `renderAppShell` 改输入,只收 6 域 + section 返回
-- [ ] `app-shell.tsx` 的大对象字面量拆为 6 个独立对象
-- [ ] 严禁 useMemo deps 白名单
-- [ ] exhaustive-deps 跑过
-- [ ] 新增 Vitest:6 域引用稳定性 + section hook 输入域不重叠
+  - 已完成生产侧第一步：`app-shell.tsx` 拆为 6 个 `rawAppShellDomainContexts` domain object，并通过 `reuseStableAppShellDomainContexts()` 稳定引用；后续仍需把 section hook 输入类型迁移到 domain 类型。
+- [x] 4 个 section hook 改输入类型,只收相关 domain
+  - `useAppShellSearchAndComposerSection` 改为接收相关 domain subset；`useAppShellSections` / `useAppShellLayoutNodesSection` 改为 structured input，不再从 `app-shell.tsx` 接收 flat context spread；`useAppShellKanbanComposerSection` / `useAppShellKanbanExecutionSection` 输入从裸 `any` 收为 `UseAppShellSectionsContext`。
+- [x] `renderAppShell` 改输入,只收 6 域 + section 返回
+  - `renderAppShell()` 外部调用已收窄为 `{ appShellDomainContexts, searchAndComposerSection, sections, layoutNodes }`；内部临时 flatten 兼容旧渲染体。
+- [x] `app-shell.tsx` 的大对象字面量拆为 6 个独立对象
+- [x] 严禁 useMemo deps 白名单
+- [x] exhaustive-deps 跑过
+- [x] 新增 Vitest:6 域引用稳定性 + section hook 输入域不重叠
+  - `appShellDomainContexts.test.ts` 覆盖 6 域命名、代表性 key ownership disjoint、selected-domain flatten、domain reference passthrough、production wiring、section hook structured input 与 render boundary 收窄。
 
 ### §4 Sidebar / ThreadList row-level status(后续 session)
 
-- [ ] 新增 `useThreadRowStatus(threadId)` hook,selector 形式
-- [ ] `ThreadRowItem` 内部调 hook,prop 只传 primitive
-- [ ] `ThreadList` 改用 selector 模式
-- [ ] 新增 Vitest:1000 次无关 status 更新后目标 row render count 保持 1
+- [x] 新增 `useThreadRowStatus(threadId)` hook,selector 形式
+- [x] `ThreadRowItem` 内部调 hook,prop 只传 primitive
+- [x] `ThreadList` 改用 selector 模式
+- [x] 新增 Vitest:1000 次无关 status 更新后目标 row render count 保持 1
+  - `ThreadList.test.tsx`: 21 tests, all pass;新增 target row 在 1000 次 unrelated `threadStatusById` 更新后 commit count 仍为 1。
 
 ### §5 Evidence gate 真实值(后续 session)
 
-- [ ] `useThreadsReducer` 加 `__profile` 计数器 export
-- [ ] 关键 component 用 `<React.Profiler>` 包裹,onRender 累加
-- [ ] Rust 端 `run_blocking_file_io` 加 wall time 测量
-- [ ] `scripts/generate-runtime-evidence-report.mjs` 读 profiler artifact 升级 evidence 字段
-- [ ] 1000-delta burst fixture 跑出 0 次 prepareThreadItems
-- [ ] 6 域引用稳定性测试通过
+- [x] `useThreadsReducer` 加 `__profile` 计数器 export
+  - `__profile.snapshot()` 暴露 `prepareThreadItemsCallCount` 与 `reducerDispatchCount`；`__profile.reset()` 重置 evidence fixture 计数。
+- [x] 关键 component 用 `<React.Profiler>` 包裹,onRender 累加
+  - `useLayoutNodes.tsx` 对 `Sidebar` 与 `Composer` 节点包裹 `React.Profiler`；`__profile.recordComponentRender()` 累加 `composer` / `sidebar` render count。
+- [x] Rust 端 `run_blocking_file_io` 加 wall time 测量
+  - `run_blocking_file_io` 内部用 `Instant::now()` 记录 wall time sample；成功、业务 `Err`、`JoinError` 路径均记录 `BlockingFileIoMetricSample`。当前保持 shared helper 低耦合，不在 helper 内直接依赖 Tauri `AppHandle` emit。
+- [x] `scripts/generate-runtime-evidence-report.mjs` 读 profiler artifact 升级 evidence 字段
+  - 新增 `docs/perf/realtime-profile.jsonl` 读取入口；artifact 不存在时保持 unsupported，存在时把 `S-IO-FP` / `S-IO-*` metric 作为 proxy/measured evidence 合入 runtime report。
+- [x] 1000-delta burst fixture 跑出 0 次 prepareThreadItems
+  - `useThreadsReducer.append-agent-delta-fast-path.test.ts`: 1000-delta codex burst 断言 `prepareThreadItemsCallCount: 0` 与 `reducerDispatchCount: 1000`。
+- [x] 6 域引用稳定性测试通过
+  - `appShellDomainContexts.test.ts`: 6 tests, all pass;新增 `reuseStableAppShellDomainContexts()` 覆盖同值 6 域复用旧引用、单域变化只替换目标 domain。
 
 ## Validation / 验证
 

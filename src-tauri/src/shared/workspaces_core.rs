@@ -1,4 +1,26 @@
 use std::collections::HashMap;
+use std::sync::{Mutex as StdMutex, OnceLock};
+use std::time::Instant;
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct BlockingFileIoMetricSample {
+    pub(crate) operation_name: &'static str,
+    pub(crate) wall_time_ms: f64,
+    pub(crate) blocking_pool_called: bool,
+}
+
+static BLOCKING_FILE_IO_METRIC_SAMPLES: OnceLock<StdMutex<Vec<BlockingFileIoMetricSample>>> =
+    OnceLock::new();
+
+fn blocking_file_io_metric_samples() -> &'static StdMutex<Vec<BlockingFileIoMetricSample>> {
+    BLOCKING_FILE_IO_METRIC_SAMPLES.get_or_init(|| StdMutex::new(Vec::new()))
+}
+
+fn record_blocking_file_io_metric_sample(sample: BlockingFileIoMetricSample) {
+    if let Ok(mut samples) = blocking_file_io_metric_samples().lock() {
+        samples.push(sample);
+    }
+}
 
 /// Run a synchronous file I/O closure on the blocking worker pool.
 ///
@@ -19,9 +41,29 @@ where
     T: Send + 'static,
     F: FnOnce() -> Result<T, String> + Send + 'static,
 {
-    tokio::task::spawn_blocking(file_io)
-        .await
-        .map_err(|error| format!("{operation_name} file I/O task failed: {error}"))?
+    let started_at = Instant::now();
+    let join_result = tokio::task::spawn_blocking(file_io).await;
+    record_blocking_file_io_metric_sample(BlockingFileIoMetricSample {
+        operation_name,
+        wall_time_ms: started_at.elapsed().as_secs_f64() * 1000.0,
+        blocking_pool_called: true,
+    });
+    join_result.map_err(|error| format!("{operation_name} file I/O task failed: {error}"))?
+}
+
+#[cfg(test)]
+pub(crate) fn reset_blocking_file_io_metric_samples_for_tests() {
+    if let Ok(mut samples) = blocking_file_io_metric_samples().lock() {
+        samples.clear();
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn blocking_file_io_metric_samples_for_tests() -> Vec<BlockingFileIoMetricSample> {
+    blocking_file_io_metric_samples()
+        .lock()
+        .map(|samples| samples.clone())
+        .unwrap_or_default()
 }
 
 use std::future::Future;
@@ -1662,9 +1704,10 @@ fn sort_workspaces(workspaces: &mut [WorkspaceInfo]) {
 #[cfg(test)]
 mod tests {
     use super::{
-        connect_workspace_core, list_workspaces_core, normalize_visible_thread_root_count,
-        normalize_workspace_display_name, paste_external_workspace_items_core,
-        resolve_base_ref_to_commit, validate_local_branch_name_for_worktree,
+        blocking_file_io_metric_samples_for_tests, connect_workspace_core, list_workspaces_core,
+        normalize_visible_thread_root_count, normalize_workspace_display_name,
+        paste_external_workspace_items_core, reset_blocking_file_io_metric_samples_for_tests,
+        resolve_base_ref_to_commit, run_blocking_file_io, validate_local_branch_name_for_worktree,
         workspace_name_from_path, workspace_requires_persistent_session,
     };
     use crate::types::{AppSettings, WorkspaceEntry, WorkspaceKind, WorkspaceSettings};
@@ -1847,6 +1890,7 @@ mod tests {
 
     #[tokio::test]
     async fn paste_external_workspace_items_core_runs_closure_on_blocking_pool() {
+        reset_blocking_file_io_metric_samples_for_tests();
         let workspace_id = "ws-paste-external";
         let workspace_root =
             std::env::temp_dir().join(format!("mossx-paste-external-{}", Uuid::new_v4()));
@@ -1870,7 +1914,50 @@ mod tests {
         .expect_err("panic inside blocking closure should become JoinError string");
 
         assert!(error.contains("paste_external_workspace_items file I/O task failed:"));
+        assert!(blocking_file_io_metric_samples_for_tests()
+            .iter()
+            .any(
+                |sample| sample.operation_name == "paste_external_workspace_items"
+                    && sample.blocking_pool_called
+                    && sample.wall_time_ms >= 0.0
+            ));
         let _ = std::fs::remove_dir_all(&workspace_root);
+    }
+
+    #[tokio::test]
+    async fn run_blocking_file_io_records_wall_time_for_business_result() {
+        reset_blocking_file_io_metric_samples_for_tests();
+
+        let result: Result<i32, String> =
+            run_blocking_file_io("metric_probe_success", || Ok::<_, String>(42)).await;
+
+        assert_eq!(result.expect("blocking file I/O result"), 42);
+        let samples = blocking_file_io_metric_samples_for_tests();
+        let sample = samples
+            .iter()
+            .find(|sample| sample.operation_name == "metric_probe_success")
+            .expect("metric sample should be recorded");
+        assert!(sample.blocking_pool_called);
+        assert!(sample.wall_time_ms >= 0.0);
+    }
+
+    #[tokio::test]
+    async fn run_blocking_file_io_records_wall_time_for_business_error() {
+        reset_blocking_file_io_metric_samples_for_tests();
+
+        let error =
+            run_blocking_file_io::<(), _>("metric_probe_error", || Err("read failed".to_string()))
+                .await
+                .expect_err("business error should surface");
+
+        assert_eq!(error, "read failed");
+        let samples = blocking_file_io_metric_samples_for_tests();
+        let sample = samples
+            .iter()
+            .find(|sample| sample.operation_name == "metric_probe_error")
+            .expect("metric sample should be recorded");
+        assert!(sample.blocking_pool_called);
+        assert!(sample.wall_time_ms >= 0.0);
     }
 
     #[tokio::test]

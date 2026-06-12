@@ -181,6 +181,87 @@ describe("useFileExternalSync", () => {
       expect(vi.mocked(pushErrorToast)).not.toHaveBeenCalled();
     });
 
+    it("does not overwrite dirty local content when an in-flight refresh resolves late", async () => {
+      vi.useFakeTimers();
+      vi.mocked(readWorkspaceFile).mockReset();
+      const pendingRefresh = createDeferred<{
+        content: string;
+        truncated: boolean;
+      }>();
+      vi.mocked(readWorkspaceFile).mockImplementationOnce(
+        () => pendingRefresh.promise,
+      );
+
+      const { result } = renderHook(() => {
+        const [content, setContent] = useState("initial content");
+        const [previewSnapshotVersion, setPreviewSnapshotVersion] = useState(0);
+        const savedContentRef = useRef("initial content");
+        const isDirty = content !== savedContentRef.current;
+        const latestIsDirtyRef = useRef(isDirty);
+        latestIsDirtyRef.current = isDirty;
+        const externalDiskSnapshotRef = useRef<{
+          content: string;
+          truncated: boolean;
+        } | null>({
+          content: "initial content",
+          truncated: false,
+        });
+
+        const sync = useFileExternalSync({
+          filePath: "src/late-refresh.ts",
+          workspaceId: "ws-sync",
+          workspaceRelativeFilePath: "src/late-refresh.ts",
+          fileReadTargetDomain: "workspace",
+          externalChangeMonitoringEnabled: true,
+          externalChangeTransportMode: "polling",
+          externalChangePollIntervalMs: 20,
+          externalChangeApplyMode: "auto",
+          isBinary: false,
+          isDirty,
+          isLoading: false,
+          caseInsensitivePathCompare: false,
+          replaceDocumentSnapshot: (value: string) => {
+            setContent(value);
+            setPreviewSnapshotVersion((version) => version + 1);
+          },
+          previewSnapshotVersion,
+          savedContentRef,
+          latestIsDirtyRef,
+          externalDiskSnapshotRef,
+          autoSyncedMessage: "auto synced",
+        });
+
+        return {
+          ...sync,
+          content,
+          setContent,
+        };
+      });
+
+      await act(async () => {
+        vi.advanceTimersByTime(25);
+        await Promise.resolve();
+      });
+
+      act(() => {
+        result.current.setContent("local edit before refresh resolves");
+      });
+
+      await act(async () => {
+        pendingRefresh.resolve({
+          content: "late disk content",
+          truncated: false,
+        });
+        await Promise.resolve();
+      });
+
+      expect(result.current.content).toBe("local edit before refresh resolves");
+      expect(result.current.externalChangeConflict?.diskContent).toBe(
+        "late disk content",
+      );
+      expect(result.current.externalPendingRefresh).toBeNull();
+    });
+
     it("debounces clean auto-apply updates and keeps the latest disk snapshot", async () => {
       vi.useFakeTimers();
       vi.mocked(readWorkspaceFile)

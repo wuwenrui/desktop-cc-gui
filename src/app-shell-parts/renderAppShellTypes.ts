@@ -1,4 +1,15 @@
+import type { AppShellDomainContexts } from "./appShellDomainContexts";
+
 export type RenderAppShellContext = {
+  appShellDomainContexts: AppShellDomainContexts;
+  searchAndComposerSection: Record<string, any>;
+  sections: Record<string, any>;
+  layoutNodes: Record<string, any>;
+  isPullRequestComposer: any;
+  isPullRequestComposerFromSections: any;
+};
+
+export type RenderAppShellFlattenedContext = {
   [key: string]: any;
   GitHubPanelData: any;
   SettingsView: any;

@@ -88,15 +88,17 @@
 - [x] 修改 `src/features/files/hooks/useFileExternalSync.ts`，batch 内合并、in-flight coalesce、generation stale-drop。
   > 已在 follow-up change `frontend-prop-chain-stability-2026-06` 完成：batch 入口按 `(workspaceId, normalizedPath)` latest-wins coalesce 后进入既有 in-flight / stale-drop path。
 - [x] 添加 Rust inline `#[cfg(test)]` 覆盖 same-path coalesce、cross-path delivery、ordering、no empty emit (4 tests added in `external_changes.rs`)。
-- [ ] 添加 Vitest 覆盖 stale refresh 不覆盖 dirty/local newer state。
-  > 留 follow-up change `frontend-prop-chain-stability-2026-06`。
+- [x] 添加 Vitest 覆盖 stale refresh 不覆盖 dirty/local newer state。
+  > 已在 follow-up change `frontend-prop-chain-stability-2026-06` 补充：`useFileExternalSync.test.tsx` 覆盖 in-flight refresh late resolve 时不覆盖 dirty local content，并将 disk snapshot 提升为 conflict。
 
 ### Step 5 — `frontend-prop-chain-stability`
 
 - [ ] 拆分 `appShellContext` 为 runtime/thread/workspace/composer/layout/file/settings 等 domain inputs。
+  > follow-up 已完成第一阶段：`app-shell.tsx` 生产侧 6 域 object + `renderAppShell` structured input；剩余为 section hook input 类型迁移与 `useLayoutNodes` options 收窄。
 - [ ] 缩小 `useAppShellLayoutNodesSection` 传给 `useLayoutNodes` 的 options 面；必要对象用完整 deps `useMemo`。
 - [ ] 将 streaming 高频状态从无关 module 的 props 中移除，改为局部 selector/subscription。
-- [ ] 收窄 Sidebar/ThreadList 的 `threadStatusById` 传播，优先传 row-level status 或 scoped selector。
+- [x] 收窄 Sidebar/ThreadList 的 `threadStatusById` 传播，优先传 row-level status 或 scoped selector。
+  > 已在 follow-up change `frontend-prop-chain-stability-2026-06` 完成：`ThreadList.tsx` 新增 `useThreadRowStatus(threadId)` + row-local external store；`ThreadList.test.tsx` 覆盖 1000 次 unrelated status update 后 target row commit count 仍为 1。
 - [ ] 检查 `useAppShellSearchAndComposerSection` callback 稳定性，所有 `useCallback` 遵守 exhaustive-deps，不使用人为漏依赖白名单。
 - [ ] 用 evidence 判断是否需要后续单独开 Sidebar virtualization / Composer split change。
 

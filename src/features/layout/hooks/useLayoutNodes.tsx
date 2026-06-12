@@ -1,4 +1,16 @@
-import { lazy, Suspense, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  lazy,
+  Profiler,
+  Suspense,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ProfilerOnRenderCallback,
+  type ReactNode,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { Sidebar } from "../../app/components/Sidebar";
 import { HomeChat } from "../../home/components/HomeChat";
@@ -78,6 +90,7 @@ import type {
   RequestUserInputRequest,
   ThreadSummary,
 } from "../../../types";
+import { __profile as threadsRuntimeProfile } from "../../threads/hooks/useThreadsReducer";
 import { getClientStoreSync } from "../../../services/clientStorage";
 import { getCodexProviders } from "../../../services/tauri";
 import { normalizeSpecRootInput } from "../../spec/pathUtils";
@@ -486,98 +499,103 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       onSelectThread: options.onSelectThread,
       onSelectWorkspace: options.onSelectWorkspace,
     });
+  const handleRuntimeProfileRender = useCallback<ProfilerOnRenderCallback>((id) => {
+    threadsRuntimeProfile.recordComponentRender(id);
+  }, []);
 
   const sidebarNode = (
-    <Sidebar
-      workspaces={options.workspaces}
-      groupedWorkspaces={options.groupedWorkspaces}
-      hasWorkspaceGroups={options.hasWorkspaceGroups}
-      deletingWorktreeIds={options.deletingWorktreeIds}
-      threadsByWorkspace={options.threadsByWorkspace}
-      activeItems={options.activeItems}
-      threadParentById={options.threadParentById}
-      threadStatusById={options.threadStatusById}
-      runningSessionCountByWorkspaceId={options.runningSessionCountByWorkspaceId}
-      recentSessionCountByWorkspaceId={options.recentCompletedSessionCountByWorkspaceId}
-      hydratedThreadListWorkspaceIds={options.hydratedThreadListWorkspaceIds}
-      threadListLoadingByWorkspace={options.threadListLoadingByWorkspace}
-      threadListPagingByWorkspace={options.threadListPagingByWorkspace}
-      threadListCursorByWorkspace={options.threadListCursorByWorkspace}
-      activeWorkspaceId={options.activeWorkspaceId}
-      activeThreadId={options.activeThreadId}
-      systemProxyEnabled={options.systemProxyEnabled}
-      systemProxyUrl={options.systemProxyUrl}
-      accountRateLimits={options.activeRateLimits}
-      usageShowRemaining={options.usageShowRemaining}
-      showProviderLabels={options.showSidebarProviderLabels}
-      accountInfo={options.accountInfo}
-      onSwitchAccount={options.onSwitchAccount}
-      onCancelSwitchAccount={options.onCancelSwitchAccount}
-      accountSwitching={options.accountSwitching}
-      onOpenSettings={options.onOpenSettings}
-      onOpenDebug={options.onOpenDebug}
-      showDebugButton={options.showDebugButton}
-      onAddWorkspace={options.onAddWorkspace}
-      onSelectHome={options.onSelectHome}
-      onSelectWorkspace={options.onSelectWorkspace}
-      onConnectWorkspace={options.onConnectWorkspace}
-      onAddAgent={options.onAddAgent}
-      engineOptions={options.engineOptions}
-      enabledEngines={options.enabledEngines}
-      onRefreshEngineOptions={options.onRefreshEngineOptions}
-      onAddSharedAgent={options.onAddSharedAgent}
-      onAddWorktreeAgent={options.onAddWorktreeAgent}
-      onAddCloneAgent={options.onAddCloneAgent}
-      onToggleWorkspaceCollapse={options.onToggleWorkspaceCollapse}
-      onSelectThread={options.onSelectThread}
-      onDeleteThread={options.onDeleteThread}
-      onArchiveThread={options.onArchiveThread}
-      deleteConfirmThreadId={options.deleteConfirmThreadId}
-      deleteConfirmWorkspaceId={options.deleteConfirmWorkspaceId}
-      deleteConfirmBusy={options.deleteConfirmBusy}
-      onCancelDeleteConfirm={options.onCancelDeleteConfirm}
-      onConfirmDeleteConfirm={options.onConfirmDeleteConfirm}
-      onSyncThread={options.onSyncThread}
-      pinThread={options.pinThread}
-      unpinThread={options.unpinThread}
-      isThreadPinned={options.isThreadPinned}
-      isThreadAutoNaming={options.isThreadAutoNaming}
-      getPinTimestamp={options.getPinTimestamp}
-      pinnedThreadsVersion={options.pinnedThreadsVersion}
-      onRenameThread={options.onRenameThread}
-      onAutoNameThread={options.onAutoNameThread}
-      onOpenClaudeTui={options.onOpenClaudeTui}
-      onDeleteWorkspace={options.onDeleteWorkspace}
-      onDeleteWorktree={options.onDeleteWorktree}
-      onRenameWorkspaceAlias={options.onRenameWorkspaceAlias}
-      onLoadOlderThreads={options.onLoadOlderThreads}
-      onReloadWorkspaceThreads={options.onReloadWorkspaceThreads}
-      onQuickReloadWorkspaceThreads={options.onQuickReloadWorkspaceThreads}
-      workspaceDropTargetRef={options.workspaceDropTargetRef}
-      isWorkspaceDropActive={options.isWorkspaceDropActive}
-      workspaceDropText={options.workspaceDropText}
-      onWorkspaceDragOver={options.onWorkspaceDragOver}
-      onWorkspaceDragEnter={options.onWorkspaceDragEnter}
-      onWorkspaceDragLeave={options.onWorkspaceDragLeave}
-      onWorkspaceDrop={options.onWorkspaceDrop}
-      appMode={options.appMode}
-      onAppModeChange={options.onAppModeChange}
-      onOpenHomeChat={options.onOpenHomeChat}
-      onLockPanel={options.onLockPanel}
-      onOpenProjectMemory={options.onOpenProjectMemory}
-      onOpenReleaseNotes={options.onOpenReleaseNotes}
-      onOpenGlobalSearch={options.onOpenGlobalSearch}
-      globalSearchShortcut={options.globalSearchShortcut}
-      openChatShortcut={options.openChatShortcut}
-      openKanbanShortcut={options.openKanbanShortcut}
-      showLoadingProgressDialog={options.showLoadingProgressDialog}
-      hideLoadingProgressDialog={options.hideLoadingProgressDialog}
-      onOpenSpecHub={options.onOpenSpecHub}
-      onOpenWorkspaceHome={options.onOpenWorkspaceHome}
-      showTerminalButton={options.showTerminalButton}
-      isTerminalOpen={options.terminalOpen}
-      onToggleTerminal={options.onToggleTerminal}
-    />
+    <Profiler id="sidebar" onRender={handleRuntimeProfileRender}>
+      <Sidebar
+        workspaces={options.workspaces}
+        groupedWorkspaces={options.groupedWorkspaces}
+        hasWorkspaceGroups={options.hasWorkspaceGroups}
+        deletingWorktreeIds={options.deletingWorktreeIds}
+        threadsByWorkspace={options.threadsByWorkspace}
+        activeItems={options.activeItems}
+        threadParentById={options.threadParentById}
+        threadStatusById={options.threadStatusById}
+        runningSessionCountByWorkspaceId={options.runningSessionCountByWorkspaceId}
+        recentSessionCountByWorkspaceId={options.recentCompletedSessionCountByWorkspaceId}
+        hydratedThreadListWorkspaceIds={options.hydratedThreadListWorkspaceIds}
+        threadListLoadingByWorkspace={options.threadListLoadingByWorkspace}
+        threadListPagingByWorkspace={options.threadListPagingByWorkspace}
+        threadListCursorByWorkspace={options.threadListCursorByWorkspace}
+        activeWorkspaceId={options.activeWorkspaceId}
+        activeThreadId={options.activeThreadId}
+        systemProxyEnabled={options.systemProxyEnabled}
+        systemProxyUrl={options.systemProxyUrl}
+        accountRateLimits={options.activeRateLimits}
+        usageShowRemaining={options.usageShowRemaining}
+        showProviderLabels={options.showSidebarProviderLabels}
+        accountInfo={options.accountInfo}
+        onSwitchAccount={options.onSwitchAccount}
+        onCancelSwitchAccount={options.onCancelSwitchAccount}
+        accountSwitching={options.accountSwitching}
+        onOpenSettings={options.onOpenSettings}
+        onOpenDebug={options.onOpenDebug}
+        showDebugButton={options.showDebugButton}
+        onAddWorkspace={options.onAddWorkspace}
+        onSelectHome={options.onSelectHome}
+        onSelectWorkspace={options.onSelectWorkspace}
+        onConnectWorkspace={options.onConnectWorkspace}
+        onAddAgent={options.onAddAgent}
+        engineOptions={options.engineOptions}
+        enabledEngines={options.enabledEngines}
+        onRefreshEngineOptions={options.onRefreshEngineOptions}
+        onAddSharedAgent={options.onAddSharedAgent}
+        onAddWorktreeAgent={options.onAddWorktreeAgent}
+        onAddCloneAgent={options.onAddCloneAgent}
+        onToggleWorkspaceCollapse={options.onToggleWorkspaceCollapse}
+        onSelectThread={options.onSelectThread}
+        onDeleteThread={options.onDeleteThread}
+        onArchiveThread={options.onArchiveThread}
+        deleteConfirmThreadId={options.deleteConfirmThreadId}
+        deleteConfirmWorkspaceId={options.deleteConfirmWorkspaceId}
+        deleteConfirmBusy={options.deleteConfirmBusy}
+        onCancelDeleteConfirm={options.onCancelDeleteConfirm}
+        onConfirmDeleteConfirm={options.onConfirmDeleteConfirm}
+        onSyncThread={options.onSyncThread}
+        pinThread={options.pinThread}
+        unpinThread={options.unpinThread}
+        isThreadPinned={options.isThreadPinned}
+        isThreadAutoNaming={options.isThreadAutoNaming}
+        getPinTimestamp={options.getPinTimestamp}
+        pinnedThreadsVersion={options.pinnedThreadsVersion}
+        onRenameThread={options.onRenameThread}
+        onAutoNameThread={options.onAutoNameThread}
+        onOpenClaudeTui={options.onOpenClaudeTui}
+        onDeleteWorkspace={options.onDeleteWorkspace}
+        onDeleteWorktree={options.onDeleteWorktree}
+        onRenameWorkspaceAlias={options.onRenameWorkspaceAlias}
+        onLoadOlderThreads={options.onLoadOlderThreads}
+        onReloadWorkspaceThreads={options.onReloadWorkspaceThreads}
+        onQuickReloadWorkspaceThreads={options.onQuickReloadWorkspaceThreads}
+        workspaceDropTargetRef={options.workspaceDropTargetRef}
+        isWorkspaceDropActive={options.isWorkspaceDropActive}
+        workspaceDropText={options.workspaceDropText}
+        onWorkspaceDragOver={options.onWorkspaceDragOver}
+        onWorkspaceDragEnter={options.onWorkspaceDragEnter}
+        onWorkspaceDragLeave={options.onWorkspaceDragLeave}
+        onWorkspaceDrop={options.onWorkspaceDrop}
+        appMode={options.appMode}
+        onAppModeChange={options.onAppModeChange}
+        onOpenHomeChat={options.onOpenHomeChat}
+        onLockPanel={options.onLockPanel}
+        onOpenProjectMemory={options.onOpenProjectMemory}
+        onOpenReleaseNotes={options.onOpenReleaseNotes}
+        onOpenGlobalSearch={options.onOpenGlobalSearch}
+        globalSearchShortcut={options.globalSearchShortcut}
+        openChatShortcut={options.openChatShortcut}
+        openKanbanShortcut={options.openKanbanShortcut}
+        showLoadingProgressDialog={options.showLoadingProgressDialog}
+        hideLoadingProgressDialog={options.hideLoadingProgressDialog}
+        onOpenSpecHub={options.onOpenSpecHub}
+        onOpenWorkspaceHome={options.onOpenWorkspaceHome}
+        showTerminalButton={options.showTerminalButton}
+        isTerminalOpen={options.terminalOpen}
+        onToggleTerminal={options.onToggleTerminal}
+      />
+    </Profiler>
   );
 
   const [localClaudeThinkingVisible, setLocalClaudeThinkingVisible] = useState<boolean | undefined>(
@@ -903,7 +921,8 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     showStatusPanelToggleOverride?: boolean,
   ) =>
     options.showComposer ? (
-      <Composer
+      <Profiler id="composer" onRender={handleRuntimeProfileRender}>
+        <Composer
         items={deferredComposerLiveInputs.items}
         activeThreadId={options.activeThreadId}
         threadItemsByThread={deferredComposerLiveInputs.threadItemsByThread}
@@ -1084,7 +1103,8 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         onReviewPromptConfirmCommit={options.onReviewPromptConfirmCommit}
         onReviewPromptUpdateCustomInstructions={options.onReviewPromptUpdateCustomInstructions}
         onReviewPromptConfirmCustom={options.onReviewPromptConfirmCustom}
-      />
+        />
+      </Profiler>
     ) : null;
   const composerNode = renderComposerNode(false);
   const homeComposerNode = renderComposerNode(false);

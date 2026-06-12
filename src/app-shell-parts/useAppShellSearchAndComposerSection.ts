@@ -4,7 +4,11 @@ import { useInterruptShortcut } from "../features/app/hooks/useInterruptShortcut
 import { usePullRequestComposer } from "../features/git/hooks/usePullRequestComposer";
 import { recordSearchResultOpen } from "../features/search/ranking/recencyStore";
 import type { KanbanTask } from "../features/kanban/types";
-import type { SearchContentFilter, SearchResult, SearchScope } from "../features/search/types";
+import type {
+  SearchContentFilter,
+  SearchResult,
+  SearchScope,
+} from "../features/search/types";
 import { resolveSearchScopeOnOpen } from "../features/search/utils/scope";
 import { toggleSearchContentFilters } from "../features/search/utils/contentFilters";
 import type {
@@ -18,14 +22,45 @@ import {
   getThreadSelectDiffCleanupAction,
   shouldPreserveEditorOnThreadSelect,
 } from "./threadEditorPreservation";
+import {
+  adaptAppShellLegacyFlatContext,
+  flattenSelectedAppShellDomainContexts,
+  type AppShellDomainContextSelection,
+} from "./appShellDomainContexts";
 
 type AppShellTab = "projects" | "codex" | "spec" | "git" | "log";
-type CenterMode = "chat" | "diff" | "editor" | "memory" | "projectMap" | "intentCanvas";
+type CenterMode =
+  | "chat"
+  | "diff"
+  | "editor"
+  | "memory"
+  | "projectMap"
+  | "intentCanvas";
 type DiffSource = "local" | "pr" | "commit";
-type FilePanelMode = "git" | "files" | "search" | "notes" | "prompts" | "memory" | "activity" | "radar";
+type FilePanelMode =
+  | "git"
+  | "files"
+  | "search"
+  | "notes"
+  | "prompts"
+  | "memory"
+  | "activity"
+  | "radar";
 type GitPanelMode = "diff" | "log" | "issues" | "prs";
 
 type ComposerSearchLegacyPassthrough = Record<string, unknown>;
+
+const COMPOSER_SEARCH_DOMAIN_NAMES = [
+  "workspaceNavigationContext",
+  "composerContext",
+  "layoutContext",
+  "fileEditorContext",
+  "settingsContext",
+] as const;
+
+export type ComposerSearchShellDomainInput = AppShellDomainContextSelection<
+  (typeof COMPOSER_SEARCH_DOMAIN_NAMES)[number]
+>;
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.length > 0;
@@ -36,7 +71,10 @@ export type ComposerSearchShellBoundary = ComposerSearchLegacyPassthrough & {
   activeEditorFilePath: string | null | undefined;
   activeWorkspace: WorkspaceInfo | null;
   activeWorkspaceId: string | null;
-  appSettings: Pick<AppSettings, "interruptShortcut" | "toggleGlobalSearchShortcut">;
+  appSettings: Pick<
+    AppSettings,
+    "interruptShortcut" | "toggleGlobalSearchShortcut"
+  >;
   canInterrupt: boolean;
   centerMode: CenterMode;
   clearActiveImages: () => void;
@@ -85,7 +123,11 @@ export type ComposerSearchShellBoundary = ComposerSearchLegacyPassthrough & {
     workspaceId: string;
     panelId: string;
   }) => void;
-  setPrefillDraft: (draft: { id: string; text: string; createdAt: number }) => void;
+  setPrefillDraft: (draft: {
+    id: string;
+    text: string;
+    createdAt: number;
+  }) => void;
   setSearchContentFilters: (
     updater: (previous: SearchContentFilter[]) => SearchContentFilter[],
   ) => void;
@@ -105,20 +147,64 @@ export type ComposerSearchShellBoundary = ComposerSearchLegacyPassthrough & {
   workspacesByPath: Map<string, WorkspaceInfo>;
 };
 
-export function useAppShellSearchAndComposerSection(ctx: ComposerSearchShellBoundary) {
+function flattenComposerSearchShellBoundary(
+  input: ComposerSearchShellDomainInput,
+): ComposerSearchShellBoundary {
+  return adaptAppShellLegacyFlatContext<ComposerSearchShellBoundary>(
+    flattenSelectedAppShellDomainContexts(input, COMPOSER_SEARCH_DOMAIN_NAMES),
+  );
+}
+
+export function useAppShellSearchAndComposerSection(
+  input: ComposerSearchShellDomainInput,
+) {
+  const ctx = flattenComposerSearchShellBoundary(input);
   const {
-    activeDraft, activeEditorFilePath, activeWorkspace, activeWorkspaceId,
-    appSettings, canInterrupt, centerMode, clearActiveImages,
-    connectWorkspace, exitDiffView, filePanelMode,
-    gitPanelMode, gitPullRequestDiffs, handleDraftChange, handleOpenFile,
-    handleSend, interruptTurn, isCompact, isSearchPaletteOpen,
-    kanbanTasks, queueMessage, searchPaletteQuery,
-    searchResults, searchScope, selectWorkspace,
-    selectedPullRequest, sendUserMessageToThread, setActiveTab, setActiveThreadId,
-    setAppMode, setCenterMode, setDiffSource, setGitPanelMode,
-    setIsSearchPaletteOpen, setKanbanViewState, setPrefillDraft, setSearchContentFilters,
-    setSearchPaletteQuery, setSearchPaletteSelectedIndex, setSearchScope, setSelectedCommitSha,
-    setSelectedDiffPath, setSelectedKanbanTaskId, setSelectedPullRequest, startThreadForWorkspace,
+    activeDraft,
+    activeEditorFilePath,
+    activeWorkspace,
+    activeWorkspaceId,
+    appSettings,
+    canInterrupt,
+    centerMode,
+    clearActiveImages,
+    connectWorkspace,
+    exitDiffView,
+    filePanelMode,
+    gitPanelMode,
+    gitPullRequestDiffs,
+    handleDraftChange,
+    handleOpenFile,
+    handleSend,
+    interruptTurn,
+    isCompact,
+    isSearchPaletteOpen,
+    kanbanTasks,
+    queueMessage,
+    searchPaletteQuery,
+    searchResults,
+    searchScope,
+    selectWorkspace,
+    selectedPullRequest,
+    sendUserMessageToThread,
+    setActiveTab,
+    setActiveThreadId,
+    setAppMode,
+    setCenterMode,
+    setDiffSource,
+    setGitPanelMode,
+    setIsSearchPaletteOpen,
+    setKanbanViewState,
+    setPrefillDraft,
+    setSearchContentFilters,
+    setSearchPaletteQuery,
+    setSearchPaletteSelectedIndex,
+    setSearchScope,
+    setSelectedCommitSha,
+    setSelectedDiffPath,
+    setSelectedKanbanTaskId,
+    setSelectedPullRequest,
+    startThreadForWorkspace,
     workspacesByPath,
   } = ctx;
 
@@ -126,7 +212,11 @@ export function useAppShellSearchAndComposerSection(ctx: ComposerSearchShellBoun
     setIsSearchPaletteOpen(false);
     setSearchPaletteQuery("");
     setSearchPaletteSelectedIndex(0);
-  }, [setIsSearchPaletteOpen, setSearchPaletteQuery, setSearchPaletteSelectedIndex]);
+  }, [
+    setIsSearchPaletteOpen,
+    setSearchPaletteQuery,
+    setSearchPaletteSelectedIndex,
+  ]);
 
   const handleOpenSearchPalette = useCallback(() => {
     const nextScope = resolveSearchScopeOnOpen(searchScope, activeWorkspaceId);
@@ -179,10 +269,15 @@ export function useAppShellSearchAndComposerSection(ctx: ComposerSearchShellBoun
     [searchResults.length, setSearchPaletteSelectedIndex],
   );
 
-  const handleToggleSearchContentFilter = useCallback((nextFilter: SearchContentFilter) => {
-    setSearchContentFilters((prev) => toggleSearchContentFilters(prev, nextFilter));
-    setSearchPaletteSelectedIndex(0);
-  }, [setSearchContentFilters, setSearchPaletteSelectedIndex]);
+  const handleToggleSearchContentFilter = useCallback(
+    (nextFilter: SearchContentFilter) => {
+      setSearchContentFilters((prev) =>
+        toggleSearchContentFilters(prev, nextFilter),
+      );
+      setSearchPaletteSelectedIndex(0);
+    },
+    [setSearchContentFilters, setSearchPaletteSelectedIndex],
+  );
 
   const handleSelectSearchResult = useCallback(
     (result: SearchResult) => {
@@ -193,7 +288,10 @@ export function useAppShellSearchAndComposerSection(ctx: ComposerSearchShellBoun
           }
           break;
         case "thread":
-          if (isNonEmptyString(result.workspaceId) && isNonEmptyString(result.threadId)) {
+          if (
+            isNonEmptyString(result.workspaceId) &&
+            isNonEmptyString(result.threadId)
+          ) {
             const preserveEditor = shouldPreserveEditorOnThreadSelect({
               isCompact,
               centerMode,
@@ -201,7 +299,8 @@ export function useAppShellSearchAndComposerSection(ctx: ComposerSearchShellBoun
               targetWorkspaceId: result.workspaceId,
               activeEditorFilePath,
             });
-            const diffCleanupAction = getThreadSelectDiffCleanupAction(preserveEditor);
+            const diffCleanupAction =
+              getThreadSelectDiffCleanupAction(preserveEditor);
             if (diffCleanupAction === "clear-selected-diff") {
               setSelectedDiffPath(null);
             } else {
@@ -216,7 +315,9 @@ export function useAppShellSearchAndComposerSection(ctx: ComposerSearchShellBoun
           break;
         case "kanban":
           if (result.taskId) {
-            const task = kanbanTasks.find((entry) => entry.id === result.taskId);
+            const task = kanbanTasks.find(
+              (entry) => entry.id === result.taskId,
+            );
             if (task) {
               const taskWs = workspacesByPath.get(task.workspaceId);
               setAppMode("kanban");
@@ -239,7 +340,10 @@ export function useAppShellSearchAndComposerSection(ctx: ComposerSearchShellBoun
           }
           break;
         case "message":
-          if (isNonEmptyString(result.workspaceId) && isNonEmptyString(result.threadId)) {
+          if (
+            isNonEmptyString(result.workspaceId) &&
+            isNonEmptyString(result.threadId)
+          ) {
             const preserveEditor = shouldPreserveEditorOnThreadSelect({
               isCompact,
               centerMode,
@@ -247,7 +351,8 @@ export function useAppShellSearchAndComposerSection(ctx: ComposerSearchShellBoun
               targetWorkspaceId: result.workspaceId,
               activeEditorFilePath,
             });
-            const diffCleanupAction = getThreadSelectDiffCleanupAction(preserveEditor);
+            const diffCleanupAction =
+              getThreadSelectDiffCleanupAction(preserveEditor);
             if (diffCleanupAction === "clear-selected-diff") {
               setSelectedDiffPath(null);
             } else {
@@ -355,8 +460,6 @@ export function useAppShellSearchAndComposerSection(ctx: ComposerSearchShellBoun
     handleSend,
     queueMessage,
   });
-
-
 
   return {
     closeSearchPalette,

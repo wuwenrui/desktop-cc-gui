@@ -1,7 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-} from "react";
+import { useCallback, useEffect } from "react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { getWorkspaceFiles } from "../services/tauri";
 import { pushErrorToast } from "../services/toasts";
@@ -23,9 +20,7 @@ import {
 import { openOrFocusClientDocumentationWindow } from "../features/client-documentation/clientDocumentationWindow";
 import type { WorkspaceHomeDeleteResult } from "../features/workspaces/components/WorkspaceHome";
 import type { EngineType, WorkspaceInfo } from "../types";
-import {
-  isRewindSupportedThreadId,
-} from "./useAppShellSections.kanbanHelpers";
+import { isRewindSupportedThreadId } from "./useAppShellSections.kanbanHelpers";
 import {
   getThreadSelectDiffCleanupAction,
   shouldCollapseRightPanelOnThreadSelect,
@@ -33,7 +28,14 @@ import {
 } from "./threadEditorPreservation";
 import { useAppShellKanbanComposerSection } from "./useAppShellKanbanComposerSection";
 import { useAppShellKanbanExecutionSection } from "./useAppShellKanbanExecutionSection";
-import type { UseAppShellSectionsContext } from "./useAppShellSectionsTypes";
+import {
+  adaptAppShellLegacyFlatContext,
+  flattenAppShellDomainContexts,
+} from "./appShellDomainContexts";
+import type {
+  UseAppShellSectionsContext,
+  UseAppShellSectionsInput,
+} from "./useAppShellSectionsTypes";
 import {
   defineAppShellContextActions,
   defineAppShellNavigationActions,
@@ -48,8 +50,18 @@ export {
   syncKanbanExecutionEngineAndModel,
 } from "./useAppShellSections.kanbanHelpers";
 
-export function useAppShellSections(ctx: UseAppShellSectionsContext) {
-  const{
+function flattenAppShellSectionsContext(
+  input: UseAppShellSectionsInput,
+): UseAppShellSectionsContext {
+  return adaptAppShellLegacyFlatContext<UseAppShellSectionsContext>({
+    ...flattenAppShellDomainContexts(input.appShellDomainContexts),
+    ...input.searchAndComposerSection,
+  });
+}
+
+export function useAppShellSections(input: UseAppShellSectionsInput) {
+  const ctx = flattenAppShellSectionsContext(input);
+  const {
     activeWorkspace,
     workspaces,
     setAppMode,
@@ -165,7 +177,9 @@ export function useAppShellSections(ctx: UseAppShellSectionsContext) {
   const handleRewindFromMessage = useCallback(
     async (
       messageId: string,
-      options?: { mode?: "messages-and-files" | "messages-only" | "files-only" },
+      options?: {
+        mode?: "messages-and-files" | "messages-only" | "files-only";
+      },
     ) => {
       const normalizedMessageId = messageId.trim();
       if (!activeWorkspaceId || !activeThreadId || !normalizedMessageId) {
@@ -208,7 +222,8 @@ export function useAppShellSections(ctx: UseAppShellSectionsContext) {
         targetWorkspaceId: workspaceId,
         activeEditorFilePath,
       });
-      const diffCleanupAction = getThreadSelectDiffCleanupAction(preserveEditor);
+      const diffCleanupAction =
+        getThreadSelectDiffCleanupAction(preserveEditor);
       if (diffCleanupAction === "clear-selected-diff") {
         setSelectedDiffPath(null);
       } else {
@@ -329,14 +344,21 @@ export function useAppShellSections(ctx: UseAppShellSectionsContext) {
               await connectWorkspace(targetWorkspace);
             }
             await setActiveEngine(sharedEngine);
-            const threadId = await startSharedSessionForWorkspace(targetWorkspace.id, {
-              activate: true,
-              initialEngine: sharedEngine,
-            });
+            const threadId = await startSharedSessionForWorkspace(
+              targetWorkspace.id,
+              {
+                activate: true,
+                initialEngine: sharedEngine,
+              },
+            );
             if (!threadId) {
               return null;
             }
-            updateSharedSessionEngineSelection(targetWorkspace.id, threadId, sharedEngine);
+            updateSharedSessionEngineSelection(
+              targetWorkspace.id,
+              threadId,
+              sharedEngine,
+            );
             setActiveThreadId(threadId, targetWorkspace.id);
             collapseRightPanel();
             if (isCompact) {
@@ -400,7 +422,11 @@ export function useAppShellSections(ctx: UseAppShellSectionsContext) {
         }
         setActiveThreadId(threadId, activeWorkspace.id);
         collapseRightPanel();
-        await sendUserMessageToThread(activeWorkspace, threadId, normalizedPrompt);
+        await sendUserMessageToThread(
+          activeWorkspace,
+          threadId,
+          normalizedPrompt,
+        );
         if (isCompact) {
           setActiveTab("codex");
         }
@@ -462,7 +488,10 @@ export function useAppShellSections(ctx: UseAppShellSectionsContext) {
       if (failed.length > 0) {
         const failedReasonLine = failed
           .slice(0, 3)
-          .map((entry) => `- ${entry.threadId}: ${t(`workspace.deleteErrorCode.${entry.code}`)}`)
+          .map(
+            (entry) =>
+              `- ${entry.threadId}: ${t(`workspace.deleteErrorCode.${entry.code}`)}`,
+          )
           .join("\n");
         alertError(
           `${t("workspace.deleteConversationsPartial", {
@@ -476,7 +505,14 @@ export function useAppShellSections(ctx: UseAppShellSectionsContext) {
         failed,
       } satisfies WorkspaceHomeDeleteResult;
     },
-    [activeWorkspace, alertError, clearDraftForThread, removeImagesForThread, removeThread, t],
+    [
+      activeWorkspace,
+      alertError,
+      clearDraftForThread,
+      removeImagesForThread,
+      removeThread,
+      t,
+    ],
   );
   const handleDeleteWorkspaceConversationsInSettings = useCallback(
     async (workspaceId: string, threadIds: string[]) => {
@@ -488,9 +524,12 @@ export function useAppShellSections(ctx: UseAppShellSectionsContext) {
       }
       const deleteResults = removeThreads
         ? await removeThreads(workspaceId, threadIds)
-        : await Promise.all(threadIds.map((threadId) => removeThread(workspaceId, threadId)));
+        : await Promise.all(
+            threadIds.map((threadId) => removeThread(workspaceId, threadId)),
+          );
       const succeededThreadIds: string[] = [];
-      const failed: Array<{ threadId: string; code: string; message: string }> = [];
+      const failed: Array<{ threadId: string; code: string; message: string }> =
+        [];
       for (const result of deleteResults) {
         if (result.success) {
           succeededThreadIds.push(result.threadId);
@@ -509,7 +548,13 @@ export function useAppShellSections(ctx: UseAppShellSectionsContext) {
         failed,
       };
     },
-    [clearDraftForThread, removeImagesForThread, removeThread, removeThreads, t],
+    [
+      clearDraftForThread,
+      removeImagesForThread,
+      removeThread,
+      removeThreads,
+      t,
+    ],
   );
 
   const {
@@ -532,7 +577,7 @@ export function useAppShellSections(ctx: UseAppShellSectionsContext) {
 
   const handleMoveWorkspace = async (
     workspaceId: string,
-    direction: "up" | "down"
+    direction: "up" | "down",
   ) => {
     const target = workspacesById.get(workspaceId);
     if (!target || (target.kind ?? "main") === "worktree") {
@@ -553,7 +598,9 @@ export function useAppShellSections(ctx: UseAppShellSectionsContext) {
         }
         return a.name.localeCompare(b.name);
       });
-    const index = ordered.findIndex((entry: WorkspaceInfo) => entry.id === workspaceId);
+    const index = ordered.findIndex(
+      (entry: WorkspaceInfo) => entry.id === workspaceId,
+    );
     if (index === -1) {
       return;
     }
@@ -568,9 +615,9 @@ export function useAppShellSections(ctx: UseAppShellSectionsContext) {
     await Promise.all(
       next.map((entry: WorkspaceInfo, idx: number) =>
         updateWorkspaceSettings(entry.id, {
-          sortOrder: idx
-        })
-      )
+          sortOrder: idx,
+        }),
+      ),
     );
   };
 
@@ -625,15 +672,16 @@ export function useAppShellSections(ctx: UseAppShellSectionsContext) {
     }
   }, [activeWorkspace, exitSoloMode, isSoloMode]);
 
-  const { markManualNavigation: markLiveEditPreviewManualNavigation } = useLiveEditPreview({
-    enabled: liveEditPreviewEnabled,
-    timeline: workspaceActivity.timeline,
-    centerMode,
-    activeEditorFilePath,
-    onOpenFile: (path) => {
-      handleOpenFile(path);
-    },
-  });
+  const { markManualNavigation: markLiveEditPreviewManualNavigation } =
+    useLiveEditPreview({
+      enabled: liveEditPreviewEnabled,
+      timeline: workspaceActivity.timeline,
+      centerMode,
+      activeEditorFilePath,
+      onOpenFile: (path) => {
+        handleOpenFile(path);
+      },
+    });
 
   const handleOpenWorkspaceFile = useCallback(
     (
@@ -673,11 +721,15 @@ export function useAppShellSections(ctx: UseAppShellSectionsContext) {
     handleExitEditor();
   }, [handleExitEditor, markLiveEditPreviewManualNavigation]);
 
-  const showComposer = Boolean(selectedKanbanTaskId) || ((!isCompact
-    ? (centerMode === "chat" || centerMode === "diff" || centerMode === "editor") &&
-      !showSpecHub &&
-      !showWorkspaceHome
-    : (isTablet ? tabletTab : activeTab) === "codex" && !showWorkspaceHome));
+  const showComposer =
+    Boolean(selectedKanbanTaskId) ||
+    (!isCompact
+      ? (centerMode === "chat" ||
+          centerMode === "diff" ||
+          centerMode === "editor") &&
+        !showSpecHub &&
+        !showWorkspaceHome
+      : (isTablet ? tabletTab : activeTab) === "codex" && !showWorkspaceHome);
   const showGitDetail = Boolean(selectedDiffPath) && isPhone;
   const isThreadOpen = Boolean(activeThreadId && showComposer);
   const handleSelectDiffForPanel = useCallback(
@@ -689,7 +741,11 @@ export function useAppShellSections(ctx: UseAppShellSectionsContext) {
       }
       handleSelectDiff(path);
     },
-    [handleSelectDiff, markLiveEditPreviewManualNavigation, setSelectedDiffPath],
+    [
+      handleSelectDiff,
+      markLiveEditPreviewManualNavigation,
+      setSelectedDiffPath,
+    ],
   );
   const handleCloseGitHistoryPanel = useCallback(() => {
     setAppMode("chat");
@@ -702,7 +758,8 @@ export function useAppShellSections(ctx: UseAppShellSectionsContext) {
     async (path: string) => {
       const normalizedTarget = normalizeWorkspacePath(path);
       const existing = workspaces.find(
-        (entry: WorkspaceInfo) => normalizeWorkspacePath(entry.path) === normalizedTarget,
+        (entry: WorkspaceInfo) =>
+          normalizeWorkspacePath(entry.path) === normalizedTarget,
       );
       if (existing) {
         setActiveWorkspaceId(existing.id);
@@ -723,7 +780,13 @@ export function useAppShellSections(ctx: UseAppShellSectionsContext) {
         });
       }
     },
-    [addDebugEntry, addWorkspaceFromPath, normalizeWorkspacePath, setActiveWorkspaceId, workspaces],
+    [
+      addDebugEntry,
+      addWorkspaceFromPath,
+      normalizeWorkspacePath,
+      setActiveWorkspaceId,
+      workspaces,
+    ],
   );
 
   const handleOpenSpecHub = useCallback(() => {
@@ -752,7 +815,7 @@ export function useAppShellSections(ctx: UseAppShellSectionsContext) {
           title: t("sidebar.specHub"),
           message: error instanceof Error ? error.message : String(error),
         });
-    });
+      });
   }, [activeWorkspace, closeSettings, setActiveTab, t]);
 
   const handleOpenClientDocumentation = useCallback(() => {
@@ -819,28 +882,31 @@ export function useAppShellSections(ctx: UseAppShellSectionsContext) {
     setWorkspaceHomeWorkspaceId,
   ]);
 
-  const handleSelectHomeWorkspace = useCallback((workspaceId: string) => {
-    if (!workspaceId) {
-      return;
-    }
-    exitDiffView();
-    resetPullRequestSelection();
-    setWorkspaceHomeWorkspaceId(null);
-    setAppMode("chat");
-    setCenterMode("chat");
-    setHomeOpen(true);
-    setActiveWorkspaceId(workspaceId);
-    setActiveThreadId(null, workspaceId);
-  }, [
-    exitDiffView,
-    resetPullRequestSelection,
-    setAppMode,
-    setCenterMode,
-    setActiveThreadId,
-    setActiveWorkspaceId,
-    setHomeOpen,
-    setWorkspaceHomeWorkspaceId,
-  ]);
+  const handleSelectHomeWorkspace = useCallback(
+    (workspaceId: string) => {
+      if (!workspaceId) {
+        return;
+      }
+      exitDiffView();
+      resetPullRequestSelection();
+      setWorkspaceHomeWorkspaceId(null);
+      setAppMode("chat");
+      setCenterMode("chat");
+      setHomeOpen(true);
+      setActiveWorkspaceId(workspaceId);
+      setActiveThreadId(null, workspaceId);
+    },
+    [
+      exitDiffView,
+      resetPullRequestSelection,
+      setAppMode,
+      setCenterMode,
+      setActiveThreadId,
+      setActiveWorkspaceId,
+      setHomeOpen,
+      setWorkspaceHomeWorkspaceId,
+    ],
+  );
 
   const handleOpenKanbanMode = useCallback(() => {
     setHomeOpen(false);
@@ -964,22 +1030,17 @@ export function useAppShellSections(ctx: UseAppShellSectionsContext) {
     isPhone ? " layout-phone" : ""
   }${isTablet ? " layout-tablet" : ""}${
     isWindowsDesktop ? " windows-desktop" : ""
-  }${isMacDesktop ? " macos-desktop" : ""
-  }${
+  }${isMacDesktop ? " macos-desktop" : ""}${
     reduceTransparency ? " reduced-transparency" : ""
-  }${
-    appSettings.canvasWidthMode === "wide" ? " canvas-width-wide" : ""
-  }${
+  }${appSettings.canvasWidthMode === "wide" ? " canvas-width-wide" : ""}${
     !isCompact && appSettings.layoutMode === "swapped" ? " layout-swapped" : ""
   }${!isCompact && sidebarCollapsed ? " sidebar-collapsed" : ""}${
     !isCompact && rightPanelCollapsed ? " right-panel-collapsed" : ""
   }${shouldShowSidebarTopbarContent ? " sidebar-title-relocated" : ""}${
     showHome ? " home-active" : ""
-  }${
-    showKanban ? " kanban-active" : ""
-  }${showGitHistory ? " git-history-active" : ""
-  }${isSoloMode ? " solo-mode" : ""
-  }`;
+  }${showKanban ? " kanban-active" : ""}${
+    showGitHistory ? " git-history-active" : ""
+  }${isSoloMode ? " solo-mode" : ""}`;
 
   const runtimeActions = defineAppShellRuntimeActions({
     handleToggleRuntimeConsole,

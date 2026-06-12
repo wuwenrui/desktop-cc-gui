@@ -15,6 +15,12 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
+vi.mock("./Markdown", () => ({
+  Markdown: ({ value }: { value: string }) => (
+    <div className="markdown">{value}</div>
+  ),
+}));
+
 if (!HTMLElement.prototype.scrollIntoView) {
   HTMLElement.prototype.scrollIntoView = vi.fn();
 }

@@ -1,3 +1,10 @@
+import type { AppShellDomainContexts } from "./appShellDomainContexts";
+
+export type UseAppShellSectionsInput = {
+  appShellDomainContexts: AppShellDomainContexts;
+  searchAndComposerSection: Record<string, any>;
+};
+
 export type UseAppShellSectionsContext = {
   [key: string]: any;
   activeWorkspace: any;

@@ -4,7 +4,7 @@ import {
   __getPrepareThreadItemsCallCountForTests,
   __resetPrepareThreadItemsCallCountForTests,
 } from "../../../utils/threadItems";
-import { initialState, threadReducer } from "./useThreadsReducer";
+import { __profile, initialState, threadReducer } from "./useThreadsReducer";
 import type { ThreadState } from "./useThreadsReducer";
 
 
@@ -194,7 +194,7 @@ describe("threadReducer non-Claude live delta fast path", () => {
     };
     let state = processingEngineState(threadId, [assistantItem]);
 
-    __resetPrepareThreadItemsCallCountForTests();
+    __profile.reset();
     for (let index = 0; index < 1000; index += 1) {
       const tag = `t${index.toString(36).padStart(2, "0")}`;
       state = threadReducer(
@@ -203,12 +203,30 @@ describe("threadReducer non-Claude live delta fast path", () => {
       );
     }
 
-    expect(__getPrepareThreadItemsCallCountForTests()).toBe(0);
+    expect(__profile.snapshot()).toEqual({
+      componentRenderCounts: {},
+      prepareThreadItemsCallCount: 0,
+      reducerDispatchCount: 1000,
+    });
     const message = state.itemsByThread[threadId]?.[0];
     expect(message?.kind).toBe("message");
     if (message?.kind === "message") {
       // 1000 distinct tags each 3 chars; we only assert non-empty + processing.
       expect(message.text.length).toBeGreaterThan(0);
     }
+  });
+
+  it("records component render counts for profiler evidence", () => {
+    __profile.reset();
+
+    __profile.recordComponentRender("composer");
+    __profile.recordComponentRender("composer");
+    __profile.recordComponentRender(" sidebar ");
+    __profile.recordComponentRender(" ");
+
+    expect(__profile.snapshot().componentRenderCounts).toEqual({
+      composer: 2,
+      sidebar: 1,
+    });
   });
 });

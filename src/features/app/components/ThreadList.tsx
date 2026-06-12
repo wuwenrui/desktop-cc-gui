@@ -8,7 +8,18 @@ import {
   TooltipPopup,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { memo, useCallback, useMemo, useState } from "react";
+import {
+  createContext,
+  memo,
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import type { CSSProperties, KeyboardEvent, MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -25,6 +36,14 @@ type ThreadStatusMap = Record<
   string,
   { isProcessing: boolean; hasUnread: boolean; isReviewing: boolean }
 >;
+
+type ThreadRowStatus = ThreadStatusMap[string];
+
+type ThreadRowStatusStore = {
+  getSnapshot: (threadId: string) => ThreadRowStatus | undefined;
+  setStatusMap: (nextStatusById: ThreadStatusMap) => void;
+  subscribe: (threadId: string, listener: () => void) => () => void;
+};
 
 type ThreadRow = {
   thread: ThreadSummary;
@@ -60,7 +79,6 @@ type ThreadRowItemProps = {
   isDeleteConfirmOpen: boolean;
   isPendingSubagent: boolean;
   isPinned: boolean;
-  isProcessing: boolean;
   showProviderLabels: boolean;
   isSharedThread: boolean;
   isSubagentParent: boolean;
@@ -73,18 +91,92 @@ type ThreadRowItemProps = {
   onShowThreadMenu: ShowThreadMenuHandler;
   onToggleThreadPin?: (workspaceId: string, threadId: string) => void;
   relativeTime: string | null;
-  runtimeBadge: { label: string; severity: "processing" | "reviewing" } | null;
   selectTargetThreadId: string;
-  showProxyBadge: boolean;
-  statusClass: string;
   subagentTreeToggleLabel: string;
+  systemProxyEnabled: boolean;
   systemProxyUrl: string | null;
   thread: ThreadSummary;
   toggleSubagentParent: (event: MouseEvent, threadId: string) => void;
   handleSubagentParentKeyDown: (event: KeyboardEvent, threadId: string) => void;
-  t: (key: string, options?: Record<string, unknown>) => string;
   workspacePath: string;
+  onThreadRowRender?: (threadId: string) => void;
 };
+
+const ThreadRowStatusStoreContext = createContext<ThreadRowStatusStore | null>(null);
+const EMPTY_MOVE_FOLDER_TARGETS: ThreadMoveFolderTarget[] = [];
+
+function areThreadRowStatusesEqual(
+  left: ThreadRowStatus | undefined,
+  right: ThreadRowStatus | undefined,
+) {
+  return (
+    left?.isProcessing === right?.isProcessing &&
+    left?.hasUnread === right?.hasUnread &&
+    left?.isReviewing === right?.isReviewing
+  );
+}
+
+function createThreadRowStatusStore(
+  initialStatusById: ThreadStatusMap,
+): ThreadRowStatusStore {
+  let statusById = initialStatusById;
+  const listenersByThreadId = new Map<string, Set<() => void>>();
+
+  return {
+    getSnapshot(threadId) {
+      return statusById[threadId];
+    },
+    setStatusMap(nextStatusById) {
+      if (Object.is(statusById, nextStatusById)) {
+        return;
+      }
+      const previousStatusById = statusById;
+      statusById = nextStatusById;
+      const changedThreadIds = new Set([
+        ...Object.keys(previousStatusById),
+        ...Object.keys(nextStatusById),
+      ]);
+
+      changedThreadIds.forEach((threadId) => {
+        if (
+          areThreadRowStatusesEqual(
+            previousStatusById[threadId],
+            nextStatusById[threadId],
+          )
+        ) {
+          return;
+        }
+        listenersByThreadId.get(threadId)?.forEach((listener) => listener());
+      });
+    },
+    subscribe(threadId, listener) {
+      const listeners = listenersByThreadId.get(threadId) ?? new Set<() => void>();
+      listeners.add(listener);
+      listenersByThreadId.set(threadId, listeners);
+      return () => {
+        listeners.delete(listener);
+        if (listeners.size === 0) {
+          listenersByThreadId.delete(threadId);
+        }
+      };
+    },
+  };
+}
+
+export function useThreadRowStatus(threadId: string): ThreadRowStatus | undefined {
+  const store = useContext(ThreadRowStatusStoreContext);
+  if (!store) {
+    throw new Error("useThreadRowStatus must be used within ThreadList");
+  }
+
+  const subscribe = useCallback(
+    (listener: () => void) => store.subscribe(threadId, listener),
+    [store, threadId],
+  );
+  const getSnapshot = useCallback(() => store.getSnapshot(threadId), [store, threadId]);
+
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+}
 
 function isPendingSubagentThread(thread: ThreadSummary) {
   return thread.id.startsWith("claude-pending-subagent:");
@@ -134,7 +226,6 @@ const ThreadRowItem = memo(function ThreadRowItem({
   isDeleteConfirmOpen,
   isPendingSubagent,
   isPinned,
-  isProcessing,
   showProviderLabels,
   isSharedThread,
   isSubagentParent,
@@ -147,18 +238,35 @@ const ThreadRowItem = memo(function ThreadRowItem({
   onShowThreadMenu,
   onToggleThreadPin,
   relativeTime,
-  runtimeBadge,
   selectTargetThreadId,
-  showProxyBadge,
-  statusClass,
   subagentTreeToggleLabel,
+  systemProxyEnabled,
   systemProxyUrl,
   thread,
   toggleSubagentParent,
   handleSubagentParentKeyDown,
-  t,
   workspacePath,
+  onThreadRowRender,
 }: ThreadRowItemProps) {
+  const { t } = useTranslation();
+  useEffect(() => {
+    onThreadRowRender?.(thread.id);
+  });
+  const status = useThreadRowStatus(thread.id);
+  const statusClass = status?.isReviewing
+    ? "reviewing"
+    : status?.isProcessing
+      ? "processing"
+      : status?.hasUnread
+        ? "unread"
+        : "ready";
+  const runtimeBadge = status?.isReviewing
+    ? { label: t("threads.runtimeReviewing"), severity: "reviewing" as const }
+    : status?.isProcessing
+      ? { label: t("threads.runtimeProcessing"), severity: "processing" as const }
+      : null;
+  const isProcessing = Boolean(status?.isProcessing);
+  const showProxyBadge = systemProxyEnabled && isProcessing;
   const indentStyle =
     indentPx !== null
       ? ({ "--thread-indent": `${indentPx}px` } as CSSProperties)
@@ -367,6 +475,7 @@ export type ThreadListProps = {
   deleteConfirmBusy?: boolean;
   onCancelDeleteConfirm?: () => void;
   onConfirmDeleteConfirm?: () => void;
+  onThreadRowRender?: (threadId: string) => void;
 };
 
 export function ThreadList({
@@ -382,7 +491,7 @@ export function ThreadList({
   nested,
   showLoadOlder = true,
   showProviderLabels = false,
-  moveFolderTargets = [],
+  moveFolderTargets = EMPTY_MOVE_FOLDER_TARGETS,
   hideExitedSessions = false,
   activeWorkspaceId,
   activeThreadId,
@@ -402,8 +511,17 @@ export function ThreadList({
   deleteConfirmBusy = false,
   onCancelDeleteConfirm,
   onConfirmDeleteConfirm,
+  onThreadRowRender,
 }: ThreadListProps) {
   const { t } = useTranslation();
+  const threadRowStatusStoreRef = useRef<ThreadRowStatusStore | null>(null);
+  if (threadRowStatusStoreRef.current === null) {
+    threadRowStatusStoreRef.current = createThreadRowStatusStore(threadStatusById);
+  }
+  const threadRowStatusStore = threadRowStatusStoreRef.current;
+  useLayoutEffect(() => {
+    threadRowStatusStore.setStatusMap(threadStatusById);
+  }, [threadRowStatusStore, threadStatusById]);
   const indentUnit = nested ? 10 : 14;
   const [collapsedParentThreadIds, setCollapsedParentThreadIds] = useState<Set<string>>(
     () => new Set(),
@@ -496,24 +614,9 @@ export function ThreadList({
     const isActiveThread =
       workspaceId === activeWorkspaceId && thread.id === activeThreadId;
     const indentPx = depth > 0 ? depth * indentUnit : null;
-    const status = threadStatusById[thread.id];
-    const statusClass = status?.isReviewing
-      ? "reviewing"
-      : status?.isProcessing
-        ? "processing"
-        : status?.hasUnread
-          ? "unread"
-          : "ready";
-    const runtimeBadge = status?.isReviewing
-      ? { label: t("threads.runtimeReviewing"), severity: "reviewing" as const }
-      : status?.isProcessing
-        ? { label: t("threads.runtimeProcessing"), severity: "processing" as const }
-        : null;
-    const isProcessing = Boolean(status?.isProcessing);
     const canPin = depth === 0;
     const isPinned = canPin && isThreadPinned(workspaceId, thread.id);
     const isAutoNaming = isThreadAutoNaming(workspaceId, thread.id);
-    const showProxyBadge = systemProxyEnabled && isProcessing;
     const isSharedThread = thread.threadKind === "shared";
     const isSubagentThread = depth > 0;
     const isSubagentParent = depth === 0 && hasChildren;
@@ -570,7 +673,6 @@ export function ThreadList({
         isDeleteConfirmOpen={isDeleteConfirmOpen}
         isPendingSubagent={isPendingSubagent}
         isPinned={isPinned}
-        isProcessing={isProcessing}
         showProviderLabels={showProviderLabels}
         isSharedThread={isSharedThread}
         isSubagentParent={isSubagentParent}
@@ -583,62 +685,62 @@ export function ThreadList({
         onShowThreadMenu={onShowThreadMenu}
         onToggleThreadPin={onToggleThreadPin}
         relativeTime={relativeTime}
-        runtimeBadge={runtimeBadge}
         selectTargetThreadId={selectTargetThreadId}
-        showProxyBadge={showProxyBadge}
-        statusClass={statusClass}
         subagentTreeToggleLabel={subagentTreeToggleLabel}
+        systemProxyEnabled={systemProxyEnabled}
         systemProxyUrl={systemProxyUrl}
         thread={thread}
         toggleSubagentParent={toggleSubagentParent}
         handleSubagentParentKeyDown={handleSubagentParentKeyDown}
-        t={t}
         workspacePath={workspacePath}
+        onThreadRowRender={onThreadRowRender}
       />
     );
   };
 
   return (
-    <div className={`thread-list${nested ? " thread-list-nested" : ""}`}>
-      {displayedPinnedRows.map((row) => renderThreadRow(row))}
-      {displayedPinnedRows.length > 0 && displayedUnpinnedRows.length > 0 && (
-        <div className="thread-list-separator" aria-hidden="true" />
-      )}
-      {displayedUnpinnedRows.map((row) => renderThreadRow(row))}
-      {showHiddenExitedSummary && (
-        <div className="thread-list-hidden-summary">
-          {t("threads.exitedSessionsHidden", { count: hiddenExitedCount })}
-        </div>
-      )}
-      {totalThreadRoots > visibleThreadRootCount && (
-        <button
-          className="thread-more"
-          onClick={(event) => {
-            event.stopPropagation();
-            onToggleExpanded(workspaceId);
-          }}
-        >
-          {isExpanded ? t("threads.showLess") : t("threads.more")}
-        </button>
-      )}
-      {showLoadOlder &&
-        nextCursor &&
-        (isExpanded || totalThreadRoots <= visibleThreadRootCount) && (
-        <button
-          className="thread-more"
-          onClick={(event) => {
-            event.stopPropagation();
-            onLoadOlderThreads(workspaceId);
-          }}
-          disabled={isPaging}
-        >
-          {isPaging
-            ? t("threads.loading")
-            : totalThreadRoots === 0
-              ? t("threads.searchOlder")
-              : t("threads.loadOlder")}
-        </button>
-      )}
-    </div>
+    <ThreadRowStatusStoreContext.Provider value={threadRowStatusStore}>
+      <div className={`thread-list${nested ? " thread-list-nested" : ""}`}>
+        {displayedPinnedRows.map((row) => renderThreadRow(row))}
+        {displayedPinnedRows.length > 0 && displayedUnpinnedRows.length > 0 && (
+          <div className="thread-list-separator" aria-hidden="true" />
+        )}
+        {displayedUnpinnedRows.map((row) => renderThreadRow(row))}
+        {showHiddenExitedSummary && (
+          <div className="thread-list-hidden-summary">
+            {t("threads.exitedSessionsHidden", { count: hiddenExitedCount })}
+          </div>
+        )}
+        {totalThreadRoots > visibleThreadRootCount && (
+          <button
+            className="thread-more"
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggleExpanded(workspaceId);
+            }}
+          >
+            {isExpanded ? t("threads.showLess") : t("threads.more")}
+          </button>
+        )}
+        {showLoadOlder &&
+          nextCursor &&
+          (isExpanded || totalThreadRoots <= visibleThreadRootCount) && (
+          <button
+            className="thread-more"
+            onClick={(event) => {
+              event.stopPropagation();
+              onLoadOlderThreads(workspaceId);
+            }}
+            disabled={isPaging}
+          >
+            {isPaging
+              ? t("threads.loading")
+              : totalThreadRoots === 0
+                ? t("threads.searchOlder")
+                : t("threads.loadOlder")}
+          </button>
+        )}
+      </div>
+    </ThreadRowStatusStoreContext.Provider>
   );
 }
