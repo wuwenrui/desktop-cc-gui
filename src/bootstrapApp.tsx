@@ -150,6 +150,14 @@ async function bootstrap() {
   recordStartupMilestone("shell-ready");
   pushBootstrapNotice("runtimeNotice.bootstrap.ready");
   void markRendererReady();
+  // 旧 IP 端点 → 正式域名 的一次性配置迁移：异步执行，失败不影响启动。
+  void import("./features/vendors/legacyEndpointMigration")
+    .then(({ migrateLegacyEndpoints }) => migrateLegacyEndpoints())
+    .catch((error) => {
+      appendRendererDiagnostic("bootstrap/endpoint-migration-failed", {
+        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      });
+    });
 }
 
 export async function startApp() {

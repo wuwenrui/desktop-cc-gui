@@ -147,7 +147,7 @@ export function VendorSettingsPanel({
     setModelDialogAddMode(false);
   }, []);
 
-  const NEW_API_HOST = "http://47.239.143.243:3000";
+  const NEW_API_HOST = "https://model.codingrui.work";
 
   const handleSyncSiteModels = useCallback(async () => {
     const activeProvider = claude.providers.find((p) => p.isActive);
