@@ -747,6 +747,12 @@ const enPart1 = {
     browserAgentFallback: "Allow external browser-operation fallback",
     browserAgentFallbackDesc:
       "When the module is disabled, unsupported, or blocked by phase, the client may fall back to existing skill/provider browser operations.",
+    visionModelTitle: "Vision model",
+    visionModelDesc:
+      "Used for OCR, screenshot understanding, and file-to-Markdown visual parsing.",
+    visionModelLabel: "Vision model",
+    visionModelHint:
+      "Leave empty to use the built-in default. Use the model id exposed by your provider or server.",
     terminalShellPathTitle: "Terminal shell",
     terminalShellPathDesc:
       "Choose the executable used when opening the built-in terminal.",

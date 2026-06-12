@@ -804,6 +804,7 @@ export type AppSettings = {
   cycleWorkspacePrevShortcut: string | null;
   lastComposerModelId: string | null;
   lastComposerReasoningEffort: string | null;
+  visionModelId: string;
   uiScale: number;
   theme: ThemePreference;
   lightThemePresetId?: LightThemePresetId;
@@ -1999,6 +2000,14 @@ export type BrowserContextSendAttachment = {
   };
 };
 
+export type VisionPreflightMode = "file-to-markdown" | "ocr";
+
+export type VisionPreflightOptions = {
+  mode: VisionPreflightMode;
+  model: string;
+  skillName: string;
+};
+
 export type MessageSendOptions = {
   selectedMemoryIds?: string[];
   selectedMemoryInjectionMode?: MemoryContextInjectionMode;
@@ -2016,6 +2025,7 @@ export type MessageSendOptions = {
   autoSession?: AutoSessionMetadata | null;
   browserContextAttachment?: BrowserContextSendAttachment | null;
   intentCanvasContextAttachments?: IntentCanvasContextSendAttachment[];
+  visionPreflight?: VisionPreflightOptions | null;
 };
 
 export type SelectedAgentOption = {

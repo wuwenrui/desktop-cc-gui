@@ -214,6 +214,7 @@ const baseSettings: AppSettings = {
   browserAgentEnabled: true,
   browserAgentPreferBuiltIn: true,
   browserAgentAllowExternalProviderFallback: true,
+  visionModelId: "qwen3-vl-flash",
   backendMode: "local",
   remoteBackendHost: "127.0.0.1:4732",
   remoteBackendToken: null,
@@ -617,6 +618,15 @@ describe("SettingsView projects display", () => {
 });
 
 describe("SettingsView Display", () => {
+  it("keeps the internal vision model hidden from behavior settings", async () => {
+    renderDisplaySection();
+    await flushSettingsViewEffects();
+
+    fireEvent.click(screen.getByRole("button", { name: "Behavior" }));
+
+    expect(screen.queryByLabelText("Vision model")).toBeNull();
+  });
+
   it("shows consolidated settings entries and keeps removed sidebar entries hidden", async () => {
     renderDisplaySection();
     await flushSettingsViewEffects();

@@ -324,6 +324,12 @@ vi.mock("react-i18next", () => ({
         "settings.browserAgentFallback": "Allow external browser-operation fallback",
         "settings.browserAgentFallbackDesc":
           "When the module is disabled, unsupported, or blocked by phase, the client may fall back to existing skill/provider browser operations.",
+        "settings.visionModelTitle": "Vision model",
+        "settings.visionModelDesc":
+          "Used for OCR, screenshot understanding, and file-to-Markdown visual parsing.",
+        "settings.visionModelLabel": "Vision model",
+        "settings.visionModelHint":
+          "Leave empty to use the built-in default. Use the model id exposed by your provider or server.",
         "browserAgent.dock.description":
           "Read key page facts first, then progressively enable navigation and element actions.",
         "browserAgent.dock.disabled": "Disabled",

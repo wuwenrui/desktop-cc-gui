@@ -7,6 +7,7 @@ import {
   engineInterrupt,
   engineInterruptTurn,
   engineSendMessage,
+  engineSendMessageSync,
   getWorkspaceFiles,
   interruptTurn,
   listGeminiSessions,
@@ -47,6 +48,7 @@ vi.mock("../../../services/tauri", () => ({
   listGeminiSessions: vi.fn(),
   loadClaudeSession: vi.fn(),
   engineSendMessage: vi.fn(),
+  engineSendMessageSync: vi.fn(),
   engineInterruptTurn: vi.fn(),
   engineInterrupt: vi.fn(),
 }));
@@ -75,6 +77,10 @@ export function resetThreadMessagingTestMocks() {
   vi.mocked(getClientStoreSync).mockReturnValue(undefined);
   vi.mocked(engineSendMessage).mockResolvedValue({
     result: { turn: { id: "turn-1" } },
+  });
+  vi.mocked(engineSendMessageSync).mockResolvedValue({
+    engine: "claude",
+    text: "OCR markdown",
   });
   vi.mocked(sendUserMessage).mockResolvedValue({
     result: { turn: { id: "turn-2" } },

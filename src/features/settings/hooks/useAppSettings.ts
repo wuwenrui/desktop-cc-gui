@@ -35,6 +35,10 @@ import {
   sanitizeLightThemePresetId,
   sanitizeThemePresetId,
 } from "../../theme/utils/themePreset";
+import {
+  DEFAULT_VISION_MODEL_ID,
+  resolveVisionModelId,
+} from "../../vision/visionRouting";
 
 const allowedThemes = new Set(["system", "light", "dark", "dim", "custom"]);
 const allowedCanvasWidthModes = new Set(["narrow", "wide"]);
@@ -185,6 +189,7 @@ const defaultSettings: AppSettings = {
   cycleWorkspacePrevShortcut: "cmd+shift+up",
   lastComposerModelId: null,
   lastComposerReasoningEffort: null,
+  visionModelId: DEFAULT_VISION_MODEL_ID,
   uiScale: UI_SCALE_DEFAULT,
   theme: "system",
   lightThemePresetId: "vscode-light-modern",
@@ -332,6 +337,7 @@ function normalizeAppSettings(
       ? sanitizeUiScale(settings.uiScale)
       : clampUiScale(settings.uiScale),
     theme: allowedThemes.has(settings.theme) ? settings.theme : "system",
+    visionModelId: resolveVisionModelId(settings.visionModelId),
     lightThemePresetId: sanitizeLightThemePresetId(settings.lightThemePresetId),
     darkThemePresetId: sanitizeDarkThemePresetId(settings.darkThemePresetId),
     customThemePresetId: sanitizeThemePresetId(settings.customThemePresetId),

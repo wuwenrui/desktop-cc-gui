@@ -837,6 +837,11 @@ const zhPart1 = {
     browserAgentFallback: "允许回落到外部浏览器操作",
     browserAgentFallbackDesc:
       "当模块关闭、平台不支持或当前阶段阻断时，客户端可回落到现有 skill/provider 浏览器操作。",
+    visionModelTitle: "视觉模型",
+    visionModelDesc: "用于 OCR、截图理解和文件转 Markdown 的视觉解析。",
+    visionModelLabel: "视觉模型",
+    visionModelHint:
+      "留空使用内置默认模型；也可以填写你们服务器或供应商暴露的模型 ID。",
     terminalShellPathTitle: "终端 Shell",
     terminalShellPathDesc: "设置打开内置终端时使用的可执行文件。",
     terminalShellPathLabel: "终端 Shell 路径",

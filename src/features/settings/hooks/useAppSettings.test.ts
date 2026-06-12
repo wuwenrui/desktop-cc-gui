@@ -10,6 +10,7 @@ import {
   updateAppSettings,
 } from "../../../services/tauri";
 import { UI_SCALE_DEFAULT, UI_SCALE_MAX } from "../../../utils/uiScale";
+import { DEFAULT_VISION_MODEL_ID } from "../../vision/visionRouting";
 
 vi.mock("../../../services/tauri", () => ({
   getAppSettings: vi.fn(),
@@ -370,6 +371,7 @@ describe("useAppSettings", () => {
     expect(result.current.settings.backendMode).toBe("local");
     expect(result.current.settings.opencodeEnabled).toBe(false);
     expect(result.current.settings.dictationModelId).toBe("base");
+    expect(result.current.settings.visionModelId).toBe(DEFAULT_VISION_MODEL_ID);
     expect(result.current.settings.interruptShortcut).toBeTruthy();
     expect(result.current.settings.performanceCompatibilityModeEnabled).toBe(
       false,

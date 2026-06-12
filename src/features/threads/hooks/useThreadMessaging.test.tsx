@@ -11,6 +11,7 @@ import {
   engineInterruptTurn,
   engineInterrupt,
   engineSendMessage,
+  engineSendMessageSync,
   interruptTurn,
   listGeminiSessions,
   loadClaudeSession,
@@ -46,6 +47,75 @@ describe("useThreadMessaging", () => {
       expect.objectContaining({ engine: "opencode" }),
     );
     expect(sendUserMessage).not.toHaveBeenCalled();
+  });
+
+  it("runs hidden vision preflight before sending the main model turn", async () => {
+    const dispatch = vi.fn();
+    vi.mocked(engineSendMessageSync).mockResolvedValueOnce({
+      engine: "claude",
+      text: "# OCR\n合同编号：A-001",
+    });
+    const { result } = makeThreadMessagingHook("claude", {
+      activeThreadId: "claude:main-session",
+      dispatch,
+      resolveComposerSelection: () => ({
+        id: "deepseek-v4-pro",
+        model: "deepseek-v4-pro",
+        source: "managed",
+        effort: null,
+        collaborationMode: null,
+      }),
+    });
+
+    await act(async () => {
+      await result.current.sendUserMessageToThread(
+        workspace,
+        "claude:main-session",
+        "把截图转成 markdown 后审查",
+        ["/tmp/contract.png"],
+        {
+          visionPreflight: {
+            mode: "file-to-markdown",
+            model: "qwen3-vl-flash",
+            skillName: "文件转Markdown",
+          },
+        },
+      );
+    });
+
+    expect(engineSendMessageSync).toHaveBeenCalledWith(
+      "ws-1",
+      expect.objectContaining({
+        engine: "claude",
+        model: "qwen3-vl-flash",
+        images: ["/tmp/contract.png"],
+        accessMode: "read-only",
+        continueSession: false,
+        autoSession: expect.objectContaining({
+          sessionPurpose: "vision-preflight",
+          visibility: "hidden",
+          ownerFeature: "vision",
+        }),
+      }),
+    );
+    expect(engineSendMessage).toHaveBeenCalledWith(
+      "ws-1",
+      expect.objectContaining({
+        engine: "claude",
+        model: "deepseek-v4-pro",
+        images: null,
+        text: expect.stringContaining("# OCR\n合同编号：A-001"),
+      }),
+    );
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        item: expect.objectContaining({
+          kind: "message",
+          role: "user",
+          text: "把截图转成 markdown 后审查",
+        }),
+      }),
+    );
   });
 
   it("normalizes unsupported shared-session sends back to claude", async () => {
