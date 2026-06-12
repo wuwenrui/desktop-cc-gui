@@ -1454,3 +1454,36 @@ During verification, `TaskCreateModal.test.tsx` exposed an async state assertion
 ### Next Steps
 
 - None - task complete
+
+
+## Session 815: 收口实时线程状态行级订阅
+
+**Date**: 2026-06-13
+**Task**: 收口实时线程状态行级订阅
+**Branch**: `feature/v0.5.9`
+
+### Summary
+
+完成 realtime-input-and-io-isolation-2026-06 未完成任务：抽出共享 ThreadRowStatusProvider/useThreadRowStatus，PinnedThreadList 改为 row-level subscription，补充 unrelated status update 回归测试，并更新该 OpenSpec change tasks 为 68/68。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `18de443a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
