@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-21.md`
-- **Total Sessions**: 813
+- **Total Sessions**: 814
 - **Last Active**: 2026-06-13
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-21.md` | ~1417 | Active |
+| `journal-21.md` | ~1456 | Active |
 | `journal-20.md` | ~1997 | Archived |
 | `journal-19.md` | ~1989 | Archived |
 | `journal-18.md` | ~1966 | Archived |
@@ -49,6 +49,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 814 | 2026-06-13 | 补齐文件编辑卡顿收口提案 | `a0082032` | `feature/v0.5.9` |
 | 813 | 2026-06-13 | 收口文件编辑交互卡顿隔离 | `87e6e53f` | `feature/v0.5.9` |
 | 812 | 2026-06-12 | 收口实时输入与前端 prop 链稳定性阶段校准 | `46b3f61a` | `feature/v0.5.9` |
 | 811 | 2026-06-12 | 收口实时输入与前端 prop 链稳定性阶段实现 | `25d101a0` | `feature/v0.5.9` |

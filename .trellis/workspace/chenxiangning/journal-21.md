@@ -1415,3 +1415,42 @@ During verification, `TaskCreateModal.test.tsx` exposed an async state assertion
 ### Next Steps
 
 - None - task complete
+
+
+## Session 814: 补齐文件编辑卡顿收口提案
+
+**Date**: 2026-06-13
+**Task**: 补齐文件编辑卡顿收口提案
+**Branch**: `feature/v0.5.9`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| 项目 | 内容 |
+|------|------|
+| OpenSpec | `file-editor-io-render-isolation-2026-06` |
+| 目标 | 将最后一轮文件编辑交互卡顿修复回写到 proposal/design，避免提案停留在旧方案状态。 |
+| 补写内容 | `proposal.md` 增加 Implementation Closeout Notes，明确 typing / line click / active code anchor / session cache / stale side channel 的最终修复点；`design.md` 修正 Decision 2，说明 `setEditorContent` 已退出 per-keystroke input path，并补充 line range 与 active code anchor 的 deferred/epoch-guarded 实现。 |
+| 验证 | `openspec validate file-editor-io-render-isolation-2026-06 --strict --no-interactive` 通过。 |
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a0082032` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
