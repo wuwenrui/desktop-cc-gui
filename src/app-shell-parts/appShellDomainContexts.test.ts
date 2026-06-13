@@ -16,6 +16,13 @@ import {
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 
+function readSourceFile(relativePath: string): string {
+  return readFileSync(join(currentDir, relativePath), "utf8").replace(
+    /\r\n/g,
+    "\n",
+  );
+}
+
 function createDomainContexts(): AppShellDomainContexts {
   return {
     runtimeThreadContext: { activeThreadId: "thread-1" },
@@ -170,22 +177,12 @@ describe("appShellDomainContexts", () => {
   });
 
   it("wires app-shell production context through the six domain objects", () => {
-    const appShellSource = readFileSync(
-      join(currentDir, "..", "app-shell.tsx"),
-      "utf8",
+    const appShellSource = readSourceFile("../app-shell.tsx");
+    const renderAppShellSource = readSourceFile("renderAppShell.tsx");
+    const searchAndComposerSource = readSourceFile(
+      "useAppShellSearchAndComposerSection.ts",
     );
-    const renderAppShellSource = readFileSync(
-      join(currentDir, "renderAppShell.tsx"),
-      "utf8",
-    );
-    const searchAndComposerSource = readFileSync(
-      join(currentDir, "useAppShellSearchAndComposerSection.ts"),
-      "utf8",
-    );
-    const sectionsSource = readFileSync(
-      join(currentDir, "useAppShellSections.ts"),
-      "utf8",
-    );
+    const sectionsSource = readSourceFile("useAppShellSections.ts");
 
     expect(appShellSource).not.toContain("const appShellContext = {");
     expect(appShellSource).not.toContain("const appShellContext =");
