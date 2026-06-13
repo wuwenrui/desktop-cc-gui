@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-21.md`
-- **Total Sessions**: 822
+- **Total Sessions**: 823
 - **Last Active**: 2026-06-13
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-21.md` | ~1767 | Active |
+| `journal-21.md` | ~1800 | Active |
 | `journal-20.md` | ~1997 | Archived |
 | `journal-19.md` | ~1989 | Archived |
 | `journal-18.md` | ~1966 | Archived |
@@ -49,6 +49,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 823 | 2026-06-13 | 收口发布级性能证据门禁 | `9c73b752` | `feature/v0.5.9` |
 | 822 | 2026-06-13 | 加固治理门禁边界处理 | `12f8c3c3` | `feature/v0.5.9` |
 | 821 | 2026-06-13 | 收口性能归档就绪提案 | `3e5b00b2` | `feature/v0.5.9` |
 | 820 | 2026-06-13 | Fix Git diff modal preview | `7836896a` | `feature/v0.5.9` |

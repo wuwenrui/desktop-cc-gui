@@ -1765,3 +1765,36 @@ During verification, `TaskCreateModal.test.tsx` exposed an async state assertion
 ### Next Steps
 
 - None - task complete
+
+
+## Session 823: 收口发布级性能证据门禁
+
+**Date**: 2026-06-13
+**Task**: 收口发布级性能证据门禁
+**Branch**: `feature/v0.5.9`
+
+### Summary
+
+提交 release-grade performance evidence change：新增 startup marker、realtime runtime evidence 脚本、release readiness mode、OpenSpec artifacts 与 regenerated perf evidence。Release mode 当前明确失败并列出 bundle/cold-start blockers。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9c73b752` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
