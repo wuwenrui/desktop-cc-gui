@@ -1798,3 +1798,36 @@ During verification, `TaskCreateModal.test.tsx` exposed an async state assertion
 ### Next Steps
 
 - None - task complete
+
+
+## Session 824: 恢复侧栏顶栏折叠按钮
+
+**Date**: 2026-06-13
+**Task**: 恢复侧栏顶栏折叠按钮
+**Branch**: `feature/v0.5.9`
+
+### Summary
+
+修复性能 profiling wrapper 导致 sidebar topbarNode 注入到 Profiler 外壳而非 Sidebar child 的回归；保留 Profiler 记录能力，恢复左侧顶栏折叠按钮，补充回归测试，并回写 OpenSpec 提案与前端组件规范。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `38e8d90e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
