@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-21.md`
-- **Total Sessions**: 826
+- **Total Sessions**: 827
 - **Last Active**: 2026-06-13
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-21.md` | ~1930 | Active |
+| `journal-21.md` | ~1970 | Active |
 | `journal-20.md` | ~1997 | Archived |
 | `journal-19.md` | ~1989 | Archived |
 | `journal-18.md` | ~1966 | Archived |
@@ -49,6 +49,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 827 | 2026-06-13 | 收口 Windows 离线安装与文件打开缓存刷新 | `10082f60`, `f880be4d` | `feature/v0.5.9` |
 | 826 | 2026-06-13 | 收口客户端性能残余证据 | `a8bd4b24` | `feature/v0.5.9` |
 | 825 | 2026-06-13 | 收口发布级性能证据提案 | `9db56c88` | `feature/v0.5.9` |
 | 824 | 2026-06-13 | 恢复侧栏顶栏折叠按钮 | `38e8d90e` | `feature/v0.5.9` |

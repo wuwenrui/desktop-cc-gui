@@ -1928,3 +1928,43 @@ Validation:
 ### Next Steps
 
 - None - task complete
+
+
+## Session 827: 收口 Windows 离线安装与文件打开缓存刷新
+
+**Date**: 2026-06-13
+**Task**: 收口 Windows 离线安装与文件打开缓存刷新
+**Branch**: `feature/v0.5.9`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| Work | Summary |
+|------|---------|
+| Windows installer | Enabled `bundle.windows.webviewInstallMode.type = offlineInstaller` in `src-tauri/tauri.windows.conf.json` and committed the archived OpenSpec/main spec for `windows-offline-installer`. |
+| File open freshness | Fixed `useFileDocumentState` so clean cached document sessions render immediately but still refresh from disk, while dirty drafts remain protected from overwrite. |
+| Tests | Added hook regression coverage for clean cache refresh and dirty draft preservation; updated typing-latency contract to assert immediate cached render plus background freshness read. |
+| Validation | Ran `openspec validate --specs --strict --no-interactive`, JSON parse check, diff whitespace checks, targeted Vitest files, `npm run typecheck`, and `npm run lint -- --quiet`. |
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `10082f60` | (see git log) |
+| `f880be4d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
