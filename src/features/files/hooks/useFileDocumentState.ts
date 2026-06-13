@@ -219,15 +219,18 @@ export function useFileDocumentState({
 
     const cachedSession = readFileDocumentSessionCache(fileReadTargetKey);
     if (cachedSession) {
+      const cachedIsDirty =
+        cachedSession.documentSnapshot.content !== cachedSession.savedContent;
       setDocumentSnapshot(cachedSession.documentSnapshot);
       latestContentRef.current = cachedSession.documentSnapshot.content;
       savedContentRef.current = cachedSession.savedContent;
-      latestIsDirtyRef.current =
-        cachedSession.documentSnapshot.content !== cachedSession.savedContent;
+      latestIsDirtyRef.current = cachedIsDirty;
       externalDiskSnapshotRef.current = cachedSession.externalDiskSnapshot;
       setLoadedFileReadTargetKey(fileReadTargetKey);
       setIsLoading(false);
-      return;
+      if (cachedIsDirty) {
+        return;
+      }
     }
 
     const readPromise =

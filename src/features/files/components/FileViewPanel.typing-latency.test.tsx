@@ -211,7 +211,7 @@ describe("FileViewPanel typing latency contract", () => {
     });
   });
 
-  it("reuses a cached clean document snapshot when switching back to an open tab", async () => {
+  it("shows a cached clean document snapshot immediately and refreshes it from disk", async () => {
     vi.mocked(readWorkspaceFile).mockImplementation(async (_workspaceId, path) => ({
       content: path === "src/A.ts" ? "const a = 1;" : "const b = 1;",
       truncated: false,
@@ -265,12 +265,14 @@ describe("FileViewPanel typing latency contract", () => {
     editor = screen.getByTestId("mock-codemirror") as HTMLTextAreaElement;
     expect(editor.value).toBe("const a = 1;");
     expect(readWorkspaceFile).toHaveBeenCalledWith("ws-clean-tab-cache", "src/A.ts");
-    expect(
-      vi.mocked(readWorkspaceFile).mock.calls.filter(
-        ([workspaceId, path]) =>
-          workspaceId === "ws-clean-tab-cache" && path === "src/A.ts",
-      ),
-    ).toHaveLength(1);
+    await waitFor(() => {
+      expect(
+        vi.mocked(readWorkspaceFile).mock.calls.filter(
+          ([workspaceId, path]) =>
+            workspaceId === "ws-clean-tab-cache" && path === "src/A.ts",
+        ),
+      ).toHaveLength(2);
+    });
   });
 
   it("keeps a dirty draft in the file session when switching tabs", async () => {
