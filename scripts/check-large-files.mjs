@@ -246,10 +246,77 @@ export async function loadPolicyConfig(root, policyFile) {
   const policyPath = path.resolve(root, policyFile);
   const raw = await fs.readFile(policyPath, "utf8");
   const parsed = JSON.parse(raw);
-  if (!Array.isArray(parsed.policies) || !parsed.defaultPolicy) {
+  validatePolicyConfig(parsed, policyFile);
+  return parsed;
+}
+
+function validatePolicyConfig(policyConfig, policyFile) {
+  if (!policyConfig || typeof policyConfig !== "object") {
     throw new Error(`Invalid large-file policy config: ${policyFile}`);
   }
-  return parsed;
+  if (!Array.isArray(policyConfig.policies) || !policyConfig.defaultPolicy) {
+    throw new Error(`Invalid large-file policy config: ${policyFile}`);
+  }
+
+  for (const [index, policy] of policyConfig.policies.entries()) {
+    validatePolicy(policy, `${policyFile}.policies[${index}]`, { requireMatch: true });
+  }
+  validatePolicy(policyConfig.defaultPolicy, `${policyFile}.defaultPolicy`, { requireMatch: false });
+}
+
+function validatePolicy(policy, label, { requireMatch }) {
+  if (!policy || typeof policy !== "object") {
+    throw new Error(`Invalid large-file policy entry: ${label}`);
+  }
+  if (typeof policy.id !== "string" || policy.id.trim().length === 0) {
+    throw new Error(`Invalid large-file policy id: ${label}`);
+  }
+  if (typeof policy.priority !== "string" || policy.priority.trim().length === 0) {
+    throw new Error(`Invalid large-file policy priority: ${label}`);
+  }
+
+  const warnThreshold = Number(policy.warnThreshold);
+  const failThreshold = Number(policy.failThreshold);
+  if (!Number.isFinite(warnThreshold) || warnThreshold < 0) {
+    throw new Error(`Invalid warnThreshold in large-file policy: ${label}`);
+  }
+  if (!Number.isFinite(failThreshold) || failThreshold < 0) {
+    throw new Error(`Invalid failThreshold in large-file policy: ${label}`);
+  }
+  if (warnThreshold > failThreshold) {
+    throw new Error(`Invalid threshold order in large-file policy: ${label}`);
+  }
+
+  if (requireMatch) {
+    validatePolicyMatch(policy.match, label);
+  }
+}
+
+function validatePolicyMatch(match, label) {
+  if (!match || typeof match !== "object") {
+    throw new Error(`Invalid large-file policy match: ${label}`);
+  }
+
+  const matcherKeys = ["exactPaths", "prefixes", "suffixes"];
+  const hasMatcher = matcherKeys.some((key) => validateOptionalPathMatcher(match[key], `${label}.match.${key}`));
+  if (!hasMatcher) {
+    throw new Error(`Invalid large-file policy match: ${label}`);
+  }
+}
+
+function validateOptionalPathMatcher(value, label) {
+  if (value == null) {
+    return false;
+  }
+  if (!Array.isArray(value)) {
+    throw new Error(`Invalid large-file policy path matcher: ${label}`);
+  }
+  for (const item of value) {
+    if (typeof item !== "string" || toRepoPath(item).trim().length === 0) {
+      throw new Error(`Invalid large-file policy path matcher: ${label}`);
+    }
+  }
+  return value.length > 0;
 }
 
 async function loadBaseline(root, baselineFile) {
@@ -298,12 +365,18 @@ function buildBaselineMap(baseline) {
   if (!baseline) {
     return null;
   }
-  return new Map(
-    baseline.entries.map((entry) => [
-      toRepoPath(entry.path),
-      entry,
-    ]),
-  );
+  const baselineMap = new Map();
+  for (const entry of baseline.entries) {
+    const normalizedPath = toRepoPath(entry.path);
+    if (normalizedPath.length === 0) {
+      throw new Error("Invalid large-file baseline entry path after normalization");
+    }
+    if (baselineMap.has(normalizedPath)) {
+      throw new Error(`Duplicate large-file baseline entry after path normalization: ${normalizedPath}`);
+    }
+    baselineMap.set(normalizedPath, entry);
+  }
+  return baselineMap;
 }
 
 export function determineHardDebtStatus(lineCount, baselineEntry, hasBaseline) {

@@ -417,6 +417,167 @@ test("scanLargeFiles rejects malformed baseline entries instead of silently drop
   });
 });
 
+test("scanLargeFiles rejects malformed policy entries before scanning", async () => {
+  await withTempDir(async (root) => {
+    const policyPath = path.join(root, "policy.json");
+    await fs.writeFile(
+      policyPath,
+      JSON.stringify(
+        {
+          version: "test-policy",
+          policies: [
+            {
+              id: "critical",
+              priority: "P0",
+              warnThreshold: 10,
+              failThreshold: 8,
+              match: {
+                prefixes: ["src/"],
+              },
+            },
+          ],
+          defaultPolicy: {
+            id: "default-source",
+            priority: "P1",
+            warnThreshold: 10,
+            failThreshold: 12,
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    await writeLines(path.join(root, "src", "visible-large.ts"), 13);
+
+    await assert.rejects(
+      () =>
+        scanLargeFiles({
+          root,
+          policyFile: "policy.json",
+          baselineFile: null,
+          threshold: 3000,
+          mode: "report",
+          markdownOutput: null,
+          baselineOutput: null,
+          scope: "fail",
+        }),
+      /Invalid threshold order in large-file policy/,
+    );
+  });
+});
+
+test("scanLargeFiles rejects policies without usable matchers", async () => {
+  await withTempDir(async (root) => {
+    const policyPath = path.join(root, "policy.json");
+    await fs.writeFile(
+      policyPath,
+      JSON.stringify(
+        {
+          version: "test-policy",
+          policies: [
+            {
+              id: "critical",
+              priority: "P0",
+              warnThreshold: 8,
+              failThreshold: 12,
+              match: {
+                prefixes: [""],
+              },
+            },
+          ],
+          defaultPolicy: {
+            id: "default-source",
+            priority: "P1",
+            warnThreshold: 8,
+            failThreshold: 12,
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    await writeLines(path.join(root, "src", "visible-large.ts"), 13);
+
+    await assert.rejects(
+      () =>
+        scanLargeFiles({
+          root,
+          policyFile: "policy.json",
+          baselineFile: null,
+          threshold: 3000,
+          mode: "report",
+          markdownOutput: null,
+          baselineOutput: null,
+          scope: "fail",
+        }),
+      /Invalid large-file policy path matcher/,
+    );
+  });
+});
+
+test("scanLargeFiles rejects duplicate baseline paths after Windows normalization", async () => {
+  await withTempDir(async (root) => {
+    const policyPath = path.join(root, "policy.json");
+    const baselinePath = path.join(root, "baseline.json");
+    await fs.writeFile(
+      policyPath,
+      JSON.stringify(
+        {
+          version: "test-policy",
+          policies: [],
+          defaultPolicy: {
+            id: "default-source",
+            priority: "P1",
+            warnThreshold: 8,
+            failThreshold: 12,
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+    await fs.writeFile(
+      baselinePath,
+      JSON.stringify(
+        {
+          generatedAt: "2026-05-01T00:00:00.000Z",
+          scope: "fail",
+          policyVersion: "test-policy",
+          entries: [
+            { path: "src/services/tauri.ts", lines: 12 },
+            { path: "src\\services\\tauri.ts", lines: 13 },
+          ],
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    await writeLines(path.join(root, "src/services/tauri.ts"), 14);
+
+    await assert.rejects(
+      () =>
+        scanLargeFiles({
+          root,
+          policyFile: "policy.json",
+          baselineFile: "baseline.json",
+          threshold: 3000,
+          mode: "report",
+          markdownOutput: null,
+          baselineOutput: null,
+          scope: "fail",
+        }),
+      /Duplicate large-file baseline entry after path normalization/,
+    );
+  });
+});
+
 test("cli fails fast when --baseline-file is missing a path instead of consuming the next flag", () => {
   const result = spawnSync(
     process.execPath,

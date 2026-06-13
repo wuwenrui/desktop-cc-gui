@@ -164,7 +164,7 @@ export function analyzeHeavyTestNoise(logText, options = {}) {
     stderrPayloads: [],
   };
 
-  const lines = logText.split(/\r?\n/);
+  const lines = logText.split(/\r\n|\n|\r/);
   let currentContext = null;
   let currentStream = null;
 

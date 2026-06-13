@@ -119,6 +119,23 @@ test("ignores ANSI-colored runner lines and normalizes payload contexts", () => 
   );
 });
 
+test("normalizes CR-only logs from legacy runners", () => {
+  const report = analyzeHeavyTestNoise(
+    [
+      "stdout | src/features/spec/components/SpecHub.test.tsx > SpecHub > example",
+      "[model/resolve/send] {\"threadId\":\"t-1\"}",
+      " Test Files  1 passed (1)",
+    ].join("\r"),
+  );
+
+  assert.equal(report.stdoutPayloads.length, 1);
+  assert.equal(
+    report.stdoutPayloads[0]?.context,
+    "src/features/spec/components/SpecHub.test.tsx > SpecHub > example",
+  );
+  assert.equal(report.stdoutPayloads[0]?.line, "[model/resolve/send] {\"threadId\":\"t-1\"}");
+});
+
 test("cli fails fast when --input is missing a path instead of misreading the next flag", () => {
   const result = spawnSync(process.execPath, ["scripts/check-heavy-test-noise.mjs", "--input", "--mode", "report"], {
     cwd: process.cwd(),
