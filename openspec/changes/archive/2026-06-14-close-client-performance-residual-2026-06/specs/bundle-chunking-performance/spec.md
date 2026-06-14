@@ -1,6 +1,6 @@
 # bundle-chunking-performance delta
 
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: Project Map And Intent Canvas MUST Live Behind A Startup Lazy Boundary
 

@@ -1,6 +1,6 @@
 # realtime-input-render-budget delta
 
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: Realtime Runtime Evidence MUST Prefer Measured Runtime Over Replay Proxy
 
