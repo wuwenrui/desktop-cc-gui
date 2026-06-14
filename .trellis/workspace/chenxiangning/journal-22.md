@@ -497,3 +497,60 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 840: 稳定 heavy-test-noise Suspense teardown
+
+**Date**: 2026-06-14
+**Task**: 稳定 heavy-test-noise Suspense teardown
+**Branch**: `feature/v0.5.9`
+
+### Summary
+
+修复 CI heavy-test-noise 中 React Suspense teardown 偶发 act warning。
+
+### Main Changes
+
+### Goal
+
+修复 GitHub CI 中 `npm run check:heavy-test-noise` 在全部 670 个 Vitest 文件完成后，因 React 19 Suspense resource 在测试外完成加载而触发的 `act(...)` warning violation。
+
+### Changes
+
+- 调整 `src/test/vitest.setup.ts` 的 `flushReactSuspenseMicrotasks()`。
+- 保持单个 `act(async () => ...)` 边界不变，只把内部 microtask drain 从 3 次 `Promise.resolve()` 扩展为 8 轮循环。
+- 避免引入 timer flush 或多段 `act`，降低对 fake timers 和测试 teardown 顺序的副作用。
+
+### Files
+
+- `src/test/vitest.setup.ts`
+
+### Validation
+
+- `node node_modules/vitest/vitest.mjs run --maxWorkers 1 --minWorkers 1 src/features/layout/hooks/useLayoutNodes.client-ui-visibility.test.tsx`
+- `node node_modules/vitest/vitest.mjs run --maxWorkers 1 --minWorkers 1 src/features/composer/components/ChatInputBox/ChatInputBoxAdapter.test.tsx src/features/composer/components/ChatInputBox/ChatInputBoxFooter.manual-memory.test.tsx src/features/composer/components/ChatInputBox/ComposerReadinessBar.test.tsx src/features/composer/components/ChatInputBox/ChatInputBox.submit-button.test.tsx`
+- `npm run check:heavy-test-noise`：completed 670 test files；act warnings 0；stdout/stderr payload lines 0。
+- `npm run typecheck`
+
+### Notes
+
+本次是测试基础设施稳定性修复，不改变业务运行时代码。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ce59b8118fe1a09adc22289298c9b98c6cec8de7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
