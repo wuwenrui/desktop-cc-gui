@@ -222,7 +222,7 @@ type ComposerProps = {
   onSelectAccessMode: (
     mode: "default" | "read-only" | "current" | "full-access",
   ) => void;
-  skills: { name: string; path: string; description?: string; source?: string }[];
+  skills: { name: string; displayName?: string; path: string; description?: string; source?: string }[];
   customSkillDirectories?: string[];
   prompts: CustomPromptOption[];
   commands?: CustomCommandOption[];
@@ -393,40 +393,50 @@ const BROWSER_OPEN_DOCK_EVENT = "browser-agent:open-dock";
 const BROWSER_OPEN_URL_EVENT = "browser-agent:open-url";
 const PENDING_BROWSER_URL_KEY = "ccgui.browserAgent.pendingUrl";
 
-function resolveSelectedNamedItems<T extends { name: string }>(
+function resolveSelectedNamedItems<T extends { name: string; displayName?: string }>(
   selectedNames: string[],
   items: T[],
 ): T[] {
   if (selectedNames.length === 0 || items.length === 0) {
     return [];
   }
-  const firstByName = new Map<string, T>();
+  const firstByAlias = new Map<string, T>();
   for (const item of items) {
     const normalizedName = item.name.trim();
-    if (!normalizedName || firstByName.has(normalizedName)) {
+    if (!normalizedName) {
       continue;
     }
-    firstByName.set(normalizedName, item);
+    for (const alias of [normalizedName, item.displayName?.trim()].filter(
+      (entry): entry is string => Boolean(entry),
+    )) {
+      if (!firstByAlias.has(alias)) {
+        firstByAlias.set(alias, item);
+      }
+    }
   }
   const resolved: T[] = [];
   const seen = new Set<string>();
   for (const selectedName of selectedNames) {
     const normalizedName = selectedName.trim();
-    if (!normalizedName || seen.has(normalizedName)) {
+    if (!normalizedName) {
       continue;
     }
-    const resolvedItem = firstByName.get(normalizedName);
+    const resolvedItem = firstByAlias.get(normalizedName);
     if (!resolvedItem) {
       continue;
     }
-    seen.add(normalizedName);
+    const resolvedKey = resolvedItem.name.trim();
+    if (!resolvedKey || seen.has(resolvedKey)) {
+      continue;
+    }
+    seen.add(resolvedKey);
     resolved.push(resolvedItem);
   }
   return resolved;
 }
 
 function toContextChipCarryOverKey(chip: ContextSelectionChip) {
-  return `${chip.type}:${chip.name}`;
+  return `${chip.type}:${chip.selectionName ?? chip.name}`;
 }
 
 const OPENCODE_DIRECT_COMMANDS = new Set(["status", "mcp", "export", "share"]);
@@ -784,7 +794,8 @@ export const Composer = memo(function Composer({
     () => [
       ...selectedSkills.map((skill) => ({
         type: "skill" as const,
-        name: skill.name,
+        name: skill.displayName?.trim() || skill.name,
+        selectionName: skill.name,
         description: skill.description,
         path: skill.path,
         source: skill.source,
@@ -973,16 +984,18 @@ export const Composer = memo(function Composer({
     if (!normalized) {
       return;
     }
+    const matchedSkill = resolveSelectedNamedItems([normalized], skills)[0];
+    const selectionName = matchedSkill?.name.trim() || normalized;
     setSelectedSkillNames((prev) => {
-      if (prev.includes(normalized)) {
+      if (prev.includes(selectionName)) {
         setCarryOverContextChipKeys((keys) =>
-          keys.filter((entry) => entry !== `skill:${normalized}`),
+          keys.filter((entry) => entry !== `skill:${selectionName}`),
         );
-        return prev.filter((entry) => entry !== normalized);
+        return prev.filter((entry) => entry !== selectionName);
       }
-      return mergeUniqueNames(prev, [normalized]);
+      return mergeUniqueNames(prev, [selectionName]);
     });
-  }, []);
+  }, [skills]);
 
   // 外部入口（如侧栏 lawhub「制作 PPT」）通过 window 事件触发 skill 选择，
   // 走与 $ 选择相同的路径附加 chip，不暴露 skill 提示词正文。
@@ -1646,8 +1659,9 @@ export const Composer = memo(function Composer({
       prev.filter((entry) => entry !== carryOverKey),
     );
     if (chip.type === "skill") {
+      const selectionName = chip.selectionName ?? chip.name;
       setSelectedSkillNames((prev) =>
-        prev.filter((name) => name !== chip.name),
+        prev.filter((name) => name !== selectionName),
       );
       return;
     }

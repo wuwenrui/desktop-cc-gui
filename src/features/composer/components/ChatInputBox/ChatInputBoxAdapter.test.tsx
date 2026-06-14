@@ -19,6 +19,7 @@ const mockState = vi.hoisted(() => ({
   switchClaudeProvider: vi.fn(),
   getWorkspaceDirectoryChildren: vi.fn(),
   getSkillsList: vi.fn(),
+  getInstalledSkillIndex: vi.fn(),
   projectMemoryList: vi.fn(),
   noteCardList: vi.fn(),
 }));
@@ -50,6 +51,7 @@ vi.mock('../../../../services/tauri', () => ({
   switchClaudeProvider: mockState.switchClaudeProvider,
   getWorkspaceDirectoryChildren: mockState.getWorkspaceDirectoryChildren,
   getSkillsList: mockState.getSkillsList,
+  getInstalledSkillIndex: mockState.getInstalledSkillIndex,
 }));
 
 vi.mock('../../../project-memory/services/projectMemoryFacade', () => ({
@@ -109,6 +111,7 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
       directories: [],
     });
     mockState.getSkillsList.mockReset().mockResolvedValue([]);
+    mockState.getInstalledSkillIndex.mockReset().mockResolvedValue({});
     mockState.projectMemoryList.mockReset().mockResolvedValue({ items: [], total: 0 });
     mockState.noteCardList.mockReset().mockResolvedValue({ items: [], total: 0 });
     window.localStorage.clear();
@@ -587,6 +590,43 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
     );
 
     expect(mockState.renderCount).toBe(1);
+  });
+
+  it('exposes lawhub installed display names in the skill completion provider', async () => {
+    mockState.getSkillsList.mockResolvedValueOnce([
+      {
+        name: 'criminal-defense-workflow',
+        path: '/Users/me/.claude/skills/criminal-defense-workflow/SKILL.md',
+        source: 'global_claude',
+        description: '刑事案件流程',
+      },
+    ]);
+    mockState.getInstalledSkillIndex.mockResolvedValueOnce({
+      'criminal-defense-workflow': {
+        skill_id: 2,
+        version: 1,
+        display_name: '刑事辩护全流程',
+      },
+    });
+
+    renderAdapter({ workspaceId: 'workspace-1' });
+    await waitFor(() => expect(mockState.latestProps).toBeTruthy());
+
+    const latest = mockState.latestProps as {
+      skillCompletionProvider?: (
+        query: string,
+        signal: AbortSignal,
+      ) => Promise<Array<{ name: string; displayName?: string }>>;
+    };
+    const skills = await latest.skillCompletionProvider?.(
+      '',
+      new AbortController().signal,
+    );
+
+    expect(skills?.[0]).toMatchObject({
+      name: 'criminal-defense-workflow',
+      displayName: '刑事辩护全流程',
+    });
   });
 
   it('rerenders ChatInputBox when advisory list content changes', async () => {

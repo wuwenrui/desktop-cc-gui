@@ -309,16 +309,60 @@ fn collect_tree(root: &Path, dir: &Path, out: &mut Vec<SkillTreeEntry>) -> Resul
 fn skill_tree_core(skills_dir: &Path, name: &str) -> Result<Vec<SkillTreeEntry>, String> {
     validate_skill_name(name)?;
     let root = skills_dir.join(name);
-    let meta = std::fs::symlink_metadata(&root)
-        .map_err(|_| format!("skill 目录不存在: {name}"))?;
-    if meta.file_type().is_symlink() || !meta.is_dir() {
-        return Err(format!("skill 目录不存在: {name}"));
+    if let Ok(meta) = std::fs::symlink_metadata(&root) {
+        if meta.file_type().is_symlink() || !meta.is_dir() {
+            return Err(format!("skill 目录不存在: {name}"));
+        }
+
+        let mut entries = Vec::new();
+        collect_tree(&root, &root, &mut entries)?;
+        entries.sort_by(|a, b| a.path.cmp(&b.path));
+        return Ok(entries);
     }
 
-    let mut entries = Vec::new();
-    collect_tree(&root, &root, &mut entries)?;
-    entries.sort_by(|a, b| a.path.cmp(&b.path));
-    Ok(entries)
+    let single_file = skills_dir.join(format!("{name}.md"));
+    let meta = std::fs::symlink_metadata(&single_file)
+        .map_err(|_| format!("skill 目录不存在: {name}"))?;
+    if meta.file_type().is_symlink() || !meta.is_file() {
+        return Err(format!("skill 目录不存在: {name}"));
+    }
+    Ok(vec![SkillTreeEntry {
+        path: "SKILL.md".to_string(),
+        size: meta.len(),
+        is_dir: false,
+    }])
+}
+
+fn read_skill_text_file(path: &Path, display_path: String) -> Result<SkillFileContent, String> {
+    let meta = std::fs::metadata(path).map_err(|e| format!("读取文件信息失败: {e}"))?;
+    if !meta.is_file() {
+        return Err(format!("不是文件: {display_path}"));
+    }
+
+    let bytes = std::fs::read(path).map_err(|e| format!("读取文件失败: {e}"))?;
+    let text = std::str::from_utf8(&bytes)
+        .map_err(|_| "二进制文件不支持预览 (binary file not previewable)".to_string())?;
+
+    if bytes.len() <= MAX_PREVIEW_BYTES {
+        return Ok(SkillFileContent {
+            path: display_path,
+            content: text.to_string(),
+            size: meta.len(),
+            truncated: false,
+        });
+    }
+
+    // 在 UTF-8 字符边界截断，保证 content 始终是合法 UTF-8。
+    let mut cut = MAX_PREVIEW_BYTES;
+    while cut > 0 && !text.is_char_boundary(cut) {
+        cut -= 1;
+    }
+    Ok(SkillFileContent {
+        path: display_path,
+        content: text[..cut].to_string(),
+        size: meta.len(),
+        truncated: true,
+    })
 }
 
 /// 读取 `skills_dir/<name>/<rel_path>` 文本内容。接 base_dir 便于测试。
@@ -335,47 +379,43 @@ fn skill_file_core(
     let rel = safe_relative_path(rel_path).map_err(|e| e.to_string())?;
     let root = skills_dir.join(name);
 
-    let canon_root = root
+    if let Ok(root_meta) = std::fs::symlink_metadata(&root) {
+        if root_meta.file_type().is_symlink() || !root_meta.is_dir() {
+            return Err(format!("skill 目录不存在: {name}"));
+        }
+        let canon_root = root
+            .canonicalize()
+            .map_err(|_| format!("skill 目录不存在: {name}"))?;
+        let canon_file = root
+            .join(&rel)
+            .canonicalize()
+            .map_err(|_| format!("文件不存在: {rel_path}"))?;
+        if !canon_file.starts_with(&canon_root) {
+            return Err(format!("路径越出 skill 目录: {rel_path}"));
+        }
+        return read_skill_text_file(&canon_file, rel_path_to_slash(&rel));
+    }
+
+    if rel_path_to_slash(&rel) != "SKILL.md" {
+        return Err(format!("文件不存在: {rel_path}"));
+    }
+
+    let single_file = skills_dir.join(format!("{name}.md"));
+    let meta = std::fs::symlink_metadata(&single_file)
+        .map_err(|_| format!("skill 目录不存在: {name}"))?;
+    if meta.file_type().is_symlink() || !meta.is_file() {
+        return Err(format!("skill 目录不存在: {name}"));
+    }
+    let canon_skills_dir = skills_dir
         .canonicalize()
         .map_err(|_| format!("skill 目录不存在: {name}"))?;
-    let canon_file = root
-        .join(&rel)
+    let canon_file = single_file
         .canonicalize()
         .map_err(|_| format!("文件不存在: {rel_path}"))?;
-    if !canon_file.starts_with(&canon_root) {
+    if !canon_file.starts_with(&canon_skills_dir) {
         return Err(format!("路径越出 skill 目录: {rel_path}"));
     }
-
-    let meta = std::fs::metadata(&canon_file).map_err(|e| format!("读取文件信息失败: {e}"))?;
-    if !meta.is_file() {
-        return Err(format!("不是文件: {rel_path}"));
-    }
-
-    let bytes = std::fs::read(&canon_file).map_err(|e| format!("读取文件失败: {e}"))?;
-    let text = std::str::from_utf8(&bytes)
-        .map_err(|_| "二进制文件不支持预览 (binary file not previewable)".to_string())?;
-
-    let path = rel_path_to_slash(&rel);
-    if bytes.len() <= MAX_PREVIEW_BYTES {
-        return Ok(SkillFileContent {
-            path,
-            content: text.to_string(),
-            size: meta.len(),
-            truncated: false,
-        });
-    }
-
-    // 在 UTF-8 字符边界截断，保证 content 始终是合法 UTF-8。
-    let mut cut = MAX_PREVIEW_BYTES;
-    while cut > 0 && !text.is_char_boundary(cut) {
-        cut -= 1;
-    }
-    Ok(SkillFileContent {
-        path,
-        content: text[..cut].to_string(),
-        size: meta.len(),
-        truncated: true,
-    })
+    read_skill_text_file(&canon_file, "SKILL.md".to_string())
 }
 
 fn http_client() -> Result<reqwest::Client, String> {
@@ -755,6 +795,14 @@ mod tests {
         (base, skills)
     }
 
+    fn make_single_file_skill(tag: &str) -> (PathBuf, PathBuf) {
+        let base = temp_dir(tag);
+        let skills = base.join("skills");
+        std::fs::create_dir_all(&skills).unwrap();
+        std::fs::write(skills.join("制作PPT.md"), "# ppt body").unwrap();
+        (base, skills)
+    }
+
     #[test]
     fn skill_tree_lists_nested_entries_sorted() {
         let (base, skills) = make_skill_dir("tree");
@@ -802,6 +850,19 @@ mod tests {
         std::fs::remove_dir_all(&base).ok();
     }
 
+    #[test]
+    fn skill_tree_supports_top_level_md_skill() {
+        let (base, skills) = make_single_file_skill("treesingle");
+
+        let entries = skill_tree_core(&skills, "制作PPT").unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].path, "SKILL.md");
+        assert_eq!(entries[0].size, "# ppt body".len() as u64);
+        assert!(!entries[0].is_dir);
+
+        std::fs::remove_dir_all(&base).ok();
+    }
+
     #[cfg(unix)]
     #[test]
     fn skill_tree_skips_symlinks() {
@@ -827,6 +888,28 @@ mod tests {
         assert_eq!(got.content, "ref a");
         assert_eq!(got.size, "ref a".len() as u64);
         assert!(!got.truncated);
+
+        std::fs::remove_dir_all(&base).ok();
+    }
+
+    #[test]
+    fn skill_file_reads_top_level_md_skill_as_skill_md() {
+        let (base, skills) = make_single_file_skill("filesingle");
+
+        let got = skill_file_core(&skills, "制作PPT", "SKILL.md").unwrap();
+        assert_eq!(got.path, "SKILL.md");
+        assert_eq!(got.content, "# ppt body");
+        assert_eq!(got.size, "# ppt body".len() as u64);
+        assert!(!got.truncated);
+
+        std::fs::remove_dir_all(&base).ok();
+    }
+
+    #[test]
+    fn skill_file_rejects_non_skill_md_path_for_top_level_skill() {
+        let (base, skills) = make_single_file_skill("filesinglebad");
+
+        assert!(skill_file_core(&skills, "制作PPT", "refs/a.md").is_err());
 
         std::fs::remove_dir_all(&base).ok();
     }

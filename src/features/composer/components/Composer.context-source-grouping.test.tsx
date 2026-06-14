@@ -269,6 +269,37 @@ describe("Composer context source grouping", () => {
     expect(onSend.mock.calls[0]?.[0]).toBe("帮我看一下");
   });
 
+  it("resolves a lawhub display name event to the real skill token", async () => {
+    const onSend = vi.fn();
+    const skill = {
+      name: "civil-litigation-master",
+      displayName: "民商事诉讼大师",
+      path: "/repo/.claude/skills/civil-litigation-master/SKILL.md",
+      source: "global_claude",
+      description: "民商事案件诉讼流程",
+    } as SkillOption;
+    const view = render(<ComposerHarness onSend={onSend} skills={[skill]} />);
+
+    await act(async () => {
+      dispatchSelectSkill("民商事诉讼大师");
+    });
+
+    const textarea = getTextarea(view.container);
+    await act(async () => {
+      fireEvent.change(textarea, {
+        target: {
+          value: "起草起诉状",
+          selectionStart: "起草起诉状".length,
+        },
+      });
+      fireEvent.keyDown(textarea, { key: "Enter", bubbles: true });
+    });
+
+    expect(onSend.mock.calls[0]?.[0]).toBe(
+      "/civil-litigation-master 起草起诉状",
+    );
+  });
+
   it("requests hidden vision preflight without overriding the main model", async () => {
     const onSend = vi.fn();
     const view = render(

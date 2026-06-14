@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DebugEntry, SkillOption, WorkspaceInfo } from "../../../types";
-import { getSkillsList } from "../../../services/tauri";
+import { getInstalledSkillIndex, getSkillsList } from "../../../services/tauri";
+import { getInstalledSkillDisplayName } from "../../skill-market/installedSkills";
 import { startupOrchestrator } from "../../startup-orchestration/utils/startupOrchestrator";
 
 type UseSkillsOptions = {
@@ -130,6 +131,7 @@ export function useSkills({
           ),
         fallback: () => [],
       });
+      const installedIndex = await getInstalledSkillIndex().catch(() => ({}));
       onDebug?.({
         id: `${Date.now()}-server-skills-list`,
         timestamp: Date.now(),
@@ -151,8 +153,10 @@ export function useSkills({
             return null;
           }
           const source = item.source ? String(item.source) : undefined;
+          const displayName = getInstalledSkillDisplayName(installedIndex, name);
           return {
             name,
+            ...(displayName ? { displayName } : {}),
             path: String(item.path ?? ""),
             description:
               item.description ?? item.shortDescription ?? item.interface?.shortDescription,

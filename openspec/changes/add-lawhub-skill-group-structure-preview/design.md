@@ -31,10 +31,10 @@ struct InstalledEntry {
 
 ### Decision 2: 结构查看分两路——已装走本地，未装走服务端
 
-- 已装（侧栏「查看」）：Rust 命令直读本地目录，离线可用、无网络依赖。
+- 已装/内置（侧栏「查看」）：Rust 命令直读本地目录或内置单文件 skill，离线可用、无网络依赖。
   - `market_skill_tree(name) -> Vec<SkillTreeEntry { path, size, is_dir }>`（相对路径，递归，按路径排序）
   - `market_skill_file(name, rel_path) -> SkillFileContent { path, content, size, truncated }`
-  - 安全：`name` 与 `rel_path` 拒绝绝对路径 / `..` / 盘符（复用 `safe_relative_path` 同级校验）；最终路径必须落在 `~/.claude/skills/<name>/` 之下；文本上限 512KB，非 UTF-8 报错。
+  - 安全：`name` 与 `rel_path` 拒绝绝对路径 / `..` / 盘符（复用 `safe_relative_path` 同级校验）；目录 skill 最终路径必须落在 `~/.claude/skills/<name>/` 之下，单文件 skill 只允许读取映射后的 `SKILL.md`；文本上限 512KB，非 UTF-8 报错。
 - 未装（市场装前预览）：前端直接 fetch lawhub 预览 API（与 `fetchPublicSkills` 同源 baseUrl），不经 Rust，不落盘。
 
 两路返回结构对齐（path/size/is_dir 与 path/content/size/truncated），结构面板组件一份渲染两处复用。
@@ -50,7 +50,7 @@ struct InstalledEntry {
 
 ### Decision 5: UI 组织
 
-- 组标签为非交互行（`PPT` / `技能`），样式随 `sidebar.css` 既有 token；技能组顺序：文件转 Markdown、视觉 OCR（bundled，无查看）→ 已装 skill（installed_at 序，名称 + 眼睛「查看」）→ 「+ 添加技能」。
+- 组标签为非交互行（`PPT` / `技能`），样式随 `sidebar.css` 既有 token；技能组顺序：文件转 Markdown、视觉 OCR、制作技能（bundled，也有眼睛「查看」）→ 已装 skill（installed_at 序，中文名称 + 眼睛「查看」）→ 「+ 添加技能」。
 - 结构面板用主区右侧抽屉（遮罩 + 滑入动画），树位于左、内容居右；树中 `sub-skills/*_SKILL.md` 悬停出「用」。
 - 装前预览嵌入市场弹窗右侧（左列表 372px / 右预览），空态提示「点击左侧技能查看装前预览」。
 

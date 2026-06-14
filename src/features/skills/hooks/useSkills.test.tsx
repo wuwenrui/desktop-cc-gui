@@ -2,10 +2,11 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkspaceInfo } from "../../../types";
-import { getSkillsList } from "../../../services/tauri";
+import { getInstalledSkillIndex, getSkillsList } from "../../../services/tauri";
 import { useSkills } from "./useSkills";
 
 vi.mock("../../../services/tauri", () => ({
+  getInstalledSkillIndex: vi.fn(),
   getSkillsList: vi.fn(),
 }));
 
@@ -22,6 +23,7 @@ const workspace: WorkspaceInfo = {
 describe("useSkills", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.mocked(getInstalledSkillIndex).mockResolvedValue({});
   });
 
   it("normalizes skill names and reads nested skills/list response", async () => {
@@ -113,6 +115,37 @@ describe("useSkills", () => {
     await waitFor(() => {
       expect(getSkillsList).toHaveBeenLastCalledWith("workspace-1", [
         "/new/skills",
+      ]);
+    });
+  });
+
+  it("adds installed lawhub display names to matching skills", async () => {
+    vi.mocked(getSkillsList).mockResolvedValue([
+      {
+        name: "criminal-defense-workflow",
+        path: "/Users/test/.claude/skills/criminal-defense-workflow/SKILL.md",
+        enabled: true,
+        source: "global_claude",
+      },
+    ]);
+    vi.mocked(getInstalledSkillIndex).mockResolvedValue({
+      "criminal-defense-workflow": {
+        display_name: "刑事辩护全流程",
+      },
+    });
+
+    const { result } = renderHook(() =>
+      useSkills({
+        activeWorkspace: workspace,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.skills).toEqual([
+        expect.objectContaining({
+          name: "criminal-defense-workflow",
+          displayName: "刑事辩护全流程",
+        }),
       ]);
     });
   });

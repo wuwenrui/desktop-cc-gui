@@ -272,7 +272,7 @@ describe("LawhubNavSection", () => {
     ).toBeTruthy();
   });
 
-  it("clicking an installed skill name dispatches select-skill with the dir name", async () => {
+  it("clicking an installed skill name dispatches select-skill with the display name", async () => {
     vi.mocked(invoke).mockImplementation(async (cmd: string) => {
       if (cmd === "market_list_installed") {
         return {
@@ -294,11 +294,29 @@ describe("LawhubNavSection", () => {
       fireEvent.click(await screen.findByText("民商事诉讼大师"));
       expect(onEvent).toHaveBeenCalledTimes(1);
       expect((onEvent.mock.calls[0][0] as CustomEvent).detail).toEqual({
-        name: "civil-litigation-master",
+        name: "民商事诉讼大师",
       });
     } finally {
       window.removeEventListener(SELECT_SKILL_EVENT, onEvent as EventListener);
     }
+  });
+
+  it("renders structure preview buttons for bundled lawhub skills", async () => {
+    render(<LawhubNavSection {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "lawhub" }));
+
+    expect(
+      await screen.findByRole("button", { name: "查看 制作 PPT 的结构" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "查看 文件转 Markdown 的结构" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "查看 视觉 OCR 的结构" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "查看 制作技能 的结构" }),
+    ).toBeTruthy();
   });
 
   it("查看 opens the local structure drawer for the skill", async () => {

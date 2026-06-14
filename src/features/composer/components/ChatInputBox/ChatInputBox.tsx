@@ -147,10 +147,11 @@ function noteCardToDropdownItem(noteCard: NoteCardItem) {
 }
 
 function skillToDropdownItem(skill: SkillItem) {
-  const label = (skill.name || '').trim();
+  const label = (skill.displayName || skill.name || '').trim();
+  const skillName = (skill.name || '').trim();
   const source = (skill.source || '').trim();
   return {
-    id: `skill:${source || 'project'}:${label}`,
+    id: `skill:${source || 'project'}:${skillName || label}`,
     label,
     description: undefined,
     icon: 'codicon-tools',

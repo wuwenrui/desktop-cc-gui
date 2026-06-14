@@ -53,7 +53,9 @@ import {
   updateClaudeProvider,
   getWorkspaceDirectoryChildren,
   getSkillsList,
+  getInstalledSkillIndex,
 } from '../../../../services/tauri';
+import { getInstalledSkillDisplayName } from '../../../skill-market/installedSkills';
 import {
   CREATE_NEW_PROMPT_ID,
   EMPTY_STATE_ID,
@@ -172,6 +174,7 @@ function areContextSelectionChipsEqual(
     if (
       leftChip?.type !== rightChip?.type ||
       leftChip?.name !== rightChip?.name ||
+      leftChip?.selectionName !== rightChip?.selectionName ||
       leftChip?.description !== rightChip?.description ||
       leftChip?.path !== rightChip?.path ||
       leftChip?.source !== rightChip?.source
@@ -850,6 +853,8 @@ type RawSkillEntry = SkillPayloadRecord & {
   source?: unknown;
   description?: unknown;
   shortDescription?: unknown;
+  displayName?: unknown;
+  display_name?: unknown;
   interface?: unknown;
   path?: unknown;
 };
@@ -1780,7 +1785,10 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
           return [];
         }
 
-        const response = await getSkillsList(workspaceId, customSkillDirectories ?? []);
+        const [response, installedIndex] = await Promise.all([
+          getSkillsList(workspaceId, customSkillDirectories ?? []),
+          getInstalledSkillIndex().catch(() => ({})),
+        ]);
         if (signal.aborted) {
           throw new DOMException('Aborted', 'AbortError');
         }
@@ -1803,6 +1811,14 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
           if (!name) {
             continue;
           }
+          const rawDisplayName =
+            typeof item.displayName === 'string'
+              ? item.displayName
+              : typeof item.display_name === 'string'
+                ? item.display_name
+                : undefined;
+          const displayName =
+            rawDisplayName?.trim() || getInstalledSkillDisplayName(installedIndex, name);
           const source =
             typeof item.source === 'string' && item.source.trim()
               ? item.source.trim()
@@ -1819,6 +1835,7 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
           const scope = resolveSkillScope(source);
           const skill: SkillItem = {
             name,
+            ...(displayName ? { displayName } : {}),
             path: typeof item.path === 'string' ? item.path : '',
             description: description || undefined,
             source,
@@ -1843,7 +1860,8 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
             if (!normalizedQuery) {
               return true;
             }
-            const text = `${skill.name} ${skill.description ?? ''}`.toLowerCase();
+            const text =
+              `${skill.name} ${skill.displayName ?? ''} ${skill.description ?? ''}`.toLowerCase();
             return text.includes(normalizedQuery);
           })
           .sort((a, b) => {
@@ -1852,7 +1870,9 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
             if (ap !== bp) {
               return ap - bp;
             }
-            return a.name.localeCompare(b.name);
+            const aLabel = a.displayName?.trim() || a.name;
+            const bLabel = b.displayName?.trim() || b.name;
+            return aLabel.localeCompare(bLabel);
           });
       },
       [customSkillDirectories, t, workspaceId],

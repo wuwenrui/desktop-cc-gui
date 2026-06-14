@@ -968,6 +968,12 @@ export async function getSkillsList(
   );
 }
 
+export async function getInstalledSkillIndex() {
+  return invoke<Record<string, { display_name?: string | null }>>(
+    "market_list_installed",
+  );
+}
+
 export async function getClaudeCommandsList(workspaceId?: string | null) {
   return traceStartupInvoke(
     "claude_commands_list",

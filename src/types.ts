@@ -2092,6 +2092,7 @@ export type CollaborationModeOption = {
 
 export type SkillOption = {
   name: string;
+  displayName?: string;
   path: string;
   description?: string;
   source?: string;

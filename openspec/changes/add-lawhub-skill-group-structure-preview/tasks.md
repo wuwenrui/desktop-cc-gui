@@ -40,3 +40,5 @@
 - [x] 7.5 [P1][Dep:none][I: macOS 预定义菜单项默认用包名 cc-gui][O: hide/quit 显式传「隐藏/退出 LawyerCopilot」、services/hide_others 中文化][V: cargo test menu 4/4] 菜单品牌名。
 - [x] 7.3 [P1][Dep:7.2][I: 已装技能行 title 无简介][O: 懒取 SKILL.md description 做悬浮提示][V: 真机 title 含简介] 悬浮简介。
 - [x] 7.4 [P0][Dep:7.1][I: superpowers:writing-skills 精髓][O: bundled skill skills/制作技能.md + 侧栏「制作技能」入口][V: vitest 事件用例 + 真机 chip 注入] 制作技能。
+- [x] 7.6 [P0][Dep:7.2][I: 已装索引 display_name + `$` completion + lawhub 点击事件][O: 侧栏、chip、`$` 下拉统一显示中文名；点击中文名仍解析为真实 skill token][V: vitest 覆盖 displayName 映射、事件解析、下拉展示] 中文名统一。
+- [x] 7.7 [P0][Dep:7.6][I: bundled top-level `~/.claude/skills/<name>.md`][O: `market_skill_tree/file` 支持单文件 skill，PPT/文件转 Markdown/视觉 OCR/制作技能均有眼睛查看入口][V: cargo test 单文件 skill + vitest 内置眼睛入口] 内置技能查看。

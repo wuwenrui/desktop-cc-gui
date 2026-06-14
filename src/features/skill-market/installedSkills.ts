@@ -44,6 +44,18 @@ export function sortInstalledSkills(index: InstalledIndex): InstalledSkillItem[]
     });
 }
 
+export function getInstalledSkillDisplayName(
+  index: InstalledIndex | Record<string, { display_name?: string | null }> | null | undefined,
+  name: string,
+): string | undefined {
+  const key = name.trim();
+  if (!key) {
+    return undefined;
+  }
+  const displayName = index?.[key]?.display_name?.trim();
+  return displayName || undefined;
+}
+
 /** 市场安装成功后的广播事件：侧栏技能组监听并刷新。 */
 export const SKILL_INSTALLED_EVENT = "ccgui:skill-market-installed";
 

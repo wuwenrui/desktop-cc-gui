@@ -1,5 +1,6 @@
 type NamedOption = {
   name: string;
+  displayName?: string;
 };
 
 type InlineSelections = {
@@ -33,8 +34,12 @@ function toAliasCandidates(name: string) {
 function buildAliasMap(options: NamedOption[]) {
   const aliasMap = new Map<string, string>();
   for (const option of options) {
-    for (const alias of toAliasCandidates(option.name)) {
-      aliasMap.set(normalizeToken(alias), option.name);
+    for (const name of [option.name, option.displayName].filter(
+      (entry): entry is string => Boolean(entry),
+    )) {
+      for (const alias of toAliasCandidates(name)) {
+        aliasMap.set(normalizeToken(alias), option.name);
+      }
     }
   }
   return aliasMap;

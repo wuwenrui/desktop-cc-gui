@@ -9,7 +9,7 @@ import BookOpen from "lucide-react/dist/esm/icons/book-open";
 import Eye from "lucide-react/dist/esm/icons/eye";
 import Plus from "lucide-react/dist/esm/icons/plus";
 import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { getWorkspaceFiles, readWorkspaceFile } from "../../../services/tauri";
 import { openWorkspaceIn } from "../../../services/tauri/workspaceRuntime";
 import type { InstalledIndex } from "../../skill-market/api";
@@ -35,6 +35,10 @@ import {
   setLawhubToken,
 } from "../../scheme-publish/api";
 import {
+  FILE_TO_MARKDOWN_SKILL_NAME,
+  MAKE_SKILL_SKILL_NAME,
+  PPT_SKILL_NAME,
+  VISION_OCR_SKILL_NAME,
   dispatchSelectSkill,
   triggerFileToMarkdownSkill,
   triggerMakeSkillSkill,
@@ -64,6 +68,17 @@ function basename(p: string): string {
 /** 文件多时默认只露最近 N 条，其余收进「显示全部」。 */
 const VISIBLE_FILE_LIMIT = 5;
 const PPT_COLLAPSED_KEY = "ccgui.lawhub.pptCollapsed";
+
+type ViewableSkill = {
+  name: string;
+  displayName: string;
+};
+
+type BundledSkillAction = ViewableSkill & {
+  icon: ReactNode;
+  title: string;
+  onUse: () => void;
+};
 
 function readPptCollapsed(): boolean {
   try {
@@ -113,9 +128,7 @@ export function LawhubNavSection({
   const [installedSkills, setInstalledSkills] = useState<InstalledSkillItem[]>(
     [],
   );
-  const [viewingSkill, setViewingSkill] = useState<InstalledSkillItem | null>(
-    null,
-  );
+  const [viewingSkill, setViewingSkill] = useState<ViewableSkill | null>(null);
   // 已装技能的悬浮简介（SKILL.md description），按名称懒取一次。
   const [skillTips, setSkillTips] = useState<Record<string, string>>({});
   const fetchedTipsRef = useRef<Set<string>>(new Set());
@@ -277,6 +290,38 @@ export function LawhubNavSection({
     }
   }, [loginFor, username, password, doPublish]);
 
+  const renderSkillActionRow = useCallback(
+    (skill: BundledSkillAction) => (
+      <div className="lawhub-file-row lawhub-skill-row" key={skill.name}>
+        <button
+          type="button"
+          className="lawhub-file-name lawhub-skill-name"
+          onClick={skill.onUse}
+          title={skill.title}
+          data-tauri-drag-region="false"
+        >
+          {skill.icon}
+          <span className="lawhub-skill-text">{skill.displayName}</span>
+        </button>
+        <button
+          type="button"
+          className="lawhub-file-publish"
+          onClick={() =>
+            setViewingSkill({
+              name: skill.name,
+              displayName: skill.displayName,
+            })
+          }
+          title={`查看 ${skill.displayName} 的结构`}
+          aria-label={`查看 ${skill.displayName} 的结构`}
+        >
+          <Eye aria-hidden size={14} strokeWidth={1.8} />
+        </button>
+      </div>
+    ),
+    [],
+  );
+
   return (
     <>
       <button
@@ -321,21 +366,20 @@ export function LawhubNavSection({
               <ChevronDown aria-hidden size={13} />
             )}
           </button>
-          <button
-            type="button"
-            className="sidebar-primary-nav-item sidebar-primary-nav-subitem lawhub-subitem"
-            onClick={() => triggerPptSkill()}
-            title="用网页制作 PPT，表达力强于传统 PPT"
-            data-tauri-drag-region="false"
-          >
-            <Presentation
-              className="sidebar-primary-nav-icon"
-              aria-hidden
-              size={18}
-              strokeWidth={1.8}
-            />
-            <span className="sidebar-primary-nav-text">制作 PPT</span>
-          </button>
+          {renderSkillActionRow({
+            name: PPT_SKILL_NAME,
+            displayName: "制作 PPT",
+            title: "用网页制作 PPT，表达力强于传统 PPT",
+            onUse: triggerPptSkill,
+            icon: (
+              <Presentation
+                className="lawhub-skill-icon"
+                aria-hidden
+                size={15}
+                strokeWidth={1.8}
+              />
+            ),
+          })}
 
           {!pptCollapsed && (
             <>
@@ -412,58 +456,55 @@ export function LawhubNavSection({
           )}
 
           <div className="lawhub-group-label">技能</div>
-          <button
-            type="button"
-            className="sidebar-primary-nav-item sidebar-primary-nav-subitem lawhub-subitem"
-            onClick={() => triggerFileToMarkdownSkill()}
-            title="将文档、图片、截图或 PDF 转成 Markdown"
-            data-tauri-drag-region="false"
-          >
-            <FileText
-              className="sidebar-primary-nav-icon"
-              aria-hidden
-              size={18}
-              strokeWidth={1.8}
-            />
-            <span className="sidebar-primary-nav-text">文件转 Markdown</span>
-          </button>
-          <button
-            type="button"
-            className="sidebar-primary-nav-item sidebar-primary-nav-subitem lawhub-subitem"
-            onClick={() => triggerVisionOcrSkill()}
-            title="识别图片、截图、扫描件或 PDF 页面"
-            data-tauri-drag-region="false"
-          >
-            <ScanText
-              className="sidebar-primary-nav-icon"
-              aria-hidden
-              size={18}
-              strokeWidth={1.8}
-            />
-            <span className="sidebar-primary-nav-text">视觉 OCR</span>
-          </button>
-          <button
-            type="button"
-            className="sidebar-primary-nav-item sidebar-primary-nav-subitem lawhub-subitem"
-            onClick={() => triggerMakeSkillSkill()}
-            title="把你的工作方法、文书模板沉淀成可复用的个人技能。点击后在对话框描述想做什么即可"
-            data-tauri-drag-region="false"
-          >
-            <Wrench
-              className="sidebar-primary-nav-icon"
-              aria-hidden
-              size={18}
-              strokeWidth={1.8}
-            />
-            <span className="sidebar-primary-nav-text">制作技能</span>
-          </button>
+          {renderSkillActionRow({
+            name: FILE_TO_MARKDOWN_SKILL_NAME,
+            displayName: "文件转 Markdown",
+            title: "将文档、图片、截图或 PDF 转成 Markdown",
+            onUse: triggerFileToMarkdownSkill,
+            icon: (
+              <FileText
+                className="lawhub-skill-icon"
+                aria-hidden
+                size={15}
+                strokeWidth={1.8}
+              />
+            ),
+          })}
+          {renderSkillActionRow({
+            name: VISION_OCR_SKILL_NAME,
+            displayName: "视觉 OCR",
+            title: "识别图片、截图、扫描件或 PDF 页面",
+            onUse: triggerVisionOcrSkill,
+            icon: (
+              <ScanText
+                className="lawhub-skill-icon"
+                aria-hidden
+                size={15}
+                strokeWidth={1.8}
+              />
+            ),
+          })}
+          {renderSkillActionRow({
+            name: MAKE_SKILL_SKILL_NAME,
+            displayName: "制作技能",
+            title: "把你的工作方法、文书模板沉淀成可复用的个人技能。点击后在对话框描述想做什么即可",
+            onUse: triggerMakeSkillSkill,
+            icon: (
+              <Wrench
+                className="lawhub-skill-icon"
+                aria-hidden
+                size={15}
+                strokeWidth={1.8}
+              />
+            ),
+          })}
 
           {installedSkills.map((skill) => (
             <div className="lawhub-file-row lawhub-skill-row" key={skill.name}>
               <button
                 type="button"
                 className="lawhub-file-name lawhub-skill-name"
-                onClick={() => dispatchSelectSkill(skill.name)}
+                onClick={() => dispatchSelectSkill(skill.displayName)}
                 title={
                   skillTips[skill.name]
                     ? `${skillTips[skill.name]}\n\n点击在对话框中使用`

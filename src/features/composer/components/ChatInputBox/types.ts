@@ -148,6 +148,8 @@ export interface CommandItem {
 export interface SkillItem {
   /** Skill name */
   name: string;
+  /** User-facing skill name */
+  displayName?: string;
   /** Full path */
   path: string;
   /** Skill description */
@@ -253,6 +255,7 @@ export interface SelectedAgent {
 export interface ContextSelectionChip {
   type: 'skill' | 'commons';
   name: string;
+  selectionName?: string;
   description?: string;
   path?: string;
   source?: string;
