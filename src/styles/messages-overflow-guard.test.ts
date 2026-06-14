@@ -6,12 +6,20 @@ const messagesShellCss = readFileSync(
   fileURLToPath(new URL("./messages.part1-shell.css", import.meta.url)),
   "utf8",
 );
+const messagesHistoryStickyCss = readFileSync(
+  fileURLToPath(new URL("./messages.history-sticky.css", import.meta.url)),
+  "utf8",
+);
 const messagesLayoutCss = readFileSync(
   fileURLToPath(new URL("./messages.part1.css", import.meta.url)),
   "utf8",
 );
 const messagesMarkdownCss = readFileSync(
   fileURLToPath(new URL("./messages.part2.css", import.meta.url)),
+  "utf8",
+);
+const mainCss = readFileSync(
+  fileURLToPath(new URL("./main.css", import.meta.url)),
   "utf8",
 );
 const engineTaskOutputCss = readFileSync(
@@ -32,6 +40,17 @@ describe("messages overflow guard", () => {
     expect(getCssRuleBlock(messagesShellCss, ".messages")).toContain("overflow-x: hidden;");
     expect(getCssRuleBlock(messagesShellCss, ".messages-full")).toContain("min-width: 0;");
     expect(getCssRuleBlock(messagesShellCss, ".messages-full")).toContain("box-sizing: border-box;");
+  });
+
+  it("aligns the sticky user header with the readable message canvas", () => {
+    expect(getCssRuleBlock(messagesHistoryStickyCss, ".messages-history-sticky-header-content"))
+      .toContain("max-width: min(750px, 100%);");
+  });
+
+  it("clips horizontal overflow at the chat layout boundary", () => {
+    expect(getCssRuleBlock(mainCss, ".content")).toContain("overflow-x: hidden;");
+    expect(getCssRuleBlock(mainCss, ".content-layer")).toContain("overflow-x: hidden;");
+    expect(getCssRuleBlock(mainCss, ".workspace-chat-stack")).toContain("overflow-x: hidden;");
   });
 
   it("allows message rows and user context stacks to shrink within the canvas", () => {

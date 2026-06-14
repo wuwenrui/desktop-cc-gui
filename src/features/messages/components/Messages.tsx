@@ -101,6 +101,8 @@ import {
   isMessagesScrollNearBottom,
   mergeReadableRecoveryItems,
   readHistoryExpansionScrollSnapshot,
+  resolveMessagesAutoFollowAfterScroll,
+  resolveMessagesBottomScrollTop,
   resolveActiveUserInputRequest,
   resolveActiveMessageAnchor,
   resolveCollapsedTimelineItems,
@@ -284,6 +286,7 @@ export const Messages = memo(function Messages({
   const agentTaskNodeByTaskIdRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const agentTaskNodeByToolUseIdRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const autoScrollRef = useRef(true);
+  const lastObservedScrollTopRef = useRef<number | null>(null);
   const anchorUpdateRafRef = useRef<number | null>(null);
   const historyStickyUpdateRafRef = useRef<number | null>(null);
   const lastRenderSnapshotRef = useRef<LastRenderSnapshot | null>(null);
@@ -414,6 +417,25 @@ export const Messages = memo(function Messages({
     return resolveActiveMessageAnchor(containerRef.current, messageNodeByIdRef.current);
   }, []);
 
+  const scrollMessagesToBottom = useCallback((behavior: ScrollBehavior) => {
+    const container = containerRef.current;
+    if (!container) {
+      return;
+    }
+    const top = resolveMessagesBottomScrollTop(container);
+    if (typeof container.scrollTo === "function") {
+      container.scrollTo({
+        left: 0,
+        top,
+        behavior,
+      });
+    } else {
+      container.scrollTop = top;
+    }
+    container.scrollLeft = 0;
+    lastObservedScrollTopRef.current = top;
+  }, []);
+
   const requestAutoScroll = useCallback(() => {
     if (!liveAutoFollowEnabled) {
       return;
@@ -429,10 +451,10 @@ export const Messages = memo(function Messages({
       return;
     }
     pinMessagesHorizontalScroll(container);
-    // Always use instant for programmatic scroll requests to avoid blocking input
-    bottomRef.current.scrollIntoView({ behavior: "instant", block: "end", inline: "nearest" });
+    // Keep auto-follow scoped to the messages scroller to avoid horizontal inline alignment.
+    scrollMessagesToBottom("instant");
     pinMessagesHorizontalScroll(container);
-  }, [isNearBottom, liveAutoFollowEnabled]);
+  }, [isNearBottom, liveAutoFollowEnabled, scrollMessagesToBottom]);
 
   const scrollToAgentTaskCard = useCallback((request: AgentTaskScrollRequest | null) => {
     if (!request) {
@@ -463,6 +485,7 @@ export const Messages = memo(function Messages({
 
   useEffect(() => {
     autoScrollRef.current = true;
+    lastObservedScrollTopRef.current = null;
     setExpandedItems(new Set());
     setIsSelectionFrozen(false);
     frozenItemsRef.current = null;
@@ -1512,7 +1535,14 @@ export const Messages = memo(function Messages({
       return;
     }
     const nearBottom = isNearBottom(container);
-    autoScrollRef.current = nearBottom;
+    autoScrollRef.current = resolveMessagesAutoFollowAfterScroll({
+      previousScrollTop: lastObservedScrollTopRef.current,
+      nextScrollTop: container.scrollTop,
+      nearBottom,
+    });
+    lastObservedScrollTopRef.current = Number.isFinite(container.scrollTop)
+      ? container.scrollTop
+      : 0;
     scheduleAnchorUpdate("scroll");
     scheduleStickyHeaderUpdate("scroll");
   }, [
@@ -1762,14 +1792,13 @@ export const Messages = memo(function Messages({
       return undefined;
     }
     let raf = 0;
-    const target = bottomRef.current;
     // Use instant scroll during streaming to avoid blocking the main thread
     // with smooth-scroll animations that compete with keyboard input events.
     const scrollBehavior =
       isThinking || isAssistantFinalizing ? "instant" as const : "smooth" as const;
     raf = window.requestAnimationFrame(() => {
       pinMessagesHorizontalScroll(container);
-      target.scrollIntoView({ behavior: scrollBehavior, block: "end", inline: "nearest" });
+      scrollMessagesToBottom(scrollBehavior);
       pinMessagesHorizontalScroll(container);
     });
     return () => {
@@ -1777,7 +1806,14 @@ export const Messages = memo(function Messages({
         window.cancelAnimationFrame(raf);
       }
     };
-  }, [isAssistantFinalizing, scrollKey, isThinking, isNearBottom, liveAutoFollowEnabled]);
+  }, [
+    isAssistantFinalizing,
+    scrollKey,
+    isThinking,
+    isNearBottom,
+    liveAutoFollowEnabled,
+    scrollMessagesToBottom,
+  ]);
 
   const groupedEntries = useMemo(
     () => groupToolItems(timelinePresentationItems),

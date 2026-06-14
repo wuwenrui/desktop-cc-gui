@@ -17,7 +17,7 @@
 
 .messages-history-sticky-header-content {
   --messages-history-sticky-peek-width: 16px;
-  max-width: none;
+  max-width: min(750px, 100%);
   width: 100%;
   margin-left: auto;
   margin-right: auto;

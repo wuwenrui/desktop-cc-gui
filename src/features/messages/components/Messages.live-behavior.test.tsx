@@ -766,13 +766,16 @@ describe("Messages live behavior", () => {
     scrollSpy.mockRestore();
   });
 
-  it("keeps auto-follow scroll aligned to the vertical axis", async () => {
+  it("keeps auto-follow scroll pinned to the messages scroller vertical axis", async () => {
     window.localStorage.setItem("ccgui.messages.live.autoFollow", "1");
-    const scrollSpy = vi
+    const scrollIntoViewSpy = vi
       .spyOn(HTMLElement.prototype, "scrollIntoView")
       .mockImplementation(() => {});
+    const scrollToSpy = vi
+      .spyOn(HTMLElement.prototype, "scrollTo")
+      .mockImplementation(() => {});
 
-    render(
+    const { container } = render(
       <Messages
         items={[
           {
@@ -790,18 +793,66 @@ describe("Messages live behavior", () => {
         selectedOpenAppId=""
       />,
     );
+    const scroller = getMessagesScroller(container);
+    setScrollerMetrics(scroller, 0, 2400);
 
     await act(async () => {
       await new Promise((resolve) => window.setTimeout(resolve, 20));
     });
 
-    expect(scrollSpy).toHaveBeenCalledWith(
+    expect(scrollIntoViewSpy).not.toHaveBeenCalled();
+    expect(scrollToSpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        block: "end",
-        inline: "nearest",
+        left: 0,
+        top: 1680,
       }),
     );
-    scrollSpy.mockRestore();
+    scrollIntoViewSpy.mockRestore();
+    scrollToSpy.mockRestore();
+  });
+
+  it("does not let delayed inline alignment drift the messages scroller to the right", async () => {
+    window.localStorage.setItem("ccgui.messages.live.autoFollow", "1");
+    const scrollIntoViewSpy = vi
+      .spyOn(HTMLElement.prototype, "scrollIntoView")
+      .mockImplementation(function mockInlineDrift(this: Element) {
+        window.setTimeout(() => {
+          const scroller = this.closest(".messages") as HTMLDivElement | null;
+          if (scroller) {
+            scroller.scrollLeft = 240;
+          }
+        }, 0);
+      });
+
+    const { container } = render(
+      <Messages
+        items={[
+          {
+            id: "assistant-live-no-horizontal-drift",
+            kind: "message",
+            role: "assistant",
+            text: "streaming chunk",
+          },
+        ]}
+        threadId="thread-no-horizontal-drift"
+        workspaceId="ws-1"
+        isThinking
+        processingStartedAt={Date.now() - 1_000}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+    const scroller = getMessagesScroller(container);
+    setScrollerMetrics(scroller, 0, 2400);
+    scroller.scrollLeft = 0;
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 20));
+    });
+
+    expect(scrollIntoViewSpy).not.toHaveBeenCalled();
+    expect(scroller.scrollLeft).toBe(0);
+    scrollIntoViewSpy.mockRestore();
   });
 
   it("pauses auto-follow after manual scroll away from the bottom", async () => {
@@ -866,6 +917,81 @@ describe("Messages live behavior", () => {
     });
     expect(scrollSpy).toHaveBeenCalledTimes(baselineCalls);
     scrollSpy.mockRestore();
+  });
+
+  it("pauses auto-follow after an upward manual scroll even while still near the bottom", async () => {
+    window.localStorage.setItem("ccgui.messages.live.autoFollow", "1");
+    const scrollIntoViewSpy = vi
+      .spyOn(HTMLElement.prototype, "scrollIntoView")
+      .mockImplementation(() => {});
+    const scrollToSpy = vi
+      .spyOn(HTMLElement.prototype, "scrollTo")
+      .mockImplementation(() => {});
+    const { container, rerender } = render(
+      <Messages
+        items={[
+          {
+            id: "assistant-live-near-bottom-lock",
+            kind: "message",
+            role: "assistant",
+            text: "first chunk",
+          },
+        ]}
+        threadId="thread-near-bottom-lock"
+        workspaceId="ws-1"
+        isThinking
+        processingStartedAt={Date.now() - 1_000}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const scroller = getMessagesScroller(container);
+    await act(async () => {
+      setScrollerMetrics(scroller, 280, 1000);
+      fireEvent.scroll(scroller);
+      await new Promise((resolve) => window.setTimeout(resolve, 20));
+    });
+
+    await act(async () => {
+      setScrollerMetrics(scroller, 220, 1000);
+      fireEvent.scroll(scroller);
+    });
+    const baselineScrollIntoViewCalls = scrollIntoViewSpy.mock.calls.length;
+    const baselineScrollToCalls = scrollToSpy.mock.calls.length;
+
+    rerender(
+      <Messages
+        items={[
+          {
+            id: "assistant-live-near-bottom-lock",
+            kind: "message",
+            role: "assistant",
+            text: "first chunk",
+          },
+          {
+            id: "assistant-live-near-bottom-lock-2",
+            kind: "message",
+            role: "assistant",
+            text: "next chunk arrives while user is reading above the bottom",
+          },
+        ]}
+        threadId="thread-near-bottom-lock"
+        workspaceId="ws-1"
+        isThinking
+        processingStartedAt={Date.now() - 1_000}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 160));
+    });
+    expect(scrollIntoViewSpy).toHaveBeenCalledTimes(baselineScrollIntoViewCalls);
+    expect(scrollToSpy).toHaveBeenCalledTimes(baselineScrollToCalls);
+    scrollIntoViewSpy.mockRestore();
+    scrollToSpy.mockRestore();
   });
 
   it("uses the shared condensed sticky header for the latest ordinary user question during realtime processing", async () => {

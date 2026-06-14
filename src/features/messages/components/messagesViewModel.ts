@@ -29,6 +29,17 @@ export type HistoryExpansionScrollSnapshot = {
   scrollTop: number;
 };
 
+export type MessagesScrollMetrics = {
+  scrollHeight: number;
+  clientHeight: number;
+};
+
+export type MessagesAutoFollowScrollInput = {
+  previousScrollTop: number | null;
+  nextScrollTop: number;
+  nearBottom: boolean;
+};
+
 export type PreservedReadableWindow = {
   threadId: string | null;
   turnId: string | null;
@@ -65,6 +76,25 @@ export function readHistoryExpansionScrollSnapshot(
     return null;
   }
   return { scrollHeight, scrollTop };
+}
+
+export function resolveMessagesBottomScrollTop(metrics: MessagesScrollMetrics) {
+  const scrollHeight = Number.isFinite(metrics.scrollHeight) ? metrics.scrollHeight : 0;
+  const clientHeight = Number.isFinite(metrics.clientHeight) ? metrics.clientHeight : 0;
+  return Math.max(0, scrollHeight - clientHeight);
+}
+
+export function resolveMessagesAutoFollowAfterScroll(input: MessagesAutoFollowScrollInput) {
+  const previousScrollTop = Number.isFinite(input.previousScrollTop)
+    ? input.previousScrollTop
+    : null;
+  const nextScrollTop = Number.isFinite(input.nextScrollTop)
+    ? input.nextScrollTop
+    : 0;
+  if (previousScrollTop !== null && nextScrollTop < previousScrollTop) {
+    return false;
+  }
+  return input.nearBottom;
 }
 
 export function restoreHistoryExpansionScrollPosition(
