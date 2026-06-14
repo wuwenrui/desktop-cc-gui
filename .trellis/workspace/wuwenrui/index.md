@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 3
+- **Total Sessions**: 4
 - **Last Active**: 2026-06-14
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~115 | Active |
+| `journal-1.md` | ~161 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 4 | 2026-06-14 | 统一 lawhub 技能中文展示和查看入口 | `6c626e31` | `main` |
 | 3 | 2026-06-14 | 视觉模型与桌面交互闭环 | `b8e38b46` | `main` |
 | 1 | 2026-06-10 | lawyer-shell MVP first cut | `ed46163a`, `7675038e` | `feat/lawyer-shell` |
 <!-- @@@/auto:session-history -->
