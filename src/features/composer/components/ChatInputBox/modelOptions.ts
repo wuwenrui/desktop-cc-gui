@@ -120,6 +120,7 @@ function getCustomClaudeModels(): ModelInfo[] {
     label: model.label,
     description: model.description,
     source: model.source,
+    capabilities: model.capabilities,
   }));
 }
 

@@ -4,6 +4,9 @@ export type ClaudeCustomModelFact = {
   label: string;
   description?: string;
   source: "custom";
+  capabilities?: {
+    imageInput?: boolean;
+  };
 };
 
 export function normalizeClaudeCustomModels(input: unknown): ClaudeCustomModelFact[] {
@@ -37,6 +40,11 @@ export function normalizeClaudeCustomModels(input: unknown): ClaudeCustomModelFa
       typeof descriptionValue === "string" && descriptionValue.trim().length > 0
         ? descriptionValue.trim()
         : undefined;
+    const capabilitiesValue = (entry as { capabilities?: unknown }).capabilities;
+    const imageInput =
+      capabilitiesValue &&
+      typeof capabilitiesValue === "object" &&
+      (capabilitiesValue as { imageInput?: unknown }).imageInput === true;
 
     models.push({
       id,
@@ -44,6 +52,7 @@ export function normalizeClaudeCustomModels(input: unknown): ClaudeCustomModelFa
       label,
       description,
       source: "custom",
+      ...(imageInput ? { capabilities: { imageInput: true } } : {}),
     });
     seenIds.add(id);
   }

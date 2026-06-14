@@ -2075,6 +2075,9 @@ export type ModelOption = {
   supportedReasoningEfforts: { reasoningEffort: string; description: string }[];
   defaultReasoningEffort: string | null;
   isDefault: boolean;
+  capabilities?: {
+    imageInput?: boolean;
+  };
 };
 
 export type CollaborationModeOption = {
@@ -2190,6 +2193,9 @@ export type EngineModelInfo = {
   description: string;
   source?: string;
   isDefault: boolean;
+  capabilities?: {
+    imageInput?: boolean;
+  };
 };
 
 /**

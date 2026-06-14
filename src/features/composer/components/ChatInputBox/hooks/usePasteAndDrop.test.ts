@@ -12,7 +12,7 @@ let windowDropHandler:
   | ((event: {
       payload: {
         type: "enter" | "over" | "leave" | "drop";
-        position: { x: number; y: number };
+        position?: { x: number; y: number };
         paths?: string[];
       };
     }) => void)
@@ -475,6 +475,28 @@ describe("usePasteAndDrop path insertion", () => {
       });
     });
     expect(harness.result.isDragOver).toBe(false);
+    harness.unmount();
+  });
+
+  it("clears generic drag overlay when forwarded leave omits coordinates", () => {
+    const harness = createHarness();
+    expect(harness.result.isDragOver).toBe(false);
+
+    act(() => {
+      windowDropHandler?.({
+        payload: { type: "enter", position: { x: 10, y: 10 } },
+      });
+    });
+    expect(harness.result.isDragOver).toBe(true);
+
+    act(() => {
+      windowDropHandler?.({
+        payload: { type: "leave" },
+      });
+    });
+    expect(harness.result.isDragOver).toBe(false);
+    expect(harness.result.dragPreviewNames).toEqual([]);
+    expect(harness.editable.textContent).toBe("");
     harness.unmount();
   });
 

@@ -25,8 +25,28 @@ struct ForwardedDragDropPosition {
 struct ForwardedDragDropPayload {
     #[serde(rename = "type")]
     event_type: &'static str,
-    position: ForwardedDragDropPosition,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    position: Option<ForwardedDragDropPosition>,
     paths: Option<Vec<String>>,
+}
+
+#[cfg(test)]
+mod drag_drop_payload_tests {
+    use super::*;
+
+    #[test]
+    fn forwarded_leave_drag_payload_serializes_without_position() {
+        let payload = ForwardedDragDropPayload {
+            event_type: "leave",
+            position: None,
+            paths: None,
+        };
+
+        let value = serde_json::to_value(payload).expect("payload serializes");
+        assert_eq!(value["type"], "leave");
+        assert!(value.get("position").is_none());
+        assert!(value["paths"].is_null());
+    }
 }
 
 /// Get and clear any pending paths that were passed to the app on launch
@@ -69,20 +89,24 @@ fn forward_webview_drag_drop_to_main<R: tauri::Runtime>(
     let payload = match event {
         DragDropEvent::Enter { paths, position } => Some(ForwardedDragDropPayload {
             event_type: "enter",
-            position: forwarded_drag_drop_position(webview, position),
+            position: Some(forwarded_drag_drop_position(webview, position)),
             paths: Some(forwarded_drag_drop_paths(paths)),
         }),
         DragDropEvent::Over { position } => Some(ForwardedDragDropPayload {
             event_type: "over",
-            position: forwarded_drag_drop_position(webview, position),
+            position: Some(forwarded_drag_drop_position(webview, position)),
             paths: None,
         }),
         DragDropEvent::Drop { paths, position } => Some(ForwardedDragDropPayload {
             event_type: "drop",
-            position: forwarded_drag_drop_position(webview, position),
+            position: Some(forwarded_drag_drop_position(webview, position)),
             paths: Some(forwarded_drag_drop_paths(paths)),
         }),
-        DragDropEvent::Leave => None,
+        DragDropEvent::Leave => Some(ForwardedDragDropPayload {
+            event_type: "leave",
+            position: None,
+            paths: None,
+        }),
         _ => None,
     };
     if let (Some(payload), Some(main_window)) =

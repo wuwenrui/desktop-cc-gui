@@ -271,6 +271,7 @@ function readCustomClaudeModels(): EngineModelInfo[] {
     description: model.description ?? "",
     source: CUSTOM_MODEL_SOURCE,
     isDefault: false,
+    capabilities: model.capabilities,
   }));
 }
 
@@ -342,6 +343,7 @@ function engineModelToOption(model: EngineModelInfo): ModelOption {
     supportedReasoningEfforts: [],
     defaultReasoningEffort: null,
     isDefault: normalized.isDefault,
+    capabilities: normalized.capabilities,
   };
 }
 

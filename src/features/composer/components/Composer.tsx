@@ -124,6 +124,10 @@ import { IntentCanvasAttachmentCard } from "../../intent-canvas/components/Inten
 import type { IntentCanvasDocument } from "../../intent-canvas/types";
 import { resolveBrowserNavigationUrl } from "../utils/browserNavigation";
 import { buildVisionSendOptions } from "../../vision/visionRouting";
+import {
+  collectVisionFilePaths,
+  collectVisionImageInputs,
+} from "../../vision/visionFileInputs";
 
 type RewindExecutionOptions = {
   mode?: RewindMode;
@@ -1479,70 +1483,107 @@ export const Composer = memo(function Composer({
               ...(browserContextAttachment ? { browserContextAttachment } : {}),
             }
           : undefined;
-      const sendOptions = buildVisionSendOptions({
-        currentOptions: contextSendOptions,
-        selectedSkills,
-        visionModelId,
+      const explicitVisionFilePaths = [
+        ...selectedInlineFileReferences.map((entry) => entry.path),
+        ...(hasActiveFileReference && activeFilePath ? [activeFilePath] : []),
+      ];
+      const visualFilePaths = collectVisionFilePaths({
+        text: resolvedFinalTextWithAnnotations,
+        explicitPaths: explicitVisionFilePaths,
+        workspacePath: activeWorkspacePath,
       });
-      const sendResult = onSend(
-        resolvedFinalTextWithAnnotations,
-        mergedImages,
-        sendOptions,
-      );
-      if (browserContextAttachment) {
-        browserContext.remove();
+      const sendPreparedMessage = (finalImages: string[]) => {
+        const dedupedImages = Array.from(new Set(finalImages));
+        const sendOptions = buildVisionSendOptions({
+          currentOptions: contextSendOptions,
+          selectedSkills,
+          visionModelId,
+          hasImages: dedupedImages.length > 0,
+          hasVisualFiles: visualFilePaths.length > 0,
+        });
+        const sendResult = onSend(
+          resolvedFinalTextWithAnnotations,
+          dedupedImages,
+          sendOptions,
+        );
+        if (browserContextAttachment) {
+          browserContext.remove();
+        }
+        const retainedManualMemories = filterRetainedEntries(
+          selectedManualMemories,
+          carryOverManualMemoryIds,
+        );
+        const retainedNoteCards = filterRetainedEntries(
+          selectedNoteCards,
+          carryOverNoteCardIds,
+        );
+        const retainedSkillNames = filterRetainedChipNames(
+          selectedSkillNames,
+          carryOverContextChipKeys,
+          "skill",
+        );
+        const retainedCommonsNames = filterRetainedChipNames(
+          selectedCommonsNames,
+          carryOverContextChipKeys,
+          "commons",
+        );
+        const nextRetainedContextChipKeys = buildRetainedContextChipKeys(
+          retainedSkillNames,
+          retainedCommonsNames,
+        );
+        setSelectedSkillNames([]);
+        setSelectedCommonsNames([]);
+        void Promise.resolve(sendResult).finally(() => {
+          setSelectedManualMemories(retainedManualMemories);
+          setSelectedNoteCards(retainedNoteCards);
+          setSelectedInlineFileReferences([]);
+          onClearCodeAnnotations?.();
+          setSelectedSkillNames(retainedSkillNames);
+          setSelectedCommonsNames(retainedCommonsNames);
+          setRetainedManualMemoryIds(
+            retainedManualMemories.map((entry) => entry.id),
+          );
+          setRetainedNoteCardIds(retainedNoteCards.map((entry) => entry.id));
+          setRetainedContextChipKeys(nextRetainedContextChipKeys);
+          setCarryOverManualMemoryIds([]);
+          setCarryOverNoteCardIds([]);
+          setCarryOverContextChipKeys([]);
+          setMemoryReferenceMode((currentMode) =>
+            currentMode === "single" ? "off" : currentMode,
+          );
+        });
+        resetHistoryNavigation();
+        setComposerText("");
+      };
+      if (visualFilePaths.length === 0) {
+        sendPreparedMessage(mergedImages);
+        return;
       }
-      const retainedManualMemories = filterRetainedEntries(
-        selectedManualMemories,
-        carryOverManualMemoryIds,
-      );
-      const retainedNoteCards = filterRetainedEntries(
-        selectedNoteCards,
-        carryOverNoteCardIds,
-      );
-      const retainedSkillNames = filterRetainedChipNames(
-        selectedSkillNames,
-        carryOverContextChipKeys,
-        "skill",
-      );
-      const retainedCommonsNames = filterRetainedChipNames(
-        selectedCommonsNames,
-        carryOverContextChipKeys,
-        "commons",
-      );
-      const nextRetainedContextChipKeys = buildRetainedContextChipKeys(
-        retainedSkillNames,
-        retainedCommonsNames,
-      );
-      setSelectedSkillNames([]);
-      setSelectedCommonsNames([]);
-      void Promise.resolve(sendResult).finally(() => {
-        setSelectedManualMemories(retainedManualMemories);
-        setSelectedNoteCards(retainedNoteCards);
-        setSelectedInlineFileReferences([]);
-        onClearCodeAnnotations?.();
-        setSelectedSkillNames(retainedSkillNames);
-        setSelectedCommonsNames(retainedCommonsNames);
-        setRetainedManualMemoryIds(
-          retainedManualMemories.map((entry) => entry.id),
-        );
-        setRetainedNoteCardIds(retainedNoteCards.map((entry) => entry.id));
-        setRetainedContextChipKeys(nextRetainedContextChipKeys);
-        setCarryOverManualMemoryIds([]);
-        setCarryOverNoteCardIds([]);
-        setCarryOverContextChipKeys([]);
-        setMemoryReferenceMode((currentMode) =>
-          currentMode === "single" ? "off" : currentMode,
-        );
-      });
-      resetHistoryNavigation();
-      setComposerText("");
+      void (async () => {
+        try {
+          const visualFileImages = await collectVisionImageInputs({
+            text: resolvedFinalTextWithAnnotations,
+            explicitPaths: explicitVisionFilePaths,
+            workspacePath: activeWorkspacePath,
+          });
+          sendPreparedMessage([...mergedImages, ...visualFileImages]);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          pushErrorToast({
+            title: "视觉文件解析失败",
+            message: message || "无法将引用文件转换为视觉输入。",
+          });
+        }
+      })();
     },
     [
       attachedImages,
+      activeFilePath,
       activeWorkspaceId,
+      activeWorkspacePath,
       browserContext,
       disabled,
+      hasActiveFileReference,
       intentCanvasAttachments.length,
       applyActiveFileReference,
       opencodeDisconnected,

@@ -15,6 +15,23 @@ afterEach(() => {
 });
 
 describe("SiteModelPicker managed-model selection", () => {
+  it("marks fetched Qwen VL models as vision-capable", () => {
+    render(
+      <SiteModelPicker
+        models={[
+          { id: "deepseek-v4-pro", owned_by: "site" },
+          { id: "qwen3-vl-flash", owned_by: "site" },
+        ]}
+        onConfirm={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("checkbox", { name: /qwen3-vl-flash.*Vision/i }),
+    ).toBeTruthy();
+    expect(screen.queryByText("Vision", { selector: "span" })).toBeTruthy();
+  });
+
   it("preselects owned models that exist in the fetched list", () => {
     render(
       <SiteModelPicker

@@ -1,6 +1,9 @@
 .engine-task-output-inspector {
   display: grid;
   gap: 12px;
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
   padding: 12px;
   border: 1px solid color-mix(in srgb, var(--border-strong) 82%, #2563eb 18%);
   border-radius: 8px;
@@ -13,6 +16,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+  min-width: 0;
 }
 
 .engine-task-output-title-block {
@@ -204,6 +208,8 @@
 }
 
 .engine-task-output-pre {
+  box-sizing: border-box;
+  max-width: 100%;
   max-height: 220px;
   margin: 0;
   padding: 10px;
@@ -218,6 +224,8 @@
 }
 
 .engine-task-output-inline {
+  min-width: 0;
+  max-width: 100%;
   margin-top: 10px;
 }
 

@@ -1,17 +1,36 @@
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
-export type DragDropPayload = {
-  type: "enter" | "over" | "leave" | "drop";
-  position: { x: number; y: number };
-  paths?: string[];
-};
+export type DragDropPosition = { x: number; y: number };
+
+export type DragDropPayload =
+  | {
+      type: "enter";
+      position: DragDropPosition;
+      paths?: string[];
+    }
+  | {
+      type: "over";
+      position: DragDropPosition;
+      paths?: string[];
+    }
+  | {
+      type: "drop";
+      position: DragDropPosition;
+      paths?: string[];
+    }
+  | {
+      type: "leave";
+      position?: DragDropPosition;
+      paths?: string[];
+    };
 
 export type DragDropEvent = {
   payload: DragDropPayload;
 };
 
 type Listener = (event: DragDropEvent) => void;
+type DropDragDropPayload = Extract<DragDropPayload, { type: "drop" }>;
 
 type SubscriptionOptions = {
   onError?: (error: unknown) => void;
@@ -26,8 +45,7 @@ let lastDispatchedDrop:
   | { signature: string; timestamp: number }
   | null = null;
 
-function dragDropSignature(event: DragDropEvent): string {
-  const { payload } = event;
+function dragDropSignature(payload: DropDragDropPayload): string {
   const roundedX = Math.round(payload.position.x);
   const roundedY = Math.round(payload.position.y);
   const paths = (payload.paths ?? []).join("\n");
@@ -38,7 +56,7 @@ function isDuplicateDropEvent(event: DragDropEvent): boolean {
   if (event.payload.type !== "drop") {
     return false;
   }
-  const signature = dragDropSignature(event);
+  const signature = dragDropSignature(event.payload);
   const now = Date.now();
   if (
     lastDispatchedDrop &&

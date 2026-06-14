@@ -48,3 +48,6 @@ CLAUDE.md
 
 .specstory/
 .superpowers/
+
+# Coverage artifacts
+*.profraw

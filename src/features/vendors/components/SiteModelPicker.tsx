@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import type { SiteModel } from "../../../services/tauri/vendors";
+import { modelSupportsVision } from "../../vision/visionRouting";
 import { initialSelectedIds } from "../syncModelMerge";
 
 export interface SlotMapping {
@@ -110,6 +111,7 @@ export function SiteModelPicker({
               style={checkbox}
             />
             <span style={modelId}>{m.id}</span>
+            {modelSupportsVision(m) && <span style={visionBadge}>Vision</span>}
             {m.owned_by && <span style={ownerBadge}>{m.owned_by}</span>}
           </label>
         ))}
@@ -262,6 +264,16 @@ const ownerBadge: CSSProperties = {
   fontSize: 11,
   color: "#6b7280",
   background: "#1a1a1e",
+  padding: "2px 6px",
+  borderRadius: 4,
+  flexShrink: 0,
+};
+
+const visionBadge: CSSProperties = {
+  fontSize: 11,
+  color: "#d9f99d",
+  background: "rgba(77, 124, 15, 0.35)",
+  border: "1px solid rgba(163, 230, 53, 0.3)",
   padding: "2px 6px",
   borderRadius: 4,
   flexShrink: 0,

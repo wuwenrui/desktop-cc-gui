@@ -244,7 +244,13 @@ describe("Composer editor helpers", () => {
     expect(onSend).toHaveBeenCalledWith(
       "fresh child snapshot",
       ["persisted-image.png", "child-image.png"],
-      undefined,
+      {
+        visionPreflight: {
+          mode: "ocr",
+          model: "qwen3-vl-flash",
+          skillName: "视觉OCR",
+        },
+      },
     );
     harness.unmount();
   });

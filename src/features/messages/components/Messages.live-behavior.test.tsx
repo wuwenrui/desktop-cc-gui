@@ -137,6 +137,7 @@ describe("Messages live behavior", () => {
     });
 
     expect(scrollToSpy).toHaveBeenCalledWith({
+      left: 0,
       top: Math.max(0, 240 + (480 - 120) - 720 * 0.28),
       behavior: "smooth",
     });
@@ -762,6 +763,44 @@ describe("Messages live behavior", () => {
     );
 
     expect(scrollSpy).not.toHaveBeenCalled();
+    scrollSpy.mockRestore();
+  });
+
+  it("keeps auto-follow scroll aligned to the vertical axis", async () => {
+    window.localStorage.setItem("ccgui.messages.live.autoFollow", "1");
+    const scrollSpy = vi
+      .spyOn(HTMLElement.prototype, "scrollIntoView")
+      .mockImplementation(() => {});
+
+    render(
+      <Messages
+        items={[
+          {
+            id: "assistant-live-inline-1",
+            kind: "message",
+            role: "assistant",
+            text: "streaming chunk",
+          },
+        ]}
+        threadId="thread-inline-scroll"
+        workspaceId="ws-1"
+        isThinking
+        processingStartedAt={Date.now() - 1_000}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 20));
+    });
+
+    expect(scrollSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        block: "end",
+        inline: "nearest",
+      }),
+    );
     scrollSpy.mockRestore();
   });
 

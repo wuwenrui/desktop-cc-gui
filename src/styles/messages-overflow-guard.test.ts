@@ -1,0 +1,61 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
+
+const messagesShellCss = readFileSync(
+  fileURLToPath(new URL("./messages.part1-shell.css", import.meta.url)),
+  "utf8",
+);
+const messagesLayoutCss = readFileSync(
+  fileURLToPath(new URL("./messages.part1.css", import.meta.url)),
+  "utf8",
+);
+const messagesMarkdownCss = readFileSync(
+  fileURLToPath(new URL("./messages.part2.css", import.meta.url)),
+  "utf8",
+);
+const engineTaskOutputCss = readFileSync(
+  fileURLToPath(new URL("./engine-task-output.css", import.meta.url)),
+  "utf8",
+);
+
+function getCssRuleBlock(css: string, selector: string): string {
+  const escapedSelector = selector
+    .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    .replace(/\s+/g, "\\s+");
+  const match = css.match(new RegExp(`(?:^|\\n)${escapedSelector}\\s*\\{([^}]*)\\}`));
+  return match?.[1] ?? "";
+}
+
+describe("messages overflow guard", () => {
+  it("keeps the message scroll container from drifting horizontally", () => {
+    expect(getCssRuleBlock(messagesShellCss, ".messages")).toContain("overflow-x: hidden;");
+    expect(getCssRuleBlock(messagesShellCss, ".messages-full")).toContain("min-width: 0;");
+    expect(getCssRuleBlock(messagesShellCss, ".messages-full")).toContain("box-sizing: border-box;");
+  });
+
+  it("allows message rows and user context stacks to shrink within the canvas", () => {
+    expect(getCssRuleBlock(messagesLayoutCss, ".message")).toContain("width: 100%;");
+    expect(getCssRuleBlock(messagesLayoutCss, ".message")).toContain("min-width: 0;");
+    expect(getCssRuleBlock(messagesLayoutCss, ".message-user-layout")).toContain("min-width: 0;");
+    expect(getCssRuleBlock(messagesLayoutCss, ".message-context-stack.is-user")).toContain(
+      "max-width: 100%;",
+    );
+  });
+
+  it("contains wide markdown and task output inside their own surfaces", () => {
+    expect(getCssRuleBlock(messagesMarkdownCss, ".markdown")).toContain("max-width: 100%;");
+    expect(getCssRuleBlock(messagesMarkdownCss, ".markdown")).toContain(
+      "overflow-wrap: anywhere;",
+    );
+    expect(getCssRuleBlock(messagesMarkdownCss, ".message .markdown-codeblock")).toContain(
+      "max-width: 100%;",
+    );
+    expect(getCssRuleBlock(messagesMarkdownCss, ".markdown table")).toContain(
+      "box-sizing: border-box;",
+    );
+    expect(getCssRuleBlock(engineTaskOutputCss, ".engine-task-output-inspector")).toContain(
+      "min-width: 0;",
+    );
+  });
+});

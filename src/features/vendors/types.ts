@@ -81,6 +81,9 @@ export interface CodexCustomModel {
   id: string;
   label: string;
   description?: string;
+  capabilities?: {
+    imageInput?: boolean;
+  };
 }
 
 export interface ClaudeCurrentConfig {

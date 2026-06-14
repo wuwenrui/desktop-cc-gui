@@ -290,8 +290,10 @@
 }
 
 .markdown {
+  box-sizing: border-box;
+  max-width: 100%;
   white-space: normal;
-  overflow-wrap: break-word;
+  overflow-wrap: anywhere;
   word-break: break-word;
   min-width: 0;
   font-size: var(--message-content-font-size);
@@ -300,6 +302,7 @@
 }
 
 .markdown > * {
+  max-width: 100%;
   margin: 0;
 }
 
@@ -308,7 +311,9 @@
 }
 
 .markdown pre {
+  max-width: 100%;
   margin: 0;
+  overflow-x: auto;
   white-space: pre-wrap;
 }
 
@@ -376,6 +381,9 @@
 }
 
 .message .markdown-codeblock {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
   border: 1px solid var(--message-codeblock-border);
   border-radius: 10px;
   background: var(--message-codeblock-bg);
@@ -812,6 +820,7 @@
 }
 
 .markdown table {
+  box-sizing: border-box;
   border-collapse: separate;
   border-spacing: 0;
   width: 100%;
@@ -838,7 +847,7 @@
   padding: 10px 16px;
   text-align: left;
   word-wrap: break-word;
-  overflow-wrap: break-word;
+  overflow-wrap: anywhere;
 }
 
 .markdown th:last-child,

@@ -30,7 +30,8 @@ describe("messages context stack layout", () => {
     expect(userStackRule).toContain(
       "width: var(--message-user-bubble-max-width, 85%);",
     );
-    expect(userStackRule).toContain("max-width: none;");
+    expect(userStackRule).toContain("min-width: 0;");
+    expect(userStackRule).toContain("max-width: 100%;");
     expect(userStackRule).toContain("margin-left: auto;");
     expect(userStackRule).toContain("justify-items: end;");
     expect(stackedBubbleRule).toContain("max-width: 100%;");

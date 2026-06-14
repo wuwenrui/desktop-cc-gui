@@ -6,6 +6,7 @@ import {
   screen,
   waitFor,
   within,
+  act,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -438,5 +439,103 @@ describe("VendorSettingsPanel", () => {
       ]);
     });
     expect(mockState.codexModels.updateModels).not.toHaveBeenCalled();
+  });
+
+  it("offers an API key configuration entry when site sync has no active provider key", async () => {
+    const activeProvider = {
+      id: "p1",
+      name: "No Key",
+      isActive: true,
+      settingsConfig: {
+        env: {
+          ANTHROPIC_BASE_URL: "http://example.test",
+        },
+      },
+    };
+    mockState.claudeManagement.providers = [activeProvider];
+
+    renderPanel();
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: /Sync Models from Site/ }),
+      );
+    });
+
+    expect(fetchSiteModelsMock).not.toHaveBeenCalled();
+    expect(
+      screen.getByText("No active provider with API key configured."),
+    ).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Configure API key" }));
+    });
+
+    expect(mockState.claudeManagement.handleEditProvider).toHaveBeenCalledWith(
+      activeProvider,
+    );
+    expect(mockState.claudeManagement.handleAddProvider).not.toHaveBeenCalled();
+  });
+
+  it("marks synced Qwen VL models and stores the preferred vision model", async () => {
+    mockState.claudeManagement.providers = [
+      {
+        id: "p1",
+        name: "P1",
+        isActive: true,
+        settingsConfig: {
+          env: {
+            ANTHROPIC_AUTH_TOKEN: "tok",
+            ANTHROPIC_BASE_URL: "http://example.test",
+          },
+        },
+      },
+    ];
+    fetchSiteModelsMock.mockResolvedValue([
+      { id: "deepseek-v4-pro", owned_by: "" },
+      { id: "qwen3-vl-plus", owned_by: "" },
+      { id: "qwen3-vl-flash", owned_by: "" },
+    ]);
+    const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
+
+    renderPanel({
+      appSettings: { visionModelId: "deepseek-v4-pro" },
+      onUpdateAppSettings,
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /Sync Models from Site/ }),
+    );
+
+    fireEvent.click(await screen.findByRole("checkbox", { name: /qwen3-vl-plus/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /qwen3-vl-flash/ }));
+    fireEvent.change(screen.getByRole("combobox", { name: "haiku" }), {
+      target: { value: "qwen3-vl-flash" },
+    });
+    fireEvent.change(screen.getByRole("combobox", { name: "sonnet" }), {
+      target: { value: "qwen3-vl-flash" },
+    });
+    fireEvent.change(screen.getByRole("combobox", { name: "opus" }), {
+      target: { value: "qwen3-vl-plus" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+
+    await waitFor(() => {
+      expect(mockState.claudeModels.updateModels).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: "qwen3-vl-flash",
+            capabilities: { imageInput: true },
+          }),
+          expect.objectContaining({
+            id: "qwen3-vl-plus",
+            capabilities: { imageInput: true },
+          }),
+        ]),
+      );
+    });
+    expect(onUpdateAppSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ visionModelId: "qwen3-vl-flash" }),
+    );
   });
 });

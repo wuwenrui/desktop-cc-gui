@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { act, cleanup, fireEvent, render } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { useRef, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ComposerEditorSettings, CustomCommandOption, SkillOption } from "../../../types";
@@ -15,6 +15,13 @@ vi.mock("@tauri-apps/api/core", () => ({
   convertFileSrc: (path: string) => `tauri://${path}`,
   invoke: vi.fn(async () => null),
 }));
+
+const visionFileInputMocks = vi.hoisted(() => ({
+  collectVisionFilePaths: vi.fn((): string[] => []),
+  collectVisionImageInputs: vi.fn(async (): Promise<string[]> => []),
+}));
+
+vi.mock("../../vision/visionFileInputs", () => visionFileInputMocks);
 
 vi.mock("../../engine/components/EngineSelector", () => ({
   EngineSelector: () => null,
@@ -54,6 +61,7 @@ type HarnessProps = {
   onSend?: (text: string, images: string[], options?: unknown) => void;
   activeThreadId?: string;
   visionModelId?: string | null;
+  attachedImages?: string[];
 };
 
 function ComposerHarness({
@@ -62,6 +70,7 @@ function ComposerHarness({
   onSend = () => {},
   activeThreadId = "thread-1",
   visionModelId = null,
+  attachedImages = [],
 }: HarnessProps) {
   const [draftText, setDraftText] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -111,6 +120,7 @@ function ComposerHarness({
       editorSettings={editorSettings}
       activeWorkspaceId="ws-1"
       activeThreadId={activeThreadId}
+      attachedImages={attachedImages}
     />
   );
 }
@@ -126,6 +136,7 @@ function getTextarea(container: HTMLElement) {
 describe("Composer context source grouping", () => {
   afterEach(() => {
     cleanup();
+    vi.clearAllMocks();
   });
 
   it("avoids duplicated slash skill tokens when same skill name exists in multiple sources", async () => {
@@ -299,5 +310,74 @@ describe("Composer context source grouping", () => {
       },
     });
     expect(onSend.mock.calls[0]?.[2]).not.toHaveProperty("model");
+  });
+
+  it("requests hidden vision preflight automatically for image attachments", async () => {
+    const onSend = vi.fn();
+    const view = render(
+      <ComposerHarness
+        onSend={onSend}
+        visionModelId="qwen3-vl-flash"
+        attachedImages={["/tmp/evidence.png"]}
+      />,
+    );
+
+    const textarea = getTextarea(view.container);
+    await act(async () => {
+      fireEvent.change(textarea, {
+        target: {
+          value: "分析这张图里的证据",
+          selectionStart: "分析这张图里的证据".length,
+        },
+      });
+      fireEvent.keyDown(textarea, { key: "Enter", bubbles: true });
+    });
+
+    expect(onSend.mock.calls[0]?.[1]).toEqual(["/tmp/evidence.png"]);
+    expect(onSend.mock.calls[0]?.[2]).toEqual({
+      visionPreflight: {
+        mode: "ocr",
+        model: "qwen3-vl-flash",
+        skillName: "视觉OCR",
+      },
+    });
+  });
+
+  it("converts referenced PDF files into hidden vision inputs before sending", async () => {
+    visionFileInputMocks.collectVisionFilePaths.mockReturnValueOnce(["/tmp/report.pdf"]);
+    visionFileInputMocks.collectVisionImageInputs.mockResolvedValueOnce([
+      "data:image/png;base64,page-1",
+    ]);
+    const onSend = vi.fn();
+    const view = render(
+      <ComposerHarness onSend={onSend} visionModelId="qwen3-vl-flash" />,
+    );
+
+    const textarea = getTextarea(view.container);
+    const value = "@file `/tmp/report.pdf`\n整理这个 PDF";
+    await act(async () => {
+      fireEvent.change(textarea, {
+        target: {
+          value,
+          selectionStart: value.length,
+        },
+      });
+      fireEvent.keyDown(textarea, { key: "Enter", bubbles: true });
+    });
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+    expect(visionFileInputMocks.collectVisionImageInputs).toHaveBeenCalledWith({
+      text: value,
+      explicitPaths: [],
+      workspacePath: null,
+    });
+    expect(onSend.mock.calls[0]?.[1]).toEqual(["data:image/png;base64,page-1"]);
+    expect(onSend.mock.calls[0]?.[2]).toEqual({
+      visionPreflight: {
+        mode: "ocr",
+        model: "qwen3-vl-flash",
+        skillName: "视觉OCR",
+      },
+    });
   });
 });

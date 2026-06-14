@@ -21,8 +21,8 @@ const MAIN_WINDOW_DRAG_DROP_FORWARD_EVENT: &str = "main-window://drag-drop";
 #[derive(Clone, Serialize)]
 struct ForwardedDragDropPayload {
     #[serde(rename = "type")]
-    event_type: &'static str, // "enter" | "over" | "drop"
-    position: ForwardedDragDropPosition,
+    event_type: &'static str, // "enter" | "over" | "leave" | "drop"
+    position: Option<ForwardedDragDropPosition>,
     paths: Option<Vec<String>>,
 }
 ```
@@ -32,7 +32,7 @@ Frontend service:
 ```typescript
 export type DragDropPayload = {
   type: "enter" | "over" | "leave" | "drop";
-  position: { x: number; y: number };
+  position?: { x: number; y: number };
   paths?: string[];
 };
 
@@ -62,6 +62,7 @@ type UsePasteAndDropOptions = {
 - `src/services/dragDrop.ts` MUST handle duplicate `drop` payloads idempotently because main WebView drops can arrive through both the native window listener and the forwarded bridge.
 - Rust bridge MUST NOT add `if webview.label() == "main" { return; }`. That optimization breaks the verified macOS external drag-drop path.
 - Forwarded `position` MUST be converted to main-window viewport coordinates before frontend target hit-testing. For child WebViews, add the child WebView physical position offset to the event-local physical position.
+- Forwarded `leave` MUST be delivered to the frontend and MAY omit `position`; frontend consumers MUST clear hover feedback before any coordinate-dependent hit-test.
 - Forwarded `paths` MUST be absolute path strings derived from `PathBuf::to_string_lossy()`.
 - `drop` events with paths MUST flow through the existing Composer path pipeline:
   - `subscribeWindowDragDrop`
@@ -80,6 +81,7 @@ type UsePasteAndDropOptions = {
 | main WebView receives OS drop | Rust still forwards payload and frontend dedupes duplicate drop | skip main in Rust bridge |
 | forwarded child position | position is main-window viewport compatible | use child-local position for Composer hit-test |
 | Browser Dock active | external drop into Composer still inserts path | Browser Dock steals global drag/drop permanently |
+| drag leaves before drop | workspace/composer hover feedback clears | wait for a drop event or app restart to clear hover feedback |
 | macOS Finder folder | inserts absolute folder reference | require folder expansion or workspace membership |
 | Windows Explorer path | preserves drive-letter path and dedupes case-insensitively | compare raw drive-letter variants as distinct paths |
 | Linux file manager | consumes WebKitGTK drag paths when available | assume Linux opacity support is required |
@@ -101,6 +103,7 @@ type UsePasteAndDropOptions = {
   - forwarded `main-window://drag-drop` dispatches to all subscribers.
   - cleanup calls both unlisten handlers after the last subscriber unsubscribes.
 - Composer hook/component test:
+  - forwarded `leave` payload without position clears drag-hover feedback.
   - forwarded `drop` payload with file path inserts `@absolutePath`.
   - forwarded `drop` payload with folder path inserts one folder reference and does not expand children.
   - drop outside Composer target does not insert.

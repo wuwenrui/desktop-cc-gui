@@ -129,6 +129,12 @@ import type {
 
 const EMPTY_TASK_RUNS: NonNullable<MessagesProps["taskRuns"]> = [];
 
+function pinMessagesHorizontalScroll(container: HTMLDivElement | null) {
+  if (container && container.scrollLeft !== 0) {
+    container.scrollLeft = 0;
+  }
+}
+
 export const Messages = memo(function Messages({
   items: legacyItems,
   threadId: legacyThreadId,
@@ -422,8 +428,10 @@ export const Messages = memo(function Messages({
     if (!shouldScroll) {
       return;
     }
+    pinMessagesHorizontalScroll(container);
     // Always use instant for programmatic scroll requests to avoid blocking input
-    bottomRef.current.scrollIntoView({ behavior: "instant", block: "end" });
+    bottomRef.current.scrollIntoView({ behavior: "instant", block: "end", inline: "nearest" });
+    pinMessagesHorizontalScroll(container);
   }, [isNearBottom, liveAutoFollowEnabled]);
 
   const scrollToAgentTaskCard = useCallback((request: AgentTaskScrollRequest | null) => {
@@ -447,6 +455,7 @@ export const Messages = memo(function Messages({
       container.scrollTop + (nodeRect.top - containerRect.top) - container.clientHeight * 0.22;
     autoScrollRef.current = false;
     container.scrollTo({
+      left: 0,
       top: Math.max(0, targetTop),
       behavior: "smooth",
     });
@@ -1759,7 +1768,9 @@ export const Messages = memo(function Messages({
     const scrollBehavior =
       isThinking || isAssistantFinalizing ? "instant" as const : "smooth" as const;
     raf = window.requestAnimationFrame(() => {
-      target.scrollIntoView({ behavior: scrollBehavior, block: "end" });
+      pinMessagesHorizontalScroll(container);
+      target.scrollIntoView({ behavior: scrollBehavior, block: "end", inline: "nearest" });
+      pinMessagesHorizontalScroll(container);
     });
     return () => {
       if (raf) {
@@ -1882,6 +1893,7 @@ export const Messages = memo(function Messages({
       container.scrollTop + (nodeRect.top - containerRect.top) - container.clientHeight * 0.28;
     autoScrollRef.current = false;
     container.scrollTo({
+      left: 0,
       top: Math.max(0, targetTop),
       behavior: "smooth",
     });

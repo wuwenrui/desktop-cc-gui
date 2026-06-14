@@ -1,5 +1,6 @@
 import type { SiteModel } from "../../services/tauri/vendors";
 import type { CodexCustomModel } from "./types";
+import { markVisionModelCapabilities } from "../vision/visionRouting";
 
 /**
  * 把"Sync Models from Site"弹窗的勾选结果并入管理模型列表。
@@ -21,7 +22,7 @@ export function mergeSyncedModels(
   const added = [...selectedIds]
     .filter((id) => !keptIds.has(id))
     .map((id): CodexCustomModel => ({ id, label: id }));
-  return [...kept, ...added];
+  return [...kept, ...added].map(markVisionModelCapabilities);
 }
 
 /** 弹窗打开时的预勾选集合：已维护且本次站点返回的模型 id。 */

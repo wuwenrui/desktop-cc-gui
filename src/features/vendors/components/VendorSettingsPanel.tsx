@@ -4,7 +4,11 @@ import LayoutList from "lucide-react/dist/esm/icons/layout-list";
 import PackagePlus from "lucide-react/dist/esm/icons/package-plus";
 import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
 import type { CodexCustomModel, CodexProviderConfig, VendorTab } from "../types";
-import { STORAGE_KEYS, validateCodexCustomModels } from "../types";
+import {
+  LOCAL_SETTINGS_PROVIDER_ID,
+  STORAGE_KEYS,
+  validateCodexCustomModels,
+} from "../types";
 import {
   fetchSiteModels,
   updateClaudeProvider,
@@ -42,6 +46,7 @@ import { EngineIcon } from "../../engine/components/EngineIcon";
 import { Tabs, TabsList, TabsTab, TabsPanel } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { pickPreferredVisionModelId } from "../../vision/visionRouting";
 
 const LEGACY_CLAUDE_MAPPING_KEYS = [
   "mossx-claude-model-mapping",
@@ -127,14 +132,28 @@ export function VendorSettingsPanel({
   const [siteModels, setSiteModels] = useState<SiteModel[]>([]);
   const [siteModelLoading, setSiteModelLoading] = useState(false);
   const [siteModelError, setSiteModelError] = useState<string | null>(null);
+  const [siteModelKeyNoticeVisible, setSiteModelKeyNoticeVisible] =
+    useState(false);
 
   const claude = useProviderManagement();
   const codex = useCodexProviderManagement();
   const claudeModels = usePluginModels(STORAGE_KEYS.CLAUDE_CUSTOM_MODELS);
   const codexModels = usePluginModels(STORAGE_KEYS.CODEX_CUSTOM_MODELS);
   const geminiModels = usePluginModels(STORAGE_KEYS.GEMINI_CUSTOM_MODELS);
+  const claudeProviders = claude.providers;
+  const handleAddClaudeProvider = claude.handleAddProvider;
+  const handleEditClaudeProvider = claude.handleEditProvider;
   const codexModelCount = codexModels.models.length;
   const updateCodexModels = codexModels.updateModels;
+
+  const openClaudeApiKeyConfig = useCallback(() => {
+    const activeProvider = claudeProviders.find((provider) => provider.isActive);
+    if (activeProvider && activeProvider.id !== LOCAL_SETTINGS_PROVIDER_ID) {
+      handleEditClaudeProvider(activeProvider);
+      return;
+    }
+    handleAddClaudeProvider();
+  }, [claudeProviders, handleAddClaudeProvider, handleEditClaudeProvider]);
 
   const openModelDialog = useCallback((target: ModelDialogTarget, addMode = false) => {
     setDialogTarget(target);
@@ -151,16 +170,32 @@ export function VendorSettingsPanel({
 
   const handleSyncSiteModels = useCallback(async () => {
     const activeProvider = claude.providers.find((p) => p.isActive);
-    const apiKey =
-      activeProvider?.settingsConfig?.env?.ANTHROPIC_AUTH_TOKEN ?? "";
+    const apiKey = (
+      activeProvider?.settingsConfig?.env?.ANTHROPIC_AUTH_TOKEN ?? ""
+    ).trim();
     if (!apiKey) {
-      pushErrorToast({ title: "Sync failed", message: "No active provider with API key configured" });
+      setSiteModelError(null);
+      setSiteModelKeyNoticeVisible(true);
+      pushErrorToast({
+        title: "Sync failed",
+        message: "No active provider with API key configured.",
+        sticky: true,
+        actions: [
+          {
+            label: "Configure API key",
+            run: openClaudeApiKeyConfig,
+            dismissOnSuccess: true,
+            variant: "primary",
+          },
+        ],
+      });
       return;
     }
     const baseUrl =
       activeProvider?.settingsConfig?.env?.ANTHROPIC_BASE_URL ?? NEW_API_HOST;
     setSiteModelLoading(true);
     setSiteModelError(null);
+    setSiteModelKeyNoticeVisible(false);
     try {
       const list = await fetchSiteModels(baseUrl, apiKey);
       if (list.length === 0) {
@@ -175,7 +210,7 @@ export function VendorSettingsPanel({
     } finally {
       setSiteModelLoading(false);
     }
-  }, [claude.providers]);
+  }, [claude.providers, openClaudeApiKeyConfig]);
 
   const handleSiteModelConfirm = useCallback(
     async (claudeSlots: SlotMapping, selectedModelIds: string[]) => {
@@ -207,9 +242,25 @@ export function VendorSettingsPanel({
         // 把弹窗勾选结果同步进 Claude 的管理模型列表（安全双向 diff）
         const fetchedIds = new Set(siteModels.map((m) => m.id));
         const selectedIds = new Set(selectedModelIds);
-        claudeModels.updateModels(
-          mergeSyncedModels(claudeModels.models, fetchedIds, selectedIds),
+        const nextModels = mergeSyncedModels(
+          claudeModels.models,
+          fetchedIds,
+          selectedIds,
         );
+        claudeModels.updateModels(nextModels);
+        const preferredVisionModel = pickPreferredVisionModelId(
+          nextModels,
+          appSettings.visionModelId,
+        );
+        if (
+          preferredVisionModel &&
+          preferredVisionModel !== appSettings.visionModelId
+        ) {
+          await onUpdateAppSettings({
+            ...appSettings,
+            visionModelId: preferredVisionModel,
+          });
+        }
         setSiteModelDialogOpen(false);
       } catch (e) {
         pushErrorToast({ title: "Save failed", message: String(e) });
@@ -217,7 +268,7 @@ export function VendorSettingsPanel({
         setSiteModelLoading(false);
       }
     },
-    [claude, claudeModels, siteModels],
+    [appSettings, claude, claudeModels, onUpdateAppSettings, siteModels],
   );
 
   const loadCodexGlobalConfig = useCallback(async () => {
@@ -586,6 +637,27 @@ export function VendorSettingsPanel({
               <RefreshCw size={14} />
               {siteModelLoading ? "Loading..." : "Sync Models from Site"}
             </Button>
+            {siteModelKeyNoticeVisible && (
+              <div
+                className="settings-help"
+                role="status"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  flexWrap: "wrap",
+                }}
+              >
+                <span>No active provider with API key configured.</span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={openClaudeApiKeyConfig}
+                >
+                  Configure API key
+                </Button>
+              </div>
+            )}
             {siteModelError && (
               <div className="settings-help" style={{ color: "var(--text-danger)" }}>
                 {siteModelError}

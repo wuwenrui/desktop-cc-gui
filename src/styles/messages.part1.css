@@ -2,6 +2,9 @@
 
 .message {
   display: flex;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   margin-bottom: 12px;
   content-visibility: auto;
   contain-intrinsic-block-size: auto 120px;
@@ -49,6 +52,7 @@
   justify-content: space-between;
   gap: 12px;
   width: 100%;
+  min-width: 0;
   max-width: 100%;
 }
 
@@ -270,6 +274,9 @@
 .message-agent-task-card {
   display: grid;
   gap: 10px;
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
   padding: 14px 16px 12px;
   margin-bottom: 10px;
   border-radius: 18px;
@@ -433,6 +440,7 @@
 
 .message-agent-task-title {
   min-width: 0;
+  overflow-wrap: anywhere;
   font-size: var(--message-title-font-size);
   line-height: 1.3;
   font-weight: 700;
@@ -441,6 +449,7 @@
 
 .message-agent-task-subtitle {
   min-width: 0;
+  overflow-wrap: anywhere;
   font-size: var(--message-meta-font-size);
   line-height: 1.35;
   color: var(--text-secondary);
@@ -490,6 +499,7 @@
   display: inline-flex;
   align-items: center;
   min-height: 22px;
+  max-width: 100%;
   padding: 0 9px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--surface-card) 92%, transparent);
@@ -497,6 +507,8 @@
   color: var(--text-secondary);
   font-size: 11px;
   line-height: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -627,10 +639,14 @@
   display: flex;
   flex-direction: column;
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .user-collapsible-content {
   position: relative;
+  min-width: 0;
+  max-width: 100%;
   transition: max-height 0.3s ease-out;
 }
 
@@ -641,6 +657,7 @@
 .user-collapsible-text-content {
   color: inherit;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
   word-break: break-word;
 }
 
@@ -1492,11 +1509,15 @@
   display: grid;
   gap: 8px;
   width: min(860px, 100%);
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .message-context-stack.is-user {
   width: var(--message-user-bubble-max-width, 85%);
-  max-width: none;
+  min-width: 0;
+  max-width: 100%;
   margin-left: auto;
   justify-items: end;
 }

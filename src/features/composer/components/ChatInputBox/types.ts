@@ -322,6 +322,9 @@ export interface ModelInfo {
   label: string;
   description?: string;
   source?: string;
+  capabilities?: {
+    imageInput?: boolean;
+  };
 }
 
 /**

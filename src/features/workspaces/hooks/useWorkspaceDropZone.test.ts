@@ -8,7 +8,7 @@ let mockOnDragDropEvent:
   | ((event: {
       payload: {
         type: "enter" | "over" | "leave" | "drop";
-        position: { x: number; y: number };
+        position?: { x: number; y: number };
         paths?: string[];
       };
     }) => void)
@@ -105,6 +105,30 @@ describe("useWorkspaceDropZone", () => {
     });
 
     expect(onDropPaths).toHaveBeenCalledWith(["/tmp/project"]);
+
+    hook.unmount();
+  });
+
+  it("clears workspace overlay when forwarded leave omits coordinates", () => {
+    const hook = renderDropHook({ onDropPaths: () => {} });
+    const target = document.createElement("aside");
+    target.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: 240, bottom: 600 } as DOMRect);
+    hook.result.dropTargetRef.current = target;
+
+    act(() => {
+      mockOnDragDropEvent?.({
+        payload: { type: "enter", position: { x: 120, y: 120 } },
+      });
+    });
+    expect(hook.result.isDragOver).toBe(true);
+
+    act(() => {
+      mockOnDragDropEvent?.({
+        payload: { type: "leave" },
+      });
+    });
+    expect(hook.result.isDragOver).toBe(false);
 
     hook.unmount();
   });
