@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-22.md`
-- **Total Sessions**: 832
+- **Total Sessions**: 833
 - **Last Active**: 2026-06-14
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-22.md` | ~243 | Active |
+| `journal-22.md` | ~287 | Active |
 | `journal-21.md` | ~1970 | Archived |
 | `journal-20.md` | ~1997 | Archived |
 | `journal-19.md` | ~1989 | Archived |
@@ -50,6 +50,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 833 | 2026-06-14 | 清理过时 OpenSpec 性能调查提案 | `88072aee` | `feature/v0.5.9` |
 | 832 | 2026-06-14 | 归档已验证 OpenSpec 提案 | `c9dd8cb1` | `feature/v0.5.9` |
 | 831 | 2026-06-14 | 优化 progressive reveal 边界扫描 | `f706b181` | `feature/v0.5.9` |
 | 830 | 2026-06-13 | 收口并行对话运行时残留 P0 修复 | `bd456e46` | `feature/v0.5.9` |

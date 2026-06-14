@@ -241,3 +241,47 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 833: 清理过时 OpenSpec 性能调查提案
+
+**Date**: 2026-06-14
+**Task**: 清理过时 OpenSpec 性能调查提案
+**Branch**: `feature/v0.5.9`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+本次会话清理了已过时的 active OpenSpec change `investigate-parallel-conversation-jank-2026-06`，避免它继续出现在 `openspec list` 中制造假任务债。
+
+完成内容：
+- 删除 `openspec/changes/investigate-parallel-conversation-jank-2026-06/` 整个 active change 目录。
+- 为已归档的 `2026-06-14-close-client-performance-residual-2026-06` 增加 Archive Calibration 说明，明确该提案已完成、已归档、主 specs 已同步。
+- 校准 `tasks.md` 顶部状态，补充归档后 truth-check / validation / handoff 项。
+
+验证：
+- `openspec list --json` 返回无 active changes。
+- `openspec validate --all --strict --no-interactive` passed: 345 passed, 0 failed。
+- 提交前工作区只包含 OpenSpec 文档改动与旧 active change 删除。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `88072aee` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
