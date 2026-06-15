@@ -15,7 +15,7 @@ import {
 } from "../features/layout/utils/sidebarTogglePlacement";
 import {
   adaptAppShellLegacyFlatContext,
-  flattenAppShellDomainContexts,
+  flattenAppShellContextInput,
 } from "./appShellDomainContexts";
 import {
   GitHistoryPanel,
@@ -62,7 +62,7 @@ export function injectSidebarTopbarNode(
 export function renderAppShell(ctx: RenderAppShellContext) {
   const legacyCtx =
     adaptAppShellLegacyFlatContext<RenderAppShellFlattenedContext>({
-      ...flattenAppShellDomainContexts(ctx.appShellDomainContexts),
+      ...flattenAppShellContextInput(ctx),
       ...ctx.searchAndComposerSection,
       ...ctx.sections,
       ...ctx.layoutNodes,

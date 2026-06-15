@@ -109,22 +109,49 @@ export function defineAppShellDomainContexts<T extends AppShellDomainContexts>(
   return contexts;
 }
 
+function getDomainContextValue(
+  contexts: Partial<AppShellDomainContexts> | null | undefined,
+  name: AppShellDomainContextName,
+): AppShellDomainContextValue {
+  const value = contexts?.[name];
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+  return value;
+}
+
 export function flattenAppShellDomainContexts(
-  contexts: AppShellDomainContexts,
+  contexts: Partial<AppShellDomainContexts> | null | undefined,
 ): AppShellLegacyFlatContext {
   return Object.assign(
     {},
-    ...APP_SHELL_DOMAIN_CONTEXT_NAMES.map((name) => contexts[name]),
+    ...APP_SHELL_DOMAIN_CONTEXT_NAMES.map((name) =>
+      getDomainContextValue(contexts, name),
+    ),
   );
+}
+
+export function flattenAppShellContextInput(
+  input: AppShellLegacyFlatContext & {
+    appShellDomainContexts?: Partial<AppShellDomainContexts> | null;
+  },
+): AppShellLegacyFlatContext {
+  if (input.appShellDomainContexts) {
+    return flattenAppShellDomainContexts(input.appShellDomainContexts);
+  }
+  return input;
 }
 
 export function flattenSelectedAppShellDomainContexts<
   TDomainName extends AppShellDomainContextName,
 >(
-  contexts: AppShellDomainContextSelection<TDomainName>,
+  contexts: Partial<AppShellDomainContextSelection<TDomainName>> | null | undefined,
   domainNames: readonly TDomainName[],
 ): AppShellLegacyFlatContext {
-  return Object.assign({}, ...domainNames.map((name) => contexts[name]));
+  return Object.assign(
+    {},
+    ...domainNames.map((name) => getDomainContextValue(contexts, name)),
+  );
 }
 
 export function adaptAppShellLegacyFlatContext<TBoundary extends object>(

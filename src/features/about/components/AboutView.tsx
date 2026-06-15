@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { getVersion } from "@tauri-apps/api/app";
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { loadAboutStyles } from "../../../styles/featureStyleLoaders";
 
-const GITHUB_URL = "https://github.com/zhukunpenglinyutong/desktop-cc-gui";
+const ABOUT_APP_NAME = "LawyerCopilot";
+const ABOUT_WINDOW_TITLE = `关于 ${ABOUT_APP_NAME}`;
 
 export function AboutView() {
   const { t } = useTranslation();
@@ -13,9 +14,13 @@ export function AboutView() {
     void loadAboutStyles();
   }, []);
 
-  const handleOpenGitHub = () => {
-    void openUrl(GITHUB_URL);
-  };
+  useEffect(() => {
+    try {
+      void getCurrentWindow().setTitle(ABOUT_WINDOW_TITLE).catch(() => {});
+    } catch {
+      // Browser tests and non-Tauri previews do not always expose a native window.
+    }
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -45,25 +50,15 @@ export function AboutView() {
           <img
             className="about-icon"
             src="/app-icon.png"
-            alt="ccgui icon"
+            alt={`${ABOUT_APP_NAME} icon`}
           />
-          <div className="about-title">ccgui</div>
+          <div className="about-title">{ABOUT_APP_NAME}</div>
         </div>
         <div className="about-version">
           {version ? `${t("about.version")} ${version}` : `${t("about.version")} —`}
         </div>
         <div className="about-tagline">
           {t("about.tagline")}
-        </div>
-        <div className="about-divider" />
-        <div className="about-links">
-          <button
-            type="button"
-            className="about-link"
-            onClick={handleOpenGitHub}
-          >
-            {t("about.github")}
-          </button>
         </div>
       </div>
     </div>

@@ -8,6 +8,7 @@ const SEARCH_SECTION_FILE = "src/app-shell-parts/useAppShellSearchAndComposerSec
 const SECTIONS_FILE = "src/app-shell-parts/useAppShellSections.ts";
 const LAYOUT_FILE = "src/app-shell-parts/useAppShellLayoutNodesSection.tsx";
 const RENDER_FILE = "src/app-shell-parts/renderAppShell.tsx";
+const SETTINGS_VIEW_FILE = "src/features/settings/components/SettingsView.tsx";
 const APP_SHELL_DOMAIN_CONTEXT_NAMES = new Set([
   "runtimeThreadContext",
   "workspaceNavigationContext",
@@ -24,6 +25,11 @@ const CONTRACT_FILES = [
   SECTIONS_FILE,
   LAYOUT_FILE,
   RENDER_FILE,
+];
+
+const PROGRAM_FILES = [
+  ...CONTRACT_FILES,
+  SETTINGS_VIEW_FILE,
 ];
 
 const PARSER_OPTIONS_JSON = JSON.stringify({
@@ -101,7 +107,7 @@ function findFunctionDeclaration(sourceFile, functionName) {
   throw new Error(`Cannot find function "${functionName}" in ${sourceFile.fileName}.`);
 }
 
-function getVariableObjectLiteral(sourceFile, variableName) {
+function findVariableObjectLiteral(sourceFile, variableName) {
   let result = null;
   visitNode(sourceFile, (node) => {
     if (result) {
@@ -117,6 +123,11 @@ function getVariableObjectLiteral(sourceFile, variableName) {
     }
   });
 
+  return result;
+}
+
+function getVariableObjectLiteral(sourceFile, variableName) {
+  const result = findVariableObjectLiteral(sourceFile, variableName);
   if (!result) {
     throw new Error(`Cannot find object literal variable "${variableName}" in ${sourceFile.fileName}.`);
   }
@@ -243,6 +254,22 @@ function checkObjectLiteralShorthandBindingsInObject(
   }
 
   return issues;
+}
+
+function collectFlatContextKeySet(sourceFile, variableName) {
+  const objectLiteral = getVariableObjectLiteral(sourceFile, variableName);
+  const sourceKeysByIdentifier = collectLocalObjectLiteralSourceKeys(sourceFile);
+  return collectObjectLiteralEffectiveKeys(objectLiteral, sourceKeysByIdentifier);
+}
+
+function checkFlatContextShorthandBindings(sourceFile, variableName, checker) {
+  const objectLiteral = getVariableObjectLiteral(sourceFile, variableName);
+  return checkObjectLiteralShorthandBindingsInObject(
+    sourceFile,
+    objectLiteral,
+    variableName,
+    checker,
+  );
 }
 
 function checkDomainContextShorthandBindings(sourceFile, variableName, checker) {
@@ -572,11 +599,21 @@ function checkContract(contract) {
   return issues;
 }
 
+function checkSettingsViewStaticStyleImport(sourceFile) {
+  const sourceText = sourceFile.getFullText();
+  if (!sourceText.includes('import "../../../styles/settings.css";')) {
+    return [
+      "[SettingsView] SettingsView component must statically import settings.css.",
+    ];
+  }
+  return [];
+}
+
 async function main() {
   await runNoUndefCheck();
 
   const program = ts.createProgram({
-    rootNames: CONTRACT_FILES.map((file) => toAbsolutePath(file)),
+    rootNames: PROGRAM_FILES.map((file) => toAbsolutePath(file)),
     options: {
       target: ts.ScriptTarget.ESNext,
       module: ts.ModuleKind.ESNext,
@@ -591,20 +628,42 @@ async function main() {
   const sectionsSource = getProgramSourceFile(program, SECTIONS_FILE);
   const layoutSource = getProgramSourceFile(program, LAYOUT_FILE);
   const renderSource = getProgramSourceFile(program, RENDER_FILE);
+  const settingsViewSource = getProgramSourceFile(program, SETTINGS_VIEW_FILE);
 
-  const appShellDomainContextKeySets = collectDomainContextKeySets(
-    appShellSource,
-    "rawAppShellDomainContexts",
+  const hasDomainContextSource = Boolean(
+    findVariableObjectLiteral(appShellSource, "rawAppShellDomainContexts"),
   );
-  const appShellDomainContextShorthandIssues = checkDomainContextShorthandBindings(
-    appShellSource,
-    "rawAppShellDomainContexts",
-    checker,
-  );
-  const appShellDomainSourceSets = new Map([
-    ["appShellDomainContexts", appShellDomainContextKeySets.allKeys],
-    ...appShellDomainContextKeySets.domainKeys,
-  ]);
+  const appShellSourceSets = hasDomainContextSource
+    ? (() => {
+        const keySets = collectDomainContextKeySets(
+          appShellSource,
+          "rawAppShellDomainContexts",
+        );
+        return {
+          shorthandIssues: checkDomainContextShorthandBindings(
+            appShellSource,
+            "rawAppShellDomainContexts",
+            checker,
+          ),
+          sourceSets: new Map([
+            ["appShellDomainContexts", keySets.allKeys],
+            ...keySets.domainKeys,
+          ]),
+        };
+      })()
+    : {
+        shorthandIssues: checkFlatContextShorthandBindings(
+          appShellSource,
+          "appShellContext",
+          checker,
+        ),
+        sourceSets: new Map([
+          [
+            "appShellContext",
+            collectFlatContextKeySet(appShellSource, "appShellContext"),
+          ],
+        ]),
+      };
   const searchReturnKeys = getReturnObjectKeys(
     searchSource,
     "useAppShellSearchAndComposerSection",
@@ -641,19 +700,19 @@ async function main() {
 
   const searchProvided = resolveProvidedKeysFromArgument(
     getFirstCallArgument(appShellSource, "useAppShellSearchAndComposerSection"),
-    appShellDomainSourceSets,
+    appShellSourceSets.sourceSets,
   );
   const sectionsProvided = resolveProvidedKeysFromArgument(
     getFirstCallArgument(appShellSource, "useAppShellSections"),
     new Map([
-      ...appShellDomainSourceSets,
+      ...appShellSourceSets.sourceSets,
       ["searchAndComposerSection", searchReturnKeys],
     ]),
   );
   const layoutProvided = resolveProvidedKeysFromArgument(
     getFirstCallArgument(appShellSource, "useAppShellLayoutNodesSection"),
     new Map([
-      ...appShellDomainSourceSets,
+      ...appShellSourceSets.sourceSets,
       ["searchAndComposerSection", searchReturnKeys],
       ["sections", sectionsReturnKeys],
     ]),
@@ -661,7 +720,7 @@ async function main() {
   const renderProvided = resolveProvidedKeysFromArgument(
     getFirstCallArgument(appShellSource, "renderAppShell"),
     new Map([
-      ...appShellDomainSourceSets,
+      ...appShellSourceSets.sourceSets,
       ["searchAndComposerSection", searchReturnKeys],
       ["sections", sectionsReturnKeys],
       ["layoutNodes", layoutReturnKeys],
@@ -669,7 +728,7 @@ async function main() {
   );
 
   const issues = [
-    ...appShellDomainContextShorthandIssues,
+    ...appShellSourceSets.shorthandIssues,
     ...checkContract({
       name: "useAppShellSearchAndComposerSection",
       requiredKeys: searchRequiredKeys,
@@ -694,6 +753,7 @@ async function main() {
       providedKeys: renderProvided.keys,
       unresolvedSpreads: renderProvided.unresolvedSpreads,
     }),
+    ...checkSettingsViewStaticStyleImport(settingsViewSource),
   ];
 
   if (issues.length > 0) {

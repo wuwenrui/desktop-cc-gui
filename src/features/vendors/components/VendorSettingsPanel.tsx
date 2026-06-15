@@ -145,6 +145,19 @@ export function VendorSettingsPanel({
   const handleEditClaudeProvider = claude.handleEditProvider;
   const codexModelCount = codexModels.models.length;
   const updateCodexModels = codexModels.updateModels;
+  const activeClaudeProvider =
+    claudeProviders.find((provider) => provider.isActive) ?? null;
+  const activeClaudeSlotMapping: Partial<SlotMapping> = {
+    haiku:
+      activeClaudeProvider?.settingsConfig?.env?.ANTHROPIC_DEFAULT_HAIKU_MODEL ??
+      "",
+    sonnet:
+      activeClaudeProvider?.settingsConfig?.env?.ANTHROPIC_DEFAULT_SONNET_MODEL ??
+      "",
+    opus:
+      activeClaudeProvider?.settingsConfig?.env?.ANTHROPIC_DEFAULT_OPUS_MODEL ??
+      "",
+  };
 
   const openClaudeApiKeyConfig = useCallback(() => {
     const activeProvider = claudeProviders.find((provider) => provider.isActive);
@@ -978,6 +991,7 @@ export function VendorSettingsPanel({
             <SiteModelPicker
               models={siteModels}
               ownedModelIds={claudeModels.models.map((m) => m.id)}
+              initialSlotMapping={activeClaudeSlotMapping}
               loading={siteModelLoading}
               onBack={() => setSiteModelDialogOpen(false)}
               onConfirm={handleSiteModelConfirm}

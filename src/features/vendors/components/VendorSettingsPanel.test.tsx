@@ -441,6 +441,54 @@ describe("VendorSettingsPanel", () => {
     expect(mockState.codexModels.updateModels).not.toHaveBeenCalled();
   });
 
+  it("prefills site model picker slots from the active provider mapping", async () => {
+    mockState.claudeManagement.providers = [
+      {
+        id: "p1",
+        name: "P1",
+        isActive: true,
+        settingsConfig: {
+          env: {
+            ANTHROPIC_AUTH_TOKEN: "tok",
+            ANTHROPIC_BASE_URL: "http://example.test",
+            ANTHROPIC_DEFAULT_HAIKU_MODEL: "custom-haiku",
+            ANTHROPIC_DEFAULT_SONNET_MODEL: "custom-sonnet",
+            ANTHROPIC_DEFAULT_OPUS_MODEL: "custom-opus",
+          },
+        },
+      },
+    ];
+    fetchSiteModelsMock.mockResolvedValue([
+      { id: "auto-flash", owned_by: "" },
+      { id: "auto-pro", owned_by: "" },
+      { id: "auto-max", owned_by: "" },
+      { id: "custom-haiku", owned_by: "" },
+      { id: "custom-sonnet", owned_by: "" },
+      { id: "custom-opus", owned_by: "" },
+    ]);
+
+    renderPanel();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /Sync Models from Site/ }),
+    );
+
+    await screen.findByRole("checkbox", { name: /custom-haiku/ });
+
+    expect(
+      (screen.getByRole("combobox", { name: "haiku" }) as HTMLSelectElement)
+        .value,
+    ).toBe("custom-haiku");
+    expect(
+      (screen.getByRole("combobox", { name: "sonnet" }) as HTMLSelectElement)
+        .value,
+    ).toBe("custom-sonnet");
+    expect(
+      (screen.getByRole("combobox", { name: "opus" }) as HTMLSelectElement)
+        .value,
+    ).toBe("custom-opus");
+  });
+
   it("offers an API key configuration entry when site sync has no active provider key", async () => {
     const activeProvider = {
       id: "p1",

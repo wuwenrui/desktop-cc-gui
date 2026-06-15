@@ -30,7 +30,7 @@ import { useAppShellKanbanComposerSection } from "./useAppShellKanbanComposerSec
 import { useAppShellKanbanExecutionSection } from "./useAppShellKanbanExecutionSection";
 import {
   adaptAppShellLegacyFlatContext,
-  flattenAppShellDomainContexts,
+  flattenAppShellContextInput,
 } from "./appShellDomainContexts";
 import type {
   UseAppShellSectionsContext,
@@ -54,7 +54,7 @@ function flattenAppShellSectionsContext(
   input: UseAppShellSectionsInput,
 ): UseAppShellSectionsContext {
   return adaptAppShellLegacyFlatContext<UseAppShellSectionsContext>({
-    ...flattenAppShellDomainContexts(input.appShellDomainContexts),
+    ...flattenAppShellContextInput(input),
     ...input.searchAndComposerSection,
   });
 }

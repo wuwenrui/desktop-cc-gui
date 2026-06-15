@@ -14,6 +14,8 @@ interface SiteModelPickerProps {
   models: SiteModel[];
   /** ids of models already in the current engine's managed list, used to preselect */
   ownedModelIds?: string[];
+  /** Saved Claude slot mapping, used when reopening the site sync dialog */
+  initialSlotMapping?: Partial<SlotMapping>;
   onConfirm: (claudeSlots: SlotMapping, selectedModelIds: string[]) => void;
   onBack?: () => void;
   loading?: boolean;
@@ -22,12 +24,15 @@ interface SiteModelPickerProps {
 export function SiteModelPicker({
   models,
   ownedModelIds,
+  initialSlotMapping,
   onConfirm,
   onBack,
   loading,
 }: SiteModelPickerProps) {
   const [search, setSearch] = useState("");
-  const [slots, setSlots] = useState<SlotMapping>(() => autoSuggestSlots(models));
+  const [slots, setSlots] = useState<SlotMapping>(() =>
+    initialSlots(models, initialSlotMapping),
+  );
   const [selected, setSelected] = useState<Set<string>>(() =>
     initialSelectedIds(models, new Set(ownedModelIds ?? [])),
   );
@@ -152,6 +157,24 @@ function autoSuggestSlots(models: SiteModel[]): SlotMapping {
     haiku: find(["haiku", "flash", "mini", "air", "lite", "spark"]),
     sonnet: find(["sonnet", "pro", "plus", "4.7", "v3", "standard"]),
     opus: find(["opus", "max", "ultra", "preview"]),
+  };
+}
+
+function initialSlots(
+  models: SiteModel[],
+  initialSlotMapping: Partial<SlotMapping> | undefined,
+): SlotMapping {
+  const suggested = autoSuggestSlots(models);
+  const modelIds = new Set(models.map((model) => model.id));
+  const fromSaved = (slot: keyof SlotMapping) => {
+    const value = initialSlotMapping?.[slot]?.trim();
+    return value && modelIds.has(value) ? value : suggested[slot];
+  };
+
+  return {
+    haiku: fromSaved("haiku"),
+    sonnet: fromSaved("sonnet"),
+    opus: fromSaved("opus"),
   };
 }
 

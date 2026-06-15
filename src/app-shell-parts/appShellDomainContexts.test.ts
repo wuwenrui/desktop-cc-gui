@@ -7,6 +7,7 @@ import {
   adaptAppShellLegacyFlatContext,
   defineAppShellDomainContexts,
   findOverlappingAppShellDomainKeys,
+  flattenAppShellContextInput,
   flattenAppShellDomainContexts,
   flattenSelectedAppShellDomainContexts,
   listAppShellDomainContextNames,
@@ -93,6 +94,23 @@ describe("appShellDomainContexts", () => {
     });
   });
 
+  it("treats a missing domain context bag as an empty legacy context", () => {
+    const flattenedContext = flattenAppShellDomainContexts(
+      undefined as unknown as AppShellDomainContexts,
+    );
+
+    expect(flattenedContext).toEqual({});
+  });
+
+  it("ignores missing or malformed individual domain contexts", () => {
+    const flattenedContext = flattenAppShellDomainContexts({
+      composerContext: { activeDraft: "hello" },
+      settingsContext: null,
+    } as unknown as AppShellDomainContexts);
+
+    expect(flattenedContext).toEqual({ activeDraft: "hello" });
+  });
+
   it("flattens only selected domains for section hook adapters", () => {
     const contexts = createDomainContexts();
 
@@ -109,6 +127,15 @@ describe("appShellDomainContexts", () => {
     expect(selectedContext).not.toHaveProperty("activeEditorFilePath");
   });
 
+  it("treats a missing selected domain context bag as an empty legacy context", () => {
+    const selectedContext = flattenSelectedAppShellDomainContexts(
+      undefined as unknown as Pick<AppShellDomainContexts, "composerContext">,
+      ["composerContext"],
+    );
+
+    expect(selectedContext).toEqual({});
+  });
+
   it("adapts legacy flat contexts through one named migration boundary", () => {
     type RequiredLegacyBoundary = { activeDraft: string };
     const adaptedContext =
@@ -117,6 +144,15 @@ describe("appShellDomainContexts", () => {
       });
 
     expect(adaptedContext.activeDraft).toBe("hello");
+  });
+
+  it("uses a legacy flat app shell context when domain contexts are absent", () => {
+    const flatContext = {
+      activeThreadId: "thread-1",
+      activeWorkspaceId: "workspace-1",
+    };
+
+    expect(flattenAppShellContextInput(flatContext)).toBe(flatContext);
   });
 
   it("reuses all six domain references when shallow values are stable", () => {
