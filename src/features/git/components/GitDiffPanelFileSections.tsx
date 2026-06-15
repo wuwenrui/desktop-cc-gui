@@ -312,6 +312,7 @@ export type DiffSectionProps = {
   excludedPaths: string[];
   partialPaths: string[];
   rootFolderName?: string;
+  rootTrailingAction?: ReactNode;
   leadingMeta?: ReactNode;
   compactHeader?: boolean;
   selectedFiles: Set<string>;
@@ -368,6 +369,7 @@ export function DiffSection({
   excludedPaths,
   partialPaths,
   rootFolderName,
+  rootTrailingAction,
   leadingMeta,
   compactHeader = false,
   selectedFiles,
@@ -457,18 +459,26 @@ export function DiffSection({
         }`}
       >
         {showCompactRoot ? (
-          <span className="diff-tree-summary-root is-static">
-            <span className="diff-tree-summary-root-toggle" aria-hidden>
-              <span className="diff-tree-folder-spacer" />
+          <span className="diff-tree-summary-root-group">
+            <span className="diff-tree-summary-root is-static">
+              <span className="diff-tree-summary-root-toggle" aria-hidden>
+                <span className="diff-tree-folder-spacer" />
+              </span>
+              <FileIcon
+                filePath={rootFolderName ?? ""}
+                isFolder
+                isOpen={false}
+                className="diff-tree-summary-root-icon"
+              />
+              <span className="diff-tree-summary-root-name">{rootFolderName}</span>
             </span>
-            <FileIcon
-              filePath={rootFolderName ?? ""}
-              isFolder
-              isOpen={false}
-              className="diff-tree-summary-root-icon"
-            />
-            <span className="diff-tree-summary-root-name">{rootFolderName}</span>
+            {rootTrailingAction ? (
+              <span className="diff-tree-summary-root-action">{rootTrailingAction}</span>
+            ) : null}
           </span>
+        ) : null}
+        {!showCompactRoot && rootTrailingAction ? (
+          <span className="diff-tree-summary-root-action">{rootTrailingAction}</span>
         ) : null}
         <span className="diff-tree-summary-section-label">
           {renderSectionIndicator(section, files.length, t)}

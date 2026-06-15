@@ -554,6 +554,8 @@ describe("useAppServerEvents routing", () => {
     await act(async () => {
       root.unmount();
     });
+    // useAppServerEvents subscribes to ONE channel at a time; cleanup
+    // fires once for that subscription.
     expect(unlisten).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,4 +1,4 @@
-import { cleanup, configure } from "@testing-library/react";
+import { act, cleanup, configure } from "@testing-library/react";
 import { afterEach, vi } from "vitest";
 
 // Note: prewarmKatexAssets is intentionally NOT awaited in this global
@@ -14,8 +14,36 @@ import { afterEach, vi } from "vitest";
 // resolve well under 1s.
 configure({ asyncUtilTimeout: 5000 });
 
-afterEach(() => {
+function waitForReactHostTask(): Promise<void> {
+  if (typeof MessageChannel === "undefined") {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => {
+      channel.port1.close();
+      channel.port2.close();
+      resolve();
+    };
+    channel.port2.postMessage(undefined);
+  });
+}
+
+async function flushReactSuspenseWork() {
+  await act(async () => {
+    for (let round = 0; round < 8; round += 1) {
+      await Promise.resolve();
+      await waitForReactHostTask();
+      await Promise.resolve();
+    }
+  });
+}
+
+afterEach(async () => {
+  await flushReactSuspenseWork();
   cleanup();
+  await flushReactSuspenseWork();
 });
 
 if (typeof Element !== "undefined" && !Element.prototype.getAnimations) {

@@ -8,6 +8,7 @@ import {
   subscribeMenuCycleCollaborationMode,
   subscribeMenuCycleModel,
   subscribeMenuNewAgent,
+  subscribeRuntimeLogStatus,
   subscribeTerminalOutput,
 } from "./events";
 
@@ -18,6 +19,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 describe("events subscriptions", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.useRealTimers();
   });
 
   it("delivers payloads and unsubscribes on cleanup", async () => {
@@ -159,6 +161,66 @@ describe("events subscriptions", () => {
     await Promise.resolve();
     expect(onError).toHaveBeenCalledWith(error);
 
+    cleanup();
+  });
+
+  it("batches terminal output until the frame-budget flush", async () => {
+    let listener: EventCallback<any> = () => {};
+    const unlisten = vi.fn();
+
+    vi.mocked(listen).mockImplementation((_event, handler) => {
+      listener = handler as EventCallback<any>;
+      return Promise.resolve(unlisten);
+    });
+
+    const onEvent = vi.fn();
+    const cleanup = subscribeTerminalOutput(onEvent);
+    listener({
+      event: "terminal-output",
+      id: 1,
+      payload: { workspaceId: "ws-1", terminalId: "term-1", data: "secret output" },
+    });
+
+    expect(onEvent).not.toHaveBeenCalled();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(onEvent).toHaveBeenCalledWith({
+      workspaceId: "ws-1",
+      terminalId: "term-1",
+      data: "secret output",
+    });
+
+    cleanup();
+  });
+
+  it("delivers critical runtime status without waiting for the queue flush", async () => {
+    let listener: EventCallback<any> = () => {};
+    const unlisten = vi.fn();
+
+    vi.mocked(listen).mockImplementation((_event, handler) => {
+      listener = handler as EventCallback<any>;
+      return Promise.resolve(unlisten);
+    });
+
+    const onEvent = vi.fn();
+    const cleanup = subscribeRuntimeLogStatus(onEvent);
+    const payload = {
+      workspaceId: "ws-1",
+      terminalId: "runtime",
+      status: "stopped",
+      commandPreview: null,
+      startedAtMs: null,
+      stoppedAtMs: 10,
+      exitCode: 0,
+      error: null,
+    };
+
+    listener({
+      event: "runtime-log:status-changed",
+      id: 1,
+      payload,
+    });
+
+    expect(onEvent).toHaveBeenCalledWith(payload);
     cleanup();
   });
 });

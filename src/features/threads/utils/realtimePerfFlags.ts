@@ -1,4 +1,87 @@
 const FLAG_PREFIX = "ccgui.perf.";
+const REALTIME_PERF_FLAG_IDS = [
+  "realtimeBatching",
+  "appServerEventBatch",
+  "reducerNoopGuard",
+  "incrementalDerivation",
+  "backgroundRenderGating",
+  "backgroundBufferedFlush",
+  "stagedHydration",
+  "debugLightPath",
+] as const;
+
+export type RealtimePerfFlagId = (typeof REALTIME_PERF_FLAG_IDS)[number];
+
+export type ActiveRealtimePerfFlag = {
+  value: boolean;
+  source: "localStorage" | "default";
+  storageKey: string;
+  defaultValue: boolean;
+  testDefaultValue: boolean;
+  metric: string;
+};
+
+type RealtimePerfFlagDefinition = {
+  id: RealtimePerfFlagId;
+  defaultValue: boolean;
+  testDefaultValue: boolean;
+  metric: string;
+};
+
+const PERF_FLAG_DEFINITIONS: readonly RealtimePerfFlagDefinition[] = [
+  {
+    id: "realtimeBatching",
+    defaultValue: true,
+    testDefaultValue: false,
+    metric: "realtime event dispatch batch size and reducer dispatch rate",
+  },
+  {
+    id: "appServerEventBatch",
+    defaultValue: true,
+    testDefaultValue: false,
+    metric: "app-server-event-batch consumer path",
+  },
+  {
+    id: "reducerNoopGuard",
+    defaultValue: true,
+    testDefaultValue: true,
+    metric: "useThreadsReducer no-op state preservation",
+  },
+  {
+    id: "incrementalDerivation",
+    defaultValue: true,
+    testDefaultValue: true,
+    metric: "thread/workspace incremental derived state rebuilds",
+  },
+  {
+    id: "backgroundRenderGating",
+    defaultValue: true,
+    testDefaultValue: true,
+    metric: "background thread render gating",
+  },
+  {
+    id: "backgroundBufferedFlush",
+    defaultValue: true,
+    testDefaultValue: true,
+    metric: "background realtime buffered flush cadence",
+  },
+  {
+    id: "stagedHydration",
+    defaultValue: true,
+    testDefaultValue: true,
+    metric: "staged thread hydration work",
+  },
+  {
+    id: "debugLightPath",
+    defaultValue: true,
+    testDefaultValue: true,
+    metric: "debug/diagnostic light-path gating",
+  },
+];
+
+function storageKeyForFlag(key: string) {
+  return `${FLAG_PREFIX}${key}`;
+}
 
 const isTestMode = (() => {
   try {
@@ -41,7 +124,7 @@ function readRealtimePerfFlag(
   let resolved = fallbackValue;
   if (typeof window !== "undefined") {
     try {
-      const stored = window.localStorage.getItem(`${FLAG_PREFIX}${key}`);
+      const stored = window.localStorage.getItem(storageKeyForFlag(key));
       const parsed = parseBooleanFlag(stored);
       if (parsed !== null) {
         resolved = parsed;
@@ -59,31 +142,111 @@ function readRealtimePerfFlag(
 
 export function isRealtimeBatchingEnabled(): boolean {
   // Keep existing tests deterministic by default; runtime remains enabled by default.
-  return readRealtimePerfFlag("realtimeBatching", true, false);
+  return readRealtimePerfFlagById("realtimeBatching");
+}
+
+export function isAppServerEventBatchConsumerEnabled(): boolean {
+  // Webview-side gate for the `app-server-event-batch` channel exposed by
+  // `services/events.ts`. The Rust side also gates the channel via
+  // `CCGUI_APP_SERVER_EVENT_BATCH`; the webview side falls back to single
+  // `app-server-event` channel when this flag is off. localStorage is the
+  // correct source for this knob per spec
+  // `app-server-event-batching` §"Backend Runtime Config Source" (frontend
+  // localStorage controls webview behavior; backend batch toggle is its
+  // own env var).
+  return readRealtimePerfFlagById("appServerEventBatch");
 }
 
 export function isReducerNoopGuardEnabled(): boolean {
-  return readRealtimePerfFlag("reducerNoopGuard", true);
+  return readRealtimePerfFlagById("reducerNoopGuard");
 }
 
 export function isIncrementalDerivationEnabled(): boolean {
-  return readRealtimePerfFlag("incrementalDerivation", true);
+  return readRealtimePerfFlagById("incrementalDerivation");
 }
 
 export function isDebugLightPathEnabled(): boolean {
-  return readRealtimePerfFlag("debugLightPath", true);
+  return readRealtimePerfFlagById("debugLightPath");
 }
 
 export function isBackgroundRenderGatingEnabled(): boolean {
-  return readRealtimePerfFlag("backgroundRenderGating", true);
+  return readRealtimePerfFlagById("backgroundRenderGating");
 }
 
 export function isBackgroundBufferedFlushEnabled(): boolean {
-  return readRealtimePerfFlag("backgroundBufferedFlush", true);
+  return readRealtimePerfFlagById("backgroundBufferedFlush");
 }
 
 export function isStagedHydrationEnabled(): boolean {
-  return readRealtimePerfFlag("stagedHydration", true);
+  return readRealtimePerfFlagById("stagedHydration");
+}
+
+function getRealtimePerfFlagDefinition(id: RealtimePerfFlagId) {
+  const definition = PERF_FLAG_DEFINITIONS.find((entry) => entry.id === id);
+  if (!definition) {
+    throw new Error(`unknown realtime perf flag: ${id}`);
+  }
+  return definition;
+}
+
+function readRealtimePerfFlagById(id: RealtimePerfFlagId): boolean {
+  const definition = getRealtimePerfFlagDefinition(id);
+  return readRealtimePerfFlag(
+    definition.id,
+    definition.defaultValue,
+    definition.testDefaultValue,
+  );
+}
+
+export function getActiveRealtimePerfFlags(): Record<
+  RealtimePerfFlagId,
+  ActiveRealtimePerfFlag
+> {
+  return Object.fromEntries(
+    PERF_FLAG_DEFINITIONS.map((definition) => {
+      const storageKey = storageKeyForFlag(definition.id);
+      let source: ActiveRealtimePerfFlag["source"] = "default";
+      if (typeof window !== "undefined") {
+        try {
+          if (parseBooleanFlag(window.localStorage.getItem(storageKey)) !== null) {
+            source = "localStorage";
+          }
+        } catch {
+          source = "default";
+        }
+      }
+      return [
+        definition.id,
+        {
+          value: readRealtimePerfFlagById(definition.id),
+          source,
+          storageKey,
+          defaultValue: definition.defaultValue,
+          testDefaultValue: definition.testDefaultValue,
+          metric: definition.metric,
+        },
+      ];
+    }),
+  ) as Record<RealtimePerfFlagId, ActiveRealtimePerfFlag>;
+}
+
+export function resetRealtimePerfFlags(): string[] {
+  const removedKeys: string[] = [];
+  if (typeof window !== "undefined") {
+    for (const definition of PERF_FLAG_DEFINITIONS) {
+      const storageKey = storageKeyForFlag(definition.id);
+      try {
+        if (window.localStorage.getItem(storageKey) !== null) {
+          removedKeys.push(storageKey);
+        }
+        window.localStorage.removeItem(storageKey);
+      } catch {
+        // Ignore storage write errors; cache reset still restores defaults in-memory.
+      }
+    }
+  }
+  __resetRealtimePerfFlagCacheForTests();
+  return removedKeys;
 }
 
 export function __resetRealtimePerfFlagCacheForTests() {

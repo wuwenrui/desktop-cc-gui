@@ -58,6 +58,7 @@ import {
   detectEngines,
   getActiveEngine,
   getEngineModels,
+  getEngineActiveProcessDiagnostics,
   getEngineStatus,
   engineSendMessage,
   engineInterrupt,
@@ -2542,6 +2543,31 @@ describe("tauri invoke wrappers", () => {
     expect(invokeMock).toHaveBeenCalledWith("get_engine_status", {
       engineType: "claude",
     });
+  });
+
+  it("invokes get_engine_active_process_diagnostics", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({
+      measured: true,
+      sampledAtMs: 1_765_647_000_000,
+      totalActiveProcessCount: 2,
+      workspaces: [
+        {
+          workspaceId: "ws-1",
+          engine: "claude",
+          activeProcessIds: [101, 102],
+        },
+      ],
+      unsupportedReason: null,
+    });
+
+    const diagnostics = await getEngineActiveProcessDiagnostics();
+
+    expect(diagnostics.totalActiveProcessCount).toBe(2);
+    expect(diagnostics.workspaces[0]?.activeProcessIds).toEqual([101, 102]);
+    expect(invokeMock).toHaveBeenCalledWith(
+      "get_engine_active_process_diagnostics",
+    );
   });
 
   it("maps get_engine_models params", async () => {

@@ -113,7 +113,7 @@ Markdown preview interactive blocks MUST preserve user-selected view state acros
 
 ### Requirement: Main File Preview MUST Separate External Change Awareness From Forced Refresh
 
-The main window file preview MUST detect external changes for the active file without forcing a reading snapshot refresh unless the user explicitly requests refresh or an explicit live preview mode is active.
+The main window file preview and editor MUST detect external changes for the active file without forcing a reading snapshot refresh or editor content replacement unless the user explicitly requests refresh, resolves a conflict, or an explicit live preview mode is active.
 
 #### Scenario: clean stable preview reports external change without replacing content
 
@@ -138,6 +138,13 @@ The main window file preview MUST detect external changes for the active file wi
 - **THEN** the file view MUST keep the local dirty buffer intact
 - **AND** it MUST expose the existing conflict handling path instead of applying disk content automatically
 
+#### Scenario: self-save watcher feedback does not force editor reload
+
+- **WHEN** the app saves the active editor buffer to disk
+- **AND** the file watcher reports the same saved snapshot
+- **THEN** the file view MUST suppress redundant full-content reload or high-cost reparse
+- **AND** the editor MUST keep the saved buffer visible without treating that event as an external conflict
+
 ### Requirement: Main File Preview MUST Avoid Refresh-Induced IPC Churn
 
 The main window file preview MUST keep external-change awareness bounded to the active file and MUST NOT introduce new IPC calls from high-frequency render interactions.
@@ -161,4 +168,39 @@ The main window file preview MUST keep external-change awareness bounded to the 
 - **AND** the backend monitor falls back to metadata polling
 - **THEN** the frontend MUST continue to consume backend change events
 - **AND** it MUST NOT switch to repeated JS-side full-content polling unless backend monitor configuration fails completely
+
+### Requirement: File view side channels MUST remain bounded during interaction
+
+External change awareness, git markers, annotations, preview refresh, and code intelligence MUST remain side channels that cannot block editor typing, line switching, or first useful viewport rendering.
+
+#### Scenario: git marker delay does not block editor mount
+
+- **WHEN** a user opens a modified workspace file
+- **AND** git marker loading is slow or fails
+- **THEN** the editor MUST still mount with file content when the document snapshot is ready
+- **AND** markers MAY appear later or degrade to empty markers
+- **AND** marker results MUST verify current file identity and render epoch before committing
+
+#### Scenario: code intelligence does not run for every cursor move
+
+- **WHEN** the user moves the cursor repeatedly inside an editor
+- **THEN** code intelligence requests MUST be explicit, debounced, or otherwise bounded
+- **AND** cursor movement MUST NOT issue one backend command per movement by default
+
+#### Scenario: stable preview does not refresh on every editor draft change
+
+- **WHEN** the user edits a file in editor mode
+- **AND** live preview mode is not active
+- **THEN** Markdown or structured preview snapshots MUST NOT rebuild on every editor draft change
+- **AND** preview MAY refresh on explicit preview switch, save, external refresh, or bounded idle publication
+
+### Requirement: Runtime stability evidence MUST classify file interaction lag
+
+File view performance evidence MUST classify whether observed lag is caused by IO, editor render, tab remount, preview work, side-channel work, or concurrent realtime pressure when enough signals are available.
+
+#### Scenario: evidence classifies unsupported measurements
+
+- **WHEN** runtime tooling cannot measure a file interaction dimension directly
+- **THEN** the report MUST classify that dimension as `proxy`, `manual-only`, or `unsupported`
+- **AND** it MUST NOT claim release-grade measured improvement for that dimension
 

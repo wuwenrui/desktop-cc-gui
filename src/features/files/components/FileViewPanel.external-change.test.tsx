@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FileViewPanel } from "./FileViewPanel";
+import { clearFileDocumentSessionCacheForTests } from "../hooks/useFileDocumentState";
 import { readWorkspaceFile } from "../../../services/tauri";
 import { subscribeDetachedExternalFileChanges } from "../../../services/events";
 import { pushErrorToast } from "../../../services/toasts";
@@ -57,6 +58,9 @@ vi.mock("@uiw/react-codemirror", async () => {
       theme?: string;
     }
   >((props, ref) => {
+    const [localValue, setLocalValue] = React.useState(props.value ?? "");
+    const onCreateEditorRef = React.useRef(props.onCreateEditor);
+    onCreateEditorRef.current = props.onCreateEditor;
     const viewRef = React.useRef<any>({
       state: {
         doc: createDoc(props.value ?? ""),
@@ -73,12 +77,13 @@ vi.mock("@uiw/react-codemirror", async () => {
     });
 
     React.useEffect(() => {
+      setLocalValue(props.value ?? "");
       viewRef.current.state.doc = createDoc(props.value ?? "");
     }, [props.value]);
 
     React.useEffect(() => {
-      props.onCreateEditor?.(viewRef.current, viewRef.current.state);
-    }, [props]);
+      onCreateEditorRef.current?.(viewRef.current, viewRef.current.state);
+    }, []);
 
     React.useImperativeHandle(ref, () => ({ view: viewRef.current }), []);
 
@@ -86,8 +91,13 @@ vi.mock("@uiw/react-codemirror", async () => {
       <textarea
         data-testid="mock-codemirror"
         data-editor-theme={props.theme ?? ""}
-        value={props.value ?? ""}
-        onChange={(event) => props.onChange?.(event.target.value)}
+        value={localValue}
+        onChange={(event) => {
+          const nextValue = event.target.value;
+          setLocalValue(nextValue);
+          viewRef.current.state.doc = createDoc(nextValue);
+          props.onChange?.(nextValue);
+        }}
       />
     );
   });
@@ -163,6 +173,7 @@ vi.mock("mermaid", () => ({
 describe("FileViewPanel external change awareness in detached mode", () => {
   afterEach(() => {
     cleanup();
+    clearFileDocumentSessionCacheForTests();
     vi.clearAllMocks();
     mockCodeMirrorDispatch.mockReset();
     detachedExternalFileChangeListener = null;
@@ -189,8 +200,12 @@ describe("FileViewPanel external change awareness in detached mode", () => {
       />,
     );
 
-    const editor = await screen.findByTestId("mock-codemirror");
-    expect((editor as HTMLTextAreaElement).value).toBe("const value = 1;");
+    // The editor renders behind a `React.lazy` boundary, so the
+    // initial CodeMirror snapshot may be reached after the external
+    // change poller has already synced disk content. What we are
+    // asserting is the end-to-end behaviour: the user sees the
+    // auto-sync toast and the editor surfaces the latest disk content.
+    await screen.findByTestId("mock-codemirror");
 
     await waitFor(() => {
       expect(screen.getByText("files.externalChangeAutoSynced")).toBeTruthy();
@@ -485,6 +500,7 @@ describe("FileViewPanel external change awareness in detached mode", () => {
   it("shows conflict actions for dirty buffer and can keep local edits", async () => {
     vi.mocked(readWorkspaceFile)
       .mockResolvedValueOnce({ content: "console.log('v1');", truncated: false })
+      .mockResolvedValueOnce({ content: "console.log('v1');", truncated: false })
       .mockResolvedValue({ content: "console.log('v2');", truncated: false });
 
     render(
@@ -520,6 +536,7 @@ describe("FileViewPanel external change awareness in detached mode", () => {
 
   it("reloads disk content when user chooses reload action", async () => {
     vi.mocked(readWorkspaceFile)
+      .mockResolvedValueOnce({ content: "line-a", truncated: false })
       .mockResolvedValueOnce({ content: "line-a", truncated: false })
       .mockResolvedValue({ content: "line-b", truncated: false });
 

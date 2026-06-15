@@ -6,31 +6,26 @@
 ## Requirements
 ### Requirement: Unified Language Resolution Contract
 
-系统 MUST 使用统一的文件语言判定规则为预览渲染、编辑渲染、结构化预览和安全 fallback 提供一致输入，不得由多套独立映射长期漂移；该规则 MUST 在进入判定前完成平台相关路径归一化。
+系统 MUST 使用统一的文件语言判定规则为预览渲染、编辑渲染、结构化预览和安全 fallback 提供一致输入，不得由多套独立映射长期漂移；该规则 MUST 在进入判定前完成平台相关路径归一化，并 MAY resolve editor language runtime asynchronously.
 
 #### Scenario: same file path resolves consistently for preview and edit pipelines
 
 - **WHEN** 用户在右侧文件树打开任意可文本渲染文件
 - **THEN** 系统 MUST 基于统一规则解析该文件的语言类型
 - **AND** 预览链路与编辑链路 MUST 共享同一语言判定结果来源
+- **AND** lazy language extension loading MUST NOT change the resolved language identity after the fact.
 
-#### Scenario: filename-priority rules are applied before extension fallback
+#### Scenario: editor language extension loads on demand
 
-- **WHEN** 打开具有强语义文件名的配置文件（例如 `pom.xml`、`application.properties`）
-- **THEN** 系统 MUST 先应用文件名规则
-- **AND** 文件名规则未命中时 MUST 回退到扩展名规则
+- **WHEN** 用户进入 edit mode for a text file
+- **THEN** the CodeMirror language extension for the resolved language SHOULD load on demand rather than requiring all supported language packages in the startup path
+- **AND** editor fallback/loading state MUST remain stable until the extension is ready.
 
-#### Scenario: platform-specific path forms resolve to the same filename rule
+#### Scenario: stale language loader result is ignored
 
-- **WHEN** 同一逻辑文件分别以 Windows 风格反斜杠路径、Windows 大小写变体文件名或 macOS 恢复出的绝对路径进入渲染链路
-- **THEN** 系统 MUST 先对路径进行统一归一化，再执行文件名优先与扩展名回退规则
-- **AND** MUST NOT 因路径分隔符、大小写或绝对/相对路径形态差异得到不同的语言判定结果
-
-#### Scenario: structured preview and fallback decisions use the same resolution source
-
-- **WHEN** 用户打开支持结构化预览或需要安全 fallback 的文件类型
-- **THEN** 系统 MUST 通过与预览/编辑相同的统一判定来源决定结构化预览类型与 fallback 语义
-- **AND** MUST NOT 额外维护一套与语言映射长期独立演化的文件类型决策表
+- **WHEN** a language extension import resolves after the active file or resolved language changed
+- **THEN** the stale extension result MUST be ignored
+- **AND** it MUST NOT apply syntax mode or editor state to the wrong file.
 
 ### Requirement: Java and XML Files Render with Syntax Highlighting
 
@@ -107,30 +102,11 @@
 
 本变更 MUST 采用新增优先策略；既有已支持文件类型的渲染行为不得被破坏或回退，但 Markdown 文件允许按照文件预览专用 renderer 的新契约演进，且主窗口与独立文件窗口 MUST 保持共享渲染基线。
 
-#### Scenario: existing supported non-markdown languages remain unchanged after rollout
+#### Scenario: find-in-file search remains in the file panel startup path
 
-- **WHEN** 变更后打开既有支持且非 Markdown 的文件类型（如 `js`、`ts`、`json`、`css`、`yaml`）
-- **THEN** 预览与编辑模式的渲染表现 MUST 与变更前基线一致
-- **AND** 不得出现由本次扩展引入的高亮缺失或错误语言匹配
-
-#### Scenario: markdown files adopt dedicated file-preview rendering
-
-- **WHEN** 变更后打开 `md` 或 `mdx` 文件并进入文件预览模式
-- **THEN** 系统 MUST 允许该预览偏离变更前基于消息 renderer 的 Markdown 视觉基线
-- **AND** 该偏离 MUST 仅来自文件预览专用 Markdown renderer 的有意能力拆分
-- **AND** Markdown 文件的源码编辑链路 MUST 保持与统一语言判定规则兼容
-
-#### Scenario: unknown file types fall back safely to plain text
-
-- **WHEN** 用户打开未被语言规则覆盖的文件类型
-- **THEN** 系统 MUST 回退为纯文本渲染
-- **AND** 回退过程 MUST 不触发崩溃、空白渲染或未捕获异常
-
-#### Scenario: main and detached surfaces keep the same rendering baseline
-
-- **WHEN** 用户在主窗口和独立文件窗口分别打开同类文本文件
-- **THEN** 两个 surface MUST 使用同一语言判定与 fallback 规则
-- **AND** MUST NOT 出现一侧高亮而另一侧错误退化的系统性不一致
+- **WHEN** 用户打开 find-in-file in editor mode
+- **THEN** `@codemirror/search` SHALL be available synchronously alongside the editor so that the `searchState` field, contiguous navigation, and replace/replace-all flows behave identically to the pre-change baseline
+- **AND** the file panel SHALL NOT introduce a dynamic import boundary around `@codemirror/search` because doing so breaks the contiguous search/replace contract (see the proposal's “Withdrawn Optimization” section).
 
 ### Requirement: Shell Script Group Files Render with Unified Compatibility Rules
 

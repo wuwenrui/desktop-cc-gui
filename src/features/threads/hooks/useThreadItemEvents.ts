@@ -776,6 +776,18 @@ export function useThreadItemEvents({
       flushNormalizedRealtimeOps();
       const ensuredThreads = new Set<string>();
       const markedProcessingThreads = new Set<string>();
+      const flushEndedAt = Date.now();
+      // Reconstruct batch-flush-start from the earliest timestamp on the events
+      // in this flush (falls back to flushEndedAt for single-event first-token
+      // flushes where the start == end is the truthful signal).
+      let batchStart = flushEndedAt;
+      for (const flush of flushes) {
+        for (const event of flush.events) {
+          if (typeof event.timestampMs === "number" && event.timestampMs < batchStart) {
+            batchStart = event.timestampMs;
+          }
+        }
+      }
       for (const flush of flushes) {
         noteRealtimeCoalescedFlush({
           reason: flush.reason,
@@ -785,6 +797,9 @@ export function useThreadItemEvents({
           threadId: operation.event.threadId,
           turnId: operation.event.turnId ?? null,
           itemKind: operation.event.itemKind,
+          startedAt: batchStart,
+          endedAt: flushEndedAt,
+          queueDepthAfter: 0,
         });
         for (const event of flush.events) {
           applyNormalizedRealtimeEventNow(

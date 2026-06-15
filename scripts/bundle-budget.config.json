@@ -1,0 +1,62 @@
+{
+  "schemaVersion": "1.0",
+  "groups": [
+    {
+      "id": "app-js",
+      "label": "Startup app JS",
+      "patterns": ["App-*.js"],
+      "unit": "bytes-gzip",
+      "target": 950000,
+      "hardFail": 1100000,
+      "mode": "advisory"
+    },
+    {
+      "id": "app-css",
+      "label": "Startup app CSS",
+      "patterns": ["App-*.css"],
+      "unit": "bytes-gzip",
+      "target": 180000,
+      "hardFail": 220000,
+      "mode": "advisory"
+    },
+    {
+      "id": "total-js-mjs-css",
+      "label": "Total JS/MJS/CSS payload",
+      "patterns": ["*.js", "*.mjs", "*.css"],
+      "unit": "bytes-gzip",
+      "target": 4800000,
+      "hardFail": 5300000,
+      "mode": "advisory"
+    },
+    {
+      "id": "vendor-mermaid",
+      "label": "Mermaid optional vendor",
+      "patterns": ["vendor-mermaid-*.js"],
+      "unit": "bytes-gzip",
+      "target": null,
+      "hardFail": null,
+      "mode": "advisory",
+      "startupEagerness": "lazy-required"
+    },
+    {
+      "id": "vendor-codemirror",
+      "label": "CodeMirror optional vendor",
+      "patterns": ["vendor-codemirror-*.js"],
+      "unit": "bytes-gzip",
+      "target": null,
+      "hardFail": null,
+      "mode": "advisory",
+      "startupEagerness": "lazy-required"
+    },
+    {
+      "id": "vendor-docs",
+      "label": "Document preview optional vendor",
+      "patterns": ["vendor-docs-*.js"],
+      "unit": "bytes-gzip",
+      "target": null,
+      "hardFail": null,
+      "mode": "advisory",
+      "startupEagerness": "lazy-required"
+    }
+  ]
+}

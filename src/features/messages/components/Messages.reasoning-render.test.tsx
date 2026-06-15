@@ -1,8 +1,62 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from "@testing-library/react";
+import type { ReactElement } from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConversationItem } from "../../../types";
 import { Messages } from "./Messages";
+
+vi.mock("./Markdown", () => ({
+  Markdown: ({
+    className,
+    value,
+    onRenderedValueChange,
+  }: {
+    className?: string;
+    value: string;
+    onRenderedValueChange?: (value: string) => void;
+  }) => {
+    onRenderedValueChange?.(value);
+
+    const blocks = value.split(/\n{2,}/).filter((block) => block.length > 0);
+    const renderedBlocks: ReactElement[] = [];
+
+    for (let index = 0; index < blocks.length; index += 1) {
+      const block = blocks[index];
+      const blockLines = block.split(/\n+/);
+      const isQuoteBlock = blockLines.every((line) => line.trim().startsWith(">"));
+
+      if (!isQuoteBlock) {
+        renderedBlocks.push(<p key={`${index}:${block}`}>{block}</p>);
+        continue;
+      }
+
+      const quoteLines = [...blockLines];
+      while (index + 1 < blocks.length) {
+        const nextBlock = blocks[index + 1];
+        const nextLines = nextBlock.split(/\n+/);
+        const nextIsQuoteBlock = nextLines.every((line) => line.trim().startsWith(">"));
+        if (!nextIsQuoteBlock) {
+          break;
+        }
+        quoteLines.push(...nextLines);
+        index += 1;
+      }
+
+      renderedBlocks.push(
+        <blockquote key={`${index}:${block}`}>
+          <p>
+            {quoteLines
+              .map((line) => line.replace(/^>\s?/, "").trim())
+              .filter(Boolean)
+              .join("")}
+          </p>
+        </blockquote>,
+      );
+    }
+
+    return <div className={className}>{renderedBlocks}</div>;
+  },
+}));
 
 describe("Messages reasoning render", () => {
   afterEach(() => {

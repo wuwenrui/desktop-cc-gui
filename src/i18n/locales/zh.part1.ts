@@ -864,6 +864,17 @@ const zhPart1 = {
 
     // 其他设置
     otherDescription: "历史记录补全、模型映射等其他配置。",
+    performanceDiagnosticsTitle: "性能诊断",
+    performanceDiagnosticsDescription:
+      "当并行对话表现异常卡顿时，重置本机 realtime performance 覆盖项。",
+    performanceFlagsResetTitle: "重置性能开关",
+    performanceFlagsResetDescription:
+      "清除已知 ccgui.perf.* localStorage 覆盖项。模块级读取缓存需要重载窗口后刷新。",
+    performanceFlagsResetButton: "重置",
+    performanceFlagsResetDone:
+      "已重置 {{count}} 个性能开关覆盖项。请重载窗口以刷新模块级缓存。",
+    performanceFlagsResetAlreadyDefault:
+      "性能开关已经使用默认值。如需验证运行时行为，请重载窗口。",
     costBudgetTitle: "成本预算",
     costBudgetDescription:
       "设置本机月度预算，用于 StatusPanel 的 BudgetBar 和成本提示。",

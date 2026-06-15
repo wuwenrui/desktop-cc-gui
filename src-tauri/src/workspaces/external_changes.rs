@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -8,7 +8,18 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::{mpsc, oneshot, Mutex};
 
-const DETACHED_EXTERNAL_FILE_CHANGE_EVENT: &str = "detached-external-file-change";
+pub(crate) const DETACHED_EXTERNAL_FILE_CHANGE_BATCH_EVENT: &str =
+    "detached-external-file-change-batch";
+const DEBOUNCED_EMIT_FLUSH_MS: u64 = 100;
+
+static DEBOUNCED_EMITTER_CELL: tokio::sync::OnceCell<DebouncedExternalChangeEmitter> =
+    tokio::sync::OnceCell::const_new();
+
+async fn debounced_emitter(app: &AppHandle) -> &'static DebouncedExternalChangeEmitter {
+    DEBOUNCED_EMITTER_CELL
+        .get_or_init(|| async { DebouncedExternalChangeEmitter::new(app.clone()) })
+        .await
+}
 const POLLING_INTERVAL_MS: u64 = 1200;
 const TRANSIENT_RETRY_ATTEMPTS: usize = 3;
 const TRANSIENT_RETRY_BASE_DELAY_MS: u64 = 60;
@@ -244,16 +255,94 @@ fn build_event(
     }
 }
 
-fn emit_external_change_event(app: &AppHandle, event: &DetachedExternalFileChangeEvent) {
-    let _ = app.emit(DETACHED_EXTERNAL_FILE_CHANGE_EVENT, event.clone());
-    eprintln!(
-        "[external_changes] workspace_id={} source={} event_kind={} path={} fallback_reason={}",
-        event.workspace_id,
-        event.source,
-        event.event_kind,
-        event.normalized_path,
-        event.fallback_reason.as_deref().unwrap_or("")
-    );
+/// Per-`(workspace_id, normalized_path)` debouncer that coalesces events
+/// within a 100ms window and emits a single `Vec<DetachedExternalFileChangeEvent>`
+/// to `DETACHED_EXTERNAL_FILE_CHANGE_BATCH_EVENT`.
+///
+/// Order is preserved using a `VecDeque` arrival-order queue. The mapping
+/// `HashMap<key, deque_index>` allows updating the latest event for a key
+/// without losing the relative order between distinct keys. `HashMap` and
+/// `BTreeMap` iteration order are NOT used to claim arrival order.
+#[derive(Clone)]
+pub(crate) struct DebouncedExternalChangeEmitter {
+    inner: Arc<Mutex<DebouncedState>>,
+}
+
+struct DebouncedState {
+    by_key: HashMap<String, usize>,
+    queue: VecDeque<DetachedExternalFileChangeEvent>,
+}
+
+impl DebouncedState {
+    /// Submit an event for the next flush. Within a single flush window,
+    /// same-key events replace the most recent slot; across windows, the
+    /// previous window's `by_key` is cleared, so a same-key event in the
+    /// next window starts a new coalesce cycle.
+    fn submit(&mut self, event: DetachedExternalFileChangeEvent) {
+        let key = format!("{}\0{}", event.workspace_id, event.normalized_path);
+        if let Some(&existing_idx) = self.by_key.get(&key) {
+            // Replace the most recent event for this key while preserving
+            // the deque index that defines arrival order. The flush ticker
+            // clears `by_key` whenever it drains the queue, so the index is
+            // always valid here; the bounds check is a defensive guard.
+            if let Some(slot) = self.queue.get_mut(existing_idx) {
+                *slot = event;
+                return;
+            }
+            // Stale index after a concurrent drain: drop the entry and
+            // fall through to append-as-new rather than silently losing
+            // the event.
+            self.by_key.remove(&key);
+        }
+        let new_idx = self.queue.len();
+        self.queue.push_back(event);
+        self.by_key.insert(key, new_idx);
+    }
+}
+
+impl DebouncedExternalChangeEmitter {
+    pub(crate) fn new(app: AppHandle) -> Self {
+        let inner = Arc::new(Mutex::new(DebouncedState {
+            by_key: HashMap::new(),
+            queue: VecDeque::new(),
+        }));
+        let inner_bg = Arc::clone(&inner);
+        tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(Duration::from_millis(DEBOUNCED_EMIT_FLUSH_MS));
+            loop {
+                ticker.tick().await;
+                let drained: Vec<DetachedExternalFileChangeEvent> = {
+                    let mut guard = inner_bg.lock().await;
+                    // Take the queue, then clear `by_key`. The queue indices
+                    // captured during this window are no longer valid once
+                    // the queue is drained; leaving them would cause `submit`
+                    // to fall through the `if let Some(slot)` branch and
+                    // silently drop the next same-key event in the next
+                    // window.
+                    //
+                    // Semantics: a key is coalesced WITHIN a flush window
+                    // only. A same-key event in the next window starts a new
+                    // coalesce cycle. This matches spec
+                    // `file-change-event-debounce`: "100ms 窗口内同 key 只
+                    // 保留最新事件".
+                    let drained: Vec<DetachedExternalFileChangeEvent> =
+                        std::mem::take(&mut guard.queue).into_iter().collect();
+                    guard.by_key.clear();
+                    drained
+                };
+                if drained.is_empty() {
+                    continue;
+                }
+                let _ = app.emit(DETACHED_EXTERNAL_FILE_CHANGE_BATCH_EVENT, drained);
+            }
+        });
+        Self { inner }
+    }
+
+    pub(crate) async fn submit(&self, event: DetachedExternalFileChangeEvent) {
+        let mut guard = self.inner.lock().await;
+        guard.submit(event);
+    }
 }
 
 async fn update_status(
@@ -340,7 +429,7 @@ async fn handle_watcher_event(
             &event_kind,
             None,
         );
-        emit_external_change_event(app, &payload);
+        debounced_emitter(app).await.submit(payload.clone()).await;
     }
 }
 
@@ -383,10 +472,10 @@ async fn handle_polling_tick(
         "polling-detected",
         None,
     );
-    emit_external_change_event(app, &payload);
+    debounced_emitter(app).await.submit(payload.clone()).await;
 }
 
-fn emit_watcher_fallback(
+async fn emit_watcher_fallback(
     app: &AppHandle,
     workspace_id: &str,
     normalized_path: String,
@@ -400,7 +489,7 @@ fn emit_watcher_fallback(
         "watcher-fallback",
         Some(fallback_reason),
     );
-    emit_external_change_event(app, &payload);
+    debounced_emitter(app).await.submit(payload.clone()).await;
 }
 
 async fn run_workspace_monitor_loop(
@@ -454,7 +543,7 @@ async fn run_workspace_monitor_loop(
                                 .unwrap_or_default();
                             update_status(&status, MONITOR_MODE_POLLING, Some(fallback_reason.clone()))
                                 .await;
-                            emit_watcher_fallback(&app, &workspace_id, active_path, fallback_reason);
+                            emit_watcher_fallback(&app, &workspace_id, active_path, fallback_reason).await;
                             watcher = None;
                             watcher_rx = None;
                         }
@@ -468,7 +557,7 @@ async fn run_workspace_monitor_loop(
                                 .unwrap_or_default();
                             update_status(&status, MONITOR_MODE_POLLING, Some(fallback_reason.clone()))
                                 .await;
-                            emit_watcher_fallback(&app, &workspace_id, active_path, fallback_reason);
+                            emit_watcher_fallback(&app, &workspace_id, active_path, fallback_reason).await;
                             watcher = None;
                             watcher_rx = None;
                         }
@@ -579,7 +668,7 @@ pub(crate) async fn configure_detached_external_change_monitor_inner(
     }
 
     if let Some(reason) = status.fallback_reason.clone() {
-        emit_watcher_fallback(&app, &workspace_id, active_file_relative, reason);
+        emit_watcher_fallback(&app, &workspace_id, active_file_relative, reason).await;
     }
 
     Ok(status)
@@ -603,7 +692,9 @@ pub(crate) async fn clear_detached_external_change_monitor_inner(
 mod tests {
     use super::{
         dedupe_key, is_active_file_match, normalize_rel_path, resolve_active_relative_path,
+        DebouncedState, DetachedExternalFileChangeEvent,
     };
+    use std::collections::{HashMap, VecDeque};
     use std::path::Path;
 
     #[test]
@@ -635,5 +726,108 @@ mod tests {
     #[test]
     fn external_changes_dedupe_key_preserves_case_on_non_windows() {
         assert_eq!(dedupe_key("SRC/Main.ts"), "SRC/Main.ts");
+    }
+
+    fn make_event(
+        workspace_id: &str,
+        normalized_path: &str,
+        detected_at_ms: u64,
+    ) -> DetachedExternalFileChangeEvent {
+        DetachedExternalFileChangeEvent {
+            workspace_id: workspace_id.to_string(),
+            normalized_path: normalized_path.to_string(),
+            mtime_ms: None,
+            size: None,
+            detected_at_ms,
+            source: "test".to_string(),
+            event_kind: "modified".to_string(),
+            platform: "test".to_string(),
+            fallback_reason: None,
+        }
+    }
+
+    /// Within a single flush window, multiple submissions of the same
+    /// `(workspace_id, normalized_path)` key MUST coalesce to a single
+    /// queue entry. The latest event wins.
+    #[test]
+    fn external_changes_debouncer_same_path_coalesce() {
+        let mut state = DebouncedState {
+            by_key: HashMap::new(),
+            queue: VecDeque::new(),
+        };
+        state.submit(make_event("ws0", "src/a.ts", 1));
+        state.submit(make_event("ws0", "src/a.ts", 2));
+        state.submit(make_event("ws0", "src/a.ts", 3));
+        assert_eq!(
+            state.queue.len(),
+            1,
+            "same-key events must coalesce to 1 entry"
+        );
+        assert_eq!(state.queue[0].detected_at_ms, 3, "latest event must win");
+    }
+
+    /// Different `(workspace_id, normalized_path)` keys within a single
+    /// window MUST each be represented, in arrival order.
+    #[test]
+    fn external_changes_debouncer_cross_path_preserved() {
+        let mut state = DebouncedState {
+            by_key: HashMap::new(),
+            queue: VecDeque::new(),
+        };
+        state.submit(make_event("ws0", "src/a.ts", 1));
+        state.submit(make_event("ws0", "src/b.ts", 2));
+        state.submit(make_event("ws1", "src/c.ts", 3));
+        assert_eq!(state.queue.len(), 3, "distinct keys must each appear");
+        let order: Vec<String> = state
+            .queue
+            .iter()
+            .map(|e| format!("{}/{}", e.workspace_id, e.normalized_path))
+            .collect();
+        assert_eq!(order, vec!["ws0/src/a.ts", "ws0/src/b.ts", "ws1/src/c.ts"]);
+    }
+
+    /// Regression test: after a flush (which clears `by_key`), the next
+    /// same-key event MUST start a new coalesce cycle, NOT be silently
+    /// dropped. Earlier this function fell through the `if let Some(slot)`
+    /// branch when the cached index was out of bounds, losing the event.
+    #[test]
+    fn external_changes_debouncer_same_key_after_flush_is_not_dropped() {
+        let mut state = DebouncedState {
+            by_key: HashMap::new(),
+            queue: VecDeque::new(),
+        };
+        state.submit(make_event("ws0", "src/a.ts", 1));
+        // Simulate the flush path: drain queue and clear by_key.
+        let drained: Vec<DetachedExternalFileChangeEvent> =
+            std::mem::take(&mut state.queue).into_iter().collect();
+        state.by_key.clear();
+        assert_eq!(drained.len(), 1);
+
+        // Second window: same key. The bug would drop this event.
+        state.submit(make_event("ws0", "src/a.ts", 2));
+        assert_eq!(
+            state.queue.len(),
+            1,
+            "same-key event in the next window must be queued, not dropped"
+        );
+        assert_eq!(state.queue[0].detected_at_ms, 2);
+    }
+
+    /// When nothing has been submitted, the flush path MUST NOT emit a
+    /// batch payload. We model the no-op by leaving the queue and by_key
+    /// empty and asserting that no spurious entries appear after a
+    /// flush-style drain.
+    #[test]
+    fn external_changes_debouncer_no_empty_batch_emit() {
+        let mut state = DebouncedState {
+            by_key: HashMap::new(),
+            queue: VecDeque::new(),
+        };
+        let drained: Vec<DetachedExternalFileChangeEvent> =
+            std::mem::take(&mut state.queue).into_iter().collect();
+        state.by_key.clear();
+        assert!(drained.is_empty(), "no events submitted => no batch emit");
+        assert!(state.by_key.is_empty());
+        assert!(state.queue.is_empty());
     }
 }

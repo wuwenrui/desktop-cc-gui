@@ -13,6 +13,10 @@ const markdownCalls = vi.hoisted(() => ({
   }>,
 }));
 
+const rendererDiagnosticMocks = vi.hoisted(() => ({
+  appendMessageRowRenderBudgetDiagnostic: vi.fn(),
+}));
+
 vi.mock("./Markdown", () => ({
   Markdown: ({
     liveRenderMode,
@@ -47,9 +51,12 @@ vi.mock("./Markdown", () => ({
   },
 }));
 
+vi.mock("../../../services/rendererDiagnostics", () => rendererDiagnosticMocks);
+
 describe("MessagesRows stream mitigation", () => {
   beforeEach(() => {
     markdownCalls.calls = [];
+    rendererDiagnosticMocks.appendMessageRowRenderBudgetDiagnostic.mockClear();
   });
 
   afterEach(() => {
@@ -90,6 +97,87 @@ describe("MessagesRows stream mitigation", () => {
     );
 
     expect(screen.getByTestId("markdown").getAttribute("data-throttle")).toBe("120");
+  });
+
+  it("records content-safe message row render budget diagnostics", () => {
+    const messageItem = {
+      id: "assistant-diagnostic",
+      kind: "message" as const,
+      role: "assistant" as const,
+      text: "secret assistant body must not be sent to diagnostics",
+    };
+
+    render(
+      <MessageRow
+        item={messageItem}
+        threadId="thread-1"
+        isStreaming
+        isCopied={false}
+        onCopy={vi.fn()}
+      />,
+    );
+
+    expect(rendererDiagnosticMocks.appendMessageRowRenderBudgetDiagnostic)
+      .toHaveBeenCalledWith(
+        expect.objectContaining({
+          threadId: "thread-1",
+          itemId: "assistant-diagnostic",
+          role: "assistant",
+          subtype: "assistant",
+          evidenceKind: "proxy",
+          isStreaming: true,
+          textLength: messageItem.text.length,
+        }),
+      );
+    const [payload] =
+      rendererDiagnosticMocks.appendMessageRowRenderBudgetDiagnostic.mock.calls[0] ?? [];
+    expect(JSON.stringify(payload)).not.toContain(messageItem.text);
+  });
+
+  it("keeps cloned history row props stable but rerenders live text changes", () => {
+    const onCopy = vi.fn();
+    const historyItem = {
+      id: "assistant-stable-history",
+      kind: "message" as const,
+      role: "assistant" as const,
+      text: "stable history text",
+    };
+    const { rerender } = render(
+      <MessageRow
+        item={historyItem}
+        threadId="thread-1"
+        isCopied={false}
+        onCopy={onCopy}
+      />,
+    );
+
+    expect(rendererDiagnosticMocks.appendMessageRowRenderBudgetDiagnostic)
+      .toHaveBeenCalledTimes(1);
+
+    rerender(
+      <MessageRow
+        item={{ ...historyItem }}
+        threadId="thread-1"
+        isCopied={false}
+        onCopy={onCopy}
+      />,
+    );
+
+    expect(rendererDiagnosticMocks.appendMessageRowRenderBudgetDiagnostic)
+      .toHaveBeenCalledTimes(1);
+
+    rerender(
+      <MessageRow
+        item={{ ...historyItem, text: "stable history text plus live delta" }}
+        threadId="thread-1"
+        isStreaming
+        isCopied={false}
+        onCopy={onCopy}
+      />,
+    );
+
+    expect(rendererDiagnosticMocks.appendMessageRowRenderBudgetDiagnostic)
+      .toHaveBeenCalledTimes(2);
   });
 
   it("uses a plain text live surface for Claude Windows visible-stream mitigation", () => {

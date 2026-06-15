@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
-import changelogMarkdown from "../../../../CHANGELOG.md?raw";
 import { getClientStoreSync, writeClientStoreValue } from "../../../services/clientStorage";
 import type { DebugEntry } from "../../../types";
 
@@ -176,6 +175,11 @@ export function findReleaseIndex(
   return index >= 0 ? index : 0;
 }
 
+async function loadChangelogMarkdown(): Promise<string> {
+  const module = await import("../../../../CHANGELOG.md?raw");
+  return module.default;
+}
+
 export function useReleaseNotes({
   enabled = true,
   onDebug,
@@ -188,10 +192,6 @@ export function useReleaseNotes({
   const entriesRef = useRef<ReleaseNotesEntry[]>([]);
   const appVersionRef = useRef<string | null>(null);
   const autoCheckDoneRef = useRef(false);
-  const parsedEntries = useMemo(
-    () => parseChangelogEntries(changelogMarkdown),
-    [],
-  );
 
   const loadEntries = useCallback(
     async (forceRefresh = false): Promise<ReleaseNotesEntry[]> => {
@@ -199,6 +199,8 @@ export function useReleaseNotes({
         return entriesRef.current;
       }
 
+      const changelogMarkdown = await loadChangelogMarkdown();
+      const parsedEntries = parseChangelogEntries(changelogMarkdown);
       if (parsedEntries.length === 0) {
         throw new Error("CHANGELOG.md has no release entries.");
       }
@@ -206,7 +208,7 @@ export function useReleaseNotes({
       setEntries(parsedEntries);
       return parsedEntries;
     },
-    [parsedEntries],
+    [],
   );
 
   const openReleaseNotes = useCallback(

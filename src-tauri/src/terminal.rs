@@ -8,7 +8,7 @@ use tauri::{AppHandle, State};
 use tokio::sync::Mutex;
 
 use crate::backend::events::{EventSink, TerminalOutput};
-use crate::event_sink::TauriEventSink;
+use crate::event_sink::build_event_sink;
 use crate::state::AppState;
 use crate::types::AppSettings;
 
@@ -254,7 +254,7 @@ pub(crate) async fn terminal_open(
         }
         sessions.insert(key, session);
     }
-    let event_sink = TauriEventSink::new(app);
+    let event_sink = build_event_sink(app);
     spawn_terminal_reader(event_sink, workspace_id, terminal_id, reader);
 
     Ok(TerminalSessionInfo { id: session_id })

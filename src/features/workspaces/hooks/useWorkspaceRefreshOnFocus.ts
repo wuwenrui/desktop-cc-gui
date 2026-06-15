@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { WorkspaceInfo } from "../../../types";
+import { registerFocusRefreshSource } from "../../../services/focusRefreshWave";
 
 const FOCUS_REFRESH_COOLDOWN_MS = 30_000;
 
@@ -15,7 +16,7 @@ type WorkspaceRefreshOptions = {
       recoverySource?: "focus-refresh";
       allowRuntimeReconnect?: boolean;
     },
-  ) => Promise<void>;
+  ) => Promise<unknown>;
 };
 
 export function useWorkspaceRefreshOnFocus({
@@ -115,24 +116,17 @@ export function useWorkspaceRefreshOnFocus({
       }, FOCUS_REFRESH_COOLDOWN_MS - elapsedMs);
     };
 
-    const handleFocus = () => {
-      scheduleRefresh();
-    };
+    const unregisterFocusRefresh = registerFocusRefreshSource({
+      id: "workspace-refresh-on-focus",
+      owner: "workspace",
+      refresh: scheduleRefresh,
+    });
 
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        handleFocus();
-      }
-    };
-
-    window.addEventListener("focus", handleFocus);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
       disposed = true;
       pendingRefreshRef.current = false;
       clearCooldownTimer();
-      window.removeEventListener("focus", handleFocus);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      unregisterFocusRefresh();
     };
   }, [activeWorkspaceId, listThreadsForWorkspace, refreshWorkspaces, workspaces]);
 }

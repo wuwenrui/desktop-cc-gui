@@ -116,7 +116,9 @@ describe("TaskCreateModal", () => {
       );
     });
 
-    expect(getByDisplayValue("Generated Title")).toBeTruthy();
+    await waitFor(() => {
+      expect(getByDisplayValue("Generated Title")).toBeTruthy();
+    });
     expect(pushErrorToast).not.toHaveBeenCalled();
   });
 

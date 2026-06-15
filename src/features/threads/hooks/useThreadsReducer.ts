@@ -4,6 +4,8 @@ import {
   MAX_ITEM_TEXT,
   normalizeItem,
   prepareThreadItems,
+  __getPrepareThreadItemsCallCountForTests,
+  __resetPrepareThreadItemsCallCountForTests,
   upsertItem,
 } from "../../../utils/threadItems";
 import { settlePlanInProgressSteps } from "../utils/threadNormalize";
@@ -99,8 +101,42 @@ export type { ThreadAction, ThreadState } from "./threadReducerTypes";
 const REDUCER_NOOP_GUARD_ENABLED = isReducerNoopGuardEnabled();
 const INCREMENTAL_DERIVATION_ENABLED = isIncrementalDerivationEnabled();
 const PENDING_THREAD_LAST_AGENT_ANCHOR_TTL_MS = 5 * 60 * 1000;
+type ThreadsReducerProfileSnapshot = {
+  componentRenderCounts: Record<string, number>;
+  prepareThreadItemsCallCount: number;
+  reducerDispatchCount: number;
+};
 type GeneratedImageItem = Extract<ConversationItem, { kind: "generatedImage" }>;
 const emptyItems: Record<string, ConversationItem[]> = {};
+const threadsReducerProfileState = {
+  componentRenderCounts: {} as Record<string, number>,
+  reducerDispatchCount: 0,
+};
+
+export const __profile = {
+  recordComponentRender(componentName: string) {
+    const normalizedName = componentName.trim();
+    if (!normalizedName) {
+      return;
+    }
+    threadsReducerProfileState.componentRenderCounts[normalizedName] =
+      (threadsReducerProfileState.componentRenderCounts[normalizedName] ?? 0) + 1;
+  },
+  reset() {
+    threadsReducerProfileState.componentRenderCounts = {};
+    threadsReducerProfileState.reducerDispatchCount = 0;
+    __resetPrepareThreadItemsCallCountForTests();
+  },
+  snapshot(): ThreadsReducerProfileSnapshot {
+    return {
+      componentRenderCounts: {
+        ...threadsReducerProfileState.componentRenderCounts,
+      },
+      prepareThreadItemsCallCount: __getPrepareThreadItemsCallCountForTests(),
+      reducerDispatchCount: threadsReducerProfileState.reducerDispatchCount,
+    };
+  },
+};
 
 type ThreadProviderBindingFields = Pick<
   ThreadSummary,
@@ -207,6 +243,7 @@ export function createInitialThreadState(snapshot?: SidebarSnapshot | null): Thr
 }
 
 export function threadReducer(state: ThreadState, action: ThreadAction): ThreadState {
+  threadsReducerProfileState.reducerDispatchCount += 1;
   switch (action.type) {
     case "setActiveThreadId":
       return {

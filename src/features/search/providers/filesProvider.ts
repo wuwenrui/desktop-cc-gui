@@ -1,12 +1,22 @@
 import type { SearchResult } from "../types";
+import { readSharedWorkspaceFileIndex } from "../../workspaces/utils/sharedWorkspaceFileIndex";
 
-export function searchFiles(query: string, files: string[], workspaceId: string): SearchResult[] {
+export function searchFiles(
+  query: string,
+  files: string[],
+  workspaceId: string,
+  sourceVersion?: string | null,
+): SearchResult[] {
   const normalizedQuery = query.trim().toLowerCase();
   if (!normalizedQuery) {
     return [];
   }
   const results: SearchResult[] = [];
-  for (const path of files) {
+  const sharedIndex = readSharedWorkspaceFileIndex({ workspaceId, sourceVersion });
+  const candidateFiles = sharedIndex && sharedIndex.freshness !== "stale"
+    ? sharedIndex.files.map((entry) => entry.path)
+    : files;
+  for (const path of candidateFiles) {
     const lower = path.toLowerCase();
     const index = lower.indexOf(normalizedQuery);
     if (index < 0) {

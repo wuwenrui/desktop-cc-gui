@@ -14,7 +14,10 @@ import type {
   EditorNavigationTarget,
   OpenFileOptions,
 } from "../../app/hooks/useGitPanelController";
-import type { ReviewPromptState, ReviewPromptStep } from "../../threads/hooks/useReviewPrompt";
+import type {
+  ReviewPromptState,
+  ReviewPromptStep,
+} from "../../threads/hooks/useReviewPrompt";
 import type { WorkspaceLaunchScriptsState } from "../../app/hooks/useWorkspaceLaunchScripts";
 import type {
   AccessMode,
@@ -112,7 +115,7 @@ export type WorktreeRenameState = {
   onCommit: () => void;
 };
 
-export type LayoutNodesOptions = {
+export type LayoutNodesFlatOptions = {
   workspaces: WorkspaceInfo[];
   groupedWorkspaces: Array<{
     id: string | null;
@@ -163,10 +166,7 @@ export type LayoutNodesOptions = {
     decision: "accept" | "decline" | "dismiss",
   ) => void;
   handleApprovalBatchAccept: (requests: ApprovalRequest[]) => void;
-  handleApprovalRemember: (
-    request: ApprovalRequest,
-    command: string[],
-  ) => void;
+  handleApprovalRemember: (request: ApprovalRequest, command: string[]) => void;
   handleUserInputSubmit: (
     request: RequestUserInputRequest,
     response: RequestUserInputResponse,
@@ -175,12 +175,16 @@ export type LayoutNodesOptions = {
   onRecoverThreadRuntime?: (
     workspaceId: string,
     threadId: string,
-  ) => Promise<RuntimeReconnectRecoveryCallbackResult> | RuntimeReconnectRecoveryCallbackResult;
+  ) =>
+    | Promise<RuntimeReconnectRecoveryCallbackResult>
+    | RuntimeReconnectRecoveryCallbackResult;
   onRecoverThreadRuntimeAndResend?: (
     workspaceId: string,
     threadId: string,
     message: Pick<QueuedMessage, "text" | "images">,
-  ) => Promise<RuntimeReconnectRecoveryCallbackResult> | RuntimeReconnectRecoveryCallbackResult;
+  ) =>
+    | Promise<RuntimeReconnectRecoveryCallbackResult>
+    | RuntimeReconnectRecoveryCallbackResult;
   onThreadRecoveryFork?: () => Promise<void> | void;
   handleExitPlanModeExecute?: (
     mode: Extract<AccessMode, "default" | "full-access">,
@@ -202,7 +206,10 @@ export type LayoutNodesOptions = {
   engineOptions?: EngineDisplayInfo[];
   enabledEngines?: Partial<Record<EngineType, boolean>>;
   onRefreshEngineOptions?: () =>
-    | Promise<import("../../engine/hooks/useEngineController").EngineRefreshResult | void>
+    | Promise<
+        | import("../../engine/hooks/useEngineController").EngineRefreshResult
+        | void
+      >
     | import("../../engine/hooks/useEngineController").EngineRefreshResult
     | void;
   onAddSharedAgent: (workspace: WorkspaceInfo) => Promise<string | null>;
@@ -312,8 +319,16 @@ export type LayoutNodesOptions = {
   mainHeaderActionsNode?: ReactNode;
   browserDockOpen?: boolean;
   onCloseBrowserDock?: () => void;
-  centerMode: "chat" | "diff" | "editor" | "memory" | "projectMap" | "intentCanvas";
-  setCenterMode: (mode: "chat" | "diff" | "editor" | "memory" | "projectMap" | "intentCanvas") => void;
+  centerMode:
+    | "chat"
+    | "diff"
+    | "editor"
+    | "memory"
+    | "projectMap"
+    | "intentCanvas";
+  setCenterMode: (
+    mode: "chat" | "diff" | "editor" | "memory" | "projectMap" | "intentCanvas",
+  ) => void;
   editorSplitCompanion: "chat" | "projectMap";
   setEditorSplitCompanion: (companion: "chat" | "projectMap") => void;
   editorSplitLayout: "vertical" | "horizontal";
@@ -327,17 +342,19 @@ export type LayoutNodesOptions = {
   onActivateEditorTab: (path: string) => void;
   onCloseEditorTab: (path: string) => void;
   onCloseAllEditorTabs: () => void;
-  onActiveEditorLineRangeChange: (range: { startLine: number; endLine: number } | null) => void;
+  onActiveEditorLineRangeChange: (
+    range: { startLine: number; endLine: number } | null,
+  ) => void;
   onOpenFile: (
     path: string,
     location?: EditorNavigationLocation,
     options?: OpenFileOptions,
   ) => void;
-    externalChangeMonitoringEnabled?: boolean;
-    externalChangeTransportMode?: "watcher" | "polling";
-    externalChangeApplyMode?: "auto" | "manual";
-    externalChangeAutoApplyDebounceMs?: number;
-    liveEditPreviewEnabled?: boolean;
+  externalChangeMonitoringEnabled?: boolean;
+  externalChangeTransportMode?: "watcher" | "polling";
+  externalChangeApplyMode?: "auto" | "manual";
+  externalChangeAutoApplyDebounceMs?: number;
+  liveEditPreviewEnabled?: boolean;
   onToggleLiveEditPreview?: () => void;
   onExitEditor: () => void;
   onExitDiff: () => void;
@@ -349,9 +366,13 @@ export type LayoutNodesOptions = {
   onOpenGitHistoryPanel: () => void;
   onOpenProjectMap: () => void;
   intentCanvasOpenRequest?: IntentCanvasOpenRequest | null;
-  onOpenIntentCanvas?: (request?: Omit<IntentCanvasOpenRequest, "requestId">) => void;
+  onOpenIntentCanvas?: (
+    request?: Omit<IntentCanvasOpenRequest, "requestId">,
+  ) => void;
   onIntentCanvasOpenRequestConsumed?: (requestId: number) => void;
-  onAttachIntentCanvasToThread?: (document: IntentCanvasDocument) => Promise<void> | void;
+  onAttachIntentCanvasToThread?: (
+    document: IntentCanvasDocument,
+  ) => Promise<void> | void;
   pendingIntentCanvasDocuments?: IntentCanvasDocument[];
   onRemovePendingIntentCanvas?: (documentId: string) => void;
   gitDiffViewStyle: "split" | "unified";
@@ -363,8 +384,26 @@ export type LayoutNodesOptions = {
   worktreeApplyError: string | null;
   worktreeApplySuccess: boolean;
   onApplyWorktreeChanges?: () => void | Promise<void>;
-  filePanelMode: "git" | "files" | "search" | "notes" | "prompts" | "memory" | "activity" | "radar";
-  onFilePanelModeChange: (mode: "git" | "files" | "search" | "notes" | "prompts" | "memory" | "activity" | "radar") => void;
+  filePanelMode:
+    | "git"
+    | "files"
+    | "search"
+    | "notes"
+    | "prompts"
+    | "memory"
+    | "activity"
+    | "radar";
+  onFilePanelModeChange: (
+    mode:
+      | "git"
+      | "files"
+      | "search"
+      | "notes"
+      | "prompts"
+      | "memory"
+      | "activity"
+      | "radar",
+  ) => void;
   focusedProjectMemoryId?: string | null;
   focusedProjectMemoryRequestKey?: number;
   focusedWorkspaceNoteId?: string | null;
@@ -475,7 +514,10 @@ export type LayoutNodesOptions = {
     content: string;
   }) => void | Promise<void>;
   onDeletePrompt: (path: string) => void | Promise<void>;
-  onMovePrompt: (data: { path: string; scope: "workspace" | "global" }) => void | Promise<void>;
+  onMovePrompt: (data: {
+    path: string;
+    scope: "workspace" | "global";
+  }) => void | Promise<void>;
   onRevealWorkspacePrompts: () => void | Promise<void>;
   onRevealGeneralPrompts: () => void | Promise<void>;
   canRevealGeneralPrompts: boolean;
@@ -571,7 +613,9 @@ export type LayoutNodesOptions = {
   onSelectModel: (id: string | null) => void;
   onDispatchOrchestrationTask?: (
     confirmation: OrchestrationDispatchConfirmation,
-  ) => Promise<{ ok: boolean; taskId?: string | null; reason?: string }> | { ok: boolean; taskId?: string | null; reason?: string };
+  ) =>
+    | Promise<{ ok: boolean; taskId?: string | null; reason?: string }>
+    | { ok: boolean; taskId?: string | null; reason?: string };
   reasoningOptions: string[];
   selectedEffort: string | null;
   onSelectEffort: (effort: string | null) => void;
@@ -600,6 +644,7 @@ export type LayoutNodesOptions = {
   files: string[];
   directories: string[];
   directoryMetadata: WorkspaceDirectoryEntry[];
+  fileTreeSourceVersion?: string | null;
   gitignoredFiles: Set<string>;
   gitignoredDirectories: Set<string>;
   onInsertComposerText: (text: string) => void;
@@ -634,7 +679,9 @@ export type LayoutNodesOptions = {
   activeComposerFilePath: string | null;
   activeComposerFileLineRange: { startLine: number; endLine: number } | null;
   activeCodeSelectionAnchor: IntentCanvasCodeSelectionAnchor | null;
-  onActiveCodeSelectionAnchorChange: (anchor: IntentCanvasCodeSelectionAnchor | null) => void;
+  onActiveCodeSelectionAnchorChange: (
+    anchor: IntentCanvasCodeSelectionAnchor | null,
+  ) => void;
   fileReferenceMode: "path" | "none";
   onFileReferenceModeChange: (mode: "path" | "none") => void;
   plan: TurnPlan | null;
@@ -659,6 +706,489 @@ export type LayoutNodesOptions = {
   onResizeTerminal: (event: MouseEvent<Element>) => void;
   onBackFromDiff: () => void;
   onGoProjects: () => void;
+};
+
+export type WorkspaceLayoutNodesOptions = Pick<
+  LayoutNodesFlatOptions,
+  | "workspaces"
+  | "groupedWorkspaces"
+  | "hasWorkspaceGroups"
+  | "deletingWorktreeIds"
+  | "threadsByWorkspace"
+  | "threadParentById"
+  | "threadStatusById"
+  | "historyLoadingByThreadId"
+  | "historyRestoredAtMsByThread"
+  | "runningSessionCountByWorkspaceId"
+  | "recentCompletedSessionCountByWorkspaceId"
+  | "hydratedThreadListWorkspaceIds"
+  | "threadListLoadingByWorkspace"
+  | "threadListPagingByWorkspace"
+  | "threadListCursorByWorkspace"
+  | "activeWorkspaceId"
+  | "activeThreadId"
+  | "isPhone"
+  | "isTablet"
+  | "systemProxyEnabled"
+  | "systemProxyUrl"
+>;
+
+export type RuntimeLayoutNodesOptions = Pick<
+  LayoutNodesFlatOptions,
+  | "activeItems"
+  | "activeQueuedHandoffBubble"
+  | "threadItemsByThread"
+  | "sessionRadarRunningSessions"
+  | "sessionRadarRecentCompletedSessions"
+  | "activeRateLimits"
+  | "usageShowRemaining"
+  | "showSidebarProviderLabels"
+  | "onRefreshAccountRateLimits"
+  | "showMessageAnchors"
+  | "accountInfo"
+  | "onSwitchAccount"
+  | "onCancelSwitchAccount"
+  | "accountSwitching"
+  | "codeBlockCopyUseModifier"
+  | "openAppTargets"
+  | "openAppIconById"
+  | "selectedOpenAppId"
+  | "onSelectOpenAppId"
+  | "approvals"
+  | "userInputRequests"
+  | "handleApprovalDecision"
+  | "handleApprovalBatchAccept"
+  | "handleApprovalRemember"
+  | "handleUserInputSubmit"
+  | "handleUserInputDismiss"
+  | "onRecoverThreadRuntime"
+  | "onRecoverThreadRuntimeAndResend"
+  | "onThreadRecoveryFork"
+  | "handleExitPlanModeExecute"
+>;
+
+export type ChromeLayoutNodesOptions = Pick<
+  LayoutNodesFlatOptions,
+  | "onOpenSettings"
+  | "onOpenAgentSettings"
+  | "onOpenPromptSettings"
+  | "onOpenModelSettings"
+  | "onRefreshModelConfig"
+  | "isModelConfigRefreshing"
+  | "onOpenDictationSettings"
+  | "onOpenDebug"
+  | "showDebugButton"
+  | "onAddWorkspace"
+  | "onSelectHome"
+  | "onSelectWorkspace"
+  | "onConnectWorkspace"
+  | "onAddAgent"
+  | "engineOptions"
+  | "enabledEngines"
+  | "onRefreshEngineOptions"
+  | "onAddSharedAgent"
+  | "onAddWorktreeAgent"
+  | "onAddCloneAgent"
+  | "onToggleWorkspaceCollapse"
+  | "onSelectThread"
+  | "onSelectHomeWorkspace"
+  | "onDeleteThread"
+  | "onArchiveThread"
+  | "deleteConfirmThreadId"
+  | "deleteConfirmWorkspaceId"
+  | "deleteConfirmBusy"
+  | "onCancelDeleteConfirm"
+  | "onConfirmDeleteConfirm"
+  | "onSyncThread"
+  | "pinThread"
+  | "unpinThread"
+  | "isThreadPinned"
+  | "getPinTimestamp"
+  | "pinnedThreadsVersion"
+  | "isThreadAutoNaming"
+  | "onRenameThread"
+  | "onAutoNameThread"
+  | "onOpenClaudeTui"
+  | "onDeleteWorkspace"
+  | "onDeleteWorktree"
+  | "onRenameWorkspaceAlias"
+  | "onLoadOlderThreads"
+  | "onQuickReloadWorkspaceThreads"
+  | "onReloadWorkspaceThreads"
+  | "updaterState"
+  | "onUpdate"
+  | "onDismissUpdate"
+  | "errorToasts"
+  | "onDismissErrorToast"
+  | "latestAgentRuns"
+  | "isLoadingLatestAgents"
+  | "onSelectHomeThread"
+  | "onOpenSpecHub"
+  | "showLoadingProgressDialog"
+  | "hideLoadingProgressDialog"
+  | "activeWorkspace"
+  | "activeParentWorkspace"
+  | "worktreeLabel"
+  | "worktreeRename"
+  | "isWorktreeWorkspace"
+  | "branchName"
+  | "branches"
+  | "onCheckoutBranch"
+  | "onCreateBranch"
+  | "onCopyThread"
+  | "onLockPanel"
+  | "onToggleTerminal"
+  | "showTerminalButton"
+  | "launchScript"
+  | "launchScriptEditorOpen"
+  | "launchScriptDraft"
+  | "launchScriptSaving"
+  | "launchScriptError"
+  | "onRunLaunchScript"
+  | "onOpenLaunchScriptEditor"
+  | "onCloseLaunchScriptEditor"
+  | "onLaunchScriptDraftChange"
+  | "onSaveLaunchScript"
+  | "launchScriptsState"
+  | "mainHeaderActionsNode"
+  | "filePanelMode"
+  | "onFilePanelModeChange"
+  | "liveEditPreviewEnabled"
+  | "onToggleLiveEditPreview"
+  | "fileTreeLoading"
+  | "fileTreeLoadError"
+  | "onRefreshFiles"
+  | "onOpenDetachedFileExplorer"
+  | "onToggleRuntimeConsole"
+  | "runtimeConsoleVisible"
+  | "browserDockOpen"
+  | "onCloseBrowserDock"
+>;
+
+export type EditorLayoutNodesOptions = Pick<
+  LayoutNodesFlatOptions,
+  | "centerMode"
+  | "setCenterMode"
+  | "editorSplitCompanion"
+  | "setEditorSplitCompanion"
+  | "editorSplitLayout"
+  | "onToggleEditorSplitLayout"
+  | "isEditorFileMaximized"
+  | "onToggleEditorFileMaximized"
+  | "editorFilePath"
+  | "editorNavigationTarget"
+  | "editorHighlightTarget"
+  | "openEditorTabs"
+  | "onActivateEditorTab"
+  | "onCloseEditorTab"
+  | "onCloseAllEditorTabs"
+  | "onActiveEditorLineRangeChange"
+  | "onOpenFile"
+  | "externalChangeMonitoringEnabled"
+  | "externalChangeTransportMode"
+  | "externalChangeApplyMode"
+  | "externalChangeAutoApplyDebounceMs"
+  | "onExitEditor"
+  | "onExitDiff"
+  | "activeTab"
+  | "onSelectTab"
+  | "tabletNavTab"
+  | "gitPanelMode"
+  | "onGitPanelModeChange"
+  | "onOpenGitHistoryPanel"
+  | "onOpenProjectMap"
+  | "gitDiffViewStyle"
+  | "gitDiffListView"
+  | "onGitDiffListViewChange"
+  | "worktreeApplyLabel"
+  | "worktreeApplyTitle"
+  | "worktreeApplyLoading"
+  | "worktreeApplyError"
+  | "worktreeApplySuccess"
+  | "onApplyWorktreeChanges"
+>;
+
+export type GitLayoutNodesOptions = Pick<
+  LayoutNodesFlatOptions,
+  | "gitStatus"
+  | "fileStatus"
+  | "selectedDiffPath"
+  | "diffScrollRequestId"
+  | "onSelectDiff"
+  | "gitLogEntries"
+  | "gitLogTotal"
+  | "gitLogAhead"
+  | "gitLogBehind"
+  | "gitLogAheadEntries"
+  | "gitLogBehindEntries"
+  | "gitLogUpstream"
+  | "gitLogError"
+  | "gitLogLoading"
+  | "selectedCommitSha"
+  | "gitIssues"
+  | "gitIssuesTotal"
+  | "gitIssuesLoading"
+  | "gitIssuesError"
+  | "gitPullRequests"
+  | "gitPullRequestsTotal"
+  | "gitPullRequestsLoading"
+  | "gitPullRequestsError"
+  | "selectedPullRequestNumber"
+  | "selectedPullRequest"
+  | "selectedPullRequestComments"
+  | "selectedPullRequestCommentsLoading"
+  | "selectedPullRequestCommentsError"
+  | "onSelectPullRequest"
+  | "onSelectCommit"
+  | "gitRemoteUrl"
+  | "gitRoot"
+  | "gitRootCandidates"
+  | "gitRootScanDepth"
+  | "gitRootScanLoading"
+  | "gitRootScanError"
+  | "gitRootScanHasScanned"
+  | "onGitRootScanDepthChange"
+  | "onScanGitRoots"
+  | "onSelectGitRoot"
+  | "onClearGitRoot"
+  | "onPickGitRoot"
+  | "onStageGitAll"
+  | "onStageGitFile"
+  | "onUnstageGitFile"
+  | "onRevertGitFile"
+  | "onRevertAllGitChanges"
+  | "gitDiffs"
+  | "gitDiffLoading"
+  | "gitDiffError"
+  | "refreshGitDiffs"
+  | "queueGitStatusRefresh"
+  | "onDiffActivePathChange"
+  | "onGitDiffViewStyleChange"
+  | "commitMessage"
+  | "commitMessageLoading"
+  | "commitMessageError"
+  | "onCommitMessageChange"
+  | "onGenerateCommitMessage"
+  | "onCommit"
+  | "onCommitAndPush"
+  | "onCommitAndSync"
+  | "onPush"
+  | "onSync"
+  | "commitLoading"
+  | "pushLoading"
+  | "syncLoading"
+  | "commitError"
+  | "pushError"
+  | "syncError"
+  | "commitsAhead"
+>;
+
+export type ComposerLayoutNodesOptions = Pick<
+  LayoutNodesFlatOptions,
+  | "onSendPrompt"
+  | "onSendPromptToNewAgent"
+  | "onCreatePrompt"
+  | "onUpdatePrompt"
+  | "onDeletePrompt"
+  | "onMovePrompt"
+  | "onRevealWorkspacePrompts"
+  | "onRevealGeneralPrompts"
+  | "canRevealGeneralPrompts"
+  | "onSend"
+  | "onQueue"
+  | "onRequestContextCompaction"
+  | "onStop"
+  | "completionEmailSelected"
+  | "completionEmailDisabled"
+  | "onToggleCompletionEmail"
+  | "onRewind"
+  | "onForkFromMessage"
+  | "canStop"
+  | "isReviewing"
+  | "isProcessing"
+  | "steerEnabled"
+  | "reviewPrompt"
+  | "onReviewPromptClose"
+  | "onReviewPromptShowPreset"
+  | "onReviewPromptChoosePreset"
+  | "highlightedPresetIndex"
+  | "onReviewPromptHighlightPreset"
+  | "highlightedBranchIndex"
+  | "onReviewPromptHighlightBranch"
+  | "highlightedCommitIndex"
+  | "onReviewPromptHighlightCommit"
+  | "onReviewPromptKeyDown"
+  | "onReviewPromptSelectBranch"
+  | "onReviewPromptSelectBranchAtIndex"
+  | "onReviewPromptConfirmBranch"
+  | "onReviewPromptSelectCommit"
+  | "onReviewPromptSelectCommitAtIndex"
+  | "onReviewPromptConfirmCommit"
+  | "onReviewPromptUpdateCustomInstructions"
+  | "onReviewPromptConfirmCustom"
+  | "activeTokenUsage"
+  | "contextDualViewEnabled"
+  | "codexAutoCompactionEnabled"
+  | "codexAutoCompactionThresholdPercent"
+  | "onCodexAutoCompactionSettingsChange"
+  | "activeQueue"
+  | "draftText"
+  | "onDraftChange"
+  | "activeImages"
+  | "onPickImages"
+  | "onAttachImages"
+  | "onRemoveImage"
+  | "prefillDraft"
+  | "onPrefillHandled"
+  | "insertText"
+  | "onInsertHandled"
+  | "onEditQueued"
+  | "onDeleteQueued"
+  | "onFuseQueued"
+  | "canFuseActiveQueue"
+  | "activeFusingMessageId"
+  | "collaborationModes"
+  | "collaborationModesEnabled"
+  | "selectedCollaborationModeId"
+  | "onSelectCollaborationMode"
+  | "engines"
+  | "selectedEngine"
+  | "usePresentationProfile"
+  | "onSelectEngine"
+  | "models"
+  | "selectedModelId"
+  | "projectMapDatasetController"
+  | "onSelectModel"
+  | "onDispatchOrchestrationTask"
+  | "intentCanvasOpenRequest"
+  | "onOpenIntentCanvas"
+  | "onIntentCanvasOpenRequestConsumed"
+  | "onAttachIntentCanvasToThread"
+  | "pendingIntentCanvasDocuments"
+  | "onRemovePendingIntentCanvas"
+  | "reasoningOptions"
+  | "selectedEffort"
+  | "onSelectEffort"
+  | "claudeThinkingVisible"
+  | "onResolvedClaudeThinkingVisibleChange"
+  | "reasoningSupported"
+  | "opencodeAgents"
+  | "selectedOpenCodeAgent"
+  | "onSelectOpenCodeAgent"
+  | "selectedAgent"
+  | "onSelectAgent"
+  | "opencodeVariantOptions"
+  | "selectedOpenCodeVariant"
+  | "onSelectOpenCodeVariant"
+  | "accessMode"
+  | "onSelectAccessMode"
+  | "skills"
+  | "customSkillDirectories"
+  | "prompts"
+  | "commands"
+  | "files"
+  | "directories"
+  | "directoryMetadata"
+  | "fileTreeSourceVersion"
+  | "gitignoredFiles"
+  | "gitignoredDirectories"
+  | "onInsertComposerText"
+  | "textareaRef"
+  | "composerEditorSettings"
+  | "composerSendShortcut"
+  | "textareaHeight"
+  | "onTextareaHeightChange"
+  | "dictationEnabled"
+  | "dictationState"
+  | "dictationLevel"
+  | "onToggleDictation"
+  | "dictationTranscript"
+  | "onDictationTranscriptHandled"
+  | "dictationError"
+  | "onDismissDictationError"
+  | "dictationHint"
+  | "onDismissDictationHint"
+  | "onOpenExperimentalSettings"
+  | "composerSendLabel"
+  | "composerLinkedKanbanPanels"
+  | "selectedComposerKanbanPanelId"
+  | "composerKanbanContextMode"
+  | "onSelectComposerKanbanPanel"
+  | "onComposerKanbanContextModeChange"
+  | "onOpenComposerKanbanPanel"
+  | "activeComposerFilePath"
+  | "activeComposerFileLineRange"
+  | "activeCodeSelectionAnchor"
+  | "onActiveCodeSelectionAnchorChange"
+  | "fileReferenceMode"
+  | "onFileReferenceModeChange"
+>;
+
+export type PanelsLayoutNodesOptions = Pick<
+  LayoutNodesFlatOptions,
+  | "showComposer"
+  | "plan"
+  | "isPlanMode"
+  | "onOpenPlanPanel"
+  | "onClosePlanPanel"
+  | "bottomStatusPanelExpanded"
+  | "agentTaskScrollRequest"
+  | "onSelectSubagent"
+  | "debugEntries"
+  | "debugOpen"
+  | "terminalOpen"
+  | "terminalTabs"
+  | "activeTerminalId"
+  | "onSelectTerminal"
+  | "onNewTerminal"
+  | "onCloseTerminal"
+  | "terminalState"
+  | "onClearDebug"
+  | "onCopyDebug"
+  | "onResizeDebug"
+  | "onResizeTerminal"
+  | "onBackFromDiff"
+  | "onGoProjects"
+  | "workspaceDropTargetRef"
+  | "isWorkspaceDropActive"
+  | "workspaceDropText"
+  | "onWorkspaceDragOver"
+  | "onWorkspaceDragEnter"
+  | "onWorkspaceDragLeave"
+  | "onWorkspaceDrop"
+  | "appMode"
+  | "onAppModeChange"
+  | "onOpenHomeChat"
+  | "onOpenMemory"
+  | "onOpenProjectMemory"
+  | "onOpenContextLedgerMemory"
+  | "onOpenContextLedgerNote"
+  | "onOpenReleaseNotes"
+  | "focusedProjectMemoryId"
+  | "focusedProjectMemoryRequestKey"
+  | "focusedWorkspaceNoteId"
+  | "focusedWorkspaceNoteRequestKey"
+  | "onOpenGlobalSearch"
+  | "globalSearchShortcut"
+  | "openChatShortcut"
+  | "openKanbanShortcut"
+  | "cycleOpenSessionPrevShortcut"
+  | "cycleOpenSessionNextShortcut"
+  | "closeCurrentSessionShortcut"
+  | "saveFileShortcut"
+  | "findInFileShortcut"
+  | "toggleGitDiffListViewShortcut"
+  | "onOpenWorkspaceHome"
+>;
+
+export type LayoutNodesOptions = {
+  workspace: WorkspaceLayoutNodesOptions;
+  runtime: RuntimeLayoutNodesOptions;
+  chrome: ChromeLayoutNodesOptions;
+  editor: EditorLayoutNodesOptions;
+  git: GitLayoutNodesOptions;
+  composer: ComposerLayoutNodesOptions;
+  panels: PanelsLayoutNodesOptions;
 };
 
 export type LayoutNodesResult = {
@@ -692,4 +1222,7 @@ export type LayoutNodesResult = {
   compactGitBackNode: ReactNode;
 };
 
-export type RightPanelTabSelection = LayoutNodesOptions["filePanelMode"] | "projectMap" | "intentCanvas";
+export type RightPanelTabSelection =
+  | LayoutNodesFlatOptions["filePanelMode"]
+  | "projectMap"
+  | "intentCanvas";

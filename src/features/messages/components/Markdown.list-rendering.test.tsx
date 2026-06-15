@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { Markdown } from "./Markdown";
 
@@ -74,7 +74,7 @@ describe("Markdown list rendering", () => {
     expect(container.querySelector("ul")).toBeNull();
   });
 
-  it("keeps nested bullet items under ordered steps for chat-formatted content", () => {
+  it("keeps nested bullet items under ordered steps for chat-formatted content", async () => {
     const value = [
       "1. 第一步",
       " - 先做检查",
@@ -84,6 +84,9 @@ describe("Markdown list rendering", () => {
 
     const { container } = render(<Markdown value={value} className="markdown" />);
 
+    await waitFor(() => {
+      expect(container.querySelector("ol")?.querySelectorAll(":scope > li")).toHaveLength(2);
+    });
     const ordered = container.querySelector("ol");
     const nestedList = ordered?.querySelector("li ul");
     expect(ordered?.querySelectorAll(":scope > li")).toHaveLength(2);

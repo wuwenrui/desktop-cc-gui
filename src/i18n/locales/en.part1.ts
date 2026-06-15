@@ -782,6 +782,17 @@ const enPart1 = {
     // Other settings
     otherDescription:
       "History completion, model mapping, and other configurations.",
+    performanceDiagnosticsTitle: "Performance diagnostics",
+    performanceDiagnosticsDescription:
+      "Reset local realtime performance overrides when parallel conversations behave worse than expected.",
+    performanceFlagsResetTitle: "Reset performance flags",
+    performanceFlagsResetDescription:
+      "Clears known ccgui.perf.* localStorage overrides. A reload is required for module-level readers.",
+    performanceFlagsResetButton: "Reset",
+    performanceFlagsResetDone:
+      "Reset {{count}} performance flag override(s). Reload the window to refresh module-level caches.",
+    performanceFlagsResetAlreadyDefault:
+      "Performance flags already use defaults. Reload the window if you are verifying runtime behavior.",
     costBudgetTitle: "Cost budget",
     costBudgetDescription:
       "Set a local monthly budget for the StatusPanel BudgetBar and cost guidance.",

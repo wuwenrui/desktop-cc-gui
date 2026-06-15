@@ -914,6 +914,7 @@ export const ContextLedgerPanel = memo(function ContextLedgerPanel({
             <div className="composer-context-ledger-detail-body">
               <Markdown
                 className="markdown composer-context-ledger-detail-markdown"
+                liveRenderMode="lightweight"
                 value={inspectedMarkdownContent}
               />
             </div>

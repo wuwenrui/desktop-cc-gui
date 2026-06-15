@@ -52,7 +52,7 @@ use crate::backend::app_server::{
 pub(crate) use crate::backend::app_server::{ResumePendingSource, WorkspaceSession};
 use crate::backend::events::AppServerEvent;
 use crate::engine::SendMessageParams;
-use crate::event_sink::TauriEventSink;
+use crate::event_sink::build_event_sink;
 use crate::local_usage;
 use crate::remote_backend;
 use crate::session_management::CodexProviderBinding;
@@ -302,7 +302,7 @@ pub(crate) async fn spawn_workspace_session_with_launch_options(
             settings.codex_auto_compaction_enabled,
         )
     };
-    let event_sink = TauriEventSink::new(app_handle);
+    let event_sink = build_event_sink(app_handle);
     spawn_workspace_session_inner_with_options(
         entry,
         default_codex_bin,

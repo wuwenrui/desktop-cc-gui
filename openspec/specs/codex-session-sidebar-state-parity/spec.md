@@ -54,20 +54,77 @@ TBD - synced from change fix-codex-session-sidebar-state-parity. Update Purpose 
 
 ### Requirement: Codex New Conversation Start MUST Be Idempotent While In Flight
 
-When the frontend starts a new Codex conversation for the same workspace and folder, concurrent callers MUST reuse the same in-flight backend start instead of creating multiple backend sessions.
+When the frontend starts a new Codex conversation for the same workspace, folder/root, provider profile, and auto-session identity, concurrent callers MUST reuse the same in-flight backend start instead of creating multiple backend sessions. Starts for different provider profiles or materially different current launch identities MUST remain independent so provider-scoped runtimes can launch in parallel. Current code does not include selected model, launch mode, or spec-root in `start_thread`; if a future change adds those fields to the start payload, the in-flight identity MUST be extended in that same change.
 
-#### Scenario: concurrent codex starts reuse one backend session
-- **WHEN** two or more callers invoke new Codex conversation creation for the same workspace before the first backend start resolves
+#### Scenario: concurrent codex starts reuse one backend session for the same provider profile and auto-session identity
+
+- **WHEN** two or more callers invoke new Codex conversation creation for the same workspace, folder/root, provider profile, and auto-session identity before the first backend start resolves
 - **THEN** the system MUST call the backend start command only once
 - **AND** all callers MUST receive the same created thread id
 - **AND** the sidebar MUST materialize only one new Codex conversation
 
+#### Scenario: different provider profiles do not share the same in-flight start
+
+- **WHEN** two callers invoke new Codex conversation creation for the same workspace and folder
+- **AND** the selected provider profiles are different
+- **THEN** the system MUST keep those starts as separate in-flight operations
+- **AND** each resolved thread MUST retain its own provider profile binding
+- **AND** the sidebar MAY materialize both conversations
+
+#### Scenario: different current launch identities do not share the same in-flight start
+
+- **WHEN** two callers invoke new Codex conversation creation for the same workspace and provider profile
+- **AND** the folder/root or auto-session identity differs
+- **THEN** the system MUST keep those starts as separate in-flight operations
+- **AND** each resolved thread MUST retain the folder and auto-session metadata used to start it
+
+#### Scenario: future start payload dimensions extend in-flight identity
+
+- **WHEN** a future change adds selected model, launch mode, spec-root, or another material launch dimension to the Codex `start_thread` payload
+- **THEN** the frontend in-flight key MUST include that dimension in the same change
+- **AND** starts that differ by that dimension MUST NOT share one backend start
+
 #### Scenario: in-flight reuse preserves activation request
+
 - **WHEN** a caller reuses an in-flight Codex start and requests activation
 - **THEN** the resolved shared thread MUST become active for that workspace
 - **AND** the system MUST NOT dispatch a second create/materialize side effect for that same thread
 
 #### Scenario: failed in-flight start can be retried
+
 - **WHEN** an in-flight Codex start fails
 - **THEN** the in-flight guard MUST be released
-- **AND** a later user action MAY attempt a new backend start
+- **AND** a later user action MAY attempt a new backend start for the same workspace, folder, and provider profile
+
+### Requirement: Codex Sidebar MUST Preserve Provider-Backed Sessions Across Refresh And Restart
+
+Codex sidebar and recent conversation surfaces MUST treat provider-backed workspace catalog rows as first-class sessions, not as creation-time-only frontend overlays.
+
+#### Scenario: provider-backed row survives app restart
+
+- **WHEN** the user creates a Codex session with a managed provider
+- **AND** the app restarts or the frontend loses in-memory reducer state
+- **AND** the workspace catalog returns that session from a provider home scan
+- **THEN** the sidebar MUST render the session row
+- **AND** the row MUST show provider metadata from catalog/thread fields rather than a global active provider state
+
+#### Scenario: degraded provider source does not erase last-good row
+
+- **WHEN** a previously visible managed-provider Codex session is omitted from a later refresh
+- **AND** the backend marks Codex provider-home source coverage as partial or degraded
+- **THEN** the sidebar MUST NOT treat the omission alone as authoritative deletion
+- **AND** it MAY preserve the last-good row with degraded or continuity-preserved state until authoritative evidence arrives
+
+#### Scenario: authoritative provider source absence may remove row
+
+- **WHEN** backend catalog evidence proves the provider-backed Codex session no longer exists or no longer belongs to the requested workspace scope
+- **AND** provider-home source coverage for the relevant scope is authoritative
+- **THEN** the sidebar MAY remove the row
+- **AND** it MUST NOT keep the row indefinitely as a ghost session
+
+#### Scenario: provider label is preserved through catalog refresh
+
+- **WHEN** a Codex sidebar row is rebuilt from catalog data after refresh or restart
+- **THEN** provider label and unavailable-provider state MUST derive from `providerProfileId`, `providerProfileName`, and `providerAvailability`
+- **AND** the row MUST NOT fall back to disk label unless the catalog identifies the session as disk profile
+

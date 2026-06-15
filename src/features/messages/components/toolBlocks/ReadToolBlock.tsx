@@ -146,6 +146,7 @@ export const ReadToolBlock = memo(function ReadToolBlock({
                 <Markdown
                   value={renderedOutput}
                   className="markdown read-tool-markdown"
+                  liveRenderMode="lightweight"
                 />
               </div>
             </div>

@@ -8,6 +8,15 @@ const SEARCH_SECTION_FILE = "src/app-shell-parts/useAppShellSearchAndComposerSec
 const SECTIONS_FILE = "src/app-shell-parts/useAppShellSections.ts";
 const LAYOUT_FILE = "src/app-shell-parts/useAppShellLayoutNodesSection.tsx";
 const RENDER_FILE = "src/app-shell-parts/renderAppShell.tsx";
+const APP_SHELL_DOMAIN_CONTEXT_NAMES = new Set([
+  "runtimeThreadContext",
+  "workspaceNavigationContext",
+  "composerContext",
+  "layoutContext",
+  "fileEditorContext",
+  "settingsContext",
+]);
+const CONTEXT_DESTRUCTURE_IDENTIFIERS = new Set(["ctx", "legacyCtx"]);
 
 const CONTRACT_FILES = [
   APP_SHELL_FILE,
@@ -102,10 +111,9 @@ function getVariableObjectLiteral(sourceFile, variableName) {
       ts.isVariableDeclaration(node) &&
       ts.isIdentifier(node.name) &&
       node.name.text === variableName &&
-      node.initializer &&
-      ts.isObjectLiteralExpression(node.initializer)
+      node.initializer
     ) {
-      result = node.initializer;
+      result = getInitializerObjectLiteral(node.initializer);
     }
   });
 
@@ -115,10 +123,41 @@ function getVariableObjectLiteral(sourceFile, variableName) {
   return result;
 }
 
-function getVariableObjectLiteralKeys(sourceFile, variableName) {
-  return collectObjectLiteralOwnKeys(
-    getVariableObjectLiteral(sourceFile, variableName),
-  );
+function collectDomainContextKeySets(sourceFile, variableName) {
+  const objectLiteral = getVariableObjectLiteral(sourceFile, variableName);
+  const sourceKeysByIdentifier = collectLocalObjectLiteralSourceKeys(sourceFile);
+  const domainKeys = new Map();
+  const allKeys = new Set();
+
+  for (const property of objectLiteral.properties) {
+    if (!ts.isPropertyAssignment(property)) {
+      continue;
+    }
+    const domainName = getPropertyNameText(property.name);
+    if (!domainName || !APP_SHELL_DOMAIN_CONTEXT_NAMES.has(domainName)) {
+      continue;
+    }
+    const domainObject = getInitializerObjectLiteral(property.initializer);
+    if (!domainObject) {
+      continue;
+    }
+    const keys = collectObjectLiteralEffectiveKeys(
+      domainObject,
+      sourceKeysByIdentifier,
+    );
+    domainKeys.set(domainName, keys);
+    for (const key of keys) {
+      allKeys.add(key);
+    }
+  }
+
+  if (domainKeys.size === 0) {
+    throw new Error(
+      `Cannot find domain context object literals in variable "${variableName}" (${sourceFile.fileName}).`,
+    );
+  }
+
+  return { domainKeys, allKeys };
 }
 
 function getInitializerObjectLiteral(initializer) {
@@ -173,8 +212,12 @@ function collectObjectLiteralEffectiveKeys(objectLiteral, sourceKeysByIdentifier
   return keys;
 }
 
-function checkObjectLiteralShorthandBindings(sourceFile, variableName, checker) {
-  const objectLiteral = getVariableObjectLiteral(sourceFile, variableName);
+function checkObjectLiteralShorthandBindingsInObject(
+  sourceFile,
+  objectLiteral,
+  label,
+  checker,
+) {
   const issues = [];
 
   for (const property of objectLiteral.properties) {
@@ -184,7 +227,7 @@ function checkObjectLiteralShorthandBindings(sourceFile, variableName, checker) 
     const symbol = checker.getSymbolAtLocation(property.name);
     if (!symbol) {
       issues.push(
-        `[${variableName}] shorthand "${property.name.text}" has no resolvable symbol.`,
+        `[${label}] shorthand "${property.name.text}" has no resolvable symbol.`,
       );
       continue;
     }
@@ -194,9 +237,38 @@ function checkObjectLiteralShorthandBindings(sourceFile, variableName, checker) 
     );
     if (!hasLocalDeclaration) {
       issues.push(
-        `[${variableName}] shorthand "${property.name.text}" resolves to a non-local symbol (likely global).`,
+        `[${label}] shorthand "${property.name.text}" resolves to a non-local symbol (likely global).`,
       );
     }
+  }
+
+  return issues;
+}
+
+function checkDomainContextShorthandBindings(sourceFile, variableName, checker) {
+  const objectLiteral = getVariableObjectLiteral(sourceFile, variableName);
+  const issues = [];
+
+  for (const property of objectLiteral.properties) {
+    if (!ts.isPropertyAssignment(property)) {
+      continue;
+    }
+    const domainName = getPropertyNameText(property.name);
+    if (!domainName || !APP_SHELL_DOMAIN_CONTEXT_NAMES.has(domainName)) {
+      continue;
+    }
+    const domainObject = getInitializerObjectLiteral(property.initializer);
+    if (!domainObject) {
+      continue;
+    }
+    issues.push(
+      ...checkObjectLiteralShorthandBindingsInObject(
+        sourceFile,
+        domainObject,
+        `${variableName}.${domainName}`,
+        checker,
+      ),
+    );
   }
 
   return issues;
@@ -260,7 +332,7 @@ function getCtxDestructureKeys(sourceFile, functionName, checker) {
       ts.isObjectBindingPattern(node.name) &&
       node.initializer &&
       ts.isIdentifier(node.initializer) &&
-      node.initializer.text === "ctx"
+      CONTEXT_DESTRUCTURE_IDENTIFIERS.has(node.initializer.text)
     ) {
       for (const element of node.name.elements) {
         if (element.dotDotDotToken) {
@@ -286,7 +358,7 @@ function getCtxDestructureKeys(sourceFile, functionName, checker) {
   });
 
   if (allKeys.size === 0) {
-    throw new Error(`Cannot find "const { ... } = ctx" destructure in ${sourceFile.fileName}.`);
+    throw new Error(`Cannot find context destructure in ${sourceFile.fileName}.`);
   }
 
   const usedKeys = new Set();
@@ -364,6 +436,12 @@ function getFirstCallArgument(sourceFile, calleeName) {
   return result;
 }
 
+function addSourceKeys(targetKeys, sourceKeys) {
+  for (const key of sourceKeys) {
+    targetKeys.add(key);
+  }
+}
+
 function resolveProvidedKeysFromArgument(argumentNode, sourceSetsByIdentifier) {
   if (ts.isIdentifier(argumentNode)) {
     const keys = sourceSetsByIdentifier.get(argumentNode.text);
@@ -410,7 +488,12 @@ function resolveProvidedKeysFromArgument(argumentNode, sourceSetsByIdentifier) {
     }
 
     if (ts.isShorthandPropertyAssignment(property)) {
-      keys.add(property.name.text);
+      const sourceKeys = sourceSetsByIdentifier.get(property.name.text);
+      if (sourceKeys) {
+        addSourceKeys(keys, sourceKeys);
+      } else {
+        keys.add(property.name.text);
+      }
       continue;
     }
 
@@ -422,6 +505,11 @@ function resolveProvidedKeysFromArgument(argumentNode, sourceSetsByIdentifier) {
     ) {
       const key = getPropertyNameText(property.name);
       if (key) {
+        const sourceKeys = sourceSetsByIdentifier.get(key);
+        if (sourceKeys) {
+          addSourceKeys(keys, sourceKeys);
+          continue;
+        }
         keys.add(key);
       }
     }
@@ -504,15 +592,19 @@ async function main() {
   const layoutSource = getProgramSourceFile(program, LAYOUT_FILE);
   const renderSource = getProgramSourceFile(program, RENDER_FILE);
 
-  const appShellContextKeys = getVariableObjectLiteralKeys(
+  const appShellDomainContextKeySets = collectDomainContextKeySets(
     appShellSource,
-    "appShellContext",
+    "rawAppShellDomainContexts",
   );
-  const appShellContextShorthandIssues = checkObjectLiteralShorthandBindings(
+  const appShellDomainContextShorthandIssues = checkDomainContextShorthandBindings(
     appShellSource,
-    "appShellContext",
+    "rawAppShellDomainContexts",
     checker,
   );
+  const appShellDomainSourceSets = new Map([
+    ["appShellDomainContexts", appShellDomainContextKeySets.allKeys],
+    ...appShellDomainContextKeySets.domainKeys,
+  ]);
   const searchReturnKeys = getReturnObjectKeys(
     searchSource,
     "useAppShellSearchAndComposerSection",
@@ -549,19 +641,19 @@ async function main() {
 
   const searchProvided = resolveProvidedKeysFromArgument(
     getFirstCallArgument(appShellSource, "useAppShellSearchAndComposerSection"),
-    new Map([["appShellContext", appShellContextKeys]]),
+    appShellDomainSourceSets,
   );
   const sectionsProvided = resolveProvidedKeysFromArgument(
     getFirstCallArgument(appShellSource, "useAppShellSections"),
     new Map([
-      ["appShellContext", appShellContextKeys],
+      ...appShellDomainSourceSets,
       ["searchAndComposerSection", searchReturnKeys],
     ]),
   );
   const layoutProvided = resolveProvidedKeysFromArgument(
     getFirstCallArgument(appShellSource, "useAppShellLayoutNodesSection"),
     new Map([
-      ["appShellContext", appShellContextKeys],
+      ...appShellDomainSourceSets,
       ["searchAndComposerSection", searchReturnKeys],
       ["sections", sectionsReturnKeys],
     ]),
@@ -569,7 +661,7 @@ async function main() {
   const renderProvided = resolveProvidedKeysFromArgument(
     getFirstCallArgument(appShellSource, "renderAppShell"),
     new Map([
-      ["appShellContext", appShellContextKeys],
+      ...appShellDomainSourceSets,
       ["searchAndComposerSection", searchReturnKeys],
       ["sections", sectionsReturnKeys],
       ["layoutNodes", layoutReturnKeys],
@@ -577,7 +669,7 @@ async function main() {
   );
 
   const issues = [
-    ...appShellContextShorthandIssues,
+    ...appShellDomainContextShorthandIssues,
     ...checkContract({
       name: "useAppShellSearchAndComposerSection",
       requiredKeys: searchRequiredKeys,

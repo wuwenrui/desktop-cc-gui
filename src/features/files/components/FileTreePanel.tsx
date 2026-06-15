@@ -27,6 +27,7 @@ import {
   writeWorkspaceFile,
   type WorkspaceDirectoryEntry,
 } from "../../../services/tauri";
+import { appendWorkspaceFileListingBudgetDiagnostic } from "../../../services/rendererDiagnostics";
 import type { GitFileStatus, OpenAppTarget } from "../../../types";
 import { languageFromPath } from "../../../utils/syntax";
 import {
@@ -39,6 +40,7 @@ import {
   DETACHED_FILE_TREE_DRAG_BRIDGE_EVENT,
   type DetachedFileTreeDragBridgePayload,
 } from "../detachedFileTreeDragBridge";
+import { loadFileTreeStyles } from "../../../styles/featureStyleLoaders";
 import {
   CROSS_WINDOW_TREE_DRAG_REBROADCAST_THROTTLE_MS,
 } from "../utils/fileTreeDragBridge";
@@ -105,6 +107,7 @@ type FileTreePanelProps = {
   files: string[];
   directories?: string[];
   directoryMetadata?: WorkspaceDirectoryEntry[];
+  sourceVersion?: string | null;
   isLoading: boolean;
   loadError?: string | null;
   filePanelMode: PanelTabId;
@@ -134,6 +137,14 @@ type FileOpenLocation = {
   column: number;
 };
 
+function hashFileTreeDiagnosticPath(path: string) {
+  let hash = 0;
+  for (let index = 0; index < path.length; index += 1) {
+    hash = (hash * 31 + path.charCodeAt(index)) >>> 0;
+  }
+  return hash.toString(36);
+}
+
 export function FileTreePanel({
   workspaceId,
   workspaceName,
@@ -142,6 +153,7 @@ export function FileTreePanel({
   files,
   directories,
   directoryMetadata = EMPTY_DIRECTORY_METADATA,
+  sourceVersion = null,
   isLoading,
   loadError = null,
   filePanelMode: _filePanelMode,
@@ -165,6 +177,9 @@ export function FileTreePanel({
   gitignoredDirectories,
   onRefreshFiles,
 }: FileTreePanelProps) {
+  useEffect(() => {
+    void loadFileTreeStyles();
+  }, []);
   const directoryEntries = directories ?? EMPTY_DIRECTORIES;
   const ignoredFileEntries = gitignoredFiles ?? EMPTY_SET;
   const ignoredDirectoryEntries = gitignoredDirectories ?? EMPTY_SET;
@@ -228,6 +243,11 @@ export function FileTreePanel({
   const [suppressedDeletedPaths, setSuppressedDeletedPaths] = useState<Set<string>>(new Set());
   const loadedLazyDirectoriesRef = useRef<Set<string>>(new Set());
   const loadingLazyDirectoriesRef = useRef<Set<string>>(new Set());
+  const sourceVersionRef = useRef<string | null>(sourceVersion);
+
+  useEffect(() => {
+    sourceVersionRef.current = sourceVersion;
+  }, [sourceVersion]);
 
   useEffect(() => {
     return () => {
@@ -680,6 +700,8 @@ export function FileTreePanel({
         return;
       }
       loadingLazyDirectoriesRef.current = new Set(loadingLazyDirectoriesRef.current).add(path);
+      const requestSourceVersion = sourceVersionRef.current;
+      const requestedAt = Date.now();
       setLoadingLazyDirectories((prev) => {
         const next = new Set(prev);
         next.add(path);
@@ -692,6 +714,25 @@ export function FileTreePanel({
       });
       try {
         const response = await getWorkspaceDirectoryChildren(workspaceId, path);
+        const elapsedMs = Date.now() - requestedAt;
+        if (sourceVersionRef.current !== requestSourceVersion) {
+          appendWorkspaceFileListingBudgetDiagnostic({
+            surfaceId: "subtree-listing",
+            workspaceId,
+            durationMs: elapsedMs,
+            returnedEntries: response.listingBudget?.returnedEntries ?? 0,
+            payloadBytes: response.listingBudget?.payloadBytes ?? response.payloadBudget?.estimatedBytes ?? null,
+            cacheState: response.listingBudget?.cacheState ?? response.payloadBudget?.cacheState ?? "unsupported",
+            scanState: response.scan_state ?? response.listingBudget?.scanState ?? null,
+            partial: true,
+            limitHit: Boolean(response.limit_hit ?? response.listingBudget?.limitHit),
+            sourceVersion: response.sourceVersion ?? response.listingBudget?.sourceVersion ?? null,
+            requestedPathHash: hashFileTreeDiagnosticPath(path),
+            evidenceClass: "proxy",
+            fallbackReason: "stale-source-version",
+          });
+          return;
+        }
         const nextFiles = Array.isArray(response.files) ? response.files : [];
         const nextDirectories = Array.isArray(response.directories) ? response.directories : [];
         const nextGitignoredFiles = Array.isArray(response.gitignored_files)
@@ -705,6 +746,22 @@ export function FileTreePanel({
               Boolean(entry && typeof entry.path === "string" && typeof entry.child_state === "string"),
             )
           : [];
+        appendWorkspaceFileListingBudgetDiagnostic({
+          surfaceId: "subtree-listing",
+          workspaceId,
+          durationMs: elapsedMs,
+          returnedEntries:
+            response.listingBudget?.returnedEntries ??
+            nextFiles.length + nextDirectories.length + nextDirectoryMetadata.length,
+          payloadBytes: response.listingBudget?.payloadBytes ?? response.payloadBudget?.estimatedBytes ?? null,
+          cacheState: response.listingBudget?.cacheState ?? response.payloadBudget?.cacheState ?? "unsupported",
+          scanState: response.scan_state ?? response.listingBudget?.scanState ?? null,
+          partial: response.scan_state === "partial" || Boolean(response.limit_hit ?? response.listingBudget?.limitHit),
+          limitHit: Boolean(response.limit_hit ?? response.listingBudget?.limitHit),
+          sourceVersion: response.sourceVersion ?? response.listingBudget?.sourceVersion ?? null,
+          requestedPathHash: hashFileTreeDiagnosticPath(path),
+          evidenceClass: response.sourceVersion || response.listingBudget?.sourceVersion ? "measured" : "unsupported",
+        });
 
         setLazyFiles((prev) => {
           const next = new Set(prev);

@@ -95,6 +95,7 @@ fn forward_webview_drag_drop_to_main<R: tauri::Runtime>(
 mod agents;
 mod app_paths;
 mod backend;
+mod backend_budget;
 mod browser_agent;
 mod claude_commands;
 mod claude_home;

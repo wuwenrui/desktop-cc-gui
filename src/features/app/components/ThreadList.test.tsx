@@ -28,6 +28,8 @@ vi.mock("react-i18next", () => ({
         "threads.subagentTreeExpanded": "Subagent tree expanded",
         "threads.subagentTreeExpand": "Expand subagent tree",
         "threads.subagentTreeCollapse": "Collapse subagent tree",
+        "threads.runtimeProcessing": "Processing",
+        "threads.runtimeReviewing": "Reviewing",
         "threads.deleteThreadTitle": "Delete conversation",
         "threads.deleteThreadMessage": "Are you sure you want to delete this thread?",
         "threads.deleteThreadHint": "This cannot be undone.",
@@ -615,6 +617,58 @@ describe("ThreadList", () => {
     expect(badge).toBeTruthy();
     expect(badge?.textContent ?? "").toBe("");
     expect(badge?.classList.contains("proxy-status-badge--animated")).toBe(false);
+  });
+
+  it("keeps an unchanged target row stable across unrelated status updates", () => {
+    const renderCountByThreadId = new Map<string, number>();
+    const rows = [
+      { thread, depth: 0 },
+      {
+        thread: { id: "thread-other", name: "Other", updatedAt: 999 },
+        depth: 0,
+      },
+    ];
+    const onThreadRowRender = vi.fn((threadId: string) => {
+      renderCountByThreadId.set(
+        threadId,
+        (renderCountByThreadId.get(threadId) ?? 0) + 1,
+      );
+    });
+
+    const { rerender } = render(
+      <ThreadList
+        {...baseProps}
+        unpinnedRows={rows}
+        threadStatusById={{
+          "thread-1": { isProcessing: false, hasUnread: true, isReviewing: false },
+          "thread-other": { isProcessing: false, hasUnread: false, isReviewing: false },
+        }}
+        onThreadRowRender={onThreadRowRender}
+      />,
+    );
+
+    expect(renderCountByThreadId.get("thread-1")).toBe(1);
+
+    for (let index = 0; index < 1000; index += 1) {
+      rerender(
+        <ThreadList
+          {...baseProps}
+          unpinnedRows={rows}
+          threadStatusById={{
+            "thread-1": { isProcessing: false, hasUnread: true, isReviewing: false },
+            "thread-other": {
+              isProcessing: index % 2 === 0,
+              hasUnread: false,
+              isReviewing: false,
+            },
+          }}
+          onThreadRowRender={onThreadRowRender}
+        />,
+      );
+    }
+
+    expect(renderCountByThreadId.get("thread-1")).toBe(1);
+    expect(onThreadRowRender).toHaveBeenCalledWith("thread-other");
   });
 
   it("hides codex provider metadata by default and keeps explicit badges opt-in", () => {

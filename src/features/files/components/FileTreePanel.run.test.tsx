@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { OpenAppTarget } from "../../../types";
 
@@ -71,6 +71,10 @@ vi.mock("../../../services/tauri", () => ({
     invokeMock("write_workspace_file", { workspaceId, path, content }),
 }));
 
+vi.mock("../../../services/rendererDiagnostics", () => ({
+  appendWorkspaceFileListingBudgetDiagnostic: vi.fn(),
+}));
+
 vi.mock("@tauri-apps/plugin-opener", () => ({
   revealItemInDir: revealItemInDirMock,
 }));
@@ -88,6 +92,14 @@ vi.mock("./FilePreviewPopover", () => ({
 }));
 
 let FileTreePanel: typeof import("./FileTreePanel").FileTreePanel;
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((nextResolve) => {
+    resolve = nextResolve;
+  });
+  return { promise, resolve };
+}
 
 beforeAll(async () => {
   ({ FileTreePanel } = await import("./FileTreePanel"));
@@ -823,6 +835,97 @@ describe("FileTreePanel run action isolation", () => {
       workspaceId: "workspace-1",
       path: "packages/large",
     });
+  });
+
+  it("drops stale lazy directory responses when the root source version changes", async () => {
+    const childrenResponse = createDeferred<any>();
+    invokeMock.mockImplementation(async (...args: any[]): Promise<any> => {
+      const command = args[0];
+      if (command === "list_workspace_directory_children") {
+        return childrenResponse.promise;
+      }
+      return null;
+    });
+
+    const { rerender } = render(
+      <FileTreePanel
+        workspaceId="workspace-1"
+        workspacePath="/tmp/workspace"
+        files={[]}
+        directories={["packages/large"]}
+        directoryMetadata={[
+          {
+            path: "packages/large",
+            child_state: "unknown",
+          },
+        ]}
+        sourceVersion="source-v1"
+        isLoading={false}
+        filePanelMode="files"
+        onFilePanelModeChange={() => undefined}
+        onOpenFile={() => undefined}
+        onInsertText={() => undefined}
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={() => undefined}
+        gitStatusFiles={[]}
+        gitignoredFiles={new Set<string>()}
+      />,
+    );
+
+    fireEvent.doubleClick(screen.getByRole("button", { name: /packages/ }));
+    fireEvent.doubleClick(screen.getByRole("button", { name: /large/ }));
+
+    rerender(
+      <FileTreePanel
+        workspaceId="workspace-1"
+        workspacePath="/tmp/workspace"
+        files={[]}
+        directories={["packages/large"]}
+        directoryMetadata={[
+          {
+            path: "packages/large",
+            child_state: "unknown",
+          },
+        ]}
+        sourceVersion="source-v2"
+        isLoading={false}
+        filePanelMode="files"
+        onFilePanelModeChange={() => undefined}
+        onOpenFile={() => undefined}
+        onInsertText={() => undefined}
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={() => undefined}
+        gitStatusFiles={[]}
+        gitignoredFiles={new Set<string>()}
+      />,
+    );
+
+    await act(async () => {
+      childrenResponse.resolve({
+        files: ["packages/large/stale.ts"],
+        directories: [] as string[],
+        gitignored_files: [] as string[],
+        gitignored_directories: [] as string[],
+        scan_state: "complete",
+        limit_hit: false,
+        sourceVersion: "subtree-v1",
+        directory_entries: [
+          {
+            path: "packages/large",
+            child_state: "loaded",
+          },
+        ],
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByText("stale.ts")).toBeNull());
   });
 
   it("caches confirmed empty ordinary directories without repeated fetches", async () => {

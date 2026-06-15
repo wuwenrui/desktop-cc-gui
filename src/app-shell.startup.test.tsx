@@ -87,7 +87,10 @@ const startupState = vi.hoisted(() => {
       selectedOpenAppId: null,
     },
     renderCtx: null as Record<string, unknown> | null,
-    selectedComposerSelection: null as { modelId: string | null; effort: string | null } | null,
+    selectedComposerSelection: null as {
+      modelId: string | null;
+      effort: string | null;
+    } | null,
     clientStore: {
       app: {} as Record<string, unknown>,
       composer: {} as Record<string, unknown>,
@@ -170,7 +173,9 @@ function resolveStartupThreadComposerSelection(
   }
   const canonicalThreadId = resolveCanonicalThreadId(threadId);
   const prefix = `selectedModelByThread.${workspaceId ?? "__workspace__unknown__"}:`;
-  for (const [key, rawValue] of Object.entries(startupState.clientStore.composer)) {
+  for (const [key, rawValue] of Object.entries(
+    startupState.clientStore.composer,
+  )) {
     if (!key.startsWith(prefix)) {
       continue;
     }
@@ -189,11 +194,17 @@ function resolveStartupThreadComposerSelection(
 }
 
 vi.mock("./services/clientStorage", () => ({
-  getClientStoreSync: vi.fn((store: keyof typeof startupState.clientStore, key: string) => {
-    return startupState.clientStore[store]?.[key];
-  }),
+  getClientStoreSync: vi.fn(
+    (store: keyof typeof startupState.clientStore, key: string) => {
+      return startupState.clientStore[store]?.[key];
+    },
+  ),
   writeClientStoreValue: vi.fn(
-    (store: keyof typeof startupState.clientStore, key: string, value: unknown) => {
+    (
+      store: keyof typeof startupState.clientStore,
+      key: string,
+      value: unknown,
+    ) => {
       startupState.clientStore[store][key] = value;
     },
   ),
@@ -217,7 +228,10 @@ vi.mock("./app-shell-parts/useSelectedComposerSession", () => ({
       if (!threadId) {
         return;
       }
-      const sessionKey = getThreadComposerSelectionStorageKey(workspaceId, threadId);
+      const sessionKey = getThreadComposerSelectionStorageKey(
+        workspaceId,
+        threadId,
+      );
       startupState.clientStore.composer[sessionKey] =
         normalizeThreadComposerSelection(selection);
     };
@@ -239,7 +253,11 @@ vi.mock("./app-shell-parts/useSelectedComposerSession", () => ({
       selectedComposerSelection,
       selectedComposerSelectionRef: { current: selectedComposerSelection },
       handleSelectComposerSelection: (selection: unknown) => {
-        persistComposerSelectionForThread(activeWorkspaceId, activeThreadId, selection);
+        persistComposerSelectionForThread(
+          activeWorkspaceId,
+          activeThreadId,
+          selection,
+        );
       },
       persistComposerSelectionForThread,
       reloadSelectedComposerSelection: vi.fn(),
@@ -402,7 +420,8 @@ vi.mock("./features/app/hooks/useLoadingProgressDialogState", () => ({
 }));
 
 vi.mock("./app-shell-parts/useCreateSessionLoading", () => ({
-  useCreateSessionLoading: () => vi.fn(async (run: () => Promise<unknown>) => run()),
+  useCreateSessionLoading: () =>
+    vi.fn(async (run: () => Promise<unknown>) => run()),
 }));
 
 vi.mock("./features/app/hooks/useUpdaterController", () => ({
@@ -795,7 +814,8 @@ vi.mock("./features/threads/hooks/useThreads", () => ({
       startShare: createNoopFunction(),
       startSharedSessionForWorkspace: createNoopFunction(),
       updateSharedSessionEngineSelection: createNoopFunction(),
-      resolveCanonicalThreadId: (value: string) => startupState.canonicalThreadId ?? value,
+      resolveCanonicalThreadId: (value: string) =>
+        startupState.canonicalThreadId ?? value,
       reviewPrompt: null,
       closeReviewPrompt: createNoopFunction(),
       showPresetStep: false,
@@ -1188,10 +1208,31 @@ vi.mock("./app-shell-parts/useAppShellLayoutNodesSection", () => ({
 
 vi.mock("./app-shell-parts/renderAppShell", () => ({
   renderAppShell: (ctx: Record<string, unknown>) => {
-    startupState.renderCtx = ctx;
+    const domainContexts =
+      ctx.appShellDomainContexts &&
+      typeof ctx.appShellDomainContexts === "object"
+        ? (ctx.appShellDomainContexts as Record<
+            string,
+            Record<string, unknown>
+          >)
+        : null;
+    const renderCtx = domainContexts
+      ? {
+          ...(domainContexts.runtimeThreadContext ?? {}),
+          ...(domainContexts.workspaceNavigationContext ?? {}),
+          ...(domainContexts.composerContext ?? {}),
+          ...(domainContexts.layoutContext ?? {}),
+          ...(domainContexts.fileEditorContext ?? {}),
+          ...(domainContexts.settingsContext ?? {}),
+          ...((ctx.searchAndComposerSection as Record<string, unknown>) ?? {}),
+          ...((ctx.sections as Record<string, unknown>) ?? {}),
+          ...((ctx.layoutNodes as Record<string, unknown>) ?? {}),
+        }
+      : ctx;
+    startupState.renderCtx = renderCtx;
     const threadSelection =
-      typeof ctx.resolveComposerSelectionForThread === "function"
-        ? ctx.resolveComposerSelectionForThread(
+      typeof renderCtx.resolveComposerSelectionForThread === "function"
+        ? renderCtx.resolveComposerSelectionForThread(
             startupState.workspace.id,
             startupState.activeThreadId,
           )
@@ -1199,8 +1240,8 @@ vi.mock("./app-shell-parts/renderAppShell", () => ({
     return (
       <div
         data-testid="app-shell-sentinel"
-        data-model={String(ctx.effectiveSelectedModelId ?? "")}
-        data-effort={String(ctx.resolvedEffort ?? "")}
+        data-model={String(renderCtx.effectiveSelectedModelId ?? "")}
+        data-effort={String(renderCtx.resolvedEffort ?? "")}
         data-thread-model={String(threadSelection?.modelId ?? "")}
         data-thread-effort={String(threadSelection?.effort ?? "")}
       />
@@ -1228,7 +1269,9 @@ describe("AppShell startup", () => {
       leida: {},
     };
     startupState.setAppSettings = vi.fn((updater) =>
-      typeof updater === "function" ? updater(startupState.appSettings) : updater,
+      typeof updater === "function"
+        ? updater(startupState.appSettings)
+        : updater,
     );
     startupState.queueSaveSettings = vi.fn(async (next) => next);
     tauriWindowMocks.setTitle.mockReset();
@@ -1274,7 +1317,9 @@ describe("AppShell startup", () => {
     await waitFor(() => {
       expect(getStartupTraceSnapshot().milestones["input-ready"]).toBeTruthy();
     });
-    expect(getStartupTraceSnapshot().milestones["active-workspace-ready"]).toBeUndefined();
+    expect(
+      getStartupTraceSnapshot().milestones["active-workspace-ready"],
+    ).toBeUndefined();
   });
 
   it("mounts without an active thread and keeps the global composer defaults", async () => {
@@ -1298,7 +1343,9 @@ describe("AppShell startup", () => {
 
   it("mounts in a web preview when Tauri window metadata is unavailable", async () => {
     tauriWindowMocks.getCurrentWindow.mockImplementation(() => {
-      throw new TypeError("undefined is not an object (evaluating 'window.__TAURI_INTERNALS__.metadata')");
+      throw new TypeError(
+        "undefined is not an object (evaluating 'window.__TAURI_INTERNALS__.metadata')",
+      );
     });
 
     const view = render(<AppShell />);
@@ -1327,7 +1374,9 @@ describe("AppShell startup", () => {
     expect(startupState.setAppSettings).not.toHaveBeenCalled();
     expect(startupState.queueSaveSettings).not.toHaveBeenCalled();
     expect(getStartupTraceSnapshot().milestones["input-ready"]).toBeUndefined();
-    expect(getStartupTraceSnapshot().milestones["active-workspace-ready"]).toBeUndefined();
+    expect(
+      getStartupTraceSnapshot().milestones["active-workspace-ready"],
+    ).toBeUndefined();
   });
 
   it("persists the effective global composer defaults instead of clearing them during a cold start", async () => {
@@ -1357,7 +1406,10 @@ describe("AppShell startup", () => {
     startupState.activeThreadId = "codex-pending-1";
     startupState.canonicalThreadId = "codex:session-1";
     startupState.clientStore.composer[
-      getThreadComposerSelectionStorageKey(startupState.workspace.id, "codex-pending-1")
+      getThreadComposerSelectionStorageKey(
+        startupState.workspace.id,
+        "codex-pending-1",
+      )
     ] = {
       modelId: "codex-alt",
       effort: "high",

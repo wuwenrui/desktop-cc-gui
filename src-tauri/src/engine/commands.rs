@@ -14,7 +14,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::{Mutex, OnceLock};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, State};
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
@@ -37,6 +37,24 @@ use super::{
     engine_disabled_diagnostic, engine_enabled_in_settings, EngineConfig, EngineStatus, EngineType,
 };
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EngineWorkspaceActiveProcessDiagnostics {
+    pub workspace_id: String,
+    pub engine: EngineType,
+    pub active_process_ids: Vec<u32>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EngineActiveProcessDiagnostics {
+    pub measured: bool,
+    pub sampled_at_ms: u64,
+    pub total_active_process_count: usize,
+    pub workspaces: Vec<EngineWorkspaceActiveProcessDiagnostics>,
+    pub unsupported_reason: Option<String>,
+}
+
 #[path = "claude_forwarder.rs"]
 mod claude_forwarder;
 #[path = "commands_opencode.rs"]
@@ -58,6 +76,32 @@ const EVENT_FORWARDER_TIMEOUT_SECS: u64 = 30 * 60;
 /// Gemini may emit fallback reasoning shortly after turn/completed.
 /// Keep the forwarder alive briefly so realtime reasoning is not dropped.
 const GEMINI_POST_COMPLETION_REASONING_GRACE_MS: u64 = 8_000;
+
+fn unix_timestamp_ms_for_diagnostics() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+fn build_engine_active_process_diagnostics(
+    sampled_at_ms: u64,
+    mut workspaces: Vec<EngineWorkspaceActiveProcessDiagnostics>,
+) -> EngineActiveProcessDiagnostics {
+    workspaces.sort_by(|left, right| left.workspace_id.cmp(&right.workspace_id));
+    let total_active_process_count = workspaces
+        .iter()
+        .map(|workspace| workspace.active_process_ids.len())
+        .sum();
+
+    EngineActiveProcessDiagnostics {
+        measured: true,
+        sampled_at_ms,
+        total_active_process_count,
+        workspaces,
+        unsupported_reason: None,
+    }
+}
 
 async fn record_auto_session_metadata_if_present(
     state: &AppState,
@@ -1042,6 +1086,40 @@ pub async fn get_available_engines(state: State<'_, AppState>) -> Result<Vec<Eng
         .into_iter()
         .filter(|engine| engine_enabled_in_settings(&settings, *engine))
         .collect())
+}
+
+/// Get active child-process diagnostics for local engine sessions.
+#[tauri::command]
+pub async fn get_engine_active_process_diagnostics(
+    state: State<'_, AppState>,
+) -> Result<EngineActiveProcessDiagnostics, String> {
+    let sampled_at_ms = unix_timestamp_ms_for_diagnostics();
+    if remote_backend::is_remote_mode(&*state).await {
+        return Ok(EngineActiveProcessDiagnostics {
+            measured: false,
+            sampled_at_ms,
+            total_active_process_count: 0,
+            workspaces: Vec::new(),
+            unsupported_reason: Some(
+                "active process diagnostics are only available for local runtime sessions"
+                    .to_string(),
+            ),
+        });
+    }
+
+    let mut workspaces = Vec::new();
+    for (workspace_id, session) in state.engine_manager.claude_manager.list_sessions().await {
+        let active_process_ids = session.active_process_ids().await;
+        workspaces.push(EngineWorkspaceActiveProcessDiagnostics {
+            workspace_id,
+            engine: EngineType::Claude,
+            active_process_ids,
+        });
+    }
+    Ok(build_engine_active_process_diagnostics(
+        sampled_at_ms,
+        workspaces,
+    ))
 }
 
 /// Get models for a specific engine

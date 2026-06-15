@@ -23,6 +23,39 @@
 - nullable 字段显式写 `T | null`，避免隐式 optional。
 - optional array/map/set props 不得在参数解构里写 `=[]` / `= new Set()` / `= new Map()`；使用 module-level `EMPTY_*` 常量，避免每次 render 生成新引用并触发 `useMemo/useEffect` 循环。
 
+### Pattern: Wrapper-aware React Element Prop Injection
+
+**Trigger**: 当已有代码用 `cloneElement(node, injectedProps)` 给外部构造好的 `ReactNode` 注入 props，且该 node 可能被 `Profiler` / provider / memo wrapper 包裹时。
+
+**Contract**:
+- 不得假设 `sidebarNode` / `composerNode` 等已构造 node 的 root element 就是真正消费 props 的组件。
+- 如果要向 child-only wrapper 内的组件注入 prop，必须显式检查 `isValidElement(node.props.children)` 并把 prop 注入 child。
+- 保留 wrapper 原有 props，例如 `Profiler id` / `onRender`；修复注入链路时不得移除 profiling / provider。
+- 必须补 focused test，断言 wrapper child 的 props 收到注入值。
+
+**Wrong**:
+
+```tsx
+const sidebarNodeWithTopbar = cloneElement(sidebarNode, { topbarNode });
+```
+
+如果 `sidebarNode` 实际是 `<Profiler><Sidebar /></Profiler>`，`topbarNode` 会写到 `Profiler` 上，`Sidebar` 收不到。
+
+**Correct**:
+
+```tsx
+const props = sidebarNode.props as { children?: React.ReactNode };
+const sidebarNodeWithTopbar = isValidElement(props.children)
+  ? cloneElement(sidebarNode, {
+      children: cloneElement(props.children, { topbarNode }),
+    })
+  : cloneElement(sidebarNode, { topbarNode });
+```
+
+**Tests Required**:
+- 覆盖直接 `<Sidebar />` 注入路径。
+- 覆盖 `<Profiler><Sidebar /></Profiler>` 注入路径，断言 child props 包含 `topbarNode`。
+
 ## Styling 规范
 
 - 当前项目主样式是 `src/styles/*.css` + `className`/`cn()` 组合。

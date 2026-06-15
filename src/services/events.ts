@@ -6,6 +6,8 @@ import type {
 } from "../types";
 import type { CliInstallProgressEvent } from "../types";
 import type { RuntimeLogSessionSnapshot } from "./tauri";
+import { createEventBackpressure } from "./eventBackpressure";
+import { appendEventBackpressureDiagnostic } from "./rendererDiagnostics";
 
 export type Unsubscribe = () => void;
 export const WEB_SERVICE_RECONNECTED_EVENT =
@@ -37,23 +39,42 @@ type SubscriptionOptions = {
 
 type Listener<T> = (payload: T) => void;
 
-function createEventHub<T>(eventName: string) {
+type EventHubOptions<T> = {
+  backpressure?: ReturnType<typeof createEventBackpressure<T>>;
+};
+
+function deliverEvent<T>(
+  eventName: string,
+  listeners: Set<Listener<T>>,
+  payload: T,
+) {
+  for (const listener of listeners) {
+    try {
+      listener(payload);
+    } catch (error) {
+      console.error(`[events] ${eventName} listener failed`, error);
+    }
+  }
+}
+
+function createEventHub<T>(eventName: string, hubOptions: EventHubOptions<T> = {}) {
   const listeners = new Set<Listener<T>>();
   let unlisten: Unsubscribe | null = null;
   let listenPromise: Promise<Unsubscribe> | null = null;
+  const backpressureUnsubscribe = hubOptions.backpressure?.subscribe((payload) => {
+    deliverEvent(eventName, listeners, payload);
+  });
 
   const start = (options?: SubscriptionOptions) => {
     if (unlisten || listenPromise) {
       return;
     }
     listenPromise = listen<T>(eventName, (event) => {
-      for (const listener of listeners) {
-        try {
-          listener(event.payload);
-        } catch (error) {
-          console.error(`[events] ${eventName} listener failed`, error);
-        }
+      if (hubOptions.backpressure) {
+        hubOptions.backpressure.push(event.payload);
+        return;
       }
+      deliverEvent(eventName, listeners, event.payload);
     });
     listenPromise
       .then((handler) => {
@@ -95,20 +116,78 @@ function createEventHub<T>(eventName: string) {
     };
   };
 
-  return { subscribe };
+  return { subscribe, disposeBackpressure: backpressureUnsubscribe };
 }
 
+function terminalOutputBytes(event: TerminalOutputEvent) {
+  return event.data.length;
+}
+
+function runtimeStatusCoalesceKey(event: RuntimeLogSessionSnapshot) {
+  return [
+    event.workspaceId,
+    event.terminalId,
+    event.status,
+    event.exitCode ?? "none",
+    Boolean(event.error),
+  ].join(":");
+}
+
+function runtimeStatusCriticality(event: RuntimeLogSessionSnapshot) {
+  return event.status === "failed" || event.status === "stopped"
+    ? "critical"
+    : "non-critical";
+}
+
+const terminalOutputBackpressure = createEventBackpressure<TerminalOutputEvent>({
+  surfaceId: "terminal-output",
+  eventKind: "terminal-output",
+  estimateBytes: terminalOutputBytes,
+  onStats: appendEventBackpressureDiagnostic,
+});
+
+const runtimeLogLineBackpressure = createEventBackpressure<RuntimeLogLineEvent>({
+  surfaceId: "runtime-log-line",
+  eventKind: "runtime-log-line",
+  estimateBytes: terminalOutputBytes,
+  onStats: appendEventBackpressureDiagnostic,
+});
+
+const runtimeLogStatusBackpressure =
+  createEventBackpressure<RuntimeLogSessionSnapshot>({
+    surfaceId: "runtime-log-status",
+    eventKind: "runtime-log-status",
+    classify: runtimeStatusCriticality,
+    coalesceKey: runtimeStatusCoalesceKey,
+    onStats: appendEventBackpressureDiagnostic,
+  });
+
 const appServerHub = createEventHub<AppServerEvent>("app-server-event");
+
+/**
+ * Batch channel emitted by `BatchedTauriEventSink` (Rust). The payload is a
+ * `Vec<AppServerEvent>` ordered by arrival within a workspace; the
+ * batch-aware route in `useAppServerEvents` is responsible for dispatching
+ * each event to the original handler with coalescing / budgeted flush, NOT
+ * a tight synchronous loop.
+ */
+const appServerBatchHub = createEventHub<readonly AppServerEvent[]>(
+  "app-server-event-batch",
+);
 const dictationDownloadHub =
   createEventHub<DictationModelStatus>("dictation-download");
 const dictationEventHub = createEventHub<DictationEvent>("dictation-event");
 const terminalOutputHub =
-  createEventHub<TerminalOutputEvent>("terminal-output");
+  createEventHub<TerminalOutputEvent>("terminal-output", {
+    backpressure: terminalOutputBackpressure,
+  });
 const runtimeLogLineHub = createEventHub<RuntimeLogLineEvent>(
   "runtime-log:line-appended",
+  { backpressure: runtimeLogLineBackpressure },
 );
 const runtimeLogStatusHub = createEventHub<RuntimeLogSessionSnapshot>(
   "runtime-log:status-changed",
+  { backpressure: runtimeLogStatusBackpressure },
 );
 const runtimeLogExitedHub = createEventHub<RuntimeLogSessionSnapshot>(
   "runtime-log:session-exited",
@@ -119,6 +198,17 @@ const cliInstallerHub = createEventHub<CliInstallProgressEvent>(
 const detachedExternalFileChangeHub =
   createEventHub<DetachedExternalFileChangeEvent>(
     "detached-external-file-change",
+  );
+
+/**
+ * Batch channel emitted by the Rust `DebouncedExternalChangeEmitter`.
+ * The payload is a `Vec<DetachedExternalFileChangeEvent>` ordered by
+ * arrival, with same-`(workspace_id, normalized_path)` events coalesced
+ * to the latest within a 100ms window.
+ */
+const detachedExternalFileChangeBatchHub =
+  createEventHub<readonly DetachedExternalFileChangeEvent[]>(
+    "detached-external-file-change-batch",
   );
 const updaterCheckHub = createEventHub<void>("updater-check");
 const menuNewAgentHub = createEventHub<void>("menu-new-agent");
@@ -167,6 +257,22 @@ export function subscribeAppServerEvents(
   options?: SubscriptionOptions,
 ): Unsubscribe {
   return appServerHub.subscribe(onEvent, options);
+}
+
+/**
+ * Subscribe to the Rust-side batched app server event channel.
+ *
+ * Callers should use this in preference to `subscribeAppServerEvents` when
+ * the backend has `BatchedTauriEventSink` enabled. The default
+ * `useAppServerEvents` consumer routes both channels through a single
+ * batch-aware path so the frontend does not pay per-event reducer dispatch
+ * cost for every raw event.
+ */
+export function subscribeAppServerEventBatch(
+  onBatch: (events: readonly AppServerEvent[]) => void,
+  options?: SubscriptionOptions,
+): Unsubscribe {
+  return appServerBatchHub.subscribe(onBatch, options);
 }
 
 export function subscribeWebServiceReconnect(
@@ -238,6 +344,18 @@ export function subscribeDetachedExternalFileChanges(
   options?: SubscriptionOptions,
 ): Unsubscribe {
   return detachedExternalFileChangeHub.subscribe(onEvent, options);
+}
+
+/**
+ * Subscribe to the Rust-side debounced file change batch channel.
+ * Use this in preference to `subscribeDetachedExternalFileChanges` when
+ * the backend `DebouncedExternalChangeEmitter` is enabled.
+ */
+export function subscribeDetachedExternalFileChangeBatch(
+  onBatch: (events: readonly DetachedExternalFileChangeEvent[]) => void,
+  options?: SubscriptionOptions,
+): Unsubscribe {
+  return detachedExternalFileChangeBatchHub.subscribe(onBatch, options);
 }
 
 export function subscribeUpdaterCheck(

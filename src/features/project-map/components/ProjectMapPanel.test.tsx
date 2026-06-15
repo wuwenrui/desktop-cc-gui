@@ -1582,7 +1582,7 @@ describe("ProjectMapPanel", () => {
     expect(within(evidenceSection).getByText("web/package.json")).toBeTruthy();
   });
 
-  it("keeps compact generation tasks hidden while task module entrypoints are deferred", () => {
+  it("opens the generation task drawer from the top task button", () => {
     const queuedDataset = {
       ...mockProjectMapData,
       runs: [
@@ -1628,11 +1628,19 @@ describe("ProjectMapPanel", () => {
     render(<ProjectMapPanel workspaceName="mossx" dataset={queuedDataset} />);
 
     expect(screen.queryByLabelText("projectMap.tasks.bannerAria")).toBeNull();
-    expect(screen.queryByRole("button", { name: /projectMap\.tasks\.button|Tasks|任务/ })).toBeNull();
-    expect(screen.queryByRole("dialog", { name: "projectMap.tasks.drawerTitle" })).toBeNull();
+    const taskButton = screen.getByRole("button", { name: /projectMap\.tasks\.button|Tasks|任务/ });
+    expect(taskButton.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(taskButton);
+
+    expect(taskButton.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("dialog", { name: "projectMap.tasks.drawerTitle" })).toBeTruthy();
+    expect(screen.getByText("global_run_1")).toBeTruthy();
+    expect(screen.getByText("global_run_2")).toBeTruthy();
+    expect(screen.getByText("global_run_done")).toBeTruthy();
   });
 
-  it("does not expose failed generation run diagnostics through the deferred task drawer", () => {
+  it("shows failed generation run diagnostics only after opening the task drawer", () => {
     const failedDataset: ProjectMapDataset = {
       ...mockProjectMapData,
       runs: [
@@ -1654,9 +1662,14 @@ describe("ProjectMapPanel", () => {
 
     render(<ProjectMapPanel workspaceName="mossx" dataset={failedDataset} />);
 
-    expect(screen.queryByRole("button", { name: /projectMap\.tasks\.button|Tasks|任务/ })).toBeNull();
     expect(screen.queryByRole("dialog", { name: "projectMap.tasks.drawerTitle" })).toBeNull();
     expect(screen.queryByText("global_run_failed")).toBeNull();
     expect(screen.queryByText("AI output did not contain a JSON object.")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /projectMap\.tasks\.button|Tasks|任务/ }));
+
+    expect(screen.getByRole("dialog", { name: "projectMap.tasks.drawerTitle" })).toBeTruthy();
+    expect(screen.getByText("global_run_failed")).toBeTruthy();
+    expect(screen.getByText("AI output did not contain a JSON object.")).toBeTruthy();
   });
 });

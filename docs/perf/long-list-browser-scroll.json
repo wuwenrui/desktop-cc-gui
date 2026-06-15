@@ -1,6 +1,6 @@
 {
   "schemaVersion": "1.0",
-  "generatedAt": "2026-05-24T10:02:41.729Z",
+  "generatedAt": "2026-06-11T19:33:55.201Z",
   "source": "long-list-browser-scroll",
   "metrics": [
     {
@@ -11,7 +11,7 @@
       "notes": "browser=/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
       "details": {
         "rowCount": 1000,
-        "durationMs": 1814.6,
+        "durationMs": 1816.9,
         "frameCount": 218,
         "droppedFrames": 0,
         "dropPct": 0,

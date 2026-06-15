@@ -325,6 +325,86 @@ export type ClientInteractionPerfDiagnosticInput = {
   notes?: string | null;
 };
 
+export type ComposerRenderBudgetDiagnosticInput = {
+  surfaceId: "chat-input-adapter" | "chat-input-box";
+  evidenceKind: ClientInteractionPerfEvidenceKind;
+  workspaceId?: string | null;
+  renderCount: number;
+  isProcessing?: boolean;
+  disabled?: boolean;
+  streamActivityPhase?: string | null;
+  textLength?: number | null;
+};
+
+export type MessageRowRenderBudgetDiagnosticInput = {
+  threadId?: string | null;
+  itemId: string;
+  role: "user" | "assistant";
+  subtype: string;
+  evidenceKind: ClientInteractionPerfEvidenceKind;
+  renderCount: number;
+  isStreaming?: boolean;
+  textLength?: number | null;
+};
+
+export type EventBackpressureDiagnosticInput = {
+  surfaceId: string;
+  eventKind: string;
+  queueDepth: number;
+  droppedCount: number;
+  coalescedCount: number;
+  flushCount: number;
+  lastFlushDurationMs: number;
+  criticalBypassCount: number;
+  deliveredCount: number;
+  rawRetainedCount: number;
+  evidenceClass: ClientInteractionPerfEvidenceKind;
+};
+
+export type ListenerOwnerDiagnosticInput = {
+  activeCount: number;
+  inactiveCount: number;
+  evidenceClass: ClientInteractionPerfEvidenceKind;
+};
+
+export type MediaOwnerDiagnosticInput = {
+  activeCount: number;
+  revokedCount: number;
+  retainedBytes?: number | null;
+  unsupportedReason?: string | null;
+  evidenceClass: ClientInteractionPerfEvidenceKind;
+};
+
+export type MarkdownPrecomputeDiagnosticInput = {
+  mode: "worker-precompute" | "main" | "cache-hit" | "fallback";
+  durationMs: number;
+  contentLength: number;
+  contentHash: string;
+  thresholdReason: string;
+  cacheState: string;
+  fallbackReason?: string | null;
+  evidenceClass: ClientInteractionPerfEvidenceKind;
+  totalHeadings?: number | null;
+  totalHeavyBlocks?: number | null;
+  totalSourceLines?: number | null;
+};
+
+export type WorkspaceFileListingBudgetDiagnosticInput = {
+  surfaceId: "initial-listing" | "subtree-listing" | "fallback-full-listing" | "shared-index";
+  workspaceId?: string | null;
+  durationMs?: number | null;
+  returnedEntries: number;
+  payloadBytes?: number | null;
+  cacheState: string;
+  scanState?: string | null;
+  partial: boolean;
+  limitHit: boolean;
+  sourceVersion?: string | null;
+  requestedPathHash?: string | null;
+  evidenceClass: ClientInteractionPerfEvidenceKind;
+  fallbackReason?: string | null;
+};
+
 function toFiniteDiagnosticNumber(value: number | null | undefined) {
   return typeof value === "number" && Number.isFinite(value)
     ? Math.max(0, value)
@@ -334,6 +414,16 @@ function toFiniteDiagnosticNumber(value: number | null | undefined) {
 function toBoundedDiagnosticString(value: string | null | undefined) {
   const trimmed = value?.trim();
   return trimmed ? trimmed.slice(0, 120) : null;
+}
+
+function isPerfDiagnosticCollectionEnabled() {
+  const env = (import.meta.env ?? {}) as Record<string, string | boolean | undefined>;
+  const nodeEnv = typeof process === "undefined" ? undefined : process.env?.NODE_ENV;
+  return (
+    env.DEV === true ||
+    env.VITE_ENABLE_PERF_BASELINE === "1" ||
+    nodeEnv === "test"
+  );
 }
 
 function toSupportState(supported: boolean): RendererSupportState {
@@ -472,6 +562,131 @@ export function appendClientInteractionPerfDiagnostic(
     foregroundLatencyMs: toFiniteDiagnosticNumber(input.foregroundLatencyMs),
     hydrationLatencyMs: toFiniteDiagnosticNumber(input.hydrationLatencyMs),
     notes: toBoundedDiagnosticString(input.notes),
+  });
+}
+
+export function appendComposerRenderBudgetDiagnostic(
+  input: ComposerRenderBudgetDiagnosticInput,
+) {
+  if (!isPerfDiagnosticCollectionEnabled()) {
+    return;
+  }
+  appendRendererDiagnostic("perf.composer.render-budget", {
+    surfaceId: input.surfaceId,
+    evidenceKind: input.evidenceKind,
+    workspaceId: toBoundedDiagnosticString(input.workspaceId),
+    renderCount: toFiniteDiagnosticNumber(input.renderCount),
+    isProcessing: Boolean(input.isProcessing),
+    disabled: Boolean(input.disabled),
+    streamActivityPhase: toBoundedDiagnosticString(input.streamActivityPhase),
+    textLength: toFiniteDiagnosticNumber(input.textLength),
+  });
+}
+
+export function appendMessageRowRenderBudgetDiagnostic(
+  input: MessageRowRenderBudgetDiagnosticInput,
+) {
+  if (!isPerfDiagnosticCollectionEnabled()) {
+    return;
+  }
+  appendRendererDiagnostic("perf.messages.row-render-budget", {
+    threadId: toBoundedDiagnosticString(input.threadId),
+    itemId: toBoundedDiagnosticString(input.itemId),
+    role: input.role,
+    subtype: toBoundedDiagnosticString(input.subtype),
+    evidenceKind: input.evidenceKind,
+    renderCount: toFiniteDiagnosticNumber(input.renderCount),
+    isStreaming: Boolean(input.isStreaming),
+    textLength: toFiniteDiagnosticNumber(input.textLength),
+  });
+}
+
+export function appendEventBackpressureDiagnostic(
+  input: EventBackpressureDiagnosticInput,
+) {
+  if (!isPerfDiagnosticCollectionEnabled()) {
+    return;
+  }
+  appendRendererDiagnostic("events.backpressure", {
+    surfaceId: toBoundedDiagnosticString(input.surfaceId),
+    eventKind: toBoundedDiagnosticString(input.eventKind),
+    queueDepth: toFiniteDiagnosticNumber(input.queueDepth),
+    droppedCount: toFiniteDiagnosticNumber(input.droppedCount),
+    coalescedCount: toFiniteDiagnosticNumber(input.coalescedCount),
+    flushCount: toFiniteDiagnosticNumber(input.flushCount),
+    lastFlushDurationMs: toFiniteDiagnosticNumber(input.lastFlushDurationMs),
+    criticalBypassCount: toFiniteDiagnosticNumber(input.criticalBypassCount),
+    deliveredCount: toFiniteDiagnosticNumber(input.deliveredCount),
+    rawRetainedCount: toFiniteDiagnosticNumber(input.rawRetainedCount),
+    evidenceClass: input.evidenceClass,
+  });
+}
+
+export function appendListenerOwnerDiagnostic(input: ListenerOwnerDiagnosticInput) {
+  if (!isPerfDiagnosticCollectionEnabled()) {
+    return;
+  }
+  appendRendererDiagnostic("listeners.owner-budget", {
+    activeCount: toFiniteDiagnosticNumber(input.activeCount),
+    inactiveCount: toFiniteDiagnosticNumber(input.inactiveCount),
+    evidenceClass: input.evidenceClass,
+  });
+}
+
+export function appendMediaOwnerDiagnostic(input: MediaOwnerDiagnosticInput) {
+  if (!isPerfDiagnosticCollectionEnabled()) {
+    return;
+  }
+  appendRendererDiagnostic("media.owner-budget", {
+    activeCount: toFiniteDiagnosticNumber(input.activeCount),
+    revokedCount: toFiniteDiagnosticNumber(input.revokedCount),
+    retainedBytes: toFiniteDiagnosticNumber(input.retainedBytes),
+    unsupportedReason: toBoundedDiagnosticString(input.unsupportedReason),
+    evidenceClass: input.evidenceClass,
+  });
+}
+
+export function appendMarkdownPrecomputeDiagnostic(
+  input: MarkdownPrecomputeDiagnosticInput,
+) {
+  if (!isPerfDiagnosticCollectionEnabled()) {
+    return;
+  }
+  appendRendererDiagnostic("perf.messages.markdown.precompute", {
+    mode: input.mode,
+    durationMs: toFiniteDiagnosticNumber(input.durationMs),
+    contentLength: toFiniteDiagnosticNumber(input.contentLength),
+    contentHash: toBoundedDiagnosticString(input.contentHash),
+    thresholdReason: toBoundedDiagnosticString(input.thresholdReason),
+    cacheState: toBoundedDiagnosticString(input.cacheState),
+    fallbackReason: toBoundedDiagnosticString(input.fallbackReason),
+    evidenceClass: input.evidenceClass,
+    totalHeadings: toFiniteDiagnosticNumber(input.totalHeadings),
+    totalHeavyBlocks: toFiniteDiagnosticNumber(input.totalHeavyBlocks),
+    totalSourceLines: toFiniteDiagnosticNumber(input.totalSourceLines),
+  });
+}
+
+export function appendWorkspaceFileListingBudgetDiagnostic(
+  input: WorkspaceFileListingBudgetDiagnosticInput,
+) {
+  if (!isPerfDiagnosticCollectionEnabled()) {
+    return;
+  }
+  appendRendererDiagnostic("workspaces.file.listing-budget", {
+    surfaceId: input.surfaceId,
+    workspaceId: toBoundedDiagnosticString(input.workspaceId),
+    durationMs: toFiniteDiagnosticNumber(input.durationMs),
+    returnedEntries: toFiniteDiagnosticNumber(input.returnedEntries),
+    payloadBytes: toFiniteDiagnosticNumber(input.payloadBytes),
+    cacheState: toBoundedDiagnosticString(input.cacheState),
+    scanState: toBoundedDiagnosticString(input.scanState),
+    partial: Boolean(input.partial),
+    limitHit: Boolean(input.limitHit),
+    sourceVersion: toBoundedDiagnosticString(input.sourceVersion),
+    requestedPathHash: toBoundedDiagnosticString(input.requestedPathHash),
+    evidenceClass: input.evidenceClass,
+    fallbackReason: toBoundedDiagnosticString(input.fallbackReason),
   });
 }
 

@@ -2,6 +2,10 @@ import { memo, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import X from "lucide-react/dist/esm/icons/x";
+import {
+  createOwnedObjectUrl,
+  revokeOwnedObjectUrl,
+} from "../../../services/mediaResourceOwners";
 
 export type MessageImage = {
   src: string;
@@ -37,7 +41,9 @@ function useTransientImageSrc(src: string) {
         if (cancelled) {
           return;
         }
-        objectUrl = URL.createObjectURL(blob);
+        objectUrl = createOwnedObjectUrl(blob, {
+          ownerId: "message-image-grid",
+        });
         setTransientSrc(objectUrl);
       })
       .catch(() => {
@@ -49,7 +55,7 @@ function useTransientImageSrc(src: string) {
     return () => {
       cancelled = true;
       if (objectUrl) {
-        URL.revokeObjectURL(objectUrl);
+        revokeOwnedObjectUrl(objectUrl);
       }
     };
   }, [src]);

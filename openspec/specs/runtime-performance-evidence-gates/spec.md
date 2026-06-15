@@ -33,17 +33,21 @@ The system MUST preserve local, skipped, unsupported, and platform-specific qual
 
 ### Requirement: Runtime Evidence Gate MUST Produce Archive-Readiness Guidance
 
-The system MUST generate guidance that separates task-complete OpenSpec changes from archive-ready OpenSpec changes.
+The runtime evidence gate MUST produce archive-readiness guidance that separates OpenSpec task completion from evidence readiness. In addition to classifying evidence as `measured`, `proxy`, `manual-only`, or `unsupported`, the guidance MUST evaluate unit consistency, hardFail annotation, current active-change reconciliation, and structural-debt ownership.
 
-#### Scenario: completed active changes are listed separately
-- **WHEN** OpenSpec active-change state is inspected
-- **THEN** task-complete changes MUST be listed separately from in-progress changes
-- **AND** each completed active change MUST retain validation, manual-test, and platform qualifier notes when available
+#### Scenario: task-complete change has evidence metadata defects
 
-#### Scenario: in-progress changes remain explicit
-- **WHEN** an active change has incomplete tasks
-- **THEN** the report MUST list it as in-progress
-- **AND** the report MUST NOT include it in archive-ready recommendations
+- **WHEN** a performance change's `tasks.md` is fully checked
+- **AND** the evidence report has unit conflicts, stale completed-active entries, malformed hardFail records, or P0/P1 large-file candidates without owner/followUp
+- **THEN** the change MUST NOT be treated as archive-ready
+- **AND** readiness output MUST list the defects by scenario, metric, or file path
+
+#### Scenario: task-complete change has residual unsupported evidence
+
+- **WHEN** a performance change's `tasks.md` is fully checked
+- **AND** the evidence report still contains `unsupported` or `proxy` records
+- **THEN** the readiness output MUST keep those records visible as residual risk
+- **AND** it MUST NOT upgrade the evidence class without a measured source artifact
 
 ### Requirement: Runtime Evidence Gate MUST Separate Dead Code From Compatibility Code
 
@@ -77,24 +81,20 @@ The system MUST treat validation noise as a stability defect when it comes from 
 
 Runtime performance closure evidence SHALL classify client interaction scenarios by evidence strength before an optimization is considered release-grade.
 
-#### Scenario: evidence source is explicit
-- **WHEN** a performance report covers Composer typing, realtime streaming, thread switching, sidebar projection, or session catalog hydration
-- **THEN** each scenario MUST be classified as `measured`, `proxy`, `manual-only`, or `unsupported`
-- **AND** the report MUST explain the classification and list the next action for non-measured scenarios
+#### Scenario: realtime evidence source is explicit
 
-#### Scenario: proxy evidence cannot prove release-grade improvement
-- **WHEN** a scenario is validated only by jsdom, static render count, pure helper tests, or fixture-only latency estimates
-- **THEN** the report MUST classify it as proxy evidence
-- **AND** it MUST NOT claim release-grade measured improvement without browser, Tauri, WebView, React Profiler, or PerformanceObserver evidence
+- **WHEN** a performance report covers realtime streaming visible lag, render amplification, terminal settlement, Composer typing, file editor typing, thread switching, sidebar projection, or session catalog hydration
+- **THEN** each scenario MUST be classified as `measured`, `proxy`, `manual-only`, or `unsupported`
+- **AND** the report MUST explain the classification and list the next action for non-measured scenarios.
 
 ### Requirement: Client Interaction Budgets SHALL Track User-Visible Latency
 
 Performance evidence SHALL capture metrics that map to user-visible responsiveness rather than only backend completion time.
 
 #### Scenario: typing budget includes input-facing signals
-- **WHEN** streaming typing evidence is collected
-- **THEN** it MUST include input event cadence, draft update latency or proxy, input subtree render count or proxy, React commit duration where available, long task evidence where available, and dropped/stale advisory update count where available
-- **AND** it MUST preserve workspace/thread/turn/engine correlation without storing prompt or assistant body text
+- **WHEN** Composer typing, streaming typing, or file editor typing evidence is collected
+- **THEN** it MUST include input event cadence, draft or editor update latency or proxy, relevant subtree render count or proxy, React commit duration where available, long task evidence where available, and dropped/stale advisory update count where available
+- **AND** it MUST preserve workspace/thread/file/turn/engine correlation where applicable without storing prompt, assistant body text, terminal output, or file content
 
 #### Scenario: thread switch budget separates phases
 - **WHEN** thread switch evidence is collected
@@ -141,4 +141,280 @@ Performance and stability evidence reports SHALL classify renderer pressure and 
 - **WHEN** a platform cannot provide memory, process, long-task, native process failure, or profiler evidence
 - **THEN** the report MUST mark that signal as unsupported with reason
 - **AND** it MUST NOT present proxy or manual-only evidence as release-grade measured evidence
+
+### Requirement: Runtime Evidence Gates MUST Expose Release Budget Fields
+
+Runtime evidence gate artifacts MUST 在 observed values 旁暴露 budget metadata，使后续 optimization changes 可以用结构化字段判断 pass/fail/unsupported。
+
+#### Scenario: budget fields accompany observed values
+
+- **WHEN** `docs/perf/runtime-evidence-gates.json` 重新生成
+- **THEN** each budgeted scenario MUST include observed value, target value when defined, hard-fail threshold when defined, unit, evidence class, and source artifact path
+- **AND** unsupported scenarios MUST keep `value: null` and include unsupported reason
+
+#### Scenario: release checklist can fail on budget regression
+
+- **WHEN** local or CI performance checklist reads runtime evidence gate artifacts
+- **THEN** it MUST determine pass, fail, or unsupported from structured fields without scraping narrative markdown
+- **AND** unsupported or proxy evidence MUST NOT be reported as release-grade measured evidence
+
+### Requirement: Realtime Visible Lag Budgets SHALL Use Correlated Milestones
+
+Realtime performance budgets SHALL use correlated turn milestones rather than isolated first-token or fixture-only timings.
+
+#### Scenario: visible text lag budget uses ingress-to-visible timing
+
+- **WHEN** realtime visible lag evidence is collected
+- **THEN** the report SHOULD compute lag from first assistant text ingress to first visible text growth where measured timing exists
+- **AND** it MUST preserve evidence class when the path is only fixture/proxy observable.
+
+#### Scenario: render amplification budget remains content-safe
+
+- **WHEN** render amplification evidence is collected
+- **THEN** the report MAY include counts, durations, queue depths, and milestone deltas
+- **AND** it MUST NOT include prompt text, assistant output body, tool output body, or terminal output content.
+
+### Requirement: Performance Iteration Archive Readiness MUST Reconcile Residual Debt
+Runtime performance archive readiness MUST reconcile completed task state with measured/proxy/manual evidence, known residual jank, and explicit technical-debt follow-up items before an active performance change is treated as archive-ready.
+
+#### Scenario: task-complete change still has residual jank
+- **WHEN** an active performance change has all tasks checked
+- **AND** manual QA or runtime notes still report residual jank, missing profiler artifacts, or `unsupported` evidence for a required budget field
+- **THEN** the evidence report MUST classify the change as task-complete but not fully archive-ready
+- **AND** the report MUST list the blocking evidence gap or follow-up change instead of silently promoting the change to archive-ready
+
+#### Scenario: compatibility fallback is intentionally retained
+- **WHEN** a performance implementation keeps a single-channel fallback, worker unsupported fallback, disk-provider fallback, flat adapter, or rollback surface
+- **THEN** the evidence report MUST classify that path as compatibility, adapter, diagnostic, or rollback code
+- **AND** it MUST NOT describe the path as dead code or as a failed migration without evidence
+
+### Requirement: Performance Evidence Language MUST Be Internally Consistent
+Performance evidence artifacts MUST avoid contradictory closeout language for the same scenario, especially when manual QA and measured/proxy artifacts disagree.
+
+#### Scenario: manual QA result conflicts with archive wording
+- **WHEN** one artifact says a scenario has no visible jank
+- **AND** another artifact for the same change says residual jank remains
+- **THEN** the change MUST be recalibrated before archive
+- **AND** the final status MUST choose one explicit classification: `measured`, `proxy`, `manual-only`, or `unsupported`, with a reason and next action
+
+#### Scenario: profiler artifact is missing
+- **WHEN** a report expects profiler-derived fields such as render counts, reducer counters, or realtime profile JSONL
+- **AND** the source artifact is absent
+- **THEN** the field MUST remain `unsupported` or `proxy` according to available evidence
+- **AND** the report MUST NOT claim measured closure for that field
+
+### Requirement: Release-Grade Performance Evidence MUST Use Runtime Measurements
+Release-target performance closure MUST distinguish runtime-measured evidence from fixture, replay, jsdom, proxy, and manual-only evidence. A release-grade claim MUST NOT be based only on proxy evidence when a runtime collection path is available.
+
+#### Scenario: release claim uses measured runtime evidence
+- **WHEN** a performance report claims release-grade improvement for Tauri cold-start, realtime visible lag, reducer amplification, batch flush duration, terminal settlement, Composer typing, file editor typing, or browser scroll stability
+- **THEN** the report MUST mark the scenario as `measured`
+- **AND** it MUST include the runtime source artifact, collection environment, metric unit, and collection timestamp
+
+#### Scenario: proxy evidence remains regression-only
+- **WHEN** a scenario is backed only by fixture, replay, jsdom, static analysis, or synthetic proxy evidence
+- **THEN** the report MUST classify it as `proxy`
+- **AND** release archive-readiness MUST list the scenario as residual evidence debt unless the change explicitly scopes it out with a platform qualifier
+
+### Requirement: Tauri Cold-Start Evidence MUST Capture Webview Timing
+Release-grade cold-start evidence MUST capture user-visible Tauri/webview timing in addition to bundle size. Bundle size alone MUST NOT satisfy first-paint or first-interactive evidence.
+
+#### Scenario: cold-start runner captures first paint
+- **WHEN** the cold-start performance runner launches the desktop app on a supported local or CI platform
+- **THEN** it MUST record `S-CS-COLD/firstPaintMs` with `evidenceClass: "measured"`
+- **AND** the record MUST include the platform, app version, git commit, source artifact path, unit, and budget status
+
+#### Scenario: cold-start runner captures first interactive
+- **WHEN** the cold-start performance runner detects the app can accept primary user input
+- **THEN** it MUST record `S-CS-COLD/firstInteractiveMs` with `evidenceClass: "measured"`
+- **AND** it MUST NOT infer interactivity only from bundle generation or process start completion
+
+#### Scenario: platform cannot collect webview timing
+- **WHEN** a platform cannot expose Tauri/webview first paint or first interactive timing
+- **THEN** the evidence artifact MUST keep the metric as `unsupported`
+- **AND** it MUST include the platform, failure reason, next action, and release decision qualifier
+
+### Requirement: Realtime Runtime Evidence MUST Replace Replay-Only Closure
+Realtime release evidence MUST collect runtime-correlated renderer data for visible lag, reducer amplification, batch flush duration, and terminal settlement. Replay-derived evidence MAY remain as regression baseline but MUST NOT be the only release proof.
+
+#### Scenario: visible lag is measured in runtime
+- **WHEN** a realtime streaming fixture runs in the desktop runtime
+- **THEN** the evidence report MUST compute visible text lag from assistant text ingress to first visible text growth using correlated runtime milestones
+- **AND** it MUST keep prompt text, assistant body, tool output, and terminal output out of the diagnostic payload
+
+#### Scenario: reducer and batch pressure are measured in runtime
+- **WHEN** the runtime receives streaming deltas through the batching path
+- **THEN** the report MUST record reducer amplification and batch flush duration from runtime counters or timing probes
+- **AND** it MUST preserve turn/session/workspace correlation using ids, counts, timings, and bounded status strings only
+
+#### Scenario: terminal settlement is measured in runtime
+- **WHEN** a streaming turn reaches provider completion and terminal settlement
+- **THEN** the report MUST record terminal settlement timing from runtime milestones
+- **AND** it MUST classify missing provider or terminal signals as `unsupported` rather than estimating them from replay data
+
+### Requirement: Release Archive Readiness MUST Fail On Unaccepted Hard Breaches
+Release archive-readiness MUST treat hard budget breaches as failures unless the release explicitly records a blocker or rollback decision. Hard breaches MUST NOT be downgraded to ordinary warnings by archive wording.
+
+#### Scenario: hard budget breach blocks release readiness
+- **WHEN** a metric value exceeds `budget.hardFail`
+- **AND** the metric does not carry an accepted release blocker or rollback decision
+- **THEN** the release-grade readiness gate MUST fail
+- **AND** the output MUST list the metric, observed value, hardFail value, unit, owner, and next action
+
+#### Scenario: bundle size breach is resolved before archive
+- **WHEN** `S-CS-COLD/bundleSizeMain` is included in release evidence
+- **THEN** its observed `bytes-gzip` value MUST be less than or equal to `budget.hardFail`
+- **AND** if it remains above `budget.hardFail`, the change MUST stay unarchived or record an explicit release blocker
+
+### Requirement: Budget Metadata MUST Have Ownership Or Remain Residual
+Budget metadata used by release gates MUST have an owner-approved source. Missing budgets MUST remain residual evidence debt rather than being filled with synthetic thresholds.
+
+#### Scenario: budgeted metric has source and owner
+- **WHEN** a metric includes `budget.target` or `budget.hardFail`
+- **THEN** the budget metadata MUST include source, owner, unit, and status or rollout annotation
+- **AND** archive-readiness MUST be able to identify who owns follow-up when the budget fails or remains advisory
+
+#### Scenario: metric has no approved budget
+- **WHEN** a metric has no owner-approved budget threshold
+- **THEN** the report MUST classify it as `budget-missing`
+- **AND** release readiness MUST list it as residual debt instead of inventing target or hardFail values
+
+### Requirement: Performance Iteration Closure MUST Enforce Unit Consistency
+
+Performance evidence artifacts MUST keep observed metric unit and budget unit consistent for the same metric record. Unit mismatch MUST block archive-readiness for P0/P1 performance changes.
+
+#### Scenario: observed unit differs from budget unit
+
+- **WHEN** `docs/perf/baseline.json` or `docs/perf/runtime-evidence-gates.json` contains a metric with both observed `unit` and `budget.unit`
+- **AND** those units differ
+- **THEN** `npm run perf:archive-readiness` MUST report `unit-conflict`
+- **AND** it MUST exit with hard-fail status
+- **AND** the report MUST name the scenario, metric, observed unit, and budget unit
+
+#### Scenario: metric has no budget block
+
+- **WHEN** a metric has observed value/unit but no `budget` block
+- **THEN** the readiness gate MUST classify it separately as `budget-missing`
+- **AND** it MUST NOT conflate the metric with `unit-conflict`
+
+### Requirement: Performance Iteration Closure MUST Annotate HardFail Records
+
+Performance evidence artifacts MUST annotate every hardFail threshold with rollout or status context. Bare hardFail thresholds MUST block archive-readiness because reviewers cannot distinguish blocking failure, advisory rollout, or tracked residual risk.
+
+#### Scenario: hardFail threshold has no annotation
+
+- **WHEN** a metric record contains `budget.hardFail`
+- **AND** the record has no `budget.rollout`, top-level `rollout`, or top-level `status`
+- **THEN** `npm run perf:archive-readiness` MUST report a malformed hardFail record
+- **AND** it MUST exit with hard-fail status
+
+#### Scenario: observed value breaches hardFail under advisory rollout
+
+- **WHEN** a metric value exceeds `budget.hardFail`
+- **AND** the metric carries an advisory rollout such as `advisory` or `advisory-until-bundle-optimization`
+- **THEN** the readiness report MUST keep the breach visible as residual risk
+- **AND** it MUST NOT report the metric as passed
+
+#### Scenario: proxy realtime threshold waits for runtime trace
+
+- **WHEN** a realtime correlation metric is derived from replay/proxy evidence
+- **AND** the metric retains `budget.hardFail`
+- **THEN** the metric MUST carry rollout/status context such as `budget.rollout: "advisory-until-runtime-trace"`
+- **AND** the readiness report MUST keep the threshold visible as residual risk until measured runtime trace evidence exists
+- **AND** the threshold MUST NOT be deleted merely to reduce gate noise
+
+### Requirement: Performance Iteration Closure MUST Reconcile ArchiveReadiness With Current Active Changes
+
+Performance evidence artifacts MUST derive current archive-readiness from current OpenSpec active-change state, not from stale generated history.
+
+#### Scenario: completed active list contains archived changes
+
+- **WHEN** `docs/perf/runtime-evidence-gates.json.archiveReadiness.completed` lists a change name
+- **AND** that change name is absent from current `openspec list --json` active changes
+- **THEN** `npm run perf:archive-readiness` MUST report the entry as stale
+- **AND** it MUST exit with hard-fail status
+
+#### Scenario: archived changes remain available as history
+
+- **WHEN** a previously completed performance change has already been archived
+- **THEN** runtime evidence MAY preserve it in history / previous archive context
+- **AND** it MUST NOT present that change as a current completed active change
+
+### Requirement: Performance Iteration Closure MUST Own P0/P1 Large-File Debt
+
+Runtime evidence gate artifacts MUST attach owner and follow-up metadata to every P0/P1 large-file candidate that is deferred by a performance iteration.
+
+#### Scenario: P0/P1 candidate lacks owner or followUp
+
+- **WHEN** `docs/perf/runtime-evidence-gates.json.largeFileSummary.candidates[]` contains an entry with `priority` equal to `P0` or `P1`
+- **AND** the entry has no `owner` or no `followUp`
+- **THEN** `npm run perf:archive-readiness` MUST report ownerless structural debt
+- **AND** it MUST exit with hard-fail status
+
+#### Scenario: large-file debt is deferred
+
+- **WHEN** a performance closure defers large-file modularization
+- **THEN** the evidence report MUST keep the file path, line count, priority, owner, and follow-up change visible
+- **AND** it MUST NOT describe the debt as completed
+
+### Requirement: Performance Iteration Closure MUST Run Archive-Readiness Gate Before Archive
+
+P0/P1 performance changes MUST run the archive-readiness gate before archive. The gate separates task-complete state from evidence-ready state.
+
+#### Scenario: readiness gate passes
+
+- **WHEN** `npm run perf:archive-readiness` exits with status 0
+- **THEN** archive MAY proceed after normal OpenSpec validation
+
+#### Scenario: readiness gate has residual warnings only
+
+- **WHEN** `npm run perf:archive-readiness` exits with status 2
+- **THEN** archive MAY proceed only if hard failures are zero
+- **AND** the residual warnings are recorded in verification or archive notes
+- **AND** the residual warnings are not silently converted into synthetic budgets or measured evidence
+
+#### Scenario: readiness gate fails
+
+- **WHEN** `npm run perf:archive-readiness` exits with status 1
+- **THEN** archive MUST NOT proceed
+- **AND** the listed metadata defects MUST be fixed or explicitly waived in a separate governance decision
+
+### Requirement: Input-Latency Budget Encoding MUST Land Candidate Budgets In Baseline
+
+The system MUST encode owner-approved input-latency candidate budgets from `openspec/changes/archive/2026-06-13-collect-release-grade-performance-evidence/budget-decision-table.md` into `docs/perf/baseline.json` and MUST remove the corresponding records from `scripts/perf-archive-readiness.mjs` `BUDGET_RESIDUALS` table.
+
+#### Scenario: inputEventLossCount metrics gain budget block
+
+- **WHEN** `S-CI-50/inputEventLossCount` and `S-CI-100-IME/inputEventLossCount` carry the `budgeted-next` decision with `target=0, hardFail=0, unit=count, owner=input-latency-budget` in the budget decision table
+- **THEN** `docs/perf/baseline.json` MUST contain a `budget` block for both metrics
+- **AND** the block MUST include `target: 0`, `hardFail: 0`, `unit: "count"`, `owner: "input-latency-budget"`, `source: "openspec/changes/archive/2026-06-13-collect-release-grade-performance-evidence/budget-decision-table.md"`, and `status: "approved"`
+- **AND** `npm run perf:archive-readiness -- --json` MUST NOT list either metric as `budget-missing`
+
+#### Scenario: owner rejection cannot fall back to budget-missing
+
+- **WHEN** an owner rejects the `hardFail=0` value for inputEventLossCount
+- **THEN** the implementation MAY change `target` / `hardFail` to a different approved value
+- **AND** it MUST NOT remove the `budget` block and reclassify the metric as `budget-missing`
+
+### Requirement: BUDGET_RESIDUALS Table MUST Stay In Sync With Baseline Budgets
+
+The system MUST keep `scripts/perf-archive-readiness.mjs` `BUDGET_RESIDUALS` table in lockstep with the set of metrics that have an actual `budget` block in `docs/perf/baseline.json`. Once a metric gains a `budget` block, the readiness gate MUST NOT list it as `budget-missing` anymore.
+
+#### Scenario: realtime metrics already budgeted in baseline are not in BUDGET_RESIDUALS
+
+- **WHEN** `docs/perf/baseline.json` carries a `budget` block for `S-RS-VL/visibleTextLagP95`, `S-RS-RA/reducerAmplificationMedian`, `S-RS-FD/batchFlushDurationP95`, or `S-RS-TS/terminalSettlementP95`
+- **THEN** `scripts/perf-archive-readiness.mjs` `BUDGET_RESIDUALS` MUST NOT contain those records
+- **AND** `npm run perf:archive-readiness -- --json` MUST NOT list those records under `budget-missing`
+
+#### Scenario: input-latency budgeted metrics are removed from BUDGET_RESIDUALS after encoding
+
+- **WHEN** `S-CI-50/inputEventLossCount` and `S-CI-100-IME/inputEventLossCount` gain a `budget` block in `docs/perf/baseline.json`
+- **THEN** `scripts/perf-archive-readiness.mjs` `BUDGET_RESIDUALS` MUST NOT contain those records
+- **AND** the normal-mode readiness report MUST drop its `budgetMissingCount` by exactly two for the input-latency pair (and by four for the realtime pair if those were not yet removed)
+
+#### Scenario: residual 15 metrics remain visible
+
+- **WHEN** all budgeted metrics are removed from `BUDGET_RESIDUALS`
+- **THEN** the residual count MUST equal 15 (LL-200/500/1000 commit duration and first-paint = 9, CI compositionToCommit = 2, RS-PE dedupHitRatio and assemblerLatency = 2, CS-COLD firstPaintMs and firstInteractiveMs = 2)
+- **AND** the readiness report MUST keep those 15 records as `budget-missing` warnings
 

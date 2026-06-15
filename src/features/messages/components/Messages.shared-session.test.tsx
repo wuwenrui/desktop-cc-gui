@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ConversationItem } from "../../../types";
 import { Messages } from "./Messages";
 
@@ -15,12 +15,22 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
+vi.mock("./Markdown", () => ({
+  Markdown: ({ value }: { value: string }) => (
+    <div className="markdown">{value}</div>
+  ),
+}));
+
 if (!HTMLElement.prototype.scrollIntoView) {
   HTMLElement.prototype.scrollIntoView = vi.fn();
 }
 
+afterEach(() => {
+  cleanup();
+});
+
 describe("Messages shared session provenance", () => {
-  it("renders per-message provenance badge for assistant messages", () => {
+  it("renders per-message provenance badge for assistant messages", async () => {
     const items: ConversationItem[] = [
       {
         id: "user-1",
@@ -55,7 +65,7 @@ describe("Messages shared session provenance", () => {
       />,
     );
 
-    expect(screen.getByText("Codex")).toBeTruthy();
-    expect(screen.getByText("Claude")).toBeTruthy();
+    expect(await screen.findByText("Codex")).toBeTruthy();
+    expect(await screen.findByText("Claude")).toBeTruthy();
   });
 });

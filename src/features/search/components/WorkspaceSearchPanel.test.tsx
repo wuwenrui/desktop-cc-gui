@@ -1,5 +1,11 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 const invokeMock = vi.fn(async (...args: any[]) => {
@@ -65,7 +71,9 @@ describe("WorkspaceSearchPanel", () => {
       />,
     );
 
-    expect(screen.getByRole("searchbox", { name: "files.filterPlaceholder" })).toBeTruthy();
+    expect(
+      screen.getByRole("searchbox", { name: "files.filterPlaceholder" }),
+    ).toBeTruthy();
   });
 
   it("runs workspace text search and opens a result at line and column", async () => {
@@ -79,9 +87,12 @@ describe("WorkspaceSearchPanel", () => {
       />,
     );
 
-    fireEvent.change(screen.getByRole("searchbox", { name: "files.filterPlaceholder" }), {
-      target: { value: "codemoss" },
-    });
+    fireEvent.change(
+      screen.getByRole("searchbox", { name: "files.filterPlaceholder" }),
+      {
+        target: { value: "codemoss" },
+      },
+    );
 
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith("search_workspace_text", {
@@ -95,11 +106,17 @@ describe("WorkspaceSearchPanel", () => {
       });
     });
 
-    expect(screen.getByText("src/index.ts")).toBeTruthy();
-    expect(screen.getByText(/const codemoss = createApp\(\);/)).toBeTruthy();
+    expect(await screen.findByText("src/index.ts")).toBeTruthy();
+    const resultPreview = await screen.findByText(
+      /const codemoss = createApp\(\);/,
+    );
+    expect(resultPreview).toBeTruthy();
 
-    fireEvent.click(screen.getByText(/const codemoss = createApp\(\);/));
-    expect(onOpenFile).toHaveBeenCalledWith("src/index.ts", { line: 3, column: 15 });
+    fireEvent.click(resultPreview);
+    expect(onOpenFile).toHaveBeenCalledWith("src/index.ts", {
+      line: 3,
+      column: 15,
+    });
   });
 
   it("shows include and exclude inputs when expanding search options", () => {
@@ -112,7 +129,9 @@ describe("WorkspaceSearchPanel", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "files.searchDetails" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "files.searchDetails" }),
+    );
     expect(screen.getByLabelText("files.includePattern")).toBeTruthy();
     expect(screen.getByLabelText("files.excludePattern")).toBeTruthy();
   });

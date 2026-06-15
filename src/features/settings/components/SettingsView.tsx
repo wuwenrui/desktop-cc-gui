@@ -37,6 +37,7 @@ import type {
   WorkspaceGroup,
   WorkspaceInfo,
 } from "../../../types";
+import { loadSettingsStyles } from "../../../styles/featureStyleLoaders";
 import wxqImage from "../../../assets/wxq.png";
 import {
   buildShortcutValue,
@@ -365,6 +366,9 @@ export function SettingsView({
   initialSection,
   initialHighlightTarget,
 }: SettingsViewProps) {
+  useEffect(() => {
+    void loadSettingsStyles();
+  }, []);
   const { t } = useTranslation();
   const runCodexDoctor = onRunCodexDoctor ?? onRunDoctor;
   const [activeSection, setActiveSection] =

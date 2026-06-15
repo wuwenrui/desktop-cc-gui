@@ -18,6 +18,7 @@ const enPart5 = {
     fetch: "Fetch",
     sync: "Sync",
     refresh: "Refresh",
+    refreshStatus: "Refresh Git status",
     branch: "Branch",
     historyNoBranchesFound: "No branches found",
     stash: "Stash",

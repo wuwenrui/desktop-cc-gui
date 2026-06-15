@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ContextLedgerPanel } from "./ContextLedgerPanel";
 import type { ContextLedgerComparison, ContextLedgerProjection } from "../types";
@@ -111,7 +111,7 @@ const comparison: ContextLedgerComparison = {
 };
 
 describe("ContextLedgerPanel", () => {
-  it("renders a summary entrypoint and grouped blocks when expanded", () => {
+  it("renders a summary entrypoint and grouped blocks when expanded", async () => {
     const onToggle = vi.fn();
     const onHide = vi.fn();
     const onShow = vi.fn();
@@ -207,13 +207,21 @@ describe("ContextLedgerPanel", () => {
       kind: "note_card",
       noteId: "note-1",
     });
-    fireEvent.click(screen.getAllByText("composer.contextLedgerActionOpenSourceDetail")[1]!);
+    await act(async () => {
+      fireEvent.click(screen.getAllByText("composer.contextLedgerActionOpenSourceDetail")[1]!);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
     expect(screen.getByRole("dialog", { name: "composer.contextLedgerDetailDialogTitle" })).toBeTruthy();
     expect(screen.getByText("/repo/.claude/skills/build-review/SKILL.md")).toBeTruthy();
     expect(screen.getByRole("heading", { level: 2, name: "Review Scope" })).toBeTruthy();
     expect(screen.getByText("SKILL.md")).toBeTruthy();
     fireEvent.click(screen.getByText("composer.contextLedgerDetailDialogClose"));
-    fireEvent.click(screen.getAllByText("composer.contextLedgerActionOpenSourceDetail")[0]!);
+    await act(async () => {
+      fireEvent.click(screen.getAllByText("composer.contextLedgerActionOpenSourceDetail")[0]!);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
     expect(screen.getAllByText("composer.contextLedgerTitleRecentTurnsCodex").length).toBeGreaterThan(1);
     const recentTurnsDialog = screen.getByRole("dialog", { name: "composer.contextLedgerDetailDialogTitle" });
     expect(recentTurnsDialog).toBeTruthy();

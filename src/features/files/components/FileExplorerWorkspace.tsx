@@ -33,6 +33,7 @@ type FileExplorerWorkspaceProps = {
   files: string[];
   directories: string[];
   directoryMetadata?: WorkspaceDirectoryEntry[];
+  sourceVersion?: string | null;
   isLoading: boolean;
   loadError?: string | null;
   gitignoredFiles: Set<string>;
@@ -64,6 +65,7 @@ export function FileExplorerWorkspace({
   files,
   directories,
   directoryMetadata,
+  sourceVersion = null,
   isLoading,
   loadError = null,
   gitignoredFiles,
@@ -203,6 +205,7 @@ export function FileExplorerWorkspace({
           files={files}
           directories={directories}
           directoryMetadata={directoryMetadata}
+          sourceVersion={sourceVersion}
           isLoading={isLoading}
           loadError={loadError}
           filePanelMode="files"

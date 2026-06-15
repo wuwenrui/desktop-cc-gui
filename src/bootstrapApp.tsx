@@ -13,7 +13,12 @@ import {
   flushRendererDiagnosticsBuffer,
   startRendererBlankScreenWatchdog,
 } from "./services/rendererDiagnostics";
-import { recordStartupMilestone } from "./features/startup-orchestration/utils/startupTrace";
+import {
+  recordStartupMilestone,
+  recordStartupTaskTrace,
+  type StartupPhase,
+} from "./features/startup-orchestration/utils/startupTrace";
+import { recordStartupPerfMarker } from "./services/perfBaseline/startupMarkers";
 
 function renderBootstrapFallback(error: unknown) {
   const root = document.getElementById("root");
@@ -113,30 +118,104 @@ async function markRendererReady() {
   }
 }
 
-async function bootstrap() {
-  appendRendererDiagnostic("bootstrap/start");
-  pushBootstrapNotice("runtimeNotice.bootstrap.start");
-  await preloadClientStores();
-  flushRendererDiagnosticsBuffer();
-  appendRendererDiagnostic("bootstrap/preload-complete");
+function nowMs() {
+  return typeof performance !== "undefined" ? performance.now() : Date.now();
+}
+
+async function traceBootstrapTask<T>(
+  taskId: string,
+  traceLabel: string,
+  run: () => Promise<T> | T,
+  phase: StartupPhase = "critical",
+): Promise<T> {
+  const startedAt = nowMs();
+  recordStartupTaskTrace({
+    type: "task",
+    taskId,
+    phase,
+    traceLabel,
+    workspaceScope: "global",
+    lifecycleState: "started",
+    durationMs: null,
+    fallbackReason: null,
+    cancellationMode: null,
+    commandLabel: null,
+  });
+  try {
+    const result = await run();
+    recordStartupTaskTrace({
+      type: "task",
+      taskId,
+      phase,
+      traceLabel,
+      workspaceScope: "global",
+      lifecycleState: "completed",
+      durationMs: nowMs() - startedAt,
+      fallbackReason: null,
+      cancellationMode: null,
+      commandLabel: null,
+    });
+    return result;
+  } catch (error) {
+    recordStartupTaskTrace({
+      type: "task",
+      taskId,
+      phase,
+      traceLabel,
+      workspaceScope: "global",
+      lifecycleState: "failed",
+      durationMs: nowMs() - startedAt,
+      fallbackReason: "failure",
+      cancellationMode: null,
+      commandLabel: null,
+    });
+    throw error;
+  }
+}
+
+async function runPostRenderBootstrapTasks() {
   pushBootstrapNotice("runtimeNotice.bootstrap.storageMigrationCheck");
   try {
-    migrateLocalStorageToFileStore();
+    await traceBootstrapTask("bootstrap:migration", "migration", () => {
+      migrateLocalStorageToFileStore();
+    }, "first-paint");
   } catch (error) {
     appendRendererDiagnostic("bootstrap/local-storage-migration-failed", {
       error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
     });
     pushBootstrapNotice("runtimeNotice.bootstrap.localStorageMigrationFailed", "warning");
-    console.error("[bootstrap] localStorage migration failed, continue startup:", error);
+    console.error("[bootstrap] localStorage migration failed after shell mount:", error);
   }
+
   pushBootstrapNotice("runtimeNotice.bootstrap.inputHistoryRestore");
-  await initInputHistoryStore();
-  appendRendererDiagnostic("bootstrap/input-history-ready");
+  try {
+    await traceBootstrapTask("bootstrap:input-history", "input-history", initInputHistoryStore, "first-paint");
+    appendRendererDiagnostic("bootstrap/input-history-ready");
+  } catch (error) {
+    appendRendererDiagnostic("bootstrap/input-history-failed", {
+      error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+    });
+  }
+}
+
+async function bootstrap() {
+  appendRendererDiagnostic("bootstrap/start");
+  pushBootstrapNotice("runtimeNotice.bootstrap.start");
+  const appImportPromise = traceBootstrapTask("bootstrap:app-import", "app-import", () => import("./App"));
+  const i18nImportPromise = traceBootstrapTask("bootstrap:i18n", "i18n", async () => {
+    const module = await import("./i18n");
+    await module.i18nReady;
+    return module;
+  });
+  void appImportPromise.catch(() => undefined);
+  void i18nImportPromise.catch(() => undefined);
+  await traceBootstrapTask("bootstrap:storage-preload", "storage-preload", preloadClientStores);
+  flushRendererDiagnosticsBuffer();
+  appendRendererDiagnostic("bootstrap/preload-complete");
   pushBootstrapNotice("runtimeNotice.bootstrap.interfaceResources");
-  await import("./i18n");
+  const [{ default: App }] = await Promise.all([appImportPromise, i18nImportPromise]);
   appendRendererDiagnostic("bootstrap/i18n-ready");
   pushBootstrapNotice("runtimeNotice.bootstrap.mountShell");
-  const { default: App } = await import("./App");
   const root = resolveRootElement();
   ReactDOM.createRoot(root).render(
     <React.StrictMode>
@@ -148,8 +227,10 @@ async function bootstrap() {
   appendRendererDiagnostic("bootstrap/render-committed");
   startRendererBlankScreenWatchdog({ rootId: "root" });
   recordStartupMilestone("shell-ready");
+  recordStartupPerfMarker("first-paint");
   pushBootstrapNotice("runtimeNotice.bootstrap.ready");
   void markRendererReady();
+  void runPostRenderBootstrapTasks();
 }
 
 export async function startApp() {

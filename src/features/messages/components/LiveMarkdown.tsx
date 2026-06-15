@@ -351,33 +351,109 @@ function findProgressiveRevealBoundary(
   const searchEnd = Math.min(pendingText.length, normalizedMaxChars);
   const preferredEnd = Math.min(pendingText.length, normalizedPreferredChars);
   const candidateSlice = pendingText.slice(0, searchEnd);
-  const boundaryPatterns = [
-    /\n[^\S\r\n]*\n+/g,
-    /\n(?=#{1,6}\s)/g,
-    /\n(?=(?:[-*+]|\d+[.)])\s+)/g,
-    /\n(?=>\s?)/g,
-    /\n(?=```)/g,
-    /\n/g,
-  ];
 
-  for (const pattern of boundaryPatterns) {
-    let match: RegExpExecArray | null;
-    let selectedBoundary = -1;
-    while ((match = pattern.exec(candidateSlice)) !== null) {
-      const boundary = match.index + match[0].length;
-      if (boundary >= preferredEnd) {
-        return boundary;
-      }
-      if (boundary >= PROGRESSIVE_REVEAL_MIN_CHARS) {
-        selectedBoundary = boundary;
-      }
+  const firstBoundariesAfterPreferred = Array<number | null>(6).fill(null);
+  const lastBoundariesBeforePreferred = Array<number | null>(6).fill(null);
+  const recordBoundary = (priority: number, boundary: number) => {
+    if (boundary >= preferredEnd) {
+      firstBoundariesAfterPreferred[priority] ??= boundary;
+      return;
     }
-    if (selectedBoundary >= PROGRESSIVE_REVEAL_MIN_CHARS) {
-      return selectedBoundary;
+    if (boundary >= PROGRESSIVE_REVEAL_MIN_CHARS) {
+      lastBoundariesBeforePreferred[priority] = boundary;
+    }
+  };
+
+  for (let index = 0; index < candidateSlice.length; index += 1) {
+    if (candidateSlice[index] !== "\n") {
+      continue;
+    }
+
+    let nextLineStart = index + 1;
+    while (
+      nextLineStart < candidateSlice.length &&
+      isHorizontalWhitespace(candidateSlice[nextLineStart])
+    ) {
+      nextLineStart += 1;
+    }
+    if (candidateSlice[nextLineStart] === "\n") {
+      let blankBoundary = nextLineStart + 1;
+      while (candidateSlice[blankBoundary] === "\n") {
+        blankBoundary += 1;
+      }
+      recordBoundary(0, blankBoundary);
+    }
+
+    const plainBoundary = index + 1;
+    if (startsHeadingBoundary(candidateSlice, plainBoundary)) {
+      recordBoundary(1, plainBoundary);
+    }
+    if (startsListBoundary(candidateSlice, plainBoundary)) {
+      recordBoundary(2, plainBoundary);
+    }
+    if (candidateSlice[plainBoundary] === ">") {
+      recordBoundary(3, plainBoundary);
+    }
+    if (candidateSlice.startsWith("```", plainBoundary)) {
+      recordBoundary(4, plainBoundary);
+    }
+    recordBoundary(5, plainBoundary);
+  }
+
+  for (const boundary of firstBoundariesAfterPreferred) {
+    if (boundary !== null) {
+      return boundary;
+    }
+  }
+  for (const boundary of lastBoundariesBeforePreferred) {
+    if (boundary !== null) {
+      return boundary;
     }
   }
 
   return preferredEnd;
+}
+
+function isHorizontalWhitespace(char: string | undefined) {
+  if (char === undefined || char === "\n" || char === "\r") {
+    return false;
+  }
+  return char <= " ";
+}
+
+function startsHeadingBoundary(value: string, start: number) {
+  let markerCount = 0;
+  while (value[start + markerCount] === "#" && markerCount < 6) {
+    markerCount += 1;
+  }
+  return markerCount > 0 && isHorizontalWhitespace(value[start + markerCount]);
+}
+
+function startsListBoundary(value: string, start: number) {
+  const firstChar = value[start];
+  if (
+    (firstChar === "-" || firstChar === "*" || firstChar === "+") &&
+    isHorizontalWhitespace(value[start + 1])
+  ) {
+    return true;
+  }
+
+  let cursor = start;
+  while (isAsciiDigit(value[cursor])) {
+    cursor += 1;
+  }
+  if (cursor === start) {
+    return false;
+  }
+  const marker = value[cursor];
+  return (
+    (marker === "." || marker === ")") &&
+    isHorizontalWhitespace(value[cursor + 1])
+  );
+}
+
+function isAsciiDigit(char: string | undefined) {
+  return char !== undefined && char >= "0" && char <= "9";
 }
 
 function resolveAdaptiveProgressiveRevealChunkChars(

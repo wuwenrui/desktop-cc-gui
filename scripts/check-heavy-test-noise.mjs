@@ -164,7 +164,7 @@ export function analyzeHeavyTestNoise(logText, options = {}) {
     stderrPayloads: [],
   };
 
-  const lines = logText.split(/\r?\n/);
+  const lines = logText.split(/\r\n|\n|\r/);
   let currentContext = null;
   let currentStream = null;
 
@@ -302,8 +302,18 @@ function buildStructuredReportJson(report, logSource, generatedAt, mode) {
   ) + "\n";
 }
 
+function resolveRepoOutputPath(outputPath) {
+  const root = process.cwd();
+  const absolutePath = path.resolve(root, outputPath);
+  const relativePath = path.relative(root, absolutePath);
+  if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+    throw new Error(`Output path must stay inside repository root: ${outputPath}`);
+  }
+  return absolutePath;
+}
+
 export async function runHeavySuiteAndCapture({ logOutput }) {
-  const absoluteLogOutput = path.resolve(logOutput);
+  const absoluteLogOutput = resolveRepoOutputPath(logOutput);
   await mkdir(path.dirname(absoluteLogOutput), { recursive: true });
 
   const command = process.execPath;
@@ -358,7 +368,7 @@ async function main() {
   console.log(`  log path: ${logSource.logPath}`);
 
   if (config.jsonOutput) {
-    const jsonOutput = path.resolve(config.jsonOutput);
+    const jsonOutput = resolveRepoOutputPath(config.jsonOutput);
     await mkdir(path.dirname(jsonOutput), { recursive: true });
     await writeFile(
       jsonOutput,

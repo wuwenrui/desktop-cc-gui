@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   ConversationItem,
   CustomCommandOption,
@@ -8,6 +8,11 @@ import type {
 import type { KanbanTask } from "../../kanban/types";
 import type { HistoryItem } from "../../composer/hooks/useInputHistoryStore";
 import { takeLimited } from "../perf/chunker";
+import {
+  type SearchEvidence,
+  type SearchProviderTiming,
+  sumProviderCandidates,
+} from "../perf/evidence";
 import {
   SEARCH_DEBOUNCE_MS,
   SEARCH_PROVIDER_LIMITS,
@@ -23,12 +28,17 @@ import { searchSkills } from "../providers/skillsProvider";
 import { searchThreads } from "../providers/threadProvider";
 import { loadSearchRecencyMap } from "../ranking/recencyStore";
 import { compareSearchResults } from "../ranking/score";
+import {
+  discardIfStale,
+  useSearchQueryToken,
+} from "./searchQueryToken";
 import type { SearchContentFilter, SearchResult } from "../types";
 
 type WorkspaceSearchSource = {
   workspaceId: string;
   workspaceName: string;
   files: string[];
+  sourceVersion?: string | null;
   threads: ThreadSummary[];
 };
 
@@ -50,6 +60,11 @@ export type ComputeUnifiedSearchOptions = Omit<UseUnifiedSearchOptions, "query" 
   query: string;
   recencyMap?: Record<string, number>;
   reportMetrics?: boolean;
+  // Optional evidence sink. When provided, the compute path emits a
+  // `SearchEvidence` record per call. The hook does NOT pass this today;
+  // fixture tests and future diagnostic tooling use it to assert on
+  // per-call perf signals without having to mock `console.debug`.
+  evidenceSink?: (evidence: SearchEvidence) => void;
 };
 
 function shouldIncludeSection(
@@ -92,7 +107,21 @@ export function useUnifiedSearch({
   workspaceNameByPath,
 }: UseUnifiedSearchOptions) {
   const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [recencyMap] = useState(() => loadSearchRecencyMap());
 
+  // Query token guard. The ref advances on every (query, bumpKey) change so
+  // any future async provider work can detect that it has been superseded.
+  // Today the compute path is synchronous, so `discardIfStale` always
+  // reports `staleDropped === false`; the hook is wired up so the stale
+  // drop count can be plumbed into metrics without further refactor.
+  const queryTokenRef = useSearchQueryToken(query);
+  // Last successful (non-stale) result set. Used as the fallback when a
+  // future async provider reports `staleDropped === true`: rather than
+  // flicker to an empty list while the next query resolves, the consumer
+  // keeps the previous stable results. In the current synchronous compute
+  // path staleDropped is never true, so this ref is effectively the same
+  // value as the most recent useMemo result.
+  const lastCommittedResultsRef = useRef<SearchResult[]>([]);
   useEffect(() => {
     if (!query.trim()) {
       setDebouncedQuery("");
@@ -105,7 +134,8 @@ export function useUnifiedSearch({
   }, [query]);
 
   const computedResults = useMemo(() => {
-    return computeUnifiedSearchResults({
+    const capturedToken = queryTokenRef.current;
+    const raw = computeUnifiedSearchResults({
       query: debouncedQuery,
       contentFilters,
       workspaceSources,
@@ -116,10 +146,16 @@ export function useUnifiedSearch({
       commands,
       activeWorkspaceId,
       maxResults,
-      recencyMap: loadSearchRecencyMap(),
+      recencyMap,
       reportMetrics: true,
       workspaceNameByPath,
     });
+    const guarded = discardIfStale(queryTokenRef.current, capturedToken, raw);
+    if (guarded.staleDropped) {
+      return lastCommittedResultsRef.current;
+    }
+    lastCommittedResultsRef.current = guarded.value;
+    return guarded.value;
   }, [
     debouncedQuery,
     historyItems,
@@ -132,6 +168,8 @@ export function useUnifiedSearch({
     threadItemsByThread,
     workspaceSources,
     workspaceNameByPath,
+    recencyMap,
+    queryTokenRef,
   ]);
 
   return computedResults;
@@ -151,6 +189,7 @@ export function computeUnifiedSearchResults({
   recencyMap,
   reportMetrics = false,
   workspaceNameByPath,
+  evidenceSink,
 }: ComputeUnifiedSearchOptions): SearchResult[] {
   const normalizedQuery = query.trim();
   if (!normalizedQuery) {
@@ -159,65 +198,96 @@ export function computeUnifiedSearchResults({
 
   const startedAt = performance.now();
   const recentOpenMap = recencyMap ?? loadSearchRecencyMap();
+  const providerTimings: SearchProviderTiming[] = [];
   const workspaceNameById = new Map(
     workspaceSources.map((source) => [source.workspaceId, source.workspaceName]),
   );
 
   const merged: SearchResult[] = [];
+  const collectProviderResults = (
+    provider: string,
+    candidateCount: number,
+    limit: number,
+    searchProvider: () => SearchResult[],
+  ) => {
+    const providerStartedAt = performance.now();
+    const results = takeLimited(searchProvider(), limit);
+    providerTimings.push({
+      provider,
+      elapsedMs: Math.round(performance.now() - providerStartedAt),
+      candidateCount,
+      resultCount: results.length,
+    });
+    merged.push(...results);
+  };
 
   for (const source of workspaceSources) {
     if (shouldIncludeSection(contentFilters, "files")) {
-      merged.push(
-        ...takeLimited(
-          searchFiles(normalizedQuery, source.files, source.workspaceId),
-          Math.max(8, Math.floor(SEARCH_PROVIDER_LIMITS.files / Math.max(workspaceSources.length, 1))),
-        ),
+      collectProviderResults(
+        "files",
+        source.files.length,
+        Math.max(8, Math.floor(SEARCH_PROVIDER_LIMITS.files / Math.max(workspaceSources.length, 1))),
+        () => searchFiles(normalizedQuery, source.files, source.workspaceId, source.sourceVersion),
       );
     }
     if (shouldIncludeSection(contentFilters, "threads")) {
-      merged.push(
-        ...takeLimited(
-          searchThreads(normalizedQuery, source.threads, source.workspaceId),
-          Math.max(8, Math.floor(SEARCH_PROVIDER_LIMITS.threads / Math.max(workspaceSources.length, 1))),
-        ),
+      collectProviderResults(
+        "threads",
+        source.threads.length,
+        Math.max(8, Math.floor(SEARCH_PROVIDER_LIMITS.threads / Math.max(workspaceSources.length, 1))),
+        () => searchThreads(normalizedQuery, source.threads, source.workspaceId),
       );
     }
     if (shouldIncludeSection(contentFilters, "messages")) {
-      merged.push(
-        ...takeLimited(
+      const messageCandidateCount = source.threads.reduce(
+        (count, thread) => count + (threadItemsByThread[thread.id]?.length ?? 0),
+        0,
+      );
+      collectProviderResults(
+        "messages",
+        messageCandidateCount,
+        Math.max(8, Math.floor(SEARCH_PROVIDER_LIMITS.messages / Math.max(workspaceSources.length, 1))),
+        () =>
           searchMessages({
             query: normalizedQuery,
             workspaceId: source.workspaceId,
             threads: source.threads,
             threadItemsByThread,
           }),
-          Math.max(8, Math.floor(SEARCH_PROVIDER_LIMITS.messages / Math.max(workspaceSources.length, 1))),
-        ),
       );
     }
   }
 
   if (shouldIncludeSection(contentFilters, "kanban")) {
-    merged.push(
-      ...takeLimited(searchKanbanTasks(normalizedQuery, kanbanTasks), SEARCH_PROVIDER_LIMITS.kanban),
+    collectProviderResults(
+      "kanban",
+      kanbanTasks.length,
+      SEARCH_PROVIDER_LIMITS.kanban,
+      () => searchKanbanTasks(normalizedQuery, kanbanTasks),
     );
   }
   if (shouldIncludeSection(contentFilters, "history")) {
-    merged.push(
-      ...takeLimited(searchHistory(normalizedQuery, historyItems), SEARCH_PROVIDER_LIMITS.history),
+    collectProviderResults(
+      "history",
+      historyItems.length,
+      SEARCH_PROVIDER_LIMITS.history,
+      () => searchHistory(normalizedQuery, historyItems),
     );
   }
   if (shouldIncludeSection(contentFilters, "skills")) {
-    merged.push(
-      ...takeLimited(
-        searchSkills(normalizedQuery, skills, activeWorkspaceId),
-        SEARCH_PROVIDER_LIMITS.skills,
-      ),
+    collectProviderResults(
+      "skills",
+      skills.length,
+      SEARCH_PROVIDER_LIMITS.skills,
+      () => searchSkills(normalizedQuery, skills, activeWorkspaceId),
     );
   }
   if (shouldIncludeSection(contentFilters, "commands")) {
-    merged.push(
-      ...takeLimited(searchCommands(normalizedQuery, commands), SEARCH_PROVIDER_LIMITS.commands),
+    collectProviderResults(
+      "commands",
+      commands.length,
+      SEARCH_PROVIDER_LIMITS.commands,
+      () => searchCommands(normalizedQuery, commands),
     );
   }
 
@@ -230,6 +300,24 @@ export function computeUnifiedSearchResults({
       query: normalizedQuery,
       elapsedMs: Math.round(performance.now() - startedAt),
       resultCount: sliced.length,
+      providerTimings,
+      hydrationState: workspaceSources.length <= 1 ? "active-only" : "partial-global",
+      staleDropCount: 0,
+    });
+  }
+
+  if (evidenceSink) {
+    evidenceSink({
+      query: normalizedQuery,
+      elapsedMs: Math.round(performance.now() - startedAt),
+      resultCount: sliced.length,
+      providerTimings,
+      hydrationState:
+        workspaceSources.length <= 1 ? "active-only" : "partial-global",
+      staleDropCount: 0,
+      candidateTotal: sumProviderCandidates(providerTimings),
+      capturedAt:
+        typeof performance !== "undefined" ? performance.now() : Date.now(),
     });
   }
 

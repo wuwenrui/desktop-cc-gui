@@ -205,6 +205,263 @@ describe("rendererDiagnostics", () => {
     expect(entry.payload).not.toHaveProperty("toolOutput");
   });
 
+  it("records content-safe composer render budget diagnostics", async () => {
+    clientStorageMocks.isPreloaded.mockReturnValue(true);
+    clientStorageMocks.getClientStoreSync.mockReturnValue([]);
+    const diagnostics = await import("./rendererDiagnostics");
+
+    diagnostics.appendComposerRenderBudgetDiagnostic({
+      surfaceId: "chat-input-adapter",
+      evidenceKind: "proxy",
+      workspaceId: "workspace-1",
+      renderCount: 2,
+      isProcessing: true,
+      disabled: false,
+      streamActivityPhase: "streaming",
+      textLength: 42,
+      // @ts-expect-error content-bearing fields are intentionally rejected.
+      promptText: "secret prompt body",
+    });
+
+    const [, , persistedValue] =
+      clientStorageMocks.writeClientStoreValue.mock.calls[0] ?? [];
+    const [entry] = persistedValue as Array<{
+      label: string;
+      payload: Record<string, unknown>;
+    }>;
+    expect(entry.label).toBe("perf.composer.render-budget");
+    expect(entry.payload).toMatchObject({
+      surfaceId: "chat-input-adapter",
+      evidenceKind: "proxy",
+      workspaceId: "workspace-1",
+      renderCount: 2,
+      isProcessing: true,
+      disabled: false,
+      streamActivityPhase: "streaming",
+      textLength: 42,
+    });
+    expect(entry.payload).not.toHaveProperty("promptText");
+  });
+
+  it("records content-safe message row render budget diagnostics", async () => {
+    clientStorageMocks.isPreloaded.mockReturnValue(true);
+    clientStorageMocks.getClientStoreSync.mockReturnValue([]);
+    const diagnostics = await import("./rendererDiagnostics");
+
+    diagnostics.appendMessageRowRenderBudgetDiagnostic({
+      threadId: "thread-1",
+      itemId: "assistant-1",
+      role: "assistant",
+      subtype: "assistant",
+      evidenceKind: "proxy",
+      renderCount: 3,
+      isStreaming: true,
+      textLength: 120,
+      // @ts-expect-error content-bearing fields are intentionally rejected.
+      assistantText: "secret assistant body",
+    });
+
+    const [, , persistedValue] =
+      clientStorageMocks.writeClientStoreValue.mock.calls[0] ?? [];
+    const [entry] = persistedValue as Array<{
+      label: string;
+      payload: Record<string, unknown>;
+    }>;
+    expect(entry.label).toBe("perf.messages.row-render-budget");
+    expect(entry.payload).toMatchObject({
+      threadId: "thread-1",
+      itemId: "assistant-1",
+      role: "assistant",
+      subtype: "assistant",
+      evidenceKind: "proxy",
+      renderCount: 3,
+      isStreaming: true,
+      textLength: 120,
+    });
+    expect(entry.payload).not.toHaveProperty("assistantText");
+  });
+
+  it("records content-safe resource backpressure diagnostics", async () => {
+    clientStorageMocks.isPreloaded.mockReturnValue(true);
+    clientStorageMocks.getClientStoreSync.mockReturnValue([]);
+    const diagnostics = await import("./rendererDiagnostics");
+
+    diagnostics.appendEventBackpressureDiagnostic({
+      surfaceId: "terminal-output",
+      eventKind: "runtime-line",
+      queueDepth: 3,
+      droppedCount: 1,
+      coalescedCount: 2,
+      flushCount: 4,
+      lastFlushDurationMs: 6,
+      criticalBypassCount: 1,
+      deliveredCount: 10,
+      rawRetainedCount: 20,
+      evidenceClass: "proxy",
+      // @ts-expect-error output bodies are intentionally rejected.
+      terminalOutput: "secret terminal output",
+    });
+
+    const [, , persistedValue] =
+      clientStorageMocks.writeClientStoreValue.mock.calls[0] ?? [];
+    const [entry] = persistedValue as Array<{
+      label: string;
+      payload: Record<string, unknown>;
+    }>;
+    expect(entry.label).toBe("events.backpressure");
+    expect(entry.payload).toMatchObject({
+      surfaceId: "terminal-output",
+      eventKind: "runtime-line",
+      queueDepth: 3,
+      droppedCount: 1,
+      coalescedCount: 2,
+      flushCount: 4,
+      lastFlushDurationMs: 6,
+      criticalBypassCount: 1,
+      deliveredCount: 10,
+      rawRetainedCount: 20,
+      evidenceClass: "proxy",
+    });
+    expect(entry.payload).not.toHaveProperty("terminalOutput");
+  });
+
+  it("records content-safe listener and media owner diagnostics", async () => {
+    clientStorageMocks.isPreloaded.mockReturnValue(true);
+    clientStorageMocks.getClientStoreSync.mockReturnValue([]);
+    const diagnostics = await import("./rendererDiagnostics");
+
+    diagnostics.appendListenerOwnerDiagnostic({
+      activeCount: 2,
+      inactiveCount: 1,
+      evidenceClass: "proxy",
+    });
+    diagnostics.appendMediaOwnerDiagnostic({
+      activeCount: 1,
+      revokedCount: 3,
+      retainedBytes: 2048,
+      unsupportedReason: null,
+      evidenceClass: "proxy",
+      // @ts-expect-error media source URL is intentionally rejected.
+      objectUrl: "blob:secret",
+    });
+
+    const [, , listenerPersistedValue] =
+      clientStorageMocks.writeClientStoreValue.mock.calls[0] ?? [];
+    const [listenerEntry] = listenerPersistedValue as Array<{
+      label: string;
+      payload: Record<string, unknown>;
+    }>;
+    const [, , mediaPersistedValue] =
+      clientStorageMocks.writeClientStoreValue.mock.calls[1] ?? [];
+    const [mediaEntry] = mediaPersistedValue as Array<{
+      label: string;
+      payload: Record<string, unknown>;
+    }>;
+    expect(listenerEntry.label).toBe("listeners.owner-budget");
+    expect(mediaEntry.label).toBe("media.owner-budget");
+    expect(mediaEntry.payload).toMatchObject({
+      activeCount: 1,
+      revokedCount: 3,
+      retainedBytes: 2048,
+      evidenceClass: "proxy",
+    });
+    expect(mediaEntry.payload).not.toHaveProperty("objectUrl");
+  });
+
+  it("records content-safe markdown precompute diagnostics", async () => {
+    clientStorageMocks.isPreloaded.mockReturnValue(true);
+    clientStorageMocks.getClientStoreSync.mockReturnValue([]);
+    const diagnostics = await import("./rendererDiagnostics");
+
+    diagnostics.appendMarkdownPrecomputeDiagnostic({
+      mode: "worker-precompute",
+      durationMs: 18,
+      contentLength: 12_000,
+      contentHash: "hash-1",
+      thresholdReason: "length",
+      cacheState: "miss",
+      fallbackReason: "none",
+      evidenceClass: "measured",
+      totalHeadings: 4,
+      totalHeavyBlocks: 2,
+      totalSourceLines: 300,
+      // @ts-expect-error markdown body is intentionally rejected.
+      rawMarkdown: "# secret prompt body",
+    });
+
+    const [, , persistedValue] =
+      clientStorageMocks.writeClientStoreValue.mock.calls[0] ?? [];
+    const [entry] = persistedValue as Array<{
+      label: string;
+      payload: Record<string, unknown>;
+    }>;
+    expect(entry.label).toBe("perf.messages.markdown.precompute");
+    expect(entry.payload).toMatchObject({
+      mode: "worker-precompute",
+      durationMs: 18,
+      contentLength: 12_000,
+      contentHash: "hash-1",
+      thresholdReason: "length",
+      cacheState: "miss",
+      fallbackReason: "none",
+      evidenceClass: "measured",
+      totalHeadings: 4,
+      totalHeavyBlocks: 2,
+      totalSourceLines: 300,
+    });
+    expect(entry.payload).not.toHaveProperty("rawMarkdown");
+    expect(entry.payload).not.toHaveProperty("assistantText");
+  });
+
+  it("records content-safe workspace file listing budget diagnostics", async () => {
+    clientStorageMocks.isPreloaded.mockReturnValue(true);
+    clientStorageMocks.getClientStoreSync.mockReturnValue([]);
+    const diagnostics = await import("./rendererDiagnostics");
+
+    diagnostics.appendWorkspaceFileListingBudgetDiagnostic({
+      surfaceId: "subtree-listing",
+      workspaceId: "workspace-1",
+      durationMs: 33,
+      returnedEntries: 120,
+      payloadBytes: 4096,
+      cacheState: "unsupported",
+      scanState: "partial",
+      partial: true,
+      limitHit: true,
+      sourceVersion: "source-hash",
+      requestedPathHash: "path-hash",
+      evidenceClass: "measured",
+      fallbackReason: null,
+      // @ts-expect-error raw paths are intentionally rejected.
+      requestedPath: "secret/project/path",
+      fileContents: "secret file body",
+    });
+
+    const [, , persistedValue] =
+      clientStorageMocks.writeClientStoreValue.mock.calls[0] ?? [];
+    const [entry] = persistedValue as Array<{
+      label: string;
+      payload: Record<string, unknown>;
+    }>;
+    expect(entry.label).toBe("workspaces.file.listing-budget");
+    expect(entry.payload).toMatchObject({
+      surfaceId: "subtree-listing",
+      workspaceId: "workspace-1",
+      durationMs: 33,
+      returnedEntries: 120,
+      payloadBytes: 4096,
+      cacheState: "unsupported",
+      scanState: "partial",
+      partial: true,
+      limitHit: true,
+      sourceVersion: "source-hash",
+      requestedPathHash: "path-hash",
+      evidenceClass: "measured",
+    });
+    expect(entry.payload).not.toHaveProperty("requestedPath");
+    expect(entry.payload).not.toHaveProperty("fileContents");
+  });
+
   it("falls back to an empty diagnostics list when persisted cache is malformed", async () => {
     clientStorageMocks.isPreloaded.mockReturnValue(true);
     clientStorageMocks.getClientStoreSync.mockReturnValue({ broken: true });

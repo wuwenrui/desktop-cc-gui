@@ -157,6 +157,12 @@ The system SHALL make evidence and related artifact chips with workspace file pa
 - **AND** node-scoped runs SHALL show the target node title and node id when the node still exists
 - **AND** the card layout SHALL use compact spacing so action, target, engine/model, scope, started time, run id, and path can be scanned without excessive vertical whitespace
 
+#### Scenario: User opens generation task drawer from Project Map chrome
+- **WHEN** the Project Map chrome is expanded
+- **THEN** the top action row SHALL render a Task button that shows the current active generation queue count
+- **AND** clicking the Task button SHALL open the Project Map task drawer
+- **AND** active, queued, and recent generation runs SHALL remain inspectable from that drawer without requiring the user to leave the Project Map surface
+
 ### Requirement: Button-specific generation prompts
 The system SHALL use concise, action-specific prompts for Collect profile, Complete node, and Calibrate node.
 
@@ -463,4 +469,3 @@ Calibrations and candidates SHALL keep source links to relationship artifacts.
 #### Scenario: candidate calibration
 - **WHEN** a map node is calibrated
 - **THEN** candidate SHALL reference evidence relation/file/run identifiers
-

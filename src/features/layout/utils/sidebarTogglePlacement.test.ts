@@ -6,7 +6,7 @@ import {
 } from "./sidebarTogglePlacement";
 
 describe("sidebarTogglePlacement", () => {
-  it("shows the sidebar titlebar toggle on macOS while the sidebar is expanded", () => {
+  it("shows the sidebar titlebar toggle while the desktop sidebar is expanded", () => {
     expect(
       shouldShowSidebarTopbarSidebarToggle({
         isCompact: false,
@@ -25,7 +25,7 @@ describe("sidebarTogglePlacement", () => {
     ).toBe(false);
   });
 
-  it("keeps a restore toggle in the main topbar after the macOS sidebar is collapsed", () => {
+  it("keeps a restore toggle in the main topbar after the desktop sidebar is collapsed", () => {
     expect(
       shouldShowSidebarTopbarSidebarToggle({
         isCompact: false,
@@ -44,7 +44,7 @@ describe("sidebarTogglePlacement", () => {
     ).toBe(true);
   });
 
-  it("keeps the existing main topbar toggle behavior on non-mac desktop layouts", () => {
+  it("uses the sidebar titlebar toggle on non-mac desktop layouts while expanded", () => {
     expect(
       shouldShowSidebarTopbarSidebarToggle({
         isCompact: false,
@@ -52,7 +52,7 @@ describe("sidebarTogglePlacement", () => {
         isSoloMode: false,
         sidebarCollapsed: false,
       }),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       shouldShowMainTopbarSidebarToggle({
         isCompact: false,
@@ -60,7 +60,7 @@ describe("sidebarTogglePlacement", () => {
         isSoloMode: false,
         sidebarCollapsed: false,
       }),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("hides both toggle placements in compact or solo layouts", () => {

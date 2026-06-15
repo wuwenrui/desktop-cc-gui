@@ -58,6 +58,7 @@ import {
 } from "../services/relationshipImportQueries";
 import { buildIntentCanvasTransmissionContext } from "../utils/context";
 import { buildIntentCanvasAiContext, sanitizeIntentCanvasScene } from "../utils/scene";
+import { loadIntentCanvasStyles } from "../../../styles/featureStyleLoaders";
 
 type IntentCanvasSourceLocation = { line: number; column: number };
 type IntentCanvasOpenSourceFile = (path: string, location?: IntentCanvasSourceLocation) => void;
@@ -1025,6 +1026,9 @@ export function IntentCanvasManager({
   onOpenProjectMap,
   onOpenSourceFile,
 }: IntentCanvasManagerProps) {
+  useEffect(() => {
+    void loadIntentCanvasStyles();
+  }, []);
   const { t } = useTranslation();
   const [status, setStatus] = useState<IntentCanvasManagerStatus>("idle");
   const [entries, setEntries] = useState<IntentCanvasIndexEntry[]>(EMPTY_CANVAS_ENTRIES);

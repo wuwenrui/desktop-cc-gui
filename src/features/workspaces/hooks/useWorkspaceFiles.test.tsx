@@ -4,11 +4,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkspaceInfo } from "../../../types";
 import { getWorkspaceDirectoryChildren, getWorkspaceFiles } from "../../../services/tauri";
 import type { WorkspaceFilesResponse } from "../../../services/tauri";
+import {
+  clearSharedWorkspaceFileIndexes,
+  readSharedWorkspaceFileIndex,
+} from "../utils/sharedWorkspaceFileIndex";
 import { useWorkspaceFiles } from "./useWorkspaceFiles";
 
 vi.mock("../../../services/tauri", () => ({
   getWorkspaceDirectoryChildren: vi.fn(),
   getWorkspaceFiles: vi.fn(),
+}));
+
+vi.mock("../../../services/rendererDiagnostics", () => ({
+  appendWorkspaceFileListingBudgetDiagnostic: vi.fn(),
 }));
 
 const workspaceA: WorkspaceInfo = {
@@ -89,6 +97,7 @@ describe("useWorkspaceFiles", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.clearAllMocks();
+    clearSharedWorkspaceFileIndexes();
   });
 
   it("loads root children without starting a full workspace scan", async () => {
@@ -725,6 +734,48 @@ describe("useWorkspaceFiles", () => {
     expect(result.current.scanState).toBe("complete");
     expect(result.current.limitHit).toBe(false);
     expect(result.current.directoryMetadata).toEqual([]);
+
+    unmount();
+  });
+
+  it("publishes source version metadata to the shared file index", async () => {
+    vi.mocked(getWorkspaceDirectoryChildren).mockResolvedValue(
+      workspaceSnapshot({
+        files: ["src/app.tsx"],
+        directories: ["src"],
+        scan_state: "complete",
+        limit_hit: false,
+        sourceVersion: "source-v1",
+        listingBudget: {
+          depth: 2,
+          maxEntries: 2000,
+          returnedEntries: 2,
+          payloadBytes: 512,
+          sourceVersion: "source-v1",
+          scanState: "complete",
+          limitHit: false,
+          cacheState: "unsupported",
+          requestedPath: null,
+          partial: false,
+          pageCursor: null,
+        },
+      }),
+    );
+
+    const { result, unmount } = renderHook(() =>
+      useWorkspaceFiles({
+        activeWorkspace: workspaceA,
+        pollingEnabled: false,
+      }),
+    );
+
+    await flushAsyncWork();
+
+    expect(result.current.sourceVersion).toBe("source-v1");
+    expect(readSharedWorkspaceFileIndex({
+      workspaceId: workspaceA.id,
+      sourceVersion: "source-v1",
+    })?.files.map((entry) => entry.path)).toEqual(["src/app.tsx"]);
 
     unmount();
   });

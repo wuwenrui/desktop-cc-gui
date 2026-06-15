@@ -4,6 +4,9 @@ mod app_paths;
 #[allow(dead_code)]
 #[path = "../backend/mod.rs"]
 mod backend;
+#[allow(dead_code)]
+#[path = "../backend_budget.rs"]
+mod backend_budget;
 #[path = "../claude_home.rs"]
 mod claude_home;
 #[path = "../codex/args.rs"]

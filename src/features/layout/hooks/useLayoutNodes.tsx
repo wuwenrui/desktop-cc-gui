@@ -1,4 +1,16 @@
-import { lazy, Suspense, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  lazy,
+  Profiler,
+  Suspense,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ProfilerOnRenderCallback,
+  type ReactNode,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { Sidebar } from "../../app/components/Sidebar";
 import { HomeChat } from "../../home/components/HomeChat";
@@ -24,8 +36,6 @@ import { FileTreePanel } from "../../files/components/FileTreePanel";
 import { WorkspaceSearchPanel } from "../../search/components/WorkspaceSearchPanel";
 import { PromptPanel } from "../../prompts/components/PromptPanel";
 import { ProjectMemoryPanel } from "../../project-memory/components/ProjectMemoryPanel";
-import { ProjectMapPanel } from "../../project-map";
-import { IntentCanvasManager } from "../../intent-canvas/components/IntentCanvasManager";
 import type {
   CanvasSemanticGraph,
   IntentCanvasCodeSelectionAnchor,
@@ -56,7 +66,10 @@ import type {
   OrchestrationTask,
 } from "../../agent-orchestration";
 import { useTaskRunStore } from "../../tasks/hooks/useTaskRunStore";
-import { patchTaskRun, saveTaskRunStore } from "../../tasks/utils/taskRunStorage";
+import {
+  patchTaskRun,
+  saveTaskRunStore,
+} from "../../tasks/utils/taskRunStorage";
 import { WorkspaceNoteCardPanel } from "../../note-cards/components/WorkspaceNoteCardPanel";
 import { WorkspaceSessionActivityPanel } from "../../session-activity/components/WorkspaceSessionActivityPanel";
 import { WorkspaceSessionRadarPanel } from "../../session-activity/components/WorkspaceSessionRadarPanel";
@@ -78,6 +91,7 @@ import type {
   RequestUserInputRequest,
   ThreadSummary,
 } from "../../../types";
+import { __profile as threadsRuntimeProfile } from "../../threads/hooks/useThreadsReducer";
 import { getClientStoreSync } from "../../../services/clientStorage";
 import { getCodexProviders } from "../../../services/tauri";
 import { normalizeSpecRootInput } from "../../spec/pathUtils";
@@ -121,10 +135,24 @@ import {
 } from "./layoutNodeSections";
 
 const GitDiffPanel = lazy(() =>
-  import("../../git/components/GitDiffPanel").then((m) => ({ default: m.GitDiffPanel })),
+  import("../../git/components/GitDiffPanel").then((m) => ({
+    default: m.GitDiffPanel,
+  })),
 );
 const FileViewPanel = lazy(() =>
-  import("../../files/components/FileViewPanel").then((m) => ({ default: m.FileViewPanel })),
+  import("../../files/components/FileViewPanel").then((m) => ({
+    default: m.FileViewPanel,
+  })),
+);
+const ProjectMapPanel = lazy(() =>
+  import("../../project-map/components/ProjectMapPanel").then((m) => ({
+    default: m.ProjectMapPanel,
+  })),
+);
+const IntentCanvasManager = lazy(() =>
+  import("../../intent-canvas/components/IntentCanvasManager").then((m) => ({
+    default: m.IntentCanvasManager,
+  })),
 );
 
 function HeavyPanelFallback() {
@@ -132,6 +160,7 @@ function HeavyPanelFallback() {
 }
 
 import type {
+  LayoutNodesFlatOptions,
   LayoutNodesOptions,
   LayoutNodesResult,
   RightPanelTabSelection,
@@ -160,7 +189,9 @@ function buildOrchestrationProjectionSignature(
   });
 }
 
-function toConversationEngine(engine: EngineType | undefined): ConversationEngine {
+function toConversationEngine(
+  engine: EngineType | undefined,
+): ConversationEngine {
   if (engine === "claude" || engine === "gemini" || engine === "opencode") {
     return engine;
   }
@@ -175,16 +206,28 @@ function inferConversationEngineFromThreadId(
     return null;
   }
 
-  if (normalizedThreadId.startsWith("claude:") || normalizedThreadId.startsWith("claude-pending-")) {
+  if (
+    normalizedThreadId.startsWith("claude:") ||
+    normalizedThreadId.startsWith("claude-pending-")
+  ) {
     return "claude";
   }
-  if (normalizedThreadId.startsWith("gemini:") || normalizedThreadId.startsWith("gemini-pending-")) {
+  if (
+    normalizedThreadId.startsWith("gemini:") ||
+    normalizedThreadId.startsWith("gemini-pending-")
+  ) {
     return "gemini";
   }
-  if (normalizedThreadId.startsWith("opencode:") || normalizedThreadId.startsWith("opencode-pending-")) {
+  if (
+    normalizedThreadId.startsWith("opencode:") ||
+    normalizedThreadId.startsWith("opencode-pending-")
+  ) {
     return "opencode";
   }
-  if (normalizedThreadId.startsWith("codex:") || normalizedThreadId.startsWith("codex-pending-")) {
+  if (
+    normalizedThreadId.startsWith("codex:") ||
+    normalizedThreadId.startsWith("codex-pending-")
+  ) {
     return "codex";
   }
 
@@ -203,7 +246,22 @@ function resolveActiveConversationEngine(
   return toConversationEngine(threadEngine ?? selectedEngine);
 }
 
-export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
+function flattenLayoutNodesOptions(
+  options: LayoutNodesOptions,
+): LayoutNodesFlatOptions {
+  return {
+    ...options.workspace,
+    ...options.runtime,
+    ...options.chrome,
+    ...options.editor,
+    ...options.git,
+    ...options.composer,
+    ...options.panels,
+  };
+}
+
+export function useLayoutNodes(input: LayoutNodesOptions): LayoutNodesResult {
+  const options = flattenLayoutNodesOptions(input);
   const { t } = useTranslation();
   const clientUiVisibility = useClientUiVisibility();
   const onOpenFile = options.onOpenFile;
@@ -213,20 +271,21 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   } | null>(null);
   const [rewindDialogRequest, setRewindDialogRequest] =
     useState<ComposerRewindDialogRequest | null>(null);
-  const [forkConfirmUserMessageId, setForkConfirmUserMessageId] =
-    useState<string | null>(null);
+  const [forkConfirmUserMessageId, setForkConfirmUserMessageId] = useState<
+    string | null
+  >(null);
   const [codexProviderProfiles, setCodexProviderProfiles] = useState<
     CodexProviderProfileOption[]
   >([]);
   const rewindDialogRequestSerialRef = useRef(0);
   const activeThreadStatus = options.activeThreadId
-    ? options.threadStatusById[options.activeThreadId] ?? null
+    ? (options.threadStatusById[options.activeThreadId] ?? null)
     : null;
   const activeThreadSummary =
     options.activeWorkspaceId && options.activeThreadId
-      ? (options.threadsByWorkspace[options.activeWorkspaceId] ?? []).find(
+      ? ((options.threadsByWorkspace[options.activeWorkspaceId] ?? []).find(
           (thread) => thread.id === options.activeThreadId,
-        ) ?? null
+        ) ?? null)
       : null;
   const activeProviderProfileLabel = activeThreadSummary
     ? resolveCodexProviderLabel(activeThreadSummary)
@@ -257,7 +316,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   }, []);
   const historyRestoredAtMsByThread = options.historyRestoredAtMsByThread ?? {};
   const activeHistoryRestoredAtMs = options.activeThreadId
-    ? historyRestoredAtMsByThread[options.activeThreadId] ?? null
+    ? (historyRestoredAtMsByThread[options.activeThreadId] ?? null)
     : null;
   const activeThreadHistoryLoading = options.activeThreadId
     ? options.historyLoadingByThreadId[options.activeThreadId] === true
@@ -265,16 +324,19 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   const showMessageAnchors =
     options.showMessageAnchors &&
     clientUiVisibility.isControlVisible("cornerStatus.messageAnchors");
-  const showStickyUserBubble =
-    clientUiVisibility.isControlVisible("curtain.stickyUserBubble");
+  const showStickyUserBubble = clientUiVisibility.isControlVisible(
+    "curtain.stickyUserBubble",
+  );
   const showTopSessionTabs =
     clientUiVisibility.isPanelVisible("topSessionTabs");
   const showTopRunControls =
     clientUiVisibility.isControlVisible("topRun.start");
-  const showOpenWorkspaceAppControl =
-    clientUiVisibility.isControlVisible("topTool.openWorkspace");
-  const showRightActivityToolbar =
-    clientUiVisibility.isPanelVisible("rightActivityToolbar");
+  const showOpenWorkspaceAppControl = clientUiVisibility.isControlVisible(
+    "topTool.openWorkspace",
+  );
+  const showRightActivityToolbar = clientUiVisibility.isPanelVisible(
+    "rightActivityToolbar",
+  );
   const rightToolbarVisibleTabs = {
     activity: clientUiVisibility.isControlVisible("rightToolbar.activity"),
     projectMap: clientUiVisibility.isControlVisible("rightToolbar.projectMap"),
@@ -284,16 +346,21 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     search: clientUiVisibility.isControlVisible("rightToolbar.search"),
     notes: clientUiVisibility.isControlVisible("rightToolbar.notes"),
   };
-  const hasVisibleRightToolbarControl =
-    Object.values(rightToolbarVisibleTabs).some(Boolean);
-  const showBottomActivityPanel =
-    clientUiVisibility.isPanelVisible("bottomActivityPanel");
-  const showGlobalRuntimeNoticeDock =
-    clientUiVisibility.isPanelVisible("globalRuntimeNoticeDock");
+  const hasVisibleRightToolbarControl = Object.values(
+    rightToolbarVisibleTabs,
+  ).some(Boolean);
+  const showBottomActivityPanel = clientUiVisibility.isPanelVisible(
+    "bottomActivityPanel",
+  );
+  const showGlobalRuntimeNoticeDock = clientUiVisibility.isPanelVisible(
+    "globalRuntimeNoticeDock",
+  );
   const bottomActivityVisibleTabs = {
     todo: clientUiVisibility.isControlVisible("bottomActivity.tasks"),
     subagent: clientUiVisibility.isControlVisible("bottomActivity.agents"),
-    checkpoint: clientUiVisibility.isControlVisible("bottomActivity.checkpoint"),
+    checkpoint: clientUiVisibility.isControlVisible(
+      "bottomActivity.checkpoint",
+    ),
     latestUserMessage: clientUiVisibility.isControlVisible(
       "bottomActivity.latestConversation",
     ),
@@ -348,8 +415,12 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   );
   const deferredComposerLiveInputs = useDeferredValue(composerLiveInputs);
   const backgroundRenderGatingEnabled = isBackgroundRenderGatingEnabled();
-  const deferredThreadItemsByThreadValue = useDeferredValue(options.threadItemsByThread);
-  const deferredThreadStatusByIdValue = useDeferredValue(options.threadStatusById);
+  const deferredThreadItemsByThreadValue = useDeferredValue(
+    options.threadItemsByThread,
+  );
+  const deferredThreadStatusByIdValue = useDeferredValue(
+    options.threadStatusById,
+  );
   const deferredStatusPanelItemsValue = useDeferredValue(options.activeItems);
   const statusPanelItems = options.isProcessing
     ? deferredStatusPanelItemsValue
@@ -361,8 +432,8 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     ? deferredThreadStatusByIdValue
     : options.threadStatusById;
   const deferredComposerActiveThreadStatus = options.activeThreadId
-    ? deferredComposerLiveInputs.threadStatusById[options.activeThreadId] ??
-      activeThreadStatus
+    ? (deferredComposerLiveInputs.threadStatusById[options.activeThreadId] ??
+      activeThreadStatus)
     : null;
 
   const conversationState = useMemo<ConversationState>(
@@ -421,7 +492,10 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   const handleOpenDiffPath = useCallback(
     (path: string) => {
       const availablePaths = gitDiffItems.map((entry) =>
-        entry.path.replace(/\\/g, "/").replace(/^\.\/+/, "").trim(),
+        entry.path
+          .replace(/\\/g, "/")
+          .replace(/^\.\/+/, "")
+          .trim(),
       );
       const resolvedPath = resolveDiffPathFromWorkspacePath(
         path,
@@ -436,7 +510,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   const workspaceActivity = useWorkspaceSessionActivity({
     activeThreadId: options.activeThreadId,
     threads: options.activeWorkspaceId
-      ? options.threadsByWorkspace[options.activeWorkspaceId] ?? []
+      ? (options.threadsByWorkspace[options.activeWorkspaceId] ?? [])
       : [],
     itemsByThread: deferredThreadItemsByThread,
     threadParentById: options.threadParentById,
@@ -467,7 +541,10 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     [isEditorFileMaximized, onOpenFile, onToggleEditorFileMaximized],
   );
   const groupedWorkspacesForHeader = useMemo(() => {
-    return buildWorkspaceHeaderGroups(options.groupedWorkspaces, options.workspaces);
+    return buildWorkspaceHeaderGroups(
+      options.groupedWorkspaces,
+      options.workspaces,
+    );
   }, [options.groupedWorkspaces, options.workspaces]);
 
   const { contextMenuNode: topbarTabContextMenuNode, sessionTabsNode } =
@@ -486,104 +563,118 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       onSelectThread: options.onSelectThread,
       onSelectWorkspace: options.onSelectWorkspace,
     });
+  const handleRuntimeProfileRender = useCallback<ProfilerOnRenderCallback>(
+    (id) => {
+      threadsRuntimeProfile.recordComponentRender(id);
+    },
+    [],
+  );
 
   const sidebarNode = (
-    <Sidebar
-      workspaces={options.workspaces}
-      groupedWorkspaces={options.groupedWorkspaces}
-      hasWorkspaceGroups={options.hasWorkspaceGroups}
-      deletingWorktreeIds={options.deletingWorktreeIds}
-      threadsByWorkspace={options.threadsByWorkspace}
-      activeItems={options.activeItems}
-      threadParentById={options.threadParentById}
-      threadStatusById={options.threadStatusById}
-      runningSessionCountByWorkspaceId={options.runningSessionCountByWorkspaceId}
-      recentSessionCountByWorkspaceId={options.recentCompletedSessionCountByWorkspaceId}
-      hydratedThreadListWorkspaceIds={options.hydratedThreadListWorkspaceIds}
-      threadListLoadingByWorkspace={options.threadListLoadingByWorkspace}
-      threadListPagingByWorkspace={options.threadListPagingByWorkspace}
-      threadListCursorByWorkspace={options.threadListCursorByWorkspace}
-      activeWorkspaceId={options.activeWorkspaceId}
-      activeThreadId={options.activeThreadId}
-      systemProxyEnabled={options.systemProxyEnabled}
-      systemProxyUrl={options.systemProxyUrl}
-      accountRateLimits={options.activeRateLimits}
-      usageShowRemaining={options.usageShowRemaining}
-      showProviderLabels={options.showSidebarProviderLabels}
-      accountInfo={options.accountInfo}
-      onSwitchAccount={options.onSwitchAccount}
-      onCancelSwitchAccount={options.onCancelSwitchAccount}
-      accountSwitching={options.accountSwitching}
-      onOpenSettings={options.onOpenSettings}
-      onOpenDebug={options.onOpenDebug}
-      showDebugButton={options.showDebugButton}
-      onAddWorkspace={options.onAddWorkspace}
-      onSelectHome={options.onSelectHome}
-      onSelectWorkspace={options.onSelectWorkspace}
-      onConnectWorkspace={options.onConnectWorkspace}
-      onAddAgent={options.onAddAgent}
-      engineOptions={options.engineOptions}
-      enabledEngines={options.enabledEngines}
-      onRefreshEngineOptions={options.onRefreshEngineOptions}
-      onAddSharedAgent={options.onAddSharedAgent}
-      onAddWorktreeAgent={options.onAddWorktreeAgent}
-      onAddCloneAgent={options.onAddCloneAgent}
-      onToggleWorkspaceCollapse={options.onToggleWorkspaceCollapse}
-      onSelectThread={options.onSelectThread}
-      onDeleteThread={options.onDeleteThread}
-      onArchiveThread={options.onArchiveThread}
-      deleteConfirmThreadId={options.deleteConfirmThreadId}
-      deleteConfirmWorkspaceId={options.deleteConfirmWorkspaceId}
-      deleteConfirmBusy={options.deleteConfirmBusy}
-      onCancelDeleteConfirm={options.onCancelDeleteConfirm}
-      onConfirmDeleteConfirm={options.onConfirmDeleteConfirm}
-      onSyncThread={options.onSyncThread}
-      pinThread={options.pinThread}
-      unpinThread={options.unpinThread}
-      isThreadPinned={options.isThreadPinned}
-      isThreadAutoNaming={options.isThreadAutoNaming}
-      getPinTimestamp={options.getPinTimestamp}
-      pinnedThreadsVersion={options.pinnedThreadsVersion}
-      onRenameThread={options.onRenameThread}
-      onAutoNameThread={options.onAutoNameThread}
-      onOpenClaudeTui={options.onOpenClaudeTui}
-      onDeleteWorkspace={options.onDeleteWorkspace}
-      onDeleteWorktree={options.onDeleteWorktree}
-      onRenameWorkspaceAlias={options.onRenameWorkspaceAlias}
-      onLoadOlderThreads={options.onLoadOlderThreads}
-      onReloadWorkspaceThreads={options.onReloadWorkspaceThreads}
-      onQuickReloadWorkspaceThreads={options.onQuickReloadWorkspaceThreads}
-      workspaceDropTargetRef={options.workspaceDropTargetRef}
-      isWorkspaceDropActive={options.isWorkspaceDropActive}
-      workspaceDropText={options.workspaceDropText}
-      onWorkspaceDragOver={options.onWorkspaceDragOver}
-      onWorkspaceDragEnter={options.onWorkspaceDragEnter}
-      onWorkspaceDragLeave={options.onWorkspaceDragLeave}
-      onWorkspaceDrop={options.onWorkspaceDrop}
-      appMode={options.appMode}
-      onAppModeChange={options.onAppModeChange}
-      onOpenHomeChat={options.onOpenHomeChat}
-      onLockPanel={options.onLockPanel}
-      onOpenProjectMemory={options.onOpenProjectMemory}
-      onOpenReleaseNotes={options.onOpenReleaseNotes}
-      onOpenGlobalSearch={options.onOpenGlobalSearch}
-      globalSearchShortcut={options.globalSearchShortcut}
-      openChatShortcut={options.openChatShortcut}
-      openKanbanShortcut={options.openKanbanShortcut}
-      showLoadingProgressDialog={options.showLoadingProgressDialog}
-      hideLoadingProgressDialog={options.hideLoadingProgressDialog}
-      onOpenSpecHub={options.onOpenSpecHub}
-      onOpenWorkspaceHome={options.onOpenWorkspaceHome}
-      showTerminalButton={options.showTerminalButton}
-      isTerminalOpen={options.terminalOpen}
-      onToggleTerminal={options.onToggleTerminal}
-    />
+    <Profiler id="sidebar" onRender={handleRuntimeProfileRender}>
+      <Sidebar
+        workspaces={options.workspaces}
+        groupedWorkspaces={options.groupedWorkspaces}
+        hasWorkspaceGroups={options.hasWorkspaceGroups}
+        deletingWorktreeIds={options.deletingWorktreeIds}
+        threadsByWorkspace={options.threadsByWorkspace}
+        activeItems={options.activeItems}
+        threadParentById={options.threadParentById}
+        threadStatusById={options.threadStatusById}
+        runningSessionCountByWorkspaceId={
+          options.runningSessionCountByWorkspaceId
+        }
+        recentSessionCountByWorkspaceId={
+          options.recentCompletedSessionCountByWorkspaceId
+        }
+        hydratedThreadListWorkspaceIds={options.hydratedThreadListWorkspaceIds}
+        threadListLoadingByWorkspace={options.threadListLoadingByWorkspace}
+        threadListPagingByWorkspace={options.threadListPagingByWorkspace}
+        threadListCursorByWorkspace={options.threadListCursorByWorkspace}
+        activeWorkspaceId={options.activeWorkspaceId}
+        activeThreadId={options.activeThreadId}
+        systemProxyEnabled={options.systemProxyEnabled}
+        systemProxyUrl={options.systemProxyUrl}
+        accountRateLimits={options.activeRateLimits}
+        usageShowRemaining={options.usageShowRemaining}
+        showProviderLabels={options.showSidebarProviderLabels}
+        accountInfo={options.accountInfo}
+        onSwitchAccount={options.onSwitchAccount}
+        onCancelSwitchAccount={options.onCancelSwitchAccount}
+        accountSwitching={options.accountSwitching}
+        onOpenSettings={options.onOpenSettings}
+        onOpenDebug={options.onOpenDebug}
+        showDebugButton={options.showDebugButton}
+        onAddWorkspace={options.onAddWorkspace}
+        onSelectHome={options.onSelectHome}
+        onSelectWorkspace={options.onSelectWorkspace}
+        onConnectWorkspace={options.onConnectWorkspace}
+        onAddAgent={options.onAddAgent}
+        engineOptions={options.engineOptions}
+        enabledEngines={options.enabledEngines}
+        onRefreshEngineOptions={options.onRefreshEngineOptions}
+        onAddSharedAgent={options.onAddSharedAgent}
+        onAddWorktreeAgent={options.onAddWorktreeAgent}
+        onAddCloneAgent={options.onAddCloneAgent}
+        onToggleWorkspaceCollapse={options.onToggleWorkspaceCollapse}
+        onSelectThread={options.onSelectThread}
+        onDeleteThread={options.onDeleteThread}
+        onArchiveThread={options.onArchiveThread}
+        deleteConfirmThreadId={options.deleteConfirmThreadId}
+        deleteConfirmWorkspaceId={options.deleteConfirmWorkspaceId}
+        deleteConfirmBusy={options.deleteConfirmBusy}
+        onCancelDeleteConfirm={options.onCancelDeleteConfirm}
+        onConfirmDeleteConfirm={options.onConfirmDeleteConfirm}
+        onSyncThread={options.onSyncThread}
+        pinThread={options.pinThread}
+        unpinThread={options.unpinThread}
+        isThreadPinned={options.isThreadPinned}
+        isThreadAutoNaming={options.isThreadAutoNaming}
+        getPinTimestamp={options.getPinTimestamp}
+        pinnedThreadsVersion={options.pinnedThreadsVersion}
+        onRenameThread={options.onRenameThread}
+        onAutoNameThread={options.onAutoNameThread}
+        onOpenClaudeTui={options.onOpenClaudeTui}
+        onDeleteWorkspace={options.onDeleteWorkspace}
+        onDeleteWorktree={options.onDeleteWorktree}
+        onRenameWorkspaceAlias={options.onRenameWorkspaceAlias}
+        onLoadOlderThreads={options.onLoadOlderThreads}
+        onReloadWorkspaceThreads={options.onReloadWorkspaceThreads}
+        onQuickReloadWorkspaceThreads={options.onQuickReloadWorkspaceThreads}
+        workspaceDropTargetRef={options.workspaceDropTargetRef}
+        isWorkspaceDropActive={options.isWorkspaceDropActive}
+        workspaceDropText={options.workspaceDropText}
+        onWorkspaceDragOver={options.onWorkspaceDragOver}
+        onWorkspaceDragEnter={options.onWorkspaceDragEnter}
+        onWorkspaceDragLeave={options.onWorkspaceDragLeave}
+        onWorkspaceDrop={options.onWorkspaceDrop}
+        appMode={options.appMode}
+        onAppModeChange={options.onAppModeChange}
+        onOpenHomeChat={options.onOpenHomeChat}
+        onLockPanel={options.onLockPanel}
+        onOpenProjectMemory={options.onOpenProjectMemory}
+        onOpenReleaseNotes={options.onOpenReleaseNotes}
+        onOpenGlobalSearch={options.onOpenGlobalSearch}
+        globalSearchShortcut={options.globalSearchShortcut}
+        openChatShortcut={options.openChatShortcut}
+        openKanbanShortcut={options.openKanbanShortcut}
+        showLoadingProgressDialog={options.showLoadingProgressDialog}
+        hideLoadingProgressDialog={options.hideLoadingProgressDialog}
+        onOpenSpecHub={options.onOpenSpecHub}
+        onOpenWorkspaceHome={options.onOpenWorkspaceHome}
+        showTerminalButton={options.showTerminalButton}
+        isTerminalOpen={options.terminalOpen}
+        onToggleTerminal={options.onToggleTerminal}
+      />
+    </Profiler>
   );
 
-  const [localClaudeThinkingVisible, setLocalClaudeThinkingVisible] = useState<boolean | undefined>(
-    undefined,
-  );
-  const [selectedCodeAnnotations, setSelectedCodeAnnotations] = useState<CodeAnnotationSelection[]>([]);
+  const [localClaudeThinkingVisible, setLocalClaudeThinkingVisible] = useState<
+    boolean | undefined
+  >(undefined);
+  const [selectedCodeAnnotations, setSelectedCodeAnnotations] = useState<
+    CodeAnnotationSelection[]
+  >([]);
   const handleCreateCodeAnnotation = useCallback(
     (annotation: CodeAnnotationDraftInput) => {
       const selection = createCodeAnnotationSelection(annotation);
@@ -611,7 +702,9 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     );
   }, []);
   const handleClearCodeAnnotations = useCallback(() => {
-    setSelectedCodeAnnotations((current) => (current.length === 0 ? current : []));
+    setSelectedCodeAnnotations((current) =>
+      current.length === 0 ? current : [],
+    );
   }, []);
   const codeAnnotationBridgeProps = useMemo<CodeAnnotationBridgeProps>(
     () => ({
@@ -619,10 +712,16 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       onRemoveCodeAnnotation: handleRemoveCodeAnnotation,
       codeAnnotations: selectedCodeAnnotations,
     }),
-    [handleCreateCodeAnnotation, handleRemoveCodeAnnotation, selectedCodeAnnotations],
+    [
+      handleCreateCodeAnnotation,
+      handleRemoveCodeAnnotation,
+      selectedCodeAnnotations,
+    ],
   );
   useEffect(() => {
-    setSelectedCodeAnnotations((current) => (current.length === 0 ? current : []));
+    setSelectedCodeAnnotations((current) =>
+      current.length === 0 ? current : [],
+    );
   }, [options.activeThreadId, options.activeWorkspace?.id]);
   const claudeThinkingVisible =
     typeof options.claudeThinkingVisible === "boolean"
@@ -630,10 +729,15 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       : localClaudeThinkingVisible;
   const onResolvedClaudeThinkingVisibleChange =
     options.onResolvedClaudeThinkingVisibleChange;
-  const handleResolvedAlwaysThinkingChange = useCallback((enabled: boolean) => {
-    setLocalClaudeThinkingVisible((previous) => (previous === enabled ? previous : enabled));
-    onResolvedClaudeThinkingVisibleChange?.(enabled);
-  }, [onResolvedClaudeThinkingVisibleChange]);
+  const handleResolvedAlwaysThinkingChange = useCallback(
+    (enabled: boolean) => {
+      setLocalClaudeThinkingVisible((previous) =>
+        previous === enabled ? previous : enabled,
+      );
+      onResolvedClaudeThinkingVisibleChange?.(enabled);
+    },
+    [onResolvedClaudeThinkingVisibleChange],
+  );
   const onForkFromMessage = options.onForkFromMessage;
   const handleOpenForkConfirmFromMessage = useCallback((messageId: string) => {
     const normalizedMessageId = messageId.trim();
@@ -646,15 +750,14 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     setForkConfirmUserMessageId(null);
   }, []);
   const handleConfirmForkFromMessage = useCallback(
-    async (
-      messageId: string,
-      options?: CodexProviderProfileSelection,
-    ) => {
+    async (messageId: string, options?: CodexProviderProfileSelection) => {
       await onForkFromMessage?.(messageId, options);
     },
     [onForkFromMessage],
   );
-  const codexForkProviderProfiles = useMemo<CodexProviderProfileOption[]>(() => {
+  const codexForkProviderProfiles = useMemo<
+    CodexProviderProfileOption[]
+  >(() => {
     const profilesById = new Map<string, CodexProviderProfileOption>();
     for (const profile of codexProviderProfiles) {
       profilesById.set(profile.id, profile);
@@ -669,8 +772,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       profilesById.set(activeProviderId, {
         id: activeProviderId,
         name:
-          activeThreadSummary?.providerProfileName?.trim() ||
-          activeProviderId,
+          activeThreadSummary?.providerProfileName?.trim() || activeProviderId,
         source:
           activeThreadSummary?.providerProfileSource === "managed"
             ? "managed"
@@ -704,125 +806,132 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
 
   const taskRunStore = useTaskRunStore();
 
-  const messagesNode = useMemo(() => (
-    <>
-      <Messages
-        items={options.activeItems}
-        threadId={options.activeThreadId ?? null}
-        workspaceId={options.activeWorkspace?.id ?? null}
-        workspacePath={options.activeWorkspace?.path ?? null}
-        openTargets={options.openAppTargets}
-        selectedOpenAppId={options.selectedOpenAppId}
-        showMessageAnchors={showMessageAnchors}
-        showStickyUserBubble={showStickyUserBubble}
-        codeBlockCopyUseModifier={options.codeBlockCopyUseModifier}
-        userInputRequests={options.userInputRequests}
-        approvals={options.approvals}
-        workspaces={options.workspaces}
-        onUserInputSubmit={options.handleUserInputSubmit}
-        onUserInputDismiss={options.handleUserInputDismiss}
-        onRecoverThreadRuntime={options.onRecoverThreadRuntime}
-        onRecoverThreadRuntimeAndResend={options.onRecoverThreadRuntimeAndResend}
-        onThreadRecoveryFork={options.onThreadRecoveryFork}
-        onForkFromMessage={
-          onForkFromMessage ? handleOpenForkConfirmFromMessage : undefined
-        }
-        onRewindFromMessage={
-          options.onRewind ? handleOpenRewindDialogFromMessage : undefined
-        }
-        onApprovalDecision={options.handleApprovalDecision}
-        onApprovalBatchAccept={options.handleApprovalBatchAccept}
-        onApprovalRemember={options.handleApprovalRemember}
-        conversationState={conversationState}
-        presentationProfile={presentationProfile}
-        activeEngine={conversationEngine}
-        claudeThinkingVisible={claudeThinkingVisible}
-        activeCollaborationModeId={options.selectedCollaborationModeId}
-        plan={options.plan}
-        isPlanMode={options.isPlanMode}
-        isPlanProcessing={options.isProcessing}
-        onOpenDiffPath={handleOpenDiffPath}
-        onOpenPlanPanel={options.onOpenPlanPanel}
-        onExitPlanModeExecute={options.handleExitPlanModeExecute}
-        onOpenWorkspaceFile={options.onOpenFile}
-        agentTaskScrollRequest={options.agentTaskScrollRequest}
-        isThinking={isThreadThinking}
-        isHistoryLoading={activeThreadHistoryLoading}
-        isContextCompacting={activeThreadStatus?.isContextCompacting ?? false}
-        proxyEnabled={options.systemProxyEnabled}
-        proxyUrl={options.systemProxyUrl}
-        processingStartedAt={activeThreadStatus?.processingStartedAt ?? null}
-        lastDurationMs={activeThreadStatus?.lastDurationMs ?? null}
-        heartbeatPulse={heartbeatPulseRef.current ?? 0}
-        codexSilentSuspectedAt={activeThreadStatus?.codexSilentSuspectedAt ?? null}
-        taskRuns={taskRunStore.runs}
-      />
-      <MessageForkConfirmDialog
-        userMessageId={forkConfirmUserMessageId}
-        onCancel={handleCancelForkConfirm}
-        onConfirm={handleConfirmForkFromMessage}
-        showProviderSelector={conversationEngine === "codex"}
-        defaultProviderProfileId={
-          activeThreadSummary?.providerProfileId ?? CODEX_DISK_PROVIDER_PROFILE_ID
-        }
-        providerProfiles={codexForkProviderProfiles}
-      />
-    </>
-  ), [
-    options.activeItems,
-    options.activeThreadId,
-    options.activeWorkspace?.id,
-    options.activeWorkspace?.path,
-    options.systemProxyEnabled,
-    options.systemProxyUrl,
-    options.openAppTargets,
-    options.selectedOpenAppId,
-    showMessageAnchors,
-    showStickyUserBubble,
-    options.codeBlockCopyUseModifier,
-    options.userInputRequests,
-    options.approvals,
-    options.workspaces,
-    options.handleUserInputSubmit,
-    options.handleUserInputDismiss,
-    options.onRecoverThreadRuntime,
-    options.onRecoverThreadRuntimeAndResend,
-    options.onThreadRecoveryFork,
-    onForkFromMessage,
-    handleOpenForkConfirmFromMessage,
-    forkConfirmUserMessageId,
-    handleCancelForkConfirm,
-    handleConfirmForkFromMessage,
-    activeThreadSummary?.providerProfileId,
-    codexForkProviderProfiles,
-    options.onRewind,
-    handleOpenRewindDialogFromMessage,
-    options.handleApprovalDecision,
-    options.handleApprovalBatchAccept,
-    options.handleApprovalRemember,
-    conversationState,
-    presentationProfile,
-    conversationEngine,
-    claudeThinkingVisible,
-    options.selectedCollaborationModeId,
-    options.plan,
-    options.isPlanMode,
-    options.isProcessing,
-    handleOpenDiffPath,
-    options.onOpenPlanPanel,
-    options.handleExitPlanModeExecute,
-    options.onOpenFile,
-    options.agentTaskScrollRequest,
-    isThreadThinking,
-    activeThreadHistoryLoading,
-    activeThreadStatus?.isContextCompacting,
-    activeThreadStatus?.processingStartedAt,
-    activeThreadStatus?.lastDurationMs,
-    activeThreadStatus?.codexSilentSuspectedAt,
-    taskRunStore.runs,
-    // heartbeatPulse removed from deps — uses ref to avoid
-    // recreating messagesNode on every heartbeat tick
-  ]
+  const messagesNode = useMemo(
+    () => (
+      <>
+        <Messages
+          items={options.activeItems}
+          threadId={options.activeThreadId ?? null}
+          workspaceId={options.activeWorkspace?.id ?? null}
+          workspacePath={options.activeWorkspace?.path ?? null}
+          openTargets={options.openAppTargets}
+          selectedOpenAppId={options.selectedOpenAppId}
+          showMessageAnchors={showMessageAnchors}
+          showStickyUserBubble={showStickyUserBubble}
+          codeBlockCopyUseModifier={options.codeBlockCopyUseModifier}
+          userInputRequests={options.userInputRequests}
+          approvals={options.approvals}
+          workspaces={options.workspaces}
+          onUserInputSubmit={options.handleUserInputSubmit}
+          onUserInputDismiss={options.handleUserInputDismiss}
+          onRecoverThreadRuntime={options.onRecoverThreadRuntime}
+          onRecoverThreadRuntimeAndResend={
+            options.onRecoverThreadRuntimeAndResend
+          }
+          onThreadRecoveryFork={options.onThreadRecoveryFork}
+          onForkFromMessage={
+            onForkFromMessage ? handleOpenForkConfirmFromMessage : undefined
+          }
+          onRewindFromMessage={
+            options.onRewind ? handleOpenRewindDialogFromMessage : undefined
+          }
+          onApprovalDecision={options.handleApprovalDecision}
+          onApprovalBatchAccept={options.handleApprovalBatchAccept}
+          onApprovalRemember={options.handleApprovalRemember}
+          conversationState={conversationState}
+          presentationProfile={presentationProfile}
+          activeEngine={conversationEngine}
+          claudeThinkingVisible={claudeThinkingVisible}
+          activeCollaborationModeId={options.selectedCollaborationModeId}
+          plan={options.plan}
+          isPlanMode={options.isPlanMode}
+          isPlanProcessing={options.isProcessing}
+          onOpenDiffPath={handleOpenDiffPath}
+          onOpenPlanPanel={options.onOpenPlanPanel}
+          onExitPlanModeExecute={options.handleExitPlanModeExecute}
+          onOpenWorkspaceFile={options.onOpenFile}
+          agentTaskScrollRequest={options.agentTaskScrollRequest}
+          isThinking={isThreadThinking}
+          isHistoryLoading={activeThreadHistoryLoading}
+          isContextCompacting={activeThreadStatus?.isContextCompacting ?? false}
+          proxyEnabled={options.systemProxyEnabled}
+          proxyUrl={options.systemProxyUrl}
+          processingStartedAt={activeThreadStatus?.processingStartedAt ?? null}
+          lastDurationMs={activeThreadStatus?.lastDurationMs ?? null}
+          heartbeatPulse={heartbeatPulseRef.current ?? 0}
+          codexSilentSuspectedAt={
+            activeThreadStatus?.codexSilentSuspectedAt ?? null
+          }
+          taskRuns={taskRunStore.runs}
+        />
+        <MessageForkConfirmDialog
+          userMessageId={forkConfirmUserMessageId}
+          onCancel={handleCancelForkConfirm}
+          onConfirm={handleConfirmForkFromMessage}
+          showProviderSelector={conversationEngine === "codex"}
+          defaultProviderProfileId={
+            activeThreadSummary?.providerProfileId ??
+            CODEX_DISK_PROVIDER_PROFILE_ID
+          }
+          providerProfiles={codexForkProviderProfiles}
+        />
+      </>
+    ),
+    [
+      options.activeItems,
+      options.activeThreadId,
+      options.activeWorkspace?.id,
+      options.activeWorkspace?.path,
+      options.systemProxyEnabled,
+      options.systemProxyUrl,
+      options.openAppTargets,
+      options.selectedOpenAppId,
+      showMessageAnchors,
+      showStickyUserBubble,
+      options.codeBlockCopyUseModifier,
+      options.userInputRequests,
+      options.approvals,
+      options.workspaces,
+      options.handleUserInputSubmit,
+      options.handleUserInputDismiss,
+      options.onRecoverThreadRuntime,
+      options.onRecoverThreadRuntimeAndResend,
+      options.onThreadRecoveryFork,
+      onForkFromMessage,
+      handleOpenForkConfirmFromMessage,
+      forkConfirmUserMessageId,
+      handleCancelForkConfirm,
+      handleConfirmForkFromMessage,
+      activeThreadSummary?.providerProfileId,
+      codexForkProviderProfiles,
+      options.onRewind,
+      handleOpenRewindDialogFromMessage,
+      options.handleApprovalDecision,
+      options.handleApprovalBatchAccept,
+      options.handleApprovalRemember,
+      conversationState,
+      presentationProfile,
+      conversationEngine,
+      claudeThinkingVisible,
+      options.selectedCollaborationModeId,
+      options.plan,
+      options.isPlanMode,
+      options.isProcessing,
+      handleOpenDiffPath,
+      options.onOpenPlanPanel,
+      options.handleExitPlanModeExecute,
+      options.onOpenFile,
+      options.agentTaskScrollRequest,
+      isThreadThinking,
+      activeThreadHistoryLoading,
+      activeThreadStatus?.isContextCompacting,
+      activeThreadStatus?.processingStartedAt,
+      activeThreadStatus?.lastDurationMs,
+      activeThreadStatus?.codexSilentSuspectedAt,
+      taskRunStore.runs,
+      // heartbeatPulse removed from deps — uses ref to avoid
+      // recreating messagesNode on every heartbeat tick
+    ],
   );
 
   const composerSelectedAgent = useMemo(
@@ -844,18 +953,14 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     options.selectedEngine === "gemini" ||
     options.selectedEngine === "opencode";
   const isStatusPanelCodexEngine = options.selectedEngine === "codex";
-  const {
-    todoTotal,
-    subagentTotal,
-    fileChanges,
-    commandTotal,
-  } = useStatusPanelData(statusPanelItems, {
-    isCodexEngine: isStatusPanelCodexEngine,
-    activeThreadId: options.activeThreadId,
-    itemsByThread: deferredThreadItemsByThread,
-    threadParentById: options.threadParentById,
-    threadStatusById: deferredThreadStatusById,
-  });
+  const { todoTotal, subagentTotal, fileChanges, commandTotal } =
+    useStatusPanelData(statusPanelItems, {
+      isCodexEngine: isStatusPanelCodexEngine,
+      activeThreadId: options.activeThreadId,
+      itemsByThread: deferredThreadItemsByThread,
+      threadParentById: options.threadParentById,
+      threadStatusById: deferredThreadStatusById,
+    });
   const hasStatusPanelActivity =
     todoTotal > 0 ||
     subagentTotal > 0 ||
@@ -882,209 +987,228 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       requestKey: (previous?.requestKey ?? 0) + 1,
     }));
   }, [openBottomStatusPanel]);
-  const globalRuntimeNoticeDock = useGlobalRuntimeNoticeDock(options.workspaces);
+  const globalRuntimeNoticeDock = useGlobalRuntimeNoticeDock(
+    options.workspaces,
+  );
   const composerRuntimeLifecycleState = resolveRuntimeLifecycleForComposer(
     globalRuntimeNoticeDock.runtimeRows,
     options.activeWorkspaceId,
     options.selectedEngine,
   );
-  const handleJumpToUserInputRequest = useCallback((request: RequestUserInputRequest) => {
-    if (focusUserInputRequestCard(request)) {
-      return;
-    }
-    dispatchMessageJumpEvent(request.params.item_id);
-  }, []);
+  const handleJumpToUserInputRequest = useCallback(
+    (request: RequestUserInputRequest) => {
+      if (focusUserInputRequestCard(request)) {
+        return;
+      }
+      dispatchMessageJumpEvent(request.params.item_id);
+    },
+    [],
+  );
   const isSharedSession = activeThreadSummary?.threadKind === "shared";
   const rewindWorkspaceGitState = deriveRewindWorkspaceGitState(
     options.gitStatus,
   );
 
-  const renderComposerNode = (
-    showStatusPanelToggleOverride?: boolean,
-  ) =>
+  const renderComposerNode = (showStatusPanelToggleOverride?: boolean) =>
     options.showComposer ? (
-      <Composer
-        items={deferredComposerLiveInputs.items}
-        activeThreadId={options.activeThreadId}
-        threadItemsByThread={deferredComposerLiveInputs.threadItemsByThread}
-        threadParentById={options.threadParentById}
-        threadStatusById={deferredComposerLiveInputs.threadStatusById}
-        onSend={options.onSend}
-        onQueue={options.onQueue}
-        onRequestContextCompaction={options.onRequestContextCompaction}
-        onStop={options.onStop}
-        completionEmailSelected={options.completionEmailSelected}
-        completionEmailDisabled={options.completionEmailDisabled}
-        onToggleCompletionEmail={options.onToggleCompletionEmail}
-        onRewind={options.onRewind}
-        rewindDialogRequest={rewindDialogRequest}
-        onRewindDialogRequestConsumed={handleRewindDialogRequestConsumed}
-        canStop={options.canStop}
-        disabled={options.isReviewing}
-        contextUsage={deferredComposerLiveInputs.tokenUsage}
-        contextDualViewEnabled={options.contextDualViewEnabled}
-        codexAutoCompactionEnabled={options.codexAutoCompactionEnabled}
-        codexAutoCompactionThresholdPercent={options.codexAutoCompactionThresholdPercent}
-        onCodexAutoCompactionSettingsChange={options.onCodexAutoCompactionSettingsChange}
-        isContextCompacting={
-          deferredComposerActiveThreadStatus?.isContextCompacting ??
-          activeThreadStatus?.isContextCompacting ??
-          false
-        }
-        codexCompactionLifecycleState={
-          deferredComposerActiveThreadStatus?.codexCompactionLifecycleState ??
-          activeThreadStatus?.codexCompactionLifecycleState ??
-          "idle"
-        }
-        codexCompactionSource={
-          deferredComposerActiveThreadStatus?.codexCompactionSource ??
-          activeThreadStatus?.codexCompactionSource ??
-          null
-        }
-        codexCompactionCompletedAt={
-          deferredComposerActiveThreadStatus?.codexCompactionCompletedAt ??
-          activeThreadStatus?.codexCompactionCompletedAt ??
-          null
-        }
-        lastTokenUsageUpdatedAt={
-          deferredComposerActiveThreadStatus?.lastTokenUsageUpdatedAt ??
-          activeThreadStatus?.lastTokenUsageUpdatedAt ??
-          null
-        }
-        accountRateLimits={deferredComposerLiveInputs.rateLimits}
-        usageShowRemaining={options.usageShowRemaining}
-        onRefreshAccountRateLimits={options.onRefreshAccountRateLimits}
-        queuedMessages={options.activeQueue}
-        userInputRequests={options.userInputRequests}
-        onJumpToUserInputRequest={handleJumpToUserInputRequest}
-        runtimeLifecycleState={composerRuntimeLifecycleState}
-        sendLabel={
-          options.composerSendLabel ??
-          (options.isProcessing && !options.steerEnabled ? t("messages.queue") : t("messages.send"))
-        }
-        steerEnabled={options.steerEnabled}
-        isProcessing={options.isProcessing}
-        draftText={options.draftText}
-        onDraftChange={options.onDraftChange}
-        attachedImages={options.activeImages}
-        onPickImages={options.onPickImages}
-        onAttachImages={options.onAttachImages}
-        onRemoveImage={options.onRemoveImage}
-        intentCanvasAttachments={options.pendingIntentCanvasDocuments}
-        onRemoveIntentCanvasAttachment={options.onRemovePendingIntentCanvas}
-        prefillDraft={options.prefillDraft}
-        onPrefillHandled={options.onPrefillHandled}
-        insertText={options.insertText}
-        onInsertHandled={options.onInsertHandled}
-        onEditQueued={options.onEditQueued}
-        onDeleteQueued={options.onDeleteQueued}
-        onFuseQueued={options.onFuseQueued}
-        canFuseQueuedMessages={options.canFuseActiveQueue}
-        fusingQueuedMessageId={options.activeFusingMessageId}
-        collaborationModes={options.collaborationModes}
-        collaborationModesEnabled={options.collaborationModesEnabled}
-        selectedCollaborationModeId={options.selectedCollaborationModeId}
-        onSelectCollaborationMode={options.onSelectCollaborationMode}
-        isSharedSession={isSharedSession}
-        engines={options.engines}
-        selectedEngine={options.selectedEngine}
-        providerProfileLabel={activeProviderProfileLabel}
-        onSelectEngine={options.onSelectEngine}
-        models={options.models}
-        selectedModelId={options.selectedModelId}
-        onSelectModel={options.onSelectModel}
-        reasoningOptions={options.reasoningOptions}
-        selectedEffort={options.selectedEffort}
-        onSelectEffort={options.onSelectEffort}
-        reasoningSupported={options.reasoningSupported}
-        onResolvedAlwaysThinkingChange={handleResolvedAlwaysThinkingChange}
-        opencodeAgents={options.opencodeAgents}
-        selectedOpenCodeAgent={options.selectedOpenCodeAgent}
-        onSelectOpenCodeAgent={options.onSelectOpenCodeAgent}
-        selectedAgent={composerSelectedAgent}
-        onAgentSelect={options.onSelectAgent}
-        onOpenAgentSettings={options.onOpenAgentSettings}
-        onOpenPromptSettings={options.onOpenPromptSettings}
-        onOpenModelSettings={options.onOpenModelSettings}
-        onRefreshModelConfig={options.onRefreshModelConfig}
-        isModelConfigRefreshing={options.isModelConfigRefreshing}
-        opencodeVariantOptions={options.opencodeVariantOptions}
-        selectedOpenCodeVariant={options.selectedOpenCodeVariant}
-        onSelectOpenCodeVariant={options.onSelectOpenCodeVariant}
-        accessMode={options.accessMode}
-        onSelectAccessMode={options.onSelectAccessMode}
-        skills={options.skills}
-        customSkillDirectories={options.customSkillDirectories}
-        prompts={options.prompts}
-        commands={composerCommands}
-        files={options.files}
-        directories={options.directories}
-        gitignoredFiles={options.gitignoredFiles}
-        gitignoredDirectories={options.gitignoredDirectories}
-        textareaRef={options.textareaRef}
-        historyKey={options.activeWorkspace?.id ?? null}
-        editorSettings={options.composerEditorSettings}
-        sendShortcut={options.composerSendShortcut}
-        textareaHeight={options.textareaHeight}
-        onTextareaHeightChange={options.onTextareaHeightChange}
-        dictationEnabled={options.dictationEnabled}
-        dictationState={options.dictationState}
-        dictationLevel={options.dictationLevel}
-        onToggleDictation={options.onToggleDictation}
-        onOpenDictationSettings={options.onOpenDictationSettings}
-        onOpenExperimentalSettings={options.onOpenExperimentalSettings}
-        dictationTranscript={options.dictationTranscript}
-        onDictationTranscriptHandled={options.onDictationTranscriptHandled}
-        dictationError={options.dictationError}
-        onDismissDictationError={options.onDismissDictationError}
-        dictationHint={options.dictationHint}
-        onDismissDictationHint={options.onDismissDictationHint}
-        linkedKanbanPanels={options.composerLinkedKanbanPanels}
-        selectedLinkedKanbanPanelId={options.selectedComposerKanbanPanelId}
-        onSelectLinkedKanbanPanel={options.onSelectComposerKanbanPanel}
-        kanbanContextMode={options.composerKanbanContextMode}
-        onKanbanContextModeChange={options.onComposerKanbanContextModeChange}
-        onOpenLinkedKanbanPanel={options.onOpenComposerKanbanPanel}
-        onOpenContextLedgerMemory={options.onOpenContextLedgerMemory}
-        onOpenContextLedgerNote={options.onOpenContextLedgerNote}
-        activeFilePath={options.activeComposerFilePath}
-        activeFileLineRange={options.activeComposerFileLineRange}
-        fileReferenceMode={options.fileReferenceMode}
-        activeWorkspaceId={options.activeWorkspaceId}
-        activeWorkspaceName={options.activeWorkspace?.name ?? null}
-        activeWorkspacePath={options.activeWorkspace?.path ?? null}
-        rewindWorkspaceGitState={rewindWorkspaceGitState}
-        plan={options.plan}
-        isPlanMode={options.isPlanMode}
-        onOpenDiffPath={(path) => options.onOpenFile(path)}
-        showStatusPanelToggleOverride={showStatusPanelToggleOverride}
-        statusPanelExpandedOverride={showBottomStatusPanel}
-        onToggleStatusPanelOverride={
-          showBottomStatusPanel ? options.onClosePlanPanel : options.onOpenPlanPanel
-        }
-        selectedCodeAnnotations={selectedCodeAnnotations}
-        onRemoveCodeAnnotation={handleRemoveCodeAnnotation}
-        onClearCodeAnnotations={handleClearCodeAnnotations}
-        reviewPrompt={options.reviewPrompt}
-        onReviewPromptClose={options.onReviewPromptClose}
-        onReviewPromptShowPreset={options.onReviewPromptShowPreset}
-        onReviewPromptChoosePreset={options.onReviewPromptChoosePreset}
-        highlightedPresetIndex={options.highlightedPresetIndex}
-        onReviewPromptHighlightPreset={options.onReviewPromptHighlightPreset}
-        highlightedBranchIndex={options.highlightedBranchIndex}
-        onReviewPromptHighlightBranch={options.onReviewPromptHighlightBranch}
-        highlightedCommitIndex={options.highlightedCommitIndex}
-        onReviewPromptHighlightCommit={options.onReviewPromptHighlightCommit}
-        onReviewPromptKeyDown={options.onReviewPromptKeyDown}
-        onReviewPromptSelectBranch={options.onReviewPromptSelectBranch}
-        onReviewPromptSelectBranchAtIndex={options.onReviewPromptSelectBranchAtIndex}
-        onReviewPromptConfirmBranch={options.onReviewPromptConfirmBranch}
-        onReviewPromptSelectCommit={options.onReviewPromptSelectCommit}
-        onReviewPromptSelectCommitAtIndex={options.onReviewPromptSelectCommitAtIndex}
-        onReviewPromptConfirmCommit={options.onReviewPromptConfirmCommit}
-        onReviewPromptUpdateCustomInstructions={options.onReviewPromptUpdateCustomInstructions}
-        onReviewPromptConfirmCustom={options.onReviewPromptConfirmCustom}
-      />
+      <Profiler id="composer" onRender={handleRuntimeProfileRender}>
+        <Composer
+          items={deferredComposerLiveInputs.items}
+          activeThreadId={options.activeThreadId}
+          threadItemsByThread={deferredComposerLiveInputs.threadItemsByThread}
+          threadParentById={options.threadParentById}
+          threadStatusById={deferredComposerLiveInputs.threadStatusById}
+          onSend={options.onSend}
+          onQueue={options.onQueue}
+          onRequestContextCompaction={options.onRequestContextCompaction}
+          onStop={options.onStop}
+          completionEmailSelected={options.completionEmailSelected}
+          completionEmailDisabled={options.completionEmailDisabled}
+          onToggleCompletionEmail={options.onToggleCompletionEmail}
+          onRewind={options.onRewind}
+          rewindDialogRequest={rewindDialogRequest}
+          onRewindDialogRequestConsumed={handleRewindDialogRequestConsumed}
+          canStop={options.canStop}
+          disabled={options.isReviewing}
+          contextUsage={deferredComposerLiveInputs.tokenUsage}
+          contextDualViewEnabled={options.contextDualViewEnabled}
+          codexAutoCompactionEnabled={options.codexAutoCompactionEnabled}
+          codexAutoCompactionThresholdPercent={
+            options.codexAutoCompactionThresholdPercent
+          }
+          onCodexAutoCompactionSettingsChange={
+            options.onCodexAutoCompactionSettingsChange
+          }
+          isContextCompacting={
+            deferredComposerActiveThreadStatus?.isContextCompacting ??
+            activeThreadStatus?.isContextCompacting ??
+            false
+          }
+          codexCompactionLifecycleState={
+            deferredComposerActiveThreadStatus?.codexCompactionLifecycleState ??
+            activeThreadStatus?.codexCompactionLifecycleState ??
+            "idle"
+          }
+          codexCompactionSource={
+            deferredComposerActiveThreadStatus?.codexCompactionSource ??
+            activeThreadStatus?.codexCompactionSource ??
+            null
+          }
+          codexCompactionCompletedAt={
+            deferredComposerActiveThreadStatus?.codexCompactionCompletedAt ??
+            activeThreadStatus?.codexCompactionCompletedAt ??
+            null
+          }
+          lastTokenUsageUpdatedAt={
+            deferredComposerActiveThreadStatus?.lastTokenUsageUpdatedAt ??
+            activeThreadStatus?.lastTokenUsageUpdatedAt ??
+            null
+          }
+          accountRateLimits={deferredComposerLiveInputs.rateLimits}
+          usageShowRemaining={options.usageShowRemaining}
+          onRefreshAccountRateLimits={options.onRefreshAccountRateLimits}
+          queuedMessages={options.activeQueue}
+          userInputRequests={options.userInputRequests}
+          onJumpToUserInputRequest={handleJumpToUserInputRequest}
+          runtimeLifecycleState={composerRuntimeLifecycleState}
+          sendLabel={
+            options.composerSendLabel ??
+            (options.isProcessing && !options.steerEnabled
+              ? t("messages.queue")
+              : t("messages.send"))
+          }
+          steerEnabled={options.steerEnabled}
+          isProcessing={options.isProcessing}
+          draftText={options.draftText}
+          onDraftChange={options.onDraftChange}
+          attachedImages={options.activeImages}
+          onPickImages={options.onPickImages}
+          onAttachImages={options.onAttachImages}
+          onRemoveImage={options.onRemoveImage}
+          intentCanvasAttachments={options.pendingIntentCanvasDocuments}
+          onRemoveIntentCanvasAttachment={options.onRemovePendingIntentCanvas}
+          prefillDraft={options.prefillDraft}
+          onPrefillHandled={options.onPrefillHandled}
+          insertText={options.insertText}
+          onInsertHandled={options.onInsertHandled}
+          onEditQueued={options.onEditQueued}
+          onDeleteQueued={options.onDeleteQueued}
+          onFuseQueued={options.onFuseQueued}
+          canFuseQueuedMessages={options.canFuseActiveQueue}
+          fusingQueuedMessageId={options.activeFusingMessageId}
+          collaborationModes={options.collaborationModes}
+          collaborationModesEnabled={options.collaborationModesEnabled}
+          selectedCollaborationModeId={options.selectedCollaborationModeId}
+          onSelectCollaborationMode={options.onSelectCollaborationMode}
+          isSharedSession={isSharedSession}
+          engines={options.engines}
+          selectedEngine={options.selectedEngine}
+          providerProfileLabel={activeProviderProfileLabel}
+          onSelectEngine={options.onSelectEngine}
+          models={options.models}
+          selectedModelId={options.selectedModelId}
+          onSelectModel={options.onSelectModel}
+          reasoningOptions={options.reasoningOptions}
+          selectedEffort={options.selectedEffort}
+          onSelectEffort={options.onSelectEffort}
+          reasoningSupported={options.reasoningSupported}
+          onResolvedAlwaysThinkingChange={handleResolvedAlwaysThinkingChange}
+          opencodeAgents={options.opencodeAgents}
+          selectedOpenCodeAgent={options.selectedOpenCodeAgent}
+          onSelectOpenCodeAgent={options.onSelectOpenCodeAgent}
+          selectedAgent={composerSelectedAgent}
+          onAgentSelect={options.onSelectAgent}
+          onOpenAgentSettings={options.onOpenAgentSettings}
+          onOpenPromptSettings={options.onOpenPromptSettings}
+          onOpenModelSettings={options.onOpenModelSettings}
+          onRefreshModelConfig={options.onRefreshModelConfig}
+          isModelConfigRefreshing={options.isModelConfigRefreshing}
+          opencodeVariantOptions={options.opencodeVariantOptions}
+          selectedOpenCodeVariant={options.selectedOpenCodeVariant}
+          onSelectOpenCodeVariant={options.onSelectOpenCodeVariant}
+          accessMode={options.accessMode}
+          onSelectAccessMode={options.onSelectAccessMode}
+          skills={options.skills}
+          customSkillDirectories={options.customSkillDirectories}
+          prompts={options.prompts}
+          commands={composerCommands}
+          files={options.files}
+          directories={options.directories}
+          gitignoredFiles={options.gitignoredFiles}
+          gitignoredDirectories={options.gitignoredDirectories}
+          textareaRef={options.textareaRef}
+          historyKey={options.activeWorkspace?.id ?? null}
+          editorSettings={options.composerEditorSettings}
+          sendShortcut={options.composerSendShortcut}
+          textareaHeight={options.textareaHeight}
+          onTextareaHeightChange={options.onTextareaHeightChange}
+          dictationEnabled={options.dictationEnabled}
+          dictationState={options.dictationState}
+          dictationLevel={options.dictationLevel}
+          onToggleDictation={options.onToggleDictation}
+          onOpenDictationSettings={options.onOpenDictationSettings}
+          onOpenExperimentalSettings={options.onOpenExperimentalSettings}
+          dictationTranscript={options.dictationTranscript}
+          onDictationTranscriptHandled={options.onDictationTranscriptHandled}
+          dictationError={options.dictationError}
+          onDismissDictationError={options.onDismissDictationError}
+          dictationHint={options.dictationHint}
+          onDismissDictationHint={options.onDismissDictationHint}
+          linkedKanbanPanels={options.composerLinkedKanbanPanels}
+          selectedLinkedKanbanPanelId={options.selectedComposerKanbanPanelId}
+          onSelectLinkedKanbanPanel={options.onSelectComposerKanbanPanel}
+          kanbanContextMode={options.composerKanbanContextMode}
+          onKanbanContextModeChange={options.onComposerKanbanContextModeChange}
+          onOpenLinkedKanbanPanel={options.onOpenComposerKanbanPanel}
+          onOpenContextLedgerMemory={options.onOpenContextLedgerMemory}
+          onOpenContextLedgerNote={options.onOpenContextLedgerNote}
+          activeFilePath={options.activeComposerFilePath}
+          activeFileLineRange={options.activeComposerFileLineRange}
+          fileReferenceMode={options.fileReferenceMode}
+          activeWorkspaceId={options.activeWorkspaceId}
+          activeWorkspaceName={options.activeWorkspace?.name ?? null}
+          activeWorkspacePath={options.activeWorkspace?.path ?? null}
+          rewindWorkspaceGitState={rewindWorkspaceGitState}
+          plan={options.plan}
+          isPlanMode={options.isPlanMode}
+          onOpenDiffPath={(path) => options.onOpenFile(path)}
+          showStatusPanelToggleOverride={showStatusPanelToggleOverride}
+          statusPanelExpandedOverride={showBottomStatusPanel}
+          onToggleStatusPanelOverride={
+            showBottomStatusPanel
+              ? options.onClosePlanPanel
+              : options.onOpenPlanPanel
+          }
+          selectedCodeAnnotations={selectedCodeAnnotations}
+          onRemoveCodeAnnotation={handleRemoveCodeAnnotation}
+          onClearCodeAnnotations={handleClearCodeAnnotations}
+          reviewPrompt={options.reviewPrompt}
+          onReviewPromptClose={options.onReviewPromptClose}
+          onReviewPromptShowPreset={options.onReviewPromptShowPreset}
+          onReviewPromptChoosePreset={options.onReviewPromptChoosePreset}
+          highlightedPresetIndex={options.highlightedPresetIndex}
+          onReviewPromptHighlightPreset={options.onReviewPromptHighlightPreset}
+          highlightedBranchIndex={options.highlightedBranchIndex}
+          onReviewPromptHighlightBranch={options.onReviewPromptHighlightBranch}
+          highlightedCommitIndex={options.highlightedCommitIndex}
+          onReviewPromptHighlightCommit={options.onReviewPromptHighlightCommit}
+          onReviewPromptKeyDown={options.onReviewPromptKeyDown}
+          onReviewPromptSelectBranch={options.onReviewPromptSelectBranch}
+          onReviewPromptSelectBranchAtIndex={
+            options.onReviewPromptSelectBranchAtIndex
+          }
+          onReviewPromptConfirmBranch={options.onReviewPromptConfirmBranch}
+          onReviewPromptSelectCommit={options.onReviewPromptSelectCommit}
+          onReviewPromptSelectCommitAtIndex={
+            options.onReviewPromptSelectCommitAtIndex
+          }
+          onReviewPromptConfirmCommit={options.onReviewPromptConfirmCommit}
+          onReviewPromptUpdateCustomInstructions={
+            options.onReviewPromptUpdateCustomInstructions
+          }
+          onReviewPromptConfirmCustom={options.onReviewPromptConfirmCustom}
+        />
+      </Profiler>
     ) : null;
   const composerNode = renderComposerNode(false);
   const homeComposerNode = renderComposerNode(false);
@@ -1099,7 +1223,10 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   );
 
   const errorToastsNode = (
-    <ErrorToasts toasts={options.errorToasts} onDismiss={options.onDismissErrorToast} />
+    <ErrorToasts
+      toasts={options.errorToasts}
+      onDismiss={options.onDismissErrorToast}
+    />
   );
   const globalRuntimeNoticeDockNode = showGlobalRuntimeNoticeDock ? (
     <GlobalRuntimeNoticeDock
@@ -1142,7 +1269,9 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       worktreeRename={options.worktreeRename}
       disableBranchMenu={options.isWorktreeWorkspace}
       parentPath={options.activeParentWorkspace?.path ?? null}
-      worktreePath={options.isWorktreeWorkspace ? options.activeWorkspace.path : null}
+      worktreePath={
+        options.isWorktreeWorkspace ? options.activeWorkspace.path : null
+      }
       openTargets={options.openAppTargets}
       openAppIconById={options.openAppIconById}
       selectedOpenAppId={options.selectedOpenAppId}
@@ -1184,7 +1313,10 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   });
 
   const tabletNavNode = (
-    <TabletNav activeTab={options.tabletNavTab} onSelect={options.onSelectTab} />
+    <TabletNav
+      activeTab={options.tabletNavTab}
+      onSelect={options.onSelectTab}
+    />
   );
 
   const tabBarNode = (
@@ -1222,7 +1354,8 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         graph = await loadCodeSelectionRelationshipGraph({
           workspaceId: options.activeWorkspace.id,
           anchor,
-          storageLocation: options.projectMapDatasetController?.activeReadLocation,
+          storageLocation:
+            options.projectMapDatasetController?.activeReadLocation,
         });
       } catch (error) {
         pushErrorToast({
@@ -1247,7 +1380,11 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         seedSemanticGraphs: [graph],
       });
     },
-    [onOpenIntentCanvas, options.activeWorkspace, options.projectMapDatasetController?.activeReadLocation],
+    [
+      onOpenIntentCanvas,
+      options.activeWorkspace,
+      options.projectMapDatasetController?.activeReadLocation,
+    ],
   );
   const centerMode = options.centerMode;
   const setCenterMode = options.setCenterMode;
@@ -1328,6 +1465,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         files={options.files}
         directories={options.directories}
         directoryMetadata={options.directoryMetadata}
+        sourceVersion={options.fileTreeSourceVersion}
         isLoading={options.fileTreeLoading}
         loadError={options.fileTreeLoadError}
         filePanelMode={options.filePanelMode}
@@ -1423,98 +1561,99 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   } else {
     gitDiffPanelNode = (
       <Suspense fallback={<HeavyPanelFallback />}>
-      <GitDiffPanel
-        workspaceId={options.activeWorkspace?.id ?? null}
-        workspacePath={options.activeWorkspace?.path ?? null}
-        mode={options.gitPanelMode}
-        onModeChange={options.onGitPanelModeChange}
-        onOpenGitHistoryPanel={options.onOpenGitHistoryPanel}
-        isGitHistoryOpen={options.appMode === "gitHistory"}
-        diffEntries={options.gitDiffs}
-        gitDiffListView={options.gitDiffListView}
-        onGitDiffListViewChange={options.onGitDiffListViewChange}
-        toggleGitDiffListViewShortcut={options.toggleGitDiffListViewShortcut}
-        filePanelMode={options.filePanelMode}
-        onFilePanelModeChange={options.onFilePanelModeChange}
-        worktreeApplyLabel={options.worktreeApplyLabel}
-        worktreeApplyTitle={options.worktreeApplyTitle}
-        worktreeApplyLoading={options.worktreeApplyLoading}
-        worktreeApplyError={options.worktreeApplyError}
-        worktreeApplySuccess={options.worktreeApplySuccess}
-        onApplyWorktreeChanges={options.onApplyWorktreeChanges}
-        branchName={options.gitStatus.branchName || t("workspace.unknownBranch")}
-        totalAdditions={options.gitStatus.totalAdditions}
-        totalDeletions={options.gitStatus.totalDeletions}
-        fileStatus={options.fileStatus}
-        diffViewStyle={options.gitDiffViewStyle}
-        onDiffViewStyleChange={options.onGitDiffViewStyleChange}
-        error={options.gitStatus.error}
-        logError={options.gitLogError}
-        logLoading={options.gitLogLoading}
-        stagedFiles={canonicalGitPanelChanges.stagedFiles}
-        unstagedFiles={canonicalGitPanelChanges.unstagedFiles}
-        onSelectFile={options.onSelectDiff}
-        onOpenFile={options.onOpenFile}
-        selectedPath={sidebarSelectedDiffPath}
-        logEntries={options.gitLogEntries}
-        logTotal={options.gitLogTotal}
-        logAhead={options.gitLogAhead}
-        logBehind={options.gitLogBehind}
-        logAheadEntries={options.gitLogAheadEntries}
-        logBehindEntries={options.gitLogBehindEntries}
-        logUpstream={options.gitLogUpstream}
-        selectedCommitSha={options.selectedCommitSha}
-        onSelectCommit={options.onSelectCommit}
-        issues={options.gitIssues}
-        issuesTotal={options.gitIssuesTotal}
-        issuesLoading={options.gitIssuesLoading}
-        issuesError={options.gitIssuesError}
-        pullRequests={options.gitPullRequests}
-        pullRequestsTotal={options.gitPullRequestsTotal}
-        pullRequestsLoading={options.gitPullRequestsLoading}
-        pullRequestsError={options.gitPullRequestsError}
-        selectedPullRequest={options.selectedPullRequestNumber}
-        onSelectPullRequest={options.onSelectPullRequest}
-        gitRemoteUrl={options.gitRemoteUrl}
-        gitRoot={options.gitRoot}
-        gitRootCandidates={options.gitRootCandidates}
-        gitRootScanDepth={options.gitRootScanDepth}
-        gitRootScanLoading={options.gitRootScanLoading}
-        gitRootScanError={options.gitRootScanError}
-        gitRootScanHasScanned={options.gitRootScanHasScanned}
-        onGitRootScanDepthChange={options.onGitRootScanDepthChange}
-        onScanGitRoots={options.onScanGitRoots}
-        onSelectGitRoot={options.onSelectGitRoot}
-        onClearGitRoot={options.onClearGitRoot}
-        onPickGitRoot={options.onPickGitRoot}
-        onStageAllChanges={options.onStageGitAll}
-        onStageFile={options.onStageGitFile}
-        onUnstageFile={options.onUnstageGitFile}
-        onRevertFile={options.onRevertGitFile}
-        onRevertAllChanges={options.onRevertAllGitChanges}
-        commitMessage={options.commitMessage}
-        commitMessageLoading={options.commitMessageLoading}
-        commitMessageError={options.commitMessageError}
-        onCommitMessageChange={options.onCommitMessageChange}
-        onGenerateCommitMessage={options.onGenerateCommitMessage}
-        onCommit={options.onCommit}
-        onCommitAndPush={options.onCommitAndPush}
-        onCommitAndSync={options.onCommitAndSync}
-        onPush={options.onPush}
-        onSync={options.onSync}
-        commitLoading={options.commitLoading}
-        pushLoading={options.pushLoading}
-        syncLoading={options.syncLoading}
-        commitError={options.commitError}
-        pushError={options.pushError}
-        syncError={options.syncError}
-        commitsAhead={options.commitsAhead}
-        onRefreshGitStatus={options.queueGitStatusRefresh}
-        onRefreshGitDiffs={options.refreshGitDiffs}
-        onCreateCodeAnnotation={handleCreateCodeAnnotation}
-        onRemoveCodeAnnotation={handleRemoveCodeAnnotation}
-        codeAnnotations={selectedCodeAnnotations}
-      />
+        <GitDiffPanel
+          workspaceId={options.activeWorkspace?.id ?? null}
+          workspacePath={options.activeWorkspace?.path ?? null}
+          mode={options.gitPanelMode}
+          onModeChange={options.onGitPanelModeChange}
+          onOpenGitHistoryPanel={options.onOpenGitHistoryPanel}
+          isGitHistoryOpen={options.appMode === "gitHistory"}
+          diffEntries={options.gitDiffs}
+          gitDiffListView={options.gitDiffListView}
+          onGitDiffListViewChange={options.onGitDiffListViewChange}
+          toggleGitDiffListViewShortcut={options.toggleGitDiffListViewShortcut}
+          filePanelMode={options.filePanelMode}
+          onFilePanelModeChange={options.onFilePanelModeChange}
+          worktreeApplyLabel={options.worktreeApplyLabel}
+          worktreeApplyTitle={options.worktreeApplyTitle}
+          worktreeApplyLoading={options.worktreeApplyLoading}
+          worktreeApplyError={options.worktreeApplyError}
+          worktreeApplySuccess={options.worktreeApplySuccess}
+          onApplyWorktreeChanges={options.onApplyWorktreeChanges}
+          branchName={
+            options.gitStatus.branchName || t("workspace.unknownBranch")
+          }
+          totalAdditions={options.gitStatus.totalAdditions}
+          totalDeletions={options.gitStatus.totalDeletions}
+          fileStatus={options.fileStatus}
+          diffViewStyle={options.gitDiffViewStyle}
+          onDiffViewStyleChange={options.onGitDiffViewStyleChange}
+          error={options.gitStatus.error}
+          logError={options.gitLogError}
+          logLoading={options.gitLogLoading}
+          stagedFiles={canonicalGitPanelChanges.stagedFiles}
+          unstagedFiles={canonicalGitPanelChanges.unstagedFiles}
+          onSelectFile={options.onSelectDiff}
+          onOpenFile={options.onOpenFile}
+          selectedPath={sidebarSelectedDiffPath}
+          logEntries={options.gitLogEntries}
+          logTotal={options.gitLogTotal}
+          logAhead={options.gitLogAhead}
+          logBehind={options.gitLogBehind}
+          logAheadEntries={options.gitLogAheadEntries}
+          logBehindEntries={options.gitLogBehindEntries}
+          logUpstream={options.gitLogUpstream}
+          selectedCommitSha={options.selectedCommitSha}
+          onSelectCommit={options.onSelectCommit}
+          issues={options.gitIssues}
+          issuesTotal={options.gitIssuesTotal}
+          issuesLoading={options.gitIssuesLoading}
+          issuesError={options.gitIssuesError}
+          pullRequests={options.gitPullRequests}
+          pullRequestsTotal={options.gitPullRequestsTotal}
+          pullRequestsLoading={options.gitPullRequestsLoading}
+          pullRequestsError={options.gitPullRequestsError}
+          selectedPullRequest={options.selectedPullRequestNumber}
+          onSelectPullRequest={options.onSelectPullRequest}
+          gitRemoteUrl={options.gitRemoteUrl}
+          gitRoot={options.gitRoot}
+          gitRootCandidates={options.gitRootCandidates}
+          gitRootScanDepth={options.gitRootScanDepth}
+          gitRootScanLoading={options.gitRootScanLoading}
+          gitRootScanError={options.gitRootScanError}
+          gitRootScanHasScanned={options.gitRootScanHasScanned}
+          onGitRootScanDepthChange={options.onGitRootScanDepthChange}
+          onScanGitRoots={options.onScanGitRoots}
+          onSelectGitRoot={options.onSelectGitRoot}
+          onClearGitRoot={options.onClearGitRoot}
+          onPickGitRoot={options.onPickGitRoot}
+          onStageAllChanges={options.onStageGitAll}
+          onStageFile={options.onStageGitFile}
+          onUnstageFile={options.onUnstageGitFile}
+          onRevertFile={options.onRevertGitFile}
+          onRevertAllChanges={options.onRevertAllGitChanges}
+          commitMessage={options.commitMessage}
+          commitMessageLoading={options.commitMessageLoading}
+          commitMessageError={options.commitMessageError}
+          onCommitMessageChange={options.onCommitMessageChange}
+          onGenerateCommitMessage={options.onGenerateCommitMessage}
+          onCommit={options.onCommit}
+          onCommitAndPush={options.onCommitAndPush}
+          onCommitAndSync={options.onCommitAndSync}
+          onPush={options.onPush}
+          onSync={options.onSync}
+          commitLoading={options.commitLoading}
+          pushLoading={options.pushLoading}
+          syncLoading={options.syncLoading}
+          commitError={options.commitError}
+          pushError={options.pushError}
+          syncError={options.syncError}
+          commitsAhead={options.commitsAhead}
+          onRefreshGitDiffs={options.refreshGitDiffs}
+          onCreateCodeAnnotation={handleCreateCodeAnnotation}
+          onRemoveCodeAnnotation={handleRemoveCodeAnnotation}
+          codeAnnotations={selectedCodeAnnotations}
+        />
       </Suspense>
     );
   }
@@ -1547,54 +1686,62 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   const fileViewPanelNode =
     options.editorFilePath && options.activeWorkspace ? (
       <Suspense fallback={<HeavyPanelFallback />}>
-      <FileViewPanel
-        workspaceId={options.activeWorkspace.id}
-        workspaceName={options.activeWorkspace.name}
-        workspacePath={options.activeWorkspace.path}
-        gitRoot={options.gitRoot}
-        customSpecRoot={activeWorkspaceCustomSpecRoot}
-        filePath={options.editorFilePath}
-        navigationTarget={options.editorNavigationTarget}
-        highlightMarkers={
-          options.editorHighlightTarget?.path === options.editorFilePath
-            ? options.editorHighlightTarget.markers
-            : null
-        }
-        gitStatusFiles={options.gitStatus.files}
-        openTabs={options.openEditorTabs}
-        activeTabPath={options.editorFilePath}
-        onActivateTab={options.onActivateEditorTab}
-        onCloseTab={options.onCloseEditorTab}
-        onCloseAllTabs={options.onCloseAllEditorTabs}
-        fileReferenceMode={options.fileReferenceMode}
-        onFileReferenceModeChange={options.onFileReferenceModeChange}
-        activeFileLineRange={options.activeComposerFileLineRange}
-        onActiveFileLineRangeChange={options.onActiveEditorLineRangeChange}
-        onActiveCodeAnchorChange={options.onActiveCodeSelectionAnchorChange}
-        onAssociateIntentCanvasCodeAnchor={handleAssociateIntentCanvasCodeAnchor}
-        openTargets={options.openAppTargets}
-        openAppIconById={options.openAppIconById}
-        selectedOpenAppId={options.selectedOpenAppId}
-        onSelectOpenAppId={options.onSelectOpenAppId}
-        editorSplitLayout={options.editorSplitLayout}
-        onToggleEditorSplitLayout={options.onToggleEditorSplitLayout}
-        isEditorFileMaximized={options.isEditorFileMaximized}
-        onToggleEditorFileMaximized={options.onToggleEditorFileMaximized}
-        onNavigateToLocation={options.onOpenFile}
-        onClose={options.onExitEditor}
-        onInsertText={options.onInsertComposerText}
-        onCreateCodeAnnotation={handleCreateCodeAnnotation}
-        onRemoveCodeAnnotation={handleRemoveCodeAnnotation}
-        codeAnnotations={selectedCodeAnnotations}
-          externalChangeMonitoringEnabled={options.externalChangeMonitoringEnabled}
+        <FileViewPanel
+          workspaceId={options.activeWorkspace.id}
+          workspaceName={options.activeWorkspace.name}
+          workspacePath={options.activeWorkspace.path}
+          gitRoot={options.gitRoot}
+          customSpecRoot={activeWorkspaceCustomSpecRoot}
+          filePath={options.editorFilePath}
+          navigationTarget={options.editorNavigationTarget}
+          highlightMarkers={
+            options.editorHighlightTarget?.path === options.editorFilePath
+              ? options.editorHighlightTarget.markers
+              : null
+          }
+          gitStatusFiles={options.gitStatus.files}
+          openTabs={options.openEditorTabs}
+          activeTabPath={options.editorFilePath}
+          onActivateTab={options.onActivateEditorTab}
+          onCloseTab={options.onCloseEditorTab}
+          onCloseAllTabs={options.onCloseAllEditorTabs}
+          fileReferenceMode={options.fileReferenceMode}
+          onFileReferenceModeChange={options.onFileReferenceModeChange}
+          activeFileLineRange={options.activeComposerFileLineRange}
+          onActiveFileLineRangeChange={options.onActiveEditorLineRangeChange}
+          onActiveCodeAnchorChange={options.onActiveCodeSelectionAnchorChange}
+          onAssociateIntentCanvasCodeAnchor={
+            handleAssociateIntentCanvasCodeAnchor
+          }
+          openTargets={options.openAppTargets}
+          openAppIconById={options.openAppIconById}
+          selectedOpenAppId={options.selectedOpenAppId}
+          onSelectOpenAppId={options.onSelectOpenAppId}
+          editorSplitLayout={options.editorSplitLayout}
+          onToggleEditorSplitLayout={options.onToggleEditorSplitLayout}
+          isEditorFileMaximized={options.isEditorFileMaximized}
+          onToggleEditorFileMaximized={options.onToggleEditorFileMaximized}
+          onNavigateToLocation={options.onOpenFile}
+          onClose={options.onExitEditor}
+          onInsertText={options.onInsertComposerText}
+          onCreateCodeAnnotation={handleCreateCodeAnnotation}
+          onRemoveCodeAnnotation={handleRemoveCodeAnnotation}
+          codeAnnotations={selectedCodeAnnotations}
+          externalChangeMonitoringEnabled={
+            options.externalChangeMonitoringEnabled
+          }
           externalChangeTransportMode={options.externalChangeTransportMode}
           externalChangeApplyMode={options.externalChangeApplyMode}
-          externalChangeAutoApplyDebounceMs={options.externalChangeAutoApplyDebounceMs}
-          markdownPreviewSnapshotMode={options.liveEditPreviewEnabled ? "live" : "stable"}
+          externalChangeAutoApplyDebounceMs={
+            options.externalChangeAutoApplyDebounceMs
+          }
+          markdownPreviewSnapshotMode={
+            options.liveEditPreviewEnabled ? "live" : "stable"
+          }
           fileRenderPressure={fileRenderPressure}
-        saveFileShortcut={options.saveFileShortcut}
-        findInFileShortcut={options.findInFileShortcut}
-      />
+          saveFileShortcut={options.saveFileShortcut}
+          findInFileShortcut={options.findInFileShortcut}
+        />
       </Suspense>
     ) : null;
 
@@ -1603,10 +1750,14 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     [options.gitStatus.files],
   );
   const orchestrationTaskStore = useOrchestrationTaskStore();
-  const [isOrchestrationCenterOpen, setIsOrchestrationCenterOpen] = useState(false);
-  const [selectedOrchestrationTaskId, setSelectedOrchestrationTaskId] = useState<string | null>(null);
-  const [projectMapSourceFocusNodeId, setProjectMapSourceFocusNodeId] = useState<string | null>(null);
-  const projectMapDataset = options.projectMapDatasetController?.dataset ?? null;
+  const [isOrchestrationCenterOpen, setIsOrchestrationCenterOpen] =
+    useState(false);
+  const [selectedOrchestrationTaskId, setSelectedOrchestrationTaskId] =
+    useState<string | null>(null);
+  const [projectMapSourceFocusNodeId, setProjectMapSourceFocusNodeId] =
+    useState<string | null>(null);
+  const projectMapDataset =
+    options.projectMapDatasetController?.dataset ?? null;
   const projectMapRelationshipContextPack =
     options.projectMapDatasetController?.relationshipContextPack ?? null;
   const orchestrationWorkspaceId =
@@ -1614,7 +1765,8 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     projectMapDataset?.manifest.storageKey ??
     null;
   const persistedOrchestrationTasks = orchestrationTaskStore.tasks;
-  const [specWorkspaceSnapshot, setSpecWorkspaceSnapshot] = useState<SpecWorkspaceSnapshot | null>(null);
+  const [specWorkspaceSnapshot, setSpecWorkspaceSnapshot] =
+    useState<SpecWorkspaceSnapshot | null>(null);
   useEffect(() => {
     if (!orchestrationWorkspaceId) {
       setSpecWorkspaceSnapshot(null);
@@ -1634,7 +1786,10 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       })
       .catch((error) => {
         if (!cancelled) {
-          console.warn("[agent-orchestration] Failed to build SpecHub provider snapshot", error);
+          console.warn(
+            "[agent-orchestration] Failed to build SpecHub provider snapshot",
+            error,
+          );
           setSpecWorkspaceSnapshot(null);
         }
       });
@@ -1647,41 +1802,42 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     options.directories,
     options.files,
   ]);
-  const orchestrationProviderSnapshots = useMemo(
-    () => {
-      if (!orchestrationWorkspaceId) {
-        return [];
-      }
-      const coreSnapshots = collectCoreOrchestrationProviderSnapshots({
-        workspaceId: orchestrationWorkspaceId,
-        projectMapDataset,
-        projectMapRelationshipContextPack,
-        taskRuns: taskRunStore.runs,
-      });
-      if (
-        !specWorkspaceSnapshot ||
-        (specWorkspaceSnapshot.provider === "unknown" && specWorkspaceSnapshot.specRoot?.source !== "custom")
-      ) {
-        return coreSnapshots;
-      }
-      return [
-        ...coreSnapshots,
-        readSpecHubOrchestrationCandidates({
-          workspaceId: orchestrationWorkspaceId,
-          snapshot: specWorkspaceSnapshot,
-        }),
-      ];
-    },
-    [
-      orchestrationWorkspaceId,
+  const orchestrationProviderSnapshots = useMemo(() => {
+    if (!orchestrationWorkspaceId) {
+      return [];
+    }
+    const coreSnapshots = collectCoreOrchestrationProviderSnapshots({
+      workspaceId: orchestrationWorkspaceId,
       projectMapDataset,
       projectMapRelationshipContextPack,
-      specWorkspaceSnapshot,
-      taskRunStore.runs,
-    ],
-  );
+      taskRuns: taskRunStore.runs,
+    });
+    if (
+      !specWorkspaceSnapshot ||
+      (specWorkspaceSnapshot.provider === "unknown" &&
+        specWorkspaceSnapshot.specRoot?.source !== "custom")
+    ) {
+      return coreSnapshots;
+    }
+    return [
+      ...coreSnapshots,
+      readSpecHubOrchestrationCandidates({
+        workspaceId: orchestrationWorkspaceId,
+        snapshot: specWorkspaceSnapshot,
+      }),
+    ];
+  }, [
+    orchestrationWorkspaceId,
+    projectMapDataset,
+    projectMapRelationshipContextPack,
+    specWorkspaceSnapshot,
+    taskRunStore.runs,
+  ]);
   useEffect(() => {
-    if (orchestrationTaskStore.tasks.length === 0 || taskRunStore.runs.length === 0) {
+    if (
+      orchestrationTaskStore.tasks.length === 0 ||
+      taskRunStore.runs.length === 0
+    ) {
       return;
     }
 
@@ -1714,9 +1870,15 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       }
     };
 
-    window.addEventListener(OPEN_ORCHESTRATION_TASK_EVENT, handleOpenOrchestrationTaskEvent);
+    window.addEventListener(
+      OPEN_ORCHESTRATION_TASK_EVENT,
+      handleOpenOrchestrationTaskEvent,
+    );
     return () => {
-      window.removeEventListener(OPEN_ORCHESTRATION_TASK_EVENT, handleOpenOrchestrationTaskEvent);
+      window.removeEventListener(
+        OPEN_ORCHESTRATION_TASK_EVENT,
+        handleOpenOrchestrationTaskEvent,
+      );
     };
   }, [handleOpenOrchestrationTask]);
   const handleBackToProjectMapFromOrchestration = useCallback(() => {
@@ -1725,7 +1887,10 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   const handleOpenOrchestrationSourceRef = useCallback(
     (input: { task: OrchestrationTask; sourceRef: OrchestrationSourceRef }) => {
       const { sourceRef } = input;
-      if (sourceRef.providerId === "project-map" && sourceRef.kind === "project_map_node") {
+      if (
+        sourceRef.providerId === "project-map" &&
+        sourceRef.kind === "project_map_node"
+      ) {
         setProjectMapSourceFocusNodeId(sourceRef.id);
         setIsOrchestrationCenterOpen(false);
         return;
@@ -1775,13 +1940,18 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   const handleOrchestrationReviewAction = useCallback(
     (request: OrchestrationReviewActionRequest) => {
       const result = applyOrchestrationReviewAction(request);
-      setSelectedOrchestrationTaskId(result.followUpTask?.taskId ?? result.task.taskId);
+      setSelectedOrchestrationTaskId(
+        result.followUpTask?.taskId ?? result.task.taskId,
+      );
     },
     [],
   );
   const handleArchiveOrchestrationTask = useCallback(
     (task: OrchestrationTask) => {
-      const nextStore = archiveOrchestrationTask(orchestrationTaskStore, task.taskId);
+      const nextStore = archiveOrchestrationTask(
+        orchestrationTaskStore,
+        task.taskId,
+      );
       saveOrchestrationTaskStore(nextStore);
       setSelectedOrchestrationTaskId(null);
     },
@@ -1838,35 +2008,39 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       onBackToProjectMap={handleBackToProjectMapFromOrchestration}
     />
   ) : (
-    <ProjectMapPanel
-      key={options.activeWorkspace?.id ?? "no-workspace"}
-      activeWorkspace={options.activeWorkspace ?? null}
-      workspaceName={options.activeWorkspace?.name ?? null}
-      selectedEngine={options.selectedEngine ?? null}
-      selectedModelId={options.selectedModelId}
-      models={options.models}
-      datasetController={options.projectMapDatasetController}
-      changedFilePaths={projectMapImpactInput.filePaths}
-      changedFileSource={projectMapImpactInput.source}
-      sourceFocusNodeId={projectMapSourceFocusNodeId}
-      activeCodeSelectionAnchor={options.activeCodeSelectionAnchor}
-      onOpenEvidenceFile={handleOpenProjectMapEvidenceFile}
-      onOpenOrchestrationTask={handleOpenOrchestrationTask}
-      onOpenIntentCanvas={options.onOpenIntentCanvas}
-      onOpenIntentCanvasFromRelationship={options.onOpenIntentCanvas}
-    />
+    <Suspense fallback={<HeavyPanelFallback />}>
+      <ProjectMapPanel
+        key={options.activeWorkspace?.id ?? "no-workspace"}
+        activeWorkspace={options.activeWorkspace ?? null}
+        workspaceName={options.activeWorkspace?.name ?? null}
+        selectedEngine={options.selectedEngine ?? null}
+        selectedModelId={options.selectedModelId}
+        models={options.models}
+        datasetController={options.projectMapDatasetController}
+        changedFilePaths={projectMapImpactInput.filePaths}
+        changedFileSource={projectMapImpactInput.source}
+        sourceFocusNodeId={projectMapSourceFocusNodeId}
+        activeCodeSelectionAnchor={options.activeCodeSelectionAnchor}
+        onOpenEvidenceFile={handleOpenProjectMapEvidenceFile}
+        onOpenOrchestrationTask={handleOpenOrchestrationTask}
+        onOpenIntentCanvas={options.onOpenIntentCanvas}
+        onOpenIntentCanvasFromRelationship={options.onOpenIntentCanvas}
+      />
+    </Suspense>
   );
 
   const intentCanvasPanelNode = (
-    <IntentCanvasManager
-      activeWorkspace={options.activeWorkspace ?? null}
-      activeThreadId={options.activeThreadId ?? null}
-      openRequest={options.intentCanvasOpenRequest ?? null}
-      onOpenRequestConsumed={options.onIntentCanvasOpenRequestConsumed}
-      onAttachToThread={options.onAttachIntentCanvasToThread}
-      onOpenProjectMap={options.onOpenProjectMap}
-      onOpenSourceFile={handleOpenProjectMapEvidenceFile}
-    />
+    <Suspense fallback={<HeavyPanelFallback />}>
+      <IntentCanvasManager
+        activeWorkspace={options.activeWorkspace ?? null}
+        activeThreadId={options.activeThreadId ?? null}
+        openRequest={options.intentCanvasOpenRequest ?? null}
+        onOpenRequestConsumed={options.onIntentCanvasOpenRequestConsumed}
+        onAttachToThread={options.onAttachIntentCanvasToThread}
+        onOpenProjectMap={options.onOpenProjectMap}
+        onOpenSourceFile={handleOpenProjectMapEvidenceFile}
+      />
+    </Suspense>
   );
 
   const planPanelNode = shouldMountBottomStatusPanel ? (

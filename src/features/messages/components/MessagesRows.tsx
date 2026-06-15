@@ -8,6 +8,11 @@ import Copy from "lucide-react/dist/esm/icons/copy";
 import Terminal from "lucide-react/dist/esm/icons/terminal";
 import { AgentIcon } from "../../../components/AgentIcon";
 import { hydrateClaudeDeferredImage } from "../../../services/tauri";
+import { appendMessageRowRenderBudgetDiagnostic } from "../../../services/rendererDiagnostics";
+import {
+  createOwnedObjectUrl,
+  revokeOwnedObjectUrl,
+} from "../../../services/mediaResourceOwners";
 import type { ConversationItem, QueuedMessage } from "../../../types";
 import { DiffBlock } from "../../git/components/DiffBlock";
 import type { StreamActivityPhase } from "../../threads/hooks/useStreamActivityPhase";
@@ -171,7 +176,7 @@ function revokeDeferredImageState(state: DeferredImageState | undefined) {
     ? state?.src
     : null;
   if (objectUrl) {
-    URL.revokeObjectURL(objectUrl);
+    revokeOwnedObjectUrl(objectUrl);
   }
 }
 
@@ -183,7 +188,9 @@ async function createTransientImageObjectUrl(dataUrl: string) {
     const response = await fetch(dataUrl);
     const blob = await response.blob();
     return {
-      src: URL.createObjectURL(blob),
+      src: createOwnedObjectUrl(blob, {
+        ownerId: "message-deferred-image",
+      }),
       transient: true,
     };
   } catch {
@@ -315,6 +322,7 @@ function areMessageRowPropsEqual(
     previous.threadId === next.threadId &&
     previous.isStreaming === next.isStreaming &&
     previous.activeEngine === next.activeEngine &&
+    previous.activeCollaborationModeId === next.activeCollaborationModeId &&
     previous.enableCollaborationBadge === next.enableCollaborationBadge &&
     previous.presentationProfile === next.presentationProfile &&
     previous.showRuntimeReconnectCard === next.showRuntimeReconnectCard &&
@@ -670,6 +678,8 @@ export const MessageRow = memo(function MessageRow({
   suppressNoteCardSummaryCard = false,
 }: MessageRowProps) {
   const renderStartedAtMs = readHighResolutionNowMs();
+  const renderCountRef = useRef(0);
+  renderCountRef.current += 1;
   const { t } = useTranslation();
   const lastLongLiveRenderDiagnosticRef = useRef<{
     itemId: string;
@@ -787,6 +797,23 @@ export const MessageRow = memo(function MessageRow({
       : resolvedMemorySummary || resolvedNoteCardSummary
         ? ""
         : item.text;
+  const messageRowSubtype = agentTaskNotification
+    ? "agent-task"
+    : item.role === "assistant"
+      ? "assistant"
+      : "user";
+  useEffect(() => {
+    appendMessageRowRenderBudgetDiagnostic({
+      threadId,
+      itemId: item.id,
+      role: item.role,
+      subtype: messageRowSubtype,
+      evidenceKind: "proxy",
+      renderCount: renderCountRef.current,
+      isStreaming,
+      textLength: displayText.length,
+    });
+  });
   const selectedAgentName = userMessagePresentation?.selectedAgentName ?? null;
   const selectedAgentIcon = userMessagePresentation?.selectedAgentIcon ?? null;
   const hasInjectedAgentPromptBlock =
@@ -956,7 +983,7 @@ export const MessageRow = memo(function MessageRow({
     isMountedRef.current = false;
     Object.values(deferredImageStatesRef.current).forEach(revokeTrackedDeferredImageState);
     deferredImageObjectUrlsRef.current.forEach((objectUrl) => {
-      URL.revokeObjectURL(objectUrl);
+      revokeOwnedObjectUrl(objectUrl);
     });
     deferredImageObjectUrlsRef.current.clear();
   }, [revokeTrackedDeferredImageState]);

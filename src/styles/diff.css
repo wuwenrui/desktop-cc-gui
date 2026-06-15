@@ -563,6 +563,14 @@
   flex: 0 0 auto;
 }
 
+.diff-tree-summary-root-group {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+}
+
 .diff-tree-summary-root {
   min-width: 0;
   display: inline-flex;
@@ -573,11 +581,73 @@
   background: transparent;
   color: var(--text-primary);
   font: inherit;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
 }
 
 .diff-tree-summary-root.is-static {
   cursor: default;
+}
+
+.diff-tree-summary-root-action {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.git-status-refresh-button {
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--accent-primary, #2563eb);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 1;
+  padding: 0;
+}
+
+.git-status-refresh-button:hover {
+  background: transparent;
+  color: var(--accent-primary, #2563eb);
+}
+
+.git-status-refresh-button:focus-visible {
+  outline: 2px solid var(--border-accent-soft);
+  outline-offset: 2px;
+}
+
+.git-status-refresh-button svg,
+.git-status-refresh-icon {
+  display: block;
+  width: 14px;
+  height: 14px;
+  stroke: currentColor !important;
+  stroke-width: 2.4;
+  opacity: 1 !important;
+}
+
+.git-status-refresh-button.is-spinning svg,
+.git-status-refresh-button.is-spinning .git-status-refresh-icon {
+  animation: git-status-refresh-spin 520ms ease-in-out 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .git-status-refresh-button.is-spinning svg,
+  .git-status-refresh-button.is-spinning .git-status-refresh-icon {
+    animation: none;
+  }
+}
+
+@keyframes git-status-refresh-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .diff-tree-summary-root-toggle,

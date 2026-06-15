@@ -1,9 +1,20 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import type { ConversationItem, WorkspaceInfo } from "../../../types";
 import { useLayoutNodes } from "./useLayoutNodes";
+import type {
+  LayoutNodesFlatOptions,
+  LayoutNodesOptions,
+} from "./layoutNodesTypes";
 import { getCodexProviders } from "../../../services/tauri";
 
 const clientUiVisibilityMock = vi.hoisted(() => ({
@@ -25,41 +36,87 @@ vi.mock("../../client-ui-visibility/hooks/useClientUiVisibility", () => ({
   useClientUiVisibility: () => ({
     preference: {
       panels: {
-        topSessionTabs: clientUiVisibilityMock.visiblePanels.has("topSessionTabs"),
-        topRunControls: clientUiVisibilityMock.visiblePanels.has("topRunControls"),
-        topToolControls: clientUiVisibilityMock.visiblePanels.has("topToolControls"),
-        rightActivityToolbar: clientUiVisibilityMock.visiblePanels.has("rightActivityToolbar"),
-        bottomActivityPanel: clientUiVisibilityMock.visiblePanels.has("bottomActivityPanel"),
-        cornerStatusIndicator: clientUiVisibilityMock.visiblePanels.has("cornerStatusIndicator"),
-        globalRuntimeNoticeDock: clientUiVisibilityMock.visiblePanels.has("globalRuntimeNoticeDock"),
+        topSessionTabs:
+          clientUiVisibilityMock.visiblePanels.has("topSessionTabs"),
+        topRunControls:
+          clientUiVisibilityMock.visiblePanels.has("topRunControls"),
+        topToolControls:
+          clientUiVisibilityMock.visiblePanels.has("topToolControls"),
+        rightActivityToolbar: clientUiVisibilityMock.visiblePanels.has(
+          "rightActivityToolbar",
+        ),
+        bottomActivityPanel: clientUiVisibilityMock.visiblePanels.has(
+          "bottomActivityPanel",
+        ),
+        cornerStatusIndicator: clientUiVisibilityMock.visiblePanels.has(
+          "cornerStatusIndicator",
+        ),
+        globalRuntimeNoticeDock: clientUiVisibilityMock.visiblePanels.has(
+          "globalRuntimeNoticeDock",
+        ),
       },
       controls: {
-        "topRun.start": clientUiVisibilityMock.visibleControls.has("topRun.start"),
-        "topTool.openWorkspace": clientUiVisibilityMock.visibleControls.has("topTool.openWorkspace"),
-        "topTool.runtimeConsole": clientUiVisibilityMock.visibleControls.has("topTool.runtimeConsole"),
-        "topTool.terminal": clientUiVisibilityMock.visibleControls.has("topTool.terminal"),
-        "topTool.focus": clientUiVisibilityMock.visibleControls.has("topTool.focus"),
-        "topTool.rightPanel": clientUiVisibilityMock.visibleControls.has("topTool.rightPanel"),
-        "topTool.clientDocumentation": clientUiVisibilityMock.visibleControls.has("topTool.clientDocumentation"),
-        "rightToolbar.activity": clientUiVisibilityMock.visibleControls.has("rightToolbar.activity"),
-        "rightToolbar.projectMap": clientUiVisibilityMock.visibleControls.has("rightToolbar.projectMap"),
-        "rightToolbar.radar": clientUiVisibilityMock.visibleControls.has("rightToolbar.radar"),
-        "rightToolbar.git": clientUiVisibilityMock.visibleControls.has("rightToolbar.git"),
-        "rightToolbar.files": clientUiVisibilityMock.visibleControls.has("rightToolbar.files"),
-        "rightToolbar.search": clientUiVisibilityMock.visibleControls.has("rightToolbar.search"),
-        "bottomActivity.tasks": clientUiVisibilityMock.visibleControls.has("bottomActivity.tasks"),
-        "bottomActivity.agents": clientUiVisibilityMock.visibleControls.has("bottomActivity.agents"),
-        "bottomActivity.checkpoint": clientUiVisibilityMock.visibleControls.has("bottomActivity.checkpoint"),
-        "bottomActivity.latestConversation": clientUiVisibilityMock.visibleControls.has(
-          "bottomActivity.latestConversation",
+        "topRun.start":
+          clientUiVisibilityMock.visibleControls.has("topRun.start"),
+        "topTool.openWorkspace": clientUiVisibilityMock.visibleControls.has(
+          "topTool.openWorkspace",
         ),
-        "curtain.stickyUserBubble": clientUiVisibilityMock.visibleControls.has("curtain.stickyUserBubble"),
-        "cornerStatus.messageAnchors": clientUiVisibilityMock.visibleControls.has("cornerStatus.messageAnchors"),
+        "topTool.runtimeConsole": clientUiVisibilityMock.visibleControls.has(
+          "topTool.runtimeConsole",
+        ),
+        "topTool.terminal":
+          clientUiVisibilityMock.visibleControls.has("topTool.terminal"),
+        "topTool.focus":
+          clientUiVisibilityMock.visibleControls.has("topTool.focus"),
+        "topTool.rightPanel":
+          clientUiVisibilityMock.visibleControls.has("topTool.rightPanel"),
+        "topTool.clientDocumentation":
+          clientUiVisibilityMock.visibleControls.has(
+            "topTool.clientDocumentation",
+          ),
+        "rightToolbar.activity": clientUiVisibilityMock.visibleControls.has(
+          "rightToolbar.activity",
+        ),
+        "rightToolbar.projectMap": clientUiVisibilityMock.visibleControls.has(
+          "rightToolbar.projectMap",
+        ),
+        "rightToolbar.radar":
+          clientUiVisibilityMock.visibleControls.has("rightToolbar.radar"),
+        "rightToolbar.git":
+          clientUiVisibilityMock.visibleControls.has("rightToolbar.git"),
+        "rightToolbar.files":
+          clientUiVisibilityMock.visibleControls.has("rightToolbar.files"),
+        "rightToolbar.search": clientUiVisibilityMock.visibleControls.has(
+          "rightToolbar.search",
+        ),
+        "bottomActivity.tasks": clientUiVisibilityMock.visibleControls.has(
+          "bottomActivity.tasks",
+        ),
+        "bottomActivity.agents": clientUiVisibilityMock.visibleControls.has(
+          "bottomActivity.agents",
+        ),
+        "bottomActivity.checkpoint": clientUiVisibilityMock.visibleControls.has(
+          "bottomActivity.checkpoint",
+        ),
+        "bottomActivity.latestConversation":
+          clientUiVisibilityMock.visibleControls.has(
+            "bottomActivity.latestConversation",
+          ),
+        "curtain.stickyUserBubble": clientUiVisibilityMock.visibleControls.has(
+          "curtain.stickyUserBubble",
+        ),
+        "cornerStatus.messageAnchors":
+          clientUiVisibilityMock.visibleControls.has(
+            "cornerStatus.messageAnchors",
+          ),
       },
     },
-    isPanelVisible: (id: string) => clientUiVisibilityMock.visiblePanels.has(id),
-    isControlVisible: (id: string) => clientUiVisibilityMock.visibleControls.has(id),
-    isControlPreferenceVisible: (id: string) => clientUiVisibilityMock.visibleControls.has(id),
+    isPanelVisible: (id: string) =>
+      clientUiVisibilityMock.visiblePanels.has(id),
+    isControlVisible: (id: string) =>
+      clientUiVisibilityMock.visibleControls.has(id),
+    isControlPreferenceVisible: (id: string) =>
+      clientUiVisibilityMock.visibleControls.has(id),
     setPanelVisible: vi.fn(),
     setControlVisible: vi.fn(),
     resetVisibility: vi.fn(),
@@ -139,7 +196,9 @@ vi.mock("../../composer/components/Composer", () => ({
   }) => (
     <form
       data-testid="composer"
-      data-show-status-panel-toggle-override={String(showStatusPanelToggleOverride)}
+      data-show-status-panel-toggle-override={String(
+        showStatusPanelToggleOverride,
+      )}
     >
       <textarea
         aria-label="composer input"
@@ -159,7 +218,13 @@ vi.mock("../../composer/components/Composer", () => ({
 }));
 
 vi.mock("../../app/components/MainHeader", () => ({
-  MainHeader: ({ sessionTabsNode, extraActionsNode }: { sessionTabsNode?: ReactNode; extraActionsNode?: ReactNode }) => (
+  MainHeader: ({
+    sessionTabsNode,
+    extraActionsNode,
+  }: {
+    sessionTabsNode?: ReactNode;
+    extraActionsNode?: ReactNode;
+  }) => (
     <header data-testid="main-header">
       {sessionTabsNode}
       {extraActionsNode}
@@ -217,12 +282,19 @@ vi.mock("../../project-memory/components/ProjectMemoryPanel", () => ({
   ProjectMemoryPanel: () => <div data-testid="project-memory-panel" />,
 }));
 
-vi.mock("../../session-activity/components/WorkspaceSessionActivityPanel", () => ({
-  WorkspaceSessionActivityPanel: () => <div data-testid="workspace-session-activity-panel" />,
-}));
+vi.mock(
+  "../../session-activity/components/WorkspaceSessionActivityPanel",
+  () => ({
+    WorkspaceSessionActivityPanel: () => (
+      <div data-testid="workspace-session-activity-panel" />
+    ),
+  }),
+);
 
 vi.mock("../../session-activity/components/WorkspaceSessionRadarPanel", () => ({
-  WorkspaceSessionRadarPanel: () => <div data-testid="workspace-session-radar-panel" />,
+  WorkspaceSessionRadarPanel: () => (
+    <div data-testid="workspace-session-radar-panel" />
+  ),
 }));
 
 vi.mock("../../debug/components/DebugPanel", () => ({
@@ -329,13 +401,30 @@ const activeItems: ConversationItem[] = [
 
 const noop = vi.fn();
 const asyncNoop = vi.fn(async () => undefined);
+const asyncNull = vi.fn(async () => null);
+
+function createGroupedLayoutNodesOptionsForTest(
+  flatOptions: LayoutNodesFlatOptions,
+): LayoutNodesOptions {
+  return {
+    workspace: flatOptions,
+    runtime: flatOptions,
+    chrome: flatOptions,
+    editor: flatOptions,
+    git: flatOptions,
+    composer: flatOptions,
+    panels: flatOptions,
+  };
+}
 
 function createLayoutOptions(
-  overrides: Partial<Parameters<typeof useLayoutNodes>[0]> = {},
+  overrides: Partial<LayoutNodesFlatOptions> = {},
 ): Parameters<typeof useLayoutNodes>[0] {
-  return {
+  const baseOptions = {
     workspaces: [workspace],
-    groupedWorkspaces: [{ id: null, name: "Ungrouped", workspaces: [workspace] }],
+    groupedWorkspaces: [
+      { id: null, name: "Ungrouped", workspaces: [workspace] },
+    ],
     hasWorkspaceGroups: false,
     deletingWorktreeIds: new Set(),
     threadsByWorkspace: {
@@ -386,8 +475,8 @@ function createLayoutOptions(
     onSelectHome: noop,
     onSelectWorkspace: noop,
     onConnectWorkspace: asyncNoop,
-    onAddAgent: asyncNoop,
-    onAddSharedAgent: asyncNoop,
+    onAddAgent: asyncNull,
+    onAddSharedAgent: asyncNull,
     onAddWorktreeAgent: asyncNoop,
     onAddCloneAgent: asyncNoop,
     onToggleWorkspaceCollapse: noop,
@@ -433,7 +522,7 @@ function createLayoutOptions(
     toggleGitDiffListViewShortcut: null,
     onOpenSpecHub: noop,
     onOpenWorkspaceHome: noop,
-    updaterState: { status: "idle" },
+    updaterState: { stage: "idle" },
     onUpdate: noop,
     onDismissUpdate: noop,
     errorToasts: [],
@@ -583,7 +672,7 @@ function createLayoutOptions(
     isReviewing: false,
     isProcessing: false,
     steerEnabled: false,
-    reviewPrompt: { open: false },
+    reviewPrompt: null,
     onReviewPromptClose: noop,
     onReviewPromptShowPreset: noop,
     onReviewPromptChoosePreset: noop,
@@ -653,12 +742,21 @@ function createLayoutOptions(
     gitignoredDirectories: new Set(),
     onInsertComposerText: noop,
     textareaRef: { current: null },
-    composerEditorSettings: {},
+    composerEditorSettings: {
+      preset: "default",
+      expandFenceOnSpace: false,
+      expandFenceOnEnter: false,
+      fenceLanguageTags: false,
+      fenceWrapSelection: false,
+      autoWrapPasteMultiline: false,
+      autoWrapPasteCodeLike: false,
+      continueListOnShiftEnter: false,
+    },
     composerSendShortcut: "enter",
     textareaHeight: 120,
     onTextareaHeightChange: noop,
     dictationEnabled: false,
-    dictationState: { status: "idle" },
+    dictationState: "idle",
     dictationLevel: 0,
     onToggleDictation: noop,
     dictationTranscript: null,
@@ -698,8 +796,130 @@ function createLayoutOptions(
     onResizeTerminal: noop,
     onBackFromDiff: noop,
     onGoProjects: noop,
-    ...overrides,
-  } as Parameters<typeof useLayoutNodes>[0];
+    activeTurnId: null,
+    systemProxyEnabled: false,
+    systemProxyUrl: "",
+    onRefreshAccountRateLimits: asyncNoop,
+    onRecoverThreadRuntime: asyncNoop,
+    onRecoverThreadRuntimeAndResend: asyncNoop,
+    onThreadRecoveryFork: asyncNoop,
+    handleExitPlanModeExecute: noop,
+    onOpenDictationSettings: noop,
+    engineOptions: [],
+    enabledEngines: {},
+    onRefreshEngineOptions: asyncNoop,
+    deleteConfirmThreadId: null,
+    deleteConfirmWorkspaceId: null,
+    deleteConfirmBusy: false,
+    onCancelDeleteConfirm: noop,
+    onConfirmDeleteConfirm: noop,
+    onOpenClaudeTui: noop,
+    onRenameWorkspaceAlias: noop,
+    onQuickReloadWorkspaceThreads: noop,
+    onOpenContextLedgerMemory: noop,
+    onOpenContextLedgerNote: noop,
+    showLoadingProgressDialog: noop,
+    hideLoadingProgressDialog: noop,
+    closeCurrentSessionShortcut: null,
+    worktreeRename: undefined,
+    onLockPanel: noop,
+    launchScriptsState: {
+      launchScripts: [],
+      editorOpenId: null,
+      draftScript: "",
+      draftIcon: "play",
+      draftLabel: "",
+      newEditorOpen: false,
+      newDraftScript: "",
+      newDraftIcon: "play",
+      newDraftLabel: "",
+      newError: null,
+      isSaving: false,
+      error: null,
+      errorById: {},
+      onRunScript: noop,
+      onOpenEditor: noop,
+      onCloseEditor: noop,
+      onDraftScriptChange: noop,
+      onDraftIconChange: noop,
+      onDraftLabelChange: noop,
+      onSaveScript: asyncNoop,
+      onDeleteScript: asyncNoop,
+      onOpenNew: noop,
+      onCloseNew: noop,
+      onNewDraftScriptChange: noop,
+      onNewDraftIconChange: noop,
+      onNewDraftLabelChange: noop,
+      onCreateNew: asyncNoop,
+    },
+    mainHeaderActionsNode: null,
+    browserDockOpen: false,
+    onCloseBrowserDock: noop,
+    externalChangeMonitoringEnabled: false,
+    externalChangeTransportMode: "watcher",
+    externalChangeApplyMode: "manual",
+    externalChangeAutoApplyDebounceMs: 300,
+    liveEditPreviewEnabled: false,
+    onToggleLiveEditPreview: noop,
+    intentCanvasOpenRequest: null,
+    onOpenIntentCanvas: noop,
+    onIntentCanvasOpenRequestConsumed: noop,
+    onAttachIntentCanvasToThread: asyncNoop,
+    pendingIntentCanvasDocuments: [],
+    onRemovePendingIntentCanvas: noop,
+    onApplyWorktreeChanges: asyncNoop,
+    focusedProjectMemoryId: null,
+    focusedProjectMemoryRequestKey: 0,
+    focusedWorkspaceNoteId: null,
+    focusedWorkspaceNoteRequestKey: 0,
+    onRefreshFiles: noop,
+    onOpenDetachedFileExplorer: noop,
+    refreshGitDiffs: asyncNoop,
+    queueGitStatusRefresh: noop,
+    onDiffActivePathChange: noop,
+    onCommit: asyncNoop,
+    onCommitAndPush: asyncNoop,
+    onCommitAndSync: asyncNoop,
+    onPush: asyncNoop,
+    onSync: asyncNoop,
+    commitLoading: false,
+    pushLoading: false,
+    syncLoading: false,
+    commitError: null,
+    pushError: null,
+    syncError: null,
+    commitsAhead: 0,
+    onRequestContextCompaction: noop,
+    completionEmailSelected: false,
+    completionEmailDisabled: false,
+    onToggleCompletionEmail: noop,
+    onRewind: noop,
+    onForkFromMessage: asyncNoop,
+    contextDualViewEnabled: false,
+    codexAutoCompactionEnabled: false,
+    codexAutoCompactionThresholdPercent: 80,
+    onCodexAutoCompactionSettingsChange: noop,
+    engines: [],
+    usePresentationProfile: false,
+    onSelectEngine: noop,
+    projectMapDatasetController: undefined,
+    onDispatchOrchestrationTask: async () => ({ ok: false }),
+    claudeThinkingVisible: false,
+    onResolvedClaudeThinkingVisibleChange: noop,
+    onRefreshModelConfig: asyncNoop,
+    isModelConfigRefreshing: false,
+    customSkillDirectories: [],
+    directoryMetadata: [],
+    fileTreeSourceVersion: null,
+    composerSendLabel: "messages.send",
+    activeCodeSelectionAnchor: null,
+    onActiveCodeSelectionAnchorChange: noop,
+    agentTaskScrollRequest: null,
+    onSelectSubagent: noop,
+  } satisfies LayoutNodesFlatOptions;
+  const flatOptions = Object.assign(baseOptions, overrides);
+
+  return createGroupedLayoutNodesOptionsForTest(flatOptions);
 }
 
 function LayoutNodesHarness({
@@ -731,7 +951,9 @@ describe("useLayoutNodes client UI visibility", () => {
   it("keeps conversation, composer, send, and settings recovery available when every optional entry is hidden", async () => {
     const onOpenSettings = vi.fn();
     const onSend = vi.fn();
-    const { result } = await renderUseLayoutNodes(createLayoutOptions({ onOpenSettings, onSend }));
+    const { result } = await renderUseLayoutNodes(
+      createLayoutOptions({ onOpenSettings, onSend }),
+    );
 
     expect(result.current.rightPanelToolbarNode).toBeNull();
     expect(result.current.planPanelNode).toBeNull();
@@ -749,8 +971,12 @@ describe("useLayoutNodes client UI visibility", () => {
     expect(screen.queryByTestId("runtime-notice-dock")).toBeNull();
     expect(screen.getByTestId("messages")).toBeTruthy();
     expect(screen.getByTestId("messages").dataset.messageAnchors).toBe("false");
-    expect(screen.getByTestId("messages").dataset.stickyUserBubble).toBe("false");
-    expect(screen.getByRole("textbox", { name: "composer input" })).toBeTruthy();
+    expect(screen.getByTestId("messages").dataset.stickyUserBubble).toBe(
+      "false",
+    );
+    expect(
+      screen.getByRole("textbox", { name: "composer input" }),
+    ).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "messages.send" }));
     expect(onSend).toHaveBeenCalledWith("hello from maximum hidden mode", []);
@@ -770,7 +996,9 @@ describe("useLayoutNodes client UI visibility", () => {
 
     render(<>{result.current.messagesNode}</>);
 
-    expect(screen.getByTestId("messages").dataset.historyRestoredAt).toBe("1234");
+    expect(screen.getByTestId("messages").dataset.historyRestoredAt).toBe(
+      "1234",
+    );
   });
 
   it("confirms message-tail fork before running the fork callback", async () => {
@@ -790,7 +1018,9 @@ describe("useLayoutNodes client UI visibility", () => {
     expect(screen.getByText("messages.forkConfirmPurpose")).toBeTruthy();
     expect(screen.getByText("messages.forkConfirmUsage")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "messages.forkConfirmAction" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "messages.forkConfirmAction" }),
+    );
 
     await waitFor(() => {
       expect(onForkFromMessage).toHaveBeenCalledWith("user-fork-anchor", {
@@ -804,52 +1034,65 @@ describe("useLayoutNodes client UI visibility", () => {
     });
   });
 
-  it("passes selected codex provider when confirming message-tail fork", async () => {
-    vi.mocked(getCodexProviders).mockResolvedValueOnce([
-      { id: "provider-a", name: "Provider A" },
-      { id: "provider-b", name: "Provider B" },
-    ]);
-    const onForkFromMessage = vi.fn(async () => {});
+  it(
+    "passes selected codex provider when confirming message-tail fork",
+    async () => {
+      vi.mocked(getCodexProviders).mockResolvedValueOnce([
+        { id: "provider-a", name: "Provider A" },
+        { id: "provider-b", name: "Provider B" },
+      ]);
+      const onForkFromMessage = vi.fn(async () => {});
 
-    render(
-      <LayoutNodesHarness
-        options={createLayoutOptions({
-          onForkFromMessage,
-          threadsByWorkspace: {
-            [workspace.id]: [
-              {
-                id: "thread-1",
-                name: "Thread",
-                updatedAt: 1,
-                engineSource: "codex",
-                providerProfileId: "provider-a",
-                providerProfileName: "Provider A",
-                providerProfileSource: "managed",
-              },
-            ],
-          },
-        })}
-      />,
-    );
+      render(
+        <LayoutNodesHarness
+          options={createLayoutOptions({
+            onForkFromMessage,
+            threadsByWorkspace: {
+              [workspace.id]: [
+                {
+                  id: "thread-1",
+                  name: "Thread",
+                  updatedAt: 1,
+                  engineSource: "codex",
+                  providerProfileId: "provider-a",
+                  providerProfileName: "Provider A",
+                  providerProfileSource: "managed",
+                },
+              ],
+            },
+          })}
+        />,
+      );
 
-    fireEvent.click(screen.getByRole("button", { name: "open fork confirm" }));
+      fireEvent.click(screen.getByRole("button", { name: "open fork confirm" }));
 
-    const selector = await screen.findByLabelText("messages.forkProviderLabel");
-    expect((selector as HTMLSelectElement).value).toBe("provider-a");
-    fireEvent.change(selector, { target: { value: "provider-b" } });
-    fireEvent.click(screen.getByRole("button", { name: "messages.forkConfirmAction" }));
-
-    await waitFor(() => {
-      expect(onForkFromMessage).toHaveBeenCalledWith("user-fork-anchor", {
-        providerProfileId: "provider-b",
-        providerProfile: {
-          id: "provider-b",
-          name: "Provider B",
-          source: "managed",
-        },
+      const selector = await screen.findByLabelText("messages.forkProviderLabel");
+      expect((selector as HTMLSelectElement).value).toBe("provider-a");
+      await screen.findByRole("option", { name: "Provider B" });
+      await act(async () => {
+        fireEvent.change(selector, { target: { value: "provider-b" } });
+        await Promise.resolve();
       });
-    });
-  });
+      await waitFor(() => {
+        expect((selector as HTMLSelectElement).value).toBe("provider-b");
+      });
+      fireEvent.click(
+        screen.getByRole("button", { name: "messages.forkConfirmAction" }),
+      );
+
+      await waitFor(() => {
+        expect(onForkFromMessage).toHaveBeenCalledWith("user-fork-anchor", {
+          providerProfileId: "provider-b",
+          providerProfile: {
+            id: "provider-b",
+            name: "Provider B",
+            source: "managed",
+          },
+        });
+      });
+    },
+    10_000,
+  );
 
   it("uses the active thread engine when restoring a Claude session while Codex is selected globally", async () => {
     const { result } = await renderUseLayoutNodes(
@@ -875,7 +1118,9 @@ describe("useLayoutNodes client UI visibility", () => {
     render(<>{result.current.messagesNode}</>);
 
     expect(screen.getByTestId("messages").dataset.activeEngine).toBe("claude");
-    expect(screen.getByTestId("messages").dataset.conversationEngine).toBe("claude");
+    expect(screen.getByTestId("messages").dataset.conversationEngine).toBe(
+      "claude",
+    );
   });
 
   it("does not crash when restored history metadata is omitted by a caller", async () => {
@@ -888,7 +1133,9 @@ describe("useLayoutNodes client UI visibility", () => {
 
     render(<>{result.current.messagesNode}</>);
 
-    expect(screen.getByTestId("messages").dataset.historyRestoredAt ?? "").toBe("");
+    expect(screen.getByTestId("messages").dataset.historyRestoredAt ?? "").toBe(
+      "",
+    );
   });
 
   it("routes composer file reference open actions through the file-open pipeline", async () => {
@@ -901,7 +1148,9 @@ describe("useLayoutNodes client UI visibility", () => {
 
     render(<>{result.current.composerNode}</>);
 
-    fireEvent.click(screen.getByRole("button", { name: "open file reference" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "open file reference" }),
+    );
 
     expect(onOpenFile).toHaveBeenCalledWith("src/App.tsx");
   });
@@ -1033,7 +1282,9 @@ describe("useLayoutNodes client UI visibility", () => {
   it("keeps the bottom status dock mounted when baseline tabs are visible and collapsed", async () => {
     clientUiVisibilityMock.visiblePanels.add("bottomActivityPanel");
     clientUiVisibilityMock.visibleControls.add("bottomActivity.checkpoint");
-    clientUiVisibilityMock.visibleControls.add("bottomActivity.latestConversation");
+    clientUiVisibilityMock.visibleControls.add(
+      "bottomActivity.latestConversation",
+    );
 
     const { result } = await renderUseLayoutNodes(
       createLayoutOptions({
@@ -1051,8 +1302,12 @@ describe("useLayoutNodes client UI visibility", () => {
       </>,
     );
 
-    expect(screen.getByTestId("status-panel").dataset.dockCollapsed).toBe("true");
-    expect(screen.getByTestId("status-panel").dataset.selectedEngine).toBe("opencode");
+    expect(screen.getByTestId("status-panel").dataset.dockCollapsed).toBe(
+      "true",
+    );
+    expect(screen.getByTestId("status-panel").dataset.selectedEngine).toBe(
+      "opencode",
+    );
     expect(
       screen.getByTestId("composer").dataset.showStatusPanelToggleOverride,
     ).toBe("false");

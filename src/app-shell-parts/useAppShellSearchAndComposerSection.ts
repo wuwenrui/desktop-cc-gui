@@ -1,11 +1,14 @@
-// @ts-nocheck
 import { useCallback, useEffect } from "react";
 import { useGlobalSearchShortcut } from "../features/app/hooks/useGlobalSearchShortcut";
 import { useInterruptShortcut } from "../features/app/hooks/useInterruptShortcut";
 import { usePullRequestComposer } from "../features/git/hooks/usePullRequestComposer";
 import { recordSearchResultOpen } from "../features/search/ranking/recencyStore";
 import type { KanbanTask } from "../features/kanban/types";
-import type { SearchContentFilter, SearchResult, SearchScope } from "../features/search/types";
+import type {
+  SearchContentFilter,
+  SearchResult,
+  SearchScope,
+} from "../features/search/types";
 import { resolveSearchScopeOnOpen } from "../features/search/utils/scope";
 import { toggleSearchContentFilters } from "../features/search/utils/contentFilters";
 import type {
@@ -19,20 +22,59 @@ import {
   getThreadSelectDiffCleanupAction,
   shouldPreserveEditorOnThreadSelect,
 } from "./threadEditorPreservation";
+import {
+  adaptAppShellLegacyFlatContext,
+  flattenSelectedAppShellDomainContexts,
+  type AppShellDomainContextSelection,
+} from "./appShellDomainContexts";
 
 type AppShellTab = "projects" | "codex" | "spec" | "git" | "log";
-type CenterMode = "chat" | "diff" | "editor" | "memory" | "projectMap" | "intentCanvas";
+type CenterMode =
+  | "chat"
+  | "diff"
+  | "editor"
+  | "memory"
+  | "projectMap"
+  | "intentCanvas";
 type DiffSource = "local" | "pr" | "commit";
-type FilePanelMode = "git" | "files" | "search" | "notes" | "prompts" | "memory" | "activity" | "radar";
+type FilePanelMode =
+  | "git"
+  | "files"
+  | "search"
+  | "notes"
+  | "prompts"
+  | "memory"
+  | "activity"
+  | "radar";
 type GitPanelMode = "diff" | "log" | "issues" | "prs";
 
 type ComposerSearchLegacyPassthrough = Record<string, unknown>;
 
+const COMPOSER_SEARCH_DOMAIN_NAMES = [
+  "workspaceNavigationContext",
+  "composerContext",
+  "layoutContext",
+  "fileEditorContext",
+  "settingsContext",
+] as const;
+
+export type ComposerSearchShellDomainInput = AppShellDomainContextSelection<
+  (typeof COMPOSER_SEARCH_DOMAIN_NAMES)[number]
+>;
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0;
+}
+
 export type ComposerSearchShellBoundary = ComposerSearchLegacyPassthrough & {
   activeDraft: string;
+  activeEditorFilePath: string | null | undefined;
   activeWorkspace: WorkspaceInfo | null;
   activeWorkspaceId: string | null;
-  appSettings: Pick<AppSettings, "interruptShortcut" | "toggleGlobalSearchShortcut">;
+  appSettings: Pick<
+    AppSettings,
+    "interruptShortcut" | "toggleGlobalSearchShortcut"
+  >;
   canInterrupt: boolean;
   centerMode: CenterMode;
   clearActiveImages: () => void;
@@ -81,7 +123,11 @@ export type ComposerSearchShellBoundary = ComposerSearchLegacyPassthrough & {
     workspaceId: string;
     panelId: string;
   }) => void;
-  setPrefillDraft: (draft: { id: string; text: string; createdAt: number }) => void;
+  setPrefillDraft: (draft: {
+    id: string;
+    text: string;
+    createdAt: number;
+  }) => void;
   setSearchContentFilters: (
     updater: (previous: SearchContentFilter[]) => SearchContentFilter[],
   ) => void;
@@ -101,99 +147,76 @@ export type ComposerSearchShellBoundary = ComposerSearchLegacyPassthrough & {
   workspacesByPath: Map<string, WorkspaceInfo>;
 };
 
-export function useAppShellSearchAndComposerSection(ctx: ComposerSearchShellBoundary) {
+function flattenComposerSearchShellBoundary(
+  input: ComposerSearchShellDomainInput,
+): ComposerSearchShellBoundary {
+  return adaptAppShellLegacyFlatContext<ComposerSearchShellBoundary>(
+    flattenSelectedAppShellDomainContexts(input, COMPOSER_SEARCH_DOMAIN_NAMES),
+  );
+}
+
+export function useAppShellSearchAndComposerSection(
+  input: ComposerSearchShellDomainInput,
+) {
+  const ctx = flattenComposerSearchShellBoundary(input);
   const {
-    GitHubPanelData, RECENT_THREAD_LIMIT, SettingsView, accessMode, accountByWorkspace, accountSwitching, activeAccount, activeDiffError,
-    activeDiffLoading, activeDiffs, activeDraft, activeEditorFilePath, activeEditorLineRange, activeEngine, activeGitRoot, activeImages,
-    activeItems, activeParentWorkspace, activePath, activePlan, activeQueue, activeRateLimits, activeRenamePrompt, activeTab,
-    activeTerminalId, activeThreadId, activeThreadIdForModeRef, activeThreadIdRef, activeTokenUsage, activeWorkspace, activeWorkspaceId, activeWorkspaceIdRef,
-    activeWorkspaceKanbanTasks, activeWorkspaceRef, activeWorkspaceThreads, addCloneAgent, addDebugEntry, addWorkspace, addWorkspaceFromPath, addWorktreeAgent,
-    agent, alertError, appMode, appRoot, appRootRef, appSettings, appSettingsLoading, applySelectedCollaborationMode,
-    approvals, assignWorkspaceGroup, attachImages, baseWorkspaceRef, branches, canInterrupt, cancelClonePrompt, cancelWorktreePrompt,
-    cancelled, centerMode, checkoutBranch, chooseCloneCopiesFolder, choosePreset, claudeAccessModeRef, clearActiveImages, clearCloneCopiesFolder,
-    clearDebugEntries, clearDictationError, clearDictationHint, clearDictationTranscript, clearDraftForThread, clearGitRootCandidates, clonePrompt, closePlanPanel,
-    closeReleaseNotes, closeReviewPrompt, closeSettings, closeTerminalPanel, closeWorktreeCreateResult, codexComposerModeRef, collaborationModePayload, collaborationModes,
-    collaborationModesEnabled, collaborationRuntimeModeByThread, collaborationUiModeByThread, collapseRightPanel, collapseSidebar, commands, commitError, commitLoading,
-    commitMessage, commitMessageError, commitMessageLoading, completionTrackerBySessionRef, completionTrackerReadyRef, composerEditorSettings, composerInputRef, composerInsert,
-    confirmBranch, confirmClonePrompt, confirmCommit, confirmCustom, confirmRenameWorktreeUpstream, confirmWorktreePrompt, connectWorkspace, createBranch,
-    createPrompt, createWorkspaceGroup, debugEntries, debugOpen, debugPanelHeight, defaultModel, deletePrompt, deleteThreadPrompt,
-    deleteWorkspaceGroup, deletingWorktreeIds, delta, dictationError, dictationHint, dictationLevel, dictationModel, dictationReady,
-    dictationState, dictationTranscript, diffScrollRequestId, diffSource, directories, dismissErrorToast, dismissUpdate, doctor,
-    dragHandle, editorHighlightTarget, editorNavigationTarget, editorSplitLayout, effectiveModels, effectiveReasoningSupported, effectiveRuntimeMode, effectiveSelectedModel,
-    effectiveSelectedModelId, effectiveUiMode, engineModelsAsOptions, engineSelectedModelIdByType, engineSelection, engineStatuses, ensureLaunchTerminal, ensureTerminalWithTitle,
-    ensureWorkspaceThreadListLoaded, entry, errorToasts, existing, exitDiffView, expandRightPanel, expandSidebar, filePanelMode,
-    filePassword, fileReferenceMode, fileStatus, files, finishedByAgentUpdate, finishedByDuration, firstAnswer, flushDraggedHeight,
-    force, forkThreadForWorkspace, getGlobalPromptsDir, getPinTimestamp, getThreadRows, getWorkspaceGroupName, getWorkspacePromptsDir, gitCommitDiffs,
-    gitDiffListView, gitDiffViewStyle, gitHistoryPanelHeight, gitHistoryPanelHeightRef, gitIssues, gitIssuesError, gitIssuesLoading, gitIssuesTotal,
-    gitLogAhead, gitLogAheadEntries, gitLogBehind, gitLogBehindEntries, gitLogEntries, gitLogError, gitLogLoading, gitLogTotal,
-    gitLogUpstream, gitPanelMode, gitPullRequestComments, gitPullRequestCommentsError, gitPullRequestCommentsLoading, gitPullRequestDiffs, gitPullRequestDiffsError, gitPullRequestDiffsLoading,
-    gitPullRequests, gitPullRequestsError, gitPullRequestsLoading, gitPullRequestsTotal, gitRemoteUrl, gitRootCandidates, gitRootScanDepth, gitRootScanError,
-    gitRootScanHasScanned, gitRootScanLoading, gitStatus, gitignoredDirectories, gitignoredFiles, globalSearchFilesByWorkspace, group, groupId,
-    groupedWorkspaces, handleActivateFileTab, handleActiveDiffPath, handleAddAgent, handleAddCloneAgent, handleAddWorkspace, handleAddWorkspaceFromPath, handleAddWorktreeAgent,
-    handleAppModeChange, handleApplyWorktreeChanges, handleApprovalDecision, handleApprovalRemember, handleArchiveActiveThread, handleCancelSwitchAccount, handleCheckoutBranch, handleCloseAllFileTabs,
-    handleCloseFileTab, handleCollaborationModeResolved, handleCommit, handleCommitAndPush, handleCommitAndSync, handleCommitMessageChange, handleCopyDebug, handleCopyThread,
-    handleCreateBranch, handleCreatePrompt, handleDebugClick, handleDeletePrompt, handleDeleteQueued, handleDeleteThreadPromptCancel, handleDeleteThreadPromptConfirm, handleDraftChange,
-    handleDropWorkspacePaths, handleEditQueued, handleEnsureWorkspaceThreadsForSettings, handleExitEditor, handleGenerateCommitMessage, handleGitIssuesChange, handleGitPanelModeChange, handleGitPullRequestCommentsChange,
-    handleGitPullRequestDiffsChange, handleGitPullRequestsChange, handleInsertComposerText, handleLockPanel, handleMovePrompt, handleOpenFile, handleOpenModelSettings, handleOpenRenameWorktree,
-    handlePickGitRoot, handlePointerMove, handlePointerUp, handlePush, handleRenamePromptCancel, handleRenamePromptChange, handleRenamePromptConfirm, handleRenameThread,
-    handleRenameWorktreeCancel, handleRenameWorktreeChange, handleRenameWorktreeConfirm, handleResize, handleRevealGeneralPrompts, handleRevealWorkspacePrompts, handleRevertAllGitChanges, handleRevertGitFile,
-    handleReviewPromptKeyDown, handleSelectAgent, handleSelectCommit, handleSelectDiff, handleSelectModel, handleSelectOpenAppId, handleSelectOpenCodeAgent, handleSelectOpenCodeVariant,
-    handleSend, handleSendPrompt, handleSendPromptToNewAgent, handleSetAccessMode, handleSetGitRoot, handleStageGitAll, handleStageGitFile, handleSwitchAccount,
-    handleSync, handleTestNotificationSound, handleToggleDictation, handleToggleRuntimeConsole, handleToggleTerminal, handleToggleTerminalPanel, handleUnlockPanel, handleUnstageGitFile,
-    handleUpdatePrompt, handleUserInputSubmit, handleUserInputSubmitWithPlanApply, handleWorkspaceDragEnter, handleWorkspaceDragLeave, handleWorkspaceDragOver, handleWorkspaceDrop, handleWorktreeCreated,
-    hasActivePlan, hasLoaded, hasPlanData, highlightedBranchIndex, highlightedCommitIndex, highlightedPresetIndex, historySearchItems, hydratedThreadListWorkspaceIdsRef,
-    installedEngines, interruptTurn, isCompact, isDeleteThreadPromptBusy, isEditorFileMaximized, isFilesLoading, isLoadingLatestAgents, isMacDesktop,
-    isPanelLocked, isPhone, isPlanMode, isPlanPanelDismissed, isProcessing, isProcessingNow, isReviewing, isSearchPaletteOpen,
-    isTablet, isThreadAutoNaming, isThreadPinned, isValid, isWindowsDesktop, isWorkspaceDropActive, isWorktreeWorkspace, kanbanConversationWidth,
-    kanbanCreatePanel, kanbanCreateTask, kanbanDeletePanel, kanbanDeleteTask, kanbanPanels, kanbanReorderTask, kanbanTasks, kanbanUpdatePanel,
-    kanbanUpdateTask, kanbanViewState, key, label, lastAgent, lastAgentMessageByThread, lastAgentTimestamp, lastCodexModeSyncThreadRef,
-    lastDurationMs, lastFrameAt, latestAgentRuns, latestClampedHeight, latestRawHeight, latestSnippet, launchScriptState, launchScriptsState,
-    listThreadsForWorkspace, listThreadsForWorkspaceTracked, liveEditPreviewEnabled, loadOlderThreadsForWorkspace, lockLiveSessions, main, mainWidth, mappedMode,
-    markWorkspaceConnected, maxHeight, minHeight, models, monitor, movePrompt, moveWorkspaceGroup, navigateToThread,
-    next, nextDefault, nextFiles, nextHeight, nextSettings, normalizePath, normalized, onCloseTerminal,
-    onDebugPanelResizeStart, onGitHistoryPanelResizeStart, onKanbanConversationResizeStart, onNewTerminal, onPlanPanelResizeStart, onRightPanelResizeStart, onSelectTerminal, onSidebarResizeStart,
-    onTerminalPanelResizeStart, onTextareaHeightChange, openAppIconById, openClonePrompt, openCodeAgents, openDeleteThreadPrompt, openFileTabs, openPlanPanel, openReleaseNotes, openRenamePrompt, openRenameWorktreePrompt, openSettings,
-    openTerminal, openWorktreePrompt, path, payload, perfSnapshotRef, persistProjectCopiesFolder, pickImages, pinThread,
-    pinnedThreadsVersion, planByThread, planPanelHeight, pointerId, prefillDraft, prevFiles, previous, previousAgentTimestamp,
-    previousDurationMs, previousThreadIdRef, previousTracker, prompts, pushError, pushLoading, queueGitStatusRefresh, queueMessage,
-    queueSaveSettings, rafId, rateLimitsByWorkspace, reasoningOptions, reasoningSupported, recentThreads, reduceTransparency, refreshAccountInfo,
-    refreshAccountRateLimits, refreshFiles, refreshGitDiffs, refreshGitLog, refreshGitStatus, refreshThread, refreshWorkspaces, releaseNotesActiveIndex,
-    releaseNotesEntries, releaseNotesError, releaseNotesLoading, releaseNotesOpen, reloadSelectedAgent, removeImage, removeImagesForThread, removeThread,
-    removeWorkspace, removeWorktree, renamePrompt, renameThread, renameWorkspaceGroup, renameWorktree, renameWorktreeNotice, renameWorktreePrompt,
-    renameWorktreeUpstream, renameWorktreeUpstreamPrompt, requestId, requestThreadId, resetGitHubPanelState, resetSoloSplitToHalf, resetWorkspaceThreads, resolveCloneProjectContext,
-    resolveCollaborationRuntimeMode, resolveCollaborationUiMode, resolveOpenCodeAgentForThread, resolveOpenCodeVariantForThread, resolvedEffort, resolvedModel, response, restartTerminalSession,
-    result, resumePrompt, retryReleaseNotesLoad, reviewPrompt, rightPanelCollapsed, rightPanelWidth, runtimeMode, runtimeRunState,
-    scaleShortcutText, scaleShortcutTitle, scanGitRoots, scheduleDraggedHeightFlush, scopedKanbanTasks, searchContentFilters, searchPaletteQuery, searchPaletteSelectedIndex,
-    searchResults, searchScope, selectBranch, selectBranchAtIndex, selectCommit, selectCommitAtIndex, selectHome, selectWorkspace,
-    selected, selectedAgent, selectedAnswer, selectedCollaborationMode, selectedCollaborationModeId, selectedCommitSha, selectedDiffPath, selectedEffort,
-    selectedKanbanTaskId, selectedModelId, selectedOpenCodeAgent, selectedOpenCodeVariant, selectedPath, selectedPullRequest, selection, sendUserMessage,
-    sendUserMessageToThread, sessions, setAccessMode, setActiveEditorLineRange, setActiveEngine, setActiveTab, setActiveThreadId, setActiveWorkspaceId,
-    setAppMode, setAppSettings, setCenterMode, setCodexCollaborationMode, setCollaborationRuntimeModeByThread, setCollaborationUiModeByThread, setComposerInsert, setDebugOpen,
-    setDiffSource, setEditorSplitLayout, setEngineSelectedModelIdByType, setFilePanelMode, setFileReferenceMode, setGitDiffListView, setGitDiffViewStyle, setGitHistoryPanelHeight,
-    setGitPanelMode, setGitRootScanDepth, setGlobalSearchFilesByWorkspace, setHighlightedBranchIndex, setHighlightedCommitIndex, setHighlightedPresetIndex, setIsEditorFileMaximized, setIsPanelLocked,
-    setIsPlanPanelDismissed, setIsSearchPaletteOpen, setKanbanViewState, setLiveEditPreviewEnabled, setPrefillDraft, setReduceTransparency, setRightPanelWidth, setSearchContentFilters, setSearchPaletteQuery, setSearchPaletteSelectedIndex, setSearchScope,
-    setSelectedAgent, setSelectedCollaborationModeId, setSelectedCommitSha, setSelectedDiffPath, setSelectedEffort, setSelectedKanbanTaskId, setSelectedModelId, setSelectedPullRequest,
-    setWorkspaceHomeWorkspaceId, settingsHighlightTarget, settingsOpen, settingsSection, shouldForceResumeInCode, shouldImplementPlan, shouldLoadDiffs, shouldLoadGitHubPanelData,
-    showDebugButton, showGitHistory, showHome, showKanban, showNextReleaseNotes, showPresetStep, showPreviousReleaseNotes, showWorkspaceHome,
-    sidebarCollapsed, sidebarWidth, skills, snapshot, startExport, startFast, startFork, startHeight,
-    startImport, startLsp, startMcp, startMode, startResume, startReview, startShare, startSpecRoot,
-    startStatus, startThreadForWorkspace, startUpdate, startY, stored, syncError, syncLoading,
-    t, tabletTab, target, targetThread, targetWorkspaceIds, terminalOpen, terminalPanelHeight, terminalState,
-    terminalTabs, textareaHeight, threadAccessMode, threadChanged, threadId, threadItemsByThread, threadListCursorByWorkspace, threadListLoadingByWorkspace,
-    threadListPagingByWorkspace, threadMode, threadParentById, threadStatusById, threads, threadsByWorkspace, timelinePlan, title,
-    tokenUsageByThread, triggerAutoThreadTitle, trimmed, uiMode, uncachedWorkspaceIds, ungroupedLabel, uniquePaths, unpinThread,
-    updateCloneCopyName, updateCustomInstructions, updatePrompt, updateWorkspaceCodexBin, updateWorkspaceSettings, updateWorktreeBaseRef, updateWorktreeBranch, updateWorktreePublishToOrigin,
-    updateWorktreeSetupScript, updatedAt, updaterState, useSuggestedCloneCopiesFolder, userInputRequests, validModel, viewportHeight, wasProcessing,
-    workspace, workspaceActivity, workspaceDropTargetRef, workspaceFilesPollingEnabled, workspaceGroups, workspaceHomeWorkspaceId, workspaceId, workspaceNameByPath,
-    workspacePath, workspaceSearchSources, workspaces, workspacesById, workspacesByPath, worktreeApplyError, worktreeApplyLoading, worktreeApplySuccess,
-    worktreeCreateResult, worktreeLabel, worktreePrompt, worktreeRename, worktreeSetupScriptState,
+    activeDraft,
+    activeEditorFilePath,
+    activeWorkspace,
+    activeWorkspaceId,
+    appSettings,
+    canInterrupt,
+    centerMode,
+    clearActiveImages,
+    connectWorkspace,
+    exitDiffView,
+    filePanelMode,
+    gitPanelMode,
+    gitPullRequestDiffs,
+    handleDraftChange,
+    handleOpenFile,
+    handleSend,
+    interruptTurn,
+    isCompact,
+    isSearchPaletteOpen,
+    kanbanTasks,
+    queueMessage,
+    searchPaletteQuery,
+    searchResults,
+    searchScope,
+    selectWorkspace,
+    selectedPullRequest,
+    sendUserMessageToThread,
+    setActiveTab,
+    setActiveThreadId,
+    setAppMode,
+    setCenterMode,
+    setDiffSource,
+    setGitPanelMode,
+    setIsSearchPaletteOpen,
+    setKanbanViewState,
+    setPrefillDraft,
+    setSearchContentFilters,
+    setSearchPaletteQuery,
+    setSearchPaletteSelectedIndex,
+    setSearchScope,
+    setSelectedCommitSha,
+    setSelectedDiffPath,
+    setSelectedKanbanTaskId,
+    setSelectedPullRequest,
+    startThreadForWorkspace,
+    workspacesByPath,
   } = ctx;
 
   const closeSearchPalette = useCallback(() => {
     setIsSearchPaletteOpen(false);
     setSearchPaletteQuery("");
     setSearchPaletteSelectedIndex(0);
-  }, [setIsSearchPaletteOpen, setSearchPaletteQuery, setSearchPaletteSelectedIndex]);
+  }, [
+    setIsSearchPaletteOpen,
+    setSearchPaletteQuery,
+    setSearchPaletteSelectedIndex,
+  ]);
 
   const handleOpenSearchPalette = useCallback(() => {
     const nextScope = resolveSearchScopeOnOpen(searchScope, activeWorkspaceId);
@@ -246,10 +269,15 @@ export function useAppShellSearchAndComposerSection(ctx: ComposerSearchShellBoun
     [searchResults.length, setSearchPaletteSelectedIndex],
   );
 
-  const handleToggleSearchContentFilter = useCallback((nextFilter: SearchContentFilter) => {
-    setSearchContentFilters((prev) => toggleSearchContentFilters(prev, nextFilter));
-    setSearchPaletteSelectedIndex(0);
-  }, [setSearchContentFilters, setSearchPaletteSelectedIndex]);
+  const handleToggleSearchContentFilter = useCallback(
+    (nextFilter: SearchContentFilter) => {
+      setSearchContentFilters((prev) =>
+        toggleSearchContentFilters(prev, nextFilter),
+      );
+      setSearchPaletteSelectedIndex(0);
+    },
+    [setSearchContentFilters, setSearchPaletteSelectedIndex],
+  );
 
   const handleSelectSearchResult = useCallback(
     (result: SearchResult) => {
@@ -260,7 +288,10 @@ export function useAppShellSearchAndComposerSection(ctx: ComposerSearchShellBoun
           }
           break;
         case "thread":
-          if (result.workspaceId && result.threadId) {
+          if (
+            isNonEmptyString(result.workspaceId) &&
+            isNonEmptyString(result.threadId)
+          ) {
             const preserveEditor = shouldPreserveEditorOnThreadSelect({
               isCompact,
               centerMode,
@@ -268,7 +299,8 @@ export function useAppShellSearchAndComposerSection(ctx: ComposerSearchShellBoun
               targetWorkspaceId: result.workspaceId,
               activeEditorFilePath,
             });
-            const diffCleanupAction = getThreadSelectDiffCleanupAction(preserveEditor);
+            const diffCleanupAction =
+              getThreadSelectDiffCleanupAction(preserveEditor);
             if (diffCleanupAction === "clear-selected-diff") {
               setSelectedDiffPath(null);
             } else {
@@ -283,7 +315,9 @@ export function useAppShellSearchAndComposerSection(ctx: ComposerSearchShellBoun
           break;
         case "kanban":
           if (result.taskId) {
-            const task = kanbanTasks.find((entry) => entry.id === result.taskId);
+            const task = kanbanTasks.find(
+              (entry) => entry.id === result.taskId,
+            );
             if (task) {
               const taskWs = workspacesByPath.get(task.workspaceId);
               setAppMode("kanban");
@@ -306,7 +340,10 @@ export function useAppShellSearchAndComposerSection(ctx: ComposerSearchShellBoun
           }
           break;
         case "message":
-          if (result.workspaceId && result.threadId) {
+          if (
+            isNonEmptyString(result.workspaceId) &&
+            isNonEmptyString(result.threadId)
+          ) {
             const preserveEditor = shouldPreserveEditorOnThreadSelect({
               isCompact,
               centerMode,
@@ -314,7 +351,8 @@ export function useAppShellSearchAndComposerSection(ctx: ComposerSearchShellBoun
               targetWorkspaceId: result.workspaceId,
               activeEditorFilePath,
             });
-            const diffCleanupAction = getThreadSelectDiffCleanupAction(preserveEditor);
+            const diffCleanupAction =
+              getThreadSelectDiffCleanupAction(preserveEditor);
             if (diffCleanupAction === "clear-selected-diff") {
               setSelectedDiffPath(null);
             } else {
@@ -422,8 +460,6 @@ export function useAppShellSearchAndComposerSection(ctx: ComposerSearchShellBoun
     handleSend,
     queueMessage,
   });
-
-
 
   return {
     closeSearchPalette,

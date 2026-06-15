@@ -11,6 +11,8 @@ const flushRendererDiagnosticsBufferMock = vi.hoisted(() => vi.fn());
 const startRendererBlankScreenWatchdogMock = vi.hoisted(() => vi.fn());
 const pushGlobalRuntimeNoticeMock = vi.hoisted(() => vi.fn());
 const recordStartupMilestoneMock = vi.hoisted(() => vi.fn());
+const recordStartupTaskTraceMock = vi.hoisted(() => vi.fn());
+const recordStartupPerfMarkerMock = vi.hoisted(() => vi.fn());
 const invokeMock = vi.hoisted(() => vi.fn());
 const isTauriMock = vi.hoisted(() => vi.fn(() => false));
 
@@ -44,9 +46,16 @@ vi.mock("./services/globalRuntimeNotices", () => ({
 
 vi.mock("./features/startup-orchestration/utils/startupTrace", () => ({
   recordStartupMilestone: recordStartupMilestoneMock,
+  recordStartupTaskTrace: recordStartupTaskTraceMock,
 }));
 
-vi.mock("./i18n", () => ({}));
+vi.mock("./services/perfBaseline/startupMarkers", () => ({
+  recordStartupPerfMarker: recordStartupPerfMarkerMock,
+}));
+
+vi.mock("./i18n", () => ({
+  i18nReady: Promise.resolve(),
+}));
 
 vi.mock("./App", () => ({
   default: () => null,
@@ -75,6 +84,8 @@ describe("startApp", () => {
     startRendererBlankScreenWatchdogMock.mockReset();
     pushGlobalRuntimeNoticeMock.mockReset();
     recordStartupMilestoneMock.mockReset();
+    recordStartupTaskTraceMock.mockReset();
+    recordStartupPerfMarkerMock.mockReset();
     invokeMock.mockReset();
     isTauriMock.mockReset();
     isTauriMock.mockReturnValue(false);
@@ -86,37 +97,13 @@ describe("startApp", () => {
 
     await startApp();
 
-    expect(pushGlobalRuntimeNoticeMock.mock.calls).toEqual([
-      [
-        expect.objectContaining({
-          messageKey: "runtimeNotice.bootstrap.start",
-        }),
-      ],
-      [
-        expect.objectContaining({
-          messageKey: "runtimeNotice.bootstrap.storageMigrationCheck",
-        }),
-      ],
-      [
-        expect.objectContaining({
-          messageKey: "runtimeNotice.bootstrap.inputHistoryRestore",
-        }),
-      ],
-      [
-        expect.objectContaining({
-          messageKey: "runtimeNotice.bootstrap.interfaceResources",
-        }),
-      ],
-      [
-        expect.objectContaining({
-          messageKey: "runtimeNotice.bootstrap.mountShell",
-        }),
-      ],
-      [
-        expect.objectContaining({
-          messageKey: "runtimeNotice.bootstrap.ready",
-        }),
-      ],
+    expect(pushGlobalRuntimeNoticeMock.mock.calls.map(([notice]) => notice.messageKey)).toEqual([
+      "runtimeNotice.bootstrap.start",
+      "runtimeNotice.bootstrap.interfaceResources",
+      "runtimeNotice.bootstrap.mountShell",
+      "runtimeNotice.bootstrap.ready",
+      "runtimeNotice.bootstrap.storageMigrationCheck",
+      "runtimeNotice.bootstrap.inputHistoryRestore",
     ]);
     expect(preloadClientStoresMock).toHaveBeenCalledTimes(1);
     expect(migrateLocalStorageToFileStoreMock).toHaveBeenCalledTimes(1);
@@ -125,6 +112,13 @@ describe("startApp", () => {
     expect(renderMock).toHaveBeenCalledTimes(1);
     expect(startRendererBlankScreenWatchdogMock).toHaveBeenCalledWith({ rootId: "root" });
     expect(recordStartupMilestoneMock).toHaveBeenCalledWith("shell-ready");
+    expect(recordStartupPerfMarkerMock).toHaveBeenCalledWith("first-paint");
+    expect(recordStartupTaskTraceMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: "bootstrap:app-import",
+        lifecycleState: "started",
+      }),
+    );
   });
 
   it("renders the bootstrap fallback and flushes diagnostics when preload fails early", async () => {

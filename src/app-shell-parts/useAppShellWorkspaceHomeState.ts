@@ -5,6 +5,7 @@ import {
   resolveHomeWorkspaceId,
 } from "../features/home/utils/homeWorkspaceOptions";
 import { recordStartupMilestone } from "../features/startup-orchestration/utils/startupTrace";
+import { recordStartupPerfMarker } from "../services/perfBaseline/startupMarkers";
 
 type WorkspaceHomeStateParams = {
   activeWorkspaceId: string | null;
@@ -29,6 +30,7 @@ export function useAppShellWorkspaceHomeState({
     }
     inputReadyMilestoneRecordedRef.current = true;
     recordStartupMilestone("input-ready");
+    recordStartupPerfMarker("first-interactive");
   }, [appSettingsLoading, hasLoaded]);
 
   const workspacesById = useMemo(

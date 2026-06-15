@@ -2,8 +2,11 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
   __resetRealtimePerfFlagCacheForTests,
+  getActiveRealtimePerfFlags,
   isBackgroundBufferedFlushEnabled,
   isBackgroundRenderGatingEnabled,
+  isRealtimeBatchingEnabled,
+  resetRealtimePerfFlags,
   isStagedHydrationEnabled,
 } from "./realtimePerfFlags";
 
@@ -27,5 +30,39 @@ describe("realtimePerfFlags background scheduling rollback flags", () => {
     expect(isBackgroundRenderGatingEnabled()).toBe(false);
     expect(isBackgroundBufferedFlushEnabled()).toBe(false);
     expect(isStagedHydrationEnabled()).toBe(false);
+  });
+
+  it("reports all active flag values with source metadata", () => {
+    window.localStorage.setItem("ccgui.perf.realtimeBatching", "0");
+
+    const flags = getActiveRealtimePerfFlags();
+
+    expect(Object.keys(flags)).toHaveLength(8);
+    expect(flags.realtimeBatching.value).toBe(false);
+    expect(flags.realtimeBatching.source).toBe("localStorage");
+    expect(flags.realtimeBatching.storageKey).toBe("ccgui.perf.realtimeBatching");
+    expect(flags.appServerEventBatch.source).toBe("default");
+    expect(flags.appServerEventBatch.defaultValue).toBe(true);
+    expect(flags.appServerEventBatch.testDefaultValue).toBe(false);
+    expect(flags.reducerNoopGuard.metric).toContain("no-op");
+  });
+
+  it("resets known localStorage overrides and clears the cache", () => {
+    window.localStorage.setItem("ccgui.perf.realtimeBatching", "0");
+    window.localStorage.setItem("ccgui.perf.backgroundRenderGating", "off");
+
+    expect(isRealtimeBatchingEnabled()).toBe(false);
+    expect(isBackgroundRenderGatingEnabled()).toBe(false);
+
+    const removed = resetRealtimePerfFlags();
+
+    expect(removed).toEqual([
+      "ccgui.perf.realtimeBatching",
+      "ccgui.perf.backgroundRenderGating",
+    ]);
+    expect(window.localStorage.getItem("ccgui.perf.realtimeBatching")).toBeNull();
+    expect(window.localStorage.getItem("ccgui.perf.backgroundRenderGating")).toBeNull();
+    expect(isRealtimeBatchingEnabled()).toBe(false);
+    expect(isBackgroundRenderGatingEnabled()).toBe(true);
   });
 });

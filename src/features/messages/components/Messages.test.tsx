@@ -328,7 +328,7 @@ describe("Messages", () => {
     );
   });
 
-  it("enhances lead keywords only on codex assistant markdown", () => {
+  it("enhances lead keywords only on codex assistant markdown", async () => {
     const items: ConversationItem[] = [
       {
         id: "assistant-lead-1",
@@ -350,8 +350,10 @@ describe("Messages", () => {
       />,
     );
 
-    expect(container.querySelector(".markdown-lead-paragraph")).toBeTruthy();
-    expect(container.querySelector(".markdown-codex-canvas")).toBeTruthy();
+    await waitFor(() => {
+      expect(container.querySelector(".markdown-lead-paragraph")).toBeTruthy();
+      expect(container.querySelector(".markdown-codex-canvas")).toBeTruthy();
+    });
 
     rerender(
       <Messages
@@ -495,7 +497,7 @@ describe("Messages", () => {
     expect(container.textContent ?? "").toContain("现在我继续读取 README.md");
   });
 
-  it("matches extended lead keywords with semantic icons", () => {
+  it("matches extended lead keywords with semantic icons", async () => {
     const items: ConversationItem[] = [
       {
         id: "assistant-lead-next-1",
@@ -517,8 +519,10 @@ describe("Messages", () => {
       />,
     );
 
-    expect(container.querySelector(".markdown-lead-next")).toBeTruthy();
-    expect(container.querySelector(".markdown-lead-icon")?.textContent ?? "").toContain("🚀");
+    await waitFor(() => {
+      expect(container.querySelector(".markdown-lead-next")).toBeTruthy();
+      expect(container.querySelector(".markdown-lead-icon")?.textContent ?? "").toContain("🚀");
+    });
   });
 
   it("collapses pathological fragmented paragraphs in assistant markdown", () => {

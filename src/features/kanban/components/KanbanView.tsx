@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { useMemo } from "react";
 import type { AppMode, EngineStatus, EngineType, WorkspaceInfo } from "../../../types";
+import { loadKanbanStyles } from "../../../styles/featureStyleLoaders";
+import { useFeatureStylesReady } from "../../../styles/useFeatureStylesReady";
 import type {
   KanbanTaskChain,
   KanbanTaskSchedule,
@@ -89,6 +91,7 @@ export function KanbanView({
   terminalOpen,
   onToggleTerminal,
 }: KanbanViewProps) {
+  const stylesReady = useFeatureStylesReady(loadKanbanStyles);
   const handleSelectWorkspace = useMemo(
     () => (workspaceId: string) => {
       onCloseTaskConversation();
@@ -96,6 +99,9 @@ export function KanbanView({
     },
     [onCloseTaskConversation, onViewStateChange]
   );
+  if (!stylesReady) {
+    return null;
+  }
 
   // --- Board view ---
   if (viewState.view === "board") {

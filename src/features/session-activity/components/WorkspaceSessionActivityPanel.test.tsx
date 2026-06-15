@@ -1326,7 +1326,7 @@ describe("WorkspaceSessionActivityPanel", () => {
     expect(view.container.querySelectorAll(".session-activity-preview-markdown ol li")).toHaveLength(4);
   });
 
-  it("preserves soft line breaks in running reasoning preview", () => {
+  it("preserves soft line breaks in running reasoning preview", async () => {
     const viewModel = createViewModel();
     viewModel.timeline = viewModel.timeline.map((event) =>
       event.kind === "reasoning"
@@ -1348,7 +1348,9 @@ describe("WorkspaceSessionActivityPanel", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: /activityPanel\.tabs\.reasoning1/i }));
 
-    expect(view.container.querySelectorAll(".session-activity-preview-markdown br").length).toBe(2);
+    await waitFor(() => {
+      expect(view.container.querySelectorAll(".session-activity-preview-markdown br").length).toBe(2);
+    });
   });
 
   it("pins running reasoning preview to the bottom while streaming updates", () => {

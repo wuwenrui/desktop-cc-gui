@@ -7,7 +7,7 @@ use tauri::{Manager, State, Window};
 
 use crate::codex::args::resolve_workspace_codex_args;
 use crate::codex::home::resolve_workspace_codex_home;
-use crate::event_sink::TauriEventSink;
+use crate::event_sink::build_event_sink;
 use crate::remote_backend;
 use crate::shared::settings_core::{
     app_settings_change_requires_codex_restart, get_app_settings_core, get_codex_config_path_core,
@@ -75,7 +75,7 @@ async fn spawn_reloaded_codex_sessions(
             env!("CARGO_PKG_VERSION").to_string(),
             f64::from(app_settings_snapshot.codex_auto_compaction_threshold_percent),
             auto_compaction_enabled,
-            TauriEventSink::new(window.app_handle().clone()),
+            build_event_sink(window.app_handle().clone()),
         )
         .await
         {
@@ -136,7 +136,7 @@ pub(crate) async fn update_app_settings(
                     env!("CARGO_PKG_VERSION").to_string(),
                     auto_compaction_threshold_percent,
                     auto_compaction_enabled,
-                    crate::event_sink::TauriEventSink::new(window.app_handle().clone()),
+                    crate::event_sink::build_event_sink(window.app_handle().clone()),
                 )
             },
         )

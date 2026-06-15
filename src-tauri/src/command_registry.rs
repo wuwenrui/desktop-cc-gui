@@ -91,6 +91,7 @@ pub(crate) fn invoke_handler(
         crate::engine::get_engine_config,
         crate::engine::is_engine_available,
         crate::engine::get_available_engines,
+        crate::engine::get_engine_active_process_diagnostics,
         crate::engine::get_engine_models,
         crate::engine::opencode_commands_list,
         crate::engine::opencode_agents_list,

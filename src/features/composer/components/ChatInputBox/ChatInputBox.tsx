@@ -1023,6 +1023,7 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
       editableRef,
       getTextContent,
       handleInput,
+      historyScopeKey: workspaceId ?? null,
     });
 
     // Keyboard navigation hook

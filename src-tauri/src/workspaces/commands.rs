@@ -777,7 +777,10 @@ pub(crate) async fn read_external_spec_file(
         }
     }
 
-    read_external_spec_file_inner(&spec_root, &path)
+    workspaces_core::run_blocking_file_io("read_external_spec_file", move || {
+        read_external_spec_file_inner(&spec_root, &path)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -812,7 +815,10 @@ pub(crate) async fn read_external_absolute_file(
         )?
     };
 
-    read_external_absolute_file_inner(&path, &allowed_roots)
+    workspaces_core::run_blocking_file_io("read_external_absolute_file", move || {
+        read_external_absolute_file_inner(&path, &allowed_roots)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -859,7 +865,11 @@ pub(crate) async fn resolve_file_preview_handle(
             }
 
             let root = spec_root.ok_or_else(|| "specRoot is required.".to_string())?;
-            resolve_external_spec_preview_handle_inner(&root, &path)
+            workspaces_core::run_blocking_file_io(
+                "resolve_external_spec_preview_handle",
+                move || resolve_external_spec_preview_handle_inner(&root, &path),
+            )
+            .await
         }
         "external-absolute" => {
             let custom_skill_roots = {
@@ -878,7 +888,11 @@ pub(crate) async fn resolve_file_preview_handle(
                 )?
             };
 
-            resolve_external_absolute_preview_handle_inner(&path, &allowed_roots)
+            workspaces_core::run_blocking_file_io(
+                "resolve_external_absolute_preview_handle",
+                move || resolve_external_absolute_preview_handle_inner(&path, &allowed_roots),
+            )
+            .await
         }
         _ => Err("Unsupported preview handle domain.".to_string()),
     }
@@ -911,7 +925,10 @@ pub(crate) async fn write_external_spec_file(
         }
     }
 
-    write_external_spec_file_inner(&spec_root, &path, &content)
+    workspaces_core::run_blocking_file_io("write_external_spec_file", move || {
+        write_external_spec_file_inner(&spec_root, &path, &content)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -942,7 +959,10 @@ pub(crate) async fn write_external_absolute_file(
         allowed_external_skill_roots(&state, &workspaces, &workspace_id, &custom_skill_roots)?
     };
 
-    write_external_absolute_file_inner(&path, &allowed_roots, &content)
+    workspaces_core::run_blocking_file_io("write_external_absolute_file", move || {
+        write_external_absolute_file_inner(&path, &allowed_roots, &content)
+    })
+    .await
 }
 
 #[tauri::command]
