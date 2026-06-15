@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 6
+- **Total Sessions**: 7
 - **Last Active**: 2026-06-15
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~248 | Active |
+| `journal-1.md` | ~285 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 7 | 2026-06-15 | 修复设置崩溃和模型映射回填 | `84c1c07d` | `main` |
 | 6 | 2026-06-15 | 合并 upstream main 并保留 fork 能力 | `625216f0` | `main` |
 | 5 | 2026-06-15 | 修复请求输入跳转右漂 | `d2447e4e` | `main` |
 | 4 | 2026-06-14 | 统一 lawhub 技能中文展示和查看入口 | `6c626e31` | `main` |
