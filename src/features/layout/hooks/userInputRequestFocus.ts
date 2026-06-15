@@ -1,5 +1,27 @@
 import type { RequestUserInputRequest } from "../../../types";
 
+function scrollCardIntoMessagesView(card: HTMLElement, scroller: HTMLElement) {
+  const scrollerRect = scroller.getBoundingClientRect();
+  const cardRect = card.getBoundingClientRect();
+  const targetTop =
+    scroller.scrollTop +
+    (cardRect.top - scrollerRect.top) -
+    scroller.clientHeight / 2 +
+    cardRect.height / 2;
+  const nextTop = Math.max(0, targetTop);
+  if (typeof scroller.scrollTo === "function") {
+    scroller.scrollTo({
+      left: 0,
+      top: nextTop,
+      behavior: "smooth",
+    });
+  } else {
+    scroller.scrollTop = nextTop;
+    scroller.scrollLeft = 0;
+  }
+  scroller.scrollLeft = 0;
+}
+
 export function focusUserInputRequestCard(request: RequestUserInputRequest) {
   if (typeof document === "undefined") {
     return false;
@@ -14,7 +36,12 @@ export function focusUserInputRequestCard(request: RequestUserInputRequest) {
   if (!card) {
     return false;
   }
-  card.scrollIntoView({ block: "center", behavior: "smooth" });
+  const messagesScroller = card.closest<HTMLElement>(".messages");
+  if (messagesScroller) {
+    scrollCardIntoMessagesView(card, messagesScroller);
+  } else {
+    card.scrollIntoView({ block: "center", behavior: "smooth", inline: "nearest" });
+  }
   card.focus({ preventScroll: true });
   return true;
 }

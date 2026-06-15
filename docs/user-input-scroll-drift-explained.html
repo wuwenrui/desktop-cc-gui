@@ -1,0 +1,629 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>请求输入跳转右漂问题说明</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #17212b;
+        --muted: #66717d;
+        --paper: #f7f5ef;
+        --panel: #fffaf0;
+        --line: #d8d1c2;
+        --blue: #1267c9;
+        --red: #ce4c3a;
+        --green: #287b4d;
+        --amber: #d79921;
+        --shadow: 0 22px 60px rgba(47, 42, 31, 0.16);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        color: var(--ink);
+        font-family:
+          "Iowan Old Style", "Songti SC", "Noto Serif CJK SC", Georgia, serif;
+        background:
+          linear-gradient(90deg, rgba(23, 33, 43, 0.05) 1px, transparent 1px),
+          linear-gradient(rgba(23, 33, 43, 0.05) 1px, transparent 1px),
+          radial-gradient(circle at 18% 12%, rgba(206, 76, 58, 0.12), transparent 28%),
+          radial-gradient(circle at 82% 22%, rgba(18, 103, 201, 0.12), transparent 30%),
+          var(--paper);
+        background-size:
+          38px 38px,
+          38px 38px,
+          auto,
+          auto,
+          auto;
+      }
+
+      main {
+        width: min(1400px, calc(100vw - 48px));
+        margin: 0 auto;
+        padding: 34px 0 48px;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 28px;
+        align-items: end;
+        margin-bottom: 24px;
+      }
+
+      h1 {
+        margin: 0;
+        max-width: 980px;
+        font-size: clamp(34px, 5vw, 76px);
+        line-height: 0.94;
+        letter-spacing: 0;
+      }
+
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        min-height: 34px;
+        padding: 0 14px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--muted);
+        background: rgba(255, 250, 240, 0.72);
+        font-family: "Menlo", "SFMono-Regular", monospace;
+        font-size: 13px;
+        white-space: nowrap;
+      }
+
+      .lead {
+        max-width: 980px;
+        margin: 0 0 26px;
+        color: #303b45;
+        font-size: 18px;
+        line-height: 1.7;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 22px;
+      }
+
+      .case {
+        position: relative;
+        min-width: 0;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(255, 250, 240, 0.86);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+
+      .case header {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 18px 20px;
+        border-bottom: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.56);
+      }
+
+      .case h2 {
+        margin: 0;
+        font-size: 23px;
+        line-height: 1.2;
+      }
+
+      .case p {
+        margin: 8px 0 0;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.55;
+      }
+
+      .badge {
+        height: 28px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-family: "Menlo", "SFMono-Regular", monospace;
+        font-size: 12px;
+        white-space: nowrap;
+      }
+
+      .bad {
+        color: #8f251a;
+        background: rgba(206, 76, 58, 0.13);
+        border: 1px solid rgba(206, 76, 58, 0.28);
+      }
+
+      .good {
+        color: #1d5d39;
+        background: rgba(40, 123, 77, 0.13);
+        border: 1px solid rgba(40, 123, 77, 0.26);
+      }
+
+      .window {
+        margin: 20px;
+        border: 1px solid #c7c0b1;
+        border-radius: 8px;
+        background: #fdfbf7;
+        overflow: hidden;
+      }
+
+      .toolbar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 42px;
+        padding: 0 14px;
+        border-bottom: 1px solid #ddd5c5;
+        background: #f2efe7;
+      }
+
+      .dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #c0b8aa;
+      }
+
+      .title {
+        margin-left: 8px;
+        color: #49535e;
+        font-family: "Menlo", "SFMono-Regular", monospace;
+        font-size: 12px;
+      }
+
+      .messages {
+        position: relative;
+        height: 430px;
+        overflow: hidden;
+        background:
+          linear-gradient(90deg, rgba(216, 209, 194, 0.45) 1px, transparent 1px),
+          #fffefb;
+        background-size: 80px 100%;
+      }
+
+      .track {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 1040px;
+        height: 100%;
+        padding: 26px 28px;
+        transition: transform 900ms cubic-bezier(0.2, 0.8, 0.2, 1);
+      }
+
+      .problem .track {
+        animation: driftRight 4.2s ease-in-out infinite;
+      }
+
+      .solution .track {
+        width: 100%;
+        animation: stayPinned 4.2s ease-in-out infinite;
+      }
+
+      .solution .message {
+        width: min(680px, calc(100% - 96px));
+        margin-left: 48px;
+      }
+
+      .solution .tool,
+      .solution .question-card {
+        width: calc(100% - 96px);
+        margin-left: 48px;
+      }
+
+      .center-guide {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 50%;
+        width: 2px;
+        background: rgba(215, 153, 33, 0.45);
+      }
+
+      .center-guide::after {
+        content: "视口中心";
+        position: absolute;
+        top: 12px;
+        left: 8px;
+        color: #9a6b10;
+        font-family: "Menlo", "SFMono-Regular", monospace;
+        font-size: 11px;
+        white-space: nowrap;
+      }
+
+      .message {
+        width: 680px;
+        margin-left: 330px;
+        padding: 14px 16px;
+        border-radius: 8px;
+        color: #fff;
+        background: var(--blue);
+        font-size: 14px;
+        line-height: 1.55;
+      }
+
+      .tool {
+        width: 760px;
+        margin: 16px 0 0 300px;
+        padding: 14px 16px;
+        border: 1px solid #d8d1c2;
+        border-radius: 8px;
+        background: #fffaf0;
+      }
+
+      .tool-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+        color: #34404b;
+        font-family: "Menlo", "SFMono-Regular", monospace;
+        font-size: 13px;
+      }
+
+      .question-card {
+        width: 780px;
+        margin: 16px 0 0 300px;
+        padding: 14px;
+        border: 2px solid #9dccff;
+        border-radius: 10px;
+        background: #ffffff;
+        box-shadow: 0 10px 24px rgba(18, 103, 201, 0.12);
+      }
+
+      .tabs {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+
+      .tab {
+        min-height: 28px;
+        border: 1px solid #b9dbff;
+        border-radius: 999px;
+        color: #1267c9;
+        background: #eaf5ff;
+        text-align: center;
+        font-family: "Menlo", "SFMono-Regular", monospace;
+        font-size: 12px;
+        line-height: 28px;
+      }
+
+      .choices {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+        margin-top: 14px;
+      }
+
+      .choice {
+        min-height: 64px;
+        padding: 10px;
+        border: 1px solid #e0e4e7;
+        border-radius: 8px;
+        color: #4d5965;
+        background: #fbfcfd;
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .cursor {
+        position: absolute;
+        right: 22px;
+        bottom: 20px;
+        width: 102px;
+        height: 32px;
+        border-radius: 999px;
+        color: #fff;
+        background: var(--blue);
+        font-family: "Menlo", "SFMono-Regular", monospace;
+        font-size: 12px;
+        line-height: 32px;
+        text-align: center;
+        box-shadow: 0 12px 28px rgba(18, 103, 201, 0.28);
+      }
+
+      .problem .cursor {
+        animation: clickAndDrift 4.2s ease-in-out infinite;
+      }
+
+      .solution .cursor {
+        animation: clickAndPin 4.2s ease-in-out infinite;
+      }
+
+      .scroll-readout {
+        position: absolute;
+        left: 18px;
+        bottom: 18px;
+        padding: 8px 10px;
+        border: 1px solid #d8d1c2;
+        border-radius: 6px;
+        background: rgba(255, 250, 240, 0.92);
+        font-family: "Menlo", "SFMono-Regular", monospace;
+        font-size: 12px;
+      }
+
+      .problem .scroll-readout::after {
+        content: "scrollLeft: 240";
+        color: var(--red);
+        animation: badReadout 4.2s step-end infinite;
+      }
+
+      .solution .scroll-readout::after {
+        content: "scrollLeft: 0";
+        color: var(--green);
+      }
+
+      .notes {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 14px;
+        margin-top: 22px;
+      }
+
+      .note {
+        min-width: 0;
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(255, 250, 240, 0.78);
+      }
+
+      .note b {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 16px;
+      }
+
+      .note span {
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.65;
+      }
+
+      code {
+        padding: 2px 5px;
+        border: 1px solid rgba(23, 33, 43, 0.12);
+        border-radius: 4px;
+        background: rgba(255, 255, 255, 0.62);
+        font-family: "Menlo", "SFMono-Regular", monospace;
+        font-size: 0.92em;
+      }
+
+      @keyframes driftRight {
+        0%,
+        34% {
+          transform: translateX(0);
+        }
+        52%,
+        100% {
+          transform: translateX(-240px);
+        }
+      }
+
+      @keyframes stayPinned {
+        0%,
+        34% {
+          transform: translateX(0);
+        }
+        52%,
+        100% {
+          transform: translateX(0);
+        }
+      }
+
+      @keyframes clickAndDrift {
+        0%,
+        28% {
+          transform: translate(0, 0);
+          background: var(--blue);
+        }
+        38% {
+          transform: translate(-8px, -8px) scale(0.96);
+          background: #0f56a8;
+        }
+        55%,
+        100% {
+          transform: translate(-240px, -8px);
+          background: var(--red);
+        }
+      }
+
+      @keyframes clickAndPin {
+        0%,
+        28% {
+          transform: translate(0, 0);
+          background: var(--blue);
+        }
+        38% {
+          transform: translate(-8px, -8px) scale(0.96);
+          background: #0f56a8;
+        }
+        55%,
+        100% {
+          transform: translate(-8px, -8px);
+          background: var(--green);
+        }
+      }
+
+      @keyframes badReadout {
+        0%,
+        40% {
+          content: "scrollLeft: 0";
+        }
+        41%,
+        100% {
+          content: "scrollLeft: 240";
+        }
+      }
+
+      @media (max-width: 980px) {
+        main {
+          width: min(100vw - 24px, 720px);
+          padding-top: 22px;
+        }
+
+        .hero,
+        .grid,
+        .notes {
+          grid-template-columns: 1fr;
+        }
+
+        .tag {
+          justify-self: start;
+        }
+
+        .messages {
+          height: 390px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero" aria-labelledby="page-title">
+        <div>
+          <h1 id="page-title">对话右漂不是消息变宽，而是请求输入跳转把滚动容器横向带偏。</h1>
+        </div>
+        <div class="tag">LawyerCopilot / request input scroll</div>
+      </section>
+
+      <p class="lead">
+        用户看到的现象发生在 Claude 或 Claude+Codex 进入“请求输入”状态后。输入框出现“去回答”，点击后代码会定位到请求卡片。
+        旧逻辑直接对卡片调用 <code>scrollIntoView</code>，浏览器会顺手调整横向滚动，于是整条对话内容看起来漂到了右侧。
+      </p>
+
+      <section class="grid" aria-label="问题和修复对比">
+        <article class="case problem">
+          <header>
+            <div>
+              <h2>修复前：跳转卡片时横向滚动被带走</h2>
+              <p>点击“去回答”后，卡片进入视口，但消息轨道整体左移，视觉上就是内容漂到右侧。</p>
+            </div>
+            <span class="badge bad">old: scrollIntoView</span>
+          </header>
+          <div class="window">
+            <div class="toolbar">
+              <span class="dot"></span>
+              <span class="dot"></span>
+              <span class="dot"></span>
+              <span class="title">Shared Session</span>
+            </div>
+            <div class="messages">
+              <div class="center-guide"></div>
+              <div class="track">
+                <div class="message">
+                  去这里，改一下离职通知。给赵总的通知要确认多会儿劳动关系已经解除。
+                </div>
+                <div class="tool">
+                  <div class="tool-title">
+                    <span>Claude / skill</span>
+                    <span>读取文件</span>
+                  </div>
+                  已读取原文内容，准备生成 V2 版本。
+                </div>
+                <div class="question-card">
+                  <div class="tool-title">
+                    <strong>请求输入</strong>
+                    <span>4:02</span>
+                  </div>
+                  <div class="tabs">
+                    <div class="tab">1 解除日期</div>
+                    <div class="tab">2 法律依据</div>
+                  </div>
+                  <div class="choices">
+                    <div class="choice">留空待填<br />由客户自行填写日期</div>
+                    <div class="choice">2026年6月15日<br />以通知落款日为准</div>
+                    <div class="choice">2026年6月___日<br />留空月份内日期</div>
+                  </div>
+                </div>
+              </div>
+              <div class="cursor">去回答</div>
+              <div class="scroll-readout"></div>
+            </div>
+          </div>
+        </article>
+
+        <article class="case solution">
+          <header>
+            <div>
+              <h2>修复后：只做纵向定位，横向固定为 0</h2>
+              <p>仍然把请求卡片滚到中间，但每次跳转都明确把消息容器的横向位置归零。</p>
+            </div>
+            <span class="badge good">new: left = 0</span>
+          </header>
+          <div class="window">
+            <div class="toolbar">
+              <span class="dot"></span>
+              <span class="dot"></span>
+              <span class="dot"></span>
+              <span class="title">Shared Session</span>
+            </div>
+            <div class="messages">
+              <div class="center-guide"></div>
+              <div class="track">
+                <div class="message">
+                  去这里，改一下离职通知。给赵总的通知要确认多会儿劳动关系已经解除。
+                </div>
+                <div class="tool">
+                  <div class="tool-title">
+                    <span>Claude / skill</span>
+                    <span>读取文件</span>
+                  </div>
+                  已读取原文内容，准备生成 V2 版本。
+                </div>
+                <div class="question-card">
+                  <div class="tool-title">
+                    <strong>请求输入</strong>
+                    <span>4:02</span>
+                  </div>
+                  <div class="tabs">
+                    <div class="tab">1 解除日期</div>
+                    <div class="tab">2 法律依据</div>
+                  </div>
+                  <div class="choices">
+                    <div class="choice">留空待填<br />由客户自行填写日期</div>
+                    <div class="choice">2026年6月15日<br />以通知落款日为准</div>
+                    <div class="choice">2026年6月___日<br />留空月份内日期</div>
+                  </div>
+                </div>
+              </div>
+              <div class="cursor">去回答</div>
+              <div class="scroll-readout"></div>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section class="notes" aria-label="技术说明">
+        <div class="note">
+          <b>真实触发点</b>
+          <span>
+            输入区发现未完成请求后显示“去回答”。点击后走 <code>onJumpToUserInputRequest</code>，
+            再调用 <code>focusUserInputRequestCard</code> 定位请求卡片。
+          </span>
+        </div>
+        <div class="note">
+          <b>旧问题</b>
+          <span>
+            <code>scrollIntoView</code> 是浏览器原生定位。它不只处理纵向滚动，也可能为了让元素完整可见而改变横向滚动。
+          </span>
+        </div>
+        <div class="note">
+          <b>新方案</b>
+          <span>
+            手动计算请求卡片的纵向居中位置，调用消息容器 <code>scrollTo({ left: 0, top })</code>，
+            然后再次写入 <code>scrollLeft = 0</code> 防止横向残留。
+          </span>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
