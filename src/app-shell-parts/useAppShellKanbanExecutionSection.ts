@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import {
-  captureBrowserAgentSnapshot,
-} from "../services/tauri";
-import {
-  isKanbanThreadCompatibleWithEngine,
-} from "../features/kanban/utils/contextMode";
+import { captureBrowserAgentSnapshot } from "../services/tauri";
+import { isKanbanThreadCompatibleWithEngine } from "../features/kanban/utils/contextMode";
 import { findTaskDownstream } from "../features/kanban/utils/chaining";
-import { buildChainedPromptPrefix, extractKanbanResultSnapshot } from "../features/kanban/utils/resultSnapshot";
+import {
+  buildChainedPromptPrefix,
+  extractKanbanResultSnapshot,
+} from "../features/kanban/utils/resultSnapshot";
 import {
   beginKanbanTaskRunLifecycle,
   patchKanbanTaskRunLifecycle,
@@ -16,9 +15,7 @@ import {
   cancelTaskRunRecovery,
 } from "../features/tasks/utils/taskRunRecovery";
 import { buildLatestRunSummary } from "../features/tasks/utils/taskRunProjection";
-import {
-  deriveTaskRunTelemetryPatch,
-} from "../features/tasks/utils/taskRunTelemetry";
+import { deriveTaskRunTelemetryPatch } from "../features/tasks/utils/taskRunTelemetry";
 import {
   buildTaskRunBrowserEvidenceRef,
   loadTaskRunStore,
@@ -57,6 +54,7 @@ import {
   resolveTaskThreadId,
   syncKanbanExecutionEngineAndModel,
 } from "./useAppShellSections.kanbanHelpers";
+import type { UseAppShellSectionsContext } from "./useAppShellSectionsTypes";
 
 const KANBAN_SCHEDULER_INTERVAL_MS = 20_000;
 const KANBAN_EXECUTION_LOCK_STALE_MS = 120_000;
@@ -76,7 +74,9 @@ type CreateKanbanTaskInput = Pick<
   | "chain"
 >;
 
-export function useAppShellKanbanExecutionSection(ctx: any) {
+export function useAppShellKanbanExecutionSection(
+  ctx: UseAppShellSectionsContext,
+) {
   const {
     activeEngine,
     activeWorkspace,
@@ -107,7 +107,10 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
   } = ctx;
   const typedKanbanTasks = kanbanTasks as KanbanTask[];
   const typedThreadItemsByThread = threadItemsByThread as Record<string, any[]>;
-  const typedThreadsByWorkspace = threadsByWorkspace as Record<string, ThreadSummary[]>;
+  const typedThreadsByWorkspace = threadsByWorkspace as Record<
+    string,
+    ThreadSummary[]
+  >;
   const typedThreadStatusById = threadStatusById as Record<string, any>;
   const typedWorkspacesByPath = workspacesByPath as Map<string, WorkspaceInfo>;
   const typedKanbanViewState = kanbanViewState as KanbanViewState;
@@ -115,7 +118,10 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
   const kanbanTasksRef = useRef<KanbanTask[]>(typedKanbanTasks);
   const schedulerStartedAtRef = useRef(Date.now());
   const kanbanExecutionLocksRef = useRef<
-    Record<string, { token: string; source: KanbanTaskExecutionSource; acquiredAt: number }>
+    Record<
+      string,
+      { token: string; source: KanbanTaskExecutionSource; acquiredAt: number }
+    >
   >({});
 
   useEffect(() => {
@@ -174,11 +180,18 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
   );
 
   const persistKanbanTaskComposerSelection = useCallback(
-    (workspaceId: string, threadId: string, modelId: string | null | undefined) => {
+    (
+      workspaceId: string,
+      threadId: string,
+      modelId: string | null | undefined,
+    ) => {
       if (!modelId) {
         return;
       }
-      const currentSelection = resolveComposerSelectionForThread(workspaceId, threadId);
+      const currentSelection = resolveComposerSelectionForThread(
+        workspaceId,
+        threadId,
+      );
       persistComposerSelectionForThread(workspaceId, threadId, {
         modelId,
         effort: currentSelection?.effort ?? null,
@@ -188,10 +201,16 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
   );
 
   const handleDispatchOrchestrationTask = useCallback(
-    async (confirmation: any): Promise<{ ok: boolean; taskId?: string | null; reason?: string }> => {
+    async (
+      confirmation: any,
+    ): Promise<{ ok: boolean; taskId?: string | null; reason?: string }> => {
       const taskId = confirmation?.task?.taskId ?? null;
       const validEngines = new Set(["codex", "claude", "gemini"]);
-      const validThreadStrategies = new Set(["new_thread", "reuse_active_thread", "choose_thread"]);
+      const validThreadStrategies = new Set([
+        "new_thread",
+        "reuse_active_thread",
+        "choose_thread",
+      ]);
       if (
         !confirmation?.task ||
         typeof confirmation.workspaceId !== "string" ||
@@ -217,7 +236,9 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
         const workspace =
           activeWorkspace?.id === confirmation.workspaceId
             ? activeWorkspace
-            : workspaces.find((entry: WorkspaceInfo) => entry.id === confirmation.workspaceId) ?? null;
+            : (workspaces.find(
+                (entry: WorkspaceInfo) => entry.id === confirmation.workspaceId,
+              ) ?? null);
         if (!workspace) {
           throw new Error("workspace_not_found");
         }
@@ -226,7 +247,7 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
         await setActiveEngine(confirmation.engine);
         threadId =
           confirmation.threadStrategy === "reuse_active_thread"
-            ? confirmation.task.linkedSessionIds[0] ?? null
+            ? (confirmation.task.linkedSessionIds[0] ?? null)
             : null;
         if (!threadId) {
           threadId = await startThreadForWorkspace(workspace.id, {
@@ -239,7 +260,10 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
         }
 
         if (confirmation.model) {
-          const currentSelection = resolveComposerSelectionForThread(workspace.id, threadId);
+          const currentSelection = resolveComposerSelectionForThread(
+            workspace.id,
+            threadId,
+          );
           persistComposerSelectionForThread(workspace.id, threadId, {
             modelId: confirmation.model,
             effort: currentSelection?.effort ?? null,
@@ -255,23 +279,32 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
           confirmation.model ? { model: confirmation.model } : undefined,
         );
 
-        const nextTaskRunStore = patchTaskRun(initial.taskRunStore, initial.run.runId, {
-          status: "running",
-          model: confirmation.model ?? null,
-          linkedThreadId: threadId,
-          currentStep: "first_message_sent",
-          latestOutputSummary: "Task prompt sent to session.",
-          startedAt,
-          now: startedAt,
-        });
+        const nextTaskRunStore = patchTaskRun(
+          initial.taskRunStore,
+          initial.run.runId,
+          {
+            status: "running",
+            model: confirmation.model ?? null,
+            linkedThreadId: threadId,
+            currentStep: "first_message_sent",
+            latestOutputSummary: "Task prompt sent to session.",
+            startedAt,
+            now: startedAt,
+          },
+        );
         const nextOrchestrationTaskStore = patchOrchestrationTask(
-          upsertOrchestrationTask(initial.orchestrationTaskStore, confirmation.task),
+          upsertOrchestrationTask(
+            initial.orchestrationTaskStore,
+            confirmation.task,
+          ),
           confirmation.task.taskId,
           {
             status: "running",
             preferredEngine: confirmation.engine,
             preferredModel: confirmation.model ?? null,
-            linkedSessionIds: [...new Set([...confirmation.task.linkedSessionIds, threadId])],
+            linkedSessionIds: [
+              ...new Set([...confirmation.task.linkedSessionIds, threadId]),
+            ],
             now: new Date(startedAt).toISOString(),
           },
         );
@@ -282,19 +315,32 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
         const reason = error instanceof Error ? error.message : String(error);
         const failedAt = Date.now();
         const linkedSessionIds = threadId
-          ? [...new Set([...(confirmation.task.linkedSessionIds ?? []), threadId])]
-          : confirmation.task.linkedSessionIds ?? [];
-        const nextTaskRunStore = patchTaskRun(initial.taskRunStore, initial.run.runId, {
-          status: "failed",
-          model: confirmation.model ?? null,
-          linkedThreadId: threadId ?? initial.run.linkedThreadId ?? null,
-          currentStep: "runtime_start_failed",
-          latestOutputSummary: reason,
-          failureReason: reason,
-          availableRecoveryActions: ["open_conversation", "retry", "fork_new_run"],
-          finishedAt: failedAt,
-          now: failedAt,
-        });
+          ? [
+              ...new Set([
+                ...(confirmation.task.linkedSessionIds ?? []),
+                threadId,
+              ]),
+            ]
+          : (confirmation.task.linkedSessionIds ?? []);
+        const nextTaskRunStore = patchTaskRun(
+          initial.taskRunStore,
+          initial.run.runId,
+          {
+            status: "failed",
+            model: confirmation.model ?? null,
+            linkedThreadId: threadId ?? initial.run.linkedThreadId ?? null,
+            currentStep: "runtime_start_failed",
+            latestOutputSummary: reason,
+            failureReason: reason,
+            availableRecoveryActions: [
+              "open_conversation",
+              "retry",
+              "fork_new_run",
+            ],
+            finishedAt: failedAt,
+            now: failedAt,
+          },
+        );
         const nextOrchestrationTaskStore = patchOrchestrationTask(
           initial.orchestrationTaskStore,
           confirmation.task.taskId,
@@ -332,8 +378,12 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
       injectedPrefix?: string;
       forceNewThread?: boolean;
       existingRunId?: string | null;
-    }): Promise<{ ok: true; threadId: string } | { ok: false; reason: string }> => {
-      const task = kanbanTasksRef.current.find((entry) => entry.id === params.taskId);
+    }): Promise<
+      { ok: true; threadId: string } | { ok: false; reason: string }
+    > => {
+      const task = kanbanTasksRef.current.find(
+        (entry) => entry.id === params.taskId,
+      );
       if (!task) {
         return { ok: false, reason: "task_not_found" };
       }
@@ -359,7 +409,9 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
         return { ok: false, reason: "non_reentrant_trigger_blocked" };
       }
       if (!taskRunId) {
-        let taskRunResult: ReturnType<typeof beginKanbanTaskRunLifecycle> | null = null;
+        let taskRunResult: ReturnType<
+          typeof beginKanbanTaskRunLifecycle
+        > | null = null;
         try {
           taskRunResult = beginKanbanTaskRunLifecycle({
             task,
@@ -409,26 +461,26 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
         await connectWorkspace(workspace);
         const engine = (task.engineType ?? activeEngine) as "claude" | "codex";
         const workspaceThreads = typedThreadsByWorkspace[workspace.id] ?? [];
-        const { outboundModel, shouldSyncComposerSelection, composerSelection } =
-          await syncKanbanExecutionEngineAndModel({
-            activate: params.activate,
-            engine,
-            modelId: task.modelId,
-            setActiveEngine,
-          });
+        const {
+          outboundModel,
+          shouldSyncComposerSelection,
+          composerSelection,
+        } = await syncKanbanExecutionEngineAndModel({
+          activate: params.activate,
+          engine,
+          modelId: task.modelId,
+          setActiveEngine,
+        });
 
         const shouldForceNewThread = Boolean(params.forceNewThread);
-        const canonicalTaskThreadId =
-          shouldForceNewThread
-            ? null
-            : resolveTaskThreadId(task.threadId, resolveCanonicalThreadId);
-        const canonicalTaskThreadEngine =
-          canonicalTaskThreadId
-            ? (
-                workspaceThreads.find((entry) => entry.id === canonicalTaskThreadId)
-                  ?.engineSource ?? null
-              )
-            : null;
+        const canonicalTaskThreadId = shouldForceNewThread
+          ? null
+          : resolveTaskThreadId(task.threadId, resolveCanonicalThreadId);
+        const canonicalTaskThreadEngine = canonicalTaskThreadId
+          ? (workspaceThreads.find(
+              (entry) => entry.id === canonicalTaskThreadId,
+            )?.engineSource ?? null)
+          : null;
         const canReuseExistingThread = isKanbanThreadCompatibleWithEngine({
           engine,
           threadId: canonicalTaskThreadId,
@@ -470,7 +522,11 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
         }
 
         if (shouldSyncComposerSelection && composerSelection?.modelId) {
-          persistKanbanTaskComposerSelection(workspace.id, threadId, composerSelection.modelId);
+          persistKanbanTaskComposerSelection(
+            workspace.id,
+            threadId,
+            composerSelection.modelId,
+          );
         }
 
         const executionStartedAt = Date.now();
@@ -499,10 +555,16 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
           ? `${params.injectedPrefix}\n\n${baseMessage}`
           : baseMessage;
         if (firstMessage) {
-          await sendUserMessageToThread(workspace, threadId, firstMessage, task.images ?? [], {
-            ...(outboundModel ? { model: outboundModel } : {}),
-            ...(browserContextAttachment ? { browserContextAttachment } : {}),
-          });
+          await sendUserMessageToThread(
+            workspace,
+            threadId,
+            firstMessage,
+            task.images ?? [],
+            {
+              ...(outboundModel ? { model: outboundModel } : {}),
+              ...(browserContextAttachment ? { browserContextAttachment } : {}),
+            },
+          );
         }
 
         kanbanUpdateTask(task.id, { status: "inprogress" });
@@ -578,9 +640,11 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
 
       if (task.threadId) {
         let resolvedThreadId =
-          resolveTaskThreadId(task.threadId, resolveCanonicalThreadId) ?? task.threadId;
+          resolveTaskThreadId(task.threadId, resolveCanonicalThreadId) ??
+          task.threadId;
         const resolvedThreadEngine =
-          workspaceThreads.find((entry) => entry.id === resolvedThreadId)?.engineSource ?? null;
+          workspaceThreads.find((entry) => entry.id === resolvedThreadId)
+            ?.engineSource ?? null;
         const canReuseExistingThread = isKanbanThreadCompatibleWithEngine({
           engine,
           threadId: resolvedThreadId,
@@ -597,7 +661,8 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
         const isPendingThread =
           resolvedThreadId.startsWith("claude-pending-") ||
           resolvedThreadId.startsWith("opencode-pending-");
-        const hasThreadStatus = typedThreadStatusById[resolvedThreadId] !== undefined;
+        const hasThreadStatus =
+          typedThreadStatusById[resolvedThreadId] !== undefined;
         const existsInWorkspaceThreads = workspaceThreads.some(
           (entry) => entry.id === resolvedThreadId,
         );
@@ -609,13 +674,12 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
               .map((entry) =>
                 resolveTaskThreadId(entry.threadId, resolveCanonicalThreadId),
               )
-              .filter(
-                (threadId): threadId is string =>
-                  Boolean(
-                    threadId &&
-                      !threadId.startsWith("claude-pending-") &&
-                      !threadId.startsWith("opencode-pending-"),
-                  ),
+              .filter((threadId): threadId is string =>
+                Boolean(
+                  threadId &&
+                  !threadId.startsWith("claude-pending-") &&
+                  !threadId.startsWith("opencode-pending-"),
+                ),
               ),
           );
           const uniqueCandidate = resolvePendingSessionThreadCandidate({
@@ -635,7 +699,11 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
           resolvedThreadId.startsWith("claude-pending-") ||
           resolvedThreadId.startsWith("opencode-pending-");
         if (canActivateExistingThread) {
-          persistKanbanTaskComposerSelection(workspace.id, resolvedThreadId, task.modelId);
+          persistKanbanTaskComposerSelection(
+            workspace.id,
+            resolvedThreadId,
+            task.modelId,
+          );
           setActiveThreadId(resolvedThreadId, workspace.id);
           return;
         }
@@ -644,7 +712,11 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
       const threadId = await startThreadForWorkspace(workspace.id, { engine });
       if (threadId) {
         kanbanUpdateTask(task.id, { threadId });
-        persistKanbanTaskComposerSelection(workspace.id, threadId, task.modelId);
+        persistKanbanTaskComposerSelection(
+          workspace.id,
+          threadId,
+          task.modelId,
+        );
         setActiveThreadId(threadId, workspace.id);
       }
     },
@@ -663,7 +735,7 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
       typedKanbanTasks,
       resolveCanonicalThreadId,
       setSelectedKanbanTaskId,
-    ]
+    ],
   );
 
   const handleCloseTaskConversation = useCallback(() => {
@@ -671,7 +743,9 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
   }, [setSelectedKanbanTaskId]);
 
   const resolveTaskByRun = useCallback((run: TaskRunRecord) => {
-    return kanbanTasksRef.current.find((task) => task.id === run.task.taskId) ?? null;
+    return (
+      kanbanTasksRef.current.find((task) => task.id === run.task.taskId) ?? null
+    );
   }, []);
 
   const handleRetryTaskRun = useCallback(
@@ -687,11 +761,15 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
       });
       if (!recovery.ok) {
         if (recovery.latestRunSummary) {
-          kanbanUpdateTask(task.id, { latestRunSummary: recovery.latestRunSummary });
+          kanbanUpdateTask(task.id, {
+            latestRunSummary: recovery.latestRunSummary,
+          });
         }
         return;
       }
-      kanbanUpdateTask(task.id, { latestRunSummary: recovery.latestRunSummary });
+      kanbanUpdateTask(task.id, {
+        latestRunSummary: recovery.latestRunSummary,
+      });
       void launchKanbanTaskExecution({
         taskId: task.id,
         source: "manual",
@@ -716,11 +794,15 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
       });
       if (!recovery.ok) {
         if (recovery.latestRunSummary) {
-          kanbanUpdateTask(task.id, { latestRunSummary: recovery.latestRunSummary });
+          kanbanUpdateTask(task.id, {
+            latestRunSummary: recovery.latestRunSummary,
+          });
         }
         return;
       }
-      kanbanUpdateTask(task.id, { latestRunSummary: recovery.latestRunSummary });
+      kanbanUpdateTask(task.id, {
+        latestRunSummary: recovery.latestRunSummary,
+      });
       void launchKanbanTaskExecution({
         taskId: task.id,
         source: "manual",
@@ -750,7 +832,10 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
       if (run.linkedThreadId && activeThreadId === run.linkedThreadId) {
         await interruptTurn();
       }
-      const canceled = cancelTaskRunRecovery({ runId: run.runId, now: Date.now() });
+      const canceled = cancelTaskRunRecovery({
+        runId: run.runId,
+        now: Date.now(),
+      });
       if (canceled.run) {
         kanbanUpdateTask(run.task.taskId, {
           latestRunSummary: buildLatestRunSummary(canceled.run),
@@ -776,9 +861,12 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
             if (result.reason !== "task_not_found" || attempt >= 3) {
               return;
             }
-            window.setTimeout(() => {
-              tryLaunch(attempt + 1);
-            }, (attempt + 1) * 40);
+            window.setTimeout(
+              () => {
+                tryLaunch(attempt + 1);
+              },
+              (attempt + 1) * 40,
+            );
           });
         };
         tryLaunch(0);
@@ -798,7 +886,10 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
       if (!task.threadId) {
         continue;
       }
-      const canonicalThreadId = resolveTaskThreadId(task.threadId, resolveCanonicalThreadId);
+      const canonicalThreadId = resolveTaskThreadId(
+        task.threadId,
+        resolveCanonicalThreadId,
+      );
       if (canonicalThreadId && canonicalThreadId !== task.threadId) {
         kanbanUpdateTask(task.id, { threadId: canonicalThreadId });
         continue;
@@ -825,13 +916,12 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
           .map((entry) =>
             resolveTaskThreadId(entry.threadId, resolveCanonicalThreadId),
           )
-          .filter(
-            (threadId): threadId is string =>
-              Boolean(
-                threadId &&
-                  !threadId.startsWith("claude-pending-") &&
-                  !threadId.startsWith("opencode-pending-"),
-              ),
+          .filter((threadId): threadId is string =>
+            Boolean(
+              threadId &&
+              !threadId.startsWith("claude-pending-") &&
+              !threadId.startsWith("opencode-pending-"),
+            ),
           ),
       );
       const uniqueCandidate = resolvePendingSessionThreadCandidate({
@@ -867,13 +957,25 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
         setActiveWorkspaceId(ws.id);
       }
     }
-  }, [appMode, typedKanbanViewState, activeWorkspaceId, setActiveWorkspaceId, typedWorkspacesByPath]);
+  }, [
+    appMode,
+    typedKanbanViewState,
+    activeWorkspaceId,
+    setActiveWorkspaceId,
+    typedWorkspacesByPath,
+  ]);
 
   // Compute which kanban tasks are currently processing (AI responding)
   const taskProcessingMap = useMemo(() => {
-    const map: Record<string, { isProcessing: boolean; startedAt: number | null }> = {};
+    const map: Record<
+      string,
+      { isProcessing: boolean; startedAt: number | null }
+    > = {};
     for (const task of typedKanbanTasks) {
-      const taskThreadId = resolveTaskThreadId(task.threadId, resolveCanonicalThreadId);
+      const taskThreadId = resolveTaskThreadId(
+        task.threadId,
+        resolveCanonicalThreadId,
+      );
       if (taskThreadId) {
         const status = typedThreadStatusById[taskThreadId];
         map[task.id] = {
@@ -888,7 +990,9 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
   useEffect(() => {
     const runSchedulerTick = () => {
       const nowTs = Date.now();
-      const activeTaskIds = new Set(kanbanTasksRef.current.map((entry) => entry.id));
+      const activeTaskIds = new Set(
+        kanbanTasksRef.current.map((entry) => entry.id),
+      );
       for (const taskId of Object.keys(kanbanExecutionLocksRef.current)) {
         if (activeTaskIds.has(taskId)) {
           continue;
@@ -899,8 +1003,13 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
         const runtimeLock = kanbanExecutionLocksRef.current[task.id];
         if (runtimeLock) {
           const hasPersistedExecutionLock = Boolean(task.execution?.lock);
-          const isLockExpired = nowTs - runtimeLock.acquiredAt > KANBAN_EXECUTION_LOCK_STALE_MS;
-          if (!hasPersistedExecutionLock || task.status !== "todo" || isLockExpired) {
+          const isLockExpired =
+            nowTs - runtimeLock.acquiredAt > KANBAN_EXECUTION_LOCK_STALE_MS;
+          if (
+            !hasPersistedExecutionLock ||
+            task.status !== "todo" ||
+            isLockExpired
+          ) {
             delete kanbanExecutionLocksRef.current[task.id];
             if (task.execution?.lock) {
               updateTaskExecution(task.id, { lock: null });
@@ -917,7 +1026,10 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
         if (schedule.paused) {
           continue;
         }
-        const taskThreadId = resolveTaskThreadId(task.threadId, resolveCanonicalThreadId);
+        const taskThreadId = resolveTaskThreadId(
+          task.threadId,
+          resolveCanonicalThreadId,
+        );
         if (taskThreadId && task.threadId && taskThreadId !== task.threadId) {
           kanbanUpdateTask(task.id, { threadId: taskThreadId });
         }
@@ -931,7 +1043,9 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
           !isTaskProcessing &&
           typeof schedule.nextRunAt === "number" &&
           schedule.nextRunAt <= nowTs;
-        const normalizedStatus = shouldPromoteTestingToTodo ? "todo" : task.status;
+        const normalizedStatus = shouldPromoteTestingToTodo
+          ? "todo"
+          : task.status;
         if (normalizedStatus !== task.status) {
           kanbanUpdateTask(task.id, { status: normalizedStatus });
         }
@@ -966,7 +1080,8 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
           effectiveSchedule.recurringExecutionMode === "new_thread"
         ) {
           const recurringSeriesId =
-            typeof effectiveSchedule.seriesId === "string" && effectiveSchedule.seriesId.trim().length > 0
+            typeof effectiveSchedule.seriesId === "string" &&
+            effectiveSchedule.seriesId.trim().length > 0
               ? effectiveSchedule.seriesId.trim()
               : task.id;
           const hasSiblingExecuting = kanbanTasksRef.current.some((entry) => {
@@ -982,7 +1097,8 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
               return false;
             }
             const siblingSeriesId =
-              typeof siblingSchedule.seriesId === "string" && siblingSchedule.seriesId.trim().length > 0
+              typeof siblingSchedule.seriesId === "string" &&
+              siblingSchedule.seriesId.trim().length > 0
                 ? siblingSchedule.seriesId.trim()
                 : entry.id;
             if (siblingSeriesId !== recurringSeriesId) {
@@ -1002,7 +1118,10 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
           }
         }
 
-        if (effectiveSchedule.mode === "recurring" && hasReachedRecurringRoundLimit(effectiveSchedule)) {
+        if (
+          effectiveSchedule.mode === "recurring" &&
+          hasReachedRecurringRoundLimit(effectiveSchedule)
+        ) {
           kanbanUpdateTask(task.id, {
             status: "done",
             schedule: {
@@ -1017,10 +1136,16 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
           continue;
         }
 
-        if (isTaskProcessing || Boolean(kanbanExecutionLocksRef.current[task.id])) {
+        if (
+          isTaskProcessing ||
+          Boolean(kanbanExecutionLocksRef.current[task.id])
+        ) {
           // Running/locked is an expected transient condition for due recurring tasks.
           // Do not expose it as user-facing "blocked" state.
-          updateTaskExecution(task.id, { lastSource: "scheduled", blockedReason: null });
+          updateTaskExecution(task.id, {
+            lastSource: "scheduled",
+            blockedReason: null,
+          });
           continue;
         }
 
@@ -1065,7 +1190,10 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
     };
 
     runSchedulerTick();
-    const timer = window.setInterval(runSchedulerTick, KANBAN_SCHEDULER_INTERVAL_MS);
+    const timer = window.setInterval(
+      runSchedulerTick,
+      KANBAN_SCHEDULER_INTERVAL_MS,
+    );
     return () => {
       window.clearInterval(timer);
     };
@@ -1154,23 +1282,31 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
             ].join("|");
             return signature === recurringSignature;
           });
-          const siblingSeriesIds = Array.from(new Set(
-            recurringSiblings
-              .map((entry) => entry.schedule?.seriesId)
-              .filter((seriesId): seriesId is string =>
-                typeof seriesId === "string" && seriesId.trim().length > 0),
-          ));
+          const siblingSeriesIds = Array.from(
+            new Set(
+              recurringSiblings
+                .map((entry) => entry.schedule?.seriesId)
+                .filter(
+                  (seriesId): seriesId is string =>
+                    typeof seriesId === "string" && seriesId.trim().length > 0,
+                ),
+            ),
+          );
           const recurringSeriesId =
             task.schedule.recurringExecutionMode === "new_thread"
-              ? (
-                task.schedule.seriesId ??
+              ? (task.schedule.seriesId ??
                 (siblingSeriesIds.length === 1 ? siblingSeriesIds[0] : null) ??
-                task.id
-              )
-              : task.schedule.seriesId ?? null;
-          if (task.schedule.recurringExecutionMode === "new_thread" && siblingSeriesIds.length <= 1) {
+                task.id)
+              : (task.schedule.seriesId ?? null);
+          if (
+            task.schedule.recurringExecutionMode === "new_thread" &&
+            siblingSeriesIds.length <= 1
+          ) {
             for (const sibling of recurringSiblings) {
-              if (!sibling.schedule || sibling.schedule.seriesId === recurringSeriesId) {
+              if (
+                !sibling.schedule ||
+                sibling.schedule.seriesId === recurringSeriesId
+              ) {
                 continue;
               }
               kanbanUpdateTask(sibling.id, {
@@ -1189,7 +1325,8 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
             completionSource,
             completedAt,
           );
-          const reachedRoundLimit = hasReachedRecurringRoundLimit(completedSchedule);
+          const reachedRoundLimit =
+            hasReachedRecurringRoundLimit(completedSchedule);
           if (task.schedule.recurringExecutionMode === "new_thread") {
             kanbanUpdateTask(task.id, {
               status: reachedRoundLimit ? "done" : nextStatus,
@@ -1213,13 +1350,16 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
                   return false;
                 }
                 const siblingSeriesId =
-                  typeof siblingSchedule.seriesId === "string" && siblingSchedule.seriesId.trim().length > 0
+                  typeof siblingSchedule.seriesId === "string" &&
+                  siblingSchedule.seriesId.trim().length > 0
                     ? siblingSchedule.seriesId.trim()
                     : sibling.id;
                 if (siblingSeriesId !== recurringSeriesId) {
                   return false;
                 }
-                return sibling.status === "todo" || sibling.status === "inprogress";
+                return (
+                  sibling.status === "todo" || sibling.status === "inprogress"
+                );
               });
               if (!hasPendingSeriesTask) {
                 kanbanCreateTask({
@@ -1271,12 +1411,20 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
         const snapshot = extractKanbanResultSnapshot(
           resolveTaskThreadId(task.threadId, resolveCanonicalThreadId),
           (() => {
-            const taskThreadId = resolveTaskThreadId(task.threadId, resolveCanonicalThreadId);
-            return taskThreadId ? typedThreadItemsByThread[taskThreadId] : undefined;
+            const taskThreadId = resolveTaskThreadId(
+              task.threadId,
+              resolveCanonicalThreadId,
+            );
+            return taskThreadId
+              ? typedThreadItemsByThread[taskThreadId]
+              : undefined;
           })(),
         );
         if (snapshot) {
-          const taskThreadId = resolveTaskThreadId(task.threadId, resolveCanonicalThreadId);
+          const taskThreadId = resolveTaskThreadId(
+            task.threadId,
+            resolveCanonicalThreadId,
+          );
           kanbanUpdateTask(task.id, {
             ...(taskThreadId && task.threadId && taskThreadId !== task.threadId
               ? { threadId: taskThreadId }
@@ -1285,10 +1433,16 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
           });
         }
 
-        const downstreamTask = findTaskDownstream(kanbanTasksRef.current, task.id);
+        const downstreamTask = findTaskDownstream(
+          kanbanTasksRef.current,
+          task.id,
+        );
         if (downstreamTask) {
           if (!snapshot) {
-            setTaskChainBlockedReason(downstreamTask.id, "missing_upstream_snapshot");
+            setTaskChainBlockedReason(
+              downstreamTask.id,
+              "missing_upstream_snapshot",
+            );
             updateTaskExecution(downstreamTask.id, {
               lastSource: "chained",
               blockedReason: "missing_upstream_snapshot",
@@ -1299,8 +1453,14 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
               lastSource: "chained",
               blockedReason: "downstream_not_todo",
             });
-          } else if (downstreamTask.schedule?.mode && downstreamTask.schedule.mode !== "manual") {
-            setTaskChainBlockedReason(downstreamTask.id, "downstream_has_schedule");
+          } else if (
+            downstreamTask.schedule?.mode &&
+            downstreamTask.schedule.mode !== "manual"
+          ) {
+            setTaskChainBlockedReason(
+              downstreamTask.id,
+              "downstream_has_schedule",
+            );
             updateTaskExecution(downstreamTask.id, {
               lastSource: "chained",
               blockedReason: "downstream_has_schedule",
@@ -1360,10 +1520,17 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
       if (!run.linkedThreadId) {
         continue;
       }
-      if (run.status !== "planning" && run.status !== "running" && run.status !== "waiting_input") {
+      if (
+        run.status !== "planning" &&
+        run.status !== "running" &&
+        run.status !== "waiting_input"
+      ) {
         continue;
       }
-      const canonicalThreadId = resolveTaskThreadId(run.linkedThreadId, resolveCanonicalThreadId);
+      const canonicalThreadId = resolveTaskThreadId(
+        run.linkedThreadId,
+        resolveCanonicalThreadId,
+      );
       if (!canonicalThreadId) {
         continue;
       }
@@ -1410,7 +1577,6 @@ export function useAppShellKanbanExecutionSection(ctx: any) {
     },
     [launchKanbanTaskExecution],
   );
-
 
   return {
     handleOpenTaskConversation,

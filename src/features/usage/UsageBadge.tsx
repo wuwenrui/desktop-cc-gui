@@ -41,6 +41,20 @@ type LoadState =
   | { status: "ready"; usage: NewapiUsage }
   | { status: "error"; message: string };
 
+function isNewapiUsage(value: unknown): value is NewapiUsage {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Partial<NewapiUsage>;
+  return (
+    typeof candidate.granted_cny === "number" &&
+    typeof candidate.used_cny === "number" &&
+    typeof candidate.available_cny === "number" &&
+    typeof candidate.unlimited === "boolean"
+  );
+}
+
 /**
  * 常驻顶栏徽标：展示 new-api 余额与已用额度，每 60 秒刷新一次。
  *
@@ -56,9 +70,13 @@ export function UsageBadge() {
 
     async function refresh() {
       try {
-        const usage = await invoke<NewapiUsage>("get_newapi_usage");
+        const usage = await invoke<NewapiUsage | null>("get_newapi_usage");
         if (!cancelled) {
-          setState({ status: "ready", usage });
+          if (isNewapiUsage(usage)) {
+            setState({ status: "ready", usage });
+          } else {
+            setState({ status: "error", message: "new-api 用量返回为空" });
+          }
         }
       } catch (error) {
         if (!cancelled) {

@@ -4,18 +4,20 @@ use super::claude_forwarder::{
     ClaudeForwarderState, CLAUDE_RUNTIME_SYNC_HEARTBEAT_SECS,
 };
 use super::{
-    build_provider_prefill_query, delete_opencode_session_files,
-    delete_opencode_session_from_datastore, extract_turn_result_text,
-    is_likely_foreign_model_for_gemini, is_likely_legacy_claude_model_id,
-    is_valid_claude_model_for_passthrough, merge_opencode_agents, next_gemini_routed_item_id,
-    normalize_provider_key, opencode_data_candidate_roots, opencode_session_candidate_paths,
-    parse_imported_session_id, parse_json_value, parse_opencode_agent_list,
-    parse_opencode_auth_providers, parse_opencode_debug_config_agents,
-    parse_opencode_help_commands, parse_opencode_mcp_servers, parse_opencode_session_list,
-    parse_opencode_updated_at, provider_keys_match,
+    build_engine_active_process_diagnostics, build_provider_prefill_query,
+    delete_opencode_session_files, delete_opencode_session_from_datastore,
+    extract_turn_result_text, is_likely_foreign_model_for_gemini,
+    is_likely_legacy_claude_model_id, is_valid_claude_model_for_passthrough,
+    merge_opencode_agents, next_gemini_routed_item_id, normalize_provider_key,
+    opencode_data_candidate_roots, opencode_session_candidate_paths, parse_imported_session_id,
+    parse_json_value, parse_opencode_agent_list, parse_opencode_auth_providers,
+    parse_opencode_debug_config_agents, parse_opencode_help_commands,
+    parse_opencode_mcp_servers, parse_opencode_session_list, parse_opencode_updated_at,
+    provider_keys_match,
     record_claude_auto_session_metadata_for_sync_result,
     resolve_claude_auto_session_metadata_session_id, resolve_claude_session_id_for_engine_send,
-    EngineConfig, GeminiRenderLane, GeminiRenderRoutingState, OpenCodeAgentEntry,
+    EngineConfig, EngineWorkspaceActiveProcessDiagnostics, GeminiRenderLane,
+    GeminiRenderRoutingState, OpenCodeAgentEntry,
 };
 use crate::backend::events::AppServerEvent;
 use crate::engine::events::EngineEvent;
@@ -32,6 +34,39 @@ use std::time::{Duration, Instant};
 use uuid::Uuid;
 
 use crate::engine::SendMessageParams;
+
+#[test]
+fn engine_active_process_diagnostics_sorts_workspaces_and_counts_processes() {
+    let diagnostics = build_engine_active_process_diagnostics(
+        1_765_647_000_000,
+        vec![
+            EngineWorkspaceActiveProcessDiagnostics {
+                workspace_id: "ws-z".to_string(),
+                engine: crate::engine::EngineType::Claude,
+                active_process_ids: vec![301],
+            },
+            EngineWorkspaceActiveProcessDiagnostics {
+                workspace_id: "ws-a".to_string(),
+                engine: crate::engine::EngineType::Claude,
+                active_process_ids: vec![101, 102],
+            },
+        ],
+    );
+
+    assert!(diagnostics.measured);
+    assert_eq!(diagnostics.sampled_at_ms, 1_765_647_000_000);
+    assert_eq!(diagnostics.total_active_process_count, 3);
+    assert_eq!(
+        diagnostics
+            .workspaces
+            .iter()
+            .map(|workspace| workspace.workspace_id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["ws-a", "ws-z"]
+    );
+    assert_eq!(diagnostics.workspaces[0].active_process_ids, vec![101, 102]);
+    assert!(diagnostics.unsupported_reason.is_none());
+}
 
 #[test]
 fn resolve_claude_session_id_for_sync_new_auto_session_generates_identity() {

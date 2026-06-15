@@ -866,6 +866,7 @@ impl DaemonState {
             ahead_entries: Vec::new(),
             behind_entries: Vec::new(),
             upstream: None,
+            payload_budget: None,
         })
     }
 

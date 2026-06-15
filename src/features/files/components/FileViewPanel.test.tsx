@@ -10,6 +10,7 @@ import {
   mockOpenNewDetachedFileExplorerWindow,
 } from "./FileViewPanel.test-utils";
 import { FileViewPanel, resolveEditorAnnotationWidgetOrder } from "./FileViewPanel";
+import { clearFileDocumentSessionCacheForTests } from "../hooks/useFileDocumentState";
 import {
   getCodeIntelDefinition,
   getCodeIntelReferences,
@@ -68,6 +69,7 @@ describe("editor annotation widget ordering", () => {
 describe("FileViewPanel navigation", () => {
   afterEach(() => {
     cleanup();
+    clearFileDocumentSessionCacheForTests();
     vi.clearAllMocks();
     mockCodeMirrorDispatch.mockReset();
     mockOpenNewDetachedFileExplorerWindow.mockClear();
@@ -441,6 +443,94 @@ describe("FileViewPanel navigation", () => {
 
     await screen.findByTestId("mock-codemirror");
     expect(getGitFileFullDiff).toHaveBeenCalledWith("ws-highlight-empty", "src/Main.java");
+  });
+
+  it("mounts the editor before slow git markers resolve", async () => {
+    vi.mocked(readWorkspaceFile).mockResolvedValue({
+      content: "const value = 1;",
+      truncated: false,
+    });
+    vi.mocked(getGitFileFullDiff).mockReturnValue(new Promise(() => undefined));
+
+    render(
+      <FileViewPanel
+        workspaceId="ws-slow-git-marker"
+        workspacePath="/repo"
+        filePath="src/value.ts"
+        gitStatusFiles={[
+          { path: "src/value.ts", status: "M", additions: 1, deletions: 0 },
+        ]}
+        highlightMarkers={{ added: [], modified: [] }}
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const editor = (await screen.findByTestId("mock-codemirror")) as HTMLTextAreaElement;
+    expect(editor.value).toBe("const value = 1;");
+    expect(getGitFileFullDiff).toHaveBeenCalledWith(
+      "ws-slow-git-marker",
+      "src/value.ts",
+    );
+  });
+
+  it("drops stale git marker results after switching files", async () => {
+    let resolveDiff: (diff: string) => void = () => {};
+    const pendingDiff = new Promise<string>((resolve) => {
+      resolveDiff = resolve;
+    });
+    vi.mocked(readWorkspaceFile).mockImplementation(async (_workspaceId, path) => ({
+      content: path === "src/A.ts" ? "const a = 1;\n" : "const b = 1;\n",
+      truncated: false,
+    }));
+    vi.mocked(getGitFileFullDiff).mockReturnValue(pendingDiff);
+
+    const { rerender } = render(
+      <FileViewPanel
+        workspaceId="ws-stale-git-marker"
+        workspacePath="/repo"
+        filePath="src/A.ts"
+        gitStatusFiles={[{ path: "src/A.ts", status: "M", additions: 1, deletions: 0 }]}
+        highlightMarkers={{ added: [], modified: [] }}
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await screen.findByTestId("mock-codemirror");
+
+    rerender(
+      <FileViewPanel
+        workspaceId="ws-stale-git-marker"
+        workspacePath="/repo"
+        filePath="src/B.ts"
+        gitStatusFiles={[]}
+        highlightMarkers={{ added: [], modified: [] }}
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(readWorkspaceFile).toHaveBeenCalledWith("ws-stale-git-marker", "src/B.ts");
+    });
+    mockCodeMirrorDispatch.mockClear();
+
+    await act(async () => {
+      resolveDiff("@@ -1,1 +1,2 @@\n const a = 1;\n+const stale = true;");
+      await pendingDiff;
+    });
+
+    expect(mockCodeMirrorDispatch).not.toHaveBeenCalled();
   });
 
   it("normalizes absolute file paths before reading and fetching git diff", async () => {
@@ -1501,17 +1591,19 @@ describe("FileViewPanel markdown modes", () => {
       editor.setSelectionRange(4, 4);
       fireEvent.select(editor);
 
-      expect(screen.getAllByText("L2").length).toBeGreaterThan(0);
+      expect(screen.queryByText("L2")).toBeNull();
       expect(onActiveFileLineRangeChange).not.toHaveBeenCalled();
 
       act(() => {
         vi.advanceTimersByTime(89);
       });
+      expect(screen.queryByText("L2")).toBeNull();
       expect(onActiveFileLineRangeChange).not.toHaveBeenCalled();
 
       act(() => {
         vi.advanceTimersByTime(1);
       });
+      expect(screen.getAllByText("L2").length).toBeGreaterThan(0);
       expect(onActiveFileLineRangeChange).toHaveBeenCalledWith({
         startLine: 2,
         endLine: 2,
@@ -1519,6 +1611,107 @@ describe("FileViewPanel markdown modes", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("drops pending editor line range publication after switching files", async () => {
+    vi.mocked(readWorkspaceFile).mockImplementation(async (_workspaceId, path) => ({
+      content: path === "docs/guide.md"
+        ? ["one", "two", "three"].join("\n")
+        : ["alpha", "beta"].join("\n"),
+      truncated: false,
+    }));
+    const onActiveFileLineRangeChange = vi.fn();
+    const baseProps = {
+      workspaceId: "ws-md-line-stale",
+      workspacePath: "/repo",
+      activeFileLineRange: null,
+      onActiveFileLineRangeChange,
+      openTargets: [],
+      openAppIconById: {},
+      selectedOpenAppId: "",
+      onSelectOpenAppId: vi.fn(),
+      onClose: vi.fn(),
+      openTabs: ["docs/guide.md", "docs/other.md"],
+      activeTabPath: "docs/guide.md",
+      onActivateTab: vi.fn(),
+      onCloseTab: vi.fn(),
+      onCloseAllTabs: vi.fn(),
+    };
+    const { rerender } = render(
+      <FileViewPanel
+        {...baseProps}
+        filePath="docs/guide.md"
+      />,
+    );
+
+    await screen.findByTestId("file-markdown-preview");
+    fireEvent.click(screen.getByRole("button", { name: /edit/i }));
+    const editor = (await screen.findByTestId("mock-codemirror")) as HTMLTextAreaElement;
+    onActiveFileLineRangeChange.mockClear();
+
+    vi.useFakeTimers();
+    try {
+      act(() => {
+        editor.setSelectionRange(4, 4);
+        fireEvent.select(editor);
+      });
+
+      act(() => {
+        rerender(
+          <FileViewPanel
+            {...baseProps}
+            filePath="docs/other.md"
+            activeTabPath="docs/other.md"
+          />,
+        );
+      });
+
+      await act(async () => {
+        vi.advanceTimersByTime(91);
+        await Promise.resolve();
+      });
+
+      expect(onActiveFileLineRangeChange).toHaveBeenCalledWith(null);
+      expect(onActiveFileLineRangeChange).not.toHaveBeenCalledWith({
+        startLine: 2,
+        endLine: 2,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not run code intelligence requests for cursor movement alone", async () => {
+    vi.mocked(readWorkspaceFile).mockResolvedValue({
+      content: ["function alpha() {", "  return 1;", "}"].join("\n"),
+      truncated: false,
+    });
+
+    render(
+      <FileViewPanel
+        workspaceId="ws-code-intel-cursor"
+        workspacePath="/repo"
+        filePath="src/value.ts"
+        activeFileLineRange={null}
+        onActiveFileLineRangeChange={vi.fn()}
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const editor = (await screen.findByTestId("mock-codemirror")) as HTMLTextAreaElement;
+    fireEvent.select(editor, {
+      target: {
+        selectionStart: editor.value.indexOf("return"),
+        selectionEnd: editor.value.indexOf("return"),
+      },
+    });
+
+    expect(getCodeIntelDefinition).not.toHaveBeenCalled();
+    expect(getCodeIntelReferences).not.toHaveBeenCalled();
   });
 
   it("renders mermaid blocks lazily with per-block tabs", async () => {

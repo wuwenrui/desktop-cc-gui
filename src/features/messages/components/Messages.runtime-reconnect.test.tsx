@@ -14,6 +14,25 @@ vi.mock("../../../services/tauri", async (importOriginal) => {
   };
 });
 
+vi.mock("./Markdown", () => ({
+  Markdown: ({
+    value,
+    onRenderedValueChange,
+  }: {
+    value: string;
+    onRenderedValueChange?: (value: string) => void;
+  }) => {
+    onRenderedValueChange?.(value);
+    return (
+      <div className="markdown">
+        {value.split(/\n+/).map((line) => (
+          <p key={line}>{line}</p>
+        ))}
+      </div>
+    );
+  },
+}));
+
 describe("Messages runtime reconnect", () => {
   beforeAll(() => {
     if (!HTMLElement.prototype.scrollIntoView) {

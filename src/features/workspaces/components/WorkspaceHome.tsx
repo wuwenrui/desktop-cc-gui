@@ -10,6 +10,8 @@ import { BrowserDock } from "../../browser-agent";
 import { TaskCenterView } from "../../tasks/components/TaskCenterView";
 import { useTaskRunStore } from "../../tasks/hooks/useTaskRunStore";
 import { compareTaskRunSurfacePriority, describeTaskRunSurface } from "../../tasks/utils/taskRunSurface";
+import { loadWorkspaceHomeStyles } from "../../../styles/featureStyleLoaders";
+import { useFeatureStylesReady } from "../../../styles/useFeatureStylesReady";
 
 export type WorkspaceHomeThreadSummary = {
   id: string;
@@ -80,6 +82,7 @@ export function WorkspaceHome({
   onCancelTaskRun,
   onForkTaskRun,
 }: WorkspaceHomeProps) {
+  const stylesReady = useFeatureStylesReady(loadWorkspaceHomeStyles);
   const { t } = useTranslation();
   const taskRunStore = useTaskRunStore();
   const workspaceRuns = taskRunStore.runs
@@ -92,6 +95,9 @@ export function WorkspaceHome({
     ? t("workspace.homeBranchLabelWorktree")
     : t("workspace.homeBranchLabelMain");
   const { prefix: pathPrefix, name: pathName } = splitWorkspacePath(workspace.path, workspace.name);
+  if (!stylesReady) {
+    return null;
+  }
 
   return (
     <section className={`workspace-home workspace-home-minimal ${highlightedRun ? "workspace-home--task-mode" : ""}`}>

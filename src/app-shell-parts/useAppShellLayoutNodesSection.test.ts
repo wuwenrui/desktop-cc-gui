@@ -90,6 +90,27 @@ describe("shouldCollapseRightPanelOnThreadSelect", () => {
 });
 
 describe("useAppShellLayoutNodesSection adapter contract", () => {
+  it("passes the fork's flat option list into useLayoutNodes", () => {
+    const source = readFileSync(
+      join(currentDir, "useAppShellLayoutNodesSection.tsx"),
+      "utf8",
+    );
+    const layoutNodesOptions = source.slice(
+      source.indexOf("} = useLayoutNodes({"),
+      source.indexOf(
+        "  const runSelectedPath",
+        source.indexOf("} = useLayoutNodes({"),
+      ),
+    );
+
+    expect(layoutNodesOptions).toContain("workspaces,");
+    expect(layoutNodesOptions).toContain("activeItems,");
+    expect(layoutNodesOptions).toContain("onSend:");
+    expect(layoutNodesOptions).not.toContain("workspace: {");
+    expect(layoutNodesOptions).not.toContain("runtime: {");
+    expect(layoutNodesOptions).not.toContain("composer: {");
+  });
+
   it("forwards Project Map toggle state into useLayoutNodes despite ts-nocheck", () => {
     const source = readFileSync(
       join(currentDir, "useAppShellLayoutNodesSection.tsx"),
@@ -97,7 +118,10 @@ describe("useAppShellLayoutNodesSection adapter contract", () => {
     );
     const layoutNodesOptions = source.slice(
       source.indexOf("} = useLayoutNodes({"),
-      source.indexOf("  const runSelectedPath", source.indexOf("} = useLayoutNodes({")),
+      source.indexOf(
+        "  const runSelectedPath",
+        source.indexOf("} = useLayoutNodes({"),
+      ),
     );
 
     expect(layoutNodesOptions).toContain("centerMode,");
@@ -113,7 +137,10 @@ describe("useAppShellLayoutNodesSection adapter contract", () => {
     );
     const projectMapHandler = source.slice(
       source.indexOf("onOpenProjectMap: () => {"),
-      source.indexOf("gitDiffViewStyle,", source.indexOf("onOpenProjectMap: () => {")),
+      source.indexOf(
+        "gitDiffViewStyle,",
+        source.indexOf("onOpenProjectMap: () => {"),
+      ),
     );
 
     expect(projectMapHandler).toContain("closeSettings();");
@@ -139,11 +166,19 @@ describe("useAppShellLayoutNodesSection adapter contract", () => {
     expect(forkHandler).toContain("forkSessionFromMessageForWorkspace");
     expect(forkHandler).toContain("messageId");
     expect(forkHandler).toContain('mode: "messages-only"');
-    expect(forkHandler).toContain("providerProfileId: options?.providerProfileId ?? null");
-    expect(forkHandler).toContain("providerProfile: options?.providerProfile ?? null");
-    expect(forkHandler).toContain('throw new Error("Fork did not return a child conversation.")');
+    expect(forkHandler).toContain(
+      "providerProfileId: options?.providerProfileId ?? null",
+    );
+    expect(forkHandler).toContain(
+      "providerProfile: options?.providerProfile ?? null",
+    );
+    expect(forkHandler).toContain(
+      'throw new Error("Fork did not return a child conversation.")',
+    );
     expect(forkHandler).toContain('typeof updateThreadParent === "function"');
     expect(forkHandler).not.toContain('await startFork("/fork");');
-    expect(forkHandler).not.toContain("forkClaudeSessionFromMessageForWorkspace");
+    expect(forkHandler).not.toContain(
+      "forkClaudeSessionFromMessageForWorkspace",
+    );
   });
 });

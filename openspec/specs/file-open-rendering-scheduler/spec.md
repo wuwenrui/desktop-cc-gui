@@ -112,15 +112,15 @@ File rendering MUST treat active engine processing in editor split as foreground
 
 ### Requirement: Editor line-range tracking MUST not block cursor interaction
 
-Editor cursor and selection changes MUST keep the file editor responsive and MUST NOT synchronously force cross-surface recomputation for every line click.
+Editor cursor, selection, and typing changes MUST keep the file editor responsive and MUST NOT synchronously force cross-surface recomputation for every line click, cursor move, selection change, or keystroke.
 
 #### Scenario: editor line affordance updates locally first
-- **WHEN** the user clicks or selects a different line in editor mode
+- **WHEN** the user clicks, types on, or selects a different line in editor mode
 - **THEN** the file panel MAY update its local line label and annotation affordance immediately
 - **AND** that local update MUST NOT require app-shell or Composer active-file reference state to round-trip first
 
 #### Scenario: composer file reference publication is delayed and coalesced
-- **WHEN** editor line range changes repeatedly through clicks, cursor movement, or drag selection
+- **WHEN** editor line range changes repeatedly through typing, clicks, cursor movement, or drag selection
 - **THEN** the global active-file line reference consumed by Composer/context ledger MUST be published through a delayed, coalesced, or low-priority path
 - **AND** intermediate line ranges MAY be dropped as long as the latest range is available before send/context injection
 
@@ -212,4 +212,49 @@ The change MUST provide evidence for the high-cost scenarios that motivated the 
 - **WHEN** Windows or macOS runtime evidence is unavailable
 - **THEN** the closeout MUST state the missing platform, residual risk, and intended follow-up
 - **AND** it MUST NOT infer Windows pass from macOS evidence or macOS pass from Windows evidence
+
+### Requirement: File activation MUST prioritize first useful viewport
+
+File activation MUST separate tab/session activation, document snapshot readiness, first useful viewport, and heavy preview completion.
+
+#### Scenario: first useful viewport precedes heavy preview work
+
+- **WHEN** a user opens or activates a supported text file
+- **THEN** the system MUST be able to render the file header and first useful viewport before Markdown compilation, full syntax highlighting, git marker parsing, structured preview parsing, or code intelligence completes
+- **AND** delayed heavy work MUST NOT block the first useful file view
+
+#### Scenario: file open stage timings are observable
+
+- **WHEN** file-open evidence is collected
+- **THEN** the evidence MUST distinguish read start/end, document snapshot ready, first useful viewport, and heavy preview complete timings
+- **AND** the evidence MUST remain content-safe
+
+#### Scenario: preview handle resolution is deferred
+
+- **WHEN** an editable text file is opened
+- **THEN** preview handle resolution, truncated preview loading, or structured preview parsing MUST NOT block editor mount or the first useful viewport
+- **AND** those preview tasks MUST be cancellable or ignored when the file identity or render epoch changes
+
+### Requirement: Scheduled file work MUST use snapshot and render epoch guards
+
+Any async file render work that can complete after tab switch, snapshot replacement, or unmount MUST use file identity, snapshot version, and render epoch guards.
+
+#### Scenario: external refresh verifies current snapshot
+
+- **WHEN** a clean external refresh is delayed
+- **AND** the active file, dirty state, snapshot version, or render epoch changes before it applies
+- **THEN** the refresh MUST be cancelled or ignored
+- **AND** it MUST NOT replace the current visible content
+
+#### Scenario: git marker result verifies active file
+
+- **WHEN** git marker parsing completes for file A
+- **AND** the active render epoch no longer belongs to file A
+- **THEN** the marker result MUST NOT be committed to the visible editor
+
+#### Scenario: external sync reuses the file epoch contract
+
+- **WHEN** external change sync finishes after a file version, dirty state, or render epoch changed
+- **THEN** the sync result MUST be ignored through the same file identity/snapshot guard contract
+- **AND** the implementation SHOULD NOT introduce a parallel stale-result mechanism with conflicting semantics
 

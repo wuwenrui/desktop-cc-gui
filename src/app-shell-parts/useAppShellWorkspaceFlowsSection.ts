@@ -18,7 +18,14 @@ import { useWorktreeSetupScript } from "../features/app/hooks/useWorktreeSetupSc
 import { buildClaudeResumeTerminalCommand } from "../features/app/utils/claudeResumeCommand";
 import { writeTerminalSession } from "../services/tauri";
 import type { AgentTaskScrollRequest } from "../features/messages/types";
-import type { AppSettings, DebugEntry, WorkspaceInfo, WorkspaceSettings } from "../types";
+import type {
+  AppMode,
+  AppSettings,
+  DebugEntry,
+  EngineType,
+  WorkspaceInfo,
+  WorkspaceSettings,
+} from "../types";
 import {
   shouldCollapseRightPanelOnThreadSelect,
   shouldPreserveEditorOnThreadSelect,
@@ -44,6 +51,12 @@ type ThreadSwitchScope = {
 
 type WorkspaceShellSettings = Pick<AppSettings, "workspaceGroups"> &
   Partial<Pick<AppSettings, "selectedOpenAppId">>;
+type WorkspaceShellTab = "projects" | "codex" | "spec" | "git" | "log";
+type WorkspaceShellCenterMode = "chat" | "diff" | "editor" | "memory" | "projectMap" | "intentCanvas";
+
+function isEngineType(value: unknown): value is EngineType {
+  return value === "claude" || value === "codex" || value === "gemini" || value === "opencode";
+}
 
 export type WorkspaceShellBoundary = {
   activeEditorFilePath: string | null;
@@ -62,7 +75,7 @@ export type WorkspaceShellBoundary = {
   closeTerminalPanel: () => void;
   collapseRightPanel: () => void;
   connectWorkspace: (workspace: WorkspaceInfo) => Promise<void>;
-  centerMode: "chat" | "diff" | "editor" | "memory" | "projectMap" | "intentCanvas";
+  centerMode: WorkspaceShellCenterMode;
   exitDiffView: () => void;
   handleToggleTerminal: () => void;
   isCompact: boolean;
@@ -70,7 +83,7 @@ export type WorkspaceShellBoundary = {
   openTerminal: () => unknown;
   queueSaveSettings: (
     settings: WorkspaceShellSettings,
-  ) => Promise<WorkspaceShellSettings> | WorkspaceShellSettings;
+  ) => Promise<unknown> | unknown;
   refreshThread: (workspaceId: string, threadId: string) => Promise<unknown> | unknown;
   removeImagesForThread: (threadId: string) => void;
   removeThread: (
@@ -85,15 +98,13 @@ export type WorkspaceShellBoundary = {
   ) => Promise<void>;
   resetWorkspaceThreads: (workspaceId: string) => void;
   selectWorkspace: (workspaceId: string) => void;
-  setActiveEngine: (engine: string) => void;
-  setActiveTab: (tab: string) => void;
+  setActiveEngine: (engine: EngineType) => Promise<void> | void;
+  setActiveTab: Dispatch<SetStateAction<WorkspaceShellTab>>;
   setActiveThreadId: (threadId: string, workspaceId: string) => void;
   setAgentTaskScrollRequest: Dispatch<SetStateAction<AgentTaskScrollRequest | null>>;
-  setAppMode: (mode: string) => void;
-  setAppSettings: (
-    updater: (current: WorkspaceShellSettings) => WorkspaceShellSettings,
-  ) => void;
-  setCenterMode: (mode: string) => void;
+  setAppMode: Dispatch<SetStateAction<AppMode>>;
+  setAppSettings: Dispatch<SetStateAction<WorkspaceShellSettings>>;
+  setCenterMode: Dispatch<SetStateAction<WorkspaceShellCenterMode>>;
   setHomeOpen: (open: boolean) => void;
   setSelectedKanbanTaskId: (taskId: string | null) => void;
   t: (key: string, params?: Record<string, unknown>) => string;
@@ -419,7 +430,7 @@ export function useAppShellWorkspaceFlowsSection(
       setActiveThreadId(threadId, workspaceId);
       const threads = threadsByWorkspace[workspaceId] ?? [];
       const targetThread = threads.find((entry: any) => entry.id === threadId);
-      if (targetThread?.engineSource) {
+      if (isEngineType(targetThread?.engineSource)) {
         setActiveEngine(targetThread.engineSource);
       }
       startTransition(() => {

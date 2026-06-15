@@ -373,6 +373,7 @@ export type LayoutNodesOptions = {
   focusedWorkspaceNoteRequestKey?: number;
   fileTreeLoading: boolean;
   fileTreeLoadError?: string | null;
+  fileTreeSourceVersion?: number | string | null;
   onRefreshFiles?: () => void;
   onOpenDetachedFileExplorer?: (initialFilePath?: string | null) => void;
   onToggleRuntimeConsole: () => void;
@@ -663,6 +664,8 @@ export type LayoutNodesOptions = {
   onBackFromDiff: () => void;
   onGoProjects: () => void;
 };
+
+export type LayoutNodesFlatOptions = LayoutNodesOptions;
 
 export type LayoutNodesResult = {
   codeAnnotationBridgeProps: CodeAnnotationBridgeProps;

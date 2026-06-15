@@ -88,6 +88,15 @@ describe("UsageBadge", () => {
     });
   });
 
+  it("renders an error placeholder when invoke returns null", async () => {
+    vi.mocked(invoke).mockResolvedValue(null);
+    render(<UsageBadge />);
+
+    await waitFor(() => {
+      expect(screen.getByText("用量不可用")).toBeTruthy();
+    });
+  });
+
   it("shows unlimited balance when usage is unlimited", async () => {
     vi.mocked(invoke).mockResolvedValue({
       ...sampleUsage,

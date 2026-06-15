@@ -6,10 +6,8 @@ import {
   useState,
   type RefObject,
 } from "react";
-import { StateEffect, StateField } from "@codemirror/state";
-import { Decoration, EditorView, keymap, type DecorationSet } from "@codemirror/view";
-import { closeSearchPanel, openSearchPanel, searchPanelOpen } from "@codemirror/search";
-import type { ReactCodeMirrorRef } from "@uiw/react-codemirror";
+import type { EditorView } from "@codemirror/view";
+import type { FileCodeMirrorEditorHandle } from "../components/FileCodeMirrorEditor";
 import { getCodeIntelDefinition, getCodeIntelReferences } from "../../../services/tauri";
 import {
   isAbsoluteFsPath,
@@ -54,37 +52,8 @@ type UseFileNavigationArgs = {
     location: { line: number; column: number },
   ) => void;
   setMode: (mode: "edit") => void;
-  cmRef: RefObject<ReactCodeMirrorRef | null>;
+  cmRef: RefObject<FileCodeMirrorEditorHandle | null>;
 };
-
-const navigationLineFlashEffect = StateEffect.define<number | null>();
-
-const navigationLineFlashField = StateField.define<DecorationSet>({
-  create: () => Decoration.none,
-  update(markers, transaction) {
-    let nextMarkers = markers.map(transaction.changes);
-    for (const effect of transaction.effects) {
-      if (!effect.is(navigationLineFlashEffect)) {
-        continue;
-      }
-      const lineNumber = effect.value;
-      if (lineNumber === null) {
-        nextMarkers = Decoration.none;
-        continue;
-      }
-      if (lineNumber < 1 || lineNumber > transaction.state.doc.lines) {
-        nextMarkers = Decoration.none;
-        continue;
-      }
-      const line = transaction.state.doc.line(lineNumber);
-      nextMarkers = Decoration.set([
-        Decoration.line({ class: "cm-navigation-line-flash" }).range(line.from),
-      ]);
-    }
-    return nextMarkers;
-  },
-  provide: (field) => EditorView.decorations.from(field),
-});
 
 export function useFileNavigation({
   workspaceId,
@@ -131,13 +100,7 @@ export function useFileNavigation({
 
   const clearEditorNavigationFlash = useCallback(() => {
     clearNavigationFlashTimer();
-    const view = cmRef.current?.view;
-    if (!view) {
-      return;
-    }
-    view.dispatch({
-      effects: navigationLineFlashEffect.of(null),
-    });
+    cmRef.current?.clearNavigationFlash();
   }, [clearNavigationFlashTimer, cmRef]);
 
   const flashEditorNavigationLine = useCallback((line: number) => {
@@ -146,18 +109,12 @@ export function useFileNavigation({
       return;
     }
     clearNavigationFlashTimer();
-    view.dispatch({
-      effects: navigationLineFlashEffect.of(line),
-    });
+    const didFlash = cmRef.current?.flashNavigationLine(line) ?? false;
+    if (!didFlash) {
+      return;
+    }
     navigationFlashTimerRef.current = window.setTimeout(() => {
-      const currentView = cmRef.current?.view;
-      if (!currentView) {
-        navigationFlashTimerRef.current = null;
-        return;
-      }
-      currentView.dispatch({
-        effects: navigationLineFlashEffect.of(null),
-      });
+      cmRef.current?.clearNavigationFlash();
       navigationFlashTimerRef.current = null;
     }, 2000);
   }, [clearNavigationFlashTimer, cmRef]);
@@ -429,64 +386,6 @@ export function useFileNavigation({
     void findReferencesAtOffset(view.state.selection.main.head);
   }, [cmRef, findReferencesAtOffset]);
 
-  const editorNavigationKeymapExt = useMemo(
-    () =>
-      [
-        navigationLineFlashField,
-        keymap.of([
-          {
-            key: "Mod-f",
-            run: (view) => {
-              if (searchPanelOpen(view.state)) {
-                closeSearchPanel(view);
-              } else {
-                openSearchPanel(view);
-              }
-              view.focus();
-              return true;
-            },
-          },
-          {
-            key: "Mod-b",
-            run: () => {
-              runDefinitionFromCursor();
-              return true;
-            },
-          },
-          {
-            key: "Alt-F7",
-            run: () => {
-              runReferencesFromCursor();
-              return true;
-            },
-          },
-        ]),
-      ],
-    [runDefinitionFromCursor, runReferencesFromCursor],
-  );
-
-  const ctrlClickDefinitionExt = useMemo(
-    () =>
-      EditorView.domEventHandlers({
-        mousedown: (event, view) => {
-          if (event.button !== 0) {
-            return false;
-          }
-          if (!(event.metaKey || event.ctrlKey)) {
-            return false;
-          }
-          const offset = view.posAtCoords({ x: event.clientX, y: event.clientY });
-          if (offset == null) {
-            return false;
-          }
-          event.preventDefault();
-          void resolveDefinitionAtOffset(offset, view);
-          return true;
-        },
-      }),
-    [resolveDefinitionAtOffset],
-  );
-
   useEffect(() => {
     lspRequestIdRef.current += 1;
     recentDefinitionTriggerRef.current = null;
@@ -539,27 +438,11 @@ export function useFileNavigation({
   ]);
 
   const openFindPanelInEditor = useCallback(() => {
-    const view = cmRef.current?.view;
-    if (!view) {
-      return false;
-    }
-    openSearchPanel(view as unknown as EditorView);
-    view.focus();
-    return true;
+    return cmRef.current?.openFindPanel() ?? false;
   }, [cmRef]);
 
   const toggleFindPanelInEditor = useCallback(() => {
-    const view = cmRef.current?.view;
-    if (!view) {
-      return false;
-    }
-    if (searchPanelOpen(view.state)) {
-      closeSearchPanel(view as unknown as EditorView);
-    } else {
-      openSearchPanel(view as unknown as EditorView);
-    }
-    view.focus();
-    return true;
+    return cmRef.current?.toggleFindPanel() ?? false;
   }, [cmRef]);
 
   return {
@@ -573,8 +456,7 @@ export function useFileNavigation({
     navigateToLocation,
     runDefinitionFromCursor,
     runReferencesFromCursor,
-    editorNavigationKeymapExt,
-    ctrlClickDefinitionExt,
+    resolveDefinitionAtOffset,
     openFindPanelInEditor,
     toggleFindPanelInEditor,
   };

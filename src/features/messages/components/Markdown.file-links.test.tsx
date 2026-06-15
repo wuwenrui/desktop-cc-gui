@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Markdown } from "./Markdown";
 
@@ -29,9 +29,12 @@ describe("Markdown file links", () => {
     );
   });
 
-  it("renders image tags declared with <image>url</image>", () => {
+  it("renders image tags declared with <image>url</image>", async () => {
     const { container } = render(<Markdown value="<image>https://example.com/a.png</image>" />);
 
+    await waitFor(() => {
+      expect(container.querySelector("img")).toBeTruthy();
+    });
     const img = container.querySelector("img") as HTMLImageElement | null;
     expect(img).toBeTruthy();
     if (!img) {

@@ -67,6 +67,43 @@ use stream_helpers::{
     parse_claude_stream_json_line, tool_input_signature,
 };
 
+impl Drop for ClaudeSession {
+    fn drop(&mut self) {
+        let Ok(mut active) = self.active_processes.try_lock() else {
+            log::warn!(
+                "[claude] dropping session workspace={} while active_processes is locked; child cleanup fallback skipped",
+                self.workspace_id
+            );
+            return;
+        };
+        if active.is_empty() {
+            return;
+        }
+        for (turn_id, mut child) in active.drain() {
+            let pid = child.id();
+            match child.start_kill() {
+                Ok(()) => {
+                    log::info!(
+                        "[claude] drop fallback started child kill workspace={} turn={} pid={:?}",
+                        self.workspace_id,
+                        turn_id,
+                        pid
+                    );
+                }
+                Err(error) => {
+                    log::warn!(
+                        "[claude] drop fallback failed to kill child workspace={} turn={} pid={:?}: {}",
+                        self.workspace_id,
+                        turn_id,
+                        pid,
+                        error
+                    );
+                }
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ClaudeTurnEvent {
     pub turn_id: String,

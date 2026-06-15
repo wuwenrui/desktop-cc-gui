@@ -7,20 +7,18 @@ type SidebarTogglePlacementArgs = {
 
 export function shouldShowSidebarTopbarSidebarToggle({
   isCompact,
-  isMacDesktop,
   isSoloMode,
   sidebarCollapsed,
 }: SidebarTogglePlacementArgs): boolean {
-  return !isCompact && isMacDesktop && !isSoloMode && !sidebarCollapsed;
+  return !isCompact && !isSoloMode && !sidebarCollapsed;
 }
 
 export function shouldShowMainTopbarSidebarToggle({
   isCompact,
-  isMacDesktop,
   isSoloMode,
   sidebarCollapsed,
 }: SidebarTogglePlacementArgs): boolean {
-  return !isCompact && !isSoloMode && (!isMacDesktop || sidebarCollapsed);
+  return !isCompact && !isSoloMode && sidebarCollapsed;
 }
 
 export function shouldShowFloatingTitlebarSidebarToggle({

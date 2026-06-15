@@ -22,6 +22,7 @@ const mockState = vi.hoisted(() => ({
   getInstalledSkillIndex: vi.fn(),
   projectMemoryList: vi.fn(),
   noteCardList: vi.fn(),
+  appendComposerRenderBudgetDiagnostic: vi.fn(),
 }));
 
 vi.mock('./ChatInputBox', async () => {
@@ -64,6 +65,10 @@ vi.mock('../../../note-cards/services/noteCardsFacade', () => ({
   noteCardsFacade: {
     list: mockState.noteCardList,
   },
+}));
+
+vi.mock('../../../../services/rendererDiagnostics', () => ({
+  appendComposerRenderBudgetDiagnostic: mockState.appendComposerRenderBudgetDiagnostic,
 }));
 
 import { ChatInputBoxAdapter } from './ChatInputBoxAdapter';
@@ -114,6 +119,7 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
     mockState.getInstalledSkillIndex.mockReset().mockResolvedValue({});
     mockState.projectMemoryList.mockReset().mockResolvedValue({ items: [], total: 0 });
     mockState.noteCardList.mockReset().mockResolvedValue({ items: [], total: 0 });
+    mockState.appendComposerRenderBudgetDiagnostic.mockReset();
     window.localStorage.clear();
     clearPromptUsageForTests();
   });
@@ -1030,6 +1036,31 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
       latest.onInput?.('hello');
     }).not.toThrow();
     expect(onTextChange).toHaveBeenCalledWith('hello', null);
+  });
+
+  it('records content-safe composer render budget diagnostics', async () => {
+    renderAdapter({
+      text: 'secret prompt text must not be sent to diagnostics',
+      workspaceId: 'workspace-1',
+      isProcessing: true,
+      streamActivityPhase: 'ingress',
+    });
+
+    await waitFor(() =>
+      expect(mockState.appendComposerRenderBudgetDiagnostic).toHaveBeenCalled(),
+    );
+
+    const [payload] = mockState.appendComposerRenderBudgetDiagnostic.mock.calls[0] ?? [];
+    expect(payload).toMatchObject({
+      surfaceId: 'chat-input-adapter',
+      evidenceKind: 'proxy',
+      workspaceId: 'workspace-1',
+      isProcessing: true,
+      disabled: false,
+      streamActivityPhase: 'ingress',
+      textLength: 'secret prompt text must not be sent to diagnostics'.length,
+    });
+    expect(JSON.stringify(payload)).not.toContain('secret prompt text');
   });
 
   it("forwards submitted content snapshot to parent send handler", async () => {

@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { GitLogEntry } from "../../../types";
 
@@ -48,6 +48,7 @@ vi.mock("react-i18next", () => ({
         "git.listFlat": "Flat",
         "git.listTree": "Tree",
         "git.listView": "List view",
+        "git.refreshStatus": "Refresh Git status",
         "git.toggleCommitSection": "Toggle commit section",
         "git.panelView": "Git panel view",
         "git.previewInline": "Preview in center pane",
@@ -208,6 +209,78 @@ describe("GitDiffPanel", () => {
     expect(
       screen.getByRole("button", { name: "Preview diff in center pane" }),
     ).toBeTruthy();
+  });
+
+  it("invokes manual git status and diff refresh from the repository summary action", () => {
+    const onRefreshGitStatus = vi.fn();
+    const onRefreshGitDiffs = vi.fn();
+    render(
+      <GitDiffPanel
+        {...baseProps}
+        workspacePath="/tmp/ccgui"
+        onRefreshGitStatus={onRefreshGitStatus}
+        onRefreshGitDiffs={onRefreshGitDiffs}
+        unstagedFiles={[
+          { path: "src/App.tsx", status: "M", additions: 2, deletions: 1 },
+        ]}
+      />,
+    );
+
+    const refreshButton = screen.getByRole("button", { name: "Refresh Git status" });
+    const refreshAction = refreshButton.closest(".diff-tree-summary-root-action");
+
+    expect(refreshButton.closest(".diff-tree-summary-root-group")?.textContent).toContain("ccgui");
+    expect(
+      refreshAction?.previousElementSibling?.classList.contains("diff-tree-summary-root"),
+    ).toBe(true);
+
+    fireEvent.click(refreshButton);
+
+    expect(onRefreshGitStatus).toHaveBeenCalledTimes(1);
+    expect(onRefreshGitDiffs).toHaveBeenCalledTimes(1);
+  });
+
+  it("spins the manual git status refresh icon when clicked", () => {
+    vi.useFakeTimers();
+    const requestAnimationFrameSpy = vi
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((callback: FrameRequestCallback) => {
+        callback(performance.now());
+        return 1;
+      });
+    const cancelAnimationFrameSpy = vi
+      .spyOn(window, "cancelAnimationFrame")
+      .mockImplementation(() => undefined);
+    const onRefreshGitStatus = vi.fn();
+
+    render(
+      <GitDiffPanel
+        {...baseProps}
+        workspacePath="/tmp/ccgui"
+        onRefreshGitStatus={onRefreshGitStatus}
+        unstagedFiles={[
+          { path: "src/App.tsx", status: "M", additions: 2, deletions: 1 },
+        ]}
+      />,
+    );
+
+    const refreshButton = screen.getByRole("button", { name: "Refresh Git status" });
+
+    fireEvent.click(refreshButton);
+    act(() => {
+      vi.advanceTimersByTime(16);
+    });
+    expect(refreshButton.className).toContain("is-spinning");
+    expect(onRefreshGitStatus).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      vi.advanceTimersByTime(520);
+    });
+    expect(refreshButton.className).not.toContain("is-spinning");
+
+    requestAnimationFrameSpy.mockRestore();
+    cancelAnimationFrameSpy.mockRestore();
+    vi.useRealTimers();
   });
 
   it("marks deleted rows with a stable deleted status hook", () => {

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { Markdown } from "./Markdown";
 
@@ -143,7 +143,7 @@ describe("Markdown tool-call fallback", () => {
     expect(container.textContent ?? "").toContain("<invoke name=\"example\">");
   });
 
-  it("keeps full markdown rendering for stable content with non-tool unclosed inline code", () => {
+  it("keeps full markdown rendering for stable content with non-tool unclosed inline code", async () => {
     const value = [
       "Document `unfinished inline code",
       "",
@@ -160,7 +160,9 @@ describe("Markdown tool-call fallback", () => {
       />,
     );
 
-    expect(container.querySelector("table")).toBeTruthy();
+    await waitFor(() => {
+      expect(container.querySelector("table")).toBeTruthy();
+    });
     expect(screen.queryByRole("group", { name: "messages.toolCallCard.title" })).toBeNull();
   });
 });

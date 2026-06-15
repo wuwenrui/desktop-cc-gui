@@ -15,8 +15,12 @@ import {
 } from "../clientDocumentationUtils";
 import { ClientDocumentationDetail } from "./ClientDocumentationDetail";
 import { ClientDocumentationTree } from "./ClientDocumentationTree";
+import { loadClientDocumentationStyles } from "../../../styles/featureStyleLoaders";
 
 export function ClientDocumentationWindow() {
+  useEffect(() => {
+    void loadClientDocumentationStyles();
+  }, []);
   const { appSettings, reduceTransparency } = useAppSettingsController();
   useCodeCssVars(appSettings);
   const menubarRef = useRef<HTMLElement | null>(null);

@@ -1,87 +1,27 @@
-use std::collections::HashSet;
 use std::fs::File;
 use std::io::Read;
 use std::path::{Component, Path, PathBuf};
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
-use git2::Repository;
 use ignore::WalkBuilder;
 use regex::{Regex, RegexBuilder};
 use serde::{Deserialize, Serialize};
 
+use crate::backend_budget::ScanCacheState;
+#[cfg(test)]
+use crate::shared::workspace_listing::WorkspaceDirectoryChildState;
+use crate::shared::workspace_listing::{
+    build_initial_directory_entries, is_special_directory_path,
+    normalize_workspace_relative_directory_path, normalize_workspace_relative_file_path,
+    normalized_relative_to_pathbuf, should_always_skip, sort_and_truncate_named_entries,
+    workspace_files_response, workspace_scan_budget_reached, WorkspaceScanState,
+    WORKSPACE_DIRECTORY_SCAN_BUDGET_MULTIPLIER, WORKSPACE_SCAN_TIME_BUDGET,
+};
+pub(crate) use crate::shared::workspace_listing::{
+    list_workspace_directory_children_inner, list_workspace_files_inner, WorkspaceFilesResponse,
+};
 use crate::text_encoding::decode_text_bytes;
 use crate::utils::normalize_git_path;
-
-fn should_always_skip(name: &str) -> bool {
-    name == ".git"
-}
-
-fn is_special_dependency_dir_name(name: &str) -> bool {
-    matches!(
-        name,
-        "node_modules"
-            | ".pnpm-store"
-            | ".yarn"
-            | "bower_components"
-            | "vendor"
-            | ".venv"
-            | "venv"
-            | "env"
-            | "__pypackages__"
-            | "Pods"
-            | "Carthage"
-            | ".m2"
-            | ".ivy2"
-            | ".cargo"
-    )
-}
-
-fn is_special_build_artifact_dir_name(name: &str) -> bool {
-    matches!(
-        name,
-        "target"
-            | "dist"
-            | "build"
-            | "out"
-            | "coverage"
-            | ".next"
-            | ".nuxt"
-            | ".svelte-kit"
-            | ".angular"
-            | ".parcel-cache"
-            | ".turbo"
-            | ".cache"
-            | ".gradle"
-            | "CMakeFiles"
-            | "bin"
-            | "obj"
-            | "__pycache__"
-            | ".pytest_cache"
-            | ".mypy_cache"
-            | ".tox"
-            | ".dart_tool"
-    ) || name.starts_with("cmake-build-")
-}
-
-fn is_special_directory_path(path: &str) -> bool {
-    path.rsplit('/')
-        .next()
-        .map(|name| {
-            is_special_dependency_dir_name(name) || is_special_build_artifact_dir_name(name)
-        })
-        .unwrap_or(false)
-}
-
-fn normalized_relative_to_pathbuf(normalized: &str) -> PathBuf {
-    let mut path = PathBuf::new();
-    for segment in normalized.split('/') {
-        if !segment.is_empty() {
-            path.push(segment);
-        }
-    }
-    path
-}
 
 fn normalize_workspace_relative_path(path: &str) -> Result<String, String> {
     let normalized = path.trim().replace('\\', "/");
@@ -109,13 +49,6 @@ fn normalize_workspace_relative_path(path: &str) -> Result<String, String> {
         return Err("Cannot access .git directory.".to_string());
     }
     Ok(trimmed.to_string())
-}
-
-fn normalize_workspace_relative_directory_path(path: &str) -> Result<String, String> {
-    if path.is_empty() {
-        return Ok(String::new());
-    }
-    normalize_workspace_relative_path(path)
 }
 
 fn validate_workspace_item_basename(name: &str) -> Result<String, String> {
@@ -242,78 +175,6 @@ fn relative_path_from_absolute(
     Ok(normalize_git_path(&relative.to_string_lossy()))
 }
 
-fn sort_and_dedup_workspace_lists(
-    files: &mut Vec<String>,
-    directories: &mut Vec<String>,
-    gitignored_files: &mut Vec<String>,
-    gitignored_directories: &mut Vec<String>,
-) {
-    files.sort();
-    files.dedup();
-    directories.sort();
-    directories.dedup();
-    gitignored_files.sort();
-    gitignored_files.dedup();
-    gitignored_directories.sort();
-    gitignored_directories.dedup();
-}
-
-fn sort_and_truncate_named_entries<T>(entries: &mut Vec<(String, T)>, max_entries: usize) {
-    entries.sort_by(|a, b| a.0.cmp(&b.0));
-    if entries.len() > max_entries {
-        entries.truncate(max_entries);
-    }
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-pub(crate) struct WorkspaceFilesResponse {
-    pub(crate) files: Vec<String>,
-    pub(crate) directories: Vec<String>,
-    #[serde(default)]
-    pub(crate) gitignored_files: Vec<String>,
-    #[serde(default)]
-    pub(crate) gitignored_directories: Vec<String>,
-    #[serde(default = "default_workspace_scan_state")]
-    pub(crate) scan_state: WorkspaceScanState,
-    #[serde(default)]
-    pub(crate) limit_hit: bool,
-    #[serde(default)]
-    pub(crate) directory_entries: Vec<WorkspaceDirectoryEntry>,
-}
-
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum WorkspaceScanState {
-    Complete,
-    Partial,
-}
-
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum WorkspaceDirectoryChildState {
-    Unknown,
-    Loaded,
-    Empty,
-    Partial,
-}
-
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum WorkspaceDirectorySpecialKind {
-    Dependency,
-    BuildArtifact,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub(crate) struct WorkspaceDirectoryEntry {
-    pub(crate) path: String,
-    pub(crate) child_state: WorkspaceDirectoryChildState,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) special_kind: Option<WorkspaceDirectorySpecialKind>,
-    #[serde(default)]
-    pub(crate) has_more: bool,
-}
-
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum WorkspaceFileItemKind {
@@ -325,110 +186,6 @@ pub(crate) enum WorkspaceFileItemKind {
 pub(crate) struct WorkspaceFileOperationResult {
     pub(crate) path: String,
     pub(crate) kind: WorkspaceFileItemKind,
-}
-
-fn default_workspace_scan_state() -> WorkspaceScanState {
-    WorkspaceScanState::Complete
-}
-
-fn workspace_files_response(
-    files: Vec<String>,
-    directories: Vec<String>,
-    gitignored_files: Vec<String>,
-    gitignored_directories: Vec<String>,
-    scan_state: WorkspaceScanState,
-    limit_hit: bool,
-    directory_entries: Vec<WorkspaceDirectoryEntry>,
-) -> WorkspaceFilesResponse {
-    WorkspaceFilesResponse {
-        files,
-        directories,
-        gitignored_files,
-        gitignored_directories,
-        scan_state,
-        limit_hit,
-        directory_entries,
-    }
-}
-
-fn special_directory_kind(path: &str) -> Option<WorkspaceDirectorySpecialKind> {
-    let leaf = path.rsplit('/').next().unwrap_or_default();
-    if is_special_dependency_dir_name(leaf) {
-        return Some(WorkspaceDirectorySpecialKind::Dependency);
-    }
-    if is_special_build_artifact_dir_name(leaf) {
-        return Some(WorkspaceDirectorySpecialKind::BuildArtifact);
-    }
-    None
-}
-
-fn has_known_direct_child(parent: &str, files: &[String], directories: &[String]) -> bool {
-    let prefix = format!("{parent}/");
-    files.iter().chain(directories.iter()).any(|path| {
-        path.strip_prefix(&prefix)
-            .is_some_and(|child| !child.is_empty() && !child.contains('/'))
-    })
-}
-
-fn build_initial_directory_entries(
-    files: &[String],
-    directories: &[String],
-    scan_state: WorkspaceScanState,
-) -> Vec<WorkspaceDirectoryEntry> {
-    directories
-        .iter()
-        .map(|path| {
-            let special_kind = special_directory_kind(path);
-            let child_state = if special_kind.is_some() {
-                WorkspaceDirectoryChildState::Unknown
-            } else if has_known_direct_child(path, files, directories) {
-                match scan_state {
-                    WorkspaceScanState::Complete => WorkspaceDirectoryChildState::Loaded,
-                    WorkspaceScanState::Partial => WorkspaceDirectoryChildState::Partial,
-                }
-            } else {
-                match scan_state {
-                    WorkspaceScanState::Complete => WorkspaceDirectoryChildState::Empty,
-                    WorkspaceScanState::Partial => WorkspaceDirectoryChildState::Unknown,
-                }
-            };
-            WorkspaceDirectoryEntry {
-                path: path.clone(),
-                child_state,
-                special_kind,
-                has_more: child_state == WorkspaceDirectoryChildState::Partial,
-            }
-        })
-        .collect()
-}
-
-fn build_directory_child_entries(
-    parent_path: &str,
-    files: &[String],
-    directories: &[String],
-    scan_state: WorkspaceScanState,
-) -> Vec<WorkspaceDirectoryEntry> {
-    let parent_child_state = match scan_state {
-        WorkspaceScanState::Partial => WorkspaceDirectoryChildState::Partial,
-        WorkspaceScanState::Complete if files.is_empty() && directories.is_empty() => {
-            WorkspaceDirectoryChildState::Empty
-        }
-        WorkspaceScanState::Complete => WorkspaceDirectoryChildState::Loaded,
-    };
-    let mut entries = vec![WorkspaceDirectoryEntry {
-        path: parent_path.to_string(),
-        child_state: parent_child_state,
-        special_kind: special_directory_kind(parent_path),
-        has_more: scan_state == WorkspaceScanState::Partial,
-    }];
-
-    entries.extend(directories.iter().map(|path| WorkspaceDirectoryEntry {
-        path: path.clone(),
-        child_state: WorkspaceDirectoryChildState::Unknown,
-        special_kind: special_directory_kind(path),
-        has_more: false,
-    }));
-    entries
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -466,14 +223,6 @@ pub(crate) struct WorkspaceTextSearchOptions {
 const MAX_SEARCH_MATCHES: usize = 1_000;
 const MAX_SEARCH_FILE_BYTES: u64 = 1_024 * 1_024;
 const MAX_PREVIEW_CHARS: usize = 180;
-const WORKSPACE_SCAN_ENTRY_BUDGET: usize = 30_000;
-const WORKSPACE_SCAN_TIME_BUDGET: Duration = Duration::from_millis(1_200);
-const WORKSPACE_DIRECTORY_SCAN_BUDGET_MULTIPLIER: usize = 8;
-
-fn workspace_scan_budget_reached(started_at: Instant, scanned_entries: usize) -> bool {
-    scanned_entries >= WORKSPACE_SCAN_ENTRY_BUDGET
-        || started_at.elapsed() >= WORKSPACE_SCAN_TIME_BUDGET
-}
 
 fn compile_search_regex(
     query: &str,
@@ -705,354 +454,6 @@ pub(crate) fn search_workspace_text_inner(
     })
 }
 
-pub(crate) fn list_workspace_files_inner(
-    root: &PathBuf,
-    max_files: usize,
-) -> WorkspaceFilesResponse {
-    let scan_started_at = Instant::now();
-    let mut scanned_entries = 0usize;
-    let max_directories = max_files.saturating_mul(2).max(1_000);
-    let mut files = Vec::new();
-    let mut directories = Vec::new();
-    let mut gitignored_files = Vec::new();
-    let mut gitignored_directories = Vec::new();
-    let mut limit_hit = false;
-    let pruned_special_directories: Arc<Mutex<HashSet<String>>> =
-        Arc::new(Mutex::new(HashSet::new()));
-
-    // Always open the repo so we can tag gitignored files for dimmed styling.
-    let repo = Repository::open(root).ok();
-
-    // Seed root-level entries first so the file tree always reflects the real workspace root
-    // even when deep traversal later hits the max file cap.
-    if let Ok(entries) = std::fs::read_dir(root) {
-        let mut root_entries = Vec::new();
-        for entry in entries {
-            if workspace_scan_budget_reached(scan_started_at, scanned_entries) {
-                limit_hit = true;
-                break;
-            }
-            scanned_entries += 1;
-            if let Ok(entry) = entry {
-                root_entries.push(entry);
-            }
-        }
-        root_entries.sort_by(|a, b| {
-            a.file_name()
-                .to_string_lossy()
-                .cmp(&b.file_name().to_string_lossy())
-        });
-        for entry in root_entries {
-            if workspace_scan_budget_reached(scan_started_at, scanned_entries) {
-                limit_hit = true;
-                break;
-            }
-            let path = entry.path();
-            let rel_path = match path.strip_prefix(root) {
-                Ok(path) => path,
-                Err(_) => continue,
-            };
-            let normalized = normalize_git_path(&rel_path.to_string_lossy());
-            if normalized.is_empty() {
-                continue;
-            }
-            let name = entry.file_name().to_string_lossy().to_string();
-            let file_type = match entry.file_type() {
-                Ok(file_type) => file_type,
-                Err(_) => continue,
-            };
-            let is_ignored = repo
-                .as_ref()
-                .and_then(|r| r.status_should_ignore(rel_path).ok())
-                .unwrap_or(false);
-            if file_type.is_dir() {
-                if should_always_skip(&name) {
-                    continue;
-                }
-                if directories.len() >= max_directories {
-                    limit_hit = true;
-                    continue;
-                }
-                directories.push(normalized.clone());
-                if is_ignored {
-                    gitignored_directories.push(normalized);
-                }
-            } else if file_type.is_file() {
-                if name == ".DS_Store" {
-                    continue;
-                }
-                files.push(normalized.clone());
-                if is_ignored {
-                    gitignored_files.push(normalized);
-                }
-                if files.len() >= max_files {
-                    sort_and_dedup_workspace_lists(
-                        &mut files,
-                        &mut directories,
-                        &mut gitignored_files,
-                        &mut gitignored_directories,
-                    );
-                    let scan_state = WorkspaceScanState::Partial;
-                    let directory_entries =
-                        build_initial_directory_entries(&files, &directories, scan_state);
-                    return workspace_files_response(
-                        files,
-                        directories,
-                        gitignored_files,
-                        gitignored_directories,
-                        scan_state,
-                        true,
-                        directory_entries,
-                    );
-                }
-            }
-        }
-    }
-
-    let root_for_filter = root.clone();
-    let pruned_special_directories_for_filter = Arc::clone(&pruned_special_directories);
-    let walker = WalkBuilder::new(root)
-        .hidden(false)
-        .follow_links(false)
-        .require_git(false)
-        .git_ignore(false)
-        .filter_entry(move |entry| {
-            if entry.depth() == 0 {
-                return true;
-            }
-            let name = entry.file_name().to_string_lossy();
-            if entry.file_type().is_some_and(|ft| ft.is_dir()) {
-                if should_always_skip(&name) {
-                    return false;
-                }
-                if let Ok(rel_path) = entry.path().strip_prefix(&root_for_filter) {
-                    let normalized = normalize_git_path(&rel_path.to_string_lossy());
-                    if !normalized.is_empty() && is_special_directory_path(&normalized) {
-                        if let Ok(mut special_dirs) = pruned_special_directories_for_filter.lock() {
-                            special_dirs.insert(normalized);
-                        }
-                        return false;
-                    }
-                }
-                return true;
-            }
-            // Skip OS metadata files
-            name != ".DS_Store"
-        })
-        .build();
-
-    for entry in walker {
-        if workspace_scan_budget_reached(scan_started_at, scanned_entries) {
-            limit_hit = true;
-            break;
-        }
-        scanned_entries += 1;
-        let entry = match entry {
-            Ok(entry) => entry,
-            Err(_) => continue,
-        };
-        if entry.depth() <= 1 {
-            continue;
-        }
-        if let Ok(rel_path) = entry.path().strip_prefix(root) {
-            let normalized = normalize_git_path(&rel_path.to_string_lossy());
-            if normalized.is_empty() {
-                continue;
-            }
-            let is_ignored = repo
-                .as_ref()
-                .and_then(|r| r.status_should_ignore(rel_path).ok())
-                .unwrap_or(false);
-            if entry.file_type().is_some_and(|ft| ft.is_dir()) {
-                if directories.len() >= max_directories {
-                    limit_hit = true;
-                    continue;
-                }
-                directories.push(normalized.clone());
-                if is_ignored {
-                    gitignored_directories.push(normalized);
-                }
-            } else if entry.file_type().is_some_and(|ft| ft.is_file()) {
-                files.push(normalized.clone());
-                if is_ignored {
-                    gitignored_files.push(normalized);
-                }
-                if files.len() >= max_files {
-                    limit_hit = true;
-                    break;
-                }
-            }
-        }
-    }
-
-    if let Ok(special_dirs) = pruned_special_directories.lock() {
-        for normalized in special_dirs.iter() {
-            directories.push(normalized.clone());
-            let relative_path = normalized_relative_to_pathbuf(normalized);
-            let is_ignored = repo
-                .as_ref()
-                .and_then(|r| r.status_should_ignore(&relative_path).ok())
-                .unwrap_or(false);
-            if is_ignored {
-                gitignored_directories.push(normalized.clone());
-            }
-        }
-    }
-
-    sort_and_dedup_workspace_lists(
-        &mut files,
-        &mut directories,
-        &mut gitignored_files,
-        &mut gitignored_directories,
-    );
-    let scan_state = if limit_hit {
-        WorkspaceScanState::Partial
-    } else {
-        WorkspaceScanState::Complete
-    };
-    let directory_entries = build_initial_directory_entries(&files, &directories, scan_state);
-    workspace_files_response(
-        files,
-        directories,
-        gitignored_files,
-        gitignored_directories,
-        scan_state,
-        limit_hit,
-        directory_entries,
-    )
-}
-
-pub(crate) fn list_workspace_directory_children_inner(
-    root: &PathBuf,
-    directory_path: &str,
-    max_entries: usize,
-) -> Result<WorkspaceFilesResponse, String> {
-    let normalized_path = normalize_workspace_relative_directory_path(directory_path)?;
-    let canonical_root = root
-        .canonicalize()
-        .map_err(|err| format!("Failed to resolve workspace root: {err}"))?;
-    let candidate = canonical_root.join(normalized_relative_to_pathbuf(&normalized_path));
-    let canonical_path = candidate
-        .canonicalize()
-        .map_err(|err| format!("Failed to resolve directory path: {err}"))?;
-    if !canonical_path.starts_with(&canonical_root) {
-        return Err("Invalid directory path.".to_string());
-    }
-    let metadata = std::fs::metadata(&canonical_path)
-        .map_err(|err| format!("Failed to read directory metadata: {err}"))?;
-    if !metadata.is_dir() {
-        return Err("Path is not a directory.".to_string());
-    }
-
-    let include_gitignore_markers = !normalized_path.is_empty();
-    let repo = if include_gitignore_markers {
-        Repository::open(&canonical_root).ok()
-    } else {
-        None
-    };
-    let mut files = Vec::new();
-    let mut directories = Vec::new();
-    let mut gitignored_files = Vec::new();
-    let mut gitignored_directories = Vec::new();
-
-    let entries = std::fs::read_dir(&canonical_path)
-        .map_err(|err| format!("Failed to read directory: {err}"))?;
-    let scan_started_at = Instant::now();
-    let max_scanned_entries = max_entries
-        .saturating_mul(WORKSPACE_DIRECTORY_SCAN_BUDGET_MULTIPLIER)
-        .max(max_entries);
-    let mut sorted_entries = Vec::new();
-    let mut limit_hit = false;
-    for entry in entries {
-        if scan_started_at.elapsed() >= WORKSPACE_SCAN_TIME_BUDGET {
-            limit_hit = true;
-            break;
-        }
-        if sorted_entries.len() >= max_scanned_entries {
-            limit_hit = true;
-            break;
-        }
-        if let Ok(entry) = entry {
-            sorted_entries.push((entry.file_name().to_string_lossy().to_string(), entry));
-        }
-    }
-    sort_and_truncate_named_entries(&mut sorted_entries, max_scanned_entries);
-
-    for (_, entry) in sorted_entries {
-        if scan_started_at.elapsed() >= WORKSPACE_SCAN_TIME_BUDGET {
-            limit_hit = true;
-            break;
-        }
-        let path = entry.path();
-        let rel_path = match path.strip_prefix(&canonical_root) {
-            Ok(value) => value,
-            Err(_) => continue,
-        };
-        let normalized = normalize_git_path(&rel_path.to_string_lossy());
-        if normalized.is_empty() {
-            continue;
-        }
-        let name = entry.file_name().to_string_lossy().to_string();
-        let file_type = match entry.file_type() {
-            Ok(value) => value,
-            Err(_) => continue,
-        };
-        let is_ignored = if include_gitignore_markers {
-            repo.as_ref()
-                .and_then(|r| r.status_should_ignore(rel_path).ok())
-                .unwrap_or(false)
-        } else {
-            false
-        };
-
-        if file_type.is_dir() {
-            if should_always_skip(&name) {
-                continue;
-            }
-            directories.push(normalized.clone());
-            if is_ignored {
-                gitignored_directories.push(normalized);
-            }
-        } else if file_type.is_file() {
-            if name == ".DS_Store" {
-                continue;
-            }
-            files.push(normalized.clone());
-            if is_ignored {
-                gitignored_files.push(normalized);
-            }
-        }
-
-        if files.len() + directories.len() >= max_entries {
-            limit_hit = true;
-            break;
-        }
-    }
-
-    sort_and_dedup_workspace_lists(
-        &mut files,
-        &mut directories,
-        &mut gitignored_files,
-        &mut gitignored_directories,
-    );
-    let scan_state = if limit_hit {
-        WorkspaceScanState::Partial
-    } else {
-        WorkspaceScanState::Complete
-    };
-    let directory_entries =
-        build_directory_child_entries(&normalized_path, &files, &directories, scan_state);
-    Ok(workspace_files_response(
-        files,
-        directories,
-        gitignored_files,
-        gitignored_directories,
-        scan_state,
-        limit_hit,
-        directory_entries,
-    ))
-}
-
 pub(crate) fn list_external_absolute_directory_children_inner(
     absolute_directory_path: &str,
     allowed_roots: &[PathBuf],
@@ -1128,6 +529,12 @@ pub(crate) fn list_external_absolute_directory_children_inner(
         WorkspaceScanState::Complete
     };
     Ok(workspace_files_response(
+        "list_external_absolute_directory_children",
+        "workspaces.file.external-subtree-listing",
+        Some(absolute_directory_path),
+        Some(1),
+        max_entries,
+        ScanCacheState::Unsupported,
         files,
         directories,
         Vec::new(),
@@ -1271,6 +678,12 @@ pub(crate) fn list_external_spec_tree_inner(
         let directory_entries =
             build_initial_directory_entries(&files, &directories, WorkspaceScanState::Complete);
         return Ok(workspace_files_response(
+            "list_external_spec_tree",
+            "workspaces.file.external-spec-listing",
+            None,
+            Some(2),
+            effective_max_files,
+            ScanCacheState::Unsupported,
             files,
             directories,
             Vec::new(),
@@ -1344,6 +757,12 @@ pub(crate) fn list_external_spec_tree_inner(
     };
     let directory_entries = build_initial_directory_entries(&files, &directories, scan_state);
     Ok(workspace_files_response(
+        "list_external_spec_tree",
+        "workspaces.file.external-spec-listing",
+        None,
+        Some(2),
+        effective_max_files,
+        ScanCacheState::Unsupported,
         files,
         directories,
         Vec::new(),
@@ -1474,10 +893,11 @@ fn read_workspace_file_with_limit_inner(
     relative_path: &str,
     max_bytes: u64,
 ) -> Result<WorkspaceFileResponse, String> {
+    let normalized_path = normalize_workspace_relative_file_path(relative_path)?;
     let canonical_root = root
         .canonicalize()
         .map_err(|err| format!("Failed to resolve workspace root: {err}"))?;
-    let candidate = canonical_root.join(relative_path);
+    let candidate = canonical_root.join(normalized_relative_to_pathbuf(&normalized_path));
     let canonical_path = candidate
         .canonicalize()
         .map_err(|err| format!("Failed to open file: {err}"))?;
@@ -1967,6 +1387,7 @@ mod tests {
         sort_and_truncate_named_entries, write_external_absolute_file_inner,
         WorkspaceDirectoryChildState, WorkspaceScanState, WorkspaceTextSearchOptions,
     };
+    use crate::backend_budget::ScanCacheState;
     use crate::utils::normalize_git_path;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -2297,6 +1718,84 @@ mod tests {
     }
 
     #[test]
+    fn list_workspace_files_includes_budget_source_and_payload_metadata() {
+        let root = std::env::temp_dir().join(format!("mossx-files-budget-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("src")).expect("create src dir");
+        std::fs::write(root.join("src/app.ts"), "app\n").expect("write app");
+
+        let response = list_workspace_files_inner(&root, 20);
+        let listing_budget = response
+            .listing_budget
+            .as_ref()
+            .expect("listing budget metadata");
+        let payload_budget = response
+            .payload_budget
+            .as_ref()
+            .expect("payload budget metadata");
+
+        assert_eq!(
+            response.source_version.as_deref(),
+            Some(listing_budget.source_version.as_str())
+        );
+        assert_eq!(listing_budget.depth, Some(2));
+        assert_eq!(listing_budget.max_entries, 20);
+        assert_eq!(listing_budget.scan_state, response.scan_state);
+        assert_eq!(listing_budget.limit_hit, response.limit_hit);
+        assert!(
+            listing_budget.returned_entries >= response.files.len() + response.directories.len()
+        );
+        assert!(listing_budget.payload_bytes > 0);
+        assert_eq!(payload_budget.command, "list_workspace_files");
+        assert_eq!(payload_budget.surface_id, "workspaces.file.initial-listing");
+        assert_eq!(payload_budget.item_count, listing_budget.returned_entries);
+        assert_ne!(listing_budget.cache_state, ScanCacheState::Unsupported);
+        assert_ne!(payload_budget.cache_state, ScanCacheState::Unsupported);
+
+        std::fs::remove_dir_all(&root).expect("cleanup root");
+    }
+
+    #[test]
+    fn list_workspace_files_reports_cache_miss_hit_and_invalidation() {
+        let root = std::env::temp_dir().join(format!("mossx-files-cache-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("src/deep")).expect("create deep dir");
+        std::fs::write(root.join("src/deep/app.ts"), "app\n").expect("write app");
+
+        let first = list_workspace_files_inner(&root, 20);
+        assert_eq!(
+            first
+                .payload_budget
+                .as_ref()
+                .expect("first payload budget")
+                .cache_state,
+            ScanCacheState::Miss
+        );
+
+        let second = list_workspace_files_inner(&root, 20);
+        assert_eq!(
+            second
+                .payload_budget
+                .as_ref()
+                .expect("second payload budget")
+                .cache_state,
+            ScanCacheState::Hit
+        );
+
+        std::fs::write(root.join("src/deep/next.ts"), "next\n").expect("write next");
+        let third = list_workspace_files_inner(&root, 20);
+        assert_eq!(
+            third
+                .payload_budget
+                .as_ref()
+                .expect("third payload budget")
+                .cache_state,
+            ScanCacheState::Invalidated
+        );
+        assert!(third.files.iter().any(|path| path == "src/deep/next.ts"));
+
+        std::fs::remove_dir_all(&root).expect("cleanup root");
+    }
+
+    #[test]
     fn sort_and_truncate_named_entries_sorts_before_truncating() {
         let mut entries = vec![
             ("z-item".to_string(), 1usize),
@@ -2330,6 +1829,81 @@ mod tests {
                 "bucket/z.ts".to_string()
             ]
         );
+
+        std::fs::remove_dir_all(&root).expect("cleanup root");
+    }
+
+    #[test]
+    fn list_workspace_directory_children_includes_subtree_budget_contract() {
+        let root =
+            std::env::temp_dir().join(format!("mossx-dir-children-budget-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("bucket")).expect("create bucket dir");
+        std::fs::write(root.join("bucket/a.ts"), "a\n").expect("write a");
+
+        let response =
+            list_workspace_directory_children_inner(&root, "bucket", 10).expect("list children");
+        let listing_budget = response
+            .listing_budget
+            .as_ref()
+            .expect("listing budget metadata");
+        let payload_budget = response
+            .payload_budget
+            .as_ref()
+            .expect("payload budget metadata");
+
+        assert_eq!(listing_budget.requested_path.as_deref(), Some("bucket"));
+        assert_eq!(listing_budget.depth, Some(1));
+        assert_eq!(listing_budget.max_entries, 10);
+        assert_eq!(payload_budget.command, "list_workspace_directory_children");
+        assert_eq!(payload_budget.surface_id, "workspaces.file.subtree-listing");
+        assert_eq!(payload_budget.estimated_bytes, listing_budget.payload_bytes);
+        assert_ne!(listing_budget.cache_state, ScanCacheState::Unsupported);
+        assert_ne!(payload_budget.cache_state, ScanCacheState::Unsupported);
+
+        std::fs::remove_dir_all(&root).expect("cleanup root");
+    }
+
+    #[test]
+    fn list_workspace_directory_children_reports_path_scoped_cache_states() {
+        let root =
+            std::env::temp_dir().join(format!("mossx-dir-children-cache-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("bucket")).expect("create bucket dir");
+        std::fs::write(root.join("bucket/a.ts"), "a\n").expect("write a");
+
+        let first =
+            list_workspace_directory_children_inner(&root, "bucket", 10).expect("first children");
+        assert_eq!(
+            first
+                .payload_budget
+                .as_ref()
+                .expect("first payload budget")
+                .cache_state,
+            ScanCacheState::Miss
+        );
+
+        let second =
+            list_workspace_directory_children_inner(&root, "bucket", 10).expect("second children");
+        assert_eq!(
+            second
+                .payload_budget
+                .as_ref()
+                .expect("second payload budget")
+                .cache_state,
+            ScanCacheState::Hit
+        );
+
+        std::fs::write(root.join("bucket/b.ts"), "b\n").expect("write b");
+        let third =
+            list_workspace_directory_children_inner(&root, "bucket", 10).expect("third children");
+        assert_eq!(
+            third
+                .payload_budget
+                .as_ref()
+                .expect("third payload budget")
+                .cache_state,
+            ScanCacheState::Invalidated
+        );
+        assert!(third.files.iter().any(|path| path == "bucket/b.ts"));
 
         std::fs::remove_dir_all(&root).expect("cleanup root");
     }
@@ -2484,6 +2058,18 @@ mod tests {
         assert_eq!(response.content, "usb异常断开");
         assert!(!response.truncated);
 
+        std::fs::remove_dir_all(&root).expect("cleanup root");
+    }
+
+    #[test]
+    fn read_workspace_file_rejects_git_directory_access() {
+        let root = std::env::temp_dir().join(format!("mossx-read-git-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(root.join(".git")).expect("create git dir");
+        std::fs::write(root.join(".git").join("config"), "[core]\n").expect("write git config");
+
+        let result = read_workspace_file_inner(&PathBuf::from(&root), ".git/config");
+
+        assert!(result.is_err());
         std::fs::remove_dir_all(&root).expect("cleanup root");
     }
 

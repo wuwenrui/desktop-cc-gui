@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
-import { render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, render, screen } from "@testing-library/react";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 let windowLabel = "main";
 
@@ -30,43 +30,59 @@ vi.mock("./features/client-documentation/components/ClientDocumentationWindow", 
 
 import { AppRouter } from "./router";
 
+async function renderAppRouter() {
+  await act(async () => {
+    render(<AppRouter />);
+    await Promise.resolve();
+  });
+}
+
 describe("AppRouter", () => {
+  beforeAll(async () => {
+    await Promise.all([
+      import("./features/about/components/AboutView"),
+      import("./features/files/components/DetachedFileExplorerWindow"),
+      import("./features/spec/components/DetachedSpecHubWindow"),
+      import("./features/client-documentation/components/ClientDocumentationWindow"),
+    ]);
+  });
+
   beforeEach(() => {
     windowLabel = "main";
   });
 
-  it("renders the main shell for the main window", () => {
-    render(<AppRouter />);
+  it("renders the main shell for the main window", async () => {
+    await renderAppRouter();
     expect(screen.getByText("main-shell")).not.toBeNull();
   });
 
   it("renders the about view for the about window", async () => {
     windowLabel = "about";
-    render(<AppRouter />);
+    await renderAppRouter();
     expect(await screen.findByText("about-view")).not.toBeNull();
   });
 
   it("renders the detached file explorer for the file-explorer window", async () => {
     windowLabel = "file-explorer";
-    render(<AppRouter />);
+    await renderAppRouter();
     expect(await screen.findByText("detached-file-explorer-view")).not.toBeNull();
   });
 
   it("renders the detached file explorer for per-tab file-explorer windows", async () => {
     windowLabel = "file-explorer-multiple-1";
-    render(<AppRouter />);
+    await renderAppRouter();
     expect(await screen.findByText("detached-file-explorer-view")).not.toBeNull();
   });
 
   it("renders the detached Spec Hub for the spec-hub window", async () => {
     windowLabel = "spec-hub";
-    render(<AppRouter />);
+    await renderAppRouter();
     expect(await screen.findByText("detached-spec-hub-view")).not.toBeNull();
   });
 
   it("renders the client documentation window for the client-documentation window", async () => {
     windowLabel = "client-documentation";
-    render(<AppRouter />);
+    await renderAppRouter();
     expect(await screen.findByText("client-documentation-view")).not.toBeNull();
   });
 });

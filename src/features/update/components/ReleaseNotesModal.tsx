@@ -6,6 +6,7 @@ import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Markdown } from "../../messages/components/Markdown";
+import { loadReleaseNotesStyles } from "../../../styles/featureStyleLoaders";
 import type { ReleaseNotesEntry } from "../hooks/useReleaseNotes";
 
 type ReleaseNotesModalProps = {
@@ -32,6 +33,11 @@ export function ReleaseNotesModal({
   onRetry,
 }: ReleaseNotesModalProps) {
   const { t } = useTranslation();
+  useEffect(() => {
+    if (isOpen) {
+      void loadReleaseNotesStyles();
+    }
+  }, [isOpen]);
 
   const currentEntry = useMemo(
     () => entries[activeIndex] ?? null,

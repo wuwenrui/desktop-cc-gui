@@ -14,6 +14,7 @@
 |---|---|---|
 | [Directory Structure](./directory-structure.md) | 模块目录与文件落位规则 | Active |
 | [Component Guidelines](./component-guidelines.md) | 组件设计、props、样式与 i18n 规范 | Active |
+| [Parallel Conversation Runtime Residuals](./parallel-conversation-runtime-residuals.md) | 多 session 并行实时对话的 7 条根因诊断 + 修复 + 回归契约 | Active |
 | [Messages Streaming Render Contract](./messages-streaming-render-contract.md) | 固化 live conversation streaming 的 stable snapshot + live row override render contract | Active |
 | [Computer Use Bridge](./computer-use-bridge.md) | Computer Use 状态面板、hook 与 bridge service contract | Active |
 | [Claude Context Usage Display](./claude-context-usage-display.md) | Claude context usage view model、tooltip layout、pending/estimated/live display contract | Active |
@@ -23,6 +24,7 @@
 | [Hook Guidelines](./hook-guidelines.md) | hook 编排、async safety、bridge 调用约束 | Active |
 | [State Management](./state-management.md) | local/global/persistent/runtime state 边界 | Active |
 | [Quality Guidelines](./quality-guidelines.md) | 禁止项、必做项、review checklist | Active |
+| [CodeMirror State-Coupled Extensions 不可跨越 Lazy Boundary](./quality-guidelines.md#codemirror-state-coupled-extensions-不可跨越-lazy-boundary) | 任何把 `@codemirror/*` state-coupled extension 拆到 lazy 边界后的硬性禁止 | Active |
 | [Type Safety](./type-safety.md) | strict TypeScript 与 boundary mapping 规则 | Active |
 
 ## Pre-Development Checklist（开始开发前必读）
@@ -31,6 +33,8 @@
 - 先读 [Directory Structure](./directory-structure.md)，确认文件放在哪个 feature slice。
 - 涉及 `useEffect`、polling、listener 时先读 [Hook Guidelines](./hook-guidelines.md)。
 - 涉及 refactor 或大文件修改时先读 [Quality Guidelines](./quality-guidelines.md)。
+- 涉及 CodeMirror / `@uiw/react-codemirror` 拆分 lazy 边界、压缩 startup bundle 时，先读 [CodeMirror State-Coupled Extensions 不可跨越 Lazy Boundary](./quality-guidelines.md#codemirror-state-coupled-extensions-不可跨越-lazy-boundary)。
+- 涉及多 session 并行 / 长 turn 实时对话 / 性能卡顿排查时,额外读 [Parallel Conversation Runtime Residuals](./parallel-conversation-runtime-residuals.md) + [docs/perf/parallel-conversation-jank-handbook.md](../../docs/perf/parallel-conversation-jank-handbook.md)。
 - 涉及 live conversation message / Markdown / timeline render path 时，额外读 [Messages Streaming Render Contract](./messages-streaming-render-contract.md)。
 - 涉及 UI -> service -> tauri/rust 的跨层变更，额外读：
   - `../guides/cross-layer-thinking-guide.md`

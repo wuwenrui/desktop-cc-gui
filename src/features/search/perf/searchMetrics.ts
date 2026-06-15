@@ -2,6 +2,14 @@ export function reportSearchMetrics(payload: {
   query: string;
   elapsedMs: number;
   resultCount: number;
+  providerTimings?: Array<{
+    provider: string;
+    elapsedMs: number;
+    candidateCount: number;
+    resultCount: number;
+  }>;
+  hydrationState?: "active-only" | "partial-global" | "global";
+  staleDropCount?: number;
 }): void {
   const isTestMode = (() => {
     try {
@@ -26,5 +34,8 @@ export function reportSearchMetrics(payload: {
     q: payload.query,
     ms: payload.elapsedMs,
     count: payload.resultCount,
+    providers: payload.providerTimings,
+    hydration: payload.hydrationState,
+    staleDrops: payload.staleDropCount,
   });
 }

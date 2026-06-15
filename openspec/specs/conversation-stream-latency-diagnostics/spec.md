@@ -6,47 +6,29 @@ Define correlated stream latency diagnostics so the system can distinguish upstr
 ## Requirements
 ### Requirement: Stream Latency Diagnostics MUST Capture Correlated Turn Evidence
 
-The system MUST record correlated latency evidence for streaming conversation turns so it can distinguish upstream provider delay, chunk cadence anomalies, client render amplification, and visible-output stalls.
+The system MUST record correlated latency evidence for streaming conversation turns so it can distinguish upstream provider delay, backend forwarding stalls, batch/reducer amplification, client render lag, terminal settlement delay, and visible-output stalls.
 
-#### Scenario: first token and render pacing are recorded with turn correlation
+#### Scenario: turn trace links ingress through visible render
 
-- **WHEN** a streaming conversation turn starts and later receives the first assistant chunk
-- **THEN** the system MUST record first-token latency, first visible render latency, and subsequent chunk cadence summary
+- **WHEN** a streaming conversation turn starts and later receives assistant/runtime events
+- **THEN** diagnostics MUST preserve a turn-level correlation id or equivalent dimensions across event ingress, batch flush, reducer commit, first visible row render, first visible text growth, and terminal settlement where available
 - **AND** records MUST include `workspaceId`, `threadId`, `engine`, `providerId/providerName/baseUrl`, `model`, and `platform` when available
 
-#### Scenario: prolonged waiting or timeout still emits correlated latency evidence
+#### Scenario: visible lag is classified after correlation
 
-- **WHEN** a streaming conversation remains in waiting state without receiving the first chunk, or eventually enters `FIRST_PACKET_TIMEOUT` or equivalent timeout
-- **THEN** the system MUST record latency diagnostics with the same correlation dimensions
-- **AND** diagnostics MUST distinguish no-first-packet from chunk cadence anomalies after ingress
-
-#### Scenario: non-text runtime progress is not classified as backend silence
-
-- **WHEN** a conversation has not yet received assistant text ingress
-- **AND** the backend emits command execution, file change, tool output, terminal interaction, or equivalent runtime activity for the active turn
-- **THEN** diagnostics MUST record that activity as non-text progress evidence
-- **AND** first-token pending warnings MUST NOT fire solely because assistant text has not arrived yet
-- **AND** the first assistant text latency MUST remain unset until assistant text ingress actually occurs
-
-#### Scenario: candidate and active mitigation evidence are distinct
-
-- **WHEN** a stream mitigation candidate profile is selected before or during visible render analysis
-- **THEN** diagnostics MUST record candidate profile id and candidate reason separately from active mitigation profile id and active mitigation reason
-- **AND** disabling active mitigation MUST NOT erase the evidence that a candidate was selected
+- **WHEN** assistant text ingress exists but visible text growth is delayed
+- **THEN** diagnostics MUST classify the delay using correlated evidence from batch flush, reducer commit, render timing, and terminal pressure where surfaced
+- **AND** the system MUST NOT infer backend or upstream stalls from frontend visible delay alone.
 
 ### Requirement: Stream Latency Diagnostics MUST Reuse Existing Diagnostics Surfaces And Stay Bounded
 
 系统 MUST 复用现有 renderer/runtime/thread diagnostics surfaces 暴露 stream latency 证据，并保持事件数量有界。
 
-#### Scenario: renderer diagnostics append bounded latency events
-- **WHEN** 前端记录 stream latency 相关事件
-- **THEN** 系统 MUST 复用现有 renderer diagnostics 或等价 diagnostics surface 进行追加
-- **AND** 事件缓冲 MUST 保持有界，不能因单个长会话无限增长
+#### Scenario: per-turn trace summary is bounded
 
-#### Scenario: runtime and thread diagnostics remain correlatable
-- **WHEN** 同一条慢体验链路同时涉及前端等待态和 runtime-side timeout / degraded evidence
-- **THEN** diagnostics MUST 保留可对齐的 correlation dimensions
-- **AND** triage 时 MUST 能将 renderer 侧证据与 runtime/thread 侧证据关联到同一次 turn
+- **WHEN** a long streaming turn emits many deltas
+- **THEN** diagnostics SHOULD store bounded milestone summaries, counters, queue depth summaries, or sampled records instead of unbounded per-delta payloads
+- **AND** payloads MUST NOT include prompt text, assistant body text, tool output body, or terminal output content.
 
 ### Requirement: Latency Diagnostics MUST Distinguish Upstream Delay From Client Render Amplification
 

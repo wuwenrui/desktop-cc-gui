@@ -2316,6 +2316,7 @@ export function useThreads({
     startShare,
     getThreadKind,
     updateSharedSessionEngineSelection,
+    updateThreadParent,
     resolveCanonicalThreadId,
     reviewPrompt,
     openReviewPrompt,

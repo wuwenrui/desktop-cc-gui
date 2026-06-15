@@ -233,6 +233,60 @@ describe("PinnedThreadList", () => {
     expect(badge?.classList.contains("proxy-status-badge--animated")).toBe(false);
   });
 
+  it("keeps an unchanged pinned row stable across unrelated status updates", () => {
+    const renderCountByThreadId = new Map<string, number>();
+    const rows = [
+      { thread, depth: 0, workspaceId: "ws-1", workspacePath: "/tmp/ws-1" },
+      {
+        thread: otherThread,
+        depth: 0,
+        workspaceId: "ws-2",
+        workspacePath: "/tmp/ws-2",
+      },
+    ];
+    const onPinnedThreadRowRender = vi.fn((threadId: string) => {
+      renderCountByThreadId.set(
+        threadId,
+        (renderCountByThreadId.get(threadId) ?? 0) + 1,
+      );
+    });
+
+    const { rerender } = render(
+      <PinnedThreadList
+        {...baseProps}
+        rows={rows}
+        threadStatusById={{
+          "thread-1": { isProcessing: false, hasUnread: true, isReviewing: false },
+          "thread-2": { isProcessing: false, hasUnread: false, isReviewing: false },
+        }}
+        onPinnedThreadRowRender={onPinnedThreadRowRender}
+      />,
+    );
+
+    expect(renderCountByThreadId.get("thread-1")).toBe(1);
+
+    for (let index = 0; index < 1000; index += 1) {
+      rerender(
+        <PinnedThreadList
+          {...baseProps}
+          rows={rows}
+          threadStatusById={{
+            "thread-1": { isProcessing: false, hasUnread: true, isReviewing: false },
+            "thread-2": {
+              isProcessing: index % 2 === 0,
+              hasUnread: false,
+              isReviewing: false,
+            },
+          }}
+          onPinnedThreadRowRender={onPinnedThreadRowRender}
+        />,
+      );
+    }
+
+    expect(renderCountByThreadId.get("thread-1")).toBe(1);
+    expect(onPinnedThreadRowRender).toHaveBeenCalledWith("thread-2");
+  });
+
   it("hides codex provider metadata by default and keeps explicit pinned badges opt-in", () => {
     const { container, rerender } = render(
       <PinnedThreadList

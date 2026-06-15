@@ -5,7 +5,11 @@ import {
   useState,
   type MutableRefObject,
 } from "react";
-import { subscribeDetachedExternalFileChanges } from "../../../services/events";
+import {
+  subscribeDetachedExternalFileChangeBatch,
+  subscribeDetachedExternalFileChanges,
+} from "../../../services/events";
+import { isAppServerEventBatchConsumerEnabled } from "../../threads/utils/realtimePerfFlags";
 import { readWorkspaceFile } from "../../../services/tauri";
 import { pushErrorToast } from "../../../services/toasts";
 import {
@@ -28,6 +32,27 @@ const WINDOWS_PATH_NOT_FOUND_ERROR_PATTERN =
   /os error 3/i;
 const WINDOWS_PATH_NOT_FOUND_TEXT_PATTERN =
   /cannot find the path|path not found|the system cannot find the path specified|系统找不到指定的路径/i;
+
+type DetachedExternalFileChangeInput = {
+  workspaceId: string;
+  normalizedPath: string;
+  eventKind: string;
+  source: string;
+};
+
+export function coalesceDetachedExternalFileChangeBatch<
+  T extends DetachedExternalFileChangeInput,
+>(batch: readonly T[], caseInsensitivePathCompare: boolean): T[] {
+  const latestByKey = new Map<string, T>();
+  for (const event of batch) {
+    const comparablePath = normalizeComparablePath(
+      event.normalizedPath,
+      caseInsensitivePathCompare,
+    );
+    latestByKey.set(`${event.workspaceId}\0${comparablePath}`, event);
+  }
+  return Array.from(latestByKey.values());
+}
 
 export type ExternalChangeConflict = {
   diskContent: string;
@@ -479,7 +504,7 @@ export function useFileExternalSync({
       return;
     }
 
-    return subscribeDetachedExternalFileChanges((event) => {
+    const handleEvent = (event: { workspaceId: string; normalizedPath: string; eventKind: string; source: string }) => {
       if (event.workspaceId !== workspaceId) {
         return;
       }
@@ -493,7 +518,25 @@ export function useFileExternalSync({
         return;
       }
       void refreshFromDisk(event.source, event.eventKind || "watcher-event");
-    });
+    };
+
+    // Per design §2.2 and parent change Step 4 tasks: subscribe to ONE
+    // channel at a time. The runtime flag picks the batch channel as the
+    // preferred path and falls back to the single channel only when the
+    // flag is off. Double-subscribing would cause duplicate refresh jobs
+    // when the runtime config flips to "both" in the future.
+    if (isAppServerEventBatchConsumerEnabled()) {
+      return subscribeDetachedExternalFileChangeBatch((batch) => {
+        const coalescedBatch = coalesceDetachedExternalFileChangeBatch(
+          batch,
+          caseInsensitivePathCompare,
+        );
+        for (const event of coalescedBatch) {
+          handleEvent(event);
+        }
+      });
+    }
+    return subscribeDetachedExternalFileChanges(handleEvent);
   }, [
     caseInsensitivePathCompare,
     externalChangeMonitoringEnabled,

@@ -1169,6 +1169,18 @@ pub(crate) async fn get_git_log(
         }
     }
 
+    let truncated = total > entries.len();
+    let payload_budget = PayloadBudgetMetadata {
+        command: "get_git_log".to_string(),
+        surface_id: "git-history-log".to_string(),
+        item_count: entries.len(),
+        estimated_bytes: estimate_json_payload_bytes(&entries),
+        partial: truncated,
+        truncated,
+        cache_state: ScanCacheState::Unsupported,
+        evidence_class: "proxy".to_string(),
+    };
+
     Ok(GitLogResponse {
         total,
         entries,
@@ -1177,6 +1189,7 @@ pub(crate) async fn get_git_log(
         ahead_entries,
         behind_entries,
         upstream,
+        payload_budget: Some(payload_budget),
     })
 }
 

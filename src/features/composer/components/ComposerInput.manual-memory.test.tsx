@@ -5,6 +5,21 @@ import { describe, expect, it, vi } from "vitest";
 import type { AutocompleteItem } from "../hooks/useComposerAutocomplete";
 import { ComposerInput } from "./ComposerInput";
 
+vi.mock("../../messages/components/Markdown", () => ({
+  Markdown: ({ value, className }: { value: string; className?: string }) => (
+    <div className={className}>
+      {value.split(/\r?\n/).map((line, index) => {
+        const heading = line.match(/^##\s+(.+)$/);
+        if (heading) {
+          return <h2 key={`${line}-${index}`}>{heading[1]}</h2>;
+        }
+        const listItem = line.replace(/^[-*]\s+/, "");
+        return <div key={`${line}-${index}`}>{listItem}</div>;
+      })}
+    </div>
+  ),
+}));
+
 function makeMemorySuggestion(partial: Partial<AutocompleteItem>): AutocompleteItem {
   return {
     id: "memory:default",

@@ -14,7 +14,7 @@ type WorkspaceRestoreOptions = {
       recoverySource?: "workspace-restore";
       allowRuntimeReconnect?: boolean;
     },
-  ) => Promise<void>;
+  ) => Promise<unknown>;
 };
 
 export function useWorkspaceRestore({

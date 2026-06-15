@@ -5,6 +5,7 @@ pub(crate) mod git_core;
 pub(crate) mod proxy_core;
 pub(crate) mod settings_core;
 pub(crate) mod thread_titles_core;
+pub(crate) mod workspace_listing;
 pub(crate) mod workspace_snapshot;
 pub(crate) mod workspaces_core;
 pub(crate) mod worktree_core;

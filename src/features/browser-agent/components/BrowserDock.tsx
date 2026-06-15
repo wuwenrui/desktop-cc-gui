@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { loadBrowserAgentStyles } from "../../../styles/featureStyleLoaders";
 import type {
   BrowserSession,
   BrowserWebviewEvent,
@@ -97,6 +98,9 @@ export function BrowserDock({
   className,
   onSessionChange,
 }: BrowserDockProps) {
+  useEffect(() => {
+    void loadBrowserAgentStyles();
+  }, []);
   const { t, i18n } = useTranslation();
   const [statusEnabled, setStatusEnabled] = useState(false);
   const [urlDraft, setUrlDraft] = useState("");

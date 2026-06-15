@@ -365,7 +365,7 @@ describe("useThreadActions codex rewind", () => {
     );
   });
 
-  it("skips workspace restore when Codex rewind toggle is disabled", async () => {
+  it("does not mutate workspace files when message fork runs in messages-only mode", async () => {
     vi.mocked(listThreads).mockResolvedValue({
       result: {
         data: [],
@@ -442,6 +442,8 @@ describe("useThreadActions codex rewind", () => {
         localUserMessageCount: 2,
       },
     );
+    expect(readWorkspaceFile).not.toHaveBeenCalled();
+    expect(trashWorkspaceItem).not.toHaveBeenCalled();
     expect(writeWorkspaceFile).not.toHaveBeenCalled();
   });
 

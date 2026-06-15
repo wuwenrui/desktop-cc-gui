@@ -11,6 +11,7 @@ use serde_json::json;
 use tauri::{AppHandle, State};
 use tokio::time::{timeout, Duration};
 
+use crate::backend_budget::{estimate_json_payload_bytes, PayloadBudgetMetadata, ScanCacheState};
 use crate::git_utils::{
     checkout_branch, commit_to_entry, diff_patch_to_string, diff_stats_for_path, image_mime_type,
     list_git_roots as scan_git_roots, parse_github_repo, path_has_git_repository_marker,
@@ -1910,6 +1911,7 @@ pub(crate) use commands::*;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::GitLogEntry;
     use std::fs;
     use validation::validate_local_branch_name;
 
@@ -1946,6 +1948,51 @@ mod tests {
                 "Git remote forwarding matrix is missing category {category}"
             );
         }
+    }
+
+    #[test]
+    fn git_log_payload_budget_serializes_content_safe_metadata() {
+        let response = GitLogResponse {
+            total: 10,
+            entries: vec![GitLogEntry {
+                sha: "abc123".to_string(),
+                summary: "summary".to_string(),
+                author: "author".to_string(),
+                timestamp: 1,
+            }],
+            ahead: 0,
+            behind: 0,
+            ahead_entries: Vec::new(),
+            behind_entries: Vec::new(),
+            upstream: None,
+            payload_budget: Some(PayloadBudgetMetadata {
+                command: "get_git_log".to_string(),
+                surface_id: "git-history-log".to_string(),
+                item_count: 1,
+                estimated_bytes: 64,
+                partial: true,
+                truncated: true,
+                cache_state: ScanCacheState::Unsupported,
+                evidence_class: "proxy".to_string(),
+            }),
+        };
+
+        let value = serde_json::to_value(response).expect("serialize response");
+        let budget = value
+            .get("payloadBudget")
+            .and_then(|entry| entry.as_object())
+            .expect("payload budget object");
+        assert_eq!(
+            budget.get("command").and_then(|entry| entry.as_str()),
+            Some("get_git_log")
+        );
+        assert_eq!(
+            budget.get("itemCount").and_then(|entry| entry.as_u64()),
+            Some(1)
+        );
+        assert!(budget.get("absolutePath").is_none());
+        assert!(budget.get("prompt").is_none());
+        assert!(budget.get("toolOutput").is_none());
     }
 
     fn create_temp_repo() -> (PathBuf, Repository) {

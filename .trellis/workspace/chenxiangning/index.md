@@ -7,9 +7,9 @@
 ## Current Status
 
 <!-- @@@auto:current-status -->
-- **Active File**: `journal-21.md`
-- **Total Sessions**: 797
-- **Last Active**: 2026-06-10
+- **Active File**: `journal-22.md`
+- **Total Sessions**: 841
+- **Last Active**: 2026-06-14
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,8 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-21.md` | ~659 | Active |
+| `journal-22.md` | ~618 | Active |
+| `journal-21.md` | ~1970 | Archived |
 | `journal-20.md` | ~1997 | Archived |
 | `journal-19.md` | ~1989 | Archived |
 | `journal-18.md` | ~1966 | Archived |
@@ -49,6 +50,50 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 841 | 2026-06-14 | 稳定 Suspense host-task teardown | `d4fcbbee5422b68c7c42e4efc9ad6099fe9fcc85` | `feature/v0.5.9` |
+| 840 | 2026-06-14 | 稳定 heavy-test-noise Suspense teardown | `ce59b8118fe1a09adc22289298c9b98c6cec8de7` | `feature/v0.5.9` |
+| 839 | 2026-06-14 | 修复 fork provider 选择测试时序 | `8c3bc5fe` | `feature/v0.5.9` |
+| 838 | 2026-06-14 | 修复 WebService token 生成测试超时 | `556adfb7` | `feature/v0.5.9` |
+| 837 | 2026-06-14 | 修复 router lazy 测试 act 噪声 | `4ec39c61` | `feature/v0.5.9` |
+| 836 | 2026-06-14 | 修复 CI WebService 超时与 Suspense 噪声 | `50c2a169` | `feature/v0.5.9` |
+| 835 | 2026-06-14 | 修复 Messages reasoning 测试类型检查 | `262970f1` | `feature/v0.5.9` |
+| 834 | 2026-06-14 | 重新触发 heavy noise CI 验证 | `7486cdfb` | `feature/v0.5.9` |
+| 833 | 2026-06-14 | 清理过时 OpenSpec 性能调查提案 | `88072aee` | `feature/v0.5.9` |
+| 832 | 2026-06-14 | 归档已验证 OpenSpec 提案 | `c9dd8cb1` | `feature/v0.5.9` |
+| 831 | 2026-06-14 | 优化 progressive reveal 边界扫描 | `f706b181` | `feature/v0.5.9` |
+| 830 | 2026-06-13 | 收口并行对话运行时残留 P0 修复 | `bd456e46` | `feature/v0.5.9` |
+| 829 | 2026-06-13 | 修复 heavy-test-noise 与 branding gate | `38e3cee0` | `feature/v0.5.9` |
+| 828 | 2026-06-13 | 修复 AppShell domain context 测试换行断言 | `cd41bcb8` | `feature/v0.5.9` |
+| 827 | 2026-06-13 | 收口 Windows 离线安装与文件打开缓存刷新 | `10082f60`, `f880be4d` | `feature/v0.5.9` |
+| 826 | 2026-06-13 | 收口客户端性能残余证据 | `a8bd4b24` | `feature/v0.5.9` |
+| 825 | 2026-06-13 | 收口发布级性能证据提案 | `9db56c88` | `feature/v0.5.9` |
+| 824 | 2026-06-13 | 恢复侧栏顶栏折叠按钮 | `38e8d90e` | `feature/v0.5.9` |
+| 823 | 2026-06-13 | 收口发布级性能证据门禁 | `9c73b752` | `feature/v0.5.9` |
+| 822 | 2026-06-13 | 加固治理门禁边界处理 | `12f8c3c3` | `feature/v0.5.9` |
+| 821 | 2026-06-13 | 收口性能归档就绪提案 | `3e5b00b2` | `feature/v0.5.9` |
+| 820 | 2026-06-13 | Fix Git diff modal preview | `7836896a` | `feature/v0.5.9` |
+| 819 | 2026-06-13 | 添加 Git 状态手动刷新入口 | `0c66668e` | `feature/v0.5.9` |
+| 818 | 2026-06-13 | 恢复 Project Map Task 入口 | `32159950` | `feature/v0.5.9` |
+| 817 | 2026-06-13 | 收口性能迭代结构债 | `9e99f6f9` | `feature/v0.5.9` |
+| 816 | 2026-06-13 | 同步性能证据归档状态 | `d5c96d7d` | `feature/v0.5.9` |
+| 815 | 2026-06-13 | 收口实时线程状态行级订阅 | `18de443a` | `feature/v0.5.9` |
+| 814 | 2026-06-13 | 补齐文件编辑卡顿收口提案 | `a0082032` | `feature/v0.5.9` |
+| 813 | 2026-06-13 | 收口文件编辑交互卡顿隔离 | `87e6e53f` | `feature/v0.5.9` |
+| 812 | 2026-06-12 | 收口实时输入与前端 prop 链稳定性阶段校准 | `46b3f61a` | `feature/v0.5.9` |
+| 811 | 2026-06-12 | 收口实时输入与前端 prop 链稳定性阶段实现 | `25d101a0` | `feature/v0.5.9` |
+| 810 | 2026-06-12 | 收口事件批处理与文件 I/O 隔离 | `7cc4a284` | `feature/v0.5.9` |
+| 809 | 2026-06-12 | 落地 P1 性能预算链路 | `f7ae0a99` | `feature/v0.5.9` |
+| 808 | 2026-06-12 | 收口本迭代已完成任务 | `c646bcc0` | `feature/v0.5.9` |
+| 807 | 2026-06-12 | 为 5 个 P1 提案补串行执行顺序 | `944e3536` | `feature/v0.5.9` |
+| 806 | 2026-06-11 | 提交 OpenSpec 性能预算提案 | `41ffa534` | `feature/v0.5.9` |
+| 805 | 2026-06-11 | 归档 P0 性能提案至 openspec archive | `aba7c2fd` | `feature/v0.5.9` |
+| 804 | 2026-06-11 | 补齐实时链路追踪门禁 | `ea916f00` | `feature/v0.5.9` |
+| 803 | 2026-06-11 | 完善 search index review 修复 | `905c6a37` | `feature/v0.5.9` |
+| 802 | 2026-06-11 | 完成文件预览重依赖延迟加载 | `b2fe0224`, `bf048d7c` | `feature/v0.5.9` |
+| 801 | 2026-06-11 | 批量落地 v0.5.9 性能优化 | `6e005ebb` | `feature/v0.5.9` |
+| 800 | 2026-06-10 | 归档阻塞 OpenSpec 提案 | `2a09c927` | `feature/v0.5.9` |
+| 799 | 2026-06-10 | 归档已验证 OpenSpec 提案 | `f4dfba2d` | `feature/v0.5.9` |
+| 798 | 2026-06-10 | 补充消息 Fork 文件保护回归测试 | `5e155324` | `feature/v0.5.8` |
 | 797 | 2026-06-10 | 修复消息 Fork 改写工作区 | `88d6d494` | `feature/v0.5.8` |
 | 796 | 2026-06-10 | 修复浏览器快照浅色主题可读性 | `b262d353` | `feature/v0.5.8` |
 | 795 | 2026-06-10 | 调整运行中状态浅色配色 | `a3b3f8c6` | `feature/v0.5.8` |

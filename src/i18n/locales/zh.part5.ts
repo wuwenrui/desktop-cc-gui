@@ -18,6 +18,7 @@ const zhPart5 = {
     fetch: "获取",
     sync: "同步",
     refresh: "刷新",
+    refreshStatus: "刷新 Git 状态",
     branch: "分支",
     historyNoBranchesFound: "未找到分支",
     stash: "暂存",

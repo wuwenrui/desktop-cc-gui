@@ -1,5 +1,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 
+use crate::backend_budget::PayloadBudgetMetadata;
+
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) enum WorkspaceSessionAttributionMode {
@@ -109,6 +111,12 @@ pub(crate) struct GitLogResponse {
     pub(crate) behind_entries: Vec<GitLogEntry>,
     #[serde(default)]
     pub(crate) upstream: Option<String>,
+    #[serde(
+        default,
+        rename = "payloadBudget",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub(crate) payload_budget: Option<PayloadBudgetMetadata>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

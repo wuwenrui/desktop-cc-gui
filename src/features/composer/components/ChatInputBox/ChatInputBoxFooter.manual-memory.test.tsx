@@ -5,6 +5,12 @@ import { describe, expect, it, vi } from 'vitest';
 import { ChatInputBoxFooter } from './ChatInputBoxFooter';
 import type { DropdownItemData } from './types';
 
+vi.mock('../../../messages/components/Markdown', () => ({
+  Markdown: ({ value, className }: { value: string; className?: string }) => (
+    <div className={className}>{value}</div>
+  ),
+}));
+
 vi.mock('@tauri-apps/api/core', () => ({
   convertFileSrc: (path: string) => path,
 }));

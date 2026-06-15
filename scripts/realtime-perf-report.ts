@@ -4,8 +4,12 @@ import {
   buildThreeThreadReplayEventsForMinutes,
   REALTIME_REPLAY_BATCH_WINDOW_MS,
 } from "../src/features/threads/contracts/realtimeReplayFixture";
-import { buildRealtimePerfExtendedEvents } from "../src/features/threads/contracts/realtimePerfExtendedFixture";
+import {
+  buildRealtimePerfExtendedEvents,
+  buildRealtimeTurnTraceEvents,
+} from "../src/features/threads/contracts/realtimePerfExtendedFixture";
 import { runReplayProfile } from "../src/features/threads/contracts/realtimeReplayHarness";
+import { runTurnTraceReplay } from "../src/features/threads/contracts/realtimeTurnTraceReplay";
 import { getArgValue, isVerbose, percentile, roundMetric, writeJsonFile, type BaselineFragment } from "./perf-baseline-utils";
 
 type DurationReport = {
@@ -44,6 +48,7 @@ function isQuiet() {
 function computeExtendedMetrics(
   events: ReturnType<typeof buildRealtimePerfExtendedEvents>,
   result: Awaited<ReturnType<typeof runReplayProfile>>,
+  traceEvents: ReturnType<typeof buildRealtimeTurnTraceEvents> = events,
 ) {
   const firstAgentDelta = events.find((event) => event.kind === "agentDelta");
   const agentDeltaTimes = events
@@ -53,6 +58,7 @@ function computeExtendedMetrics(
   const jitters = agentDeltaTimes.slice(1).map((atMs, index) => atMs - (agentDeltaTimes[index] ?? atMs));
   const deltaEvents = events.filter((event) => event.kind === "agentDelta");
   const dedupHits = deltaEvents.filter((event) => event.delta.length === 0).length;
+  const trace = runTurnTraceReplay(traceEvents);
   return [
     {
       scenario: "S-RS-FT",
@@ -79,6 +85,34 @@ function computeExtendedMetrics(
       value: roundMetric(result.metrics.wallTimeMs),
       unit: "ms",
       notes: "replay reducer-path proxy latency",
+    },
+    {
+      scenario: "S-RS-VL",
+      metric: "visibleTextLagP95",
+      value: trace.visibleTextLagP95Ms,
+      unit: "ms",
+      notes: "first engine delta ingress -> first visible text growth (per-turn P95, turn-trace correlation gate)",
+    },
+    {
+      scenario: "S-RS-RA",
+      metric: "reducerAmplificationMedian",
+      value: trace.reducerAmplificationMedian,
+      unit: "ratio",
+      notes: "reducer commit count / delta count (median across completed turns)",
+    },
+    {
+      scenario: "S-RS-FD",
+      metric: "batchFlushDurationP95",
+      value: trace.batchFlushDurationP95Ms,
+      unit: "ms",
+      notes: "batch flush duration P95 across completed turns",
+    },
+    {
+      scenario: "S-RS-TS",
+      metric: "terminalSettlementP95",
+      value: trace.terminalSettlementP95Ms,
+      unit: "ms",
+      notes: "last reducer commit -> terminal settlement P95 across completed turns",
     },
   ];
 }
@@ -161,6 +195,7 @@ function createAcceptanceReportMarkdown(reports: DurationReport[], generatedAt: 
 async function main() {
   if (getArgValue("--profile") === "extended") {
     const events = buildRealtimePerfExtendedEvents();
+    const traceEvents = buildRealtimeTurnTraceEvents();
     const baseline = await runReplayProfile({
       events,
       profile: "baseline",
@@ -170,14 +205,54 @@ async function main() {
       schemaVersion: "1.0",
       generatedAt: new Date().toISOString(),
       source: "realtime-extended",
-      metrics: computeExtendedMetrics(events, baseline),
+      metrics: computeExtendedMetrics(events, baseline, traceEvents),
       residualRisks: hasIntegrityFailure(baseline)
         ? ["Extended realtime fixture replay reported integrity failures."]
         : [],
     };
     await writeJsonFile("docs/perf/realtime-extended-baseline.json", fragment);
+    const trace = runTurnTraceReplay(traceEvents);
+    const traceFragment = {
+      schemaVersion: "1.0",
+      generatedAt: new Date().toISOString(),
+      source: "realtime-turn-trace",
+      totals: {
+        turns: trace.totalTurns,
+        completedTurns: trace.completedTurns,
+        visibleTextLagP95Ms: trace.visibleTextLagP95Ms,
+        batchFlushDurationP95Ms: trace.batchFlushDurationP95Ms,
+        reducerAmplificationMedian: trace.reducerAmplificationMedian,
+        terminalSettlementP95Ms: trace.terminalSettlementP95Ms,
+      },
+      evidenceClassCounts: trace.evidenceClassCounts,
+      perTurn: trace.summaries.map((summary) => ({
+        traceId: summary.traceId,
+        threadId: summary.dimensions.threadId,
+        turnId: summary.dimensions.turnId,
+        engine: summary.dimensions.engine,
+        evidenceClass: summary.evidenceClass,
+        evidenceReason: summary.evidenceReason,
+        endedReason: summary.endedReason,
+        deltas: summary.deltas,
+        counters: {
+          deltaCount: summary.counters.deltaCount,
+          reducerCommitCount: summary.counters.reducerCommitCount,
+          reasoningDeltaCount: summary.counters.reasoningDeltaCount,
+          toolDeltaCount: summary.counters.toolDeltaCount,
+          toolCompletedCount: summary.counters.toolCompletedCount,
+          visibleTextGrowthCount: summary.counters.visibleTextGrowthCount,
+          batchFlushCount: summary.counters.batchFlushCount,
+          batchFlushDurationAvgMs: summary.counters.batchFlushDurationAvgMs,
+          maxQueueDepth: summary.counters.maxQueueDepth,
+          reducerAmplification: summary.counters.reducerAmplification,
+          terminalSettlementLagMs: summary.counters.terminalSettlementLagMs,
+        },
+      })),
+    };
+    await writeJsonFile("docs/perf/realtime-turn-trace.json", traceFragment);
     if (!isQuiet()) {
       console.info("Realtime extended baseline written: docs/perf/realtime-extended-baseline.json");
+      console.info("Realtime turn trace written: docs/perf/realtime-turn-trace.json");
     }
     return;
   }

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConversationItem } from "../../../../types";
 import * as diffParser from "../../../../utils/diff";
@@ -702,7 +702,7 @@ describe("GenericToolBlock", () => {
     expect(screen.getByText("Execution Plan Ready")).toBeTruthy();
   });
 
-  it("preserves rich markdown when extracting labeled exit plan payload", () => {
+  it("preserves rich markdown when extracting labeled exit plan payload", async () => {
     const onToggle = vi.fn();
     const view = render(
       <GenericToolBlock
@@ -726,11 +726,13 @@ describe("GenericToolBlock", () => {
       />,
     );
 
-    expect(screen.getByText("Rollout")).toBeTruthy();
-    expect(screen.getByText("Checklist")).toBeTruthy();
-    expect(screen.getByText("nested detail")).toBeTruthy();
-    expect(screen.getByText("API")).toBeTruthy();
-    expect(screen.getByText("PLANFILEPATH should stay inside code fence")).toBeTruthy();
-    expect(screen.getByText("/Users/demo/.claude/plans/rich-plan.md")).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByText("Rollout")).toBeTruthy();
+      expect(screen.getByText("Checklist")).toBeTruthy();
+      expect(screen.getByText("nested detail")).toBeTruthy();
+      expect(screen.getByText("API")).toBeTruthy();
+      expect(screen.getByText("PLANFILEPATH should stay inside code fence")).toBeTruthy();
+      expect(screen.getByText("/Users/demo/.claude/plans/rich-plan.md")).toBeTruthy();
+    });
   });
 });

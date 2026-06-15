@@ -3,6 +3,19 @@ import { appendRendererDiagnostic } from "../../../services/rendererDiagnostics"
 import { getCurrentClaudeConfig } from "../../../services/tauri";
 import { isMacPlatform, isWindowsPlatform } from "../../../utils/platform";
 import type { ConversationEngine } from "../contracts/conversationCurtainContracts";
+import {
+  completeTurnTrace,
+  isTurnTraceEnabled,
+  noteTurnBatchFlushBoundary,
+  noteTurnFirstEngineDeltaIngress,
+  noteTurnFirstVisibleRowRender,
+  noteTurnFirstVisibleTextGrowth,
+  noteTurnReducerCommit,
+  noteTurnRuntimeProcessStarted,
+  noteTurnSendCommitted,
+  type TurnTraceDimensions,
+} from "./turnTraceCorrelation";
+import { resetTurnTraceCorrelationForTests } from "./turnTraceCorrelation";
 
 export type StreamPlatform = "windows" | "macos" | "linux" | "unknown";
 export type StreamLatencyCategory =
@@ -152,6 +165,25 @@ function pickObservableThreadStreamLatencySnapshotFields(
     candidateMitigationReason: snapshot.candidateMitigationReason,
     mitigationProfile: snapshot.mitigationProfile,
     mitigationReason: snapshot.mitigationReason,
+  };
+}
+
+function buildTraceDimensionsFromSnapshot(
+  snapshot: ThreadStreamLatencySnapshot,
+): TurnTraceDimensions | null {
+  if (!snapshot.turnId) {
+    return null;
+  }
+  return {
+    workspaceId: snapshot.workspaceId,
+    threadId: snapshot.threadId,
+    turnId: snapshot.turnId,
+    engine: snapshot.engine,
+    providerId: snapshot.providerId,
+    providerName: snapshot.providerName,
+    baseUrl: snapshot.baseUrl,
+    model: snapshot.model,
+    platform: snapshot.platform,
   };
 }
 
@@ -941,6 +973,20 @@ export function noteThreadTurnStarted(input: {
 }) {
   const startedAt = input.startedAt ?? Date.now();
   clearVisibleOutputStallTimer(input.threadId);
+  const priorForTrace = snapshotByThread.get(input.threadId);
+  const traceDimensions: TurnTraceDimensions = {
+    workspaceId: input.workspaceId,
+    threadId: input.threadId,
+    turnId: input.turnId,
+    engine: priorForTrace?.engine ?? null,
+    providerId: priorForTrace?.providerId ?? null,
+    providerName: priorForTrace?.providerName ?? null,
+    baseUrl: priorForTrace?.baseUrl ?? null,
+    model: priorForTrace?.model ?? null,
+    platform: priorForTrace?.platform ?? "unknown",
+  };
+  noteTurnSendCommitted(traceDimensions, startedAt);
+  noteTurnRuntimeProcessStarted(traceDimensions, startedAt);
   updateThreadSnapshot(input.threadId, (current) => ({
     ...current,
     workspaceId: input.workspaceId,
@@ -996,6 +1042,9 @@ export function noteThreadDeltaReceived(
     textLength: number;
   },
 ) {
+  const beforeSnapshot = snapshotByThread.get(threadId);
+  const wasFirstDeltaPending = beforeSnapshot?.firstDeltaAt === null
+    || beforeSnapshot?.firstDeltaAt === undefined;
   const nextSnapshot = updateThreadSnapshot(threadId, (current) => {
     const cadenceSamplesMs =
       current.lastDeltaAt === null
@@ -1019,6 +1068,26 @@ export function noteThreadDeltaReceived(
   });
   maybeEmitCodexIngressDiagnostic(nextSnapshot, ingress);
   scheduleVisibleOutputStallTimer(threadId, nextSnapshot);
+  if (isTurnTraceEnabled()) {
+    const dimensions = buildTraceDimensionsFromSnapshot(nextSnapshot);
+    if (dimensions) {
+      const cadenceSampleMs = beforeSnapshot?.lastDeltaAt !== null
+        && beforeSnapshot?.lastDeltaAt !== undefined
+        ? Math.max(0, timestamp - beforeSnapshot.lastDeltaAt)
+        : undefined;
+      if (wasFirstDeltaPending) {
+        noteTurnFirstEngineDeltaIngress(dimensions, timestamp);
+      }
+      noteTurnReducerCommit({
+        dimensions,
+        atMs: timestamp,
+        isAssistantDelta: ingress?.source !== "snapshot" && ingress?.itemId !== undefined,
+        isReasoningDelta: false,
+        isToolDelta: false,
+        cadenceSampleMs,
+      });
+    }
+  }
 }
 
 function applyThreadTextIngress(
@@ -1306,6 +1375,7 @@ export function noteThreadVisibleRender(
       return nextSnapshot;
     }
     const renderLagMs = Math.max(0, renderAt - current.pendingRenderSinceDeltaAt);
+    const isFirstVisibleRender = current.firstVisibleRenderAt === null;
     nextSnapshot = {
       ...nextSnapshot,
       firstVisibleRenderAt: current.firstVisibleRenderAt ?? renderAt,
@@ -1314,6 +1384,12 @@ export function noteThreadVisibleRender(
       lastRenderLagMs: renderLagMs,
       pendingRenderSinceDeltaAt: null,
     };
+    if (isFirstVisibleRender && isTurnTraceEnabled()) {
+      const dimensions = buildTraceDimensionsFromSnapshot(nextSnapshot);
+      if (dimensions) {
+        noteTurnFirstVisibleRowRender(dimensions, renderAt);
+      }
+    }
 
     if (current.firstVisibleRenderAt === null) {
       const { firstVisibleLatencyMs, renderAmplificationMs } =
@@ -1424,8 +1500,9 @@ export function noteThreadVisibleTextRendered(
       current.pendingVisibleTextSinceDeltaAt === null
         ? null
         : Math.max(0, renderAt - current.pendingVisibleTextSinceDeltaAt);
+    const isFirstVisibleTextRender = current.firstVisibleTextRenderAt === null;
     clearVisibleOutputStallTimer(threadId);
-    return {
+    const nextSnapshotAfterText: ThreadStreamLatencySnapshot = {
       ...current,
       firstVisibleTextRenderAt: current.firstVisibleTextRenderAt ?? renderAt,
       firstVisibleTextAfterDeltaMs:
@@ -1437,6 +1514,16 @@ export function noteThreadVisibleTextRendered(
       visibleTextGrowthCount: current.visibleTextGrowthCount + 1,
       pendingVisibleTextSinceDeltaAt: null,
     };
+    if (isFirstVisibleTextRender && isTurnTraceEnabled()) {
+      const dimensions = buildTraceDimensionsFromSnapshot(nextSnapshotAfterText);
+      if (dimensions) {
+        noteTurnFirstVisibleTextGrowth(dimensions, {
+          atMs: renderAt,
+          visibleTextGrowthCount: nextSnapshotAfterText.visibleTextGrowthCount,
+        });
+      }
+    }
+    return nextSnapshotAfterText;
   });
 }
 
@@ -1504,6 +1591,7 @@ export function reportThreadUpstreamPending(
 
 export function completeThreadStreamTurn(threadId: string) {
   clearVisibleOutputStallTimer(threadId);
+  const priorSnapshot = snapshotByThread.get(threadId);
   updateThreadSnapshot(threadId, (current) => ({
     ...current,
     turnId: null,
@@ -1547,6 +1635,12 @@ export function completeThreadStreamTurn(threadId: string) {
     visibleOutputStallReported: false,
     repeatTurnBlankingReported: false,
   }));
+  if (isTurnTraceEnabled() && priorSnapshot) {
+    const dimensions = buildTraceDimensionsFromSnapshot(priorSnapshot);
+    if (dimensions) {
+      completeTurnTrace(dimensions, { atMs: Date.now(), reason: "completed" });
+    }
+  }
 }
 
 export function resolveActiveThreadStreamMitigation(
@@ -1583,6 +1677,9 @@ export function resetThreadStreamLatencyDiagnosticsForTests() {
   latestProviderConfigRequestByThread.clear();
   streamLatencyTraceEnabledCache = null;
   notifySnapshotListeners();
+  // Also clear the per-turn trace correlation aggregator so tests
+  // see an empty ring even if the trace gate is on.
+  resetTurnTraceCorrelationForTests();
 }
 const STREAMING_PRESSURE_DIAGNOSTIC_MIN_INTERVAL_MS = 15_000;
 let lastStreamingPressureDiagnosticAt = 0;
@@ -1595,8 +1692,16 @@ export function noteRealtimeCoalescedFlush(input: {
   threadId: string;
   turnId: string | null;
   itemKind: string;
+  startedAt?: number;
+  endedAt?: number;
+  queueDepthAfter?: number;
 }) {
-  const now = Date.now();
+  // endedAt defaults to wall-clock now; callers (the realtime batcher in
+  // useThreadItemEvents) should pass it explicitly so the batch-flush window
+  // does not drift into the next tick of the calling microtask.
+  const now = typeof input.endedAt === "number" && Number.isFinite(input.endedAt)
+    ? input.endedAt
+    : Date.now();
   if (input.reason === "first-token" || input.eventCount <= 0) {
     return;
   }
@@ -1613,5 +1718,76 @@ export function noteRealtimeCoalescedFlush(input: {
     turnId: normalizeNullableString(input.turnId),
     itemKind: normalizeNullableString(input.itemKind),
     diagnosticKind: "coalesced-realtime-flush",
+  });
+  if (
+    isTurnTraceEnabled()
+    && input.turnId !== null
+    && typeof input.startedAt === "number"
+  ) {
+    const snapshot = snapshotByThread.get(input.threadId);
+    if (snapshot) {
+      noteTurnBatchFlushBoundary({
+        dimensions: {
+          workspaceId: input.workspaceId,
+          threadId: input.threadId,
+          turnId: input.turnId,
+          engine: input.engine,
+          providerId: snapshot.providerId,
+          providerName: snapshot.providerName,
+          baseUrl: snapshot.baseUrl,
+          model: snapshot.model,
+          platform: snapshot.platform,
+        },
+        startedAt: input.startedAt,
+        endedAt: now,
+        eventCount: input.eventCount,
+        queueDepthAfter: input.queueDepthAfter ?? 0,
+      });
+    }
+  }
+}
+
+export function noteThreadBatchFlushBoundary(input: {
+  threadId: string;
+  turnId: string;
+  startedAt: number;
+  endedAt: number;
+  eventCount: number;
+  queueDepthAfter?: number;
+}) {
+  if (!isTurnTraceEnabled()) {
+    return;
+  }
+  // Reject non-finite timestamps up front so a bad call does not pollute the
+  // bounded trace ring with NaN deltas.
+  if (
+    typeof input.startedAt !== "number"
+    || !Number.isFinite(input.startedAt)
+    || typeof input.endedAt !== "number"
+    || !Number.isFinite(input.endedAt)
+    || input.eventCount < 0
+  ) {
+    return;
+  }
+  const snapshot = snapshotByThread.get(input.threadId);
+  if (!snapshot) {
+    return;
+  }
+  noteTurnBatchFlushBoundary({
+    dimensions: {
+      workspaceId: snapshot.workspaceId,
+      threadId: input.threadId,
+      turnId: input.turnId,
+      engine: snapshot.engine,
+      providerId: snapshot.providerId,
+      providerName: snapshot.providerName,
+      baseUrl: snapshot.baseUrl,
+      model: snapshot.model,
+      platform: snapshot.platform,
+    },
+    startedAt: input.startedAt,
+    endedAt: input.endedAt,
+    eventCount: input.eventCount,
+    queueDepthAfter: input.queueDepthAfter ?? 0,
   });
 }

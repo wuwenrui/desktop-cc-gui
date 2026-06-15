@@ -2,7 +2,10 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useRef, useState } from "react";
-import { useFileExternalSync } from "./useFileExternalSync";
+import {
+  coalesceDetachedExternalFileChangeBatch,
+  useFileExternalSync,
+} from "./useFileExternalSync";
 import { readWorkspaceFile } from "../../../services/tauri";
 import { pushErrorToast } from "../../../services/toasts";
 
@@ -29,6 +32,68 @@ describe("useFileExternalSync", () => {
     vi.useRealTimers();
     vi.clearAllMocks();
   });
+
+    it("coalesces batch watcher events by workspace and normalized path with latest event winning", () => {
+      const batch = [
+        {
+          workspaceId: "ws-1",
+          normalizedPath: "src/live.ts",
+          eventKind: "modified",
+          source: "watcher",
+          detectedAtMs: 1,
+        },
+        {
+          workspaceId: "ws-1",
+          normalizedPath: "src/other.ts",
+          eventKind: "modified",
+          source: "watcher",
+          detectedAtMs: 2,
+        },
+        {
+          workspaceId: "ws-1",
+          normalizedPath: "src/live.ts",
+          eventKind: "modified",
+          source: "watcher",
+          detectedAtMs: 3,
+        },
+        {
+          workspaceId: "ws-2",
+          normalizedPath: "src/live.ts",
+          eventKind: "modified",
+          source: "watcher",
+          detectedAtMs: 4,
+        },
+      ];
+
+      const coalesced = coalesceDetachedExternalFileChangeBatch(batch, false);
+
+      expect(coalesced.map((event) => event.detectedAtMs)).toEqual([3, 2, 4]);
+    });
+
+    it("coalesces watcher batch paths case-insensitively when requested", () => {
+      const coalesced = coalesceDetachedExternalFileChangeBatch(
+        [
+          {
+            workspaceId: "ws-1",
+            normalizedPath: "SRC/Live.ts",
+            eventKind: "modified",
+            source: "watcher",
+            detectedAtMs: 1,
+          },
+          {
+            workspaceId: "ws-1",
+            normalizedPath: "src/live.ts",
+            eventKind: "modified",
+            source: "watcher",
+            detectedAtMs: 2,
+          },
+        ],
+        true,
+      );
+
+      expect(coalesced).toHaveLength(1);
+      expect(coalesced[0]?.detectedAtMs).toBe(2);
+    });
 
     it("ignores stale polling refresh results after the file path changes", async () => {
     vi.useFakeTimers();
@@ -114,6 +179,87 @@ describe("useFileExternalSync", () => {
 
       expect(result.current.content).toBe("fresh content");
       expect(vi.mocked(pushErrorToast)).not.toHaveBeenCalled();
+    });
+
+    it("does not overwrite dirty local content when an in-flight refresh resolves late", async () => {
+      vi.useFakeTimers();
+      vi.mocked(readWorkspaceFile).mockReset();
+      const pendingRefresh = createDeferred<{
+        content: string;
+        truncated: boolean;
+      }>();
+      vi.mocked(readWorkspaceFile).mockImplementationOnce(
+        () => pendingRefresh.promise,
+      );
+
+      const { result } = renderHook(() => {
+        const [content, setContent] = useState("initial content");
+        const [previewSnapshotVersion, setPreviewSnapshotVersion] = useState(0);
+        const savedContentRef = useRef("initial content");
+        const isDirty = content !== savedContentRef.current;
+        const latestIsDirtyRef = useRef(isDirty);
+        latestIsDirtyRef.current = isDirty;
+        const externalDiskSnapshotRef = useRef<{
+          content: string;
+          truncated: boolean;
+        } | null>({
+          content: "initial content",
+          truncated: false,
+        });
+
+        const sync = useFileExternalSync({
+          filePath: "src/late-refresh.ts",
+          workspaceId: "ws-sync",
+          workspaceRelativeFilePath: "src/late-refresh.ts",
+          fileReadTargetDomain: "workspace",
+          externalChangeMonitoringEnabled: true,
+          externalChangeTransportMode: "polling",
+          externalChangePollIntervalMs: 20,
+          externalChangeApplyMode: "auto",
+          isBinary: false,
+          isDirty,
+          isLoading: false,
+          caseInsensitivePathCompare: false,
+          replaceDocumentSnapshot: (value: string) => {
+            setContent(value);
+            setPreviewSnapshotVersion((version) => version + 1);
+          },
+          previewSnapshotVersion,
+          savedContentRef,
+          latestIsDirtyRef,
+          externalDiskSnapshotRef,
+          autoSyncedMessage: "auto synced",
+        });
+
+        return {
+          ...sync,
+          content,
+          setContent,
+        };
+      });
+
+      await act(async () => {
+        vi.advanceTimersByTime(25);
+        await Promise.resolve();
+      });
+
+      act(() => {
+        result.current.setContent("local edit before refresh resolves");
+      });
+
+      await act(async () => {
+        pendingRefresh.resolve({
+          content: "late disk content",
+          truncated: false,
+        });
+        await Promise.resolve();
+      });
+
+      expect(result.current.content).toBe("local edit before refresh resolves");
+      expect(result.current.externalChangeConflict?.diskContent).toBe(
+        "late disk content",
+      );
+      expect(result.current.externalPendingRefresh).toBeNull();
     });
 
     it("debounces clean auto-apply updates and keeps the latest disk snapshot", async () => {
@@ -403,5 +549,56 @@ describe("useFileExternalSync", () => {
       expect(result.current.content).toBe("disk update after snapshot change");
       expect(result.current.externalChangeConflict).toBeNull();
       expect(result.current.externalPendingRefresh).toBeNull();
+    });
+
+    it("suppresses self-save watcher feedback when disk snapshot matches saved content", async () => {
+      vi.useFakeTimers();
+      vi.mocked(readWorkspaceFile).mockReset();
+      vi.mocked(readWorkspaceFile).mockResolvedValue({
+        content: "saved content",
+        truncated: false,
+      });
+      const replaceDocumentSnapshot = vi.fn();
+
+      const { result } = renderHook(() => {
+        const savedContentRef = useRef("saved content");
+        const latestIsDirtyRef = useRef(false);
+        const externalDiskSnapshotRef = useRef<{ content: string; truncated: boolean } | null>({
+          content: "saved content",
+          truncated: false,
+        });
+
+        return useFileExternalSync({
+          filePath: "src/self-save.ts",
+          workspaceId: "ws-sync",
+          workspaceRelativeFilePath: "src/self-save.ts",
+          fileReadTargetDomain: "workspace",
+          externalChangeMonitoringEnabled: true,
+          externalChangeTransportMode: "polling",
+          externalChangePollIntervalMs: 20,
+          externalChangeApplyMode: "auto",
+          isBinary: false,
+          isDirty: false,
+          isLoading: false,
+          caseInsensitivePathCompare: false,
+          replaceDocumentSnapshot,
+          previewSnapshotVersion: 1,
+          savedContentRef,
+          latestIsDirtyRef,
+          externalDiskSnapshotRef,
+          autoSyncedMessage: "auto synced",
+        });
+      });
+
+      await act(async () => {
+        vi.advanceTimersByTime(25);
+        await Promise.resolve();
+      });
+
+      expect(readWorkspaceFile).toHaveBeenCalledWith("ws-sync", "src/self-save.ts");
+      expect(replaceDocumentSnapshot).not.toHaveBeenCalled();
+      expect(result.current.externalChangeConflict).toBeNull();
+      expect(result.current.externalPendingRefresh).toBeNull();
+      expect(result.current.externalChangeSyncState).toBe("in-sync");
     });
   });

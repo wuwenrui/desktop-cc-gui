@@ -2,12 +2,16 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { loadAboutStyles } from "../../../styles/featureStyleLoaders";
 
 const GITHUB_URL = "https://github.com/zhukunpenglinyutong/desktop-cc-gui";
 
 export function AboutView() {
   const { t } = useTranslation();
   const [version, setVersion] = useState<string | null>(null);
+  useEffect(() => {
+    void loadAboutStyles();
+  }, []);
 
   const handleOpenGitHub = () => {
     void openUrl(GITHUB_URL);

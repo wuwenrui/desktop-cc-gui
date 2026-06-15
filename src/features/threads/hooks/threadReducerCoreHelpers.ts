@@ -85,7 +85,9 @@ export function isAssistantMessageItem(
 }
 
 export function canUseLiveAssistantDeltaFastPath({
-  threadId,
+  // threadId retained for caller-side API stability and future per-engine overrides;
+  // the engine-prefix gate is intentionally not part of the fast-path predicate.
+  threadId: _threadId,
   list,
   index,
   shouldCanonicalizeLegacyId,
@@ -99,7 +101,6 @@ export function canUseLiveAssistantDeltaFastPath({
 }) {
   return (
     INCREMENTAL_DERIVATION_ENABLED &&
-    threadId.startsWith("claude:") &&
     index === list.length - 1 &&
     !shouldCanonicalizeLegacyId &&
     !keepFinalMetadata

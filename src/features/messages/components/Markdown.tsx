@@ -1,14 +1,12 @@
-import { Fragment, lazy, memo, startTransition, Suspense, useCallback, useEffect, useMemo, useRef, useState, isValidElement, type ReactNode, type MouseEvent } from "react";
-import ReactMarkdown, { type Components } from "react-markdown";
+import { Fragment, lazy, memo, startTransition, Suspense, useCallback, useEffect, useMemo, useRef, useState, isValidElement, type ImgHTMLAttributes, type ReactNode, type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
-import remarkBreaks from "remark-breaks";
-import remarkGfm from "remark-gfm";
-import remarkMath from "remark-math";
-import rehypeRaw from "rehype-raw";
-import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { LocalImage } from "./LocalImage";
+import type {
+  FullMarkdownComponents,
+  FullMarkdownUrlTransform,
+} from "./FullMarkdownRuntime";
 import {
   LightweightMarkdown,
   resolveAdaptiveProgressiveRevealStepMs,
@@ -24,7 +22,6 @@ import {
   areKatexAssetsReady,
   buildLatexRenderEntries,
   detectMathContent,
-  getCachedRehypeKatex,
   isKatexRenderReady,
   loadKatexAssets,
   normalizeMarkdownMathForMessage,
@@ -33,11 +30,15 @@ import {
 export { prewarmKatexAssets } from "../../markdown/markdownMath";
 
 const MermaidBlock = lazy(() => import("./MermaidBlock"));
+const FullMarkdownRuntime = lazy(() =>
+  import("./FullMarkdownRuntime").then((module) => ({
+    default: module.FullMarkdownRuntime,
+  })),
+);
 import {
   decodeFileLink,
   isFileLinkUrl,
   isLinkableFilePath,
-  remarkFileLinks,
   toFileLink,
 } from "../../../utils/remarkFileLinks";
 import {
@@ -47,6 +48,13 @@ import {
 import { highlightLine } from "../../../utils/syntax";
 import { detectCodexLeadMarker, type CodexLeadMarkerConfig } from "../constants/codexLeadMarkers";
 import { parseToolCallBlocks, type Block } from "../utils/toolCallBlocks";
+import {
+  createMessageMarkdownOptionsHash,
+  createMessageMarkdownPrecomputeRequest,
+  isStaleMessageMarkdownPrecomputeResult,
+  runMessageMarkdownPrecompute,
+} from "../../markdown/messageMarkdownPrecompute";
+import { appendMarkdownPrecomputeDiagnostic } from "../../../services/rendererDiagnostics";
 
 type MarkdownProps = {
   value: string;
@@ -98,15 +106,6 @@ type PreProps = {
 type LinkBlockProps = {
   urls: string[];
 };
-
-const SUPPORTS_REGEX_LOOKBEHIND = (() => {
-  try {
-    void new RegExp("(?<=a)b");
-    return true;
-  } catch {
-    return false;
-  }
-})();
 
 const MARKDOWN_LANGUAGE_SET = new Set(["markdown", "md", "mdx"]);
 const MARKDOWN_ALERT_TONE_SET = new Set([
@@ -1724,8 +1723,8 @@ export const Markdown = memo(function Markdown({
   // This is critical: when components/plugins change reference, ReactMarkdown
   // discards its entire internal HAST tree and re-parses from scratch.
   const enableCodexLeadEnhancement = className?.includes("markdown-codex-canvas") ?? false;
-  const components = useMemo<Components>(() => {
-    const result: Components = {
+  const components = useMemo<FullMarkdownComponents>(() => {
+    const result: FullMarkdownComponents = {
       a: ({ href, children }) => {
         const url = href ?? "";
         if (isFileLinkUrl(url)) {
@@ -1796,6 +1795,7 @@ export const Markdown = memo(function Markdown({
         );
       },
       img: ({ src, alt, ...props }) => {
+        const imageProps = props as ImgHTMLAttributes<HTMLImageElement>;
         const fallbackLocalPath = normalizeImageLocalPath(src ?? "");
         const normalizedSrc = normalizeMarkdownImageSrc(src ?? "");
         if (!normalizedSrc) {
@@ -1803,7 +1803,7 @@ export const Markdown = memo(function Markdown({
         }
         return (
           <LocalImage
-            {...props}
+            {...imageProps}
             src={normalizedSrc}
             localPath={fallbackLocalPath}
             workspaceId={workspaceId}
@@ -1867,20 +1867,64 @@ export const Markdown = memo(function Markdown({
     workspaceId,
   ]);
 
-  // Memoize plugin arrays so ReactMarkdown doesn't re-initialize its processor
-  const remarkPluginsMemo = useMemo(
-    () => {
-      const plugins = softBreaks
-        ? [remarkBreaks, remarkMath, remarkFileLinks]
-        : [remarkMath, remarkFileLinks];
-      if (SUPPORTS_REGEX_LOOKBEHIND) {
-        return [remarkGfm, ...plugins];
-      }
-      return plugins;
-    },
-    [softBreaks],
-  );
   const hasMathContent = useMemo(() => detectMathContent(value), [value]);
+  const markdownPrecomputeOptionsHash = useMemo(() => createMessageMarkdownOptionsHash({
+    codexLeadEnhanced: enableCodexLeadEnhancement,
+    codeBlockStyle,
+    hasFileLinkHandlers: Boolean(onOpenFileLink || onOpenFileLinkMenu),
+    hasMathContent,
+    preserveFormatting,
+    softBreaks,
+  }), [
+    codeBlockStyle,
+    enableCodexLeadEnhancement,
+    hasMathContent,
+    onOpenFileLink,
+    onOpenFileLinkMenu,
+    preserveFormatting,
+    softBreaks,
+  ]);
+  useEffect(() => {
+    if (liveRenderMode === "lightweight" || codeBlock) {
+      return undefined;
+    }
+    const request = createMessageMarkdownPrecomputeRequest({
+      messageId: workspaceId ? `workspace:${workspaceId}` : "message:unknown",
+      source: content,
+      optionsHash: markdownPrecomputeOptionsHash,
+    });
+    let cancelled = false;
+    void runMessageMarkdownPrecompute(request).then((result) => {
+      if (cancelled) {
+        return;
+      }
+      if (isStaleMessageMarkdownPrecomputeResult(result, request)) {
+        return;
+      }
+      appendMarkdownPrecomputeDiagnostic({
+        mode: result.mode,
+        durationMs: result.durationMs,
+        contentLength: result.sourceLength,
+        contentHash: result.contentHash,
+        thresholdReason: result.thresholdReason,
+        cacheState: result.cacheState,
+        fallbackReason: result.fallbackReason,
+        evidenceClass: result.evidenceClass,
+        totalHeadings: result.precomputeResult?.totalHeadings,
+        totalHeavyBlocks: result.precomputeResult?.totalHeavyBlocks,
+        totalSourceLines: result.precomputeResult?.totalSourceLines,
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    codeBlock,
+    content,
+    liveRenderMode,
+    markdownPrecomputeOptionsHash,
+    workspaceId,
+  ]);
   const [katexReady, setKatexReady] = useState(
     () => areKatexAssetsReady(),
   );
@@ -1895,33 +1939,7 @@ export const Markdown = memo(function Markdown({
       cancelled = true;
     };
   }, [hasMathContent, katexReady]);
-  const rehypePluginsMemo = useMemo(
-    () => {
-      const plugins: unknown[] = [
-        rehypeRaw,
-        [rehypeSanitize, {
-          ...defaultSchema,
-          tagNames: [
-            ...(defaultSchema.tagNames ?? []),
-            "details", "summary", "abbr", "mark", "ins", "del",
-            "sub", "sup", "kbd", "var", "samp",
-          ],
-          attributes: {
-            ...defaultSchema.attributes,
-            "*": [...(defaultSchema.attributes?.["*"] ?? []), "className", "class", "style"],
-            "img": [...(defaultSchema.attributes?.["img"] ?? []), "loading"],
-          },
-        }],
-      ];
-      const cachedRehypeKatex = getCachedRehypeKatex();
-      if (katexReady && cachedRehypeKatex) {
-        plugins.push(cachedRehypeKatex);
-      }
-      return plugins as Parameters<typeof ReactMarkdown>[0]["rehypePlugins"];
-    },
-    [katexReady],
-  );
-  const urlTransform = useCallback((url: string) => {
+  const urlTransform = useCallback<FullMarkdownUrlTransform>((url: string) => {
     const hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(url);
     if (
       isFileLinkUrl(url) ||
@@ -2011,21 +2029,29 @@ export const Markdown = memo(function Markdown({
       );
     }
     return (
-      <ReactMarkdown
-        remarkPlugins={remarkPluginsMemo}
-        rehypePlugins={rehypePluginsMemo}
-        urlTransform={urlTransform}
-        components={components}
+      <Suspense
+        fallback={(
+          <LightweightMarkdown
+            value={nextContent}
+            renderLink={renderLightweightLink}
+          />
+        )}
       >
-        {nextContent}
-      </ReactMarkdown>
+        <FullMarkdownRuntime
+          value={nextContent}
+          softBreaks={softBreaks}
+          katexReady={katexReady}
+          urlTransform={urlTransform}
+          components={components}
+        />
+      </Suspense>
     );
   }, [
     components,
+    katexReady,
     liveRenderMode,
-    rehypePluginsMemo,
-    remarkPluginsMemo,
     renderLightweightLink,
+    softBreaks,
     streamingThrottleMs,
     urlTransform,
   ]);

@@ -6,6 +6,13 @@ import { spawnSync } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { analyzeHeavyTestNoise } from "./check-heavy-test-noise.mjs";
 
+function tempArtifactPath(label) {
+  return path.join(
+    ".artifacts",
+    `heavy-test-noise-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}-${label}.json`,
+  );
+}
+
 test("allows environment-owned warnings without violations", () => {
   const report = analyzeHeavyTestNoise(`
 npm warn Unknown user config "electron_mirror". This will stop working in the next major version of npm.
@@ -112,6 +119,23 @@ test("ignores ANSI-colored runner lines and normalizes payload contexts", () => 
   );
 });
 
+test("normalizes CR-only logs from legacy runners", () => {
+  const report = analyzeHeavyTestNoise(
+    [
+      "stdout | src/features/spec/components/SpecHub.test.tsx > SpecHub > example",
+      "[model/resolve/send] {\"threadId\":\"t-1\"}",
+      " Test Files  1 passed (1)",
+    ].join("\r"),
+  );
+
+  assert.equal(report.stdoutPayloads.length, 1);
+  assert.equal(
+    report.stdoutPayloads[0]?.context,
+    "src/features/spec/components/SpecHub.test.tsx > SpecHub > example",
+  );
+  assert.equal(report.stdoutPayloads[0]?.line, "[model/resolve/send] {\"threadId\":\"t-1\"}");
+});
+
 test("cli fails fast when --input is missing a path instead of misreading the next flag", () => {
   const result = spawnSync(process.execPath, ["scripts/check-heavy-test-noise.mjs", "--input", "--mode", "report"], {
     cwd: process.cwd(),
@@ -150,9 +174,9 @@ test("cli includes environment-owned warnings from process env metadata", async 
 
 test("cli writes structured JSON report for governance evidence consumers", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "heavy-test-noise-"));
+  const outputPath = tempArtifactPath("pass");
   try {
     const inputPath = path.join(tempDir, "log.txt");
-    const outputPath = path.join(tempDir, "heavy-test-noise.json");
     await writeFile(inputPath, "[vitest-batch] completed 346 test files.\n", "utf8");
 
     const result = spawnSync(
@@ -173,11 +197,43 @@ test("cli writes structured JSON report for governance evidence consumers", asyn
     );
 
     assert.equal(result.status, 0);
-    const report = JSON.parse(await readFile(outputPath, "utf8"));
+    const report = JSON.parse(await readFile(path.resolve(outputPath), "utf8"));
     assert.equal(report.schemaVersion, 1);
     assert.equal(report.gate, "heavy-test-noise");
     assert.equal(report.status, "pass");
     assert.equal(report.breachCount, 0);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+    await rm(path.resolve(outputPath), { force: true });
+  }
+});
+
+test("cli rejects governance output paths outside the repository root", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "heavy-test-noise-"));
+  try {
+    const inputPath = path.join(tempDir, "log.txt");
+    const outsidePath = path.join(path.dirname(process.cwd()), `heavy-test-noise-outside-${Date.now()}.json`);
+    await writeFile(inputPath, "[vitest-batch] completed 346 test files.\n", "utf8");
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        "scripts/check-heavy-test-noise.mjs",
+        "--input",
+        inputPath,
+        "--mode",
+        "report",
+        "--json-output",
+        outsidePath,
+      ],
+      {
+        cwd: process.cwd(),
+        encoding: "utf8",
+      },
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(`${result.stdout}\n${result.stderr}`, /Output path must stay inside repository root/);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
@@ -185,9 +241,9 @@ test("cli writes structured JSON report for governance evidence consumers", asyn
 
 test("cli marks structured JSON as fail when fail-mode violations are present", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "heavy-test-noise-"));
+  const outputPath = tempArtifactPath("fail");
   try {
     const inputPath = path.join(tempDir, "log.txt");
-    const outputPath = path.join(tempDir, "heavy-test-noise.json");
     await writeFile(
       inputPath,
       [
@@ -216,11 +272,12 @@ test("cli marks structured JSON as fail when fail-mode violations are present", 
     );
 
     assert.equal(result.status, 1);
-    const report = JSON.parse(await readFile(outputPath, "utf8"));
+    const report = JSON.parse(await readFile(path.resolve(outputPath), "utf8"));
     assert.equal(report.status, "fail");
     assert.equal(report.mode, "fail");
     assert.equal(report.breachCount, 1);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
+    await rm(path.resolve(outputPath), { force: true });
   }
 });

@@ -7,7 +7,10 @@ import type {
   CollaborationModeResolvedRequest,
   RequestUserInputRequest,
 } from "../../../types";
-import { subscribeAppServerEvents } from "../../../services/events";
+import {
+  subscribeAppServerEventBatch,
+  subscribeAppServerEvents,
+} from "../../../services/events";
 import type {
   ConversationEngine,
   NormalizedThreadEvent,
@@ -26,6 +29,7 @@ import {
 } from "../../shared-session/runtime/sharedSessionBridge";
 import { updateSharedSessionNativeBinding as updateSharedSessionNativeBindingService } from "../../shared-session/services/sharedSessions";
 import { noteThreadAppServerEventReceived } from "../../threads/utils/streamLatencyDiagnostics";
+import { isAppServerEventBatchConsumerEnabled } from "../../threads/utils/realtimePerfFlags";
 
 type AgentDelta = {
   workspaceId: string;
@@ -62,7 +66,10 @@ type AgentCompleted = {
 type AppServerEventHandlers = {
   onNormalizedRealtimeEvent?: (event: NormalizedThreadEvent) => void;
   onWorkspaceConnected?: (workspaceId: string) => void;
-  onThreadStarted?: (workspaceId: string, thread: Record<string, unknown>) => void;
+  onThreadStarted?: (
+    workspaceId: string,
+    thread: Record<string, unknown>,
+  ) => void;
   onThreadSessionIdUpdated?: (
     workspaceId: string,
     threadId: string,
@@ -82,9 +89,21 @@ type AppServerEventHandlers = {
   onAgentMessageDelta?: (event: AgentDelta) => void;
   onAgentMessageCompleted?: (event: AgentCompleted) => void;
   onAppServerEvent?: (event: AppServerEvent) => void;
-  onTurnStarted?: (workspaceId: string, threadId: string, turnId: string) => void;
-  onTurnCompleted?: (workspaceId: string, threadId: string, turnId: string) => void;
-  onProcessingHeartbeat?: (workspaceId: string, threadId: string, pulse: number) => void;
+  onTurnStarted?: (
+    workspaceId: string,
+    threadId: string,
+    turnId: string,
+  ) => void;
+  onTurnCompleted?: (
+    workspaceId: string,
+    threadId: string,
+    turnId: string,
+  ) => void;
+  onProcessingHeartbeat?: (
+    workspaceId: string,
+    threadId: string,
+    pulse: number,
+  ) => void;
   onContextCompacting?: (
     workspaceId: string,
     threadId: string,
@@ -142,9 +161,21 @@ type AppServerEventHandlers = {
     turnId: string,
     payload: { explanation: unknown; plan: unknown },
   ) => void;
-  onItemStarted?: (workspaceId: string, threadId: string, item: Record<string, unknown>) => void;
-  onItemUpdated?: (workspaceId: string, threadId: string, item: Record<string, unknown>) => void;
-  onItemCompleted?: (workspaceId: string, threadId: string, item: Record<string, unknown>) => void;
+  onItemStarted?: (
+    workspaceId: string,
+    threadId: string,
+    item: Record<string, unknown>,
+  ) => void;
+  onItemUpdated?: (
+    workspaceId: string,
+    threadId: string,
+    item: Record<string, unknown>,
+  ) => void;
+  onItemCompleted?: (
+    workspaceId: string,
+    threadId: string,
+    item: Record<string, unknown>,
+  ) => void;
   onReasoningSummaryDelta?: (
     workspaceId: string,
     threadId: string,
@@ -189,7 +220,11 @@ type AppServerEventHandlers = {
     delta: string,
     turnId?: string | null,
   ) => void;
-  onTurnDiffUpdated?: (workspaceId: string, threadId: string, diff: string) => void;
+  onTurnDiffUpdated?: (
+    workspaceId: string,
+    threadId: string,
+    diff: string,
+  ) => void;
   onThreadTokenUsageUpdated?: (
     workspaceId: string,
     threadId: string,
@@ -210,6 +245,20 @@ type AppServerEventHandlers = {
 type UseAppServerEventsOptions = {
   useNormalizedRealtimeAdapters?: boolean;
 };
+
+type DispatchAppServerEventOptions = {
+  useNormalizedRealtimeAdapters: boolean;
+  threadAgentDeltaSeenRef: MutableRefObject<Record<string, true>>;
+  threadAgentCompletedSeenRef: MutableRefObject<ThreadAgentCompletedItemTracker>;
+  threadAgentSnapshotSeenRef: MutableRefObject<ThreadAgentSnapshotItemTracker>;
+};
+
+type DispatchAppServerEventBatchOptions = DispatchAppServerEventOptions & {
+  chunkSize?: number;
+  onComplete?: () => void;
+};
+
+const DEFAULT_APP_SERVER_EVENT_BATCH_CHUNK_SIZE = 64;
 
 function asString(value: unknown): string {
   return typeof value === "string" ? value : value ? String(value) : "";
@@ -264,16 +313,16 @@ function extractRuntimeEndedTurnMap(value: unknown): Map<string, string> {
   }
   value.forEach((entry) => {
     const objectEntry =
-      entry && typeof entry === "object" ? (entry as Record<string, unknown>) : null;
+      entry && typeof entry === "object"
+        ? (entry as Record<string, unknown>)
+        : null;
     if (!objectEntry) {
       return;
     }
     const threadId = asString(
       objectEntry.threadId ?? objectEntry.thread_id,
     ).trim();
-    const turnId = asString(
-      objectEntry.turnId ?? objectEntry.turn_id,
-    ).trim();
+    const turnId = asString(objectEntry.turnId ?? objectEntry.turn_id).trim();
     if (!threadId || !turnId) {
       return;
     }
@@ -284,7 +333,8 @@ function extractRuntimeEndedTurnMap(value: unknown): Map<string, string> {
 
 function extractThreadIdFromParams(params: Record<string, unknown>): string {
   const turn = (params.turn as Record<string, unknown> | undefined) ?? {};
-  const threadObj = (params.thread as Record<string, unknown> | undefined) ?? {};
+  const threadObj =
+    (params.thread as Record<string, unknown> | undefined) ?? {};
   return asString(
     params.threadId ??
       params.thread_id ??
@@ -295,6 +345,59 @@ function extractThreadIdFromParams(params: Record<string, unknown>): string {
       threadObj.id ??
       "",
   ).trim();
+}
+
+function getAppServerEventMethod(payload: AppServerEvent): string {
+  return String(payload.message.method ?? "");
+}
+
+function getAppServerEventParams(
+  payload: AppServerEvent,
+): Record<string, unknown> {
+  return (payload.message.params as Record<string, unknown> | undefined) ?? {};
+}
+
+function buildCoalescibleAppServerEventKey(
+  payload: AppServerEvent,
+): string | null {
+  const method = getAppServerEventMethod(payload);
+  const params = getAppServerEventParams(payload);
+  switch (method) {
+    case "processing/heartbeat":
+    case "thread/tokenUsage/updated":
+    case "thread/compacting":
+    case "turn/diff/updated": {
+      const threadId = extractThreadIdFromParams(params);
+      return threadId
+        ? `${payload.workspace_id}\0${method}\0${threadId}`
+        : null;
+    }
+    case "account/rateLimits/updated":
+      return `${payload.workspace_id}\0${method}`;
+    default:
+      return null;
+  }
+}
+
+export function coalesceAppServerEventBatch(
+  batch: readonly AppServerEvent[],
+): AppServerEvent[] {
+  const coalesced: AppServerEvent[] = [];
+  let previousCoalesceKey: string | null = null;
+  for (const payload of batch) {
+    const coalesceKey = buildCoalescibleAppServerEventKey(payload);
+    if (
+      coalesceKey &&
+      previousCoalesceKey === coalesceKey &&
+      coalesced.length > 0
+    ) {
+      coalesced[coalesced.length - 1] = payload;
+    } else {
+      coalesced.push(payload);
+    }
+    previousCoalesceKey = coalesceKey;
+  }
+  return coalesced;
 }
 
 function extractTurnIdFromParams(params: Record<string, unknown>): string {
@@ -312,9 +415,11 @@ function extractTurnIdFromParams(params: Record<string, unknown>): string {
 function extractItemIdFromParams(params: Record<string, unknown>): string {
   const turn = (params.turn as Record<string, unknown> | undefined) ?? {};
   const itemObj = (params.item as Record<string, unknown> | undefined) ?? {};
-  const messageObj = (params.message as Record<string, unknown> | undefined) ?? {};
+  const messageObj =
+    (params.message as Record<string, unknown> | undefined) ?? {};
   const partObj = (params.part as Record<string, unknown> | undefined) ?? {};
-  const contentObj = (params.content as Record<string, unknown> | undefined) ?? {};
+  const contentObj =
+    (params.content as Record<string, unknown> | undefined) ?? {};
   return asString(
     params.itemId ??
       params.item_id ??
@@ -332,10 +437,13 @@ function extractItemIdFromParams(params: Record<string, unknown>): string {
   ).trim();
 }
 
-function extractReasoningDeltaFromParams(params: Record<string, unknown>): string {
+function extractReasoningDeltaFromParams(
+  params: Record<string, unknown>,
+): string {
   const partObj = (params.part as Record<string, unknown> | undefined) ?? {};
   const itemObj = (params.item as Record<string, unknown> | undefined) ?? {};
-  const contentObj = (params.content as Record<string, unknown> | undefined) ?? {};
+  const contentObj =
+    (params.content as Record<string, unknown> | undefined) ?? {};
   return asString(
     params.delta ??
       params.text ??
@@ -356,7 +464,12 @@ function extractReasoningDeltaFromParams(params: Record<string, unknown>): strin
 function extractAgentMessageDeltaPayload(
   method: string,
   params: Record<string, unknown>,
-): { threadId: string; itemId: string; delta: string; turnId: string | null } | null {
+): {
+  threadId: string;
+  itemId: string;
+  delta: string;
+  turnId: string | null;
+} | null {
   const isTextAliasMethod = method === "text:delta" || method === "text/delta";
   const isAgentDeltaMethod =
     method === "item/agentMessage/delta" ||
@@ -369,7 +482,8 @@ function extractAgentMessageDeltaPayload(
 
   const turn = (params.turn as Record<string, unknown> | undefined) ?? {};
   const itemObj = (params.item as Record<string, unknown> | undefined) ?? {};
-  const messageObj = (params.message as Record<string, unknown> | undefined) ?? {};
+  const messageObj =
+    (params.message as Record<string, unknown> | undefined) ?? {};
   const partObj = (params.part as Record<string, unknown> | undefined) ?? {};
   const threadId = extractThreadIdFromParams(params);
   const turnId = extractTurnIdFromParams(params);
@@ -443,7 +557,7 @@ function cloneMessageWithThreadId(
   message: Record<string, unknown>,
   threadId: string,
 ): Record<string, unknown> {
-  const params = ((message.params as Record<string, unknown> | undefined) ?? {});
+  const params = (message.params as Record<string, unknown> | undefined) ?? {};
   const nextParams: Record<string, unknown> = {
     ...params,
     threadId,
@@ -495,7 +609,9 @@ function toOptionalNumber(value: unknown): number | null {
 }
 
 function isClaudeThreadId(threadId: string): boolean {
-  return threadId.startsWith("claude:") || threadId.startsWith("claude-pending-");
+  return (
+    threadId.startsWith("claude:") || threadId.startsWith("claude-pending-")
+  );
 }
 
 function resolveLegacyModelContextWindow(
@@ -510,10 +626,14 @@ function resolveLegacyModelContextWindow(
 }
 
 function isGeminiThreadId(threadId: string): boolean {
-  return threadId.startsWith("gemini:") || threadId.startsWith("gemini-pending-");
+  return (
+    threadId.startsWith("gemini:") || threadId.startsWith("gemini-pending-")
+  );
 }
 
-function inferGeminiReasoningHintFromThreadId(threadId: string): "gemini" | null {
+function inferGeminiReasoningHintFromThreadId(
+  threadId: string,
+): "gemini" | null {
   if (!threadId) {
     return null;
   }
@@ -544,7 +664,9 @@ function isCodexRawGeneratedImageEvent(
   if (method !== "codex/raw") {
     return false;
   }
-  const rawEntryType = asString(params.type ?? "").trim().toLowerCase();
+  const rawEntryType = asString(params.type ?? "")
+    .trim()
+    .toLowerCase();
   if (rawEntryType !== "event_msg" && rawEntryType !== "response_item") {
     return false;
   }
@@ -555,9 +677,13 @@ function isCodexRawGeneratedImageEvent(
   if (!payload) {
     return false;
   }
-  const payloadType = asString(payload.type ?? "").trim().toLowerCase();
+  const payloadType = asString(payload.type ?? "")
+    .trim()
+    .toLowerCase();
   if (payloadType === "function_call") {
-    return isGeneratedImageToolName(asString(payload.name ?? payload.tool ?? ""));
+    return isGeneratedImageToolName(
+      asString(payload.name ?? payload.tool ?? ""),
+    );
   }
   return (
     payloadType === "image_generation_call" ||
@@ -603,7 +729,9 @@ function extractTokenUsageFromNormalizedEvent(
   event: NormalizedThreadEvent,
 ): Record<string, unknown> | null {
   const usageFromItem =
-    event.rawItem && typeof event.rawItem.usage === "object" && event.rawItem.usage
+    event.rawItem &&
+    typeof event.rawItem.usage === "object" &&
+    event.rawItem.usage
       ? (event.rawItem.usage as Record<string, unknown>)
       : null;
   const usage = event.rawUsage ?? usageFromItem;
@@ -639,7 +767,8 @@ function extractTokenUsageFromNormalizedEvent(
       ? String(usage.context_usage_source ?? usage.contextUsageSource)
       : null;
   const contextUsageFreshness =
-    typeof (usage.context_usage_freshness ?? usage.contextUsageFreshness) === "string"
+    typeof (usage.context_usage_freshness ?? usage.contextUsageFreshness) ===
+    "string"
       ? String(usage.context_usage_freshness ?? usage.contextUsageFreshness)
       : null;
   return {
@@ -658,9 +787,18 @@ function extractTokenUsageFromNormalizedEvent(
     modelContextWindow: modelContextWindow > 0 ? modelContextWindow : null,
     contextUsageSource,
     contextUsageFreshness,
-    contextUsedTokens: contextUsedTokens !== null && contextUsedTokens >= 0 ? contextUsedTokens : null,
-    contextUsedPercent: contextUsedPercent !== null && contextUsedPercent >= 0 ? contextUsedPercent : null,
-    contextRemainingPercent: contextRemainingPercent !== null && contextRemainingPercent >= 0 ? contextRemainingPercent : null,
+    contextUsedTokens:
+      contextUsedTokens !== null && contextUsedTokens >= 0
+        ? contextUsedTokens
+        : null,
+    contextUsedPercent:
+      contextUsedPercent !== null && contextUsedPercent >= 0
+        ? contextUsedPercent
+        : null,
+    contextRemainingPercent:
+      contextRemainingPercent !== null && contextRemainingPercent >= 0
+        ? contextRemainingPercent
+        : null,
   };
 }
 
@@ -782,7 +920,12 @@ function emitReasoningSummaryBoundary(
     return;
   }
   if (engineHint) {
-    handlers.onReasoningSummaryBoundary?.(workspaceId, threadId, itemId, engineHint);
+    handlers.onReasoningSummaryBoundary?.(
+      workspaceId,
+      threadId,
+      itemId,
+      engineHint,
+    );
     return;
   }
   handlers.onReasoningSummaryBoundary?.(workspaceId, threadId, itemId);
@@ -830,7 +973,13 @@ function emitCommandOutputDelta(
   turnId: string | null,
 ): void {
   if (turnId) {
-    handlers.onCommandOutputDelta?.(workspaceId, threadId, itemId, delta, turnId);
+    handlers.onCommandOutputDelta?.(
+      workspaceId,
+      threadId,
+      itemId,
+      delta,
+      turnId,
+    );
     return;
   }
   handlers.onCommandOutputDelta?.(workspaceId, threadId, itemId, delta);
@@ -845,7 +994,13 @@ function emitFileChangeOutputDelta(
   turnId: string | null,
 ): void {
   if (turnId) {
-    handlers.onFileChangeOutputDelta?.(workspaceId, threadId, itemId, delta, turnId);
+    handlers.onFileChangeOutputDelta?.(
+      workspaceId,
+      threadId,
+      itemId,
+      delta,
+      turnId,
+    );
     return;
   }
   handlers.onFileChangeOutputDelta?.(workspaceId, threadId, itemId, delta);
@@ -860,7 +1015,13 @@ function emitTerminalInteraction(
   turnId: string | null,
 ): void {
   if (turnId) {
-    handlers.onTerminalInteraction?.(workspaceId, threadId, itemId, stdin, turnId);
+    handlers.onTerminalInteraction?.(
+      workspaceId,
+      threadId,
+      itemId,
+      stdin,
+      turnId,
+    );
     return;
   }
   handlers.onTerminalInteraction?.(workspaceId, threadId, itemId, stdin);
@@ -884,11 +1045,20 @@ function routeNormalizedRealtimeEvent({
   const threadId = event.threadId;
   const itemId = event.item.id;
   const turnId = event.turnId ?? null;
-  const shouldRouteDirectly = event.engine === "codex" && Boolean(handlers.onNormalizedRealtimeEvent);
+  const shouldRouteDirectly =
+    event.engine === "codex" && Boolean(handlers.onNormalizedRealtimeEvent);
   switch (event.operation) {
     case "itemStarted":
-      if (event.engine === "codex" && event.item.kind === "message" && event.item.role === "assistant") {
-        markThreadAgentSnapshotSeen(threadAgentSnapshotSeenRef, threadId, itemId);
+      if (
+        event.engine === "codex" &&
+        event.item.kind === "message" &&
+        event.item.role === "assistant"
+      ) {
+        markThreadAgentSnapshotSeen(
+          threadAgentSnapshotSeenRef,
+          threadId,
+          itemId,
+        );
       }
       if (shouldRouteDirectly) {
         handlers.onNormalizedRealtimeEvent?.(event);
@@ -900,8 +1070,16 @@ function routeNormalizedRealtimeEvent({
       }
       return false;
     case "itemUpdated":
-      if (event.engine === "codex" && event.item.kind === "message" && event.item.role === "assistant") {
-        markThreadAgentSnapshotSeen(threadAgentSnapshotSeenRef, threadId, itemId);
+      if (
+        event.engine === "codex" &&
+        event.item.kind === "message" &&
+        event.item.role === "assistant"
+      ) {
+        markThreadAgentSnapshotSeen(
+          threadAgentSnapshotSeenRef,
+          threadId,
+          itemId,
+        );
       }
       if (shouldRouteDirectly) {
         handlers.onNormalizedRealtimeEvent?.(event);
@@ -917,7 +1095,11 @@ function routeNormalizedRealtimeEvent({
         handlers.onNormalizedRealtimeEvent?.(event);
         const tokenUsage = extractTokenUsageFromNormalizedEvent(event);
         if (tokenUsage) {
-          handlers.onThreadTokenUsageUpdated?.(workspaceId, threadId, tokenUsage);
+          handlers.onThreadTokenUsageUpdated?.(
+            workspaceId,
+            threadId,
+            tokenUsage,
+          );
         }
         return true;
       }
@@ -925,7 +1107,11 @@ function routeNormalizedRealtimeEvent({
         handlers.onItemCompleted?.(workspaceId, threadId, event.rawItem);
         const tokenUsage = extractTokenUsageFromNormalizedEvent(event);
         if (tokenUsage) {
-          handlers.onThreadTokenUsageUpdated?.(workspaceId, threadId, tokenUsage);
+          handlers.onThreadTokenUsageUpdated?.(
+            workspaceId,
+            threadId,
+            tokenUsage,
+          );
         }
         return true;
       }
@@ -945,7 +1131,8 @@ function routeNormalizedRealtimeEvent({
         // after a real streaming delta has already arrived.
         return true;
       }
-      const delta = event.delta ?? (event.item.kind === "message" ? event.item.text : "");
+      const delta =
+        event.delta ?? (event.item.kind === "message" ? event.item.text : "");
       if (!delta) {
         return false;
       }
@@ -982,7 +1169,14 @@ function routeNormalizedRealtimeEvent({
       if (tokenUsage) {
         handlers.onThreadTokenUsageUpdated?.(workspaceId, threadId, tokenUsage);
       }
-      if (!markThreadAgentCompletionSeen(threadAgentCompletedSeenRef, threadId, itemId, text)) {
+      if (
+        !markThreadAgentCompletionSeen(
+          threadAgentCompletedSeenRef,
+          threadId,
+          itemId,
+          text,
+        )
+      ) {
         return true;
       }
       if (shouldRouteDirectly) {
@@ -1092,9 +1286,23 @@ function routeNormalizedRealtimeEvent({
         return true;
       }
       if (event.item.toolType === "fileChange") {
-        emitFileChangeOutputDelta(handlers, workspaceId, threadId, itemId, delta, turnId);
+        emitFileChangeOutputDelta(
+          handlers,
+          workspaceId,
+          threadId,
+          itemId,
+          delta,
+          turnId,
+        );
       } else {
-        emitCommandOutputDelta(handlers, workspaceId, threadId, itemId, delta, turnId);
+        emitCommandOutputDelta(
+          handlers,
+          workspaceId,
+          threadId,
+          itemId,
+          delta,
+          turnId,
+        );
       }
       return true;
     }
@@ -1135,7 +1343,8 @@ function tryRouteNormalizedRealtimeEvent({
   if (!effectiveThreadId) {
     return false;
   }
-  const engine = engineOverride ?? inferRealtimeAdapterEngine(effectiveThreadId);
+  const engine =
+    engineOverride ?? inferRealtimeAdapterEngine(effectiveThreadId);
   const migrationGate = resolveConversationAssemblyMigrationGate(engine);
   if (migrationGate && !migrationGate.assemblerEnabled) {
     return false;
@@ -1174,1205 +1383,1498 @@ function tryRouteNormalizedRealtimeEvent({
   });
 }
 
+/**
+ * Module-level dispatcher for a single `AppServerEvent`.
+ *
+ * Extracted from the `useAppServerEvents` `useEffect` callback so that
+ * both the single-channel subscription (`subscribeAppServerEvents`) and
+ * the batched subscription (`subscribeAppServerEventBatch`) can share a
+ * single routing path. Sharing matters: a per-event closure copy would
+ * double-register handlers and cause duplicate reducer dispatches when
+ * both channels are active.
+ *
+ * All closure-captured state (handlers, refs, runtime options) is
+ * passed explicitly so the dispatcher has no hidden dependencies and is
+ * unit-testable in isolation.
+ */
+export function dispatchAppServerEvent(
+  handlers: AppServerEventHandlers,
+  payload: AppServerEvent,
+  options: DispatchAppServerEventOptions,
+): void {
+  const {
+    useNormalizedRealtimeAdapters,
+    threadAgentDeltaSeenRef,
+    threadAgentCompletedSeenRef,
+    threadAgentSnapshotSeenRef,
+  } = options;
+  handlers.onAppServerEvent?.(payload);
+
+  const { workspace_id, message } = payload;
+  const method = String(message.method ?? "");
+
+  if (method === "codex/connected") {
+    handlers.onWorkspaceConnected?.(workspace_id);
+    return;
+  }
+
+  const params = (message.params as Record<string, unknown>) ?? {};
+  noteThreadAppServerEventReceived({
+    workspaceId: workspace_id,
+    method,
+    params,
+  });
+  const rawThreadId = extractThreadIdFromParams(params);
+  const rawMethodEngine = inferRawMethodEngine(method);
+  const shouldForceNormalizedRealtimeRoute = isCodexRawGeneratedImageEvent(
+    method,
+    params,
+  );
+  const fallbackGeneratedImageThreadId =
+    !rawThreadId &&
+    shouldForceNormalizedRealtimeRoute &&
+    rawMethodEngine === "codex"
+      ? (handlers.getActiveCodexThreadId?.(workspace_id) ?? "")
+      : "";
+  const realtimeThreadId = rawThreadId || fallbackGeneratedImageThreadId;
+  let sharedBridge = realtimeThreadId
+    ? resolveSharedSessionBindingByNativeThread(workspace_id, realtimeThreadId)
+    : null;
+  const requestIdValue = message.id ?? params.requestId ?? params.request_id;
+  const requestId =
+    typeof requestIdValue === "number" || typeof requestIdValue === "string"
+      ? requestIdValue
+      : null;
+  const hasRequestId = requestId !== null;
+
+  if (
+    (method.includes("requestApproval") || method === "approval/request") &&
+    hasRequestId
+  ) {
+    handlers.onApprovalRequest?.({
+      workspace_id,
+      request_id: requestId,
+      method,
+      params,
+    });
+    return;
+  }
+
+  if (method === "collaboration/modeBlocked") {
+    const requestIdValue = params.requestId ?? params.request_id;
+    const requestId =
+      typeof requestIdValue === "number" || typeof requestIdValue === "string"
+        ? requestIdValue
+        : null;
+    const reasonCodeValue = params.reasonCode ?? params.reason_code;
+    const parsedReasonCode =
+      reasonCodeValue === undefined || reasonCodeValue === null
+        ? undefined
+        : String(reasonCodeValue);
+    handlers.onModeBlocked?.({
+      workspace_id,
+      params: {
+        thread_id: String(params.threadId ?? params.thread_id ?? ""),
+        blocked_method: String(
+          params.blockedMethod ?? params.blocked_method ?? "",
+        ),
+        effective_mode: String(
+          params.effectiveMode ?? params.effective_mode ?? "",
+        ),
+        ...(parsedReasonCode ? { reason_code: parsedReasonCode } : {}),
+        reason: String(params.reason ?? ""),
+        suggestion:
+          params.suggestion === undefined || params.suggestion === null
+            ? undefined
+            : String(params.suggestion),
+        request_id: requestId,
+      },
+    });
+    return;
+  }
+
+  if (method === "collaboration/modeResolved") {
+    const params = (message.params as Record<string, unknown>) ?? {};
+    const selectedUiModeRaw = String(
+      params.selectedUiMode ?? params.selected_ui_mode ?? "",
+    )
+      .trim()
+      .toLowerCase();
+    const effectiveRuntimeModeRaw = String(
+      params.effectiveRuntimeMode ?? params.effective_runtime_mode ?? "",
+    )
+      .trim()
+      .toLowerCase();
+    const effectiveUiModeRaw = String(
+      params.effectiveUiMode ?? params.effective_ui_mode ?? "",
+    )
+      .trim()
+      .toLowerCase();
+    const fallbackReasonRaw = params.fallbackReason ?? params.fallback_reason;
+    const selectedUiMode = selectedUiModeRaw === "plan" ? "plan" : "default";
+    const effectiveRuntimeMode =
+      effectiveRuntimeModeRaw === "plan" ? "plan" : "code";
+    const effectiveUiMode = effectiveUiModeRaw === "plan" ? "plan" : "default";
+    handlers.onModeResolved?.({
+      workspace_id,
+      params: {
+        thread_id: String(params.threadId ?? params.thread_id ?? ""),
+        selected_ui_mode: selectedUiMode,
+        effective_runtime_mode: effectiveRuntimeMode,
+        effective_ui_mode: effectiveUiMode,
+        fallback_reason:
+          fallbackReasonRaw === undefined || fallbackReasonRaw === null
+            ? null
+            : String(fallbackReasonRaw),
+      },
+    });
+    return;
+  }
+
+  if (method === "item/tool/requestUserInput") {
+    const params = (message.params as Record<string, unknown>) ?? {};
+    // Prefer explicit requestId fields for requestUserInput events.
+    // Some runtimes may use top-level message.id for transport-level ids.
+    const requestIdValue = params.requestId ?? params.request_id ?? message.id;
+    const requestId =
+      typeof requestIdValue === "number" || typeof requestIdValue === "string"
+        ? requestIdValue
+        : null;
+    if (requestId === null) {
+      return;
+    }
+    const fallbackThreadId =
+      handlers.getActiveCodexThreadId?.(workspace_id) ?? "";
+    const resolvedThreadId =
+      extractThreadIdFromParams(params) || fallbackThreadId;
+    const effectiveThreadId =
+      resolveSharedSessionBindingByNativeThread(workspace_id, resolvedThreadId)
+        ?.sharedThreadId ?? resolvedThreadId;
+    const completed = Boolean(params.completed);
+    const turn = (params.turn as Record<string, unknown> | undefined) ?? {};
+    const questionsRaw = Array.isArray(params.questions)
+      ? params.questions
+      : [];
+    const questions = questionsRaw
+      .map((entry) => {
+        const question = entry as Record<string, unknown>;
+        const optionsRaw = Array.isArray(question.options)
+          ? question.options
+          : [];
+        const options = optionsRaw
+          .map((option) => {
+            const record = option as Record<string, unknown>;
+            const label = String(record.label ?? "").trim();
+            const description = String(record.description ?? "").trim();
+            if (!label && !description) {
+              return null;
+            }
+            return { label, description };
+          })
+          .filter((option): option is { label: string; description: string } =>
+            Boolean(option),
+          );
+        return {
+          id: String(question.id ?? "").trim(),
+          header: String(question.header ?? ""),
+          question: String(question.question ?? ""),
+          isOther: Boolean(question.isOther ?? question.is_other),
+          isSecret: Boolean(question.isSecret ?? question.is_secret),
+          ...((question.multiSelect ?? question.multi_select)
+            ? { multiSelect: true }
+            : {}),
+          options: options.length ? options : undefined,
+        };
+      })
+      .filter((question) => question.id);
+    handlers.onRequestUserInput?.({
+      workspace_id,
+      request_id: requestId,
+      params: {
+        thread_id: effectiveThreadId,
+        turn_id: String(params.turnId ?? params.turn_id ?? turn.id ?? ""),
+        item_id: String(
+          params.itemId ?? params.item_id ?? turn.itemId ?? turn.item_id ?? "",
+        ),
+        questions,
+        ...(completed ? { completed: true } : {}),
+      },
+    });
+    return;
+  }
+
+  if (
+    (useNormalizedRealtimeAdapters || shouldForceNormalizedRealtimeRoute) &&
+    tryRouteNormalizedRealtimeEvent({
+      handlers,
+      workspaceId: workspace_id,
+      message,
+      ...(sharedBridge
+        ? {
+            engineOverride: sharedBridge.engine,
+            threadIdOverride: sharedBridge.sharedThreadId,
+          }
+        : rawMethodEngine
+          ? {
+              engineOverride: rawMethodEngine,
+              ...(fallbackGeneratedImageThreadId
+                ? { threadIdOverride: fallbackGeneratedImageThreadId }
+                : {}),
+            }
+          : {}),
+      threadAgentDeltaSeenRef,
+      threadAgentCompletedSeenRef,
+      threadAgentSnapshotSeenRef,
+    })
+  ) {
+    return;
+  }
+
+  const agentDeltaPayload = extractAgentMessageDeltaPayload(method, params);
+  if (agentDeltaPayload) {
+    const effectiveThreadId =
+      sharedBridge?.sharedThreadId ?? agentDeltaPayload.threadId;
+    threadAgentDeltaSeenRef.current[effectiveThreadId] = true;
+    handlers.onAgentMessageDelta?.({
+      workspaceId: workspace_id,
+      threadId: effectiveThreadId,
+      itemId: agentDeltaPayload.itemId,
+      delta: agentDeltaPayload.delta,
+      ...(agentDeltaPayload.turnId ? { turnId: agentDeltaPayload.turnId } : {}),
+    });
+    return;
+  }
+
+  if (method === "turn/started") {
+    const params = message.params as Record<string, unknown>;
+    const turn = params.turn as Record<string, unknown> | undefined;
+    const rawTurnThreadId = String(
+      params.threadId ??
+        params.thread_id ??
+        turn?.threadId ??
+        turn?.thread_id ??
+        "",
+    );
+    const threadId = sharedBridge?.sharedThreadId ?? rawTurnThreadId;
+    const turnId = asString(
+      params.turnId ?? params.turn_id ?? turn?.id ?? "",
+    ).trim();
+    if (threadId) {
+      delete threadAgentDeltaSeenRef.current[threadId];
+      delete threadAgentCompletedSeenRef.current[threadId];
+      delete threadAgentSnapshotSeenRef.current[threadId];
+      handlers.onTurnStarted?.(workspace_id, threadId, turnId);
+    }
+    return;
+  }
+
+  if (method === "thread/started") {
+    const params = message.params as Record<string, unknown>;
+    const thread =
+      (params.thread as Record<string, unknown> | undefined) ?? null;
+    const threadId = String(
+      thread?.id ?? params.threadId ?? params.thread_id ?? "",
+    );
+    const sessionId = String(params.sessionId ?? params.session_id ?? "");
+    const turnId = String(params.turnId ?? params.turn_id ?? "").trim();
+    const rawEngine = String(params.engine ?? "").toLowerCase();
+    const eventEngine =
+      rawEngine === "claude" ||
+      rawEngine === "opencode" ||
+      rawEngine === "codex" ||
+      rawEngine === "gemini"
+        ? rawEngine
+        : null;
+
+    if (
+      !sharedBridge &&
+      threadId &&
+      eventEngine &&
+      (eventEngine === "codex" || eventEngine === "claude")
+    ) {
+      const pendingBinding = resolvePendingSharedSessionBindingForEngine(
+        workspace_id,
+        eventEngine,
+      );
+      if (pendingBinding) {
+        if (pendingBinding.nativeThreadId !== threadId) {
+          const rebound = rebindSharedSessionNativeThread({
+            workspaceId: workspace_id,
+            oldNativeThreadId: pendingBinding.nativeThreadId,
+            newNativeThreadId: threadId,
+          });
+          if (rebound) {
+            sharedBridge = rebound;
+            void updateSharedSessionNativeBindingService(
+              workspace_id,
+              rebound.sharedThreadId,
+              rebound.engine,
+              pendingBinding.nativeThreadId,
+              threadId,
+            ).catch(() => {});
+          }
+        } else {
+          sharedBridge = pendingBinding;
+        }
+      }
+    }
+
+    if (sharedBridge) {
+      if (
+        threadId &&
+        sessionId &&
+        sessionId !== "pending" &&
+        eventEngine &&
+        shouldRebindSharedNativeThreadOnStartedEvent(eventEngine)
+      ) {
+        const finalizedNativeThreadId = `${eventEngine}:${sessionId}`;
+        if (threadId !== finalizedNativeThreadId) {
+          const rebound = rebindSharedSessionNativeThread({
+            workspaceId: workspace_id,
+            oldNativeThreadId: threadId,
+            newNativeThreadId: finalizedNativeThreadId,
+          });
+          if (rebound) {
+            void updateSharedSessionNativeBindingService(
+              workspace_id,
+              rebound.sharedThreadId,
+              rebound.engine,
+              threadId,
+              finalizedNativeThreadId,
+            ).catch(() => {});
+          }
+        }
+      }
+      return;
+    }
+
+    // If we have a real sessionId (not "pending"), notify for thread ID update
+    if (threadId && sessionId && sessionId !== "pending") {
+      handlers.onThreadSessionIdUpdated?.(
+        workspace_id,
+        threadId,
+        sessionId,
+        eventEngine,
+        turnId || null,
+      );
+    }
+
+    if (thread && threadId) {
+      handlers.onThreadStarted?.(workspace_id, thread);
+    }
+    return;
+  }
+
+  if (method === "codex/parseError") {
+    const params = (message.params as Record<string, unknown>) ?? {};
+    const fallbackThreadId =
+      handlers.getActiveCodexThreadId?.(workspace_id) ?? "";
+    const resolvedThreadId =
+      extractThreadIdFromParams(params) || fallbackThreadId;
+    const threadId = sharedBridge?.sharedThreadId ?? resolvedThreadId;
+    if (!threadId) {
+      return;
+    }
+    const parseErrorText = String(params.error ?? "").trim();
+    const rawText = String(params.raw ?? "").trim();
+    const detail = rawText ? `\n${rawText}` : "";
+    const messageText = parseErrorText
+      ? `Codex stream parse error: ${parseErrorText}${detail}`
+      : `Codex stream parse error${detail}`;
+    handlers.onTurnError?.(workspace_id, threadId, "", {
+      message: messageText,
+      willRetry: false,
+      engine: "codex",
+    });
+    return;
+  }
+
+  if (method === "runtime/ended") {
+    const params = (message.params as Record<string, unknown>) ?? {};
+    const reasonCode = asString(params.reasonCode ?? params.reason_code).trim();
+    const rawMessage = asString(params.message).trim();
+    const affectedThreadIds = asStringArray(
+      params.affectedThreadIds ?? params.affected_thread_ids,
+    );
+    const affectedTurnIds = asStringArray(
+      params.affectedTurnIds ?? params.affected_turn_ids,
+    );
+    const affectedActiveTurns = extractRuntimeEndedTurnMap(
+      params.affectedActiveTurns ?? params.affected_active_turns,
+    );
+    const pendingRequestCount = Number(
+      params.pendingRequestCount ?? params.pending_request_count ?? 0,
+    );
+    const hadActiveLease = Boolean(
+      params.hadActiveLease ?? params.had_active_lease ?? false,
+    );
+    const normalizedPendingRequestCount =
+      Number.isFinite(pendingRequestCount) && pendingRequestCount > 0
+        ? Math.trunc(pendingRequestCount)
+        : 0;
+    const runtimeGeneration = asString(
+      params.runtimeGeneration ?? params.runtime_generation,
+    ).trim();
+    const shutdownSource = asString(
+      params.shutdownSource ?? params.shutdown_source,
+    ).trim();
+    const rawRuntimeProcessId = Number(
+      params.runtimeProcessId ?? params.runtime_process_id ?? 0,
+    );
+    const rawRuntimeStartedAtMs = Number(
+      params.runtimeStartedAtMs ?? params.runtime_started_at_ms ?? 0,
+    );
+    const runtimeIdentityPayload = {
+      ...(runtimeGeneration ? { runtimeGeneration } : {}),
+      ...(Number.isFinite(rawRuntimeProcessId) && rawRuntimeProcessId > 0
+        ? { runtimeProcessId: Math.trunc(rawRuntimeProcessId) }
+        : {}),
+      ...(Number.isFinite(rawRuntimeStartedAtMs) && rawRuntimeStartedAtMs > 0
+        ? { runtimeStartedAtMs: Math.trunc(rawRuntimeStartedAtMs) }
+        : {}),
+    };
+
+    handlers.onRuntimeEnded?.(workspace_id, {
+      reasonCode,
+      message: rawMessage,
+      affectedThreadIds,
+      affectedTurnIds,
+      pendingRequestCount: normalizedPendingRequestCount,
+      hadActiveLease,
+      ...runtimeIdentityPayload,
+    });
+
+    const isRecoverableRuntimeShutdownSource =
+      shutdownSource === "stale_reuse_cleanup" ||
+      shutdownSource === "internal_replacement";
+    const isBenignManualShutdown =
+      reasonCode === "manual_shutdown" &&
+      !isRecoverableRuntimeShutdownSource &&
+      !hadActiveLease &&
+      normalizedPendingRequestCount === 0 &&
+      affectedThreadIds.length === 0 &&
+      affectedTurnIds.length === 0 &&
+      affectedActiveTurns.size === 0;
+    if (isBenignManualShutdown) {
+      return;
+    }
+
+    const fallbackThreadId =
+      handlers.getActiveCodexThreadId?.(workspace_id) ?? "";
+    const normalizedMessage = rawMessage.startsWith("[RUNTIME_ENDED]")
+      ? rawMessage
+      : rawMessage
+        ? `[RUNTIME_ENDED] ${rawMessage}`
+        : "[RUNTIME_ENDED] Managed runtime ended unexpectedly before the turn settled.";
+    const targetThreadIds = affectedThreadIds.length
+      ? affectedThreadIds
+      : affectedActiveTurns.size
+        ? Array.from(affectedActiveTurns.keys())
+        : fallbackThreadId
+          ? [fallbackThreadId]
+          : [];
+    const uniqueTargetThreadIds = Array.from(new Set(targetThreadIds));
+    const shouldUseSingleAffectedTurnId =
+      uniqueTargetThreadIds.length === 1 && affectedTurnIds.length === 1;
+    uniqueTargetThreadIds.forEach((targetThreadId) => {
+      const reboundBinding = resolveSharedSessionBindingByNativeThread(
+        workspace_id,
+        targetThreadId,
+      );
+      const reboundThreadId = reboundBinding?.sharedThreadId ?? targetThreadId;
+      if (!reboundThreadId) {
+        return;
+      }
+      const targetTurnId =
+        affectedActiveTurns.get(targetThreadId) ??
+        (shouldUseSingleAffectedTurnId ? (affectedTurnIds[0] ?? "") : "");
+      handlers.onTurnError?.(workspace_id, reboundThreadId, targetTurnId, {
+        message: normalizedMessage,
+        willRetry: false,
+        engine: resolveEventEngine(reboundThreadId, reboundBinding?.engine),
+      });
+    });
+    return;
+  }
+
+  if (method === "turn/error") {
+    const params = message.params as Record<string, unknown>;
+    const threadId =
+      sharedBridge?.sharedThreadId ??
+      String(params.threadId ?? params.thread_id ?? "");
+    const turnId = String(params.turnId ?? params.turn_id ?? "");
+    const willRetry = Boolean(params.willRetry ?? params.will_retry);
+    const errorValue = params.error;
+    const messageText =
+      typeof errorValue === "string"
+        ? errorValue
+        : typeof errorValue === "object" && errorValue
+          ? String((errorValue as Record<string, unknown>).message ?? "")
+          : "";
+    if (threadId) {
+      handlers.onTurnError?.(workspace_id, threadId, turnId, {
+        message: messageText,
+        willRetry,
+        engine: resolveEventEngine(threadId, sharedBridge?.engine),
+      });
+    }
+    return;
+  }
+
+  if (method === "turn/stalled") {
+    const params = message.params as Record<string, unknown>;
+    const threadId =
+      sharedBridge?.sharedThreadId ??
+      String(params.threadId ?? params.thread_id ?? "");
+    const turnId = String(params.turnId ?? params.turn_id ?? "");
+    const rawStartedAtMs = Number(
+      params.startedAtMs ?? params.started_at_ms ?? 0,
+    );
+    const rawTimeoutMs = Number(params.timeoutMs ?? params.timeout_ms ?? 0);
+    const runtimeGeneration = asString(
+      params.runtimeGeneration ?? params.runtime_generation,
+    ).trim();
+    const rawRuntimeProcessId = Number(
+      params.runtimeProcessId ?? params.runtime_process_id ?? 0,
+    );
+    const rawRuntimeStartedAtMs = Number(
+      params.runtimeStartedAtMs ?? params.runtime_started_at_ms ?? 0,
+    );
+    if (threadId) {
+      handlers.onTurnStalled?.(workspace_id, threadId, turnId, {
+        message: String(params.message ?? ""),
+        reasonCode: String(params.reasonCode ?? params.reason_code ?? ""),
+        stage: String(params.stage ?? ""),
+        source: String(params.source ?? ""),
+        ...(runtimeGeneration ? { runtimeGeneration } : {}),
+        ...(Number.isFinite(rawRuntimeProcessId) && rawRuntimeProcessId > 0
+          ? { runtimeProcessId: Math.trunc(rawRuntimeProcessId) }
+          : {}),
+        ...(Number.isFinite(rawRuntimeStartedAtMs) && rawRuntimeStartedAtMs > 0
+          ? { runtimeStartedAtMs: Math.trunc(rawRuntimeStartedAtMs) }
+          : {}),
+        startedAtMs:
+          Number.isFinite(rawStartedAtMs) && rawStartedAtMs > 0
+            ? Math.trunc(rawStartedAtMs)
+            : null,
+        timeoutMs:
+          Number.isFinite(rawTimeoutMs) && rawTimeoutMs > 0
+            ? Math.trunc(rawTimeoutMs)
+            : null,
+        engine: resolveEventEngine(threadId, sharedBridge?.engine),
+      });
+    }
+    return;
+  }
+
+  if (method === "codex/backgroundThread") {
+    if (sharedBridge) {
+      return;
+    }
+    const params = message.params as Record<string, unknown>;
+    const threadId = String(params.threadId ?? params.thread_id ?? "");
+    const action = String(params.action ?? "hide");
+    if (threadId) {
+      handlers.onBackgroundThreadAction?.(workspace_id, threadId, action);
+    }
+    return;
+  }
+
+  if (method === "error") {
+    const params = message.params as Record<string, unknown>;
+    const threadId =
+      sharedBridge?.sharedThreadId ??
+      String(params.threadId ?? params.thread_id ?? "");
+    const turnId = String(params.turnId ?? params.turn_id ?? "");
+    const error = (params.error as Record<string, unknown> | undefined) ?? {};
+    const messageText = String(error.message ?? "");
+    const willRetry = Boolean(params.willRetry ?? params.will_retry);
+    if (threadId) {
+      handlers.onTurnError?.(workspace_id, threadId, turnId, {
+        message: messageText,
+        willRetry,
+        engine: resolveEventEngine(threadId, sharedBridge?.engine),
+      });
+    }
+    return;
+  }
+
+  if (method === "turn/completed") {
+    const params = message.params as Record<string, unknown>;
+    const turn = params.turn as Record<string, unknown> | undefined;
+    const rawCompletedThreadId = String(
+      params.threadId ??
+        params.thread_id ??
+        turn?.threadId ??
+        turn?.thread_id ??
+        "",
+    );
+    const threadId = sharedBridge?.sharedThreadId ?? rawCompletedThreadId;
+    const turnId = asString(
+      params.turnId ?? params.turn_id ?? turn?.id ?? "",
+    ).trim();
+    if (threadId) {
+      const seenDelta = Boolean(threadAgentDeltaSeenRef.current[threadId]);
+      const seenCompleted = hasThreadAgentCompletion(
+        threadAgentCompletedSeenRef,
+        threadId,
+      );
+      const result =
+        (params.result as Record<string, unknown> | undefined) ?? undefined;
+      const textFromResult = [
+        typeof params.text === "string" ? params.text : "",
+        typeof result?.text === "string" ? String(result.text) : "",
+        typeof result?.output_text === "string"
+          ? String(result.output_text)
+          : "",
+        typeof result?.outputText === "string" ? String(result.outputText) : "",
+        typeof result?.content === "string" ? String(result.content) : "",
+      ]
+        .map((item) => item.trim())
+        .find((item) => item.length > 0);
+      if (!seenDelta && !seenCompleted && textFromResult) {
+        const fallbackItemId = turnId || `assistant-final-${Date.now()}`;
+        if (
+          markThreadAgentCompletionSeen(
+            threadAgentCompletedSeenRef,
+            threadId,
+            fallbackItemId,
+            textFromResult,
+          )
+        ) {
+          handlers.onAgentMessageCompleted?.({
+            workspaceId: workspace_id,
+            threadId,
+            itemId: fallbackItemId,
+            text: textFromResult,
+            ...(turnId ? { turnId } : {}),
+          });
+        }
+      }
+      delete threadAgentDeltaSeenRef.current[threadId];
+      delete threadAgentCompletedSeenRef.current[threadId];
+      handlers.onTurnCompleted?.(workspace_id, threadId, turnId);
+
+      // Try to extract usage data from turn/completed (Codex may include it here)
+      const usage =
+        (params.usage as Record<string, unknown> | undefined) ??
+        ((params.result as Record<string, unknown> | undefined)?.usage as
+          | Record<string, unknown>
+          | undefined);
+
+      if (usage) {
+        const inputTokens = Number(
+          usage.input_tokens ?? usage.inputTokens ?? 0,
+        );
+        const outputTokens = Number(
+          usage.output_tokens ?? usage.outputTokens ?? 0,
+        );
+        const cachedInputTokens = Number(
+          usage.cached_input_tokens ??
+            usage.cache_read_input_tokens ??
+            usage.cachedInputTokens ??
+            usage.cacheReadInputTokens ??
+            0,
+        );
+        const modelContextWindow = resolveLegacyModelContextWindow(
+          threadId,
+          usage.model_context_window ?? usage.modelContextWindow,
+        );
+
+        if (inputTokens > 0 || outputTokens > 0) {
+          const tokenUsage = {
+            total: {
+              inputTokens,
+              outputTokens,
+              cachedInputTokens,
+              totalTokens: inputTokens + outputTokens,
+            },
+            last: {
+              inputTokens,
+              outputTokens,
+              cachedInputTokens,
+              totalTokens: inputTokens + outputTokens,
+            },
+            modelContextWindow,
+            contextUsageSource: "turn_completed_usage",
+            contextUsageFreshness: "estimated",
+          };
+          handlers.onThreadTokenUsageUpdated?.(
+            workspace_id,
+            threadId,
+            tokenUsage,
+          );
+        }
+      }
+    }
+    return;
+  }
+
+  if (method === "processing/heartbeat") {
+    const params = message.params as Record<string, unknown>;
+    const threadId =
+      sharedBridge?.sharedThreadId ??
+      String(params.threadId ?? params.thread_id ?? "");
+    const pulse = Number(params.pulse ?? 0);
+    if (threadId && Number.isFinite(pulse) && pulse > 0) {
+      handlers.onProcessingHeartbeat?.(workspace_id, threadId, pulse);
+    }
+    return;
+  }
+
+  if (method === "thread/compacted") {
+    const params = message.params as Record<string, unknown>;
+    const threadId =
+      sharedBridge?.sharedThreadId ?? extractThreadIdFromParams(params);
+    const turnId = extractTurnIdFromParams(params);
+    if (threadId) {
+      const sourceFlags = extractCompactionSourceFlags(params);
+      if (sourceFlags) {
+        handlers.onContextCompacted?.(
+          workspace_id,
+          threadId,
+          turnId,
+          sourceFlags,
+        );
+      } else {
+        handlers.onContextCompacted?.(workspace_id, threadId, turnId);
+      }
+    }
+    return;
+  }
+
+  if (method === "thread/compacting") {
+    const params = message.params as Record<string, unknown>;
+    const threadId =
+      sharedBridge?.sharedThreadId ?? extractThreadIdFromParams(params);
+    if (threadId) {
+      const usagePercentRaw = Number(
+        params.usagePercent ?? params.usage_percent,
+      );
+      const thresholdPercentRaw = Number(
+        params.thresholdPercent ?? params.threshold_percent,
+      );
+      const targetPercentRaw = Number(
+        params.targetPercent ?? params.target_percent,
+      );
+      const sourceFlags = extractCompactionSourceFlags(params);
+      const compactionPayload: {
+        usagePercent: number | null;
+        thresholdPercent: number | null;
+        targetPercent: number | null;
+        auto?: boolean | null;
+        manual?: boolean | null;
+      } = {
+        usagePercent: Number.isFinite(usagePercentRaw) ? usagePercentRaw : null,
+        thresholdPercent: Number.isFinite(thresholdPercentRaw)
+          ? thresholdPercentRaw
+          : null,
+        targetPercent: Number.isFinite(targetPercentRaw)
+          ? targetPercentRaw
+          : null,
+      };
+      if (sourceFlags?.auto !== null && sourceFlags?.auto !== undefined) {
+        compactionPayload.auto = sourceFlags.auto;
+      }
+      if (sourceFlags?.manual !== null && sourceFlags?.manual !== undefined) {
+        compactionPayload.manual = sourceFlags.manual;
+      }
+      handlers.onContextCompacting?.(workspace_id, threadId, compactionPayload);
+    }
+    return;
+  }
+
+  if (method === "thread/compactionFailed") {
+    const params = message.params as Record<string, unknown>;
+    const threadId =
+      sharedBridge?.sharedThreadId ?? extractThreadIdFromParams(params);
+    if (threadId) {
+      const reason = String(params.reason ?? "").trim();
+      handlers.onContextCompactionFailed?.(workspace_id, threadId, reason);
+    }
+    return;
+  }
+
+  if (method === "turn/plan/updated") {
+    const params = message.params as Record<string, unknown>;
+    const threadId =
+      sharedBridge?.sharedThreadId ??
+      String(params.threadId ?? params.thread_id ?? "");
+    const turnId = String(params.turnId ?? params.turn_id ?? "");
+    if (threadId) {
+      handlers.onTurnPlanUpdated?.(workspace_id, threadId, turnId, {
+        explanation: params.explanation,
+        plan: params.plan,
+      });
+    }
+    return;
+  }
+
+  if (method === "turn/diff/updated") {
+    const params = message.params as Record<string, unknown>;
+    const threadId =
+      sharedBridge?.sharedThreadId ??
+      String(params.threadId ?? params.thread_id ?? "");
+    const diff = String(params.diff ?? "");
+    if (threadId && diff) {
+      handlers.onTurnDiffUpdated?.(workspace_id, threadId, diff);
+    }
+    return;
+  }
+
+  if (method === "thread/tokenUsage/updated") {
+    const params = message.params as Record<string, unknown>;
+    const threadId =
+      sharedBridge?.sharedThreadId ??
+      String(params.threadId ?? params.thread_id ?? "");
+    const tokenUsage =
+      (params.tokenUsage as Record<string, unknown> | undefined) ??
+      (params.token_usage as Record<string, unknown> | undefined);
+    if (threadId && tokenUsage) {
+      handlers.onThreadTokenUsageUpdated?.(workspace_id, threadId, tokenUsage);
+    }
+    return;
+  }
+
+  // Handle Codex token_count events (Codex sends usage data this way)
+  // Format: {"method":"token_count","params":{"info":{"total_token_usage":{...}}}}
+  if (method === "token_count") {
+    const params = message.params as Record<string, unknown>;
+    const info = params.info as Record<string, unknown> | undefined;
+    let threadId = String(params.threadId ?? params.thread_id ?? "");
+    if (sharedBridge?.sharedThreadId) {
+      threadId = sharedBridge.sharedThreadId;
+    }
+
+    // If no threadId in event, try to resolve from the active Codex thread
+    if (!threadId && handlers.getActiveCodexThreadId) {
+      const activeThreadId = handlers.getActiveCodexThreadId(workspace_id);
+      if (activeThreadId) {
+        threadId = activeThreadId;
+      }
+    }
+
+    // Skip this event if threadId is still unavailable
+    if (!threadId) {
+      return;
+    }
+
+    if (info) {
+      const totalUsageData =
+        (info.total_token_usage as Record<string, unknown> | undefined) ??
+        (info.totalTokenUsage as Record<string, unknown> | undefined);
+      const lastUsageData =
+        (info.last_token_usage as Record<string, unknown> | undefined) ??
+        (info.lastTokenUsage as Record<string, unknown> | undefined);
+      // Prefer last/current snapshot, fallback to total when unavailable.
+      const fallbackUsageData = lastUsageData ?? totalUsageData;
+
+      if (fallbackUsageData) {
+        const normalizeUsage = (usageData: Record<string, unknown>) => {
+          const inputTokens = Number(
+            usageData.input_tokens ?? usageData.inputTokens ?? 0,
+          );
+          const outputTokens = Number(
+            usageData.output_tokens ?? usageData.outputTokens ?? 0,
+          );
+          const cachedInputTokens = Number(
+            usageData.cached_input_tokens ??
+              usageData.cache_read_input_tokens ??
+              usageData.cachedInputTokens ??
+              usageData.cacheReadInputTokens ??
+              0,
+          );
+          return {
+            inputTokens,
+            outputTokens,
+            cachedInputTokens,
+            totalTokens: inputTokens + outputTokens,
+          };
+        };
+
+        const totalUsage = normalizeUsage(totalUsageData ?? fallbackUsageData);
+        const lastUsage = lastUsageData
+          ? normalizeUsage(lastUsageData)
+          : {
+              inputTokens: 0,
+              outputTokens: 0,
+              cachedInputTokens: 0,
+              totalTokens: 0,
+            };
+        const modelContextWindow = resolveLegacyModelContextWindow(
+          threadId,
+          lastUsageData?.model_context_window ??
+            lastUsageData?.modelContextWindow ??
+            totalUsageData?.model_context_window ??
+            totalUsageData?.modelContextWindow ??
+            info.model_context_window ??
+            info.modelContextWindow,
+        );
+
+        const tokenUsage = {
+          total: totalUsage,
+          last: lastUsage,
+          modelContextWindow,
+          contextUsageSource: "token_count",
+          contextUsageFreshness: "live",
+        };
+
+        handlers.onThreadTokenUsageUpdated?.(
+          workspace_id,
+          threadId,
+          tokenUsage,
+        );
+      }
+    }
+    return;
+  }
+
+  if (method === "account/rateLimits/updated") {
+    const params = message.params as Record<string, unknown>;
+    const rateLimits =
+      (params.rateLimits as Record<string, unknown> | undefined) ??
+      (params.rate_limits as Record<string, unknown> | undefined);
+    if (rateLimits) {
+      handlers.onAccountRateLimitsUpdated?.(workspace_id, rateLimits);
+    }
+    return;
+  }
+
+  if (method === "item/completed") {
+    const params = message.params as Record<string, unknown>;
+    const rawItemThreadId = extractThreadIdFromParams(params);
+    const itemBridge = rawItemThreadId
+      ? resolveSharedSessionBindingByNativeThread(workspace_id, rawItemThreadId)
+      : null;
+    const threadId = itemBridge?.sharedThreadId ?? rawItemThreadId;
+    const item =
+      params.item && typeof params.item === "object"
+        ? hydrateToolSnapshotWithEventParams(
+            params.item as Record<string, unknown>,
+            params,
+          )
+        : undefined;
+    if (threadId && item) {
+      const contextualItem = withRealtimeItemEventContext(
+        item,
+        params,
+        itemBridge?.engine,
+      );
+      handlers.onItemCompleted?.(workspace_id, threadId, contextualItem);
+
+      // Try to extract usage data from item/completed (Codex may include it here)
+      const usage =
+        (contextualItem.usage as Record<string, unknown> | undefined) ??
+        (params.usage as Record<string, unknown> | undefined);
+
+      if (usage) {
+        const inputTokens = Number(
+          usage.input_tokens ?? usage.inputTokens ?? 0,
+        );
+        const outputTokens = Number(
+          usage.output_tokens ?? usage.outputTokens ?? 0,
+        );
+        const cachedInputTokens = Number(
+          usage.cached_input_tokens ??
+            usage.cache_read_input_tokens ??
+            usage.cachedInputTokens ??
+            usage.cacheReadInputTokens ??
+            0,
+        );
+        const modelContextWindow = resolveLegacyModelContextWindow(
+          threadId,
+          usage.model_context_window ?? usage.modelContextWindow,
+        );
+
+        if (inputTokens > 0 || outputTokens > 0 || cachedInputTokens > 0) {
+          const tokenUsage = {
+            total: {
+              inputTokens,
+              outputTokens,
+              cachedInputTokens,
+              totalTokens: inputTokens + outputTokens,
+            },
+            last: {
+              inputTokens,
+              outputTokens,
+              cachedInputTokens,
+              totalTokens: inputTokens + outputTokens,
+            },
+            modelContextWindow,
+            contextUsageSource: "item_completed_usage",
+            contextUsageFreshness: "estimated",
+          };
+          handlers.onThreadTokenUsageUpdated?.(
+            workspace_id,
+            threadId,
+            tokenUsage,
+          );
+        }
+      }
+    }
+    if (threadId && item?.type === "agentMessage") {
+      const contextualItem = withRealtimeItemEventContext(
+        item,
+        params,
+        itemBridge?.engine,
+      );
+      const itemId = String(contextualItem.id ?? "");
+      const text = String(contextualItem.text ?? "");
+      const turnId = asString(
+        contextualItem.turnId ?? contextualItem.turn_id,
+      ).trim();
+      if (
+        itemId &&
+        markThreadAgentCompletionSeen(
+          threadAgentCompletedSeenRef,
+          threadId,
+          itemId,
+          text,
+        )
+      ) {
+        handlers.onAgentMessageCompleted?.({
+          workspaceId: workspace_id,
+          threadId,
+          itemId,
+          text,
+          ...(turnId ? { turnId } : {}),
+        });
+      }
+    }
+    return;
+  }
+
+  if (method === "item/started") {
+    const params = message.params as Record<string, unknown>;
+    const rawItemThreadId = extractThreadIdFromParams(params);
+    const itemBridge = rawItemThreadId
+      ? resolveSharedSessionBindingByNativeThread(workspace_id, rawItemThreadId)
+      : null;
+    const threadId = itemBridge?.sharedThreadId ?? rawItemThreadId;
+    const item =
+      params.item && typeof params.item === "object"
+        ? hydrateToolSnapshotWithEventParams(
+            params.item as Record<string, unknown>,
+            params,
+          )
+        : undefined;
+    if (threadId && item) {
+      const contextualItem = withRealtimeItemEventContext(
+        item,
+        params,
+        itemBridge?.engine,
+      );
+      if (
+        shouldIgnoreAgentMessageSnapshot({
+          threadId,
+          itemType: String(contextualItem.type ?? ""),
+          method,
+          threadAgentDeltaSeenRef,
+        })
+      ) {
+        return;
+      }
+      if (
+        String(contextualItem.type ?? "") === "agentMessage" &&
+        hasAgentMessageSnapshotText(contextualItem)
+      ) {
+        threadAgentDeltaSeenRef.current[threadId] = true;
+      }
+      handlers.onItemStarted?.(workspace_id, threadId, contextualItem);
+    }
+    return;
+  }
+
+  if (method === "item/updated") {
+    const params = message.params as Record<string, unknown>;
+    const rawItemThreadId = extractThreadIdFromParams(params);
+    const itemBridge = rawItemThreadId
+      ? resolveSharedSessionBindingByNativeThread(workspace_id, rawItemThreadId)
+      : null;
+    const threadId = itemBridge?.sharedThreadId ?? rawItemThreadId;
+    const item =
+      params.item && typeof params.item === "object"
+        ? hydrateToolSnapshotWithEventParams(
+            params.item as Record<string, unknown>,
+            params,
+          )
+        : undefined;
+    if (threadId && item) {
+      const contextualItem = withRealtimeItemEventContext(
+        item,
+        params,
+        itemBridge?.engine,
+      );
+      if (
+        shouldIgnoreAgentMessageSnapshot({
+          threadId,
+          itemType: String(contextualItem.type ?? ""),
+          method,
+          threadAgentDeltaSeenRef,
+        })
+      ) {
+        return;
+      }
+      if (
+        String(contextualItem.type ?? "") === "agentMessage" &&
+        hasAgentMessageSnapshotText(contextualItem)
+      ) {
+        threadAgentDeltaSeenRef.current[threadId] = true;
+      }
+      handlers.onItemUpdated?.(workspace_id, threadId, contextualItem);
+    }
+    return;
+  }
+
+  if (
+    method === "item/reasoning/summaryTextDelta" ||
+    method === "response.reasoning_summary_text.delta" ||
+    method === "response.reasoning_summary_text.done" ||
+    method === "response.reasoning_summary.delta" ||
+    method === "response.reasoning_summary.done" ||
+    method === "response.reasoning_summary_part.done"
+  ) {
+    const params = message.params as Record<string, unknown>;
+    const fallbackThreadId =
+      handlers.getActiveCodexThreadId?.(workspace_id) ?? "";
+    const resolvedThreadId =
+      extractThreadIdFromParams(params) || fallbackThreadId;
+    const sharedBridge = resolveSharedSessionBindingByNativeThread(
+      workspace_id,
+      resolvedThreadId,
+    );
+    const threadId = sharedBridge?.sharedThreadId ?? resolvedThreadId;
+    const itemId = extractItemIdFromParams(params);
+    const delta = extractReasoningDeltaFromParams(params);
+    const turnId = extractTurnIdFromParams(params) || null;
+    if (threadId && itemId && delta) {
+      const engineHint = inferGeminiReasoningHintFromThreadId(resolvedThreadId);
+      emitReasoningSummaryDelta(
+        handlers,
+        workspace_id,
+        threadId,
+        itemId,
+        delta,
+        engineHint,
+        turnId,
+      );
+    }
+    return;
+  }
+
+  if (
+    method === "item/reasoning/summaryPartAdded" ||
+    method === "response.reasoning_summary_part.added"
+  ) {
+    const params = message.params as Record<string, unknown>;
+    const fallbackThreadId =
+      handlers.getActiveCodexThreadId?.(workspace_id) ?? "";
+    const resolvedThreadId =
+      extractThreadIdFromParams(params) || fallbackThreadId;
+    const sharedBridge = resolveSharedSessionBindingByNativeThread(
+      workspace_id,
+      resolvedThreadId,
+    );
+    const threadId = sharedBridge?.sharedThreadId ?? resolvedThreadId;
+    const itemId = extractItemIdFromParams(params);
+    const turnId = extractTurnIdFromParams(params) || null;
+    if (threadId && itemId) {
+      const engineHint = inferGeminiReasoningHintFromThreadId(resolvedThreadId);
+      emitReasoningSummaryBoundary(
+        handlers,
+        workspace_id,
+        threadId,
+        itemId,
+        engineHint,
+        turnId,
+      );
+    }
+    return;
+  }
+
+  if (
+    method === "item/reasoning/textDelta" ||
+    method === "response.reasoning_text.delta" ||
+    method === "response.reasoning_text.done"
+  ) {
+    const params = message.params as Record<string, unknown>;
+    const fallbackThreadId =
+      handlers.getActiveCodexThreadId?.(workspace_id) ?? "";
+    const resolvedThreadId =
+      extractThreadIdFromParams(params) || fallbackThreadId;
+    const sharedBridge = resolveSharedSessionBindingByNativeThread(
+      workspace_id,
+      resolvedThreadId,
+    );
+    const threadId = sharedBridge?.sharedThreadId ?? resolvedThreadId;
+    const itemId = extractItemIdFromParams(params);
+    const delta = extractReasoningDeltaFromParams(params);
+    const turnId = extractTurnIdFromParams(params) || null;
+    if (threadId && itemId && delta) {
+      const engineHint = inferGeminiReasoningHintFromThreadId(resolvedThreadId);
+      emitReasoningTextDelta(
+        handlers,
+        workspace_id,
+        threadId,
+        itemId,
+        delta,
+        engineHint,
+        turnId,
+      );
+    }
+    return;
+  }
+
+  // Compatibility for Codex app-server variants that emit reasoning deltas
+  // without the "textDelta" suffix.
+  if (method === "item/reasoning/delta") {
+    const params = message.params as Record<string, unknown>;
+    const fallbackThreadId =
+      handlers.getActiveCodexThreadId?.(workspace_id) ?? "";
+    const resolvedThreadId =
+      extractThreadIdFromParams(params) || fallbackThreadId;
+    const sharedBridge = resolveSharedSessionBindingByNativeThread(
+      workspace_id,
+      resolvedThreadId,
+    );
+    const threadId = sharedBridge?.sharedThreadId ?? resolvedThreadId;
+    const itemId = extractItemIdFromParams(params);
+    const delta = extractReasoningDeltaFromParams(params);
+    const turnId = extractTurnIdFromParams(params) || null;
+    if (threadId && itemId && delta) {
+      const engineHint = inferGeminiReasoningHintFromThreadId(resolvedThreadId);
+      emitReasoningTextDelta(
+        handlers,
+        workspace_id,
+        threadId,
+        itemId,
+        delta,
+        engineHint,
+        turnId,
+      );
+    }
+    return;
+  }
+
+  if (method === "item/commandExecution/outputDelta") {
+    const params = message.params as Record<string, unknown>;
+    const resolvedThreadId = extractThreadIdFromParams(params);
+    const threadId =
+      resolveSharedSessionBindingByNativeThread(workspace_id, resolvedThreadId)
+        ?.sharedThreadId ?? resolvedThreadId;
+    const itemId = extractItemIdFromParams(params);
+    const delta = String(params.delta ?? "");
+    const turnId = extractTurnIdFromParams(params) || null;
+    if (threadId && itemId && delta) {
+      emitCommandOutputDelta(
+        handlers,
+        workspace_id,
+        threadId,
+        itemId,
+        delta,
+        turnId,
+      );
+    }
+    return;
+  }
+
+  if (method === "item/commandExecution/terminalInteraction") {
+    const params = message.params as Record<string, unknown>;
+    const resolvedThreadId = extractThreadIdFromParams(params);
+    const threadId =
+      resolveSharedSessionBindingByNativeThread(workspace_id, resolvedThreadId)
+        ?.sharedThreadId ?? resolvedThreadId;
+    const itemId = extractItemIdFromParams(params);
+    const stdin = String(params.stdin ?? "");
+    const turnId = extractTurnIdFromParams(params) || null;
+    if (threadId && itemId) {
+      emitTerminalInteraction(
+        handlers,
+        workspace_id,
+        threadId,
+        itemId,
+        stdin,
+        turnId,
+      );
+    }
+    return;
+  }
+
+  if (method === "item/fileChange/outputDelta") {
+    const params = message.params as Record<string, unknown>;
+    const threadId = extractThreadIdFromParams(params);
+    const itemId = extractItemIdFromParams(params);
+    const delta = String(params.delta ?? "");
+    const turnId = extractTurnIdFromParams(params) || null;
+    if (threadId && itemId && delta) {
+      emitFileChangeOutputDelta(
+        handlers,
+        workspace_id,
+        threadId,
+        itemId,
+        delta,
+        turnId,
+      );
+    }
+    return;
+  }
+}
+
+export function dispatchAppServerEventBatch(
+  handlers: AppServerEventHandlers,
+  batch: readonly AppServerEvent[],
+  options: DispatchAppServerEventBatchOptions,
+): () => void {
+  const events = coalesceAppServerEventBatch(batch);
+  const chunkSize = Math.max(
+    1,
+    Math.trunc(options.chunkSize ?? DEFAULT_APP_SERVER_EVENT_BATCH_CHUNK_SIZE),
+  );
+  let cursor = 0;
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  let cancelled = false;
+  let completed = false;
+
+  const completeOnce = () => {
+    if (completed) {
+      return;
+    }
+    completed = true;
+    options.onComplete?.();
+  };
+
+  const processNextChunk = () => {
+    timeoutId = null;
+    if (cancelled) {
+      completeOnce();
+      return;
+    }
+    const end = Math.min(cursor + chunkSize, events.length);
+    while (cursor < end) {
+      dispatchAppServerEvent(handlers, events[cursor], options);
+      cursor += 1;
+    }
+    if (cursor >= events.length) {
+      completeOnce();
+      return;
+    }
+    timeoutId = setTimeout(processNextChunk, 0);
+  };
+
+  processNextChunk();
+
+  return () => {
+    cancelled = true;
+    if (timeoutId !== null) {
+      clearTimeout(timeoutId);
+      timeoutId = null;
+    }
+    completeOnce();
+  };
+}
+
 export function useAppServerEvents(
   handlers: AppServerEventHandlers,
   options: UseAppServerEventsOptions = {},
 ) {
   const threadAgentDeltaSeenRef = useRef<Record<string, true>>({});
-  const threadAgentCompletedSeenRef = useRef<ThreadAgentCompletedItemTracker>({});
+  const threadAgentCompletedSeenRef = useRef<ThreadAgentCompletedItemTracker>(
+    {},
+  );
   const threadAgentSnapshotSeenRef = useRef<ThreadAgentSnapshotItemTracker>({});
+  // Per design §1.1: handlers and dispatcher options must be reached via
+  // refs so the effect can keep a stable subscription identity while still
+  // seeing the latest closure values on every event.
+  const handlersRef = useRef(handlers);
+  handlersRef.current = handlers;
+  const dispatcherOptionsRef = useRef({
+    useNormalizedRealtimeAdapters:
+      options.useNormalizedRealtimeAdapters === true,
+    threadAgentDeltaSeenRef,
+    threadAgentCompletedSeenRef,
+    threadAgentSnapshotSeenRef,
+  });
+  dispatcherOptionsRef.current = {
+    useNormalizedRealtimeAdapters:
+      options.useNormalizedRealtimeAdapters === true,
+    threadAgentDeltaSeenRef,
+    threadAgentCompletedSeenRef,
+    threadAgentSnapshotSeenRef,
+  };
   useEffect(() => {
-    const useNormalizedRealtimeAdapters = options.useNormalizedRealtimeAdapters === true;
-    const unlisten = subscribeAppServerEvents((payload) => {
-      handlers.onAppServerEvent?.(payload);
+    if (isAppServerEventBatchConsumerEnabled()) {
+      const queuedBatches: Array<readonly AppServerEvent[]> = [];
+      let activeBatchDispatchCancel: (() => void) | null = null;
+      let disposed = false;
 
-      const { workspace_id, message } = payload;
-      const method = String(message.method ?? "");
-
-      if (method === "codex/connected") {
-        handlers.onWorkspaceConnected?.(workspace_id);
-        return;
-      }
-
-      const params = (message.params as Record<string, unknown>) ?? {};
-      noteThreadAppServerEventReceived({
-        workspaceId: workspace_id,
-        method,
-        params,
-      });
-      const rawThreadId = extractThreadIdFromParams(params);
-      const rawMethodEngine = inferRawMethodEngine(method);
-      const shouldForceNormalizedRealtimeRoute = isCodexRawGeneratedImageEvent(
-        method,
-        params,
-      );
-      const fallbackGeneratedImageThreadId =
-        !rawThreadId && shouldForceNormalizedRealtimeRoute && rawMethodEngine === "codex"
-          ? handlers.getActiveCodexThreadId?.(workspace_id) ?? ""
-          : "";
-      const realtimeThreadId = rawThreadId || fallbackGeneratedImageThreadId;
-      let sharedBridge = realtimeThreadId
-        ? resolveSharedSessionBindingByNativeThread(workspace_id, realtimeThreadId)
-        : null;
-      const requestIdValue = message.id ?? params.requestId ?? params.request_id;
-      const requestId =
-        typeof requestIdValue === "number" || typeof requestIdValue === "string"
-          ? requestIdValue
-          : null;
-      const hasRequestId = requestId !== null;
-
-      if (
-        (method.includes("requestApproval") || method === "approval/request") &&
-        hasRequestId
-      ) {
-        handlers.onApprovalRequest?.({
-          workspace_id,
-          request_id: requestId,
-          method,
-          params,
-        });
-        return;
-      }
-
-      if (method === "collaboration/modeBlocked") {
-        const requestIdValue = params.requestId ?? params.request_id;
-        const requestId =
-          typeof requestIdValue === "number" || typeof requestIdValue === "string"
-            ? requestIdValue
-            : null;
-        const reasonCodeValue = params.reasonCode ?? params.reason_code;
-        const parsedReasonCode =
-          reasonCodeValue === undefined || reasonCodeValue === null
-            ? undefined
-            : String(reasonCodeValue);
-        handlers.onModeBlocked?.({
-          workspace_id,
-          params: {
-            thread_id: String(params.threadId ?? params.thread_id ?? ""),
-            blocked_method: String(
-              params.blockedMethod ?? params.blocked_method ?? "",
-            ),
-            effective_mode: String(
-              params.effectiveMode ?? params.effective_mode ?? "",
-            ),
-            ...(parsedReasonCode ? { reason_code: parsedReasonCode } : {}),
-            reason: String(params.reason ?? ""),
-            suggestion:
-              params.suggestion === undefined || params.suggestion === null
-                ? undefined
-                : String(params.suggestion),
-            request_id: requestId,
-          },
-        });
-        return;
-      }
-
-      if (method === "collaboration/modeResolved") {
-        const params = (message.params as Record<string, unknown>) ?? {};
-        const selectedUiModeRaw = String(
-          params.selectedUiMode ?? params.selected_ui_mode ?? "",
-        ).trim().toLowerCase();
-        const effectiveRuntimeModeRaw = String(
-          params.effectiveRuntimeMode ?? params.effective_runtime_mode ?? "",
-        ).trim().toLowerCase();
-        const effectiveUiModeRaw = String(
-          params.effectiveUiMode ?? params.effective_ui_mode ?? "",
-        ).trim().toLowerCase();
-        const fallbackReasonRaw =
-          params.fallbackReason ?? params.fallback_reason;
-        const selectedUiMode =
-          selectedUiModeRaw === "plan" ? "plan" : "default";
-        const effectiveRuntimeMode =
-          effectiveRuntimeModeRaw === "plan" ? "plan" : "code";
-        const effectiveUiMode =
-          effectiveUiModeRaw === "plan" ? "plan" : "default";
-        handlers.onModeResolved?.({
-          workspace_id,
-          params: {
-            thread_id: String(params.threadId ?? params.thread_id ?? ""),
-            selected_ui_mode: selectedUiMode,
-            effective_runtime_mode: effectiveRuntimeMode,
-            effective_ui_mode: effectiveUiMode,
-            fallback_reason:
-              fallbackReasonRaw === undefined || fallbackReasonRaw === null
-                ? null
-                : String(fallbackReasonRaw),
-          },
-        });
-        return;
-      }
-
-      if (method === "item/tool/requestUserInput") {
-        const params = (message.params as Record<string, unknown>) ?? {};
-        // Prefer explicit requestId fields for requestUserInput events.
-        // Some runtimes may use top-level message.id for transport-level ids.
-        const requestIdValue = params.requestId ?? params.request_id ?? message.id;
-        const requestId =
-          typeof requestIdValue === "number" || typeof requestIdValue === "string"
-            ? requestIdValue
-            : null;
-        if (requestId === null) {
-          return;
-        }
-        const fallbackThreadId = handlers.getActiveCodexThreadId?.(workspace_id) ?? "";
-        const resolvedThreadId =
-          extractThreadIdFromParams(params) || fallbackThreadId;
-        const effectiveThreadId =
-          resolveSharedSessionBindingByNativeThread(workspace_id, resolvedThreadId)?.sharedThreadId
-            ?? resolvedThreadId;
-        const completed = Boolean(params.completed);
-        const turn = (params.turn as Record<string, unknown> | undefined) ?? {};
-        const questionsRaw = Array.isArray(params.questions) ? params.questions : [];
-        const questions = questionsRaw
-          .map((entry) => {
-            const question = entry as Record<string, unknown>;
-            const optionsRaw = Array.isArray(question.options) ? question.options : [];
-            const options = optionsRaw
-              .map((option) => {
-                const record = option as Record<string, unknown>;
-                const label = String(record.label ?? "").trim();
-                const description = String(record.description ?? "").trim();
-                if (!label && !description) {
-                  return null;
-                }
-                return { label, description };
-              })
-              .filter((option): option is { label: string; description: string } => Boolean(option));
-            return {
-              id: String(question.id ?? "").trim(),
-              header: String(question.header ?? ""),
-              question: String(question.question ?? ""),
-              isOther: Boolean(question.isOther ?? question.is_other),
-              isSecret: Boolean(question.isSecret ?? question.is_secret),
-              ...((question.multiSelect ?? question.multi_select)
-                ? { multiSelect: true }
-                : {}),
-              options: options.length ? options : undefined,
-            };
-          })
-          .filter((question) => question.id);
-        handlers.onRequestUserInput?.({
-          workspace_id,
-          request_id: requestId,
-          params: {
-            thread_id: effectiveThreadId,
-            turn_id: String(params.turnId ?? params.turn_id ?? turn.id ?? ""),
-            item_id: String(params.itemId ?? params.item_id ?? turn.itemId ?? turn.item_id ?? ""),
-            questions,
-            ...(completed ? { completed: true } : {}),
-          },
-        });
-        return;
-      }
-
-      if (
-        (useNormalizedRealtimeAdapters || shouldForceNormalizedRealtimeRoute) &&
-        tryRouteNormalizedRealtimeEvent({
-          handlers,
-          workspaceId: workspace_id,
-          message,
-          ...(sharedBridge
-            ? {
-                engineOverride: sharedBridge.engine,
-                threadIdOverride: sharedBridge.sharedThreadId,
-              }
-            : rawMethodEngine
-              ? {
-                  engineOverride: rawMethodEngine,
-                  ...(fallbackGeneratedImageThreadId
-                    ? { threadIdOverride: fallbackGeneratedImageThreadId }
-                    : {}),
-                }
-              : {}),
-          threadAgentDeltaSeenRef,
-          threadAgentCompletedSeenRef,
-          threadAgentSnapshotSeenRef,
-        })
-      ) {
-        return;
-      }
-
-      const agentDeltaPayload = extractAgentMessageDeltaPayload(method, params);
-      if (agentDeltaPayload) {
-        const effectiveThreadId = sharedBridge?.sharedThreadId ?? agentDeltaPayload.threadId;
-        threadAgentDeltaSeenRef.current[effectiveThreadId] = true;
-        handlers.onAgentMessageDelta?.({
-          workspaceId: workspace_id,
-          threadId: effectiveThreadId,
-          itemId: agentDeltaPayload.itemId,
-          delta: agentDeltaPayload.delta,
-          ...(agentDeltaPayload.turnId ? { turnId: agentDeltaPayload.turnId } : {}),
-        });
-        return;
-      }
-
-      if (method === "turn/started") {
-        const params = message.params as Record<string, unknown>;
-        const turn = params.turn as Record<string, unknown> | undefined;
-        const rawTurnThreadId = String(
-          params.threadId ?? params.thread_id ?? turn?.threadId ?? turn?.thread_id ?? "",
-        );
-        const threadId = sharedBridge?.sharedThreadId ?? rawTurnThreadId;
-        const turnId = asString(params.turnId ?? params.turn_id ?? turn?.id ?? "").trim();
-        if (threadId) {
-          delete threadAgentDeltaSeenRef.current[threadId];
-          delete threadAgentCompletedSeenRef.current[threadId];
-          delete threadAgentSnapshotSeenRef.current[threadId];
-          handlers.onTurnStarted?.(workspace_id, threadId, turnId);
-        }
-        return;
-      }
-
-      if (method === "thread/started") {
-        const params = message.params as Record<string, unknown>;
-        const thread = (params.thread as Record<string, unknown> | undefined) ?? null;
-        const threadId = String(thread?.id ?? params.threadId ?? params.thread_id ?? "");
-        const sessionId = String(params.sessionId ?? params.session_id ?? "");
-        const turnId = String(params.turnId ?? params.turn_id ?? "").trim();
-        const rawEngine = String(params.engine ?? "").toLowerCase();
-        const eventEngine =
-          rawEngine === "claude" ||
-          rawEngine === "opencode" ||
-          rawEngine === "codex" ||
-          rawEngine === "gemini"
-            ? rawEngine
-            : null;
-
+      const runNextBatch = () => {
         if (
-          !sharedBridge &&
-          threadId &&
-          eventEngine &&
-          (eventEngine === "codex" || eventEngine === "claude")
+          disposed ||
+          activeBatchDispatchCancel ||
+          queuedBatches.length === 0
         ) {
-          const pendingBinding = resolvePendingSharedSessionBindingForEngine(
-            workspace_id,
-            eventEngine,
-          );
-          if (pendingBinding) {
-            if (pendingBinding.nativeThreadId !== threadId) {
-              const rebound = rebindSharedSessionNativeThread({
-                workspaceId: workspace_id,
-                oldNativeThreadId: pendingBinding.nativeThreadId,
-                newNativeThreadId: threadId,
-              });
-              if (rebound) {
-                sharedBridge = rebound;
-                void updateSharedSessionNativeBindingService(
-                  workspace_id,
-                  rebound.sharedThreadId,
-                  rebound.engine,
-                  pendingBinding.nativeThreadId,
-                  threadId,
-                ).catch(() => {});
+          return;
+        }
+        const nextBatch = queuedBatches.shift();
+        if (!nextBatch) {
+          return;
+        }
+        let cancelBatchDispatch: (() => void) | null = null;
+        let completedSynchronously = false;
+        cancelBatchDispatch = dispatchAppServerEventBatch(
+          handlersRef.current,
+          nextBatch,
+          {
+            ...dispatcherOptionsRef.current,
+            onComplete: () => {
+              if (cancelBatchDispatch) {
+                if (activeBatchDispatchCancel === cancelBatchDispatch) {
+                  activeBatchDispatchCancel = null;
+                }
+                runNextBatch();
+                return;
               }
-            } else {
-              sharedBridge = pendingBinding;
-            }
-          }
-        }
-
-        if (sharedBridge) {
-          if (
-            threadId &&
-            sessionId &&
-            sessionId !== "pending" &&
-            eventEngine &&
-            shouldRebindSharedNativeThreadOnStartedEvent(eventEngine)
-          ) {
-            const finalizedNativeThreadId = `${eventEngine}:${sessionId}`;
-            if (threadId !== finalizedNativeThreadId) {
-              const rebound = rebindSharedSessionNativeThread({
-                workspaceId: workspace_id,
-                oldNativeThreadId: threadId,
-                newNativeThreadId: finalizedNativeThreadId,
-              });
-              if (rebound) {
-                void updateSharedSessionNativeBindingService(
-                  workspace_id,
-                  rebound.sharedThreadId,
-                  rebound.engine,
-                  threadId,
-                  finalizedNativeThreadId,
-                ).catch(() => {});
-              }
-            }
-          }
+              completedSynchronously = true;
+            },
+          },
+        );
+        if (completedSynchronously) {
+          cancelBatchDispatch = null;
+          activeBatchDispatchCancel = null;
+          runNextBatch();
           return;
         }
+        activeBatchDispatchCancel = cancelBatchDispatch;
+      };
 
-        // If we have a real sessionId (not "pending"), notify for thread ID update
-        if (threadId && sessionId && sessionId !== "pending") {
-          handlers.onThreadSessionIdUpdated?.(
-            workspace_id,
-            threadId,
-            sessionId,
-            eventEngine,
-            turnId || null,
-          );
-        }
-
-        if (thread && threadId) {
-          handlers.onThreadStarted?.(workspace_id, thread);
-        }
-        return;
-      }
-
-      if (method === "codex/parseError") {
-        const params = (message.params as Record<string, unknown>) ?? {};
-        const fallbackThreadId = handlers.getActiveCodexThreadId?.(workspace_id) ?? "";
-        const resolvedThreadId = extractThreadIdFromParams(params) || fallbackThreadId;
-        const threadId = sharedBridge?.sharedThreadId ?? resolvedThreadId;
-        if (!threadId) {
-          return;
-        }
-        const parseErrorText = String(params.error ?? "").trim();
-        const rawText = String(params.raw ?? "").trim();
-        const detail = rawText ? `\n${rawText}` : "";
-        const messageText = parseErrorText
-          ? `Codex stream parse error: ${parseErrorText}${detail}`
-          : `Codex stream parse error${detail}`;
-        handlers.onTurnError?.(workspace_id, threadId, "", {
-          message: messageText,
-          willRetry: false,
-          engine: "codex",
-        });
-        return;
-      }
-
-      if (method === "runtime/ended") {
-        const params = (message.params as Record<string, unknown>) ?? {};
-        const reasonCode = asString(params.reasonCode ?? params.reason_code).trim();
-        const rawMessage = asString(params.message).trim();
-        const affectedThreadIds = asStringArray(
-          params.affectedThreadIds ?? params.affected_thread_ids,
+      const unsubscribeBatch = subscribeAppServerEventBatch((batch) => {
+        queuedBatches.push(batch);
+        runNextBatch();
+      });
+      const unsubscribeSingle = subscribeAppServerEvents((payload) => {
+        dispatchAppServerEvent(
+          handlersRef.current,
+          payload,
+          dispatcherOptionsRef.current,
         );
-        const affectedTurnIds = asStringArray(
-          params.affectedTurnIds ?? params.affected_turn_ids,
-        );
-        const affectedActiveTurns = extractRuntimeEndedTurnMap(
-          params.affectedActiveTurns ?? params.affected_active_turns,
-        );
-        const pendingRequestCount = Number(
-          params.pendingRequestCount ?? params.pending_request_count ?? 0,
-        );
-        const hadActiveLease = Boolean(
-          params.hadActiveLease ?? params.had_active_lease ?? false,
-        );
-        const normalizedPendingRequestCount =
-          Number.isFinite(pendingRequestCount) && pendingRequestCount > 0
-            ? Math.trunc(pendingRequestCount)
-            : 0;
-        const runtimeGeneration = asString(
-          params.runtimeGeneration ?? params.runtime_generation,
-        ).trim();
-        const shutdownSource = asString(
-          params.shutdownSource ?? params.shutdown_source,
-        ).trim();
-        const rawRuntimeProcessId = Number(
-          params.runtimeProcessId ?? params.runtime_process_id ?? 0,
-        );
-        const rawRuntimeStartedAtMs = Number(
-          params.runtimeStartedAtMs ?? params.runtime_started_at_ms ?? 0,
-        );
-        const runtimeIdentityPayload = {
-          ...(runtimeGeneration ? { runtimeGeneration } : {}),
-          ...(Number.isFinite(rawRuntimeProcessId) && rawRuntimeProcessId > 0
-            ? { runtimeProcessId: Math.trunc(rawRuntimeProcessId) }
-            : {}),
-          ...(Number.isFinite(rawRuntimeStartedAtMs) && rawRuntimeStartedAtMs > 0
-            ? { runtimeStartedAtMs: Math.trunc(rawRuntimeStartedAtMs) }
-            : {}),
-        };
-
-        handlers.onRuntimeEnded?.(workspace_id, {
-          reasonCode,
-          message: rawMessage,
-          affectedThreadIds,
-          affectedTurnIds,
-          pendingRequestCount: normalizedPendingRequestCount,
-          hadActiveLease,
-          ...runtimeIdentityPayload,
-        });
-
-        const isRecoverableRuntimeShutdownSource =
-          shutdownSource === "stale_reuse_cleanup" ||
-          shutdownSource === "internal_replacement";
-        const isBenignManualShutdown =
-          reasonCode === "manual_shutdown" &&
-          !isRecoverableRuntimeShutdownSource &&
-          !hadActiveLease &&
-          normalizedPendingRequestCount === 0 &&
-          affectedThreadIds.length === 0 &&
-          affectedTurnIds.length === 0 &&
-          affectedActiveTurns.size === 0;
-        if (isBenignManualShutdown) {
-          return;
+      });
+      return () => {
+        disposed = true;
+        unsubscribeBatch();
+        unsubscribeSingle();
+        queuedBatches.length = 0;
+        if (activeBatchDispatchCancel) {
+          activeBatchDispatchCancel();
+          activeBatchDispatchCancel = null;
         }
-
-        const fallbackThreadId = handlers.getActiveCodexThreadId?.(workspace_id) ?? "";
-        const normalizedMessage = rawMessage.startsWith("[RUNTIME_ENDED]")
-          ? rawMessage
-          : rawMessage
-            ? `[RUNTIME_ENDED] ${rawMessage}`
-            : "[RUNTIME_ENDED] Managed runtime ended unexpectedly before the turn settled.";
-        const targetThreadIds = affectedThreadIds.length
-          ? affectedThreadIds
-          : (affectedActiveTurns.size
-              ? Array.from(affectedActiveTurns.keys())
-              : (fallbackThreadId ? [fallbackThreadId] : []));
-        const uniqueTargetThreadIds = Array.from(new Set(targetThreadIds));
-        const shouldUseSingleAffectedTurnId =
-          uniqueTargetThreadIds.length === 1 && affectedTurnIds.length === 1;
-        uniqueTargetThreadIds.forEach((targetThreadId) => {
-          const reboundBinding = resolveSharedSessionBindingByNativeThread(
-            workspace_id,
-            targetThreadId,
-          );
-          const reboundThreadId = reboundBinding?.sharedThreadId ?? targetThreadId;
-          if (!reboundThreadId) {
-            return;
-          }
-          const targetTurnId =
-            affectedActiveTurns.get(targetThreadId) ??
-            (shouldUseSingleAffectedTurnId ? (affectedTurnIds[0] ?? "") : "");
-          handlers.onTurnError?.(workspace_id, reboundThreadId, targetTurnId, {
-            message: normalizedMessage,
-            willRetry: false,
-            engine: resolveEventEngine(reboundThreadId, reboundBinding?.engine),
-          });
-        });
-        return;
-      }
-
-      if (method === "turn/error") {
-        const params = message.params as Record<string, unknown>;
-        const threadId = sharedBridge?.sharedThreadId ?? String(params.threadId ?? params.thread_id ?? "");
-        const turnId = String(params.turnId ?? params.turn_id ?? "");
-        const willRetry = Boolean(params.willRetry ?? params.will_retry);
-        const errorValue = params.error;
-        const messageText =
-          typeof errorValue === "string"
-            ? errorValue
-            : typeof errorValue === "object" && errorValue
-              ? String((errorValue as Record<string, unknown>).message ?? "")
-              : "";
-        if (threadId) {
-          handlers.onTurnError?.(workspace_id, threadId, turnId, {
-            message: messageText,
-            willRetry,
-            engine: resolveEventEngine(threadId, sharedBridge?.engine),
-          });
-        }
-        return;
-      }
-
-      if (method === "turn/stalled") {
-        const params = message.params as Record<string, unknown>;
-        const threadId = sharedBridge?.sharedThreadId ?? String(params.threadId ?? params.thread_id ?? "");
-        const turnId = String(params.turnId ?? params.turn_id ?? "");
-        const rawStartedAtMs = Number(params.startedAtMs ?? params.started_at_ms ?? 0);
-        const rawTimeoutMs = Number(params.timeoutMs ?? params.timeout_ms ?? 0);
-        const runtimeGeneration = asString(
-          params.runtimeGeneration ?? params.runtime_generation,
-        ).trim();
-        const rawRuntimeProcessId = Number(
-          params.runtimeProcessId ?? params.runtime_process_id ?? 0,
-        );
-        const rawRuntimeStartedAtMs = Number(
-          params.runtimeStartedAtMs ?? params.runtime_started_at_ms ?? 0,
-        );
-        if (threadId) {
-          handlers.onTurnStalled?.(workspace_id, threadId, turnId, {
-            message: String(params.message ?? ""),
-            reasonCode: String(params.reasonCode ?? params.reason_code ?? ""),
-            stage: String(params.stage ?? ""),
-            source: String(params.source ?? ""),
-            ...(runtimeGeneration ? { runtimeGeneration } : {}),
-            ...(Number.isFinite(rawRuntimeProcessId) && rawRuntimeProcessId > 0
-              ? { runtimeProcessId: Math.trunc(rawRuntimeProcessId) }
-              : {}),
-            ...(Number.isFinite(rawRuntimeStartedAtMs) && rawRuntimeStartedAtMs > 0
-              ? { runtimeStartedAtMs: Math.trunc(rawRuntimeStartedAtMs) }
-              : {}),
-            startedAtMs:
-              Number.isFinite(rawStartedAtMs) && rawStartedAtMs > 0
-                ? Math.trunc(rawStartedAtMs)
-                : null,
-            timeoutMs:
-              Number.isFinite(rawTimeoutMs) && rawTimeoutMs > 0
-                ? Math.trunc(rawTimeoutMs)
-                : null,
-            engine: resolveEventEngine(threadId, sharedBridge?.engine),
-          });
-        }
-        return;
-      }
-
-      if (method === "codex/backgroundThread") {
-        if (sharedBridge) {
-          return;
-        }
-        const params = message.params as Record<string, unknown>;
-        const threadId = String(params.threadId ?? params.thread_id ?? "");
-        const action = String(params.action ?? "hide");
-        if (threadId) {
-          handlers.onBackgroundThreadAction?.(workspace_id, threadId, action);
-        }
-        return;
-      }
-
-      if (method === "error") {
-        const params = message.params as Record<string, unknown>;
-        const threadId = sharedBridge?.sharedThreadId ?? String(params.threadId ?? params.thread_id ?? "");
-        const turnId = String(params.turnId ?? params.turn_id ?? "");
-        const error = (params.error as Record<string, unknown> | undefined) ?? {};
-        const messageText = String(error.message ?? "");
-        const willRetry = Boolean(params.willRetry ?? params.will_retry);
-        if (threadId) {
-          handlers.onTurnError?.(workspace_id, threadId, turnId, {
-            message: messageText,
-            willRetry,
-            engine: resolveEventEngine(threadId, sharedBridge?.engine),
-          });
-        }
-        return;
-      }
-
-      if (method === "turn/completed") {
-        const params = message.params as Record<string, unknown>;
-        const turn = params.turn as Record<string, unknown> | undefined;
-        const rawCompletedThreadId = String(
-          params.threadId ?? params.thread_id ?? turn?.threadId ?? turn?.thread_id ?? "",
-        );
-        const threadId = sharedBridge?.sharedThreadId ?? rawCompletedThreadId;
-        const turnId = asString(params.turnId ?? params.turn_id ?? turn?.id ?? "").trim();
-        if (threadId) {
-          const seenDelta = Boolean(threadAgentDeltaSeenRef.current[threadId]);
-          const seenCompleted = hasThreadAgentCompletion(
-            threadAgentCompletedSeenRef,
-            threadId,
-          );
-          const result = (params.result as Record<string, unknown> | undefined) ?? undefined;
-          const textFromResult = [
-            typeof params.text === "string" ? params.text : "",
-            typeof result?.text === "string" ? String(result.text) : "",
-            typeof result?.output_text === "string" ? String(result.output_text) : "",
-            typeof result?.outputText === "string" ? String(result.outputText) : "",
-            typeof result?.content === "string" ? String(result.content) : "",
-          ]
-            .map((item) => item.trim())
-            .find((item) => item.length > 0);
-          if (!seenDelta && !seenCompleted && textFromResult) {
-            const fallbackItemId = turnId || `assistant-final-${Date.now()}`;
-            if (
-              markThreadAgentCompletionSeen(
-                threadAgentCompletedSeenRef,
-                threadId,
-                fallbackItemId,
-                textFromResult,
-              )
-            ) {
-              handlers.onAgentMessageCompleted?.({
-                workspaceId: workspace_id,
-                threadId,
-                itemId: fallbackItemId,
-                text: textFromResult,
-                ...(turnId ? { turnId } : {}),
-              });
-            }
-          }
-          delete threadAgentDeltaSeenRef.current[threadId];
-          delete threadAgentCompletedSeenRef.current[threadId];
-          handlers.onTurnCompleted?.(workspace_id, threadId, turnId);
-
-          // Try to extract usage data from turn/completed (Codex may include it here)
-          const usage =
-            (params.usage as Record<string, unknown> | undefined) ??
-            (params.result as Record<string, unknown> | undefined)?.usage as Record<string, unknown> | undefined;
-
-          if (usage) {
-            const inputTokens = Number(usage.input_tokens ?? usage.inputTokens ?? 0);
-            const outputTokens = Number(usage.output_tokens ?? usage.outputTokens ?? 0);
-            const cachedInputTokens = Number(
-              usage.cached_input_tokens ??
-              usage.cache_read_input_tokens ??
-              usage.cachedInputTokens ??
-              usage.cacheReadInputTokens ?? 0
-            );
-            const modelContextWindow = resolveLegacyModelContextWindow(
-              threadId,
-              usage.model_context_window ?? usage.modelContextWindow,
-            );
-
-            if (inputTokens > 0 || outputTokens > 0) {
-              const tokenUsage = {
-                total: {
-                  inputTokens,
-                  outputTokens,
-                  cachedInputTokens,
-                  totalTokens: inputTokens + outputTokens,
-                },
-                last: {
-                  inputTokens,
-                  outputTokens,
-                  cachedInputTokens,
-                  totalTokens: inputTokens + outputTokens,
-                },
-                modelContextWindow,
-                contextUsageSource: "turn_completed_usage",
-                contextUsageFreshness: "estimated",
-              };
-              handlers.onThreadTokenUsageUpdated?.(workspace_id, threadId, tokenUsage);
-            }
-          }
-        }
-        return;
-      }
-
-      if (method === "processing/heartbeat") {
-        const params = message.params as Record<string, unknown>;
-        const threadId = sharedBridge?.sharedThreadId ?? String(params.threadId ?? params.thread_id ?? "");
-        const pulse = Number(params.pulse ?? 0);
-        if (threadId && Number.isFinite(pulse) && pulse > 0) {
-          handlers.onProcessingHeartbeat?.(workspace_id, threadId, pulse);
-        }
-        return;
-      }
-
-      if (method === "thread/compacted") {
-        const params = message.params as Record<string, unknown>;
-        const threadId = sharedBridge?.sharedThreadId ?? extractThreadIdFromParams(params);
-        const turnId = extractTurnIdFromParams(params);
-        if (threadId) {
-          const sourceFlags = extractCompactionSourceFlags(params);
-          if (sourceFlags) {
-            handlers.onContextCompacted?.(workspace_id, threadId, turnId, sourceFlags);
-          } else {
-            handlers.onContextCompacted?.(workspace_id, threadId, turnId);
-          }
-        }
-        return;
-      }
-
-      if (method === "thread/compacting") {
-        const params = message.params as Record<string, unknown>;
-        const threadId = sharedBridge?.sharedThreadId ?? extractThreadIdFromParams(params);
-        if (threadId) {
-          const usagePercentRaw = Number(params.usagePercent ?? params.usage_percent);
-          const thresholdPercentRaw = Number(
-            params.thresholdPercent ?? params.threshold_percent,
-          );
-          const targetPercentRaw = Number(params.targetPercent ?? params.target_percent);
-          const sourceFlags = extractCompactionSourceFlags(params);
-          const compactionPayload: {
-            usagePercent: number | null;
-            thresholdPercent: number | null;
-            targetPercent: number | null;
-            auto?: boolean | null;
-            manual?: boolean | null;
-          } = {
-            usagePercent: Number.isFinite(usagePercentRaw) ? usagePercentRaw : null,
-            thresholdPercent: Number.isFinite(thresholdPercentRaw)
-              ? thresholdPercentRaw
-              : null,
-            targetPercent: Number.isFinite(targetPercentRaw) ? targetPercentRaw : null,
-          };
-          if (sourceFlags?.auto !== null && sourceFlags?.auto !== undefined) {
-            compactionPayload.auto = sourceFlags.auto;
-          }
-          if (sourceFlags?.manual !== null && sourceFlags?.manual !== undefined) {
-            compactionPayload.manual = sourceFlags.manual;
-          }
-          handlers.onContextCompacting?.(workspace_id, threadId, compactionPayload);
-        }
-        return;
-      }
-
-      if (method === "thread/compactionFailed") {
-        const params = message.params as Record<string, unknown>;
-        const threadId = sharedBridge?.sharedThreadId ?? extractThreadIdFromParams(params);
-        if (threadId) {
-          const reason = String(params.reason ?? "").trim();
-          handlers.onContextCompactionFailed?.(workspace_id, threadId, reason);
-        }
-        return;
-      }
-
-      if (method === "turn/plan/updated") {
-        const params = message.params as Record<string, unknown>;
-        const threadId = sharedBridge?.sharedThreadId ?? String(params.threadId ?? params.thread_id ?? "");
-        const turnId = String(params.turnId ?? params.turn_id ?? "");
-        if (threadId) {
-          handlers.onTurnPlanUpdated?.(workspace_id, threadId, turnId, {
-            explanation: params.explanation,
-            plan: params.plan,
-          });
-        }
-        return;
-      }
-
-      if (method === "turn/diff/updated") {
-        const params = message.params as Record<string, unknown>;
-        const threadId = sharedBridge?.sharedThreadId ?? String(params.threadId ?? params.thread_id ?? "");
-        const diff = String(params.diff ?? "");
-        if (threadId && diff) {
-          handlers.onTurnDiffUpdated?.(workspace_id, threadId, diff);
-        }
-        return;
-      }
-
-      if (method === "thread/tokenUsage/updated") {
-        const params = message.params as Record<string, unknown>;
-        const threadId = sharedBridge?.sharedThreadId ?? String(params.threadId ?? params.thread_id ?? "");
-        const tokenUsage =
-          (params.tokenUsage as Record<string, unknown> | undefined) ??
-          (params.token_usage as Record<string, unknown> | undefined);
-        if (threadId && tokenUsage) {
-          handlers.onThreadTokenUsageUpdated?.(workspace_id, threadId, tokenUsage);
-        }
-        return;
-      }
-
-      // Handle Codex token_count events (Codex sends usage data this way)
-      // Format: {"method":"token_count","params":{"info":{"total_token_usage":{...}}}}
-      if (method === "token_count") {
-        const params = message.params as Record<string, unknown>;
-        const info = params.info as Record<string, unknown> | undefined;
-        let threadId = String(params.threadId ?? params.thread_id ?? "");
-        if (sharedBridge?.sharedThreadId) {
-          threadId = sharedBridge.sharedThreadId;
-        }
-
-        // If no threadId in event, try to resolve from the active Codex thread
-        if (!threadId && handlers.getActiveCodexThreadId) {
-          const activeThreadId = handlers.getActiveCodexThreadId(workspace_id);
-          if (activeThreadId) {
-            threadId = activeThreadId;
-          }
-        }
-
-        // Skip this event if threadId is still unavailable
-        if (!threadId) {
-          return;
-        }
-
-        if (info) {
-          const totalUsageData =
-            (info.total_token_usage as Record<string, unknown> | undefined) ??
-            (info.totalTokenUsage as Record<string, unknown> | undefined);
-          const lastUsageData =
-            (info.last_token_usage as Record<string, unknown> | undefined) ??
-            (info.lastTokenUsage as Record<string, unknown> | undefined);
-          // Prefer last/current snapshot, fallback to total when unavailable.
-          const fallbackUsageData = lastUsageData ?? totalUsageData;
-
-          if (fallbackUsageData) {
-            const normalizeUsage = (usageData: Record<string, unknown>) => {
-              const inputTokens = Number(usageData.input_tokens ?? usageData.inputTokens ?? 0);
-              const outputTokens = Number(usageData.output_tokens ?? usageData.outputTokens ?? 0);
-              const cachedInputTokens = Number(
-                usageData.cached_input_tokens ??
-                  usageData.cache_read_input_tokens ??
-                  usageData.cachedInputTokens ??
-                  usageData.cacheReadInputTokens ??
-                  0,
-              );
-              return {
-                inputTokens,
-                outputTokens,
-                cachedInputTokens,
-                totalTokens: inputTokens + outputTokens,
-              };
-            };
-
-            const totalUsage = normalizeUsage(totalUsageData ?? fallbackUsageData);
-            const lastUsage = lastUsageData
-              ? normalizeUsage(lastUsageData)
-              : {
-                  inputTokens: 0,
-                  outputTokens: 0,
-                  cachedInputTokens: 0,
-                  totalTokens: 0,
-                };
-            const modelContextWindow = resolveLegacyModelContextWindow(
-              threadId,
-              lastUsageData?.model_context_window ??
-                lastUsageData?.modelContextWindow ??
-                totalUsageData?.model_context_window ??
-                totalUsageData?.modelContextWindow ??
-                info.model_context_window ??
-                info.modelContextWindow,
-            );
-
-            const tokenUsage = {
-              total: totalUsage,
-              last: lastUsage,
-              modelContextWindow,
-              contextUsageSource: "token_count",
-              contextUsageFreshness: "live",
-            };
-
-            handlers.onThreadTokenUsageUpdated?.(workspace_id, threadId, tokenUsage);
-          }
-        }
-        return;
-      }
-
-      if (method === "account/rateLimits/updated") {
-        const params = message.params as Record<string, unknown>;
-        const rateLimits =
-          (params.rateLimits as Record<string, unknown> | undefined) ??
-          (params.rate_limits as Record<string, unknown> | undefined);
-        if (rateLimits) {
-          handlers.onAccountRateLimitsUpdated?.(workspace_id, rateLimits);
-        }
-        return;
-      }
-
-      if (method === "item/completed") {
-        const params = message.params as Record<string, unknown>;
-        const rawItemThreadId = extractThreadIdFromParams(params);
-        const itemBridge = rawItemThreadId
-          ? resolveSharedSessionBindingByNativeThread(workspace_id, rawItemThreadId)
-          : null;
-        const threadId = itemBridge?.sharedThreadId ?? rawItemThreadId;
-        const item =
-          params.item && typeof params.item === "object"
-            ? hydrateToolSnapshotWithEventParams(
-                params.item as Record<string, unknown>,
-                params,
-              )
-            : undefined;
-        if (threadId && item) {
-          const contextualItem = withRealtimeItemEventContext(
-            item,
-            params,
-            itemBridge?.engine,
-          );
-          handlers.onItemCompleted?.(workspace_id, threadId, contextualItem);
-
-          // Try to extract usage data from item/completed (Codex may include it here)
-          const usage =
-            (contextualItem.usage as Record<string, unknown> | undefined) ??
-            (params.usage as Record<string, unknown> | undefined);
-
-          if (usage) {
-            const inputTokens = Number(usage.input_tokens ?? usage.inputTokens ?? 0);
-            const outputTokens = Number(usage.output_tokens ?? usage.outputTokens ?? 0);
-            const cachedInputTokens = Number(
-              usage.cached_input_tokens ??
-              usage.cache_read_input_tokens ??
-              usage.cachedInputTokens ??
-              usage.cacheReadInputTokens ?? 0
-            );
-            const modelContextWindow = resolveLegacyModelContextWindow(
-              threadId,
-              usage.model_context_window ?? usage.modelContextWindow,
-            );
-
-            if (inputTokens > 0 || outputTokens > 0 || cachedInputTokens > 0) {
-              const tokenUsage = {
-                total: {
-                  inputTokens,
-                  outputTokens,
-                  cachedInputTokens,
-                  totalTokens: inputTokens + outputTokens,
-                },
-                last: {
-                  inputTokens,
-                  outputTokens,
-                  cachedInputTokens,
-                  totalTokens: inputTokens + outputTokens,
-                },
-                modelContextWindow,
-                contextUsageSource: "item_completed_usage",
-                contextUsageFreshness: "estimated",
-              };
-              handlers.onThreadTokenUsageUpdated?.(workspace_id, threadId, tokenUsage);
-            }
-          }
-        }
-        if (threadId && item?.type === "agentMessage") {
-          const contextualItem = withRealtimeItemEventContext(
-            item,
-            params,
-            itemBridge?.engine,
-          );
-          const itemId = String(contextualItem.id ?? "");
-          const text = String(contextualItem.text ?? "");
-          const turnId = asString(
-            contextualItem.turnId ?? contextualItem.turn_id,
-          ).trim();
-          if (
-            itemId &&
-            markThreadAgentCompletionSeen(
-              threadAgentCompletedSeenRef,
-              threadId,
-              itemId,
-              text,
-            )
-          ) {
-            handlers.onAgentMessageCompleted?.({
-              workspaceId: workspace_id,
-              threadId,
-              itemId,
-              text,
-              ...(turnId ? { turnId } : {}),
-            });
-          }
-        }
-        return;
-      }
-
-      if (method === "item/started") {
-        const params = message.params as Record<string, unknown>;
-        const rawItemThreadId = extractThreadIdFromParams(params);
-        const itemBridge = rawItemThreadId
-          ? resolveSharedSessionBindingByNativeThread(workspace_id, rawItemThreadId)
-          : null;
-        const threadId = itemBridge?.sharedThreadId ?? rawItemThreadId;
-        const item =
-          params.item && typeof params.item === "object"
-            ? hydrateToolSnapshotWithEventParams(
-                params.item as Record<string, unknown>,
-                params,
-              )
-            : undefined;
-        if (threadId && item) {
-          const contextualItem = withRealtimeItemEventContext(
-            item,
-            params,
-            itemBridge?.engine,
-          );
-          if (
-            shouldIgnoreAgentMessageSnapshot({
-              threadId,
-              itemType: String(contextualItem.type ?? ""),
-              method,
-              threadAgentDeltaSeenRef,
-            })
-          ) {
-            return;
-          }
-          if (
-            String(contextualItem.type ?? "") === "agentMessage" &&
-            hasAgentMessageSnapshotText(contextualItem)
-          ) {
-            threadAgentDeltaSeenRef.current[threadId] = true;
-          }
-          handlers.onItemStarted?.(workspace_id, threadId, contextualItem);
-        }
-        return;
-      }
-
-      if (method === "item/updated") {
-        const params = message.params as Record<string, unknown>;
-        const rawItemThreadId = extractThreadIdFromParams(params);
-        const itemBridge = rawItemThreadId
-          ? resolveSharedSessionBindingByNativeThread(workspace_id, rawItemThreadId)
-          : null;
-        const threadId = itemBridge?.sharedThreadId ?? rawItemThreadId;
-        const item =
-          params.item && typeof params.item === "object"
-            ? hydrateToolSnapshotWithEventParams(
-                params.item as Record<string, unknown>,
-                params,
-              )
-            : undefined;
-        if (threadId && item) {
-          const contextualItem = withRealtimeItemEventContext(
-            item,
-            params,
-            itemBridge?.engine,
-          );
-          if (
-            shouldIgnoreAgentMessageSnapshot({
-              threadId,
-              itemType: String(contextualItem.type ?? ""),
-              method,
-              threadAgentDeltaSeenRef,
-            })
-          ) {
-            return;
-          }
-          if (
-            String(contextualItem.type ?? "") === "agentMessage" &&
-            hasAgentMessageSnapshotText(contextualItem)
-          ) {
-            threadAgentDeltaSeenRef.current[threadId] = true;
-          }
-          handlers.onItemUpdated?.(workspace_id, threadId, contextualItem);
-        }
-        return;
-      }
-
-      if (
-        method === "item/reasoning/summaryTextDelta" ||
-        method === "response.reasoning_summary_text.delta" ||
-        method === "response.reasoning_summary_text.done" ||
-        method === "response.reasoning_summary.delta" ||
-        method === "response.reasoning_summary.done" ||
-        method === "response.reasoning_summary_part.done"
-      ) {
-        const params = message.params as Record<string, unknown>;
-        const fallbackThreadId = handlers.getActiveCodexThreadId?.(workspace_id) ?? "";
-        const resolvedThreadId = extractThreadIdFromParams(params) || fallbackThreadId;
-        const sharedBridge = resolveSharedSessionBindingByNativeThread(
-          workspace_id,
-          resolvedThreadId,
-        );
-        const threadId = sharedBridge?.sharedThreadId ?? resolvedThreadId;
-        const itemId = extractItemIdFromParams(params);
-        const delta = extractReasoningDeltaFromParams(params);
-        const turnId = extractTurnIdFromParams(params) || null;
-        if (threadId && itemId && delta) {
-          const engineHint = inferGeminiReasoningHintFromThreadId(resolvedThreadId);
-          emitReasoningSummaryDelta(
-            handlers,
-            workspace_id,
-            threadId,
-            itemId,
-            delta,
-            engineHint,
-            turnId,
-          );
-        }
-        return;
-      }
-
-      if (
-        method === "item/reasoning/summaryPartAdded" ||
-        method === "response.reasoning_summary_part.added"
-      ) {
-        const params = message.params as Record<string, unknown>;
-        const fallbackThreadId = handlers.getActiveCodexThreadId?.(workspace_id) ?? "";
-        const resolvedThreadId = extractThreadIdFromParams(params) || fallbackThreadId;
-        const sharedBridge = resolveSharedSessionBindingByNativeThread(
-          workspace_id,
-          resolvedThreadId,
-        );
-        const threadId = sharedBridge?.sharedThreadId ?? resolvedThreadId;
-        const itemId = extractItemIdFromParams(params);
-        const turnId = extractTurnIdFromParams(params) || null;
-        if (threadId && itemId) {
-          const engineHint = inferGeminiReasoningHintFromThreadId(resolvedThreadId);
-          emitReasoningSummaryBoundary(
-            handlers,
-            workspace_id,
-            threadId,
-            itemId,
-            engineHint,
-            turnId,
-          );
-        }
-        return;
-      }
-
-      if (
-        method === "item/reasoning/textDelta" ||
-        method === "response.reasoning_text.delta" ||
-        method === "response.reasoning_text.done"
-      ) {
-        const params = message.params as Record<string, unknown>;
-        const fallbackThreadId = handlers.getActiveCodexThreadId?.(workspace_id) ?? "";
-        const resolvedThreadId = extractThreadIdFromParams(params) || fallbackThreadId;
-        const sharedBridge = resolveSharedSessionBindingByNativeThread(
-          workspace_id,
-          resolvedThreadId,
-        );
-        const threadId = sharedBridge?.sharedThreadId ?? resolvedThreadId;
-        const itemId = extractItemIdFromParams(params);
-        const delta = extractReasoningDeltaFromParams(params);
-        const turnId = extractTurnIdFromParams(params) || null;
-        if (threadId && itemId && delta) {
-          const engineHint = inferGeminiReasoningHintFromThreadId(resolvedThreadId);
-          emitReasoningTextDelta(
-            handlers,
-            workspace_id,
-            threadId,
-            itemId,
-            delta,
-            engineHint,
-            turnId,
-          );
-        }
-        return;
-      }
-
-      // Compatibility for Codex app-server variants that emit reasoning deltas
-      // without the "textDelta" suffix.
-      if (method === "item/reasoning/delta") {
-        const params = message.params as Record<string, unknown>;
-        const fallbackThreadId = handlers.getActiveCodexThreadId?.(workspace_id) ?? "";
-        const resolvedThreadId = extractThreadIdFromParams(params) || fallbackThreadId;
-        const sharedBridge = resolveSharedSessionBindingByNativeThread(
-          workspace_id,
-          resolvedThreadId,
-        );
-        const threadId = sharedBridge?.sharedThreadId ?? resolvedThreadId;
-        const itemId = extractItemIdFromParams(params);
-        const delta = extractReasoningDeltaFromParams(params);
-        const turnId = extractTurnIdFromParams(params) || null;
-        if (threadId && itemId && delta) {
-          const engineHint = inferGeminiReasoningHintFromThreadId(resolvedThreadId);
-          emitReasoningTextDelta(
-            handlers,
-            workspace_id,
-            threadId,
-            itemId,
-            delta,
-            engineHint,
-            turnId,
-          );
-        }
-        return;
-      }
-
-      if (method === "item/commandExecution/outputDelta") {
-        const params = message.params as Record<string, unknown>;
-        const resolvedThreadId = extractThreadIdFromParams(params);
-        const threadId =
-          resolveSharedSessionBindingByNativeThread(workspace_id, resolvedThreadId)?.sharedThreadId
-          ?? resolvedThreadId;
-        const itemId = extractItemIdFromParams(params);
-        const delta = String(params.delta ?? "");
-        const turnId = extractTurnIdFromParams(params) || null;
-        if (threadId && itemId && delta) {
-          emitCommandOutputDelta(handlers, workspace_id, threadId, itemId, delta, turnId);
-        }
-        return;
-      }
-
-      if (method === "item/commandExecution/terminalInteraction") {
-        const params = message.params as Record<string, unknown>;
-        const resolvedThreadId = extractThreadIdFromParams(params);
-        const threadId =
-          resolveSharedSessionBindingByNativeThread(workspace_id, resolvedThreadId)?.sharedThreadId
-          ?? resolvedThreadId;
-        const itemId = extractItemIdFromParams(params);
-        const stdin = String(params.stdin ?? "");
-        const turnId = extractTurnIdFromParams(params) || null;
-        if (threadId && itemId) {
-          emitTerminalInteraction(handlers, workspace_id, threadId, itemId, stdin, turnId);
-        }
-        return;
-      }
-
-      if (method === "item/fileChange/outputDelta") {
-        const params = message.params as Record<string, unknown>;
-        const threadId = extractThreadIdFromParams(params);
-        const itemId = extractItemIdFromParams(params);
-        const delta = String(params.delta ?? "");
-        const turnId = extractTurnIdFromParams(params) || null;
-        if (threadId && itemId && delta) {
-          emitFileChangeOutputDelta(handlers, workspace_id, threadId, itemId, delta, turnId);
-        }
-        return;
-      }
+      };
+    }
+    return subscribeAppServerEvents((payload) => {
+      dispatchAppServerEvent(
+        handlersRef.current,
+        payload,
+        dispatcherOptionsRef.current,
+      );
     });
-
-    return () => {
-      unlisten();
-    };
-  }, [handlers, options.useNormalizedRealtimeAdapters]);
+  }, []);
 }

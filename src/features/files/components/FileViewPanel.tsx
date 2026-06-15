@@ -24,12 +24,7 @@ import Rows2 from "lucide-react/dist/esm/icons/rows-2";
 import Save from "lucide-react/dist/esm/icons/save";
 import Search from "lucide-react/dist/esm/icons/search";
 import X from "lucide-react/dist/esm/icons/x";
-import type {
-  ReactCodeMirrorProps,
-  ReactCodeMirrorRef,
-} from "@uiw/react-codemirror";
-import { keymap } from "@codemirror/view";
-import { search } from "@codemirror/search";
+import type { ReactCodeMirrorProps } from "@uiw/react-codemirror";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import {
   getGitFileFullDiff,
@@ -52,7 +47,7 @@ import type {
   CodeAnnotationSelection,
 } from "../../code-annotations/types";
 import { isSameCodeAnnotationPath } from "../../code-annotations/utils/codeAnnotations";
-import { codeMirrorExtensionsForEditorLanguage } from "../utils/codemirrorLanguageExtensions";
+import { loadCodeMirrorExtensionsForEditorLanguage } from "../utils/codemirrorLanguageExtensions";
 import {
   parseLineMarkersFromDiff,
   type GitLineMarkers,
@@ -72,10 +67,16 @@ import {
 } from "../utils/fileRenderProfile";
 import { getFileDocumentSnapshotMetrics } from "../utils/fileDocumentSnapshot";
 import {
+  createFileEditorTypingDiagnosticsSession,
+  type FileEditorTypingDiagnosticsSession,
+} from "../utils/fileEditorTypingDiagnostics";
+import { loadFileViewStyles } from "../../../styles/featureStyleLoaders";
+import {
   resolveDefaultFileViewMode,
   resolveFileViewSurface,
 } from "../utils/fileViewSurface";
 import { FileViewBody } from "./FileViewBody";
+import type { FileCodeMirrorEditorHandle } from "./FileCodeMirrorEditor";
 import { FileViewNavigationPanel } from "./FileViewNavigationPanel";
 import { useFileDocumentState } from "../hooks/useFileDocumentState";
 import { useFileExternalSync } from "../hooks/useFileExternalSync";
@@ -100,23 +101,19 @@ import {
 import {
   EDITOR_LINE_RANGE_SYNC_DELAY_MS,
   EXTERNAL_CHANGE_POLL_INTERVAL_MS,
-  codeAnnotationWidgetsExtension,
   formatEditorLineRangeKey,
   formatFileSize,
-  gitLineMarkersExtension,
   hasGitLineMarkers,
   isSameEditorLineRange,
   resolveAbsolutePath,
   resolveDeclarationCodeSelectionAnchor,
   resolveEditorTheme,
-  setGitLineMarkersEffect,
-  toCodeMirrorShortcut,
   type AnnotationWidgetCallbacks,
   type EditorTheme,
-} from "./fileViewPanelInternals";
+} from "./fileViewPanelShared";
 import { resolveFileMarkdownFastFeatureFlags } from "../utils/fileMarkdownFeatureFlags";
 
-export { resolveEditorAnnotationWidgetOrder } from "./fileViewPanelInternals";
+export { resolveEditorAnnotationWidgetOrder } from "./fileViewPanelShared";
 
 type FileViewPanelProps = {
   workspaceId: string;
@@ -230,6 +227,9 @@ export function FileViewPanel({
   onDirtyChange,
 }: FileViewPanelProps) {
   const { t } = useTranslation();
+  useEffect(() => {
+    void loadFileViewStyles();
+  }, []);
   const renderProfile = useMemo(() => resolveFileRenderProfile(filePath), [filePath]);
   const defaultMode = useMemo(
     () => resolveDefaultFileViewMode(renderProfile, initialMode),
@@ -267,10 +267,14 @@ export function FileViewPanel({
     activeFileLineRange,
   );
   const editorLineRangeSyncTimerRef = useRef<number | null>(null);
+  const activeCodeAnchorResolveTimerRef = useRef<number | null>(null);
+  const activeCodeAnchorResolveEpochRef = useRef(0);
   const lastPublishedEditorLineRangeKeyRef = useRef(
     formatEditorLineRangeKey(activeFileLineRange),
   );
-  const cmRef = useRef<ReactCodeMirrorRef>(null);
+  const [activeDeclarationCodeAnchor, setActiveDeclarationCodeAnchor] =
+    useState<IntentCanvasCodeSelectionAnchor | null>(null);
+  const cmRef = useRef<FileCodeMirrorEditorHandle | null>(null);
   const lastReportedLineRangeRef = useRef<string>("");
   const tabsContainerRef = useRef<HTMLDivElement | null>(null);
   const panelRootRef = useRef<HTMLDivElement | null>(null);
@@ -351,6 +355,12 @@ export function FileViewPanel({
       editorLineRangeSyncTimerRef.current = null;
     }
   }, []);
+  const clearPendingActiveCodeAnchorResolve = useCallback(() => {
+    if (activeCodeAnchorResolveTimerRef.current !== null) {
+      window.clearTimeout(activeCodeAnchorResolveTimerRef.current);
+      activeCodeAnchorResolveTimerRef.current = null;
+    }
+  }, []);
   const scheduleEditorLineRangePublish = useCallback(
     (lineRange: CodeAnnotationLineRange | null) => {
       pendingEditorLineRangeRef.current = lineRange;
@@ -364,6 +374,9 @@ export function FileViewPanel({
         }
         lastPublishedEditorLineRangeKeyRef.current = pendingKey;
         startTransition(() => {
+          setEditorLocalLineRange((current) =>
+            isSameEditorLineRange(current, pendingLineRange) ? current : pendingLineRange,
+          );
           onActiveFileLineRangeChange?.(pendingLineRange);
         });
       }, EDITOR_LINE_RANGE_SYNC_DELAY_MS);
@@ -376,11 +389,6 @@ export function FileViewPanel({
         return;
       }
       editorLocalLineRangeRef.current = lineRange;
-      startTransition(() => {
-        setEditorLocalLineRange((current) =>
-          isSameEditorLineRange(current, lineRange) ? current : lineRange,
-        );
-      });
       scheduleEditorLineRangePublish(lineRange);
     },
     [scheduleEditorLineRangePublish],
@@ -484,6 +492,7 @@ export function FileViewPanel({
   const {
     content,
     setContent,
+    cacheDraftContent,
     documentSnapshot,
     replaceDocumentSnapshot,
     error,
@@ -503,20 +512,106 @@ export function FileViewPanel({
     skipTextRead,
     externalAbsoluteReadOnlyMessage: t("files.externalAbsoluteReadOnly"),
   });
-
-  const activeDeclarationCodeAnchor = useMemo(
-    () => resolveDeclarationCodeSelectionAnchor({
-      filePath,
-      content,
-      lineRange: editorLocalLineRange ?? activeFileLineRange,
-    }),
-    [
-      activeFileLineRange,
-      content,
-      editorLocalLineRange,
-      filePath,
-    ],
+  const currentFileRenderToken = useMemo(
+    () =>
+      [
+        workspaceId,
+        workspaceRelativeFilePath,
+        documentSnapshot.snapshotVersion,
+      ].join("\u001f"),
+    [documentSnapshot.snapshotVersion, workspaceId, workspaceRelativeFilePath],
   );
+  const latestFileRenderTokenRef = useRef(currentFileRenderToken);
+  latestFileRenderTokenRef.current = currentFileRenderToken;
+  const editorDraftContentRef = useRef(content);
+  const [editorDraftDirty, setEditorDraftDirty] = useState(false);
+  const effectiveIsDirty = isDirty || editorDraftDirty;
+  latestIsDirtyRef.current = effectiveIsDirty;
+  const typingDiagnosticsRef = useRef<FileEditorTypingDiagnosticsSession>(
+    createFileEditorTypingDiagnosticsSession({
+      workspaceId,
+      filePath,
+      fileKind: renderProfile.kind,
+      byteLength: null,
+      lineCount: null,
+    }),
+  );
+
+  useEffect(() => {
+    typingDiagnosticsRef.current = createFileEditorTypingDiagnosticsSession({
+      workspaceId,
+      filePath,
+      fileKind: renderProfile.kind,
+      byteLength: null,
+      lineCount: null,
+    });
+  }, [filePath, renderProfile.kind, workspaceId]);
+
+  useEffect(() => {
+    editorDraftContentRef.current = content;
+    setEditorDraftDirty(false);
+  }, [content]);
+
+  const handleEditorContentDraftChange = useCallback(
+    (nextContent: string) => {
+      editorDraftContentRef.current = nextContent;
+      if (!isLoading) {
+        cacheDraftContent(nextContent);
+      }
+      const nextIsDirty = nextContent !== savedContentRef.current;
+      latestIsDirtyRef.current = nextIsDirty;
+      setEditorDraftDirty((current) => (current === nextIsDirty ? current : nextIsDirty));
+    },
+    [cacheDraftContent, isLoading, latestIsDirtyRef, savedContentRef],
+  );
+
+  const flushEditorDraftToDocument = useCallback(() => {
+    setContent(editorDraftContentRef.current);
+  }, [setContent]);
+
+  const handleEditorContentPublished = useCallback(() => {
+    typingDiagnosticsRef.current.recordPublishedUpdate();
+  }, []);
+
+  const handleEditorTypingInput = useCallback((durationMs: number) => {
+    typingDiagnosticsRef.current.recordInput(durationMs);
+  }, []);
+
+  const activeDeclarationLineRange = editorLocalLineRange ?? activeFileLineRange;
+
+  useEffect(() => {
+    const resolveEpoch = activeCodeAnchorResolveEpochRef.current + 1;
+    activeCodeAnchorResolveEpochRef.current = resolveEpoch;
+    clearPendingActiveCodeAnchorResolve();
+
+    if (!activeDeclarationLineRange) {
+      startTransition(() => {
+        setActiveDeclarationCodeAnchor(null);
+      });
+      return;
+    }
+
+    activeCodeAnchorResolveTimerRef.current = window.setTimeout(() => {
+      activeCodeAnchorResolveTimerRef.current = null;
+      if (activeCodeAnchorResolveEpochRef.current !== resolveEpoch) {
+        return;
+      }
+      const nextAnchor = resolveDeclarationCodeSelectionAnchor({
+        filePath,
+        content: editorDraftContentRef.current,
+        lineRange: activeDeclarationLineRange,
+      });
+      startTransition(() => {
+        setActiveDeclarationCodeAnchor(nextAnchor);
+      });
+    }, EDITOR_LINE_RANGE_SYNC_DELAY_MS);
+
+    return clearPendingActiveCodeAnchorResolve;
+  }, [
+    activeDeclarationLineRange,
+    clearPendingActiveCodeAnchorResolve,
+    filePath,
+  ]);
 
   useEffect(() => {
     onActiveCodeAnchorChange?.(activeDeclarationCodeAnchor);
@@ -564,7 +659,7 @@ export function FileViewPanel({
     externalChangeApplyMode,
     externalChangeAutoApplyDebounceMs,
     isBinary: skipTextRead,
-    isDirty,
+    isDirty: effectiveIsDirty,
     isLoading,
     caseInsensitivePathCompare,
     replaceDocumentSnapshot,
@@ -576,10 +671,13 @@ export function FileViewPanel({
     autoSyncedMessage: t("files.externalChangeAutoSynced"),
   });
   const handleSave = useCallback(async () => {
+    flushEditorDraftToDocument();
     const saved = await handleDocumentSave();
     if (!saved) {
       return;
     }
+    typingDiagnosticsRef.current.recordTauriFileWrite();
+    setEditorDraftDirty(false);
     setExternalChangeSyncState((current) =>
       reduceExternalChangeSyncState(current, { type: "file-loaded" }),
     );
@@ -589,6 +687,7 @@ export function FileViewPanel({
     setExternalAutoSyncAt(null);
     onSaveSuccess?.();
   }, [
+    flushEditorDraftToDocument,
     handleDocumentSave,
     onSaveSuccess,
     setExternalChangeConflict,
@@ -608,8 +707,7 @@ export function FileViewPanel({
     navigateToLocation,
     runDefinitionFromCursor,
     runReferencesFromCursor,
-    editorNavigationKeymapExt,
-    ctrlClickDefinitionExt,
+    resolveDefinitionAtOffset,
     openFindPanelInEditor,
     toggleFindPanelInEditor,
   } = useFileNavigation({
@@ -743,15 +841,16 @@ export function FileViewPanel({
     }
 
     let cancelled = false;
+    const requestRenderToken = latestFileRenderTokenRef.current;
     getGitFileFullDiff(workspaceId, gitDiffTargetPath)
       .then((diff) => {
-        if (cancelled) {
+        if (cancelled || latestFileRenderTokenRef.current !== requestRenderToken) {
           return;
         }
         setGitLineMarkers(parseLineMarkersFromDiff(diff));
       })
       .catch(() => {
-        if (!cancelled) {
+        if (!cancelled && latestFileRenderTokenRef.current === requestRenderToken) {
           setGitLineMarkers({ added: [], modified: [] });
         }
       });
@@ -771,6 +870,9 @@ export function FileViewPanel({
   useEffect(() => () => clearPendingEditorLineRangeSync(), [
     clearPendingEditorLineRangeSync,
   ]);
+  useEffect(() => () => clearPendingActiveCodeAnchorResolve(), [
+    clearPendingActiveCodeAnchorResolve,
+  ]);
 
   useEffect(() => {
     if (editorLocalLineRangeRef.current !== null || activeFileLineRange === null) {
@@ -788,14 +890,18 @@ export function FileViewPanel({
     pendingOpenFindPanelRef.current = false;
     setMode(defaultMode);
     clearPendingEditorLineRangeSync();
+    clearPendingActiveCodeAnchorResolve();
+    activeCodeAnchorResolveEpochRef.current += 1;
     editorLocalLineRangeRef.current = null;
     pendingEditorLineRangeRef.current = null;
     lastPublishedEditorLineRangeKeyRef.current = "none";
     setEditorLocalLineRange(null);
+    setActiveDeclarationCodeAnchor(null);
     onActiveFileLineRangeChange?.(null);
     lastReportedLineRangeRef.current = "";
   }, [
     clearPendingEditorLineRangeSync,
+    clearPendingActiveCodeAnchorResolve,
     defaultMode,
     filePath,
     onActiveFileLineRangeChange,
@@ -841,8 +947,8 @@ export function FileViewPanel({
   }, []);
 
   useEffect(() => {
-    onDirtyChange?.(isDirty);
-  }, [isDirty, onDirtyChange]);
+    onDirtyChange?.(effectiveIsDirty);
+  }, [effectiveIsDirty, onDirtyChange]);
 
   // Auto-focus CodeMirror when entering edit mode
   useEffect(() => {
@@ -853,51 +959,30 @@ export function FileViewPanel({
     }
   }, [mode, isLoading, truncated]);
 
-  // CodeMirror extensions (Mod-s handled inside CM; window-level handles preview mode)
-  const cmExtensions = useMemo(() => {
-    const langExt = codeMirrorExtensionsForEditorLanguage(renderProfile.editorLanguage);
-    return [...langExt, gitLineMarkersExtension()];
-  }, [renderProfile.editorLanguage]);
+  const languageExtensionRequestRef = useRef(0);
+  const [languageExtensions, setLanguageExtensions] =
+    useState<ReactCodeMirrorProps["extensions"]>([]);
 
   useEffect(() => {
-    const view = cmRef.current?.view;
-    if (!view || mode !== "edit") {
+    const requestId = languageExtensionRequestRef.current + 1;
+    languageExtensionRequestRef.current = requestId;
+    if (mode !== "edit" || !renderProfile.editorLanguage) {
+      setLanguageExtensions([]);
       return;
     }
-    view.dispatch({
-      effects: setGitLineMarkersEffect.of(effectiveGitLineMarkers),
-    });
-  }, [effectiveGitLineMarkers, mode, filePath, content]);
-
-  // Use ref to always have latest handleSave for CodeMirror keymap
-  const handleSaveRef = useRef(handleSave);
-  handleSaveRef.current = handleSave;
-
-  const saveKeymapExt = useMemo(
-    () => {
-      const codeMirrorSaveShortcut = toCodeMirrorShortcut(saveFileShortcut);
-      if (!codeMirrorSaveShortcut) {
-        return [];
-      }
-      return keymap.of([
-        {
-          key: codeMirrorSaveShortcut,
-          run: () => {
-            handleSaveRef.current();
-            return true;
-          },
-        },
-      ]);
-    },
-    [saveFileShortcut],
-  );
-  const persistentSearchExtension = useMemo(() => search({ top: true }), []);
-  const handleCodeMirrorCreate: NonNullable<ReactCodeMirrorProps["onCreateEditor"]> =
-    useCallback((view) => {
-      view.dispatch({
-        effects: setGitLineMarkersEffect.of(effectiveGitLineMarkers),
+    loadCodeMirrorExtensionsForEditorLanguage(renderProfile.editorLanguage)
+      .then((extensions) => {
+        if (languageExtensionRequestRef.current === requestId) {
+          setLanguageExtensions(extensions);
+        }
+      })
+      .catch((error) => {
+        console.error("[file-view] failed to load CodeMirror language extension:", error);
+        if (languageExtensionRequestRef.current === requestId) {
+          setLanguageExtensions([]);
+        }
       });
-    }, [effectiveGitLineMarkers]);
+  }, [mode, renderProfile.editorLanguage]);
 
   // Keyboard shortcut: Cmd+S / Ctrl+S (works in any mode, including preview)
   useEffect(() => {
@@ -916,12 +1001,12 @@ export function FileViewPanel({
 
   // Handle close with unsaved changes
   const handleClose = useCallback(() => {
-    if (isDirty) {
+    if (effectiveIsDirty) {
       const confirmed = window.confirm(t("files.discardChangesMessage"));
       if (!confirmed) return;
     }
     onClose();
-  }, [isDirty, onClose, t]);
+  }, [effectiveIsDirty, onClose, t]);
 
   // Switch to edit mode
   const handleEnterEdit = useCallback(() => {
@@ -934,6 +1019,7 @@ export function FileViewPanel({
 
   // Switch to preview mode
   const handleEnterPreview = useCallback(() => {
+    flushEditorDraftToDocument();
     setMode("preview");
     clearPendingEditorLineRangeSync();
     editorLocalLineRangeRef.current = null;
@@ -942,7 +1028,11 @@ export function FileViewPanel({
     setEditorLocalLineRange(null);
     onActiveFileLineRangeChange?.(null);
     lastReportedLineRangeRef.current = "";
-  }, [clearPendingEditorLineRangeSync, onActiveFileLineRangeChange]);
+  }, [
+    clearPendingEditorLineRangeSync,
+    flushEditorDraftToDocument,
+    onActiveFileLineRangeChange,
+  ]);
 
   const handleOpenFindPanel = useCallback(() => {
     if (skipTextRead || truncated) {
@@ -1019,11 +1109,16 @@ export function FileViewPanel({
     }
 
     let cancelled = false;
+    const requestRenderToken = latestFileRenderTokenRef.current;
     markdownPreviewOverrideRequestRef.current += 1;
     const requestId = markdownPreviewOverrideRequestRef.current;
     readWorkspaceFilePreview(workspaceId, workspaceRelativeFilePath)
       .then((response) => {
-        if (cancelled || requestId !== markdownPreviewOverrideRequestRef.current) {
+        if (
+          cancelled ||
+          requestId !== markdownPreviewOverrideRequestRef.current ||
+          latestFileRenderTokenRef.current !== requestRenderToken
+        ) {
           return;
         }
         setMarkdownPreviewOverride({
@@ -1033,7 +1128,11 @@ export function FileViewPanel({
         });
       })
       .catch(() => {
-        if (cancelled || requestId !== markdownPreviewOverrideRequestRef.current) {
+        if (
+          cancelled ||
+          requestId !== markdownPreviewOverrideRequestRef.current ||
+          latestFileRenderTokenRef.current !== requestRenderToken
+        ) {
           return;
         }
         setMarkdownPreviewOverride(null);
@@ -1154,43 +1253,17 @@ export function FileViewPanel({
     }),
     [handleConfirmAnnotationDraft, onRemoveCodeAnnotation],
   );
-  const annotationWidgetsExt = useMemo(
+  const editorCodeAnnotations = useMemo(
     () =>
-      codeAnnotationWidgetsExtension({
-        annotations: visibleCodeAnnotations.filter(
-          (annotation) => annotation.source === "file-edit-mode",
-        ),
-        draft: effectiveAnnotationDraft?.source === "file-edit-mode"
-          ? effectiveAnnotationDraft
-          : null,
-        labels: annotationWidgetLabels,
-        callbacks: annotationWidgetCallbacks,
-      }),
-    [
-      effectiveAnnotationDraft,
-      annotationWidgetCallbacks,
-      annotationWidgetLabels,
-      visibleCodeAnnotations,
-    ],
+      visibleCodeAnnotations.filter(
+        (annotation) => annotation.source === "file-edit-mode",
+      ),
+    [visibleCodeAnnotations],
   );
-  const editorExtensions = useMemo(
-    () => [
-      saveKeymapExt,
-      editorNavigationKeymapExt,
-      ctrlClickDefinitionExt,
-      persistentSearchExtension,
-      annotationWidgetsExt,
-      ...cmExtensions,
-    ],
-    [
-      annotationWidgetsExt,
-      cmExtensions,
-      ctrlClickDefinitionExt,
-      editorNavigationKeymapExt,
-      persistentSearchExtension,
-      saveKeymapExt,
-    ],
-  );
+  const editorAnnotationDraft =
+    effectiveAnnotationDraft?.source === "file-edit-mode"
+      ? effectiveAnnotationDraft
+      : null;
 
   const visibleTabs = openTabs && openTabs.length > 0 ? openTabs : [filePath];
   const canCloseAllTabs = Boolean(onCloseAllTabs && visibleTabs.length > 0);
@@ -1473,12 +1546,12 @@ export function FileViewPanel({
               </button>
               <button
                 type="button"
-                className={`primary fvp-action-btn fvp-save-btn ${isDirty ? "" : "is-saved"}`}
+                className={`primary fvp-action-btn fvp-save-btn ${effectiveIsDirty ? "" : "is-saved"}`}
                 onClick={handleSave}
-                disabled={!isDirty || isSaving}
+                disabled={!effectiveIsDirty || isSaving}
               >
                 <Save size={14} aria-hidden />
-                <span>{isSaving ? t("files.saving") : isDirty ? t("files.save") : t("files.saved")}</span>
+                <span>{isSaving ? t("files.saving") : effectiveIsDirty ? t("files.save") : t("files.saved")}</span>
               </button>
             </div>
           )}
@@ -1505,7 +1578,7 @@ export function FileViewPanel({
         >
           {filePath}
         </span>
-        {isDirty && <span className="fvp-dirty-dot" aria-label={t("files.unsavedChanges")} />}
+        {effectiveIsDirty && <span className="fvp-dirty-dot" aria-label={t("files.unsavedChanges")} />}
         {truncated && <span className="fvp-truncated">{t("files.truncated")}</span>}
       </div>
       {renderTopbarActions()}
@@ -1597,17 +1670,20 @@ export function FileViewPanel({
     );
     };
 
-    const renderExternalComparePanel = () => {
-      const diskSnapshot = externalChangeConflict ?? externalPendingRefresh;
-      if (!externalCompareOpen || !diskSnapshot) {
-        return null;
-      }
+  const renderExternalComparePanel = () => {
+    const diskSnapshot = externalChangeConflict ?? externalPendingRefresh;
+    if (!externalCompareOpen || !diskSnapshot) {
+      return null;
+    }
+    const latestLocalContent = editorDraftContentRef.current;
     const localPreview =
-      content.length > 6_000 ? `${content.slice(0, 6_000)}\n\n...` : content;
+      latestLocalContent.length > 6_000
+        ? `${latestLocalContent.slice(0, 6_000)}\n\n...`
+        : latestLocalContent;
     const diskPreview =
-        diskSnapshot.diskContent.length > 6_000
-          ? `${diskSnapshot.diskContent.slice(0, 6_000)}\n\n...`
-          : diskSnapshot.diskContent;
+      diskSnapshot.diskContent.length > 6_000
+        ? `${diskSnapshot.diskContent.slice(0, 6_000)}\n\n...`
+        : diskSnapshot.diskContent;
     return (
       <div className="fvp-external-compare">
         <div className="fvp-external-compare-column">
@@ -1708,7 +1784,7 @@ export function FileViewPanel({
         {renderTabs("fvp-tabs-inline")}
       </div>
       <div className="fvp-header-row-right">
-        {isDirty ? <span className="fvp-dirty-dot" aria-label={t("files.unsavedChanges")} /> : null}
+        {effectiveIsDirty ? <span className="fvp-dirty-dot" aria-label={t("files.unsavedChanges")} /> : null}
         {truncated ? <span className="fvp-truncated">{t("files.truncated")}</span> : null}
         {renderTopbarActions("fvp-header-actions")}
       </div>
@@ -1734,6 +1810,9 @@ export function FileViewPanel({
         documentSnapshot={documentSnapshot}
         content={content}
         setContent={setContent}
+        onEditorContentDraftChange={handleEditorContentDraftChange}
+        onEditorContentPublished={handleEditorContentPublished}
+        onEditorTypingInput={handleEditorTypingInput}
         fileRenderPressure={fileRenderPressure}
         markdownPreviewSnapshotMode={markdownPreviewSnapshotMode}
         markdownPreviewRefreshKey={externalAutoSyncAt}
@@ -1741,8 +1820,16 @@ export function FileViewPanel({
         markdownRendererProfile={markdownRendererProfile}
         markdownFastFeatureFlags={markdownFastFeatureFlags}
         cmRef={cmRef}
-      handleCodeMirrorCreate={handleCodeMirrorCreate}
       onActiveFileLineRangeChange={handleEditorLineRangeChange}
+      languageExtensions={languageExtensions}
+      gitLineMarkers={effectiveGitLineMarkers}
+      editorCodeAnnotations={editorCodeAnnotations}
+      editorAnnotationDraft={editorAnnotationDraft}
+      annotationWidgetLabels={annotationWidgetLabels}
+      annotationWidgetCallbacks={annotationWidgetCallbacks}
+      runDefinitionFromCursor={runDefinitionFromCursor}
+      runReferencesFromCursor={runReferencesFromCursor}
+      resolveDefinitionAtOffset={resolveDefinitionAtOffset}
       onPreviewAnnotationStart={(lineRange) =>
         beginAnnotationDraft(lineRange, "file-preview-mode")
       }
@@ -1758,7 +1845,8 @@ export function FileViewPanel({
       }}
       onAnnotationDraftConfirm={handleConfirmAnnotationDraft}
       lastReportedLineRangeRef={lastReportedLineRangeRef}
-      editorExtensions={editorExtensions}
+      saveFileShortcut={saveFileShortcut}
+      handleSave={handleSave}
       editorTheme={editorTheme}
       previewLanguage={previewLanguage}
       highlightedLines={highlightedLines}
@@ -1778,14 +1866,14 @@ export function FileViewPanel({
       title={t("layout.resizePlanPanel")}
     >
       <div className="fvp-footer-left">
-        {canEditDocument && mode === "edit" && isDirty && (
+        {canEditDocument && mode === "edit" && effectiveIsDirty && (
           <span className="fvp-footer-hint">
             <span className="fvp-dirty-dot" />
             {t("files.unsavedChanges")}
             <span className="fvp-footer-shortcut">{t("files.saveShortcut")}</span>
           </span>
         )}
-        {canEditDocument && mode === "edit" && !isDirty && (
+        {canEditDocument && mode === "edit" && !effectiveIsDirty && (
           <span className="fvp-footer-hint fvp-footer-saved">{t("files.saved")}</span>
         )}
         {(mode === "preview" && (truncated || !canEditDocument)) && (

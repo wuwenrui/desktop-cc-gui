@@ -393,10 +393,11 @@ export function EmailSenderSettings({
         settings: draft,
         clearSecret: true,
       });
+      const clearedSecret = view.secretConfigured ? (view.secret ?? "") : "";
       setDraft(view.settings);
       setSavedSettings(view.settings);
-      setSecretDraft(view.secret ?? "");
-      setSavedSecret(view.secret ?? "");
+      setSecretDraft(clearedSecret);
+      setSavedSecret(clearedSecret);
       setSecretConfigured(view.secretConfigured);
       await onUpdateAppSettings({
         ...appSettings,

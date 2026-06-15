@@ -1,4 +1,71 @@
 use std::collections::HashMap;
+use std::sync::{Mutex as StdMutex, OnceLock};
+use std::time::Instant;
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct BlockingFileIoMetricSample {
+    pub(crate) operation_name: &'static str,
+    pub(crate) wall_time_ms: f64,
+    pub(crate) blocking_pool_called: bool,
+}
+
+static BLOCKING_FILE_IO_METRIC_SAMPLES: OnceLock<StdMutex<Vec<BlockingFileIoMetricSample>>> =
+    OnceLock::new();
+
+fn blocking_file_io_metric_samples() -> &'static StdMutex<Vec<BlockingFileIoMetricSample>> {
+    BLOCKING_FILE_IO_METRIC_SAMPLES.get_or_init(|| StdMutex::new(Vec::new()))
+}
+
+fn record_blocking_file_io_metric_sample(sample: BlockingFileIoMetricSample) {
+    if let Ok(mut samples) = blocking_file_io_metric_samples().lock() {
+        samples.push(sample);
+    }
+}
+
+/// Run a synchronous file I/O closure on the blocking worker pool.
+///
+/// The async Tauri runtime workers must not run `std::fs::` work directly,
+/// because that work can park the worker and stall streaming event emit
+/// (`app.emit("app-server-event", ...)`) and watcher fan-out during
+/// real-time engine sessions.
+///
+/// `JoinError` is converted into a stable `String` error so a panic inside
+/// the file closure does not poison the async runtime. The error string
+/// contains the operation name plus the substring `file I/O task failed:`
+/// so frontend handlers may match on it.
+pub(crate) async fn run_blocking_file_io<T, F>(
+    operation_name: &'static str,
+    file_io: F,
+) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+{
+    let started_at = Instant::now();
+    let join_result = tokio::task::spawn_blocking(file_io).await;
+    record_blocking_file_io_metric_sample(BlockingFileIoMetricSample {
+        operation_name,
+        wall_time_ms: started_at.elapsed().as_secs_f64() * 1000.0,
+        blocking_pool_called: true,
+    });
+    join_result.map_err(|error| format!("{operation_name} file I/O task failed: {error}"))?
+}
+
+#[cfg(test)]
+pub(crate) fn reset_blocking_file_io_metric_samples_for_tests() {
+    if let Ok(mut samples) = blocking_file_io_metric_samples().lock() {
+        samples.clear();
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn blocking_file_io_metric_samples_for_tests() -> Vec<BlockingFileIoMetricSample> {
+    blocking_file_io_metric_samples()
+        .lock()
+        .map(|samples| samples.clone())
+        .unwrap_or_default()
+}
+
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -1473,10 +1540,12 @@ pub(crate) async fn read_workspace_file_core<F, T>(
     read_file: F,
 ) -> Result<T, String>
 where
-    F: Fn(&PathBuf, &str) -> Result<T, String>,
+    F: Fn(&PathBuf, &str) -> Result<T, String> + Send + 'static + Sync,
+    T: Send + 'static,
 {
     let root = resolve_workspace_root(workspaces, workspace_id).await?;
-    read_file(&root, path)
+    let path = path.to_string();
+    run_blocking_file_io("read_workspace_file", move || read_file(&root, &path)).await
 }
 
 pub(crate) async fn write_workspace_file_core<F>(
@@ -1487,10 +1556,15 @@ pub(crate) async fn write_workspace_file_core<F>(
     write_file: F,
 ) -> Result<(), String>
 where
-    F: Fn(&PathBuf, &str, &str) -> Result<(), String>,
+    F: Fn(&PathBuf, &str, &str) -> Result<(), String> + Send + 'static + Sync,
 {
     let root = resolve_workspace_root(workspaces, workspace_id).await?;
-    write_file(&root, path, content)
+    let path = path.to_string();
+    let content = content.to_string();
+    run_blocking_file_io("write_workspace_file", move || {
+        write_file(&root, &path, &content)
+    })
+    .await
 }
 
 pub(crate) async fn create_workspace_directory_core<F>(
@@ -1500,10 +1574,14 @@ pub(crate) async fn create_workspace_directory_core<F>(
     create_directory: F,
 ) -> Result<(), String>
 where
-    F: Fn(&PathBuf, &str) -> Result<(), String>,
+    F: Fn(&PathBuf, &str) -> Result<(), String> + Send + 'static + Sync,
 {
     let root = resolve_workspace_root(workspaces, workspace_id).await?;
-    create_directory(&root, path)
+    let path = path.to_string();
+    run_blocking_file_io("create_workspace_directory", move || {
+        create_directory(&root, &path)
+    })
+    .await
 }
 
 pub(crate) async fn trash_workspace_item_core<F>(
@@ -1513,10 +1591,11 @@ pub(crate) async fn trash_workspace_item_core<F>(
     trash_item: F,
 ) -> Result<(), String>
 where
-    F: Fn(&PathBuf, &str) -> Result<(), String>,
+    F: Fn(&PathBuf, &str) -> Result<(), String> + Send + 'static + Sync,
 {
     let root = resolve_workspace_root(workspaces, workspace_id).await?;
-    trash_item(&root, path)
+    let path = path.to_string();
+    run_blocking_file_io("trash_workspace_item", move || trash_item(&root, &path)).await
 }
 
 pub(crate) async fn copy_workspace_item_core<F>(
@@ -1526,10 +1605,11 @@ pub(crate) async fn copy_workspace_item_core<F>(
     copy_item: F,
 ) -> Result<String, String>
 where
-    F: Fn(&PathBuf, &str) -> Result<String, String>,
+    F: Fn(&PathBuf, &str) -> Result<String, String> + Send + 'static + Sync,
 {
     let root = resolve_workspace_root(workspaces, workspace_id).await?;
-    copy_item(&root, path)
+    let path = path.to_string();
+    run_blocking_file_io("copy_workspace_item", move || copy_item(&root, &path)).await
 }
 
 pub(crate) async fn duplicate_workspace_item_core<F, T>(
@@ -1539,10 +1619,15 @@ pub(crate) async fn duplicate_workspace_item_core<F, T>(
     duplicate_item: F,
 ) -> Result<T, String>
 where
-    F: Fn(&PathBuf, &str) -> Result<T, String>,
+    F: Fn(&PathBuf, &str) -> Result<T, String> + Send + 'static + Sync,
+    T: Send + 'static,
 {
     let root = resolve_workspace_root(workspaces, workspace_id).await?;
-    duplicate_item(&root, path)
+    let path = path.to_string();
+    run_blocking_file_io("duplicate_workspace_item", move || {
+        duplicate_item(&root, &path)
+    })
+    .await
 }
 
 pub(crate) async fn paste_workspace_item_core<F, T>(
@@ -1553,10 +1638,16 @@ pub(crate) async fn paste_workspace_item_core<F, T>(
     paste_item: F,
 ) -> Result<T, String>
 where
-    F: Fn(&PathBuf, &str, &str) -> Result<T, String>,
+    F: Fn(&PathBuf, &str, &str) -> Result<T, String> + Send + 'static + Sync,
+    T: Send + 'static,
 {
     let root = resolve_workspace_root(workspaces, workspace_id).await?;
-    paste_item(&root, source_path, target_directory)
+    let source_path = source_path.to_string();
+    let target_directory = target_directory.to_string();
+    run_blocking_file_io("paste_workspace_item", move || {
+        paste_item(&root, &source_path, &target_directory)
+    })
+    .await
 }
 
 pub(crate) async fn rename_workspace_item_core<F, T>(
@@ -1567,10 +1658,16 @@ pub(crate) async fn rename_workspace_item_core<F, T>(
     rename_item: F,
 ) -> Result<T, String>
 where
-    F: Fn(&PathBuf, &str, &str) -> Result<T, String>,
+    F: Fn(&PathBuf, &str, &str) -> Result<T, String> + Send + 'static + Sync,
+    T: Send + 'static,
 {
     let root = resolve_workspace_root(workspaces, workspace_id).await?;
-    rename_item(&root, path, new_name)
+    let path = path.to_string();
+    let new_name = new_name.to_string();
+    run_blocking_file_io("rename_workspace_item", move || {
+        rename_item(&root, &path, &new_name)
+    })
+    .await
 }
 
 pub(crate) async fn paste_external_workspace_items_core<F, T>(
@@ -1581,10 +1678,16 @@ pub(crate) async fn paste_external_workspace_items_core<F, T>(
     paste_items: F,
 ) -> Result<T, String>
 where
-    F: Fn(&PathBuf, &[String], &str) -> Result<T, String>,
+    F: Fn(&PathBuf, &[String], &str) -> Result<T, String> + Send + 'static + Sync,
+    T: Send + 'static,
 {
     let root = resolve_workspace_root(workspaces, workspace_id).await?;
-    paste_items(&root, source_paths, target_directory)
+    let source_paths = source_paths.to_vec();
+    let target_directory = target_directory.to_string();
+    run_blocking_file_io("paste_external_workspace_items", move || {
+        paste_items(&root, &source_paths, &target_directory)
+    })
+    .await
 }
 
 fn sort_workspaces(workspaces: &mut [WorkspaceInfo]) {
@@ -1601,10 +1704,11 @@ fn sort_workspaces(workspaces: &mut [WorkspaceInfo]) {
 #[cfg(test)]
 mod tests {
     use super::{
-        connect_workspace_core, list_workspaces_core, normalize_visible_thread_root_count,
-        normalize_workspace_display_name, resolve_base_ref_to_commit,
-        validate_local_branch_name_for_worktree, workspace_name_from_path,
-        workspace_requires_persistent_session,
+        blocking_file_io_metric_samples_for_tests, connect_workspace_core, list_workspaces_core,
+        normalize_visible_thread_root_count, normalize_workspace_display_name,
+        paste_external_workspace_items_core, reset_blocking_file_io_metric_samples_for_tests,
+        resolve_base_ref_to_commit, run_blocking_file_io, validate_local_branch_name_for_worktree,
+        workspace_name_from_path, workspace_requires_persistent_session,
     };
     use crate::types::{AppSettings, WorkspaceEntry, WorkspaceKind, WorkspaceSettings};
     use git2::{Repository, Signature};
@@ -1782,6 +1886,78 @@ mod tests {
             result.expect_err("spawn failure should surface"),
             "spawn failed"
         );
+    }
+
+    #[tokio::test]
+    async fn paste_external_workspace_items_core_runs_closure_on_blocking_pool() {
+        reset_blocking_file_io_metric_samples_for_tests();
+        let workspace_id = "ws-paste-external";
+        let workspace_root =
+            std::env::temp_dir().join(format!("mossx-paste-external-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&workspace_root).expect("create workspace root");
+        let mut entry = workspace_entry(workspace_id, Some("codex"));
+        entry.path = workspace_root.to_string_lossy().to_string();
+        let mut workspace_map = HashMap::new();
+        workspace_map.insert(workspace_id.to_string(), entry);
+        let workspaces = Mutex::new(workspace_map);
+
+        let error = paste_external_workspace_items_core(
+            &workspaces,
+            workspace_id,
+            &["/tmp/source.txt".to_string()],
+            "target",
+            |_root, _sources, _target| -> Result<Vec<String>, String> {
+                panic!("paste external panic probe");
+            },
+        )
+        .await
+        .expect_err("panic inside blocking closure should become JoinError string");
+
+        assert!(error.contains("paste_external_workspace_items file I/O task failed:"));
+        assert!(blocking_file_io_metric_samples_for_tests()
+            .iter()
+            .any(
+                |sample| sample.operation_name == "paste_external_workspace_items"
+                    && sample.blocking_pool_called
+                    && sample.wall_time_ms >= 0.0
+            ));
+        let _ = std::fs::remove_dir_all(&workspace_root);
+    }
+
+    #[tokio::test]
+    async fn run_blocking_file_io_records_wall_time_for_business_result() {
+        reset_blocking_file_io_metric_samples_for_tests();
+
+        let result: Result<i32, String> =
+            run_blocking_file_io("metric_probe_success", || Ok::<_, String>(42)).await;
+
+        assert_eq!(result.expect("blocking file I/O result"), 42);
+        let samples = blocking_file_io_metric_samples_for_tests();
+        let sample = samples
+            .iter()
+            .find(|sample| sample.operation_name == "metric_probe_success")
+            .expect("metric sample should be recorded");
+        assert!(sample.blocking_pool_called);
+        assert!(sample.wall_time_ms >= 0.0);
+    }
+
+    #[tokio::test]
+    async fn run_blocking_file_io_records_wall_time_for_business_error() {
+        reset_blocking_file_io_metric_samples_for_tests();
+
+        let error =
+            run_blocking_file_io::<(), _>("metric_probe_error", || Err("read failed".to_string()))
+                .await
+                .expect_err("business error should surface");
+
+        assert_eq!(error, "read failed");
+        let samples = blocking_file_io_metric_samples_for_tests();
+        let sample = samples
+            .iter()
+            .find(|sample| sample.operation_name == "metric_probe_error")
+            .expect("metric sample should be recorded");
+        assert!(sample.blocking_pool_called);
+        assert!(sample.wall_time_ms >= 0.0);
     }
 
     #[tokio::test]

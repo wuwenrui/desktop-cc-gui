@@ -225,6 +225,7 @@ vi.mock("../../browser-agent/components/BrowserDock", () => ({
 - Summary/home tests SHOULD assert their own rendered contract only, not incidental webview/session bootstrap effects.
 - Tests MUST NOT leave React `act(...)` warnings or stderr payloads for `heavy-test-noise` to collect.
 - Runtime-heavy child behavior MUST be covered in its own focused test file, where async effects are explicitly awaited or mocked.
+- React 19 Suspense / `React.lazy` teardown MUST drain both microtasks and host-task scheduled work inside `act(...)`; do not assume repeated `Promise.resolve()` alone covers `pingSuspendedRoot`.
 - Do not solve unrelated `act(...)` warnings by globally silencing `console.error`; that hides regressions.
 
 ### 4. Validation & Error Matrix
@@ -234,6 +235,7 @@ vi.mock("../../browser-agent/components/BrowserDock", () => ({
 | WorkspaceHome summary test | mock `BrowserDock` if browser behavior is not under test | real mount triggers BrowserDock async state updates |
 | BrowserDock behavior test | test BrowserDock directly with awaited effects/mocked services | rely on WorkspaceHome tests for BrowserDock coverage |
 | heavy-test-noise gate | no `act` / stderr violations | passing assertions but noisy CI failure |
+| Suspense lazy boundary teardown | drain microtask + host task inside `act(...)` | only add more `Promise.resolve()` rounds |
 | unrelated child warning | isolate or await the actual child effect | blanket `console.error = vi.fn()` |
 
 ### 5. Good / Base / Bad Cases
@@ -266,3 +268,68 @@ vi.mock("../../browser-agent/components/BrowserDock", () => ({
 
 render(<WorkspaceHome workspace={workspace} currentBranch={branch} />);
 ```
+
+## CodeMirror State-Coupled Extensions 不可跨越 Lazy Boundary
+
+### Scope / 触发
+
+本规则约束 `src/features/files/**`、任何把 CodeMirror / `@uiw/react-codemirror` / `@codemirror/*` 用作 **state-coupled extension** 的编辑面（当前唯一现实路径是 file panel，后续 Codex 桌面编辑器 / composer 内嵌 code block 同样适用）。
+
+**state-coupled extension** 指：被注入 `extensions` prop 后会注册 `StateField` / `StateEffect`，并且其它同步 API（keymap run、命令调用、panel 状态读取）依赖该 field 同步存在的 extension。具体包含但不限于：
+
+- `@codemirror/search` 的 `search({ top })`、`searchKeymap`、`openSearchPanel` / `closeSearchPanel` / `searchPanelOpen`
+- `@codemirror/autocomplete` 的 `autocompletion({})`、`startCompletion`
+- `@codemirror/lint` 的 `linter(...)` / `lintGutter`
+- `@codemirror/view` 内的 `keymap.of([...])`（被多 panel 共享的 keymap）
+- 任何自定义 `StateField` 配套 API
+
+### Hard Rule / 红线
+
+- 不得把上述 state-coupled extension 拆到 `React.lazy` / 动态 `import()` 边界**之后**。
+- 不得用 `ensureXxxLoaded` 这类"首次 dynamic import，导入未完成时返回 null"的 wrapper 替换静态 `import`。
+- 不得把 "Mod-F / Cmd-F 这类同步 keymap run" 改成 `async (view) => { await import(...) }`——同步 keymap 路径必须保留同步可用。
+- 允许把 CodeMirror 整体（`@uiw/react-codemirror` + `@codemirror/view`）按"edit mode 激活"或"打开文件时才挂载"的粒度拆到 lazy 边界；该粒度下所有 state-coupled extension 跟 shell 一起 chunked 化是合规的。
+
+### 理由 / Why
+
+`@codemirror/search` 的 `search({ top })` 会在 `EditorState` 中注册 `searchState` field，并把 search query、replace state、当前 match index 全部存在该 field 上。Mod-F / Cmd-F 的同步 keymap run、toolbar 上"下一个/上一个/替换"按钮、IME 复合输入、selection-driven 搜索都是基于该 field 的 transaction。
+
+一旦拆到 `React.lazy` 之后：
+
+- 第一次 dynamic import 还没 resolve 时，editor view 内 `openSearchPanel` 因 `searchState` field 不存在而抛错（"state.field is not a function"）或直接 noop，连续 Cmd+F 出现"开了但跳不回原文位置"、"替换不同步"、"光标错位"等 regression。
+- 即使缓存 resolve 后再 `setExtension`，React 的 Suspense + re-render 会导致 lazy chunk 内构造的 extension 引用和 shell 持有的 `extensions` prop 数组对不上，editor view dispatch 时引用 mismatch，search query 与 cursor selection 解耦。
+- `replace` / `replace-all` 是 transactional effect 链，不是 panel 开关；dynamic 注入时无法维持"搜索-高亮-替换"的 contiguous navigation 语义。
+
+### Valid Pattern
+
+```typescript
+// 静态 import 在 file panel 启动路径上是 OK 的
+import { search } from "@codemirror/search";
+
+// 在 editor 装配时同步注入
+const editorExtensions = useMemo(
+  () => [saveKeymapExt, editorNavigationKeymapExt, search({ top: true })],
+  [],
+);
+```
+
+### Invalid Pattern (Reverted 2026-06-11)
+
+```typescript
+// ❌ 不要这样：把 search 拆到 React.lazy 之后的 module
+import("@codemirror/search").then(({ search }) => setExtension(search({ top: true })));
+// 同步 keymap run 拿不到 commands；连续 Cmd+F 断流
+```
+
+### 验证 / 验证口径
+
+任何"为压缩 startup bundle 而拆出 `@codemirror/*`"的 change 落地前必须：
+
+1. 在 proposal.md 显式列明该模块是不是 state-coupled extension（对照本节列表）。
+2. 若是 state-coupled，**禁止拆出**，并在 tasks.md 把对应实施项标 `- [ ] Withdrawn` 并写明理由。
+3. 用真人在 Tauri 桌面里连续按 Cmd+F 验证：开启 → 输入查询 → 跳下一个 → 替换 → 替换全部，行为必须与 baseline 完全一致。
+4. 跑 `npx vitest run src/features/files/components/FileViewPanel.typing-latency.test.tsx` 之外，**额外**跑 `FileViewPanel.find-in-file.test.tsx`（如不存在，新建；至少覆盖：开启 search panel、连续 Cmd+F 切换 toggle、search query 持久化、replace 单次、replace-all 多次）。
+
+### 历史回归
+
+- 2026-06-11 `lazy-file-preview-dependencies` change 中曾尝试将 `@codemirror/search` 拆到 `FileCodeMirrorEditor` lazy 边界后，CI / 单元测试通过，但 Tauri 桌面中 Cmd+F 出现"开了但跳不回原文位置、replace 不同步"等 regression。该 change 已撤回并把 `@codemirror/search` 留在 file panel 启动路径上。详见 `openspec/changes/lazy-file-preview-dependencies/proposal.md` 的 *Withdrawn Optimization* 章节和 `openspec/docs/lazy-state-extension-regression-2026-06-11.md`。

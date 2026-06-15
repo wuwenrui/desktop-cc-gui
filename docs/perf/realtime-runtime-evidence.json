@@ -1,0 +1,44 @@
+{
+  "schemaVersion": "1.0",
+  "generatedAt": "2026-06-13T05:50:20.808Z",
+  "source": "realtime-runtime",
+  "metrics": [
+    {
+      "scenario": "S-RS-VL",
+      "metric": "visibleTextLagP95",
+      "value": 35,
+      "unit": "ms",
+      "evidenceClass": "measured",
+      "notes": "measured runtime turn trace from .artifacts/realtime-runtime-diagnostics.json"
+    },
+    {
+      "scenario": "S-RS-RA",
+      "metric": "reducerAmplificationMedian",
+      "value": 3,
+      "unit": "ratio",
+      "evidenceClass": "measured",
+      "notes": "measured runtime turn trace from .artifacts/realtime-runtime-diagnostics.json"
+    },
+    {
+      "scenario": "S-RS-FD",
+      "metric": "batchFlushDurationP95",
+      "value": 14,
+      "unit": "ms",
+      "evidenceClass": "measured",
+      "notes": "measured runtime turn trace from .artifacts/realtime-runtime-diagnostics.json"
+    },
+    {
+      "scenario": "S-RS-TS",
+      "metric": "terminalSettlementP95",
+      "value": 70,
+      "unit": "ms",
+      "evidenceClass": "measured",
+      "notes": "measured runtime turn trace from .artifacts/realtime-runtime-diagnostics.json"
+    }
+  ],
+  "notes": [
+    "input=.artifacts/realtime-runtime-diagnostics.json",
+    "measuredSummaryCount=2",
+    "contentSafety=ids, durations, counters, and dimensions only; no prompt, assistant text, tool output, or file content"
+  ]
+}

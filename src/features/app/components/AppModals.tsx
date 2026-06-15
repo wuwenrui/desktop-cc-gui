@@ -1,5 +1,6 @@
-import { lazy, memo, Suspense } from "react";
+import { lazy, memo, Suspense, useEffect } from "react";
 import { LoadingProgressDialog } from "../../../components/ui/LoadingProgressDialog";
+import { loadLoadingProgressStyles } from "../../../styles/featureStyleLoaders";
 import { useRenameThreadPrompt } from "../../threads/hooks/useRenameThreadPrompt";
 import { useClonePrompt } from "../../workspaces/hooks/useClonePrompt";
 import { useWorktreePrompt } from "../../workspaces/hooks/useWorktreePrompt";
@@ -84,6 +85,11 @@ export const AppModals = memo(function AppModals({
   onClonePromptCancel,
   onClonePromptConfirm,
 }: AppModalsProps) {
+  useEffect(() => {
+    if (loadingProgressDialog) {
+      void loadLoadingProgressStyles();
+    }
+  }, [loadingProgressDialog]);
   return (
     <>
       {loadingProgressDialog && (

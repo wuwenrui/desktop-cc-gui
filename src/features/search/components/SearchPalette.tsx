@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import projectIconUrl from "../../../../icon.png";
 import { isComposingEvent } from "../../../utils/keys";
+import { loadSearchPaletteStyles } from "../../../styles/featureStyleLoaders";
+import { useFeatureStylesReady } from "../../../styles/useFeatureStylesReady";
 import type { SearchContentFilter, SearchResult, SearchScope } from "../types";
 
 const INVISIBLE_QUERY_CHARS_REGEX = /[\u200B-\u200D\uFEFF]/g;
@@ -41,6 +43,7 @@ export function SearchPalette({
   onContentFilterToggle,
   onClose,
 }: SearchPaletteProps) {
+  const stylesReady = useFeatureStylesReady(loadSearchPaletteStyles, isOpen);
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const isComposingRef = useRef(false);
@@ -131,6 +134,9 @@ export function SearchPalette({
   }, [isOpen, onClose, onMoveSelection, onSelect, selectedIndex, visibleResults]);
 
   if (!isOpen) {
+    return null;
+  }
+  if (!stylesReady) {
     return null;
   }
 

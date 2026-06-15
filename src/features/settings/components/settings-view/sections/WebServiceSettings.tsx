@@ -15,6 +15,7 @@ type WebServiceSettingsProps = {
   t: (key: string) => string;
   appSettings: AppSettings;
   onUpdateAppSettings: (next: AppSettings) => Promise<void>;
+  generateFixedToken?: () => string;
 };
 
 type WebServiceAction =
@@ -55,9 +56,13 @@ function normalizeFixedWebServiceToken(
   return normalized || null;
 }
 
-function generateFixedWebServiceToken(): string {
+export function generateFixedWebServiceToken(
+  getRandomValues: Crypto["getRandomValues"] = globalThis.crypto.getRandomValues.bind(
+    globalThis.crypto,
+  ),
+): string {
   const bytes = new Uint8Array(24);
-  globalThis.crypto.getRandomValues(bytes);
+  getRandomValues(bytes);
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(
     "",
   );
@@ -98,6 +103,7 @@ export function WebServiceSettings({
   t,
   appSettings,
   onUpdateAppSettings,
+  generateFixedToken = generateFixedWebServiceToken,
 }: WebServiceSettingsProps) {
   const [portDraft, setPortDraft] = useState(
     String(appSettings.webServicePort ?? 3080),
@@ -254,10 +260,10 @@ export function WebServiceSettings({
   }, [appSettings, onUpdateAppSettings]);
 
   const generateAndSaveFixedToken = useCallback(async () => {
-    const nextToken = generateFixedWebServiceToken();
     setAction("generate-token");
     setError(null);
     try {
+      const nextToken = generateFixedToken();
       await onUpdateAppSettings({
         ...appSettings,
         webServiceToken: nextToken,
@@ -270,7 +276,7 @@ export function WebServiceSettings({
     } finally {
       setAction(null);
     }
-  }, [appSettings, onUpdateAppSettings]);
+  }, [appSettings, generateFixedToken, onUpdateAppSettings]);
 
   const handleStart = useCallback(async () => {
     if (parsedPort == null) {

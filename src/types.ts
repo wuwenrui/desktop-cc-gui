@@ -1413,6 +1413,17 @@ export type GitLogEntry = {
   timestamp: number;
 };
 
+export type BridgePayloadBudgetMetadata = {
+  command: string;
+  surfaceId: string;
+  itemCount: number;
+  estimatedBytes: number;
+  partial: boolean;
+  truncated: boolean;
+  cacheState: "hit" | "miss" | "invalidated" | "unsupported";
+  evidenceClass: "measured" | "proxy" | "unsupported" | string;
+};
+
 export type GitLogResponse = {
   total: number;
   entries: GitLogEntry[];
@@ -1421,6 +1432,7 @@ export type GitLogResponse = {
   aheadEntries: GitLogEntry[];
   behindEntries: GitLogEntry[];
   upstream: string | null;
+  payloadBudget?: BridgePayloadBudgetMetadata | null;
 };
 
 export type GitHistoryCommit = {

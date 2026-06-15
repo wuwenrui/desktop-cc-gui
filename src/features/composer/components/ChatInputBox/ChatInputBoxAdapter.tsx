@@ -64,6 +64,7 @@ import {
   getPromptHeatLevel,
   getPromptUsageEntry,
 } from '../../../prompts/promptUsage';
+import { appendComposerRenderBudgetDiagnostic } from '../../../../services/rendererDiagnostics';
 
 // Re-export the handle type for Composer to use
 export type { ChatInputBoxHandle };
@@ -1043,6 +1044,8 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
     } = props;
     const { t } = useTranslation();
     const chatInputRef = useRef<ChatInputBoxHandle>(null);
+    const renderCountRef = useRef(0);
+    renderCountRef.current += 1;
     const [localAlwaysThinkingEnabled, setLocalAlwaysThinkingEnabled] =
       useState(false);
     const hasResolvedAlwaysThinkingRef = useRef(alwaysThinkingEnabled !== undefined);
@@ -1130,6 +1133,19 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
         cancelled = true;
       };
     }, [alwaysThinkingEnabled, isCodexEngine, onResolvedAlwaysThinkingChange]);
+
+    useEffect(() => {
+      appendComposerRenderBudgetDiagnostic({
+        surfaceId: 'chat-input-adapter',
+        evidenceKind: 'proxy',
+        workspaceId,
+        renderCount: renderCountRef.current,
+        isProcessing: Boolean(isProcessing),
+        disabled: Boolean(disabled),
+        streamActivityPhase,
+        textLength: text.length,
+      });
+    });
 
     // Handle input from ChatInputBox -> Composer text state
     const handleInput = useCallback((content: string) => {

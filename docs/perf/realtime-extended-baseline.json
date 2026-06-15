@@ -1,6 +1,6 @@
 {
   "schemaVersion": "1.0",
-  "generatedAt": "2026-06-04T15:34:22.796Z",
+  "generatedAt": "2026-06-12T14:39:07.228Z",
   "source": "realtime-extended",
   "metrics": [
     {
@@ -25,9 +25,37 @@
     {
       "scenario": "S-RS-PE",
       "metric": "assemblerLatency",
-      "value": 5.73,
+      "value": 4.77,
       "unit": "ms",
       "notes": "replay reducer-path proxy latency"
+    },
+    {
+      "scenario": "S-RS-VL",
+      "metric": "visibleTextLagP95",
+      "value": 24,
+      "unit": "ms",
+      "notes": "first engine delta ingress -> first visible text growth (per-turn P95, turn-trace correlation gate)"
+    },
+    {
+      "scenario": "S-RS-RA",
+      "metric": "reducerAmplificationMedian",
+      "value": 4,
+      "unit": "ratio",
+      "notes": "reducer commit count / delta count (median across completed turns)"
+    },
+    {
+      "scenario": "S-RS-FD",
+      "metric": "batchFlushDurationP95",
+      "value": 13.33,
+      "unit": "ms",
+      "notes": "batch flush duration P95 across completed turns"
+    },
+    {
+      "scenario": "S-RS-TS",
+      "metric": "terminalSettlementP95",
+      "value": 60,
+      "unit": "ms",
+      "notes": "last reducer commit -> terminal settlement P95 across completed turns"
     }
   ],
   "residualRisks": []

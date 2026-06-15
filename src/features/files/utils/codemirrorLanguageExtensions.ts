@@ -1,58 +1,93 @@
 import { type Extension } from "@codemirror/state";
-import { StreamLanguage } from "@codemirror/language";
-import { javascript } from "@codemirror/lang-javascript";
-import { json } from "@codemirror/lang-json";
-import { html } from "@codemirror/lang-html";
-import { css } from "@codemirror/lang-css";
-import { markdown as cmMarkdown } from "@codemirror/lang-markdown";
-import { python } from "@codemirror/lang-python";
-import { rust } from "@codemirror/lang-rust";
-import { xml } from "@codemirror/lang-xml";
-import { yaml } from "@codemirror/lang-yaml";
-import { java } from "@codemirror/lang-java";
-import { properties as propertiesMode } from "@codemirror/legacy-modes/mode/properties";
-import { groovy as groovyMode } from "@codemirror/legacy-modes/mode/groovy";
-import { sql as sqlMode } from "@codemirror/legacy-modes/mode/sql";
-import { toml as tomlMode } from "@codemirror/legacy-modes/mode/toml";
-import { shell as shellMode } from "@codemirror/legacy-modes/mode/shell";
-import { kotlin as kotlinMode } from "@codemirror/legacy-modes/mode/clike";
+import type { StreamParser } from "@codemirror/language";
 import {
   resolveEditorLanguageFromPath,
   type EditorLanguageId,
 } from "../../../utils/fileLanguageRegistry";
 
-const EDITOR_EXTENSIONS_BY_LANGUAGE: Record<EditorLanguageId, Extension[]> = {
-  javascript: [javascript()],
-  "javascript-jsx": [javascript({ jsx: true })],
-  typescript: [javascript({ typescript: true })],
-  "typescript-jsx": [javascript({ jsx: true, typescript: true })],
-  json: [json()],
-  html: [html()],
-  css: [css()],
-  markdown: [cmMarkdown()],
-  python: [python()],
-  rust: [rust()],
-  xml: [xml()],
-  yaml: [yaml()],
-  java: [java()],
-  groovy: [StreamLanguage.define(groovyMode)],
-  kotlin: [StreamLanguage.define(kotlinMode)],
-  properties: [StreamLanguage.define(propertiesMode)],
-  sql: [StreamLanguage.define(sqlMode({}))],
-  toml: [StreamLanguage.define(tomlMode)],
-  shell: [StreamLanguage.define(shellMode)],
-};
+const editorExtensionCache = new Map<EditorLanguageId, Promise<Extension[]>>();
 
-export function codeMirrorExtensionsForEditorLanguage(
-  editorLanguage: EditorLanguageId | null | undefined,
-): Extension[] {
-  if (!editorLanguage) {
-    return [];
-  }
-  return EDITOR_EXTENSIONS_BY_LANGUAGE[editorLanguage] ?? [];
+async function loadStreamLanguageExtension(
+  modeLoader: () => Promise<unknown>,
+  modeName: string,
+  modeFactory?: (mode: unknown) => unknown,
+): Promise<Extension[]> {
+  const [{ StreamLanguage }, modeModule] = await Promise.all([
+    import("@codemirror/language"),
+    modeLoader(),
+  ]);
+  const mode = (modeModule as Record<string, unknown>)[modeName];
+  return [StreamLanguage.define((modeFactory ? modeFactory(mode) : mode) as StreamParser<unknown>)];
 }
 
-export function codeMirrorExtensionsForPath(filePath: string): Extension[] {
+function loadEditorLanguageExtensions(editorLanguage: EditorLanguageId): Promise<Extension[]> {
+  switch (editorLanguage) {
+    case "javascript":
+      return import("@codemirror/lang-javascript").then(({ javascript }) => [javascript()]);
+    case "javascript-jsx":
+      return import("@codemirror/lang-javascript").then(({ javascript }) => [javascript({ jsx: true })]);
+    case "typescript":
+      return import("@codemirror/lang-javascript").then(({ javascript }) => [javascript({ typescript: true })]);
+    case "typescript-jsx":
+      return import("@codemirror/lang-javascript").then(({ javascript }) => [javascript({ jsx: true, typescript: true })]);
+    case "json":
+      return import("@codemirror/lang-json").then(({ json }) => [json()]);
+    case "html":
+      return import("@codemirror/lang-html").then(({ html }) => [html()]);
+    case "css":
+      return import("@codemirror/lang-css").then(({ css }) => [css()]);
+    case "markdown":
+      return import("@codemirror/lang-markdown").then(({ markdown }) => [markdown()]);
+    case "python":
+      return import("@codemirror/lang-python").then(({ python }) => [python()]);
+    case "rust":
+      return import("@codemirror/lang-rust").then(({ rust }) => [rust()]);
+    case "xml":
+      return import("@codemirror/lang-xml").then(({ xml }) => [xml()]);
+    case "yaml":
+      return import("@codemirror/lang-yaml").then(({ yaml }) => [yaml()]);
+    case "java":
+      return import("@codemirror/lang-java").then(({ java }) => [java()]);
+    case "groovy":
+      return loadStreamLanguageExtension(() => import("@codemirror/legacy-modes/mode/groovy"), "groovy");
+    case "kotlin":
+      return loadStreamLanguageExtension(() => import("@codemirror/legacy-modes/mode/clike"), "kotlin");
+    case "properties":
+      return loadStreamLanguageExtension(() => import("@codemirror/legacy-modes/mode/properties"), "properties");
+    case "sql":
+      return loadStreamLanguageExtension(
+        () => import("@codemirror/legacy-modes/mode/sql"),
+        "sql",
+        (mode) => (mode as (config: Record<string, never>) => unknown)({}),
+      );
+    case "toml":
+      return loadStreamLanguageExtension(() => import("@codemirror/legacy-modes/mode/toml"), "toml");
+    case "shell":
+      return loadStreamLanguageExtension(() => import("@codemirror/legacy-modes/mode/shell"), "shell");
+    default:
+      return Promise.resolve([]);
+  }
+}
+
+export function loadCodeMirrorExtensionsForEditorLanguage(
+  editorLanguage: EditorLanguageId | null | undefined,
+): Promise<Extension[]> {
+  if (!editorLanguage) {
+    return Promise.resolve([]);
+  }
+  const cached = editorExtensionCache.get(editorLanguage);
+  if (cached) {
+    return cached;
+  }
+  const loaded = loadEditorLanguageExtensions(editorLanguage).catch((error) => {
+    editorExtensionCache.delete(editorLanguage);
+    throw error;
+  });
+  editorExtensionCache.set(editorLanguage, loaded);
+  return loaded;
+}
+
+export function loadCodeMirrorExtensionsForPath(filePath: string): Promise<Extension[]> {
   const editorLanguage = resolveEditorLanguageFromPath(filePath);
-  return codeMirrorExtensionsForEditorLanguage(editorLanguage);
+  return loadCodeMirrorExtensionsForEditorLanguage(editorLanguage);
 }

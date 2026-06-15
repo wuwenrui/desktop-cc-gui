@@ -8,7 +8,10 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppSettings } from "@/types";
-import { WebServiceSettings } from "./WebServiceSettings";
+import {
+  generateFixedWebServiceToken,
+  WebServiceSettings,
+} from "./WebServiceSettings";
 
 const getWebServerStatusMock = vi.fn();
 const startWebServerMock = vi.fn();
@@ -37,19 +40,8 @@ function identityTranslator(key: string): string {
 }
 
 describe("WebServiceSettings", () => {
-  const originalCrypto = globalThis.crypto;
-
   beforeEach(() => {
     vi.resetAllMocks();
-    Object.defineProperty(globalThis, "crypto", {
-      configurable: true,
-      value: {
-        getRandomValues: vi.fn((bytes: Uint8Array) => {
-          bytes.fill(10);
-          return bytes;
-        }),
-      },
-    });
     getDaemonStatusMock.mockResolvedValue({
       running: false,
       host: "127.0.0.1:4732",
@@ -67,11 +59,18 @@ describe("WebServiceSettings", () => {
     });
   });
   afterEach(() => {
-    Object.defineProperty(globalThis, "crypto", {
-      configurable: true,
-      value: originalCrypto,
-    });
     cleanup();
+  });
+
+  it("generates fixed token bytes as lowercase hex", () => {
+    const getRandomValues = vi.fn((bytes: Uint8Array) => {
+      bytes.fill(10);
+      return bytes;
+    });
+
+    expect(generateFixedWebServiceToken(getRandomValues)).toBe("0a".repeat(24));
+    expect(getRandomValues).toHaveBeenCalledTimes(1);
+    expect(getRandomValues.mock.calls[0]?.[0]).toHaveLength(24);
   });
 
   it("renders running status and masked token", async () => {
@@ -213,7 +212,7 @@ describe("WebServiceSettings", () => {
     });
   });
 
-  it("generates fixed token with Web Crypto and persists it", async () => {
+  it("generates fixed token and persists it", async () => {
     getWebServerStatusMock.mockResolvedValue({
       running: false,
       rpcEndpoint: "127.0.0.1:4732",
@@ -223,22 +222,37 @@ describe("WebServiceSettings", () => {
       lastError: null,
     });
     const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
+    const generateFixedToken = vi.fn(() => "0a".repeat(24));
 
     render(
       <WebServiceSettings
         t={identityTranslator}
         appSettings={baseSettings}
         onUpdateAppSettings={onUpdateAppSettings}
+        generateFixedToken={generateFixedToken}
       />,
     );
 
-    const generateButton = await screen.findByRole("button", {
+    await screen.findByRole("button", {
       name: "settings.webServiceGenerateToken",
     });
-    fireEvent.click(generateButton);
+    await waitFor(() => {
+      expect(
+        (
+          screen.getByRole("button", {
+            name: "settings.webServiceGenerateToken",
+          }) as HTMLButtonElement
+        ).disabled,
+      ).toBe(false);
+    });
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "settings.webServiceGenerateToken",
+      }),
+    );
 
     await waitFor(() => {
-      expect(globalThis.crypto.getRandomValues).toHaveBeenCalledTimes(1);
+      expect(generateFixedToken).toHaveBeenCalledTimes(1);
       expect(onUpdateAppSettings).toHaveBeenCalledWith(
         expect.objectContaining({
           webServiceToken: "0a".repeat(24),

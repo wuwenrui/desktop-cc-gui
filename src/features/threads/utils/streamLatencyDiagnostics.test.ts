@@ -40,6 +40,10 @@ import {
   resolveActiveThreadStreamMitigation,
   shouldNotifyThreadStreamLatencySnapshotListeners,
 } from "./streamLatencyDiagnostics";
+import {
+  getTurnTraceSummary,
+  type TurnTraceSummary,
+} from "./turnTraceCorrelation";
 import type { ThreadStreamLatencySnapshot } from "./streamLatencyDiagnostics";
 
 describe("streamLatencyDiagnostics", () => {
@@ -57,6 +61,36 @@ describe("streamLatencyDiagnostics", () => {
     resetThreadStreamLatencyDiagnosticsForTests();
     vi.unstubAllGlobals();
     vi.useRealTimers();
+  });
+
+  it("records runtime-process-started on the realtime turn trace path", async () => {
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: (key: string) =>
+          key === "ccgui.debug.turnTrace.enabled" ? "1" : null,
+      },
+    });
+
+    await primeThreadStreamLatencyContext({
+      workspaceId: "ws-1",
+      threadId: "thread-trace-runtime",
+      engine: "claude",
+      model: "claude-sonnet-4.5",
+    });
+
+    noteThreadTurnStarted({
+      workspaceId: "ws-1",
+      threadId: "thread-trace-runtime",
+      turnId: "turn-trace-runtime",
+      startedAt: 1_000,
+    });
+
+    const summary = getTurnTraceSummary(
+      "thread-trace-runtime",
+      "turn-trace-runtime",
+    ) as TurnTraceSummary;
+    expect(summary.milestones["user-send-committed"]).toBe(1_000);
+    expect(summary.milestones["runtime-process-started"]).toBe(1_000);
   });
 
   it("activates the Qwen Windows mitigation only after render amplification evidence appears", async () => {

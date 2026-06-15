@@ -63,4 +63,45 @@ describe("LightweightMarkdown", () => {
     ).toBeGreaterThan(28);
     expect(resolveProgressiveRevealValue(visibleValue, targetValue, 360)).toBe(targetValue);
   });
+
+  it("flushes small pending text without chunking", () => {
+    const visibleValue = "已经显示的内容。";
+    const targetValue = `${visibleValue}${"补充".repeat(40)}`;
+
+    expect(resolveProgressiveRevealValue(visibleValue, targetValue, 360)).toBe(targetValue);
+  });
+
+  it("keeps structural markdown boundaries readable during progressive reveal", () => {
+    const visibleValue = "前文\n".repeat(60);
+    const pendingPrefix = "正文继续 ".repeat(45);
+    const targetValue = [
+      visibleValue,
+      pendingPrefix,
+      "\n### 新标题",
+      "标题下正文 ".repeat(80),
+    ].join("");
+
+    const nextValue = resolveProgressiveRevealValue(visibleValue, targetValue, 120);
+
+    expect(nextValue.length).toBeGreaterThan(visibleValue.length);
+    expect(nextValue.length).toBeLessThan(targetValue.length);
+    expect(targetValue.slice(nextValue.length)).toMatch(/^### 新标题/);
+  });
+
+  it("keeps long pending reveal partial below the extreme backlog threshold", () => {
+    const visibleValue = "已显示段落\n".repeat(80);
+    const pendingValue = [
+      "第一段内容 ".repeat(160),
+      "\n> 引用块\n",
+      "第二段内容 ".repeat(160),
+      "\n```ts\nconst value = 1;\n```\n",
+      "第三段内容 ".repeat(160),
+    ].join("");
+    const targetValue = `${visibleValue}${pendingValue}`;
+
+    const nextValue = resolveProgressiveRevealValue(visibleValue, targetValue, 360);
+
+    expect(nextValue.length).toBeGreaterThan(visibleValue.length + 360);
+    expect(nextValue.length).toBeLessThan(targetValue.length);
+  });
 });

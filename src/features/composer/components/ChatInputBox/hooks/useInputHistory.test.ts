@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   addHistoryItem,
@@ -13,6 +14,7 @@ import {
   loadHistory,
   loadHistoryWithImportance,
   loadTimestamps,
+  useInputHistory,
 } from './useInputHistory';
 
 // Mock the bridge module to prevent actual IPC calls
@@ -296,5 +298,86 @@ describe('useInputHistory pure functions', () => {
       localStorage.setItem(HISTORY_ENABLED_KEY, '');
       expect(isHistoryCompletionEnabled()).toBe(true);
     });
+  });
+});
+
+describe('useInputHistory hook hydration', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    localStorage.clear();
+  });
+
+  function createHarness() {
+    const editable = document.createElement('div');
+    const editableRef = { current: editable };
+    const handleInput = vi.fn();
+    const createArrowUpEvent = () => ({
+      key: 'ArrowUp',
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+    });
+    return {
+      editable,
+      editableRef,
+      handleInput,
+      createArrowUpEvent,
+      getTextContent: () => editable.innerText ?? '',
+    };
+  }
+
+  it('hydrates history after first render instead of blocking mount', () => {
+    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(['first']));
+    const harness = createHarness();
+    const { result } = renderHook(() =>
+      useInputHistory({
+        editableRef: harness.editableRef,
+        getTextContent: harness.getTextContent,
+        handleInput: harness.handleInput,
+      }),
+    );
+
+    const beforeHydrationEvent = harness.createArrowUpEvent();
+    expect(result.current.handleKeyDown(beforeHydrationEvent)).toBe(false);
+    expect(beforeHydrationEvent.preventDefault).not.toHaveBeenCalled();
+
+    act(() => {
+      vi.runOnlyPendingTimers();
+    });
+
+    const afterHydrationEvent = harness.createArrowUpEvent();
+    expect(result.current.handleKeyDown(afterHydrationEvent)).toBe(true);
+    expect(afterHydrationEvent.preventDefault).toHaveBeenCalled();
+    expect(harness.editable.innerText).toBe('first');
+  });
+
+  it('drops stale scheduled history hydration after scope changes', () => {
+    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(['old']));
+    const harness = createHarness();
+    const { result, rerender } = renderHook(
+      ({ scopeKey }) =>
+        useInputHistory({
+          editableRef: harness.editableRef,
+          getTextContent: harness.getTextContent,
+          handleInput: harness.handleInput,
+          historyScopeKey: scopeKey,
+        }),
+      { initialProps: { scopeKey: 'thread-a' } },
+    );
+
+    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(['new']));
+    rerender({ scopeKey: 'thread-b' });
+
+    act(() => {
+      vi.runOnlyPendingTimers();
+    });
+
+    const event = harness.createArrowUpEvent();
+    expect(result.current.handleKeyDown(event)).toBe(true);
+    expect(harness.editable.innerText).toBe('new');
   });
 });

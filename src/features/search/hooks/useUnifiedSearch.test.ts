@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConversationItem, CustomCommandOption, SkillOption, ThreadSummary } from "../../../types";
 import { SEARCH_PERF_BASELINE_GLOBAL } from "../perf/baseline.config";
 import { SEARCH_DEBOUNCE_MS } from "../perf/limits";
+import { discardIfStale, useSearchQueryToken } from "./searchQueryToken";
 import type { SearchContentFilter } from "../types";
 import { computeUnifiedSearchResults, useUnifiedSearch } from "./useUnifiedSearch";
 
@@ -238,5 +239,179 @@ describe("useUnifiedSearch", () => {
     });
     expect(result.current.some((item) => item.title === "/mermaid-visualizer")).toBe(true);
     expect(result.current.some((item) => item.title === "/api-fulldoc-sync")).toBe(false);
+  });
+});
+
+
+describe("useUnifiedSearch stale query guard integration", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("returns the latest debounced query results, not earlier ones", () => {
+    const baseOptions = {
+      contentFilters: ["skills"] as SearchContentFilter[],
+      workspaceSources: [],
+      kanbanTasks: [],
+      threadItemsByThread: {},
+      historyItems: [],
+      skills: [
+        { name: "alpha-runner", path: "/s/alpha", description: "A" },
+        { name: "beta-runner", path: "/s/beta", description: "B" },
+      ] as SkillOption[],
+      commands: [] as CustomCommandOption[],
+      activeWorkspaceId: "w-1",
+    };
+
+    const { result, rerender } = renderHook(
+      ({ query }) => useUnifiedSearch({ query, ...baseOptions }),
+      { initialProps: { query: "alpha" } },
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(SEARCH_DEBOUNCE_MS + 1);
+    });
+    expect(result.current.some((item) => item.title === "/alpha-runner")).toBe(true);
+
+    // Switch query fast, before debounce settles; the last computed
+    // results must be the most recent query, not the previous one.
+    act(() => {
+      rerender({ query: "beta" });
+    });
+    act(() => {
+      vi.advanceTimersByTime(SEARCH_DEBOUNCE_MS + 1);
+    });
+    expect(result.current.some((item) => item.title === "/beta-runner")).toBe(true);
+    expect(result.current.some((item) => item.title === "/alpha-runner")).toBe(false);
+  });
+
+  it("does not crash when query is empty and the hook is reused", () => {
+    const baseOptions = {
+      contentFilters: ["skills"] as SearchContentFilter[],
+      workspaceSources: [],
+      kanbanTasks: [],
+      threadItemsByThread: {},
+      historyItems: [],
+      skills: [
+        { name: "alpha-runner", path: "/s/alpha", description: "A" },
+      ] as SkillOption[],
+      commands: [] as CustomCommandOption[],
+      activeWorkspaceId: "w-1",
+    };
+
+    const { result, rerender } = renderHook(
+      ({ query }) => useUnifiedSearch({ query, ...baseOptions }),
+      { initialProps: { query: "alpha" } },
+    );
+    act(() => {
+      vi.advanceTimersByTime(SEARCH_DEBOUNCE_MS + 1);
+    });
+    expect(result.current.length).toBeGreaterThan(0);
+
+    act(() => {
+      rerender({ query: "" });
+    });
+    expect(result.current).toEqual([]);
+
+    act(() => {
+      rerender({ query: "alpha" });
+    });
+    act(() => {
+      vi.advanceTimersByTime(SEARCH_DEBOUNCE_MS + 1);
+    });
+    expect(result.current.length).toBeGreaterThan(0);
+  });
+});
+
+describe("useSearchQueryToken + discardIfStale wiring", () => {
+  it("the hook advances the token on every query change", () => {
+    const { result, rerender } = renderHook(
+      ({ query }: { query: string }) => useSearchQueryToken(query),
+      { initialProps: { query: "a" } },
+    );
+    const t0 = result.current.current.token;
+    act(() => {
+      rerender({ query: "b" });
+    });
+    expect(result.current.current.token).toBe(t0 + 1);
+  });
+
+  it("discardIfStale returns the previous value untouched when tokens match", () => {
+    const initial = {
+      token: 7,
+      query: "x",
+      bumpKey: 0,
+      updatedAt: 0,
+    };
+    const current = { ...initial };
+    const captured = { ...initial };
+    const out = discardIfStale(current, captured, ["r1", "r2"]);
+    expect(out.staleDropped).toBe(false);
+    expect(out.value).toEqual(["r1", "r2"]);
+  });
+
+  it("discardIfStale flags stale when the current token has moved on", () => {
+    const captured = {
+      token: 1,
+      query: "x",
+      bumpKey: 0,
+      updatedAt: 0,
+    };
+    const current = { ...captured, token: 2 };
+    const out = discardIfStale(current, captured, ["r1"]);
+    expect(out.staleDropped).toBe(true);
+  });
+});
+
+describe("useUnifiedSearch metrics integration (regression for elapsedMs: 0 bug)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.stubEnv("MODE", "development");
+    vi.stubEnv("DEV", true);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  it("delegates perf metrics to the compute path so elapsedMs is real, not 0", async () => {
+    const spy = vi.spyOn(console, "debug").mockImplementation(() => {});
+
+    const { result } = renderHook(() =>
+      useUnifiedSearch({
+        query: "alpha",
+        contentFilters: ["skills"],
+        workspaceSources: [],
+        kanbanTasks: [],
+        threadItemsByThread: {},
+        historyItems: [],
+        skills: [
+          { name: "alpha-runner", path: "/s/alpha", description: "A" },
+        ] as SkillOption[],
+        commands: [] as CustomCommandOption[],
+        activeWorkspaceId: "w-1",
+      }),
+    );
+
+    await act(async () => {
+      vi.advanceTimersByTime(SEARCH_DEBOUNCE_MS + 1);
+    });
+    expect(result.current.length).toBeGreaterThan(0);
+
+    // console.debug must have been called with a real (non-zero, non-NaN)
+    // elapsedMs in the search metrics payload. The previous bug reported
+    // 0 here; this assertion guards against that regression.
+    const calls = spy.mock.calls.filter(
+      (call) => Array.isArray(call) && call[0] === "[search]",
+    );
+    expect(calls.length).toBeGreaterThan(0);
+    const lastPayload = calls[calls.length - 1][1] as { ms: number };
+    expect(typeof lastPayload.ms).toBe("number");
+    expect(lastPayload.ms).toBeGreaterThanOrEqual(0);
+    expect(Number.isNaN(lastPayload.ms)).toBe(false);
   });
 });

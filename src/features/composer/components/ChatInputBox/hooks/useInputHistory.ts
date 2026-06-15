@@ -335,6 +335,7 @@ export interface UseInputHistoryOptions {
   editableRef: EditableRef;
   getTextContent: () => string;
   handleInput: (isComposingFromEvent?: boolean) => void;
+  historyScopeKey?: string | null;
 }
 
 export interface UseInputHistoryReturn {
@@ -354,14 +355,32 @@ export function useInputHistory({
   editableRef,
   getTextContent,
   handleInput,
+  historyScopeKey = null,
 }: UseInputHistoryOptions): UseInputHistoryReturn {
   const historyRef = useRef<string[]>([]);
   const historyIndexRef = useRef<number>(-1);
   const draftRef = useRef<string>('');
+  const historyLoadRequestIdRef = useRef(0);
 
   useEffect(() => {
-    historyRef.current = loadHistory();
-  }, []);
+    historyLoadRequestIdRef.current += 1;
+    const requestId = historyLoadRequestIdRef.current;
+    let disposed = false;
+    const timeoutId = window.setTimeout(() => {
+      const items = loadHistory();
+      if (disposed || historyLoadRequestIdRef.current !== requestId) {
+        return;
+      }
+      historyRef.current = items;
+      historyIndexRef.current = -1;
+      draftRef.current = '';
+    }, 0);
+
+    return () => {
+      disposed = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [historyScopeKey]);
 
   const setText = useCallback(
     (nextText: string) => {
