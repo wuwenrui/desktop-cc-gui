@@ -2,6 +2,30 @@
 
 ---
 
+##### **2026年6月16日（v0.5.10）**
+
+中文：
+
+🔧 Improvements
+- 升级应用版本号到 `0.5.10`，同步前端包配置与 Tauri 配置
+
+🐛 Fixes
+- 修复 Composer 文件引用深层路径搜索异常，恢复深层目录文件在 Composer 输入中的可被检索与引用能力
+- 修复文件树首屏滚动容器布局问题，让首屏目录树展示与滚动行为回到稳定状态
+- 修复父组件测试中 Markdown 懒加载隔离问题，降低消息组件 Markdown 懒加载在父级测试上下文中的串扰与不稳定
+
+English:
+
+🔧 Improvements
+- Bump app version to `0.5.10` across frontend package metadata and Tauri configuration
+
+🐛 Fixes
+- Fix Composer deep-path file reference search so files inside deeply nested directories can be searched and referenced again from the Composer input
+- Fix file-tree first-paint scroll container layout to restore stable initial render and scrolling of the directory tree
+- Fix Markdown lazy-loading isolation in parent component tests to reduce cross-talk and flakiness between message components and Markdown lazy boundaries
+
+---
+
 ##### **2026年6月14日（v0.5.9）**
 
 中文：
