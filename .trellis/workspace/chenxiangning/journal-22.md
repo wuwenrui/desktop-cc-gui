@@ -900,3 +900,49 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 849: 修复 Apple event 诊断码快照合并
+
+**Date**: 2026-06-17
+**Task**: 修复 Apple event 诊断码快照合并
+**Branch**: `feature/v0.5.10`
+
+### Summary
+
+修复 Codex assistant snapshot 去重时把 Apple event error -10000 回退成 -100 的问题，并补齐回归测试。
+
+### Main Changes
+
+| Area | Work |
+|------|------|
+| Assistant text normalization | 在 near-duplicate paragraph 选择中保留更完整的 Apple event diagnostic code，避免 `-10000` 被旧 `-100` 覆盖。 |
+| Thread reducer | `upsertItem` 的等价 assistant snapshot dedupe 使用 raw snapshot text 与 completed snapshot merge，并修复 incremental fast-path 误判 no-op。 |
+| Tests | 新增 completed snapshot merge 回归测试；恢复 `useThreadsReducer.completed-duplicate.test.ts` 失败用例。 |
+
+**Validation**:
+- PASS: `npx vitest run src/features/threads/hooks/threadReducerTextMerge.test.ts src/features/threads/hooks/useThreadsReducer.completed-duplicate.test.ts`
+- PASS: `npm run typecheck`
+- PASS: `npm run lint`
+- PASS: `npm run test`（671 test files completed）
+- PASS: `git diff --check`
+- NOTE: `npm run check:large-files` exits 0 but still reports existing unrelated `src/features/threads/hooks/useThreadEventHandlers.ts` large-file violation.
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5f618c20` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
