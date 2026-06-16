@@ -813,3 +813,42 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 847: 补齐聊天流式渲染隔离验证
+
+**Date**: 2026-06-16
+**Task**: 补齐聊天流式渲染隔离验证
+**Branch**: `feature/v0.5.10`
+
+### Summary
+
+实现并验证 chat-stream-render-isolation-2026-06：补齐 reducer fast path、workspace-scoped refs、LRU eviction cleanup、streaming complexity delta、virtualization 与 transient cleanup 的实现/测试/OpenSpec 校准。
+
+### Main Changes
+
+- OpenSpec change: `chat-stream-render-isolation-2026-06`
+- 实现 workspace-scoped refs 与 eviction cleanup，补充 `workspaceScopedMap` helper 与 handler transient cleanup。
+- 补齐 streaming hot path：reducer completed/upsert fast path、markdown complexity delta、streaming virtualization、Messages local transient timer cleanup。
+- 更新 runtime evidence budgets 与 OpenSpec proposal/design/tasks，使文档和实现对齐。
+- Review 后补充 `useThreads.integration.test.tsx` 覆盖 LRU formula、eviction diagnostic、同名 threadId 跨 workspace isolation。
+- 验证：targeted vitest 33 tests passed；`npx tsc --noEmit --pretty false` passed；`npm run lint` passed；`openspec validate chat-stream-render-isolation-2026-06 --strict --no-interactive` passed；`git diff --check` passed。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ae5def30` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
