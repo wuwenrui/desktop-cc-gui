@@ -1,7 +1,8 @@
 # composer-file-reference-index-availability Specification
 
 ## Purpose
-TBD - created by archiving change fix-composer-file-reference-without-file-tree-open. Update Purpose after archive.
+Define the workspace file-index availability contract for Composer `@` file-reference completion. Composer completion is a first-class consumer of workspace file metadata and must not depend on the right-side file tree being opened or expanded.
+
 ## Requirements
 ### Requirement: Composer file-reference completion MUST NOT require the file tree view
 
@@ -28,6 +29,32 @@ The system MUST make the active workspace file index available to composer `@` f
 - **GIVEN** the right-side file tree panel is visible for the active workspace
 - **WHEN** the workspace file-index polling interval is due
 - **THEN** the system MUST continue refreshing the shared workspace file index through the existing polling behavior
+
+### Requirement: Composer file-reference search MUST resolve nested workspace paths
+
+Composer `@` file-reference completion MUST search nested workspace paths by basename and stem when the query is not scoped to a directory path.
+
+#### Scenario: unscoped query matches nested files by basename
+
+- **GIVEN** the workspace contains `src-tauri/src/build_config.rs` and root file-tree candidates do not include that nested path
+- **WHEN** the user types `@build` in Composer
+- **THEN** completion MUST search the full active workspace file snapshot when local root candidates are insufficient
+- **AND** completion MUST include matching nested files such as `src-tauri/src/build_config.rs`
+- **AND** completion MUST prefer exact or prefix basename/stem matches before broad path substring matches
+
+#### Scenario: unscoped query uses a bounded workspace snapshot cache
+
+- **GIVEN** the user keeps typing multiple unscoped `@` file-reference queries in the same workspace
+- **WHEN** Composer hydrates the full workspace snapshot for completion
+- **THEN** it SHOULD reuse the in-flight or completed workspace snapshot for that workspace
+- **AND** it MUST NOT call the backend full workspace file scan once per keystroke when the workspace identity has not changed
+
+#### Scenario: directory-scoped query keeps lazy child lookup
+
+- **GIVEN** the user types a directory-scoped query such as `@src/` or `@src/bu`
+- **WHEN** Composer needs children under that directory
+- **THEN** completion MUST continue using the workspace directory-children lookup for that directory scope
+- **AND** it MUST NOT require eagerly expanding the entire file tree for scoped browsing
 
 ### Requirement: File Reference Index MUST Be Available Without Blocking High-Frequency Input
 
@@ -56,4 +83,3 @@ The file reference and search index path MUST keep high-frequency Composer/searc
 - **WHEN** search performance evidence is collected
 - **THEN** it MAY include provider elapsed time, candidate count, result count, hydration state, index hit/miss, and stale drop count
 - **AND** it MUST NOT include full message bodies, file content, prompt text, assistant output, or terminal output.
-

@@ -68,3 +68,21 @@ Issue `desktop-cc-gui#635` reports that typing `@` in the composer cannot refere
   - `npx vitest run src/features/workspaces/hooks/useWorkspaceFiles.test.tsx src/features/composer/hooks/useComposerAutocompleteState.test.tsx`
   - `npm run typecheck`
   - `openspec validate fix-composer-file-reference-without-file-tree-open --strict --no-interactive`
+
+## Follow-up Closure: Nested Composer File Reference Search
+
+- 用户校准问题：`@App` / `@build` 只是示例，不允许写死具体文件名；真实问题是 Composer `@` completion 对里层文件的候选源不完整。
+- Root cause：右侧文件树使用 lazy children 展开，可以看到深层文件；但 Composer 的真实 dropdown 链路在 `ChatInputBoxAdapter.fileCompletionProvider`，其无路径查询只消费 `useWorkspaceFiles` 暴露的 root-only snapshot，因此 `@build` 无法命中 `src-tauri/src/build_config.rs` 等 nested path。
+- 修复策略：
+  - 无 `/` 的 `@query`：先用已有 root candidates 快速匹配；不足时按 workspace 复用 `getWorkspaceFiles(workspaceId)` full snapshot，并按 basename/stem/path/subsequence score 排序。
+  - 有 `/` 的 `@dir/query`：继续走 `getWorkspaceDirectoryChildren(workspaceId, dirPath)` lazy lookup，保持文件树 progressive loading 的性能边界。
+  - 保留 malformed payload normalization、dedupe、AbortError 传播和 dropdown recoverability。
+- Review 结论：不是 hardcoded `App`，也不是单纯 includes 算法缺陷；这是 file tree root-only snapshot、lazy child source 与 Composer full-workspace search 之间的 contract drift。
+- 新增回归：
+  - `ChatInputBoxAdapter.test.tsx`: non-scoped query 可命中 full workspace nested files，并复用同 workspace full snapshot cache。
+  - `useComposerAutocompleteState.test.tsx`: legacy/parent autocomplete state 对无 `/` 查询支持 nested basename 与 nested directory name 匹配。
+- Validation passed on 2026-06-16:
+  - `npx vitest run src/features/composer/components/ChatInputBox/ChatInputBoxAdapter.test.tsx src/features/composer/hooks/useComposerAutocompleteState.test.tsx`
+  - `npm run typecheck`
+  - `npm run lint`
+  - `git diff --check`

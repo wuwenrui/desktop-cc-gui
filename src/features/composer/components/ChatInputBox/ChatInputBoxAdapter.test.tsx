@@ -17,6 +17,7 @@ const mockState = vi.hoisted(() => ({
   setClaudeAlwaysThinkingEnabled: vi.fn(),
   updateClaudeProvider: vi.fn(),
   switchClaudeProvider: vi.fn(),
+  getWorkspaceFiles: vi.fn(),
   getWorkspaceDirectoryChildren: vi.fn(),
   getSkillsList: vi.fn(),
   projectMemoryList: vi.fn(),
@@ -49,6 +50,7 @@ vi.mock('../../../../services/tauri', () => ({
   setClaudeAlwaysThinkingEnabled: mockState.setClaudeAlwaysThinkingEnabled,
   updateClaudeProvider: mockState.updateClaudeProvider,
   switchClaudeProvider: mockState.switchClaudeProvider,
+  getWorkspaceFiles: mockState.getWorkspaceFiles,
   getWorkspaceDirectoryChildren: mockState.getWorkspaceDirectoryChildren,
   getSkillsList: mockState.getSkillsList,
 }));
@@ -109,6 +111,10 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
     mockState.setClaudeAlwaysThinkingEnabled.mockReset().mockResolvedValue(undefined);
     mockState.updateClaudeProvider.mockReset().mockResolvedValue(undefined);
     mockState.switchClaudeProvider.mockReset().mockResolvedValue(undefined);
+    mockState.getWorkspaceFiles.mockReset().mockResolvedValue({
+      files: [],
+      directories: [],
+    });
     mockState.getWorkspaceDirectoryChildren.mockReset().mockResolvedValue({
       files: [],
       directories: [],
@@ -283,6 +289,73 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
         type: 'file',
       }),
     ]);
+  });
+
+  it('searches full workspace file references for non-scoped @ queries', async () => {
+    mockState.getWorkspaceFiles.mockResolvedValue({
+      directories: ['src', 'src-tauri', 'src-tauri/src'],
+      files: ['README.md', 'build.rs', 'src-tauri/src/build_config.rs'],
+    });
+
+    renderAdapter({
+      workspaceId: 'workspace-1',
+      directories: ['src', 'src-tauri'],
+      files: ['README.md'],
+    });
+
+    await waitFor(() => expect(mockState.latestProps).toBeTruthy());
+
+    const latest = mockState.latestProps as {
+      fileCompletionProvider?: (
+        query: string,
+        signal: AbortSignal,
+      ) => Promise<Array<{ name: string; path: string; type: string }>>;
+    };
+
+    const results = await latest.fileCompletionProvider?.('build', new AbortController().signal);
+
+    expect(mockState.getWorkspaceFiles).toHaveBeenCalledWith('workspace-1');
+    expect(results).toEqual([
+      expect.objectContaining({
+        name: 'build.rs',
+        path: 'build.rs',
+        type: 'file',
+      }),
+      expect.objectContaining({
+        name: 'build_config.rs',
+        path: 'src-tauri/src/build_config.rs',
+        type: 'file',
+      }),
+    ]);
+  });
+
+  it('reuses the full workspace file-reference cache across non-scoped queries', async () => {
+    mockState.getWorkspaceFiles.mockResolvedValue({
+      directories: ['src', 'src/features'],
+      files: ['src/features/Composer.tsx', 'src/features/ContextBar.tsx'],
+    });
+
+    renderAdapter({
+      workspaceId: 'workspace-1',
+      directories: ['src'],
+      files: [],
+    });
+
+    await waitFor(() => expect(mockState.latestProps).toBeTruthy());
+
+    const latest = mockState.latestProps as {
+      fileCompletionProvider?: (
+        query: string,
+        signal: AbortSignal,
+      ) => Promise<Array<{ name: string; path: string; type: string }>>;
+    };
+
+    const firstResults = await latest.fileCompletionProvider?.('Composer', new AbortController().signal);
+    const secondResults = await latest.fileCompletionProvider?.('Context', new AbortController().signal);
+
+    expect(mockState.getWorkspaceFiles).toHaveBeenCalledTimes(1);
+    expect(firstResults?.map((item) => item.path)).toContain('src/features/Composer.tsx');
+    expect(secondResults?.map((item) => item.path)).toContain('src/features/ContextBar.tsx');
   });
 
   it('skips malformed lazy workspace children without dropping valid matches', async () => {

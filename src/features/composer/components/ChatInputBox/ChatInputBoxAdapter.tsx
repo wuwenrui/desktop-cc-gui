@@ -51,6 +51,7 @@ import {
   setClaudeAlwaysThinkingEnabled,
   switchClaudeProvider,
   updateClaudeProvider,
+  getWorkspaceFiles,
   getWorkspaceDirectoryChildren,
   getSkillsList,
 } from '../../../../services/tauri';
@@ -823,12 +824,89 @@ function fileNameFromPath(path: string): string {
   return segments.length > 0 ? (segments[segments.length - 1] ?? path) : path;
 }
 
+function stemNameFromPath(path: string): string {
+  const fileName = fileNameFromPath(path);
+  const idx = fileName.lastIndexOf('.');
+  if (idx <= 0 || idx >= fileName.length - 1) {
+    return fileName;
+  }
+  return fileName.slice(0, idx);
+}
+
 function extensionFromFileName(fileName: string): string {
   const idx = fileName.lastIndexOf('.');
   if (idx <= 0 || idx >= fileName.length - 1) {
     return '';
   }
   return fileName.slice(idx + 1).toLowerCase();
+}
+
+function isSubsequenceMatch(query: string, target: string) {
+  let queryIndex = 0;
+  let targetIndex = 0;
+  while (queryIndex < query.length && targetIndex < target.length) {
+    if (query[queryIndex] === target[targetIndex]) {
+      queryIndex += 1;
+    }
+    targetIndex += 1;
+  }
+  return queryIndex === query.length;
+}
+
+function scoreCompletionPath(path: string, query: string) {
+  const normalizedQuery = normalizePath(query).trim().toLowerCase();
+  if (!normalizedQuery) {
+    return 0;
+  }
+  const normalizedPath = normalizePath(path).toLowerCase();
+  const fileName = fileNameFromPath(path).toLowerCase();
+  const stemName = stemNameFromPath(path).toLowerCase();
+  if (fileName === normalizedQuery || stemName === normalizedQuery) {
+    return 120;
+  }
+  if (stemName.startsWith(normalizedQuery)) {
+    return 115;
+  }
+  if (fileName.startsWith(normalizedQuery)) {
+    return 110;
+  }
+  if (normalizedPath.startsWith(normalizedQuery)) {
+    return 95;
+  }
+  if (fileName.includes(normalizedQuery)) {
+    return 90;
+  }
+  if (normalizedPath.includes(normalizedQuery)) {
+    return 70;
+  }
+  if (isSubsequenceMatch(normalizedQuery, fileName)) {
+    return 50;
+  }
+  return 0;
+}
+
+function rankCompletionPaths(paths: readonly unknown[], query: string) {
+  return paths
+    .map((path) => {
+      const normalizedPath = normalizeCompletionSourcePath(path);
+      if (!normalizedPath) {
+        return null;
+      }
+      const score = scoreCompletionPath(normalizedPath, query);
+      return score > 0 ? { path: normalizedPath, score } : null;
+    })
+    .filter((entry): entry is { path: string; score: number } => entry !== null)
+    .sort((left, right) => {
+      if (left.score !== right.score) {
+        return right.score - left.score;
+      }
+      const leafLengthDelta =
+        fileNameFromPath(left.path).length - fileNameFromPath(right.path).length;
+      if (leafLengthDelta !== 0) {
+        return leafLengthDelta;
+      }
+      return left.path.localeCompare(right.path);
+    });
 }
 
 function normalizeSlashCommandName(name: unknown): string | null {
@@ -1299,6 +1377,12 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
       }));
     }, [fusingQueuedMessageId, queuedMessages]);
 
+    const fullWorkspaceFileCompletionCacheRef = useRef<{
+      workspaceId: string;
+      response: unknown | null;
+      promise: Promise<unknown> | null;
+    } | null>(null);
+
     const fileCompletionProvider = useCallback(
       async (query: string, signal: AbortSignal): Promise<FileItem[]> => {
         if (signal.aborted) {
@@ -1365,6 +1449,40 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
           }
           const filesValue = (response as { files?: unknown }).files;
           return Array.isArray(filesValue) ? filesValue : [];
+        };
+        const getFullWorkspaceSnapshot = async () => {
+          if (!workspaceId) {
+            return null;
+          }
+          const cached = fullWorkspaceFileCompletionCacheRef.current;
+          if (cached?.workspaceId === workspaceId && cached.response) {
+            return cached.response;
+          }
+          if (cached?.workspaceId === workspaceId && cached.promise) {
+            return cached.promise;
+          }
+          const promise = getWorkspaceFiles(workspaceId)
+            .then((response) => {
+              const nextCache = fullWorkspaceFileCompletionCacheRef.current;
+              if (nextCache?.workspaceId === workspaceId) {
+                nextCache.response = response;
+                nextCache.promise = null;
+              }
+              return response;
+            })
+            .catch((error) => {
+              const nextCache = fullWorkspaceFileCompletionCacheRef.current;
+              if (nextCache?.workspaceId === workspaceId) {
+                nextCache.promise = null;
+              }
+              throw error;
+            });
+          fullWorkspaceFileCompletionCacheRef.current = {
+            workspaceId,
+            response: null,
+            promise,
+          };
+          return promise;
         };
         const pushFromResponse = (response: unknown) => {
           for (const dir of getResponseDirectories(response)) {
@@ -1454,26 +1572,32 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
         }
 
         // Search query without directory path: search by name across all entries
-        for (const path of sourceDirectories) {
-          const normalizedPath = normalizeCompletionSourcePath(path);
-          if (!normalizedPath) {
-            continue;
-          }
-          const name = fileNameFromPath(normalizedPath);
-          if (name.toLowerCase().includes(lowerFragment) || normalizedPath.toLowerCase().includes(lowerFragment)) {
-            pushDirectoryFromPath(normalizedPath);
-            if (results.length >= maxSuggestions) return results;
-          }
+        for (const entry of rankCompletionPaths(sourceDirectories, fragment)) {
+          pushDirectoryFromPath(entry.path);
+          if (results.length >= maxSuggestions) return results;
         }
-        for (const path of sourceFiles) {
-          const normalizedPath = normalizeCompletionSourcePath(path);
-          if (!normalizedPath) {
-            continue;
-          }
-          const name = fileNameFromPath(normalizedPath);
-          if (name.toLowerCase().includes(lowerFragment) || normalizedPath.toLowerCase().includes(lowerFragment)) {
-            pushFileFromPath(normalizedPath);
-            if (results.length >= maxSuggestions) return results;
+        for (const entry of rankCompletionPaths(sourceFiles, fragment)) {
+          pushFileFromPath(entry.path);
+          if (results.length >= maxSuggestions) return results;
+        }
+        if (workspaceId && results.length < maxSuggestions) {
+          try {
+            const fullSnapshot = await getFullWorkspaceSnapshot();
+            if (signal.aborted) {
+              throw new DOMException('Aborted', 'AbortError');
+            }
+            for (const entry of rankCompletionPaths(getResponseDirectories(fullSnapshot), fragment)) {
+              pushDirectoryFromPath(entry.path);
+              if (results.length >= maxSuggestions) return results;
+            }
+            for (const entry of rankCompletionPaths(getResponseFiles(fullSnapshot), fragment)) {
+              pushFileFromPath(entry.path);
+              if (results.length >= maxSuggestions) return results;
+            }
+          } catch (error) {
+            if ((error as Error).name === 'AbortError') {
+              throw error;
+            }
           }
         }
         return results;
