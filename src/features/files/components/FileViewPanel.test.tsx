@@ -469,8 +469,11 @@ describe("FileViewPanel navigation", () => {
       />,
     );
 
-    const editor = (await screen.findByTestId("mock-codemirror")) as HTMLTextAreaElement;
-    expect(editor.value).toBe("const value = 1;");
+    await waitFor(() => {
+      expect(
+        (screen.getByTestId("mock-codemirror") as HTMLTextAreaElement).value,
+      ).toBe("const value = 1;");
+    });
     expect(getGitFileFullDiff).toHaveBeenCalledWith(
       "ws-slow-git-marker",
       "src/value.ts",
