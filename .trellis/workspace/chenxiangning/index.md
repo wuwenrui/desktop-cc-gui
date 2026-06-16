@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-22.md`
-- **Total Sessions**: 847
-- **Last Active**: 2026-06-16
+- **Total Sessions**: 848
+- **Last Active**: 2026-06-17
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-22.md` | ~854 | Active |
+| `journal-22.md` | ~902 | Active |
 | `journal-21.md` | ~1970 | Archived |
 | `journal-20.md` | ~1997 | Archived |
 | `journal-19.md` | ~1989 | Archived |
@@ -50,6 +50,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 848 | 2026-06-17 | 收敛顶栏菜单按钮 | `b1907b3b` | `feature/v0.5.10` |
 | 847 | 2026-06-16 | 补齐聊天流式渲染隔离验证 | `ae5def30` | `feature/v0.5.10` |
 | 846 | 2026-06-16 | 审核聊天流渲染隔离提案 | `536a7b5c` | `feature/v0.5.10` |
 | 845 | 2026-06-16 | 稳定 FileViewPanel 慢 git marker 测试 | `59399914` | `feature/v0.5.10` |

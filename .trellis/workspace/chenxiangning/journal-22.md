@@ -852,3 +852,51 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 848: 收敛顶栏菜单按钮
+
+**Date**: 2026-06-17
+**Task**: 收敛顶栏菜单按钮
+**Branch**: `feature/v0.5.10`
+
+### Summary
+
+将主顶栏与右侧面板的平铺 icon 操作收敛为响应式 command menu，补齐 copy path，并回写前端组件规范。
+
+### Main Changes
+
+| Area | Work |
+|------|------|
+| MainHeader | 将运行控制台、终端、SOLO、浏览器、说明文档、右侧栏切换与 Copy path 合并进 open-app/Finder command menu。 |
+| Right panel | 新增 shared ResponsiveIconToolbar，让右侧 panel tab 默认只外显 active/live/promoted 项，其余进入 overflow。 |
+| Theme / platform | 菜单背景、hover、文字使用 theme token；顶栏交互控件保持 data-tauri-drag-region="false"，兼容 macOS/Windows titlebar 点击。 |
+| UI clipping | 主顶栏 open-app 菜单父容器改为 overflow visible；右侧 Radix menu 走 portal，避免浮层被吃。 |
+| Spec | 回写 .trellis/spec/frontend/component-guidelines.md 的 Topbar Consolidated Command Menus 规范。 |
+
+**Validation**:
+- PASS: `npx vitest run src/features/app/components/MainHeader.topbar-session-tabs.test.tsx src/features/app/components/OpenAppMenu.test.tsx src/features/app/components/MainHeaderActions.test.tsx src/features/layout/components/PanelTabs.test.tsx src/features/layout/hooks/useLayoutNodes.client-ui-visibility.test.tsx`
+- PASS: `npm run typecheck`
+- PASS: `npm run lint`
+- PASS: `git diff --check`
+- NOTE: `npm run test` / thread reducer focused test has pre-existing unrelated failures expecting `Apple event error -10000` while fixture text contains `Apple event error -100`; no current diff under `src/features/threads`.
+- NOTE: `npm run check:large-files` reports pre-existing unrelated `src/features/threads/hooks/useThreadEventHandlers.ts` large-file violation.
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b1907b3b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
