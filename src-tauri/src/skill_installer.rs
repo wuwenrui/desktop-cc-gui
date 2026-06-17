@@ -5,53 +5,17 @@
 //! level as well as nested skill folders.
 //! Only `.md` files are copied; the directory structure is preserved.
 
-use sha2::{Digest, Sha256};
 use std::path::Path;
 
 const SENSITIVE_BUNDLED_SKILL_PATHS: &[&str] = &[
     "制度审查.md",
     "劳动用工小助理/SKILL.md",
     "合同起草与审查.md",
+    "合同审查.md",
     "律师函（催款类）.md",
-    "撰写不良资产尽调报告.md",
-    "法律意见.md",
     "破产业务小助手.md",
-];
-
-struct SensitiveBundledSkill {
-    relative_path: &'static str,
-    sha256: &'static str,
-}
-
-const LEGACY_SENSITIVE_BUNDLED_SKILLS: &[SensitiveBundledSkill] = &[
-    SensitiveBundledSkill {
-        relative_path: "制度审查.md",
-        sha256: "3675bd022ad56730c8edfe49699414af2093b68f738a69c2ec35eb58f037723c",
-    },
-    SensitiveBundledSkill {
-        relative_path: "劳动用工小助理/SKILL.md",
-        sha256: "e521f88991959c46985769e522119bd58641492c7066056e57e6ee5697d12fd4",
-    },
-    SensitiveBundledSkill {
-        relative_path: "合同起草与审查.md",
-        sha256: "099f269a8d526c6b5083913c390194b065c9d1108bd5b6605bf43788b764a0be",
-    },
-    SensitiveBundledSkill {
-        relative_path: "律师函（催款类）.md",
-        sha256: "dce2344eb248c8e7f703a407a46298360183853596cd3cf85bca849d2486f92a",
-    },
-    SensitiveBundledSkill {
-        relative_path: "撰写不良资产尽调报告.md",
-        sha256: "bb35253d084622826bb4a123759a5e0645fd76fd00269e6addda4e1f3ee4229f",
-    },
-    SensitiveBundledSkill {
-        relative_path: "法律意见.md",
-        sha256: "8ebf084e63280d59c22fa6f2278c1695874a7c9eb2b8362229af49549cf27bbb",
-    },
-    SensitiveBundledSkill {
-        relative_path: "破产业务小助手.md",
-        sha256: "1cb6507ceceac2957f784a481c2c4e790c21de0493c6cf289427fee1fc0dea8f",
-    },
+    "法律意见.md",
+    "撰写不良资产尽调报告.md",
 ];
 
 fn normalized_relative_path(path: &Path) -> String {
@@ -63,12 +27,6 @@ fn is_sensitive_bundled_skill_path(relative_path: &Path) -> bool {
     SENSITIVE_BUNDLED_SKILL_PATHS
         .iter()
         .any(|path| *path == normalized)
-}
-
-fn sha256_hex(bytes: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    format!("{:x}", hasher.finalize())
 }
 
 fn remove_empty_parent_dirs(skills_root: &Path, relative_file_path: &Path) {
@@ -95,17 +53,13 @@ fn remove_empty_parent_dirs(skills_root: &Path, relative_file_path: &Path) {
 
 fn remove_sensitive_bundled_skills_with_manifest(
     skills_root: &Path,
-    manifest: &[SensitiveBundledSkill],
+    manifest: &[&str],
 ) -> Result<usize, String> {
     let mut removed = 0;
-    for skill in manifest {
-        let relative_path = Path::new(skill.relative_path);
+    for relative in manifest {
+        let relative_path = Path::new(relative);
         let target = skills_root.join(relative_path);
         if !target.is_file() {
-            continue;
-        }
-        let content = std::fs::read(&target).map_err(|e| e.to_string())?;
-        if sha256_hex(&content) != skill.sha256 {
             continue;
         }
         std::fs::remove_file(&target).map_err(|e| e.to_string())?;
@@ -116,7 +70,7 @@ fn remove_sensitive_bundled_skills_with_manifest(
 }
 
 pub fn remove_legacy_sensitive_bundled_skills(skills_root: &Path) -> Result<usize, String> {
-    remove_sensitive_bundled_skills_with_manifest(skills_root, LEGACY_SENSITIVE_BUNDLED_SKILLS)
+    remove_sensitive_bundled_skills_with_manifest(skills_root, SENSITIVE_BUNDLED_SKILL_PATHS)
 }
 
 pub fn cleanup_legacy_sensitive_bundled_skills() -> Result<usize, String> {
@@ -323,11 +277,13 @@ mod tests {
     }
 
     #[test]
-    fn removes_only_legacy_sensitive_copies_with_matching_hash() {
+    fn removes_sensitive_copies_by_path_regardless_of_content() {
         let base = temp_dir("sensitive_cleanup");
         let dst = base.join("dst");
         fs::create_dir_all(dst.join("劳动用工小助理")).unwrap();
         fs::write(dst.join("制度审查.md"), "legacy sensitive skill").unwrap();
+        // Content intentionally differs from the original bundled skill — removal
+        // must happen purely by path, never by hashing the file content.
         fs::write(dst.join("法律意见.md"), "user edited skill").unwrap();
         fs::write(dst.join("制作PPT.md"), "allowed skill").unwrap();
         fs::write(
@@ -336,27 +292,16 @@ mod tests {
         )
         .unwrap();
 
-        let manifest = [
-            SensitiveBundledSkill {
-                relative_path: "制度审查.md",
-                sha256: "1e11627ef0646b0c40509ac97c6d02737785d9aaf66dfe09f8575ac54657cb02",
-            },
-            SensitiveBundledSkill {
-                relative_path: "劳动用工小助理/SKILL.md",
-                sha256: "c9bd28c68e1e968cee8643f084753ce3f96a5b2270f3601a294ec6eb0f272eb5",
-            },
-            SensitiveBundledSkill {
-                relative_path: "法律意见.md",
-                sha256: "1e11627ef0646b0c40509ac97c6d02737785d9aaf66dfe09f8575ac54657cb02",
-            },
-        ];
+        let manifest = ["制度审查.md", "劳动用工小助理/SKILL.md", "法律意见.md"];
 
         let removed = remove_sensitive_bundled_skills_with_manifest(&dst, &manifest).unwrap();
 
-        assert_eq!(removed, 2);
+        assert_eq!(removed, 3);
         assert!(!dst.join("制度审查.md").exists());
         assert!(!dst.join("劳动用工小助理").exists());
-        assert!(dst.join("法律意见.md").exists());
+        // Deleted by path even though its content differs from the original.
+        assert!(!dst.join("法律意见.md").exists());
+        // Not in the manifest — must be left untouched.
         assert!(dst.join("制作PPT.md").exists());
 
         fs::remove_dir_all(&base).ok();
