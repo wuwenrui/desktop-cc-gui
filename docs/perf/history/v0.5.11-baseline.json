@@ -1,6 +1,6 @@
 {
   "schemaVersion": "1.0",
-  "generatedAt": "2026-06-17T15:44:26.924Z",
+  "generatedAt": "2026-06-17T15:24:23.167Z",
   "version": "0.5.11",
   "git": {
     "branch": "feature/v0.5.11",
@@ -10,63 +10,63 @@
     {
       "scenario": "S-LL-200",
       "metric": "commitDurationP50",
-      "value": 10.06,
+      "value": 9.67,
       "unit": "ms",
       "evidenceClass": "proxy"
     },
     {
       "scenario": "S-LL-200",
       "metric": "commitDurationP95",
-      "value": 10.06,
+      "value": 9.67,
       "unit": "ms",
       "evidenceClass": "proxy"
     },
     {
       "scenario": "S-LL-200",
       "metric": "firstPaintAfterMount",
-      "value": 36.9,
+      "value": 35.19,
       "unit": "ms",
       "evidenceClass": "proxy"
     },
     {
       "scenario": "S-LL-500",
       "metric": "commitDurationP50",
-      "value": 12.96,
+      "value": 14.06,
       "unit": "ms",
       "evidenceClass": "proxy"
     },
     {
       "scenario": "S-LL-500",
       "metric": "commitDurationP95",
-      "value": 12.96,
+      "value": 14.06,
       "unit": "ms",
       "evidenceClass": "proxy"
     },
     {
       "scenario": "S-LL-500",
       "metric": "firstPaintAfterMount",
-      "value": 32.03,
+      "value": 33.52,
       "unit": "ms",
       "evidenceClass": "proxy"
     },
     {
       "scenario": "S-LL-1000",
       "metric": "commitDurationP50",
-      "value": 21.28,
+      "value": 18.89,
       "unit": "ms",
       "evidenceClass": "proxy"
     },
     {
       "scenario": "S-LL-1000",
       "metric": "commitDurationP95",
-      "value": 21.28,
+      "value": 18.89,
       "unit": "ms",
       "evidenceClass": "proxy"
     },
     {
       "scenario": "S-LL-1000",
       "metric": "firstPaintAfterMount",
-      "value": 41.55,
+      "value": 37.93,
       "unit": "ms",
       "evidenceClass": "proxy"
     },
@@ -90,11 +90,11 @@
     {
       "scenario": "S-CI-50",
       "metric": "keystrokeToCommitP95",
-      "value": 0.08,
+      "value": 0.11,
       "unit": "ms",
       "evidenceClass": "proxy",
       "budget": {
-        "observed": 0.08,
+        "observed": 0.11,
         "target": 16,
         "hardFail": 32,
         "unit": "ms",
@@ -108,16 +108,7 @@
       "metric": "inputEventLossCount",
       "value": 0,
       "unit": "count",
-      "evidenceClass": "proxy",
-      "budget": {
-        "observed": 0,
-        "target": 0,
-        "hardFail": 0,
-        "unit": "count",
-        "evidenceClass": "proxy",
-        "source": "docs/perf/baseline.json",
-        "rollout": "fail-ready"
-      }
+      "evidenceClass": "proxy"
     },
     {
       "scenario": "S-CI-50",
@@ -147,16 +138,7 @@
       "metric": "inputEventLossCount",
       "value": 0,
       "unit": "count",
-      "evidenceClass": "proxy",
-      "budget": {
-        "observed": 0,
-        "target": 0,
-        "hardFail": 0,
-        "unit": "count",
-        "evidenceClass": "proxy",
-        "source": "docs/perf/baseline.json",
-        "rollout": "fail-ready"
-      }
+      "evidenceClass": "proxy"
     },
     {
       "scenario": "S-CI-100-IME",
@@ -208,7 +190,7 @@
     {
       "scenario": "S-RS-PE",
       "metric": "assemblerLatency",
-      "value": 4.59,
+      "value": 4.34,
       "unit": "ms",
       "notes": "replay reducer-path proxy latency",
       "evidenceClass": "proxy"
@@ -343,15 +325,15 @@
   "sources": [
     {
       "source": "long-list",
-      "generatedAt": "2026-06-17T15:44:02.667Z"
+      "generatedAt": "2026-06-17T15:23:58.514Z"
     },
     {
       "source": "composer-input",
-      "generatedAt": "2026-06-17T15:44:03.914Z"
+      "generatedAt": "2026-06-17T15:23:59.688Z"
     },
     {
       "source": "realtime-extended",
-      "generatedAt": "2026-06-17T15:44:05.020Z"
+      "generatedAt": "2026-06-17T15:24:00.802Z"
     },
     {
       "source": "realtime-runtime",
@@ -359,7 +341,7 @@
     },
     {
       "source": "cold-start",
-      "generatedAt": "2026-06-17T15:44:26.654Z"
+      "generatedAt": "2026-06-17T15:24:22.895Z"
     }
   ],
   "residualRisks": [],
@@ -376,8 +358,8 @@
         "metric": "commitDurationP50",
         "unit": "ms",
         "previousValue": 17.6,
-        "currentValue": 10.06,
-        "delta": -7.54,
+        "currentValue": 9.67,
+        "delta": -7.93,
         "evidenceClass": "proxy",
         "status": "comparable",
         "reason": ""
@@ -387,8 +369,8 @@
         "metric": "commitDurationP95",
         "unit": "ms",
         "previousValue": 17.6,
-        "currentValue": 10.06,
-        "delta": -7.54,
+        "currentValue": 9.67,
+        "delta": -7.93,
         "evidenceClass": "proxy",
         "status": "comparable",
         "reason": ""
@@ -398,8 +380,8 @@
         "metric": "firstPaintAfterMount",
         "unit": "ms",
         "previousValue": 54.54,
-        "currentValue": 36.9,
-        "delta": -17.64,
+        "currentValue": 35.19,
+        "delta": -19.35,
         "evidenceClass": "proxy",
         "status": "comparable",
         "reason": ""
@@ -409,8 +391,8 @@
         "metric": "commitDurationP50",
         "unit": "ms",
         "previousValue": 170.66,
-        "currentValue": 12.96,
-        "delta": -157.7,
+        "currentValue": 14.06,
+        "delta": -156.6,
         "evidenceClass": "proxy",
         "status": "comparable",
         "reason": ""
@@ -420,8 +402,8 @@
         "metric": "commitDurationP95",
         "unit": "ms",
         "previousValue": 170.66,
-        "currentValue": 12.96,
-        "delta": -157.7,
+        "currentValue": 14.06,
+        "delta": -156.6,
         "evidenceClass": "proxy",
         "status": "comparable",
         "reason": ""
@@ -431,8 +413,8 @@
         "metric": "firstPaintAfterMount",
         "unit": "ms",
         "previousValue": 195.04,
-        "currentValue": 32.03,
-        "delta": -163.01,
+        "currentValue": 33.52,
+        "delta": -161.52,
         "evidenceClass": "proxy",
         "status": "comparable",
         "reason": ""
@@ -442,8 +424,8 @@
         "metric": "commitDurationP50",
         "unit": "ms",
         "previousValue": 34.47,
-        "currentValue": 21.28,
-        "delta": -13.19,
+        "currentValue": 18.89,
+        "delta": -15.58,
         "evidenceClass": "proxy",
         "status": "comparable",
         "reason": ""
@@ -453,8 +435,8 @@
         "metric": "commitDurationP95",
         "unit": "ms",
         "previousValue": 34.47,
-        "currentValue": 21.28,
-        "delta": -13.19,
+        "currentValue": 18.89,
+        "delta": -15.58,
         "evidenceClass": "proxy",
         "status": "comparable",
         "reason": ""
@@ -464,8 +446,8 @@
         "metric": "firstPaintAfterMount",
         "unit": "ms",
         "previousValue": 58.43,
-        "currentValue": 41.55,
-        "delta": -16.88,
+        "currentValue": 37.93,
+        "delta": -20.5,
         "evidenceClass": "proxy",
         "status": "comparable",
         "reason": ""
@@ -486,8 +468,8 @@
         "metric": "keystrokeToCommitP95",
         "unit": "ms",
         "previousValue": 0.08,
-        "currentValue": 0.08,
-        "delta": 0,
+        "currentValue": 0.11,
+        "delta": 0.03,
         "evidenceClass": "proxy",
         "status": "comparable",
         "reason": ""
@@ -585,8 +567,8 @@
         "metric": "assemblerLatency",
         "unit": "ms",
         "previousValue": 5.73,
-        "currentValue": 4.59,
-        "delta": -1.14,
+        "currentValue": 4.34,
+        "delta": -1.39,
         "evidenceClass": "proxy",
         "status": "comparable",
         "reason": ""

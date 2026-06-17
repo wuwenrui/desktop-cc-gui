@@ -1,11 +1,12 @@
 # Runtime Evidence Gate Governance Report
 
-Generated at: 2026-06-17T14:52:41.534Z
+Generated at: 2026-06-17T15:45:18.383Z
 
 ## Archive Readiness
 
 | Change | Tasks | Recommendation | Qualifier |
 |---|---:|---|---|
+| v0511-performance-evidence-and-runtime-jank-hardening | 28/28 | archive-candidate-after-qualifier-review | Archive only after evidence report identifies measured/proxy/unsupported boundaries. |
 | fix-runtime-reconnect-card-state-loop | 7/7 | archive-candidate-after-qualifier-review | Review validation and platform qualifiers before archive. |
 
 ## In Progress

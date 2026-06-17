@@ -11,6 +11,7 @@ const COMPOSER_BASELINE_PATH = "docs/perf/composer-baseline.json";
 const BROWSER_SCROLL_PATH = "docs/perf/long-list-browser-scroll.json";
 const REALTIME_TURN_TRACE_PATH = "docs/perf/realtime-turn-trace.json";
 const REALTIME_RUNTIME_EVIDENCE_PATH = "docs/perf/realtime-runtime-evidence.json";
+const V0511_RUNTIME_EVIDENCE_PATH = "docs/perf/v0511-runtime-evidence.json";
 const REALTIME_PROFILE_PATH = "docs/perf/realtime-profile.jsonl";
 const LARGE_FILE_WATCHLIST_PATH = ".artifacts/large-files-near-threshold.json";
 const LONGRUNNING_RUNTIME_EVIDENCE_PATH = "docs/perf/long-running-runtime-evidence.json";
@@ -200,6 +201,10 @@ function buildPerfEvidence(fragments) {
 
 function findMetric(perfEvidence, scenario, metric) {
   return perfEvidence.find((entry) => entry.scenario === scenario && entry.metric === metric);
+}
+
+function hasMetricValue(...metrics) {
+  return metrics.some((metric) => metric?.value !== null && metric?.value !== undefined);
 }
 
 function normalizeEvidenceClass(value, fallback = "proxy") {
@@ -550,6 +555,10 @@ function buildRealtimeInputRenderBudgetSummary(perfEvidence) {
   const prepareThreadItemsCallRate = findMetric(perfEvidence, "S-IO-RR", "prepareThreadItems_calls_per_1000_delta");
   const reducerFlush = findMetric(perfEvidence, "S-IO-RR", "thread_reducer_flush_ms_p95");
   const routeDuration = findMetric(perfEvidence, "S-IO-RR", "realtime_delta_route_ms_p95");
+  const hasProducerValue = hasMetricValue(prepareThreadItemsCallRate, reducerFlush, routeDuration);
+  const hasAllProducerValues = hasMetricValue(prepareThreadItemsCallRate)
+    && hasMetricValue(reducerFlush)
+    && hasMetricValue(routeDuration);
   return {
     diagnosticsLabel: "perf.realtime.input-render-budget",
     scenarios: ["S-IO-RR"],
@@ -573,8 +582,16 @@ function buildRealtimeInputRenderBudgetSummary(perfEvidence) {
       ?? reducerFlush?.evidenceClass
       ?? routeDuration?.evidenceClass
       ?? "unsupported",
-    reason: "Streaming fixture needed to populate reducer fast-path evidence; baseline scenarios are added by this change.",
-    nextAction: "Wire prepareThreadItems call counter and reducer flush timing into the realtime replay fixture.",
+    reason: hasAllProducerValues
+      ? "Producer artifact captures reducer fast-path and realtime route timing proxy evidence."
+      : hasProducerValue
+        ? "Producer artifact is present; unavailable timing sub-metrics remain explicitly unsupported."
+        : "Streaming fixture needed to populate reducer fast-path evidence; baseline scenarios are added by this change.",
+    nextAction: hasAllProducerValues
+      ? "Promote proxy reducer and route timing to measured Tauri/WebView evidence before release-grade closure."
+      : hasProducerValue
+        ? "Promote reducer flush and realtime route timing from unsupported to proxy/measured when timing producers are available."
+        : "Wire prepareThreadItems call counter and reducer flush timing into the realtime replay fixture.",
   };
 }
 
@@ -583,6 +600,7 @@ function buildBackendFileIoIsolationSummary(perfEvidence) {
   const asyncStall = findMetric(perfEvidence, "S-IO-FS", "file_io_async_worker_stall_ms_p95");
   const poolCalls = findMetric(perfEvidence, "S-IO-FS", "file_io_blocking_pool_call_count");
   const tauriDuringStream = findMetric(perfEvidence, "S-IO-FS", "tauri_command_during_stream_ms_p95");
+  const firstReason = wallP95?.reason ?? asyncStall?.reason ?? poolCalls?.reason ?? tauriDuringStream?.reason;
   return {
     diagnosticsLabel: "perf.backend.file-io-isolation",
     scenarios: ["S-IO-FS"],
@@ -610,7 +628,7 @@ function buildBackendFileIoIsolationSummary(perfEvidence) {
       ?? poolCalls?.evidenceClass
       ?? tauriDuringStream?.evidenceClass
       ?? "unsupported",
-    reason: "Blocking pool call counter and async-worker stall probe will be added by the file I/O isolation step.",
+    reason: firstReason ?? "Blocking pool call counter and async-worker stall probe will be added by the file I/O isolation step.",
     nextAction: "Run blocking pool call counter and async-worker stall probe in a 10MB read/write fixture during streaming.",
   };
 }
@@ -620,6 +638,7 @@ function buildFileChangeEventDebounceSummary(perfEvidence) {
   const emit = findMetric(perfEvidence, "S-IO-FC", "fs_event_emitted_per_sec");
   const samePath = findMetric(perfEvidence, "S-IO-FC", "fs_event_same_path_coalesce_ratio");
   const emptyBatch = findMetric(perfEvidence, "S-IO-FC", "fs_event_empty_batch_emit_count");
+  const hasProducerValue = hasMetricValue(raw, emit, samePath, emptyBatch);
   return {
     diagnosticsLabel: "perf.file-change.debounce",
     scenarios: ["S-IO-FC"],
@@ -647,8 +666,12 @@ function buildFileChangeEventDebounceSummary(perfEvidence) {
       ?? samePath?.evidenceClass
       ?? emptyBatch?.evidenceClass
       ?? "unsupported",
-    reason: "Debounce emitter is added by the file watcher debounce step; current fixture does not yet produce same-path burst events.",
-    nextAction: "Generate a 1000-event same-path burst fixture and capture raw vs emitted counts.",
+    reason: hasProducerValue
+      ? "Producer artifact captures same-path burst debounce evidence."
+      : "Debounce emitter is added by the file watcher debounce step; current fixture does not yet produce same-path burst events.",
+    nextAction: hasProducerValue
+      ? "Promote proxy burst evidence to Rust/runtime measured evidence when a native producer is available."
+      : "Generate a 1000-event same-path burst fixture and capture raw vs emitted counts.",
   };
 }
 
@@ -658,6 +681,12 @@ function buildAppServerEventBatchingSummary(perfEvidence) {
   const route = findMetric(perfEvidence, "S-IO-AS", "app_server_event_route_ms_p95");
   const dispatches = findMetric(perfEvidence, "S-IO-AS", "realtime_reducer_dispatches_per_1000_delta");
   const longTasks = findMetric(perfEvidence, "S-IO-AS", "main_thread_long_task_count_during_stream");
+  const hasProducerValue = hasMetricValue(rawRate, ipcRate, route, dispatches, longTasks);
+  const hasAllProducerValues = hasMetricValue(rawRate)
+    && hasMetricValue(ipcRate)
+    && hasMetricValue(route)
+    && hasMetricValue(dispatches)
+    && hasMetricValue(longTasks);
   return {
     diagnosticsLabel: "perf.app-server-event.batching",
     scenarios: ["S-IO-AS"],
@@ -689,8 +718,16 @@ function buildAppServerEventBatchingSummary(perfEvidence) {
       ?? dispatches?.evidenceClass
       ?? longTasks?.evidenceClass
       ?? "unsupported",
-    reason: "App server event batching emitter and batch-aware route are added by the batching step.",
-    nextAction: "Capture raw vs IPC emit divergence and reducer dispatch count in a multi-workspace codex streaming fixture.",
+    reason: hasAllProducerValues
+      ? "Producer artifact captures raw-vs-IPC batching, route timing, reducer dispatch, and long-task proxy evidence."
+      : hasProducerValue
+        ? "Producer artifact captures raw-vs-IPC batching evidence; unavailable route/long-task sub-metrics remain explicit."
+        : "App server event batching emitter and batch-aware route are added by the batching step.",
+    nextAction: hasAllProducerValues
+      ? "Promote proxy route timing and long-task count to measured browser/Tauri evidence before release-grade closure."
+      : hasProducerValue
+        ? "Add route-duration and browser long-task producers before claiming release-grade batching evidence."
+        : "Capture raw vs IPC emit divergence and reducer dispatch count in a multi-workspace codex streaming fixture.",
   };
 }
 
@@ -699,6 +736,7 @@ function buildFrontendPropChainStabilitySummary(perfEvidence) {
   const sidebarRenders = findMetric(perfEvidence, "S-IO-FP", "sidebar_render_count_per_streaming_minute");
   const rowRerender = findMetric(perfEvidence, "S-IO-FP", "thread_row_rerender_count_per_1000_delta");
   const layoutRecompute = findMetric(perfEvidence, "S-IO-FP", "layout_nodes_recompute_count_per_1000_delta");
+  const firstReason = composerRenders?.reason ?? sidebarRenders?.reason ?? rowRerender?.reason ?? layoutRecompute?.reason;
   return {
     diagnosticsLabel: "perf.frontend.prop-chain-stability",
     scenarios: ["S-IO-FP"],
@@ -723,7 +761,7 @@ function buildFrontendPropChainStabilitySummary(perfEvidence) {
       ?? rowRerender?.evidenceClass
       ?? layoutRecompute?.evidenceClass
       ?? "unsupported",
-    reason: "Domain context split and scoped status lookup are added by the prop chain stability step; render counters need source.",
+    reason: firstReason ?? "Domain context split and scoped status lookup are added by the prop chain stability step; render counters need source.",
     nextAction: "Add Profiler-based render counters or React Profiler API capture during the streaming fixture.",
   };
 }
@@ -1027,6 +1065,7 @@ async function main() {
   const browserScroll = await readJsonIfExists(BROWSER_SCROLL_PATH);
   const realtimeTurnTrace = await readJsonIfExists(REALTIME_TURN_TRACE_PATH);
   const realtimeRuntimeEvidence = await readJsonIfExists(REALTIME_RUNTIME_EVIDENCE_PATH);
+  const v0511RuntimeEvidence = await readJsonIfExists(V0511_RUNTIME_EVIDENCE_PATH);
   const longrunningRuntimeEvidence = await readJsonIfExists(LONGRUNNING_RUNTIME_EVIDENCE_PATH);
   const realtimeProfile = await readJsonlIfExists(REALTIME_PROFILE_PATH);
   const largeFileReport = await readJsonIfExists(LARGE_FILE_WATCHLIST_PATH);
@@ -1036,6 +1075,7 @@ async function main() {
     { path: COMPOSER_BASELINE_PATH, fragment: composerBaseline },
     { path: BROWSER_SCROLL_PATH, fragment: browserScroll },
     { path: REALTIME_RUNTIME_EVIDENCE_PATH, fragment: realtimeRuntimeEvidence },
+    { path: V0511_RUNTIME_EVIDENCE_PATH, fragment: v0511RuntimeEvidence },
     { path: LONGRUNNING_RUNTIME_EVIDENCE_PATH, fragment: longrunningRuntimeEvidence },
   ]);
   performanceEvidence.push(...buildRealtimeProfileEvidence(realtimeProfile));
@@ -1050,6 +1090,7 @@ async function main() {
       browserScroll: existsSync(repoPath(BROWSER_SCROLL_PATH)) ? BROWSER_SCROLL_PATH : null,
       realtimeTurnTrace: existsSync(repoPath(REALTIME_TURN_TRACE_PATH)) ? REALTIME_TURN_TRACE_PATH : null,
       realtimeRuntimeEvidence: existsSync(repoPath(REALTIME_RUNTIME_EVIDENCE_PATH)) ? REALTIME_RUNTIME_EVIDENCE_PATH : null,
+      v0511RuntimeEvidence: existsSync(repoPath(V0511_RUNTIME_EVIDENCE_PATH)) ? V0511_RUNTIME_EVIDENCE_PATH : null,
       longrunningRuntimeEvidence: existsSync(repoPath(LONGRUNNING_RUNTIME_EVIDENCE_PATH)) ? LONGRUNNING_RUNTIME_EVIDENCE_PATH : null,
       realtimeProfile: existsSync(repoPath(REALTIME_PROFILE_PATH)) ? REALTIME_PROFILE_PATH : null,
       largeFileWatchlist: existsSync(repoPath(LARGE_FILE_WATCHLIST_PATH)) ? LARGE_FILE_WATCHLIST_PATH : null,
@@ -1090,6 +1131,9 @@ export const runtimeEvidenceReportInternals = {
   buildRendererResourceSummary,
   buildRealtimeSummary,
   buildRealtimeTraceBudgets,
+  buildRealtimeInputRenderBudgetSummary,
+  buildFileChangeEventDebounceSummary,
+  buildBackendFileIoIsolationSummary,
 };
 
 const isDirectExecution =

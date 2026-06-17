@@ -1,0 +1,184 @@
+{
+  "schemaVersion": "1.0",
+  "generatedAt": "2026-06-17T15:44:06.247Z",
+  "source": "v0511-runtime-evidence",
+  "git": {
+    "branch": "feature/v0.5.11",
+    "commit": "f4e20aeda4d65badc2e7dd4cad14a00f3f4e59bd"
+  },
+  "metrics": [
+    {
+      "scenario": "S-IO-RR",
+      "metric": "prepareThreadItems_calls_per_1000_delta",
+      "value": 0,
+      "unit": "count",
+      "evidenceClass": "proxy",
+      "notes": "Proxy fixture anchored to useThreadsReducer.append-agent-delta-fast-path 1000-delta Codex burst."
+    },
+    {
+      "scenario": "S-IO-RR",
+      "metric": "realtime_reducer_dispatches_per_1000_delta",
+      "value": 1000,
+      "unit": "count",
+      "evidenceClass": "proxy",
+      "notes": "Proxy fixture anchored to useThreadsReducer.__profile reducerDispatchCount for the same burst."
+    },
+    {
+      "scenario": "S-IO-RR",
+      "metric": "thread_reducer_flush_ms_p95",
+      "value": 0.025,
+      "unit": "ms",
+      "evidenceClass": "proxy",
+      "notes": "Proxy timing from the same reducer-only 1000-delta fixture; not a browser frame/render measurement."
+    },
+    {
+      "scenario": "S-IO-RR",
+      "metric": "realtime_delta_route_ms_p95",
+      "value": 0.003,
+      "unit": "ms",
+      "evidenceClass": "proxy",
+      "notes": "Proxy timing from dispatchAppServerEvent over the synthetic 1000-delta app-server route."
+    },
+    {
+      "scenario": "S-IO-AS",
+      "metric": "app_server_event_raw_per_sec",
+      "value": 1000,
+      "unit": "events/sec",
+      "evidenceClass": "proxy",
+      "notes": "Proxy burst fixture: 1000 app-server delta events submitted in a one-second synthetic window."
+    },
+    {
+      "scenario": "S-IO-AS",
+      "metric": "app_server_event_ipc_emit_per_sec",
+      "value": 1,
+      "unit": "events/sec",
+      "evidenceClass": "proxy",
+      "notes": "Proxy burst fixture expects one per-workspace batch IPC payload for the synthetic window."
+    },
+    {
+      "scenario": "S-IO-AS",
+      "metric": "app_server_event_route_ms_p95",
+      "value": 0.001,
+      "unit": "ms",
+      "evidenceClass": "proxy",
+      "notes": "Proxy timing from dispatchAppServerEvent over 1000 synthetic app-server delta payloads."
+    },
+    {
+      "scenario": "S-IO-AS",
+      "metric": "realtime_reducer_dispatches_per_1000_delta",
+      "value": 1000,
+      "unit": "count",
+      "evidenceClass": "proxy",
+      "notes": "Proxy fixture counts routed append-only deltas through dispatchAppServerEventBatch."
+    },
+    {
+      "scenario": "S-IO-AS",
+      "metric": "main_thread_long_task_count_during_stream",
+      "value": 0,
+      "unit": "count",
+      "evidenceClass": "proxy",
+      "notes": "Node fixture proxy: one synchronous batch route is compared to the 50ms long-task threshold; browser PerformanceObserver remains release follow-up."
+    },
+    {
+      "scenario": "S-IO-FC",
+      "metric": "fs_event_raw_per_sec",
+      "value": 1000,
+      "unit": "events/sec",
+      "evidenceClass": "proxy",
+      "notes": "Proxy same-path burst fixture mirrors DebouncedState same-key replacement semantics."
+    },
+    {
+      "scenario": "S-IO-FC",
+      "metric": "fs_event_emitted_per_sec",
+      "value": 1,
+      "unit": "events/sec",
+      "evidenceClass": "proxy",
+      "notes": "Proxy same-path burst fixture emits one debounced batch for one flush window."
+    },
+    {
+      "scenario": "S-IO-FC",
+      "metric": "fs_event_same_path_coalesce_ratio",
+      "value": 0.999,
+      "unit": "ratio",
+      "evidenceClass": "proxy",
+      "notes": "Proxy same-path burst fixture: (rawCount - emittedCount) / rawCount."
+    },
+    {
+      "scenario": "S-IO-FC",
+      "metric": "fs_event_empty_batch_emit_count",
+      "value": 0,
+      "unit": "count",
+      "evidenceClass": "proxy",
+      "notes": "Proxy fixture matches external_changes_debouncer_no_empty_batch_emit regression contract."
+    },
+    {
+      "scenario": "S-IO-FS",
+      "metric": "file_io_command_wall_ms_p95",
+      "value": 12.892,
+      "unit": "ms",
+      "evidenceClass": "proxy",
+      "notes": "Proxy Node async fs fixture: 10MB write+read wall-time P95; Tauri command timing remains release follow-up."
+    },
+    {
+      "scenario": "S-IO-FS",
+      "metric": "file_io_async_worker_stall_ms_p95",
+      "value": 0.248,
+      "unit": "ms",
+      "evidenceClass": "proxy",
+      "notes": "Proxy event-loop stall probe sampled with setImmediate during async 10MB write+read fixture."
+    },
+    {
+      "scenario": "S-IO-FS",
+      "metric": "file_io_blocking_pool_call_count",
+      "value": 10,
+      "unit": "count",
+      "evidenceClass": "proxy",
+      "notes": "Proxy count of async fs operations in the fixture; native Tauri blocking-pool attribution remains release follow-up."
+    },
+    {
+      "scenario": "S-IO-FS",
+      "metric": "tauri_command_during_stream_ms_p95",
+      "value": 12.892,
+      "unit": "ms",
+      "evidenceClass": "proxy",
+      "notes": "Proxy wall-time reused for the content-safe file I/O fixture; not a live Tauri command measurement."
+    },
+    {
+      "scenario": "S-IO-FP",
+      "metric": "composer_render_count_per_streaming_minute",
+      "value": 2,
+      "unit": "count",
+      "evidenceClass": "proxy",
+      "notes": "Proxy render-counter fixture using the same __profile.recordComponentRender hook wired by useLayoutNodes Profiler."
+    },
+    {
+      "scenario": "S-IO-FP",
+      "metric": "sidebar_render_count_per_streaming_minute",
+      "value": 1,
+      "unit": "count",
+      "evidenceClass": "proxy",
+      "notes": "Proxy render-counter fixture using the same __profile.recordComponentRender hook wired by useLayoutNodes Profiler."
+    },
+    {
+      "scenario": "S-IO-FP",
+      "metric": "thread_row_rerender_count_per_1000_delta",
+      "value": 1,
+      "unit": "count",
+      "evidenceClass": "proxy",
+      "notes": "Proxy render-counter fixture; production row-level Profiler capture remains release follow-up."
+    },
+    {
+      "scenario": "S-IO-FP",
+      "metric": "layout_nodes_recompute_count_per_1000_delta",
+      "value": 1,
+      "unit": "count",
+      "evidenceClass": "proxy",
+      "notes": "Proxy render-counter fixture; production layout recompute capture remains release follow-up."
+    }
+  ],
+  "notes": [
+    "Proxy rows are deterministic fixture evidence, not release-grade desktop runtime proof.",
+    "Unsupported rows are intentionally preserved when the current repository lacks a trustworthy producer.",
+    "S-IO-FS and S-IO-FP proxy rows are content-safe fixture evidence; native Tauri/WebView capture remains the release-grade follow-up."
+  ]
+}

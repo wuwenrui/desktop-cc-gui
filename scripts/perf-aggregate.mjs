@@ -98,10 +98,22 @@ function budgetForMetric(metric) {
       unit: "ms",
       rollout: "fail-ready",
     },
+    "S-CI-50/inputEventLossCount": {
+      target: 0,
+      hardFail: 0,
+      unit: "count",
+      rollout: "fail-ready",
+    },
     "S-CI-100-IME/keystrokeToCommitP95": {
       target: 16,
       hardFail: 32,
       unit: "ms",
+      rollout: "fail-ready",
+    },
+    "S-CI-100-IME/inputEventLossCount": {
+      target: 0,
+      hardFail: 0,
+      unit: "count",
       rollout: "fail-ready",
     },
     "S-LL-1000/scrollFrameDropPct": {
