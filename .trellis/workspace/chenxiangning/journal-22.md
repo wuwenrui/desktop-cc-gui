@@ -1372,3 +1372,53 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 859: 锁定 turn completed 写出 trace summary
+
+**Date**: 2026-06-18
+**Task**: 锁定 turn completed 写出 trace summary
+**Branch**: `feature/v0.5.11`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## 本次完成
+
+- 提交 test-only guard：`364fd177 test(perf): 锁定 turn completed 写出 trace summary`。
+- 在 `src/features/threads/hooks/useThreadEventHandlers.test.ts` 中打开 `ccgui.debug.turnTrace.enabled`，覆盖 `onTurnStarted -> onAgentMessageDelta -> onItemStarted -> onTurnCompleted` 的真实 hook 链路。
+- 断言 `onTurnCompleted` 会通过 renderer diagnostics 写出 `realtime.turnTrace.summary`，并包含 `endedReason=completed`、`deltaCount=1`、`reducerCommitCount=1`、`reducerAmplification=1`。
+
+## 事实判断
+
+- 这个测试证明 completion path 当前代码是闭合的：只要 turn terminal 到达并且 turn trace gate 打开，就会产出 summary。
+- 因此本轮 live store 仍显示 `realtime.turnTrace.summary=0`，更合理的解释是读取发生在 streaming turn 尚未 terminal，或运行中的 app 没加载到前一个提交的新代码，而不是 completion 业务链路缺调用。
+- 后续若要继续拿真实 measured evidence，应在 assistant turn 结束后重新导出，或者让 app 明确暴露 trace gate / terminal summary 状态，避免在流式过程中误判。
+
+## 验证
+
+- `npm exec vitest run src/features/threads/hooks/useThreadEventHandlers.test.ts src/features/threads/utils/streamLatencyDiagnostics.test.ts src/features/threads/utils/turnTraceCorrelation.test.ts`：99 tests passed。
+- `npm run typecheck`：passed。
+- `npm run lint`：passed。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `364fd177` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
