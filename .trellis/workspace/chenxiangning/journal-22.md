@@ -1135,3 +1135,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 854: 合并 PR 696 供应商排序修复
+
+**Date**: 2026-06-17
+**Task**: 合并 PR 696 供应商排序修复
+**Branch**: `feature/v0.5.10`
+
+### Summary
+
+调查 GitHub PR #696，确认 Files 面板滚动修复当前分支已具备；语义合并 provider createdAt 补齐、更新时间保留与 createdAt/id 稳定排序逻辑到 src-tauri/src/vendors/commands.rs。验证 rustfmt、cargo test vendors::commands::tests、cargo test vendor、cargo check，以及现有 file tree typography/scroll Vitest 均通过。兼容性 review：旧配置 createdAt 保留，缺失 createdAt 的旧 provider 以 id 稳定兜底，新增 provider 自动补时间，不改 frontend bridge 或 command 注册。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c5fe5ea5` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

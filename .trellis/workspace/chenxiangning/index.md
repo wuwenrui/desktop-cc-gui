@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-22.md`
-- **Total Sessions**: 853
+- **Total Sessions**: 854
 - **Last Active**: 2026-06-17
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-22.md` | ~1137 | Active |
+| `journal-22.md` | ~1170 | Active |
 | `journal-21.md` | ~1970 | Archived |
 | `journal-20.md` | ~1997 | Archived |
 | `journal-19.md` | ~1989 | Archived |
@@ -50,6 +50,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 854 | 2026-06-17 | 合并 PR 696 供应商排序修复 | `c5fe5ea5` | `feature/v0.5.10` |
 | 853 | 2026-06-17 | 补齐稳定性归档文档 | `4e00c1ed` | `feature/v0.5.10` |
 | 852 | 2026-06-17 | 归档聊天流与长运行稳定性提案 | `94562f8a` | `feature/v0.5.10` |
 | 851 | 2026-06-17 | 收口 AppShell 运行态稳定性与 OpenSpec 归档 | `7d8b987d`, `29b835f0` | `feature/v0.5.10` |
