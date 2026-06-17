@@ -1312,3 +1312,63 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 858: 接通 renderer 诊断导出并校准 turn trace
+
+**Date**: 2026-06-18
+**Task**: 接通 renderer 诊断导出并校准 turn trace
+**Branch**: `feature/v0.5.11`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## 本次完成
+
+- 阶段性提交 v0.5.11 性能证据链闭环工作，提交哈希：`1f5c087f`。
+- 新增 `scripts/perf-export-renderer-diagnostics.mjs`，可从 `~/.ccgui/client/app.json` 的 `diagnostics.rendererLifecycleLog` 导出 `.artifacts/realtime-runtime-diagnostics.json`。
+- 扩展 `scripts/perf-v0511-runtime-evidence.ts`，支持 `--diagnostics` 输入，安全消费白名单 measured diagnostics，并拒绝 malformed / negative / content-sensitive payload。
+- 校准 `turnTraceCorrelation` 的 `deltaCount` 口径：每个 runtime delta 都计数，同时保留 first-delta milestone，不再把 reducer amplification 误算成 per-first-delta。
+- dev / `VITE_ENABLE_PERF_BASELINE=1` 模式自动启用 bounded stream latency / turn trace，test 模式保持关闭。
+- 更新 v0.5.11 perf baseline、runtime evidence gates、OpenSpec implementation evidence，明确记录当前真实对话导出结果：有 streaming ingress/pressure，但 `realtime.turnTrace.summary=0`，因此不能冒充 measured runtime summary。
+
+## 事实证据
+
+- 真实 app store：`~/.ccgui/client/app.json` 中 `diagnostics.rendererLifecycleLog` 有 1200 条。
+- 本轮真实对话后诊断分布包括：`stream-latency/codex-text-ingress=51`、`renderer/streaming-pressure=21`、`realtime.turnTrace.summary=0`。
+- 根因判断：采集到了 streaming ingress，但 terminal/completion summary flush 未闭环；下一步应把 `turn/completed` / terminal settlement 路径显式接到 `completeThreadStreamTurn()` 的可验证 contract 上。
+
+## 验证
+
+- `node --test scripts/perf-export-renderer-diagnostics.test.mjs scripts/perf-v0511-runtime-evidence.test.mjs scripts/perf-realtime-runtime-report.test.mjs scripts/generate-runtime-evidence-report.test.mjs`：22 tests passed。
+- `npm exec vitest run src/features/threads/utils/turnTraceCorrelation.test.ts src/features/threads/utils/streamLatencyDiagnostics.test.ts src/features/threads/contracts/realtimeTurnTraceReplay.test.ts src/features/threads/contracts/realtimeTurnTraceReplay.guard.test.ts`：52 tests passed。
+- `npm run typecheck`：passed。
+- `npm run lint`：passed。
+- `openspec validate v0511-performance-evidence-and-runtime-jank-hardening --strict --no-interactive`：passed。
+- `npm run perf:archive-readiness -- --json`：`ok=true`、`hardFailures=[]`、`status=warn`；剩余为 budget missing 与 measured summary 未采集的 residual warnings。
+
+## 下一步
+
+- 在新的业务代码变更中补齐真实 runtime terminal/completion flush：让完成事件稳定产出 `realtime.turnTrace.summary`，并新增 focused test 防止回退。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1f5c087f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
