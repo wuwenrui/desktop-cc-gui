@@ -1534,6 +1534,7 @@ export const Messages = memo(function Messages({
     if (!container) {
       return;
     }
+    pinMessagesHorizontalScroll(container);
     const nearBottom = isNearBottom(container);
     autoScrollRef.current = resolveMessagesAutoFollowAfterScroll({
       previousScrollTop: lastObservedScrollTopRef.current,
@@ -1725,6 +1726,22 @@ export const Messages = memo(function Messages({
   );
 
   useEffect(() => clearTransientUiState, [clearTransientUiState]);
+
+  useEffect(() => {
+    let postTransitionTimer = 0;
+    const handleResize = () => {
+      pinMessagesHorizontalScroll(containerRef.current);
+      window.clearTimeout(postTransitionTimer);
+      postTransitionTimer = window.setTimeout(() => {
+        pinMessagesHorizontalScroll(containerRef.current);
+      }, 250);
+    };
+    window.addEventListener("resize", handleResize);
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      window.clearTimeout(postTransitionTimer);
+    };
+  }, []);
 
   useEffect(() => {
     if (!hasAnchorRail) {

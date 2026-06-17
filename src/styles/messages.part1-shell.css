@@ -125,7 +125,7 @@
 
 .messages {
   overflow-y: auto;
-  overflow-x: hidden;
+  overflow-x: clip;
   -webkit-app-region: no-drag;
   flex: 1;
   min-height: 0;
@@ -185,8 +185,8 @@
 }
 
 .app.canvas-width-wide .messages {
-  padding-left: 50px;
-  padding-right: 25px;
+  padding-left: 38px;
+  padding-right: 38px;
 }
 
 .messages-collapsed-indicator {

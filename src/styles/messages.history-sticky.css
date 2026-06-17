@@ -324,12 +324,12 @@
 }
 
 .app.canvas-width-wide .messages-history-sticky-header-inner {
-  padding-left: 50px;
-  padding-right: 25px;
+  padding-left: 38px;
+  padding-right: 38px;
 }
 
 .app.canvas-width-wide .messages-history-sticky-header[data-history-sticky-collapsed="true"] {
-  margin-right: -25px;
+  margin-right: -38px;
 }
 
 .messages-history-sticky-header[data-history-sticky-collapsed="true"]

@@ -36,11 +36,13 @@ export function focusUserInputRequestCard(request: RequestUserInputRequest) {
   if (!card) {
     return false;
   }
-  const messagesScroller = card.closest<HTMLElement>(".messages");
+  const messagesScroller =
+    card.closest<HTMLElement>(".messages") ??
+    document.querySelector<HTMLElement>(".messages");
   if (messagesScroller) {
     scrollCardIntoMessagesView(card, messagesScroller);
   } else {
-    card.scrollIntoView({ block: "center", behavior: "smooth", inline: "nearest" });
+    card.scrollIntoView({ block: "center", behavior: "smooth", inline: "start" });
   }
   card.focus({ preventScroll: true });
   return true;

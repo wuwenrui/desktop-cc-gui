@@ -177,7 +177,7 @@ describe("layout swapped platform guard", () => {
       ".messages-history-sticky-header-bubble.is-collapsed",
     );
     expect(collapsedStickyRule).toContain("margin-right: calc(-1 * var(--main-panel-padding));");
-    expect(wideCollapsedStickyRule).toContain("margin-right: -25px;");
+    expect(wideCollapsedStickyRule).toContain("margin-right: -38px;");
     expect(collapsedStickyInnerRule).toContain("padding-right: 0;");
     expect(collapsedStickyContentRule).toContain("justify-content: flex-end;");
     expect(collapsedStickyBubbleRule).toContain("width: var(--messages-history-sticky-peek-width);");
