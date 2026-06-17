@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -326,6 +326,59 @@ fn write_config(config: &CodemossConfig) -> Result<(), String> {
     std::fs::write(&path, content).map_err(|e| format!("Failed to write config: {}", e))
 }
 
+fn provider_created_at(value: &Value) -> Option<i64> {
+    value.get("createdAt").and_then(Value::as_i64)
+}
+
+fn next_provider_created_at(providers: &HashMap<String, Value>) -> i64 {
+    let next_from_existing = providers
+        .values()
+        .filter_map(provider_created_at)
+        .max()
+        .unwrap_or(0)
+        .saturating_add(1);
+    let now_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .and_then(|duration| i64::try_from(duration.as_millis()).ok())
+        .unwrap_or(next_from_existing);
+
+    now_ms.max(next_from_existing)
+}
+
+fn updated_provider_created_at(
+    existing_provider: Option<&Value>,
+    updates_created_at: Option<i64>,
+) -> Option<i64> {
+    existing_provider
+        .and_then(provider_created_at)
+        .or(updates_created_at)
+}
+
+fn set_provider_created_at(value: &mut Value, created_at: i64) {
+    if let Value::Object(map) = value {
+        map.insert("createdAt".into(), Value::Number(created_at.into()));
+    }
+}
+
+fn sort_claude_providers_by_created_at(providers: &mut [ProviderConfig]) {
+    providers.sort_by(|a, b| {
+        a.created_at
+            .unwrap_or(0)
+            .cmp(&b.created_at.unwrap_or(0))
+            .then_with(|| a.id.cmp(&b.id))
+    });
+}
+
+fn sort_codex_providers_by_created_at(providers: &mut [CodexProviderConfig]) {
+    providers.sort_by(|a, b| {
+        a.created_at
+            .unwrap_or(0)
+            .cmp(&b.created_at.unwrap_or(0))
+            .then_with(|| a.id.cmp(&b.id))
+    });
+}
+
 fn resolve_provider_name(config: &CodemossConfig, provider_id: &str) -> Option<String> {
     if provider_id == LOCAL_SETTINGS_PROVIDER_ID {
         return Some(LOCAL_SETTINGS_PROVIDER_NAME.to_string());
@@ -608,11 +661,7 @@ pub(crate) async fn vendor_get_claude_providers() -> Result<Vec<ProviderConfig>,
             value_to_claude_provider(id, value, is_active).ok()
         })
         .collect();
-    regular_providers.sort_by(|a, b| {
-        let ta = a.created_at.unwrap_or(0);
-        let tb = b.created_at.unwrap_or(0);
-        ta.cmp(&tb)
-    });
+    sort_claude_providers_by_created_at(&mut regular_providers);
 
     let mut providers = Vec::with_capacity(regular_providers.len() + 1);
     providers.push(build_local_provider(
@@ -679,10 +728,15 @@ pub(crate) async fn vendor_add_claude_provider(provider: ProviderConfig) -> Resu
     if config.claude.providers.contains_key(&provider.id) {
         return Err(format!("Provider with id {} already exists", provider.id));
     }
+    let created_at = provider
+        .created_at
+        .unwrap_or_else(|| next_provider_created_at(&config.claude.providers));
+    let mut provider_value = claude_provider_to_value(&provider);
+    set_provider_created_at(&mut provider_value, created_at);
     config
         .claude
         .providers
-        .insert(provider.id.clone(), claude_provider_to_value(&provider));
+        .insert(provider.id.clone(), provider_value);
     write_config(&config)
 }
 
@@ -698,10 +752,13 @@ pub(crate) async fn vendor_update_claude_provider(
     if !config.claude.providers.contains_key(&id) {
         return Err(format!("Provider {} not found", id));
     }
-    config
-        .claude
-        .providers
-        .insert(id, claude_provider_to_value(&updates));
+    let existing_created_at =
+        updated_provider_created_at(config.claude.providers.get(&id), updates.created_at);
+    let mut provider_value = claude_provider_to_value(&updates);
+    if let Some(created_at) = existing_created_at {
+        set_provider_created_at(&mut provider_value, created_at);
+    }
+    config.claude.providers.insert(id, provider_value);
     write_config(&config)
 }
 
@@ -775,11 +832,7 @@ pub(crate) async fn vendor_get_codex_providers() -> Result<Vec<CodexProviderConf
             value_to_codex_provider(id, value, is_active).ok()
         })
         .collect();
-    providers.sort_by(|a, b| {
-        let ta = a.created_at.unwrap_or(0);
-        let tb = b.created_at.unwrap_or(0);
-        ta.cmp(&tb)
-    });
+    sort_codex_providers_by_created_at(&mut providers);
     Ok(providers)
 }
 
@@ -792,10 +845,15 @@ pub(crate) async fn vendor_add_codex_provider(provider: CodexProviderConfig) -> 
             provider.id
         ));
     }
+    let created_at = provider
+        .created_at
+        .unwrap_or_else(|| next_provider_created_at(&config.codex.providers));
+    let mut provider_value = codex_provider_to_value(&provider);
+    set_provider_created_at(&mut provider_value, created_at);
     config
         .codex
         .providers
-        .insert(provider.id.clone(), codex_provider_to_value(&provider));
+        .insert(provider.id.clone(), provider_value);
     write_config(&config)
 }
 
@@ -808,10 +866,13 @@ pub(crate) async fn vendor_update_codex_provider(
     if !config.codex.providers.contains_key(&id) {
         return Err(format!("Codex provider {} not found", id));
     }
-    config
-        .codex
-        .providers
-        .insert(id, codex_provider_to_value(&updates));
+    let existing_created_at =
+        updated_provider_created_at(config.codex.providers.get(&id), updates.created_at);
+    let mut provider_value = codex_provider_to_value(&updates);
+    if let Some(created_at) = existing_created_at {
+        set_provider_created_at(&mut provider_value, created_at);
+    }
+    config.codex.providers.insert(id, provider_value);
     write_config(&config)
 }
 
@@ -889,4 +950,85 @@ pub(crate) async fn vendor_gemini_preflight() -> Result<GeminiVendorPreflightRes
     ];
 
     Ok(GeminiVendorPreflightResult { checks })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn codex_provider(id: &str, created_at: Option<i64>) -> CodexProviderConfig {
+        CodexProviderConfig {
+            id: id.to_string(),
+            name: id.to_string(),
+            remark: None,
+            created_at,
+            is_active: false,
+            config_toml: None,
+            auth_json: None,
+            custom_models: None,
+        }
+    }
+
+    #[test]
+    fn provider_order_uses_stable_tie_breaker_when_created_at_is_missing() {
+        let mut providers = vec![
+            codex_provider("provider-c", None),
+            codex_provider("provider-a", None),
+            codex_provider("provider-b", None),
+        ];
+
+        sort_codex_providers_by_created_at(&mut providers);
+
+        let ordered_ids: Vec<&str> = providers
+            .iter()
+            .map(|provider| provider.id.as_str())
+            .collect();
+        assert_eq!(ordered_ids, vec!["provider-a", "provider-b", "provider-c"]);
+    }
+
+    #[test]
+    fn provider_order_keeps_created_at_before_tie_breaker() {
+        let mut providers = vec![
+            codex_provider("provider-c", Some(30)),
+            codex_provider("provider-b", Some(10)),
+            codex_provider("provider-a", Some(10)),
+        ];
+
+        sort_codex_providers_by_created_at(&mut providers);
+
+        let ordered_ids: Vec<&str> = providers
+            .iter()
+            .map(|provider| provider.id.as_str())
+            .collect();
+        assert_eq!(ordered_ids, vec!["provider-a", "provider-b", "provider-c"]);
+    }
+
+    #[test]
+    fn next_provider_created_at_appends_after_existing_timestamps() {
+        let providers = HashMap::from([
+            ("first".to_string(), json!({ "createdAt": 100 })),
+            ("second".to_string(), json!({ "createdAt": 120 })),
+        ]);
+
+        assert!(next_provider_created_at(&providers) > 120);
+    }
+
+    #[test]
+    fn set_provider_created_at_overwrites_storage_value() {
+        let mut value = json!({ "name": "Provider", "createdAt": 10 });
+
+        set_provider_created_at(&mut value, 42);
+
+        assert_eq!(provider_created_at(&value), Some(42));
+    }
+
+    #[test]
+    fn updated_provider_created_at_keeps_existing_order_timestamp() {
+        let existing = json!({ "name": "Provider", "createdAt": 10 });
+
+        let created_at = updated_provider_created_at(Some(&existing), Some(42));
+
+        assert_eq!(created_at, Some(10));
+    }
 }
