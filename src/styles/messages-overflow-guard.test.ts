@@ -26,6 +26,12 @@ const engineTaskOutputCss = readFileSync(
   fileURLToPath(new URL("./engine-task-output.css", import.meta.url)),
   "utf8",
 );
+const sessionCasebarCss = readFileSync(
+  fileURLToPath(
+    new URL("../features/session-evidence/session-casebar.css", import.meta.url),
+  ),
+  "utf8",
+);
 
 function getCssRuleBlock(css: string, selector: string): string {
   const escapedSelector = selector
@@ -37,7 +43,7 @@ function getCssRuleBlock(css: string, selector: string): string {
 
 describe("messages overflow guard", () => {
   it("keeps the message scroll container from drifting horizontally", () => {
-    expect(getCssRuleBlock(messagesShellCss, ".messages")).toContain("overflow-x: hidden;");
+    expect(getCssRuleBlock(messagesShellCss, ".messages")).toContain("overflow-x: clip;");
     expect(getCssRuleBlock(messagesShellCss, ".messages-full")).toContain("min-width: 0;");
     expect(getCssRuleBlock(messagesShellCss, ".messages-full")).toContain("box-sizing: border-box;");
   });
@@ -59,6 +65,15 @@ describe("messages overflow guard", () => {
     expect(getCssRuleBlock(messagesLayoutCss, ".message-user-layout")).toContain("min-width: 0;");
     expect(getCssRuleBlock(messagesLayoutCss, ".message-context-stack.is-user")).toContain(
       "max-width: 100%;",
+    );
+  });
+
+  it("lets the conditional session stage wrappers shrink with the viewport", () => {
+    expect(getCssRuleBlock(sessionCasebarCss, ".session-stage")).toContain("min-width: 0;");
+    expect(getCssRuleBlock(sessionCasebarCss, ".session-stage")).toContain("overflow-x: hidden;");
+    expect(getCssRuleBlock(sessionCasebarCss, ".session-stage-chat")).toContain("min-width: 0;");
+    expect(getCssRuleBlock(sessionCasebarCss, ".session-stage-chat")).toContain(
+      "overflow-x: hidden;",
     );
   });
 
