@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-22.md`
-- **Total Sessions**: 855
+- **Total Sessions**: 856
 - **Last Active**: 2026-06-17
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-22.md` | ~1222 | Active |
+| `journal-22.md` | ~1255 | Active |
 | `journal-21.md` | ~1970 | Archived |
 | `journal-20.md` | ~1997 | Archived |
 | `journal-19.md` | ~1989 | Archived |
@@ -50,6 +50,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 856 | 2026-06-17 | 收口 v0.5.10 性能闭环 | `3ca3957a` | `feature/v0.5.10` |
 | 855 | 2026-06-17 | 修复 runtime 重连恢复卡片状态 | `86f3ecb3` | `feature/v0.5.10` |
 | 854 | 2026-06-17 | 合并 PR 696 供应商排序修复 | `c5fe5ea5` | `feature/v0.5.10` |
 | 853 | 2026-06-17 | 补齐稳定性归档文档 | `4e00c1ed` | `feature/v0.5.10` |

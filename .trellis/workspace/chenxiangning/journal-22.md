@@ -1220,3 +1220,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 856: 收口 v0.5.10 性能闭环
+
+**Date**: 2026-06-17
+**Task**: 收口 v0.5.10 性能闭环
+**Branch**: `feature/v0.5.10`
+
+### Summary
+
+补齐 v0.5.10 性能闭环文档、topbar advisory smoke 记录与 runtime evidence gate 结果，明确 release-grade Tauri/WebView measured trace 后置。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3ca3957a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
