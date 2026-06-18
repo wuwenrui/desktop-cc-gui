@@ -1868,3 +1868,36 @@ Conclusion：性能证据现在明确显示，下一阶段真实方向不是 Mes
 ### Next Steps
 
 - None - task complete
+
+
+## Session 869: 拆分 Codex 首文本前运行阶段
+
+**Date**: 2026-06-18
+**Task**: 拆分 Codex 首文本前运行阶段
+**Branch**: `feature/v0.5.11`
+
+### Summary
+
+扩展 Codex ccguiTiming，把 first runtime、reasoning、tool、agent message 与 assistant first text 分开记录；修正 reasoning delta 被误当 assistant 首文本的诊断风险；renderer diagnostics 与 runtime report 增加 phase breakdown 指标，并同步 OpenSpec contract。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8fb58aa1` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
