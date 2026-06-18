@@ -69,30 +69,23 @@ Codex stale-thread recovery MUST distinguish durable stale conversation identiti
 - **AND** canonical accepted-turn / durable-activity facts prove the identity has no accepted user turn, no completed assistant response, and no persisted durable activity
 - **THEN** the system MAY replace the stale draft with a fresh Codex thread for the current first prompt
 - **AND** the primary user path MUST continue the prompt in the fresh thread rather than asking the user to recover the old empty identity
+- **AND** this fresh replacement MUST be attempted before stale fork fallback for the same failed empty draft
 
-#### Scenario: unknown draft boundary stays durable-safe
-- **WHEN** a Codex thread identity fails with `thread not found`
-- **AND** the system cannot determine whether the identity accepted user work
-- **AND** the failure is not the current pre-accept first-send prompt on a locally empty draft surface
-- **THEN** the system MUST use durable stale-thread recovery semantics
-- **AND** it MUST NOT silently classify the source as an empty disposable draft based only on missing frontend-rendered items
+#### Scenario: same-id refresh does not verify a missing first-turn draft
+- **WHEN** a newly started Codex empty draft fails the first prompt with `thread not found`
+- **AND** refresh/rebind returns the same `threadId` that just failed
+- **THEN** the system MUST NOT treat that same id as a verified rebind
+- **AND** the system MUST continue through first-turn fresh replacement or visible failure semantics rather than retrying the same missing id as recovered
 
-#### Scenario: current first-send prompt can recover a lost empty-draft marker
-- **WHEN** a Codex thread identity fails with `thread not found` before `turn/start` accepts the current prompt
-- **AND** the empty-draft lifecycle marker is missing
-- **AND** local activity contains no durable user, assistant, tool, approval, or completed generated-image evidence
-- **THEN** the system MAY create a fresh Codex thread and resend the current prompt there
-- **AND** malformed identity errors such as `invalid thread id` MUST still require verified rebind or explicit user recovery rather than automatic fresh replacement
+#### Scenario: cold-start missing thread gets bounded readiness retry
+- **WHEN** the first `turn/start` after Codex runtime cold start reports `thread not found`
+- **THEN** the backend SHOULD perform same-runtime `thread/resume` plus short bounded readiness retry before surfacing the failure
+- **AND** the retry MUST remain bounded and MUST NOT route the request to another provider/runtime
 
 #### Scenario: durable stale thread still requires verified rebind or explicit fresh continuation
 - **WHEN** a Codex thread identity fails after one or more accepted user turns or durable activity facts exist
 - **THEN** the system MUST first attempt verified rebind through the existing stale-thread recovery contract
 - **AND** fresh continuation MUST be explicit and user-visible rather than silently replacing the old thread
-
-#### Scenario: first-turn fresh replacement records alias only when safe
-- **WHEN** a first-turn stale draft is replaced by a fresh thread
-- **THEN** the system MUST NOT persist an alias that claims the old durable conversation was recovered unless the old identity was verified
-- **AND** any stored mapping MUST be marked or treated as draft replacement rather than durable rebind
 
 ### Requirement: Fresh Continuation MUST Preserve User Intent Visibility
 

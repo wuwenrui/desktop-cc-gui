@@ -298,3 +298,19 @@ startup trace MUST 记录足够 milestone timing，使 slow startup 可以归因
 - **WHEN** renderer starts through bootstrap path
 - **THEN** startup trace MUST record start and end timing for storage preload, migration, input history, i18n, app import, root render, and shell readiness where those phases execute
 - **AND** trace payloads MUST contain timing/status metadata rather than prompt, assistant, tool, or file content
+
+### Requirement: V0511 Startup Marker Evidence MUST Flow Into Cold Start Baseline
+
+Startup marker snapshots MUST be consumable by cold-start baseline generation.
+
+#### Scenario: marker extraction writes normalized snapshot
+
+- **WHEN** `scripts/perf-startup-marker-snapshot.mjs` receives diagnostics containing `perf.startup.markers`
+- **THEN** it MUST write a normalized snapshot containing only `first-paint` and `first-interactive` marker timings
+- **AND** the snapshot MUST exclude unrelated runtime diagnostics content
+
+#### Scenario: cold start baseline consumes normalized snapshot
+
+- **WHEN** `scripts/perf-cold-start-baseline.mjs` receives the normalized startup marker snapshot
+- **THEN** it MUST use the marker timings for `S-CS-COLD/firstPaintMs` and `S-CS-COLD/firstInteractiveMs`
+- **AND** it MUST preserve bundle gzip metrics in the same output

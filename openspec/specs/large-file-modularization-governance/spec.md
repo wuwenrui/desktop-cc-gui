@@ -83,18 +83,24 @@ The system SHALL provide CI sentry checks that enforce domain-aware hard gates a
 - **THEN** CI sentry MUST fail the check
 - **AND** the failure output MUST show both the baseline line count and the current line count
 
-#### Scenario: stabilization extraction does not create replacement hubs
+#### Scenario: near-threshold watch stays advisory in high-frequency CI
 
-- **WHEN** this core runtime/realtime stabilization change extracts AppShell, realtime, runtime, bridge, fixture, or test code
-- **THEN** new modules MUST be split by responsibility rather than becoming replacement hub files
-- **AND** the change MUST keep `node --test scripts/check-large-files.test.mjs`, `npm run check:large-files:near-threshold`, and `npm run check:large-files:gate` passing
-- **AND** touched near-threshold files MUST be reduced, kept stable, or documented with explicit follow-up rationale
+- **WHEN** large-file governance runs for pull_request or push events
+- **THEN** the blocking job MUST run parser tests and the hard-debt gate
+- **AND** near-threshold watch output MUST NOT be required for the pull_request or push job to pass
+- **AND** near-threshold watch MUST remain available through manual or scheduled advisory execution
 
-#### Scenario: large-file sentry remains cross-platform
+#### Scenario: large-file sentry hard gate remains cross-platform
 
-- **WHEN** large-file governance checks run in CI
-- **THEN** parser tests, near-threshold watch, and hard-debt gate MUST run on ubuntu-latest, macos-latest, and windows-latest
+- **WHEN** large-file hard-debt governance checks run in CI
+- **THEN** parser tests and hard-debt gate MUST run on ubuntu-latest, macos-latest, and windows-latest
 - **AND** file matching and path output MUST remain platform-neutral
+
+#### Scenario: advisory watch artifact remains inspectable
+
+- **WHEN** the advisory near-threshold watch is run manually or by schedule
+- **THEN** it MUST produce the same near-threshold JSON artifact shape used by governance evidence readers
+- **AND** it MUST NOT change hard-debt gate pass/fail semantics
 
 ### Requirement: Completion Criteria for Governance Milestones
 

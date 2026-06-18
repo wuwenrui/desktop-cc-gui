@@ -4,40 +4,35 @@
 TBD - created by archiving change composer-and-message-row-render-budget. Update Purpose after archive.
 ## Requirements
 ### Requirement: Message Rows MUST Use Stable Identity Across Live Updates
+Message row rendering MUST keep stable identity for completed history rows while a live assistant row changes. Memoization MUST be based on explicit row-affecting fields rather than incidental object or live-only prop identity.
 
-Message row rendering MUST keep stable identity for history rows while a live assistant row changes. Memoization MUST be based on explicit ids, versions, and source versions rather than incidental object identity.
+#### Scenario: completed history rows do not rerender for live text-only updates
+- **WHEN** a live assistant row receives a text delta
+- **AND** an earlier completed user or assistant message row has unchanged row content, copied state, recovery state, file link handlers, and suppression flags
+- **THEN** the completed row MUST keep its memo boundary and avoid rerendering
+- **AND** the live assistant row MAY rerender to show the latest text
 
-#### Scenario: history rows stay stable during live token ingress
+#### Scenario: live-only props do not invalidate completed rows
+- **WHEN** a prop is only consumed by streaming assistant rows, such as visible text reporting or active stream mitigation
+- **THEN** changes to that prop MUST NOT invalidate non-streaming completed message rows
+- **AND** legitimate completed-row props such as `isCopied`, `retryMessage`, copy handler, file link handlers, runtime reconnect state, and suppression flags MUST still invalidate when their visible behavior changes
 
-- **WHEN** an assistant turn emits a streaming delta for the active live row
-- **THEN** rows before the live row SHOULD NOT rerender
-- **AND** any unavoidable history row rerender MUST be counted, attributed to a row subtype, and kept within the documented budget.
+#### Scenario: shared file-link handlers remain stable during live updates
+- **WHEN** parent settings recreate `openTargets` arrays without changing a completed row's rendered content
+- **THEN** `openFileLink` and `showFileLinkMenu` handler identities SHOULD remain stable so completed rows keep their memo boundary
+- **AND** invoking those stable handlers MUST use the latest `workspacePath`, selected open target, and workspace-file callback configuration
 
-#### Scenario: derived data is memoized by source version
-
-- **WHEN** a row or timeline projection derives maps, sets, grouped tool data, markdown metadata, or sticky state from row inputs
-- **THEN** the derived value MUST be cached by a stable `sourceVersion`
-- **AND** unchanged source versions MUST reuse the previous derived value.
-
-#### Scenario: row subtype boundaries preserve behavior
-
-- **WHEN** a row subtype is wrapped in a memo boundary or split into a child component
-- **THEN** existing visual behavior, accessibility labels, actions, and copy/export behavior MUST remain equivalent
-- **AND** the change MUST include a focused regression test for that subtype or an explicit manual-only qualifier.
+#### Scenario: hidden runtime reconnect props do not invalidate ordinary completed rows
+- **WHEN** runtime reconnect callbacks or retry-message payloads change during a live update
+- **AND** a completed message row is not rendering the runtime reconnect card
+- **THEN** those hidden reconnect-only props MUST NOT invalidate that row's memo boundary
+- **AND** rows with `showRuntimeReconnectCard=true` MUST still compare reconnect callbacks, retry message, and recovery state normally
 
 ### Requirement: Message Row Render Budgets MUST Be Reported As Content-Safe Evidence
-
 Renderer diagnostics and runtime evidence gates MUST expose message-row render budget fields without recording conversation content.
 
-#### Scenario: row render counts are reported per thread
-
-- **WHEN** renderer diagnostics emit a message-row budget report
-- **THEN** the report MUST include active thread id, live row render count, history row render count, affected subtype ids, evidence class, and sample window
-- **AND** it MUST NOT include prompt text, assistant body text, tool output, or file content.
-
-#### Scenario: gate distinguishes proxy from measured evidence
-
-- **WHEN** render counts come from fixture or jsdom tests
-- **THEN** the evidence class MUST be `proxy`
-- **AND** the gate MUST NOT describe it as release-grade measured runtime proof.
+#### Scenario: row render counts distinguish live and history rows
+- **WHEN** renderer diagnostics emit a message-row budget report during a streaming turn
+- **THEN** the report MUST include enough content-safe fields to distinguish live assistant rows from completed history rows
+- **AND** it MUST NOT include prompt text, assistant body text, tool output, or file content
 

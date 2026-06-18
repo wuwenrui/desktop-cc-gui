@@ -1,9 +1,9 @@
 # Project Context
 
 - Type: OpenSpec Workspace
-- Updated At: 2026-06-12T00:00:00+08:00
+- Updated At: 2026-06-18T11:20:00+08:00
 - Scope: governance snapshot for the current `mossx` repository workspace
-- Product version fact: `ccgui@0.5.9` from `package.json` and `src-tauri/tauri.conf.json`
+- Product version fact: `ccgui@0.5.11` from `package.json` and `src-tauri/tauri.conf.json`
 
 ## Domain
 
@@ -20,7 +20,7 @@ The product in this repository is `ccgui`: a Tauri 2 desktop AI engineering work
 - Change workflow artifacts: `openspec/changes/<change-id>/{proposal,design,tasks,verification}.md`
 - Archive: `openspec/changes/archive/*`
 - Implementation rules: `.trellis/spec/**`
-- Current workspace state: tracked active changes = `7`, archive changes = `472`, main specs = `328`
+- Current workspace state: tracked active changes = `0`, archive changes = `506`, main specs = `353`
 
 ## Entry Surfaces
 
@@ -54,67 +54,41 @@ The product in this repository is `ccgui`: a Tauri 2 desktop AI engineering work
 
 ## Current Inventory
 
-- Active changes: `7`
-- Archive changes: `472`
-- Main specs: `328`
+- Active changes: `0`
+- Archive changes: `506`
+- Main specs: `353`
 - Completed task sets still active: `0`
-- Ready-for-implementation task sets: `5`
+- Ready-for-implementation task sets: `0`
 
 ## Active Changes
 
-### `realtime-input-and-io-isolation-2026-06`
-
-- Status: in progress; root-cause isolation change for realtime reducer fast path, backend file I/O isolation, Rust event batching, file watcher debounce, and evidence-gate fields.
-- Current artifact fact: proposal/design/spec/tasks are complete and calibrated. Rust/backend substrate is mostly landed; app-server batching now has per-workspace Rust flush + terminal workspace flush and frontend status-snapshot coalesce + chunked dispatch; broader React shell isolation and full perf/manual gates remain follow-up work.
-- Action: finish remaining frontend batching/evidence tasks before archive; do not mark app-server route complete until dispatch cost is bounded beyond IPC batching.
-
-### `frontend-prop-chain-stability-2026-06`
-
-- Status: in progress; follow-up to consume batch channels and reduce frontend render propagation.
-- Current artifact fact: proposal/design/spec/tasks are complete. Current implementation has mutual-exclusive batch consumers, shared app-server dispatcher, and `useFileExternalSync` batch path coalescing; app shell domain split, row-level status lookup, and measured evidence remain open.
-- Action: next implement app-shell domain context split only after batch consumer wording and evidence status remain aligned.
-
-### `composer-and-message-row-render-budget`
-
-- Step: 1 of 5 in the P1 performance chain.
-- Current artifact fact: proposal/design/spec/tasks are complete and recalibrated after rollback. `useComposerEditorState` is documented as textarea-height state only, so implementation must focus on evidence-driven ChatInputBox value-path isolation, IME stability, input history stale-drop, and `MessagesRows` row identity/render diagnostics.
-- Action: implement first; downstream changes must not start shared renderer-chain edits until this change lands its diagnostics schema and local Composer/message-row guardrails.
-
-### `renderer-resource-backpressure`
-
-- Step: 2 of 5 in the P1 performance chain.
-- Current artifact fact: proposal/design/spec/tasks are complete and recalibrated as the renderer resource substrate. Current code still uses a bare `Set` event hub in `src/services/events.ts`; `eventBackpressure`, listener owner registry, `useFocusRefresh`, and diagnostics field naming must be introduced before backend/workspace changes reuse them.
-- Action: implement public substrate first, then migrate terminal/runtime, focus wave, listener owner pilots, and deferred media/object URL ownership.
-
-### `backend-io-cache-and-bridge-payload-budget`
-
-- Step: 3 of 5 in the P1 performance chain.
-- Current artifact fact: proposal/design/spec/tasks are complete and recalibrated as the backend substrate. Current code does not yet provide `ScanCache` / `payloadBudget`; this change must land `ScanCache<K,V>`, cache key signature, blocking helper, Tauri invoke payload metadata, and one pilot path without taking over Step 4 pagination/subtree work.
-- Action: implement after Step 2 public renderer substrate; Step 4 is blocked until this change exposes reusable backend cache and payload budget artifacts.
-
-### `workspace-tree-and-large-file-listing-budget`
-
-- Step: 4 of 5 in the P1 performance chain.
-- Current artifact fact: proposal/design/spec/tasks are complete and now explicitly gated on Step 3. Existing `workspaces/files.rs` has `limit_hit` / `scan_state` / partial response semantics, but this change must not modify file listing behavior until `ScanCache`, cache key signature, blocking helper, and `payloadBudget` metadata are available.
-- Action: implement only after Step 3; consume the backend substrate to add listing budget metadata, subtree on-demand, stale sourceVersion guards, partial UI clarity, and shared file index bridge.
-
-### `markdown-off-main-thread-pipeline`
-
-- Step: 5 of 5 in the P1 performance chain.
-- Current artifact fact: proposal/design/spec/tasks are complete and recalibrated to reuse existing `fastMarkdownRenderer` worker substrate. Code work may be researched independently, but `runtime-performance-evidence-gates` fields must be appended only after Step 1-4 field naming is stable.
-- Action: implement last for evidence-gate writes; reuse/extend the existing worker/cache path for serializable precompute and keep React/DOM rich rendering on the main React path where required.
+No active OpenSpec changes remain after the 2026-06-18 closure batch. New behavior work should start from a fresh `openspec/changes/<change-id>/` directory.
 
 ## P1 Performance Execution Order
 
-1. Implement `composer-and-message-row-render-budget`.
-2. Implement `renderer-resource-backpressure` public substrate and pilot migrations.
-3. Implement `backend-io-cache-and-bridge-payload-budget` public substrate and one pilot scan/path.
-4. Implement `workspace-tree-and-large-file-listing-budget` using Step 3 substrate.
-5. Implement `markdown-off-main-thread-pipeline`; defer evidence gate field writes until Step 1-4 are merged.
-
-Detailed rollback recalibration note: this snapshot is based on active `openspec/changes/*` directories and current code anchors after rollback, not the stale 2026-06-11 project snapshot.
+The previous v0.5.11 performance and recovery follow-up chain has been archived. Future performance work should open a new chain instead of reusing the archived change directories.
 
 ## Recent Archive / Sync Snapshot
+
+### 2026-06-18 v0.5.11 Closure Batch
+
+Archived 11 verified changes and synced their delta specs into main specs:
+
+- `fix-runtime-reconnect-card-state-loop`
+- `v0511-performance-evidence-and-runtime-jank-hardening`
+- `reduce-streaming-reducer-commit-lag`
+- `reduce-message-row-render-amplification`
+- `reduce-turn-trace-batch-flush-lag`
+- `measure-codex-first-delta-latency`
+- `measure-codex-turn-start-ack-latency`
+- `optimize-governance-sentry-noise-and-large-file-split`
+- `fix-disk-codex-empty-draft-fresh-replay`
+- `refactor-v0511-thread-messaging-recovery-and-streaming`
+- `follow-up-v0511-large-file-cookbook-and-measured-evidence`
+
+Spec sync summary: 25 main specs were created or updated, including v0.5.11 performance evidence, streaming latency diagnostics, Codex message recovery, stale binding recovery, large-file governance, and recovery cookbook capabilities. Counts after archive: active=0, archive=506, specs=353.
+
+Validation: each change passed `openspec validate <change> --strict --no-interactive` immediately before archive. The batch archive used `openspec archive <change> -y`, which synced delta specs before moving each change into `openspec/changes/archive/2026-06-18-*`.
 
 ### 2026-05-30 Closure Baseline
 
