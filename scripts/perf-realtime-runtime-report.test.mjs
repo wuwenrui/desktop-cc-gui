@@ -302,6 +302,87 @@ test("realtime runtime report separates first-delta latency from visible lag", a
   );
 });
 
+test("realtime runtime report flags provider first-response dominated Codex turns", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "ccgui-realtime-runtime-"));
+  const inputPath = join(dir, "diagnostics.json");
+  const outputPath = join(dir, "runtime.json");
+  await writeFile(inputPath, JSON.stringify({
+    entries: [
+      {
+        timestamp: Date.now(),
+        label: "realtime.turnTrace.summary",
+        payload: {
+          traceId: "tt-provider-first-response",
+          engine: "codex",
+          model: "MiniMax-M3",
+          evidenceClass: "measured",
+          deltas: {
+            sendToFirstDeltaMs: 3_146,
+            firstDeltaToFirstVisibleTextMs: 145,
+            lastReducerCommitToTerminalSettlementMs: 20,
+          },
+          counters: {
+            reducerAmplification: 1,
+            appServerEventRouteDurationAvgMs: 0,
+            terminalSettlementLagMs: 20,
+          },
+        },
+      },
+      {
+        timestamp: Date.now(),
+        label: "stream-latency/app-server-event",
+        payload: {
+          traceSource: "codex-app-server",
+          workspaceId: "ws-1",
+          threadId: "thread-provider-first-response",
+          turnId: "turn-provider-first-response",
+          model: "MiniMax-M3",
+          method: "item/agentMessage/delta",
+          turnStartResponseToFirstRuntimeEventMs: 1,
+          turnStartResponseToFirstTextDeltaMs: 2_371,
+          firstRuntimeEventToFirstTextDeltaMs: 2_370,
+          firstRuntimeEventToFirstAssistantItemEventMs: 2_365,
+          firstAssistantItemEventToFirstTextDeltaMs: 5,
+          eventCountBeforeFirstTextDelta: 7,
+          reasoningEventCountBeforeFirstTextDelta: 0,
+          toolEventCountBeforeFirstTextDelta: 0,
+          methodsBeforeFirstTextDelta: [
+            "thread/settings/updated",
+            "warning",
+            "thread/status/changed",
+            "turn/started",
+            "item/started",
+            "item/completed",
+          ],
+          firstRuntimeEventMethod: "thread/settings/updated",
+          firstAssistantItemEventMethod: "item/started",
+          firstTextDeltaMethod: "item/agentMessage/delta",
+        },
+      },
+    ],
+  }), "utf-8");
+
+  await runScript(["--input", inputPath, "--output", outputPath]);
+  const fragment = JSON.parse(await readFile(outputPath, "utf-8"));
+
+  assert.match(
+    fragment.notes.join("\n"),
+    /providerFirstResponseDominates=turn-provider-first-response/,
+  );
+  assert.match(
+    fragment.notes.join("\n"),
+    /MiniMax-M3 waited 2365ms from first runtime event to first assistant item, then 5ms to first text/,
+  );
+  assert.match(
+    fragment.notes.join("\n"),
+    /reasoningBeforeFirstText=0 toolBeforeFirstText=0/,
+  );
+  assert.match(
+    fragment.notes.join("\n"),
+    /investigate provider\/model first-response phase before client render optimization/,
+  );
+});
+
 test("realtime runtime report does not use legacy batch wait windows as measured flush duration", async () => {
   const dir = await mkdtemp(join(tmpdir(), "ccgui-realtime-runtime-"));
   const inputPath = join(dir, "diagnostics.json");

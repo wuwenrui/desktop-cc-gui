@@ -19,3 +19,9 @@ Codex backend phase timing diagnostics MUST remain bounded and content-safe whil
 - **WHEN** an app-server event lacks timing metadata or contains malformed timing fields
 - **THEN** renderer diagnostics MUST ignore or normalize those fields without throwing
 - **AND** report generation MUST mark unavailable metrics as unsupported rather than inventing proxy values
+
+#### Scenario: long sessions preserve realtime evidence
+- **WHEN** renderer diagnostics contain high-volume lifecycle, `perf.*`, `realtime.turnTrace.summary`, and `stream-latency/*` entries
+- **THEN** `realtime.turnTrace.summary` entries MUST be retained in an independent bounded bucket
+- **AND** `stream-latency/*` entries MUST be retained in an independent bounded bucket
+- **AND** retention MUST remain content-safe and bounded rather than preserving unbounded raw diagnostics

@@ -66,11 +66,24 @@ The first assistant item lifecycle event (`item/started`, `item/updated`, or `it
 
 Alternative considered: infer assistant item start from `itemId` suffixes such as `_msg`. Rejected because item ids are implementation details; item type is the stable event contract.
 
+### Decision: protect realtime evidence from renderer diagnostic eviction
+
+Renderer diagnostics keep independent bounded buckets for ordinary lifecycle diagnostics, `perf.*` entries, `realtime.turnTrace.summary`, and `stream-latency/*` entries. This prevents long streaming sessions from evicting turn summaries before `perf-realtime-runtime-report` can correlate first-delta, visible-lag, and Codex phase evidence.
+
+Alternative considered: increase the existing generic renderer diagnostics cap. Rejected because high-volume lifecycle or stream events could still evict summaries, and the retention contract would remain accidental rather than evidence-driven.
+
+### Decision: report provider/model first-response dominance explicitly
+
+When `firstRuntimeEventToFirstAssistantItemEventMs` accounts for most of `firstRuntimeEventToFirstTextDeltaMs`, is at least 2 seconds, and `firstAssistantItemEventToFirstTextDeltaMs` remains small, the runtime report emits a `providerFirstResponseDominates=...` note. The note remains content-safe and includes only ids, model, durations, method names, and bounded pre-first-text counters.
+
+Alternative considered: leave this as a manual interpretation of phase metrics. Rejected because the same evidence pattern has repeated in manual runs and should guide the next action without relying on ad hoc analysis.
+
 ## Risks / Trade-offs
 
 - [Risk] Multiple concurrent foreground turns on the same thread could overwrite timing state. → Mitigation: current Codex foreground send path is one turn per thread; state is bounded and terminal events clear the entry.
 - [Risk] Some event shapes may lack `threadId`. → Mitigation: only enrich events with resolved `threadId`; unsupported report fields remain explicit.
 - [Risk] Extra metadata increases event payload size slightly. → Mitigation: metadata is numeric and bounded; no content fields.
+- [Risk] Dedicated realtime retention buckets increase the maximum persisted diagnostic count. → Mitigation: each bucket is bounded and stores only content-safe ids, methods, counters, and timings.
 
 ## Migration Plan
 

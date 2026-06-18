@@ -335,6 +335,39 @@ function collectCodexPostAckPhaseNotes(codexPostAckFirstDeltaByTurn) {
   ];
 }
 
+function collectCodexProviderFirstResponseDominanceNotes(codexPostAckFirstDeltaByTurn) {
+  const notes = [];
+  for (const diagnostic of codexPostAckFirstDeltaByTurn.slice(0, 5)) {
+    const firstRuntimeToTextMs = toFiniteNumber(
+      diagnostic.firstRuntimeEventToFirstTextDeltaMs,
+    );
+    const firstRuntimeToAssistantItemMs = toFiniteNumber(
+      diagnostic.firstRuntimeEventToFirstAssistantItemEventMs,
+    );
+    const firstAssistantItemToTextMs = toFiniteNumber(
+      diagnostic.firstAssistantItemEventToFirstTextDeltaMs,
+    );
+    const hasDominantAssistantItemWait =
+      firstRuntimeToTextMs !== null &&
+      firstRuntimeToAssistantItemMs !== null &&
+      firstAssistantItemToTextMs !== null &&
+      firstRuntimeToAssistantItemMs >= 2_000 &&
+      firstRuntimeToAssistantItemMs >= firstRuntimeToTextMs * 0.75 &&
+      firstAssistantItemToTextMs <= 500;
+    if (!hasDominantAssistantItemWait) {
+      continue;
+    }
+    const turnId = diagnostic.turnId ?? "unknown-turn";
+    const model = diagnostic.model ?? "unknown-model";
+    const reasoningCount = diagnostic.reasoningEventCountBeforeFirstTextDelta ?? "missing";
+    const toolCount = diagnostic.toolEventCountBeforeFirstTextDelta ?? "missing";
+    notes.push(
+      `providerFirstResponseDominates=${turnId}: ${model} waited ${firstRuntimeToAssistantItemMs}ms from first runtime event to first assistant item, then ${firstAssistantItemToTextMs}ms to first text; reasoningBeforeFirstText=${reasoningCount} toolBeforeFirstText=${toolCount}; firstRuntimeEventMethod=${diagnostic.firstRuntimeEventMethod ?? "missing"} firstAssistantItemEventMethod=${diagnostic.firstAssistantItemEventMethod ?? "missing"}; investigate provider/model first-response phase before client render optimization`,
+    );
+  }
+  return notes;
+}
+
 function buildFragment(summaries, ackDiagnostics, codexTimingDiagnostics, sourcePath) {
   const unsupportedReason = summaries.length === 0
     ? "No measured realtime.turnTrace.summary diagnostics were found. Enable turn trace in a Tauri/webview session and export renderer diagnostics."
@@ -489,6 +522,7 @@ function buildFragment(summaries, ackDiagnostics, codexTimingDiagnostics, source
       ...collectTurnStartAckComparisonNotes(summaries, ackDiagnostics),
       ...collectCodexPostAckComparisonNotes(summaries, ackDiagnostics, codexTimingDiagnostics),
       ...collectCodexPostAckPhaseNotes(codexPostAckFirstDeltaByTurn),
+      ...collectCodexProviderFirstResponseDominanceNotes(codexPostAckFirstDeltaByTurn),
     ],
   };
 }

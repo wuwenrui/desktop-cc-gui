@@ -19,3 +19,9 @@ Realtime performance evidence MUST distinguish Codex post-ack first-delta wait f
 - **AND** runtime performance reports SHOULD include measured `codexFirstRuntimeEventToFirstAssistantItemP95` and `codexFirstAssistantItemToFirstTextDeltaP95` when assistant item phase fields are available
 - **AND** turn-level diagnostics MUST expose bounded `methodsBeforeFirstTextDelta` and event counters without prompt, assistant text, tool output, terminal output, or file content
 - **AND** missing phase fields from older artifacts MUST remain `unsupported` rather than being approximated
+
+#### Scenario: provider first-response dominance is identified
+- **WHEN** `firstRuntimeEventToFirstAssistantItemEventMs` accounts for most of `firstRuntimeEventToFirstTextDeltaMs`
+- **AND** `firstAssistantItemEventToFirstTextDeltaMs` is small
+- **THEN** runtime performance reports MUST emit a content-safe `providerFirstResponseDominates` note
+- **AND** the note MUST guide investigation toward provider/model first-response phase before renderer optimization
