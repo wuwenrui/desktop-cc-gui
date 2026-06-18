@@ -260,6 +260,7 @@ describe("tauri invoke wrappers", () => {
     });
     expect(invokeMock).toHaveBeenCalledWith("list_workspace_files", {
       workspaceId: "ws-1",
+      forceRefresh: false,
     });
     expect(invokeMock).toHaveBeenCalledWith("list_threads", {
       workspaceId: "ws-1",
