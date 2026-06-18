@@ -1687,3 +1687,58 @@ Conclusion：性能证据现在明确显示，下一阶段真实方向不是 Mes
 ### Next Steps
 
 - None - task complete
+
+
+## Session 865: v0.5.11 Codex turn start ack 延迟证据
+
+**Date**: 2026-06-18
+**Task**: v0.5.11 Codex turn start ack 延迟证据
+**Branch**: `feature/v0.5.11`
+
+### Summary
+
+为 v0.5.11 流式性能定位增加 Codex send_user_message turn-start ack 延迟诊断和报告指标。
+
+### Main Changes
+
+本次继续 v0.5.11 性能优化证据链，把上一阶段定位到的 first-delta 前等待进一步拆分。
+
+完成内容：
+- 新增 OpenSpec change: measure-codex-turn-start-ack-latency。
+- 在 src/services/tauri.ts 的 sendUserMessage 边界记录 content-safe 诊断 stream-latency/codex-turn-start-ack。
+- 诊断字段限定为 workspaceId/threadId/model/requestStartedAtMs/respondedAtMs/durationMs/outcome/errorName，不包含 prompt、assistant text、tool output、terminal output、file content。
+- 诊断在成功和错误路径都会记录；新增 safe append helper，确保诊断持久化失败不会改变 send_user_message invoke 原始行为。
+- runtime report 增加 S-RS-TA / turnStartAckLatencyP95，并在 firstDeltaLatencyP95 与 turnStartAckLatencyP95 同时存在时输出 postAckFirstDeltaWaitApprox。
+- 增加服务层和 report 测试，覆盖 content-safe、success/error、diagnostic failure isolation、metric/report note。
+
+验证：
+- npx openspec validate measure-codex-turn-start-ack-latency --strict --no-interactive
+- npx vitest run src/services/tauri.test.ts
+- node --test scripts/perf-realtime-runtime-report.test.mjs
+- npm run typecheck
+- npm run lint
+- git diff --check
+
+下一步：
+- 需要用户用包含 769fa83a 的热启动版本重新跑一轮真实流式问答。
+- 导出 renderer diagnostics 后重新生成 runtime report，读取 turnStartAckLatencyP95 与 postAckFirstDeltaWaitApprox。
+- 如果 ack latency 低但 first-delta 高，下一步进入 backend ack 后 provider/startup 阶段；如果 ack latency 本身高，则继续拆 backend turn/start 和队列阶段。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `769fa83a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

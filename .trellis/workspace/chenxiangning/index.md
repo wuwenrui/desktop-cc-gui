@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-22.md`
-- **Total Sessions**: 864
+- **Total Sessions**: 865
 - **Last Active**: 2026-06-18
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-22.md` | ~1689 | Active |
+| `journal-22.md` | ~1744 | Active |
 | `journal-21.md` | ~1970 | Archived |
 | `journal-20.md` | ~1997 | Archived |
 | `journal-19.md` | ~1989 | Archived |
@@ -50,6 +50,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 865 | 2026-06-18 | v0.5.11 Codex turn start ack 延迟证据 | `769fa83a` | `feature/v0.5.11` |
 | 864 | 2026-06-18 | 增加 Codex first-delta 延迟证据 | `fefe5bfa` | `feature/v0.5.11` |
 | 863 | 2026-06-18 | 校准流式 turn trace 诊断口径 | `e49034be` | `feature/v0.5.11` |
 | 862 | 2026-06-18 | 收口 v0.5.11 消息流渲染优化 | `f623036b` | `feature/v0.5.11` |
