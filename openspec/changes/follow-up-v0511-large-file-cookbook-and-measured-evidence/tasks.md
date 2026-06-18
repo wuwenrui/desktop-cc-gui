@@ -10,10 +10,10 @@
 
 ## 2. Recovery cookbook
 
-- [ ] Update `.trellis/spec/backend/codex-provider-scoped-runtime.md` with recovery failure playbook.
-- [ ] Document `staleRecoveryClassification.reasonCode` / `staleReason` / `userAction`.
-- [ ] Add GEMINI / CLAUDE provider recovery template.
-- [ ] Link the cookbook back to `codex-stale-thread-binding-recovery` and `codex-message-recovery-hook`.
+- [x] Update `.trellis/spec/backend/codex-provider-scoped-runtime.md` with recovery failure playbook.
+- [x] Document `staleRecoveryClassification.reasonCode` / `staleReason` / `userAction`.
+- [x] Add GEMINI / CLAUDE provider recovery template.
+- [x] Link the cookbook back to `codex-stale-thread-binding-recovery` and `codex-message-recovery-hook`.
 
 ## 3. Measured evidence producers
 
