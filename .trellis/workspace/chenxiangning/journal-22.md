@@ -1901,3 +1901,36 @@ Conclusion：性能证据现在明确显示，下一阶段真实方向不是 Mes
 ### Next Steps
 
 - None - task complete
+
+
+## Session 870: 细分 Codex assistant item 首响应阶段
+
+**Date**: 2026-06-18
+**Task**: 细分 Codex assistant item 首响应阶段
+**Branch**: `feature/v0.5.11`
+
+### Summary
+
+基于真实诊断发现 runtime 2ms 即活跃、assistant 首文本约 2122ms；继续将 first assistant item lifecycle 从 first text delta 前拆出，新增 runtime->assistant item 与 assistant item->first text report 指标，并同步 OpenSpec contract。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9cf672e8` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
