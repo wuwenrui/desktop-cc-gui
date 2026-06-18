@@ -1529,3 +1529,56 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 862: 收口 v0.5.11 消息流渲染优化
+
+**Date**: 2026-06-18
+**Task**: 收口 v0.5.11 消息流渲染优化
+**Branch**: `feature/v0.5.11`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+本次会话基于 v0.5.11 的运行时诊断证据，完成了消息流渲染放大问题的阶段性收口，并修复验证闭环中暴露的 CI/runtime 问题。
+
+| Area | Work |
+|------|------|
+| OpenSpec | 新增 `reduce-message-row-render-amplification` change，记录 proposal/design/tasks/spec delta，约束 MessageRow render stability 的验收口径。 |
+| Messages performance | 调整 `MessagesRows.tsx` memo comparator：仅 streaming 行比较 stream-only props，仅 runtime reconnect card 可见时比较恢复回调和 retry payload，避免 completed rows 被隐藏 live props 牵连重渲染。 |
+| File link opener | 通过 config ref 稳定 `useFileLinkOpener` 的核心 handler identity，同时保证执行时读取最新 workspace/open target/callback 配置。 |
+| Runtime hardening | 为 AppShell 默认 workspace 激活 effect 增加 pending guard，防止 unstable setter reference 下重复 setState 触发 maximum update depth。 |
+| CI hardening | 修复 branding gate 的 legacy temp prefix；修复 FileViewPanel watcher startup 测试等待条件，降低 Windows CI 竞态。 |
+| Tests | 新增/更新 messages、file link、AppShell、FileViewPanel 相关回归测试。 |
+
+验证结果：
+- `npx openspec validate reduce-message-row-render-amplification --strict --no-interactive` passed
+- `npm run doctor:strict` passed
+- `npm run typecheck` passed
+- `npm run lint` passed
+- `npx vitest run ...` 10 个目标测试文件，114 tests passed
+- `git diff --check` clean
+
+最新人工重启 app 并重新对话后的诊断结论：completed/non-streaming rows 的 render delta 已稳定为 0，row render 优化目标达成；下一阶段性能方向应转向 turnTrace/batch flush/reducer commit 指标链路，而不是继续调整 MessageRow memo。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f623036b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
