@@ -1505,7 +1505,6 @@ export function noteThreadVisibleTextRendered(
       current.pendingVisibleTextSinceDeltaAt === null
         ? null
         : Math.max(0, renderAt - current.pendingVisibleTextSinceDeltaAt);
-    const isFirstVisibleTextRender = current.firstVisibleTextRenderAt === null;
     clearVisibleOutputStallTimer(threadId);
     const nextSnapshotAfterText: ThreadStreamLatencySnapshot = {
       ...current,
@@ -1519,7 +1518,7 @@ export function noteThreadVisibleTextRendered(
       visibleTextGrowthCount: current.visibleTextGrowthCount + 1,
       pendingVisibleTextSinceDeltaAt: null,
     };
-    if (isFirstVisibleTextRender && isTurnTraceEnabled()) {
+    if (isTurnTraceEnabled()) {
       const dimensions = buildTraceDimensionsFromSnapshot(nextSnapshotAfterText);
       if (dimensions) {
         noteTurnFirstVisibleTextGrowth(dimensions, {

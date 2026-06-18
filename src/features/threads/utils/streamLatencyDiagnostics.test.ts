@@ -135,6 +135,55 @@ describe("streamLatencyDiagnostics", () => {
     expect(summary.milestones["first-engine-delta-ingress"]).toBe(1_100);
   });
 
+  it("updates turn trace visible text growth count on every text growth", async () => {
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: (key: string) =>
+          key === "ccgui.debug.turnTrace.enabled" ? "1" : null,
+      },
+    });
+
+    await primeThreadStreamLatencyContext({
+      workspaceId: "ws-1",
+      threadId: "thread-visible-growth-trace",
+      engine: "codex",
+      model: "MiniMax-M3",
+    });
+    noteThreadTurnStarted({
+      workspaceId: "ws-1",
+      threadId: "thread-visible-growth-trace",
+      turnId: "turn-visible-growth-trace",
+      startedAt: 1_000,
+    });
+    noteThreadDeltaReceived("thread-visible-growth-trace", 1_100, {
+      source: "delta",
+      itemId: "assistant-1",
+      textLength: 12,
+    });
+
+    noteThreadVisibleTextRendered("thread-visible-growth-trace", {
+      itemId: "assistant-1",
+      visibleTextLength: 6,
+      renderAt: 1_130,
+    });
+    noteThreadVisibleTextRendered("thread-visible-growth-trace", {
+      itemId: "assistant-1",
+      visibleTextLength: 12,
+      renderAt: 1_170,
+    });
+
+    const snapshot = getThreadStreamLatencySnapshot("thread-visible-growth-trace");
+    const summary = getTurnTraceSummary(
+      "thread-visible-growth-trace",
+      "turn-visible-growth-trace",
+    ) as TurnTraceSummary;
+
+    expect(snapshot?.visibleTextGrowthCount).toBe(2);
+    expect(summary.milestones["first-visible-text-growth"]).toBe(1_130);
+    expect(summary.deltas.firstDeltaToFirstVisibleTextMs).toBe(30);
+    expect(summary.counters.visibleTextGrowthCount).toBe(2);
+  });
+
   it("activates the Qwen Windows mitigation only after render amplification evidence appears", async () => {
     mocks.isWindowsPlatform.mockReturnValue(true);
     mocks.getCurrentClaudeConfig.mockResolvedValue({

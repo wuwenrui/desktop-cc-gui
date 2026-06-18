@@ -93,6 +93,33 @@ function metricFromValues({ scenario, metric, values, unit, notes, unsupportedRe
   };
 }
 
+function collectTraceConsistencyCautions(summaries) {
+  const cautions = [];
+  for (const [index, summary] of summaries.entries()) {
+    const visibleTextLagMs = toFiniteNumber(summary.deltas?.firstDeltaToFirstVisibleTextMs);
+    const batchFlushWindowMs = toFiniteNumber(summary.deltas?.firstDeltaToBatchFlushEndMs);
+    const reducerCommitWindowMs = toFiniteNumber(summary.deltas?.batchFlushEndToReducerCommitMs);
+    const batchFlushDurationAvgMs = toFiniteNumber(summary.counters?.batchFlushDurationAvgMs);
+    const visibleTextGrowthCount = toFiniteNumber(summary.counters?.visibleTextGrowthCount);
+    const hasFastVisibleOutput = visibleTextLagMs !== null && visibleTextLagMs <= 500;
+    const hasLargeSummaryWindow = [batchFlushWindowMs, reducerCommitWindowMs, batchFlushDurationAvgMs]
+      .some((value) => value !== null && value >= 2_000);
+    if (!hasFastVisibleOutput || !hasLargeSummaryWindow) {
+      continue;
+    }
+    const traceId = typeof summary.traceId === "string" && summary.traceId.length > 0
+      ? summary.traceId
+      : `summary-${index + 1}`;
+    const growthNote = visibleTextGrowthCount === null
+      ? "visibleTextGrowthCount=missing"
+      : `visibleTextGrowthCount=${visibleTextGrowthCount}`;
+    cautions.push(
+      `traceConsistencyCaution=${traceId}: fast visible text lag (${visibleTextLagMs}ms) coexists with large batch/reducer summary windows; ${growthNote}; inspect turnTrace/snapshot consistency before claiming client batch or reducer lag`,
+    );
+  }
+  return cautions;
+}
+
 function buildFragment(summaries, sourcePath) {
   const unsupportedReason = summaries.length === 0
     ? "No measured realtime.turnTrace.summary diagnostics were found. Enable turn trace in a Tauri/webview session and export renderer diagnostics."
@@ -149,6 +176,7 @@ function buildFragment(summaries, sourcePath) {
       `input=${sourcePath}`,
       `measuredSummaryCount=${summaries.length}`,
       "contentSafety=ids, durations, counters, and dimensions only; no prompt, assistant text, tool output, or file content",
+      ...collectTraceConsistencyCautions(summaries),
     ],
   };
 }

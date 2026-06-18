@@ -137,6 +137,31 @@ describe("turnTraceCorrelation", () => {
     expect(summary.evidenceReason).toMatch(/proxy/);
   });
 
+  it("keeps first visible text milestone while advancing latest growth count", () => {
+    noteTurnSendCommitted(baseDimensions, 0);
+    noteTurnFirstEngineDeltaIngress(baseDimensions, 10);
+    noteTurnReducerCommit({
+      dimensions: baseDimensions,
+      atMs: 20,
+      isAssistantDelta: true,
+    });
+    noteTurnFirstVisibleRowRender(baseDimensions, 30);
+    noteTurnFirstVisibleTextGrowth(baseDimensions, {
+      atMs: 40,
+      visibleTextGrowthCount: 1,
+    });
+    noteTurnFirstVisibleTextGrowth(baseDimensions, {
+      atMs: 80,
+      visibleTextGrowthCount: 4,
+    });
+    completeTurnTrace(baseDimensions, { atMs: 100, reason: "completed" });
+
+    const summary = getTurnTraceSummary("thread-1", "turn-1") as TurnTraceSummary;
+    expect(summary.milestones["first-visible-text-growth"]).toBe(40);
+    expect(summary.deltas.firstDeltaToFirstVisibleTextMs).toBe(30);
+    expect(summary.counters.visibleTextGrowthCount).toBe(4);
+  });
+
   it("classifies as manual-only when only send/runtime started but no ingress", () => {
     noteTurnSendCommitted(baseDimensions, 0);
     noteTurnRuntimeProcessStarted(baseDimensions, 5);
