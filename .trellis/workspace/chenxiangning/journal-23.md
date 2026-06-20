@@ -771,3 +771,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 892: 归档性能证据债务提案
+
+**Date**: 2026-06-20
+**Task**: 归档性能证据债务提案
+**Branch**: `feature/v0.5.11`
+
+### Summary
+
+完成 OpenSpec change clean-up-perf-archive-readiness-debt：同步 runtime-performance-evidence-gates 主 spec，归档提案，补齐 perf archive-readiness accepted budget/proxy/unsupported debt 元数据，并通过相关测试、lint、typecheck 与 OpenSpec 全量验证。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `53e5e07a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
