@@ -73,7 +73,6 @@ jobs:
         with:
           script: |
             const fs = require("node:fs");
-            const core = require("@actions/core");
             const report = JSON.parse(fs.readFileSync(".artifacts/perf-archive-readiness.json", "utf8"));
             const proxyRatio = typeof report.proxyRatio === "number"
               ? `${(report.proxyRatio * 100).toFixed(1)}%`

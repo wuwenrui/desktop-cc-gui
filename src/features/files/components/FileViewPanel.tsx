@@ -115,6 +115,13 @@ import { resolveFileMarkdownFastFeatureFlags } from "../utils/fileMarkdownFeatur
 
 export { resolveEditorAnnotationWidgetOrder } from "./fileViewPanelShared";
 
+function resetGitLineMarkersIfNeeded(markers: GitLineMarkers): GitLineMarkers {
+  if (markers.added.length === 0 && markers.modified.length === 0) {
+    return markers;
+  }
+  return { added: [], modified: [] };
+}
+
 type FileViewPanelProps = {
   workspaceId: string;
   workspaceName?: string | null;
@@ -828,15 +835,15 @@ export function FileViewPanel({
   useEffect(() => {
     const normalizedStatus = (fileGitStatus ?? "").toUpperCase();
     if (hasExplicitHighlightMarkers) {
-      setGitLineMarkers({ added: [], modified: [] });
+      setGitLineMarkers(resetGitLineMarkersIfNeeded);
       return;
     }
     if (fileReadTarget.domain !== "workspace") {
-      setGitLineMarkers({ added: [], modified: [] });
+      setGitLineMarkers(resetGitLineMarkersIfNeeded);
       return;
     }
     if (!normalizedStatus || normalizedStatus === "D" || skipTextRead) {
-      setGitLineMarkers({ added: [], modified: [] });
+      setGitLineMarkers(resetGitLineMarkersIfNeeded);
       return;
     }
 
@@ -851,7 +858,7 @@ export function FileViewPanel({
       })
       .catch(() => {
         if (!cancelled && latestFileRenderTokenRef.current === requestRenderToken) {
-          setGitLineMarkers({ added: [], modified: [] });
+          setGitLineMarkers(resetGitLineMarkersIfNeeded);
         }
       });
 
