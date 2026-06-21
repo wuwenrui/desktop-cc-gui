@@ -1298,6 +1298,14 @@ export type RequestUserInputResponse = {
   skippedQuestionIds?: string[];
 };
 
+export type RequestUserInputSettlementOptions = {
+  staleSettlementHint?: "timeout";
+};
+
+export type RequestUserInputSettlementResult = {
+  settlement: "accepted" | "stale";
+};
+
 export type GitFileStatus = {
   path: string;
   status: string;

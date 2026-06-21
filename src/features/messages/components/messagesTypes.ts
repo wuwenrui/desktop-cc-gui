@@ -6,6 +6,8 @@ import type {
   QueuedMessage,
   RequestUserInputRequest,
   RequestUserInputResponse,
+  RequestUserInputSettlementResult,
+  RequestUserInputSettlementOptions,
   TurnPlan,
   WorkspaceInfo,
 } from "../../../types";
@@ -56,8 +58,12 @@ export type MessagesProps = {
   onUserInputSubmit?: (
     request: RequestUserInputRequest,
     response: RequestUserInputResponse,
-  ) => Promise<void> | void;
-  onUserInputDismiss?: (request: RequestUserInputRequest) => void;
+    options?: RequestUserInputSettlementOptions,
+  ) => Promise<RequestUserInputSettlementResult | void> | RequestUserInputSettlementResult | void;
+  onUserInputDismiss?: (
+    request: RequestUserInputRequest,
+    options?: RequestUserInputSettlementOptions,
+  ) => Promise<RequestUserInputSettlementResult | void> | RequestUserInputSettlementResult | void;
   onApprovalDecision?: (
     request: ApprovalRequest,
     decision: "accept" | "decline" | "dismiss",

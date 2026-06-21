@@ -1,7 +1,12 @@
 import { useCallback } from "react";
 import type { Dispatch } from "react";
 import i18n from "../../../i18n";
-import type { RequestUserInputRequest, RequestUserInputResponse } from "../../../types";
+import type {
+  RequestUserInputRequest,
+  RequestUserInputResponse,
+  RequestUserInputSettlementOptions,
+  RequestUserInputSettlementResult,
+} from "../../../types";
 import { respondToUserInputRequest } from "../../../services/tauri";
 import type { ThreadAction } from "./useThreadsReducer";
 
@@ -144,9 +149,20 @@ function isStaleSettledRequestError(
   error: unknown,
   response: RequestUserInputResponse,
   settlementKind: "submit" | "dismiss",
+  staleSettlementHint?: RequestUserInputSettlementOptions["staleSettlementHint"],
 ) {
   const normalizedMessage = getErrorMessage(error).toLowerCase();
   if (normalizedMessage.includes("unknown request_id for askuserquestion")) {
+    return true;
+  }
+  const hasStaleRuntimeEvidence =
+    normalizedMessage.includes("workspace not connected") ||
+    normalizedMessage.includes("timeout") ||
+    normalizedMessage.includes("timed out") ||
+    normalizedMessage.includes("stale") ||
+    normalizedMessage.includes("cancelled") ||
+    normalizedMessage.includes("canceled");
+  if (staleSettlementHint === "timeout" && hasStaleRuntimeEvidence) {
     return true;
   }
   return (
@@ -167,10 +183,12 @@ export function useThreadUserInput({
       options?: {
         recordSubmittedItem?: boolean;
         settlementKind?: "submit" | "dismiss";
+        staleSettlementHint?: RequestUserInputSettlementOptions["staleSettlementHint"];
       },
-    ) => {
+    ): Promise<RequestUserInputSettlementResult> => {
       const recordSubmittedItem = options?.recordSubmittedItem ?? true;
       const settlementKind = options?.settlementKind ?? "submit";
+      const staleSettlementHint = options?.staleSettlementHint;
       const rawThreadId = request.params.thread_id;
       const resolvedThreadId =
         (rawThreadId
@@ -220,13 +238,13 @@ export function useThreadUserInput({
             timestamp: Date.now(),
           });
         }
-        if (isStaleSettledRequestError(error, response, settlementKind)) {
+        if (isStaleSettledRequestError(error, response, settlementKind, staleSettlementHint)) {
           dispatch({
             type: "removeUserInputRequest",
             requestId: request.request_id,
             workspaceId: request.workspace_id,
           });
-          return;
+          return { settlement: "stale" };
         }
         throw error;
       }
@@ -273,26 +291,39 @@ export function useThreadUserInput({
         requestId: request.request_id,
         workspaceId: request.workspace_id,
       });
+      return { settlement: "accepted" };
     },
     [dispatch, resolveClaudeContinuationThreadId],
   );
 
   const handleUserInputSubmit = useCallback(
-    async (request: RequestUserInputRequest, response: RequestUserInputResponse) => {
-      await settleUserInputRequest(request, response, {
+    async (
+      request: RequestUserInputRequest,
+      response: RequestUserInputResponse,
+      options?: RequestUserInputSettlementOptions,
+    ) => {
+      return await settleUserInputRequest(request, response, {
         recordSubmittedItem: true,
         settlementKind: "submit",
+        staleSettlementHint: options?.staleSettlementHint,
       });
     },
     [settleUserInputRequest],
   );
 
   const handleUserInputDismiss = useCallback(
-    async (request: RequestUserInputRequest) => {
-      await settleUserInputRequest(
+    async (
+      request: RequestUserInputRequest,
+      options?: RequestUserInputSettlementOptions,
+    ) => {
+      return await settleUserInputRequest(
         request,
         { answers: {} },
-        { recordSubmittedItem: false, settlementKind: "dismiss" },
+        {
+          recordSubmittedItem: false,
+          settlementKind: "dismiss",
+          staleSettlementHint: options?.staleSettlementHint,
+        },
       );
     },
     [settleUserInputRequest],

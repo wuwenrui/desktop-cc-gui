@@ -296,6 +296,63 @@ describe("useThreadUserInput", () => {
     );
   });
 
+  it("settles a timed-out submit when runtime reports the request is already stale", async () => {
+    const dispatch = vi.fn();
+    vi.mocked(respondToUserInputRequest).mockRejectedValue(
+      new Error("workspace not connected"),
+    );
+
+    const { result } = renderHook(() => useThreadUserInput({ dispatch }));
+
+    await act(async () => {
+      await result.current.handleUserInputSubmit(
+        request,
+        {
+          answers: {
+            age: {
+              answers: ["18-25岁 (Recommended)"],
+            },
+          },
+        },
+        { staleSettlementHint: "timeout" },
+      );
+    });
+
+    expect(respondToUserInputRequest).toHaveBeenLastCalledWith(
+      "ws-1",
+      "req-1",
+      {
+        age: {
+          answers: ["18-25岁 (Recommended)"],
+        },
+      },
+      {
+        threadId: "thread-1",
+        turnId: "turn-1",
+      },
+    );
+    expect(dispatch).toHaveBeenNthCalledWith(1, {
+      type: "markProcessing",
+      threadId: "thread-1",
+      isProcessing: true,
+      timestamp: expect.any(Number),
+    });
+    expect(dispatch).toHaveBeenNthCalledWith(2, {
+      type: "markProcessing",
+      threadId: "thread-1",
+      isProcessing: false,
+      timestamp: expect.any(Number),
+    });
+    expect(dispatch).toHaveBeenNthCalledWith(3, {
+      type: "removeUserInputRequest",
+      requestId: "req-1",
+      workspaceId: "ws-1",
+    });
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "upsertItem" }),
+    );
+  });
+
   it("keeps empty submit retryable when workspace disconnects", async () => {
     const dispatch = vi.fn();
     vi.mocked(respondToUserInputRequest).mockRejectedValue(

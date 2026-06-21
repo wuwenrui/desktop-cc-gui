@@ -48,6 +48,8 @@ import type {
   RateLimitSnapshot,
   RequestUserInputRequest,
   RequestUserInputResponse,
+  RequestUserInputSettlementResult,
+  RequestUserInputSettlementOptions,
   SkillOption,
   SelectedAgentOption,
   ThreadSummary,
@@ -171,8 +173,12 @@ export type LayoutNodesFlatOptions = {
   handleUserInputSubmit: (
     request: RequestUserInputRequest,
     response: RequestUserInputResponse,
-  ) => Promise<void> | void;
-  handleUserInputDismiss: (request: RequestUserInputRequest) => void;
+    options?: RequestUserInputSettlementOptions,
+  ) => Promise<RequestUserInputSettlementResult | void> | RequestUserInputSettlementResult | void;
+  handleUserInputDismiss: (
+    request: RequestUserInputRequest,
+    options?: RequestUserInputSettlementOptions,
+  ) => Promise<RequestUserInputSettlementResult | void> | RequestUserInputSettlementResult | void;
   onRecoverThreadRuntime?: (
     workspaceId: string,
     threadId: string,

@@ -6,6 +6,8 @@ import type {
   MessageSendOptions,
   RequestUserInputRequest,
   RequestUserInputResponse,
+  RequestUserInputSettlementResult,
+  RequestUserInputSettlementOptions,
 } from "../types";
 import {
   CODE_MODE_RESUME_PROMPT,
@@ -24,7 +26,8 @@ type UsePlanApplyHandlersOptions = {
   handleUserInputSubmit: (
     request: RequestUserInputRequest,
     response: RequestUserInputResponse,
-  ) => Promise<void>;
+    options?: RequestUserInputSettlementOptions,
+  ) => Promise<RequestUserInputSettlementResult | void>;
   interruptTurn: () => Promise<unknown>;
   resolveCollaborationRuntimeMode: (threadId: string) => CollaborationMode | null;
   resolveCollaborationUiMode: (threadId: string) => CollaborationMode | null;
@@ -72,6 +75,7 @@ export function usePlanApplyHandlers({
     async (
       request: RequestUserInputRequest,
       response: RequestUserInputResponse,
+      options?: RequestUserInputSettlementOptions,
     ) => {
       const requestThreadId = String(request.params.thread_id ?? "").trim();
       const runtimeMode = requestThreadId
@@ -85,7 +89,10 @@ export function usePlanApplyHandlers({
         activeEngine === "codex" &&
         runtimeMode === "plan" &&
         uiMode === "code";
-      await handleUserInputSubmit(request, response);
+      const settlementResult = await handleUserInputSubmit(request, response, options);
+      if (settlementResult?.settlement === "stale") {
+        return;
+      }
       const requestId = String(request.request_id ?? "");
       if (!requestId.startsWith(LOCAL_PLAN_APPLY_REQUEST_PREFIX)) {
         if (!shouldForceResumeInCode) {
