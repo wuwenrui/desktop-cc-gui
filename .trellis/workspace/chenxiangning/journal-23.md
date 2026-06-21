@@ -908,3 +908,53 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 895: 归档 Claude 供应商与 Codex 并行运行提案
+
+**Date**: 2026-06-21
+**Task**: 归档 Claude 供应商与 Codex 并行运行提案
+**Branch**: `feature/v0.5.11`
+
+### Summary
+
+核对 Claude provider 管理与 Codex 并行 runtime ended 隔离实现证据，同步 OpenSpec 主规格，并归档两个已完成 change。
+
+### Main Changes
+
+本次完成两个 OpenSpec change 的真实收尾：
+
+- add-claude-provider-management-order-and-model-fetch
+- fix-codex-parallel-runtime-ended-isolation
+
+关键动作：
+- 核对相关前后端代码、hook、事件归属逻辑和测试文件。
+- 补齐主 specs：claude-provider-management、codex-conversation-liveness、codex-provider-scoped-session-launch、conversation-realtime-cpu-stability。
+- 对未真实执行的人工验证项保留 caveat，没有伪造完成状态。
+- 使用 openspec archive --skip-specs 归档两个 change，因为主 specs 已手动同步。
+
+验证结果：
+- npm run typecheck 通过。
+- Claude provider focused Vitest：123 tests passed。
+- Codex ownership/liveness focused Vitest：97 tests passed。
+- Rust vendor tests：12 tests passed。
+- openspec validate --all --strict --no-interactive：356 passed, 0 failed。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `351c48b5` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

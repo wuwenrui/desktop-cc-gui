@@ -325,3 +325,17 @@ These tests prove the bug. They MAY fail before implementation and MUST pass aft
   - Do not reintroduce assistant-message-completion settlement.
   - Do not add active-tab fallback for lifecycle mutation.
   - If Class A/B is confirmed, prefer backend owner/terminal payload enrichment over more frontend inference.
+
+## Archive decision 2026-06-21
+
+- Code evidence reviewed for archive:
+  - `src/features/app/hooks/codexEventOwnership.ts` classifies Codex event risk and resolves ownership only from explicit owner context or a unique processing Codex fallback.
+  - `src/features/app/hooks/useAppServerEvents.ts` routes `runtime/ended` through explicit payload owner, `affectedThreadIds`, `affectedActiveTurns`, shared-session native binding, or unique-processing fallback; active thread selection is not used for lifecycle ownership.
+  - `src/features/threads/hooks/useThreads.ts` records same-tick Codex processing owners before post-render ref synchronization.
+  - `src/features/threads/hooks/useThreadEventHandlers.ts` quarantines settled Codex turns, blocks late turnless/duplicate events from reviving processing, preserves assistant-message-completion as non-terminal evidence, and flushes deferred completion only through scoped backend terminal reconciliation.
+- Automated validation run for archive:
+  - `npx vitest run src/features/app/hooks/codexEventOwnership.test.ts src/features/app/hooks/useAppServerEvents.runtime-ended.test.tsx src/features/threads/hooks/useThreads.integration.test.tsx src/features/threads/hooks/useThreadEventHandlers.test.ts` passed with 97 tests.
+- Manual runtime caveat:
+  - 17.1-17.3 remain intentionally unchecked because no live stuck 3-session Codex/Minimax reproduction payload was available in this session.
+  - These follow-up items are diagnostic discovery for a possible next failure class, not required implementation for the current owner-gating fix.
+  - Archive proceeds with this caveat; if the live 3-session failure recurs, open a new backend owner/terminal-payload enrichment change rather than weakening frontend ownership gates.

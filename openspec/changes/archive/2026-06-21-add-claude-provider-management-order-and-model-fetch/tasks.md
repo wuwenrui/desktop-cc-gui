@@ -41,3 +41,19 @@
 - [ ] 5.2 Switch active provider and confirm previous active provider returns to its stored position.
 - [ ] 5.3 Fetch models from a real Claude-compatible endpoint and confirm suggestions appear on all model mapping inputs.
 - [ ] 5.4 Try invalid API URL/key and confirm error feedback is visible and editable state remains usable.
+
+## Archive decision 2026-06-21
+
+- Code evidence reviewed for archive:
+  - Backend provider order and persistence: `src-tauri/src/vendors/commands.rs` parses/writes `sortOrder`, sorts by `sortOrder -> createdAt -> id`, and persists reorder through `vendor_reorder_claude_providers`.
+  - Backend model fetch: `vendor_fetch_claude_models` derives `/v1/models` endpoint candidates, uses Rust `reqwest`, parses common response shapes, and returns the successful endpoint.
+  - Frontend provider order: `ProviderList` renders local and active provider cards outside the draggable list; only non-active managed providers get drag handles.
+  - Frontend persistence rollback: `useProviderManagement` sends full ordered ids and reloads providers on persistence failure.
+  - Frontend model suggestions: `ProviderDialog` fetches with current unsaved API URL/key and exposes fetched ids through the shared `vendor-fetched-models` datalist for Sonnet, Opus, and Haiku inputs.
+- Automated validation run for archive:
+  - `npx vitest run src/features/vendors/components/ProviderList.test.tsx src/features/vendors/components/ProviderDialog.fetch-models.test.tsx src/features/vendors/hooks/useProviderManagement.test.tsx src/services/tauri.test.ts` passed with 123 tests.
+- Manual validation caveat:
+  - 5.1 and 5.2 are covered by code review plus component/hook tests, but no Tauri app restart was performed in this session.
+  - 5.3 was not executed against a real external Claude-compatible endpoint because no live endpoint/key was provided.
+  - 5.4 was validated at code-path level for missing URL/backend error display, but no live invalid credential request was sent.
+  - Archive proceeds with this caveat; a product QA pass with real credentials can be tracked separately if needed.
