@@ -56,6 +56,7 @@ export interface ProviderConfig {
   websiteUrl?: string;
   category?: ProviderCategory;
   createdAt?: number;
+  sortOrder?: number;
   isActive?: boolean;
   source?: 'cc-switch' | string;
   isLocalProvider?: boolean;
@@ -67,13 +68,23 @@ export interface ProviderConfig {
       ANTHROPIC_DEFAULT_SONNET_MODEL?: string;
       ANTHROPIC_DEFAULT_OPUS_MODEL?: string;
       ANTHROPIC_DEFAULT_HAIKU_MODEL?: string;
-      [key: string]: any;
+      [key: string]: string | undefined;
     };
     alwaysThinkingEnabled?: boolean;
+    autoDreamEnabled?: boolean;
+    cleanupPeriodDays?: number;
+    effortLevel?: string;
+    hasCompletedOnboarding?: boolean;
+    language?: string;
+    model?: string;
+    skipAutoPermissionPrompt?: boolean;
+    teammateMode?: string;
+    tui?: string;
     permissions?: {
       allow?: string[];
       deny?: string[];
     };
+    [key: string]: unknown;
   };
 }
 

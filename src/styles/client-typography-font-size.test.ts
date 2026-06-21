@@ -49,7 +49,9 @@ function getCssRuleBlock(css: string, selector: string): string {
 
 describe("client typography font-size coverage", () => {
   it("routes file tree readable text through client typography tokens", () => {
-    expect(getCssRuleBlock(fileTreeCss, ".file-tree-panel")).toContain(
+    const fileTreePanelRule = getCssRuleBlock(fileTreeCss, ".file-tree-panel");
+
+    expect(fileTreePanelRule).toContain(
       "--file-tree-content-font-size: var(--client-content-font-size, 12px);",
     );
     expect(getCssRuleBlock(fileTreeCss, ".file-tree-row")).toContain(
@@ -73,6 +75,7 @@ describe("client typography font-size coverage", () => {
     expect(fileTreePanelRule).toContain("min-height: 0;");
     expect(fileTreePanelRule).toContain("overflow: hidden;");
     expect(fileTreePanelRule).toContain("padding: 8px 8px 0;");
+    expect(fileTreePanelRule).toContain("position: relative;");
     expect(fileTreeDiffPanelRule).toContain("gap: 0;");
     expect(fileTreeDiffPanelRule).toContain("padding: 8px 8px 0;");
   });

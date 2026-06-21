@@ -1,11 +1,13 @@
 import { useState, useCallback, useEffect } from "react";
 import type { ClaudeCurrentConfig, ProviderConfig } from "../types";
+import { LOCAL_SETTINGS_PROVIDER_ID } from "../types";
 import {
   getClaudeProviders,
   addClaudeProvider,
   updateClaudeProvider,
   deleteClaudeProvider,
   switchClaudeProvider,
+  reorderClaudeProviders,
   getCurrentClaudeConfig,
 } from "../../../services/tauri";
 import { STORAGE_KEYS } from "../../models/constants";
@@ -254,6 +256,42 @@ export function useProviderManagement() {
     [providers, syncActiveProviderModelMapping, loadProviders, loadCurrentConfig],
   );
 
+  const handleReorderProviders = useCallback(
+    async (orderedIds: string[]) => {
+      const localProviders = providers.filter(
+        (provider) =>
+          provider.id === LOCAL_SETTINGS_PROVIDER_ID || provider.isLocalProvider,
+      );
+      const regularById = new Map(
+        providers
+          .filter(
+            (provider) =>
+              provider.id !== LOCAL_SETTINGS_PROVIDER_ID &&
+              !provider.isLocalProvider,
+          )
+          .map((provider) => [provider.id, provider]),
+      );
+      const orderedRegularProviders = orderedIds
+        .map((id) => regularById.get(id))
+        .filter((provider): provider is ProviderConfig => Boolean(provider));
+
+      setProviders([...localProviders, ...orderedRegularProviders]);
+
+      try {
+        await reorderClaudeProviders(orderedIds);
+        // Success: the optimistic order already matches what the backend
+        // persisted (reorder only writes sortOrder, never changes the active
+        // provider), so keep it as-is. Refetching here would toggle the loading
+        // flag and replace every provider object reference right after the drop
+        // settles, causing a visible flicker on each reorder.
+      } catch {
+        // Persistence failed: reload from backend to roll back the optimistic order.
+        await loadProviders();
+      }
+    },
+    [providers, loadProviders],
+  );
+
   const handleDeleteProvider = useCallback((provider: ProviderConfig) => {
     setDeleteConfirm({ isOpen: true, provider });
   }, []);
@@ -289,6 +327,7 @@ export function useProviderManagement() {
     handleCloseProviderDialog,
     handleSaveProvider,
     handleSwitchProvider,
+    handleReorderProviders,
     handleDeleteProvider,
     confirmDeleteProvider,
     cancelDeleteProvider,

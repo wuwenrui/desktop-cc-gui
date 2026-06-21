@@ -1823,6 +1823,8 @@ pub(crate) struct ProviderConfig {
     pub(crate) category: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) created_at: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) sort_order: Option<i64>,
     #[serde(default)]
     pub(crate) is_active: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]

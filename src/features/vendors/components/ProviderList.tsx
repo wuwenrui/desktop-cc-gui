@@ -1,5 +1,13 @@
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import {
+  DragDropContext,
+  Draggable,
+  Droppable,
+  type DropResult,
+} from "@hello-pangea/dnd";
 import FileText from "lucide-react/dist/esm/icons/file-text";
+import GripVertical from "lucide-react/dist/esm/icons/grip-vertical";
 import Pencil from "lucide-react/dist/esm/icons/pencil";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 import type { ProviderConfig } from "../types";
@@ -15,6 +23,39 @@ interface ProviderListProps {
   onEdit: (provider: ProviderConfig) => void;
   onDelete: (provider: ProviderConfig) => void;
   onSwitch: (id: string) => void;
+  onReorder: (orderedIds: string[]) => void;
+}
+
+export function buildClaudeProviderReorderIds(
+  regularProviders: ProviderConfig[],
+  sourceIndex: number,
+  destinationIndex: number,
+): string[] {
+  const activeProvider =
+    regularProviders.find((provider) => provider.isActive) ?? null;
+  const others = regularProviders.filter((provider) => !provider.isActive);
+  const newOthers = Array.from(others);
+  const [moved] = newOthers.splice(sourceIndex, 1);
+  if (!moved) {
+    return regularProviders.map((provider) => provider.id);
+  }
+  const safeDestinationIndex = Math.min(
+    Math.max(destinationIndex, 0),
+    newOthers.length,
+  );
+  newOthers.splice(safeDestinationIndex, 0, moved);
+
+  if (!activeProvider) {
+    return newOthers.map((provider) => provider.id);
+  }
+
+  const homeIndex = regularProviders.findIndex(
+    (provider) => provider.id === activeProvider.id,
+  );
+  const safeHomeIndex = Math.min(Math.max(homeIndex, 0), newOthers.length);
+  const newFull = Array.from(newOthers);
+  newFull.splice(safeHomeIndex, 0, activeProvider);
+  return newFull.map((provider) => provider.id);
 }
 
 export function ProviderList({
@@ -24,6 +65,7 @@ export function ProviderList({
   onEdit,
   onDelete,
   onSwitch,
+  onReorder,
 }: ProviderListProps) {
   const { t } = useTranslation();
   const providerList = Array.isArray(providers) ? providers : [];
@@ -35,6 +77,103 @@ export function ProviderList({
   const regularProviders = providerList.filter(
     (provider) =>
       provider.id !== LOCAL_SETTINGS_PROVIDER_ID && !provider.isLocalProvider,
+  );
+  const activeProvider =
+    regularProviders.find((provider) => provider.isActive) ?? null;
+  const otherProviders = regularProviders.filter((provider) => !provider.isActive);
+
+  const handleDragEnd = (result: DropResult) => {
+    if (!result.destination) {
+      return;
+    }
+    const sourceIndex = result.source.index;
+    const destinationIndex = result.destination.index;
+    if (sourceIndex === destinationIndex) {
+      return;
+    }
+
+    onReorder(
+      buildClaudeProviderReorderIds(
+        regularProviders,
+        sourceIndex,
+        destinationIndex,
+      ),
+    );
+  };
+
+  const renderProviderCard = (
+    provider: ProviderConfig,
+    options: { dragHandle?: ReactNode; isDragging?: boolean } = {},
+  ) => (
+    <div
+      key={provider.id}
+      className={cn(
+        "vendor-card",
+        provider.isActive && "active",
+        options.isDragging && "is-dragging",
+      )}
+    >
+      {options.dragHandle}
+      <div className="vendor-card-info">
+        <div className="vendor-card-name">
+          {provider.name}
+          {provider.source === "cc-switch" && (
+            <Badge
+              variant="outline"
+              size="sm"
+              className="text-stone-600 dark:text-stone-300"
+            >
+              cc-switch
+            </Badge>
+          )}
+        </div>
+        {(provider.remark || provider.websiteUrl) && (
+          <div
+            className="vendor-card-remark"
+            title={provider.remark || provider.websiteUrl}
+          >
+            {provider.remark || provider.websiteUrl}
+          </div>
+        )}
+      </div>
+      <div className="vendor-card-actions">
+        {provider.isActive ? (
+          <Badge variant="outline" className="text-stone-700 dark:text-stone-200">
+            <span
+              aria-hidden="true"
+              className="size-1.5 rounded-full bg-emerald-500"
+            />
+            {t("settings.vendor.inUse")}
+          </Badge>
+        ) : (
+          <Button
+            variant="outline"
+            size="xs"
+            onClick={() => onSwitch(provider.id)}
+          >
+            {t("settings.vendor.enable")}
+          </Button>
+        )}
+        <span className="vendor-card-divider" />
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          onClick={() => onEdit(provider)}
+          title={t("settings.vendor.edit")}
+        >
+          <Pencil aria-hidden />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          className="hover:text-destructive"
+          onClick={() => onDelete(provider)}
+          title={t("settings.vendor.delete")}
+        >
+          <Trash2 aria-hidden />
+        </Button>
+      </div>
+    </div>
   );
 
   return (
@@ -96,75 +235,52 @@ export function ProviderList({
           </div>
         )}
 
-        {regularProviders.map((provider) => (
-          <div
-            key={provider.id}
-            className={cn(
-              "vendor-card",
-              provider.isActive && "active",
-            )}
-          >
-            <div className="vendor-card-info">
-              <div className="vendor-card-name">
-                {provider.name}
-                {provider.source === "cc-switch" && (
-                  <Badge
-                    variant="outline"
-                    size="sm"
-                    className="text-stone-600 dark:text-stone-300"
-                  >
-                    cc-switch
-                  </Badge>
-                )}
-              </div>
-              {(provider.remark || provider.websiteUrl) && (
+        {activeProvider && renderProviderCard(activeProvider)}
+
+        {otherProviders.length > 0 && (
+          <DragDropContext onDragEnd={handleDragEnd}>
+            <Droppable droppableId="vendor-provider-list">
+              {(provided) => (
                 <div
-                  className="vendor-card-remark"
-                  title={provider.remark || provider.websiteUrl}
+                  className="vendor-draggable-cards"
+                  {...provided.droppableProps}
+                  ref={provided.innerRef}
                 >
-                  {provider.remark || provider.websiteUrl}
+                  {otherProviders.map((provider, index) => (
+                    <Draggable
+                      key={provider.id}
+                      draggableId={provider.id}
+                      index={index}
+                    >
+                      {(draggableProvided, snapshot) => (
+                        <div
+                          ref={draggableProvided.innerRef}
+                          {...draggableProvided.draggableProps}
+                          style={draggableProvided.draggableProps.style}
+                        >
+                          {renderProviderCard(provider, {
+                            isDragging: snapshot.isDragging,
+                            dragHandle: (
+                              <span
+                                className="vendor-card-drag-handle"
+                                title={t("settings.vendor.dragToReorder")}
+                                aria-label={t("settings.vendor.dragToReorder")}
+                                {...draggableProvided.dragHandleProps}
+                              >
+                                <GripVertical aria-hidden />
+                              </span>
+                            ),
+                          })}
+                        </div>
+                      )}
+                    </Draggable>
+                  ))}
+                  {provided.placeholder}
                 </div>
               )}
-            </div>
-            <div className="vendor-card-actions">
-              {provider.isActive ? (
-                <Badge variant="outline" className="text-stone-700 dark:text-stone-200">
-                  <span
-                    aria-hidden="true"
-                    className="size-1.5 rounded-full bg-emerald-500"
-                  />
-                  {t("settings.vendor.inUse")}
-                </Badge>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="xs"
-                  onClick={() => onSwitch(provider.id)}
-                >
-                  {t("settings.vendor.enable")}
-                </Button>
-              )}
-              <span className="vendor-card-divider" />
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                onClick={() => onEdit(provider)}
-                title={t("settings.vendor.edit")}
-              >
-                <Pencil aria-hidden />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                className="hover:text-destructive"
-                onClick={() => onDelete(provider)}
-                title={t("settings.vendor.delete")}
-              >
-                <Trash2 aria-hidden />
-              </Button>
-            </div>
-          </div>
-        ))}
+            </Droppable>
+          </DragDropContext>
+        )}
       </div>
 
       {!loading && regularProviders.length === 0 && !localProvider && (

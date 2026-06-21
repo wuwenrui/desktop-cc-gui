@@ -567,6 +567,12 @@
   gap: 10px;
 }
 
+.vendor-draggable-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .vendor-card {
   display: flex;
   align-items: center;
@@ -577,6 +583,13 @@
   background: var(--surface-card);
   transition: border-color 0.15s;
   gap: 12px;
+}
+
+.vendor-card.is-dragging {
+  background: var(--surface-hover);
+  border-color: var(--border-accent);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+  z-index: 100;
 }
 
 .vendor-card:hover {
@@ -635,6 +648,26 @@
   width: 1px;
   align-self: stretch;
   background: var(--border-muted);
+}
+
+.vendor-card-drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+  cursor: grab;
+  flex-shrink: 0;
+  width: 20px;
+  align-self: stretch;
+}
+
+.vendor-card-drag-handle:active {
+  cursor: grabbing;
+}
+
+.vendor-card-drag-handle svg {
+  width: 14px;
+  height: 14px;
 }
 
 .vendor-local-provider-card {

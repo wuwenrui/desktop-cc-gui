@@ -17,6 +17,7 @@
 
 .diff-panel.file-tree-panel {
   gap: 0;
+  min-height: 0;
   overflow: hidden;
   padding: 8px 8px 0;
 }

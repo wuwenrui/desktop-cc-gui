@@ -114,6 +114,8 @@ import {
   exportDiagnosticsBundle,
   hydrateClaudeDeferredImage,
   setMainWindowOpacity,
+  fetchClaudeProviderModels,
+  reorderClaudeProviders,
 } from "./tauri";
 import { resetRuntimeModeStateForTests } from "./tauri/runtimeMode";
 import {
@@ -187,6 +189,32 @@ describe("tauri invoke wrappers", () => {
     expect(invokeMock).toHaveBeenCalledWith("add_workspace", {
       path: "/tmp/project",
       codex_bin: null,
+    });
+  });
+
+  it("maps Claude provider model fetch requests", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({
+      models: ["claude-sonnet"],
+      endpoint: "https://proxy.example.com/v1/models",
+    });
+
+    await fetchClaudeProviderModels("https://proxy.example.com/anthropic", "sk-test");
+
+    expect(invokeMock).toHaveBeenCalledWith("vendor_fetch_claude_models", {
+      baseUrl: "https://proxy.example.com/anthropic",
+      apiKey: "sk-test",
+    });
+  });
+
+  it("maps Claude provider reorder requests", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce(undefined);
+
+    await reorderClaudeProviders(["provider-b", "provider-a"]);
+
+    expect(invokeMock).toHaveBeenCalledWith("vendor_reorder_claude_providers", {
+      orderedIds: ["provider-b", "provider-a"],
     });
   });
 

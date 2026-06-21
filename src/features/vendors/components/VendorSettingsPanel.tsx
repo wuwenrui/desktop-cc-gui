@@ -502,6 +502,7 @@ export function VendorSettingsPanel({
               onEdit={claude.handleEditProvider}
               onDelete={claude.handleDeleteProvider}
               onSwitch={claude.handleSwitchProvider}
+              onReorder={claude.handleReorderProviders}
             />
             <ProviderDialog
               isOpen={claude.providerDialog.isOpen}
