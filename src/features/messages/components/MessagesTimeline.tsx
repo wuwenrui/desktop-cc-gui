@@ -320,7 +320,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     getItemKey: (index) => timelineProjectionRows[index]?.key ?? `missing:${index}`,
     getScrollElement: () => scrollElementRef.current,
     observeElementOffset: observeTimelineElementOffset,
-    overscan: 12,
+    overscan: isThinking || isWorking ? 24 : 12,
   });
   const virtualTimelineRows = timelineVirtualizer.getVirtualItems();
   const activeLiveTimelineRowKeys = useMemo(

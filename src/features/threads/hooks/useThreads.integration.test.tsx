@@ -13,11 +13,15 @@ import {
   sendUserMessage,
   startThread,
 } from "../../../services/tauri";
-import { useThreads } from "./useThreads";
+import { appendRendererDiagnostic } from "../../../services/rendererDiagnostics";
+import { computeThreadItemCacheMax, useThreads } from "./useThreads";
 
 type AppServerHandlers = Parameters<typeof useAppServerEvents>[0];
 
 let handlers: AppServerHandlers | null = null;
+const rendererDiagnosticsMocks = vi.hoisted(() => ({
+  appendRendererDiagnostic: vi.fn(),
+}));
 
 vi.mock("../../app/hooks/useAppServerEvents", () => ({
   useAppServerEvents: (incoming: AppServerHandlers) => {
@@ -63,6 +67,15 @@ vi.mock("../../../services/tauri", () => ({
   claimNextEmailMailCommand: vi.fn().mockResolvedValue({ command: null }),
   completeEmailMailCommand: vi.fn(),
 }));
+
+vi.mock("../../../services/rendererDiagnostics", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../../../services/rendererDiagnostics")>();
+  return {
+    ...actual,
+    appendRendererDiagnostic: rendererDiagnosticsMocks.appendRendererDiagnostic,
+  };
+});
 
 const workspace: WorkspaceInfo = {
   id: "ws-1",
@@ -660,6 +673,115 @@ describe("useThreads UX integration", () => {
       "thread-a",
     ]);
     expect(unpinnedRows.map((row) => row.thread.id)).toEqual(["thread-b"]);
+  });
+
+  it("computes the adaptive thread item cache cap from in-flight count", () => {
+    expect(computeThreadItemCacheMax(0)).toBe(12);
+    expect(computeThreadItemCacheMax(8)).toBe(22);
+    expect(computeThreadItemCacheMax(20)).toBe(46);
+  });
+
+  it("evicts stale loaded thread items and emits a chat-stream diagnostic", async () => {
+    const startThreadMock = vi.mocked(startThread);
+    startThreadMock.mockImplementation(async () => {
+      const callIndex = startThreadMock.mock.calls.length;
+      return {
+        result: {
+          thread: {
+            id: `thread-${callIndex}`,
+          },
+        },
+      } as never;
+    });
+
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+        activeEngine: "codex",
+      }),
+    );
+
+    for (let index = 0; index < 15; index += 1) {
+      const threadId = `thread-${index + 1}`;
+      now += 100;
+      await act(async () => {
+        await result.current.startThread();
+        handlers?.onAgentMessageCompleted?.({
+          workspaceId: "ws-1",
+          threadId,
+          itemId: `assistant-${index + 1}`,
+          text: `answer ${index + 1}`,
+          turnId: `turn-${index + 1}`,
+        });
+      });
+    }
+
+    await waitFor(() => {
+      expect(result.current.threadItemsByThread["thread-1"]).toBeUndefined();
+      expect(result.current.threadItemsByThread["thread-2"]).toBeUndefined();
+      expect(result.current.threadItemsByThread["thread-3"]).toBeUndefined();
+    });
+
+    expect(result.current.threadItemsByThread["thread-4"]).toHaveLength(1);
+    expect(result.current.threadItemsByThread["thread-15"]).toHaveLength(1);
+    expect(appendRendererDiagnostic).toHaveBeenCalledWith(
+      "chat-stream/evict-thread",
+      expect.objectContaining({
+        evictedCount: 3,
+        cacheMax: 12,
+        inFlightCount: 0,
+      }),
+    );
+  });
+
+  it("keeps interrupted guards scoped by workspace for matching thread ids", async () => {
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    await act(async () => {
+      handlers?.onThreadStarted?.("ws-1", {
+        id: "thread-shared",
+        preview: "Workspace one",
+        updated_at: 1000,
+      });
+      handlers?.onThreadStarted?.("ws-2", {
+        id: "thread-shared",
+        preview: "Workspace two",
+        updated_at: 1000,
+      });
+      result.current.setActiveThreadId("thread-shared");
+      handlers?.onTurnStarted?.("ws-1", "thread-shared", "turn-ws-1");
+    });
+
+    await act(async () => {
+      await result.current.interruptTurn();
+    });
+
+    await act(async () => {
+      handlers?.onAgentMessageCompleted?.({
+        workspaceId: "ws-2",
+        threadId: "thread-shared",
+        itemId: "assistant-ws-2",
+        text: "workspace two answer",
+        turnId: "turn-ws-2",
+      });
+    });
+
+    expect(result.current.threadItemsByThread["thread-shared"]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "assistant-ws-2",
+          kind: "message",
+          role: "assistant",
+          text: "workspace two answer",
+        }),
+      ]),
+    );
   });
 
 });

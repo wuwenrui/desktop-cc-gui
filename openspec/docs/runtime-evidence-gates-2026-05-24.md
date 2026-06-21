@@ -1,20 +1,15 @@
 # Runtime Evidence Gate Governance Report
 
-Generated at: 2026-06-13T05:53:58.534Z
+Generated at: 2026-06-17T09:50:58.775Z
 
 ## Archive Readiness
 
 | Change | Tasks | Recommendation | Qualifier |
 |---|---:|---|---|
 
-## Previous Archive Context
-
-- close-performance-iteration-2026-06: 25/25, previous-closure-context. Retained as historical closure context; not a current completed-active archive candidate.
-
 ## In Progress
 
-- close-client-performance-residual-2026-06: 0/30, not-archive-ready
-- collect-release-grade-performance-evidence: 28/32, not-archive-ready
+- fix-file-tree-virtual-scroll-height: 0/0, not-archive-ready
 
 ## Compatibility / Cleanup Matrix
 
@@ -31,15 +26,15 @@ Source: .artifacts/large-files-near-threshold.json
 
 | Path | Priority | Lines | Headroom | Facade / Boundary |
 |---|---|---:|---:|---|
-| src/app-shell.tsx | P0 | 2547 | 53 | Declare public facade before splitting. |
-| src/services/tauri.ts | P0 | 2514 | 86 | Preserve service exports, payload mapping, and web/Tauri fallback semantics. |
+| src/app-shell.tsx | P0 | 2593 | 7 | Declare public facade before splitting. |
+| src/services/tauri.ts | P0 | 2567 | 33 | Preserve service exports, payload mapping, and web/Tauri fallback semantics. |
+| src-tauri/src/engine/commands.rs | P0 | 2528 | 72 | Preserve command registration, Rust module facade, payload shape, and cross-platform paths. |
 | src-tauri/src/engine/claude_history.rs | P0 | 2505 | 95 | Preserve command registration, Rust module facade, payload shape, and cross-platform paths. |
 | src-tauri/src/codex/mod.rs | P0 | 2484 | 116 | Preserve command registration, Rust module facade, payload shape, and cross-platform paths. |
 | src-tauri/src/git/mod.rs | P0 | 2379 | 221 | Preserve command registration, Rust module facade, payload shape, and cross-platform paths. |
 | src-tauri/src/runtime/mod.rs | P0 | 2371 | 229 | Preserve command registration, Rust module facade, payload shape, and cross-platform paths. |
-| src-tauri/src/engine/commands.rs | P0 | 2286 | 314 | Preserve command registration, Rust module facade, payload shape, and cross-platform paths. |
-| src-tauri/src/engine/claude.rs | P0 | 2272 | 328 | Preserve command registration, Rust module facade, payload shape, and cross-platform paths. |
+| src-tauri/src/engine/claude.rs | P0 | 2309 | 291 | Preserve command registration, Rust module facade, payload shape, and cross-platform paths. |
+| src/features/threads/hooks/useThreadEventHandlers.ts | P1 | 2799 | 1 | Preserve hook input/output shape and async cleanup semantics. |
 | src-tauri/src/session_management.rs | P1 | 2976 | 24 | Preserve command registration, Rust module facade, payload shape, and cross-platform paths. |
-| src/features/threads/hooks/useThreadEventHandlers.ts | P1 | 2747 | 53 | Preserve hook input/output shape and async cleanup semantics. |
 
 Next action: Pick one coherent runtime boundary; do not batch unrelated hot paths together.

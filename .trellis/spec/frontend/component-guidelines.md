@@ -75,6 +75,78 @@ const sidebarNodeWithTopbar = isValidElement(props.children)
 - modal/dialog 必须具备 `role="dialog"` + `aria-modal`（若为 modal）。
 - 鼠标可操作项需考虑 keyboard path。
 
+## Scenario: Topbar Consolidated Command Menus
+
+### 1. Scope / Trigger
+
+- Trigger：修改主窗口顶栏 action、workspace open-app 入口、右侧 panel tab overflow、或任何在 `main-topbar` / right panel toolbar 内弹出的 menu。
+- 目标：小屏不平铺大量 icon，菜单视觉在 light/dark theme 与 macOS/Windows titlebar drag 语义下稳定。
+
+### 2. Signatures
+
+- 主入口菜单：`OpenAppMenu.extraActions?: OpenAppMenuExtraAction[]`
+- 顶栏动作数据源：`useMainHeaderActionItems(options): OpenAppMenuExtraAction[]`
+- 右侧面板 overflow：`ResponsiveIconToolbar({ collapseInactiveItems?: boolean })`
+- 顶栏交互控件必须显式带 `data-tauri-drag-region="false"`。
+
+### 3. Contracts
+
+- 顶栏中间动作（runtime console / terminal / solo / browser / docs / right panel / copy path）SHOULD 合并进 workspace open-app 主入口；避免另起一个平级 overflow trigger。
+- `OpenAppMenu` 的 icon-only 下拉 MUST 支持应用项和 extra action 项共用同一 command-list 视觉规格。
+- 菜单视觉 MUST 使用 theme token：`var(--surface-popover)`、`var(--surface-hover)`、`var(--text-emphasis)`、`var(--text-muted)`；禁止为了 light/dark 适配写死前景色。
+- 若菜单是 absolute child（例如 `OpenAppMenu`），其父容器 MUST NOT 使用会裁剪浮层的 `overflow: hidden`；需要压缩顶部布局时用 `min-width/max-width/flex` 控制，而不是裁剪 popover。
+- 若菜单来自 Radix portal（例如 shared responsive toolbar），可以保留 toolbar 自身 overflow 控制，但 dropdown content 的视觉必须与主菜单保持一致。
+- right panel toolbar 默认只外显 active/live/promoted item；inactive item 留在 overflow menu，防止小屏堆叠。
+- macOS/Windows 顶栏中，菜单 trigger 与 menu item MUST 保持 `data-tauri-drag-region="false"`，避免 window drag 区吞掉点击。
+
+### 4. Validation & Error Matrix
+
+| 场景 | 必须行为 | 禁止行为 |
+|---|---|---|
+| small viewport | 顶栏动作收进主入口或 overflow menu | icon 平铺导致堆叠/挤压 |
+| light theme | 菜单背景、hover、文字对比度来自 token | 固定深色/浅色导致不可读 |
+| dark theme | 图标继承 currentColor 或 theme token | 固定黑色 SVG 融进背景 |
+| macOS / Windows titlebar | 点击 trigger/menu item 执行动作 | drag-region 覆盖按钮导致点了无效 |
+| absolute popover | 父容器允许浮层溢出显示 | 父级 `overflow: hidden` 裁掉菜单，看起来像打不开 |
+| right panel overflow | active/live 外显，其余收纳；点击 menu item 后可切换 | 所有 panel icon 默认平铺 |
+
+### 5. Good / Base / Bad Cases
+
+- Good：`MainHeader` 把 `useMainHeaderActionItems()` 产出的动作传给 `OpenAppMenu.extraActions`，`Copy path` 也作为同一菜单项出现。
+- Good：`ResponsiveIconToolbar` 用 `collapseInactiveItems` 让右侧 panel tab 只外显生效项。
+- Base：Radix menu item 与自绘 open-app menu 使用相同尺寸、圆角、hover token，视觉一致但实现可不同。
+- Bad：给 `main-header-actions` 设置 `overflow: hidden` 后把 absolute menu 裁掉。
+- Bad：为了省空间再新增一个平级 `...` 菜单，让用户必须猜两个入口分别装什么。
+
+### 6. Tests Required
+
+- `OpenAppMenu.test.tsx` MUST 覆盖 extra action 出现在同一菜单内且点击触发 handler。
+- `MainHeader.topbar-session-tabs.test.tsx` MUST 覆盖 `Copy path` 写入当前 resolved workspace path。
+- `PanelTabs.test.tsx` MUST 覆盖 inactive tab 收进 overflow、点击后可切换/外显。
+- Topbar/session tabs 测试 MUST 覆盖 interactive controls `data-tauri-drag-region="false"`，drag lane 保持可拖拽。
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```tsx
+<div className="main-header-actions" style={{ overflow: "hidden" }}>
+  <OpenAppMenu iconOnly />
+  <MainHeaderActions />
+</div>
+```
+
+#### Correct
+
+```tsx
+const openAppExtraActions = useMainHeaderActionItems(options);
+
+<OpenAppMenu
+  iconOnly
+  extraActions={[...openAppExtraActions, copyPathAction]}
+/>
+```
+
 ## 常见坏味道（Common Smells）
 
 - 超长 TSX 文件里混入大量 data logic。

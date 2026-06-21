@@ -2225,6 +2225,27 @@ export type EngineWorkspaceActiveProcessDiagnostics = {
   workspaceId: string;
   engine: EngineType;
   activeProcessIds: number[];
+  registeredActiveProcesses: Array<{
+    pid: number;
+    registeredAgeMs: number;
+  }>;
+};
+
+export type EngineOsChildLivenessEvidence = {
+  evidenceClass: "measured" | "proxy" | "manual-only" | "unsupported";
+  sampledAfterCloseMs: number;
+  sampledOsChildCount: number | null;
+  sampler: string | null;
+  rationale: string | null;
+};
+
+export type EngineStaleChildCandidate = {
+  workspaceId: string;
+  engine: "claude" | "opencode" | "gemini" | "codex" | string;
+  pid: number;
+  registeredAgeMs: number;
+  staleReason: string;
+  progressEvidence: string;
 };
 
 export type EngineActiveProcessDiagnostics = {
@@ -2233,6 +2254,18 @@ export type EngineActiveProcessDiagnostics = {
   totalActiveProcessCount: number;
   workspaces: EngineWorkspaceActiveProcessDiagnostics[];
   unsupportedReason: string | null;
+  /**
+   * OS-level child process liveness evidence. Kept structurally separate from
+   * `totalActiveProcessCount`: a zero registry count only proves no handles
+   * remain registered, NOT that the OS has reaped every child process.
+   */
+  osChildLiveness: EngineOsChildLivenessEvidence;
+  /**
+   * Diagnostics-only stale child candidates. Never auto-killed in this change.
+   * Engines without structured IO/progress metadata report
+   * `progressEvidence="unsupported"`.
+   */
+  staleChildCandidates: EngineStaleChildCandidate[];
 };
 
 export async function getEngineActiveProcessDiagnostics(): Promise<EngineActiveProcessDiagnostics> {

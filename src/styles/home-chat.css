@@ -304,6 +304,24 @@
   overflow-y: auto;
 }
 
+.home-chat-workspace-picker-list[data-virtualized="true"] {
+  display: block;
+  overflow-y: auto;
+  contain: strict;
+}
+
+.home-chat-workspace-picker-virtual-spacer {
+  position: relative;
+  width: 100%;
+}
+
+.home-chat-workspace-picker-list[data-virtualized="true"] .home-chat-workspace-picker-item {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 36px;
+}
+
 .home-chat-workspace-picker-item {
   display: grid;
   grid-template-columns: 16px minmax(0, 1fr) 16px;

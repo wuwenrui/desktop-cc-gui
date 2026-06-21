@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useEffect } from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConversationItem } from "../../../types";
 import { ensureRuntimeReady } from "../../../services/tauri";
@@ -22,7 +23,9 @@ vi.mock("./Markdown", () => ({
     value: string;
     onRenderedValueChange?: (value: string) => void;
   }) => {
-    onRenderedValueChange?.(value);
+    useEffect(() => {
+      onRenderedValueChange?.(value);
+    }, [onRenderedValueChange, value]);
     return (
       <div className="markdown">
         {value.split(/\n+/).map((line) => (
@@ -109,10 +112,10 @@ describe("Messages runtime reconnect", () => {
 
     await waitFor(() => {
       expect(vi.mocked(ensureRuntimeReady)).toHaveBeenCalledWith("ws-runtime");
+      expect(onRecoverThreadRuntime).toHaveBeenCalledWith("ws-runtime", "thread-runtime-reconnect");
+      expect(screen.getByText("messages.runtimeReconnectRestored")).toBeTruthy();
+      expect(screen.getByText("messages.runtimeReconnectRestoredDetail")).toBeTruthy();
     });
-    expect(onRecoverThreadRuntime).toHaveBeenCalledWith("ws-runtime", "thread-runtime-reconnect");
-    expect(screen.getByText("messages.runtimeReconnectRestored")).toBeTruthy();
-    expect(screen.getByText("messages.runtimeReconnectRestoredDetail")).toBeTruthy();
   });
 
   it("shows a recover-specific error when runtime resumes but thread recovery returns null", async () => {
@@ -135,10 +138,10 @@ describe("Messages runtime reconnect", () => {
 
     await waitFor(() => {
       expect(vi.mocked(ensureRuntimeReady)).toHaveBeenCalledWith("ws-runtime");
+      expect(onRecoverThreadRuntime).toHaveBeenCalledWith("ws-runtime", "thread-runtime-reconnect-null");
+      expect(screen.getByText("messages.runtimeReconnectFailed")).toBeTruthy();
+      expect(screen.getByText("messages.runtimeReconnectRecoverFailed")).toBeTruthy();
     });
-    expect(onRecoverThreadRuntime).toHaveBeenCalledWith("ws-runtime", "thread-runtime-reconnect-null");
-    expect(screen.getByText("messages.runtimeReconnectFailed")).toBeTruthy();
-    expect(screen.getByText("messages.runtimeReconnectRecoverFailed")).toBeTruthy();
   });
 
   it("dedupes repeated runtime reconnect cards and only renders the latest one", () => {

@@ -38,6 +38,7 @@ const zhPart1 = {
     name: "名称",
     terminal: "终端",
     toggleTerminalPanel: "切换终端面板",
+    moreActions: "更多操作",
   },
 
   // 应用

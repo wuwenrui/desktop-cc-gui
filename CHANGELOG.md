@@ -2,43 +2,67 @@
 
 ---
 
-##### **2026年6月20日（v0.5.10）**
+##### **2026年6月16日（v0.5.10）**
 
 中文：
 
-✨ Features
-- 新增 Claude 供应商配置界面与默认模板补全，补齐模型、环境变量和运行时开关等关键配置项，方便用户直接创建和调整 Claude provider
-- 新增 Claude provider 模型拉取能力，支持从供应商接口同步模型列表并在模型下拉菜单中展示可用项
-- 新增 Claude provider 拖拽排序能力，支持在供应商列表中调整常规 provider 顺序并保持本地设置项与当前激活项的固定位置
-- 升级应用版本号到 `0.5.10`，同步前端包配置与 Tauri 配置
-
 🔧 Improvements
-- 优化 Claude provider 的默认配置和表单展示，减少创建或编辑供应商时的手工补全成本
-- 优化 provider 列表交互，让当前激活 provider 与可排序 provider 的视觉层级更清晰
-- 优化供应商模型加载后的展示与选择路径，提升可用模型较多时的浏览效率
+- 升级应用版本号到 `0.5.10`，同步前端包配置与 Tauri 配置
+- 补齐近期测试稳定性批次，覆盖 Composer rewind 确认、慢 git 标记编辑器挂载、聊天流渲染隔离、WebService token 生成、router lazy act 边界、Suspense host-task teardown 与 flush 等场景，降低测试串扰与误报
+- 补齐近期 OpenSpec 稳定性提案优化与归档，覆盖聊天流渲染隔离、AppShell 运行态稳定性、长运行客户端运行时、稳定性归档文档等条目
 
 🐛 Fixes
-- 修复 Claude provider 模板中缺少必要选项的问题，避免新建供应商后还需要手动补齐关键字段
-- 修复模型列表展示过少的问题，确保下拉菜单与实际拉取到的模型数量保持一致
-- 修复供应商排序持久化问题，避免拖拽后顺序在刷新或重启后丢失
+- 修复 Composer 文件引用深层路径搜索异常，恢复深层目录文件在 Composer 输入中的可被检索与引用能力
+- 修复文件树首屏滚动容器布局问题，让首屏目录树展示与滚动行为回到稳定状态
+- 修复父组件测试中 Markdown 懒加载隔离问题，降低消息组件 Markdown 懒加载在父级测试上下文中的串扰与不稳定
+- 修复顶栏菜单按钮收敛问题，恢复关键导航入口稳定状态
+- 修复 Apple event 完整诊断码保留问题，避免 threads 链路在跨进程事件中丢失诊断信息
+- 修复长运行客户端运行时稳定性问题，减少长会话、并行对话与高频事件下的 runtime 状态、事件订阅与前台残留漂移
+- 修复 AppShell 运行态上下文隔离稳定性问题，让 layoutContext、fileEditorContext、settingsContext 以及新增的 runtimeContext、modelSelectionContext、collaborationModeContext 在跨模块访问时保持清晰边界
+- 修复供应商排序时间稳定性问题，让供应商列表的展示顺序在多次刷新与会话切换后保持一致
+- 修复 runtime 重连恢复卡片状态问题，避免 messages 在重连或会话恢复后丢失或错乱展示
+- 修复 reasoning 测试 JSX 类型引用问题，让消息组件在测试上下文中恢复稳定渲染
+- 修复 AppShell runtime contract 治理脚本边界处理问题，避免新增 context 名称与 ctx 形参被误判为违规
 
 English:
 
-✨ Features
-- Add the Claude provider settings UI and complete the default template with the key model, environment, and runtime toggles needed to create or adjust a Claude provider directly
-- Add Claude provider model fetching so the app can sync model lists from the provider API and expose the available models in the selector
-- Add drag reordering for Claude providers so regular providers can be reordered while the local settings entry and active provider stay pinned in place
-- Bump the app version to `0.5.10` across frontend package metadata and Tauri configuration
-
 🔧 Improvements
-- Improve the default Claude provider configuration and form presentation to reduce manual filling when creating or editing providers
-- Improve provider list interactions so the active provider and sortable providers have a clearer visual hierarchy
-- Improve the model-selection flow after provider model loading so browsing works better when many models are available
+- Bump app version to `0.5.10` across frontend package metadata and Tauri configuration
+- Add a recent test-stability batch covering Composer rewind confirmation, slow git marker editor mount, chat-stream render isolation, WebService token generation, router lazy act boundaries, and Suspense host-task teardown and flush to reduce cross-talk and false positives
+- Optimize and archive recent OpenSpec stability proposals covering chat-stream render isolation, AppShell runtime stability, long-running client runtime, and stability archiving documentation
 
 🐛 Fixes
-- Fix missing required fields in the Claude provider template so new providers no longer need manual patch-up before use
-- Fix the model list showing too few entries so the selector matches the full set of fetched models
-- Fix provider-order persistence so drag reordering survives refresh and restart
+- Fix Composer deep-path file reference search so files inside deeply nested directories can be searched and referenced again from the Composer input
+- Fix file-tree first-paint scroll container layout to restore stable initial render and scrolling of the directory tree
+- Fix Markdown lazy-loading isolation in parent component tests to reduce cross-talk and flakiness between message components and Markdown lazy boundaries
+- Fix top-bar menu button convergence so key navigation entrypoints stay stable
+- Fix Apple event full diagnostic code retention so the threads path no longer drops diagnostic information across process events
+- Fix long-running client runtime stability to reduce runtime-state, event-subscription, and foreground-residue drift during long sessions, parallel conversations, and high-frequency events
+- Fix AppShell runtime context isolation stability so `layoutContext`, `fileEditorContext`, `settingsContext`, and the newly introduced `runtimeContext`, `modelSelectionContext`, and `collaborationModeContext` keep clear boundaries across module access
+- Fix vendor ordering time stability so the vendor list order remains consistent across refreshes and session switches
+- Fix the runtime reconnect recovery card state so messages no longer lose or mis-render state after reconnect or session recovery
+- Fix reasoning test JSX type references so message components render reliably inside the test context
+- Fix the AppShell runtime contract governance script boundary handling so newly added context names and `ctx` parameters are no longer misclassified as violations
+
+中文：
+
+🔧 Improvements
+- 升级应用版本号到 `0.5.10`，同步前端包配置与 Tauri 配置
+
+🐛 Fixes
+- 修复 Composer 文件引用深层路径搜索异常，恢复深层目录文件在 Composer 输入中的可被检索与引用能力
+- 修复文件树首屏滚动容器布局问题，让首屏目录树展示与滚动行为回到稳定状态
+- 修复父组件测试中 Markdown 懒加载隔离问题，降低消息组件 Markdown 懒加载在父级测试上下文中的串扰与不稳定
+
+English:
+
+🔧 Improvements
+- Bump app version to `0.5.10` across frontend package metadata and Tauri configuration
+
+🐛 Fixes
+- Fix Composer deep-path file reference search so files inside deeply nested directories can be searched and referenced again from the Composer input
+- Fix file-tree first-paint scroll container layout to restore stable initial render and scrolling of the directory tree
+- Fix Markdown lazy-loading isolation in parent component tests to reduce cross-talk and flakiness between message components and Markdown lazy boundaries
 
 ---
 

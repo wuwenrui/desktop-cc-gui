@@ -25,6 +25,16 @@ import { useThreadEventHandlers } from "./useThreadEventHandlers";
 import { useThreadActions } from "./useThreadActions";
 import { useThreadMessaging } from "./useThreadMessaging";
 import { useThreadApprovals } from "./useThreadApprovals";
+import {
+  cleanupThreadScopedRefs,
+  createWorkspaceScopedMap,
+  workspaceScopedDelete,
+  workspaceScopedEntries,
+  workspaceScopedGet,
+  workspaceScopedHas,
+  workspaceScopedSet,
+  type WorkspaceScopedMap,
+} from "./workspaceScopedMap";
 import { useThreadAccountInfo } from "./useThreadAccountInfo";
 import { useThreadRateLimits } from "./useThreadRateLimits";
 import { useThreadSelectors } from "./useThreadSelectors";
@@ -56,6 +66,7 @@ import {
   saveCustomName,
 } from "../utils/threadStorage";
 import { writeClientStoreValue } from "../../../services/clientStorage";
+import { appendRendererDiagnostic } from "../../../services/rendererDiagnostics";
 import { isWebServiceRuntime } from "../../../services/tauri/runtimeMode";
 import {
   loadSidebarSnapshot,
@@ -100,8 +111,22 @@ const AUTO_TITLE_PENDING_STALE_MS = 20_000;
 const THREAD_ERROR_DUPLICATE_WINDOW_MS = 8_000;
 const THREAD_SWITCH_RESUME_DELAY_MS = 24;
 const THREAD_SWITCH_LOADED_REFRESH_MS = 20_000;
-const THREAD_ITEM_CACHE_MAX = 12;
+const THREAD_ITEM_CACHE_DEFAULT_MAX = 12;
 const THREAD_ITEM_CACHE_TRIM_WATERMARK = 2;
+
+// chat-stream-render-isolation-2026-06 task 5: LRU adaptive. When
+// multiple threads stream in parallel we want the cache to grow so
+// the reducer hot path does not thrash evicted thread items back into
+// state. The formula is intentionally simple: in-flight count plus
+// a baseline headroom. When no thread is processing, the formula
+// returns the original `THREAD_ITEM_CACHE_DEFAULT_MAX` (backward-compat
+// with the prior 12-entry budget).
+export function computeThreadItemCacheMax(inFlightCount: number): number {
+  if (!Number.isFinite(inFlightCount) || inFlightCount <= 0) {
+    return THREAD_ITEM_CACHE_DEFAULT_MAX;
+  }
+  return Math.max(THREAD_ITEM_CACHE_DEFAULT_MAX, inFlightCount * 2 + 6);
+}
 
 function normalizeMemoryTurnId(turnId: string | null | undefined) {
   return turnId?.trim() || "__unknown_turn__";
@@ -112,6 +137,56 @@ function isSameMemoryTurn(
   rightTurnId: string | null | undefined,
 ) {
   return normalizeMemoryTurnId(leftTurnId) === normalizeMemoryTurnId(rightTurnId);
+}
+
+type PendingMemoryCaptureBucket = Record<string, PendingMemoryCapture>;
+type PendingAssistantCompletionBucket = Record<string, PendingAssistantCompletion>;
+
+function getPendingMemoryEntries<T extends { threadId: string }>(
+  store: WorkspaceScopedMap<Record<string, T>>,
+  workspaceId: string | null | undefined,
+  threadIds: readonly string[],
+) {
+  return threadIds.flatMap((threadId) => {
+    const bucket = workspaceScopedGet(store, workspaceId, threadId);
+    if (!bucket) {
+      return [];
+    }
+    return Object.entries(bucket).map(([key, entry]) => ({ key, threadId, entry }));
+  });
+}
+
+function setPendingMemoryEntry<T>(
+  store: WorkspaceScopedMap<Record<string, T>>,
+  workspaceId: string | null | undefined,
+  threadId: string,
+  key: string,
+  entry: T,
+) {
+  const bucket = {
+    ...(workspaceScopedGet(store, workspaceId, threadId) ?? {}),
+    [key]: entry,
+  };
+  workspaceScopedSet(store, workspaceId, threadId, bucket);
+}
+
+function deletePendingMemoryEntry<T>(
+  store: WorkspaceScopedMap<Record<string, T>>,
+  workspaceId: string | null | undefined,
+  threadId: string,
+  key: string,
+) {
+  const bucket = workspaceScopedGet(store, workspaceId, threadId);
+  if (!bucket || !(key in bucket)) {
+    return;
+  }
+  const nextBucket = { ...bucket };
+  delete nextBucket[key];
+  if (Object.keys(nextBucket).length === 0) {
+    workspaceScopedDelete(store, workspaceId, threadId);
+    return;
+  }
+  workspaceScopedSet(store, workspaceId, threadId, nextBucket);
 }
 
 function shouldKeepPendingCaptureForAdditionalAssistantSegments(
@@ -234,13 +309,37 @@ export function useThreads({
   const historyLoadingThreadByWorkspaceRef = useRef<Record<string, string | null>>({});
   const activeThreadIdByWorkspaceRef = useRef(state.activeThreadIdByWorkspace);
   const replaceOnResumeRef = useRef<Record<string, boolean>>({});
-  const pendingInterruptsRef = useRef<Set<string>>(new Set());
-  const interruptedThreadsRef = useRef<Set<string>>(new Set());
+  // chat-stream-render-isolation-2026-06 task 8: workspace-scope these
+  // 6 thread-scoped in-flight refs so a workspace switch cannot resurrect
+  // stale entries from a previous workspace. The 3 Set refs use boolean
+  // values; the 2 pending memory refs keep per-thread turn buckets. The
+  // 5 additional Record refs
+  // listed in proposal footnote (loadedThreadLastRefreshAtRef,
+  // historyLoadingThreadByWorkspaceRef, codexCompactionInFlightByThreadRef,
+  // sharedSessionLastSignatureByThreadRef, sharedSessionSyncTimerByThreadRef)
+  // are follow-up 11.6 and stay in the original shape.
+  const pendingInterruptsRef = useRef<WorkspaceScopedMap<true>>(
+    createWorkspaceScopedMap<true>(),
+  );
+  const interruptedThreadsRef = useRef<WorkspaceScopedMap<true>>(
+    createWorkspaceScopedMap<true>(),
+  );
   const codexCompactionInFlightByThreadRef = useRef<Record<string, boolean>>({});
-  const pendingMemoryCaptureRef = useRef<Record<string, PendingMemoryCapture>>({});
-  const pendingAssistantCompletionRef = useRef<Record<string, PendingAssistantCompletion>>({});
-  const recentThreadErrorsRef = useRef<Record<string, { message: string; at: number }>>({});
-  const handledClaudeExitPlanToolIdsRef = useRef<Set<string>>(new Set());
+  const pendingMemoryCaptureRef = useRef<
+    WorkspaceScopedMap<PendingMemoryCaptureBucket>
+  >(createWorkspaceScopedMap<PendingMemoryCaptureBucket>());
+  const pendingAssistantCompletionRef = useRef<
+    WorkspaceScopedMap<PendingAssistantCompletionBucket>
+  >(createWorkspaceScopedMap<PendingAssistantCompletionBucket>());
+  const recentThreadErrorsRef = useRef<
+    WorkspaceScopedMap<{ message: string; at: number }>
+  >(createWorkspaceScopedMap<{ message: string; at: number }>());
+  const handledClaudeExitPlanToolIdsRef = useRef<WorkspaceScopedMap<true>>(
+    createWorkspaceScopedMap<true>(),
+  );
+  const cleanupThreadTransientStateRef = useRef<
+    (workspaceId: string | null | undefined, threadId: string) => number
+  >(() => 0);
   const sharedSessionSyncTimerByThreadRef = useRef<
     Record<string, ReturnType<typeof setTimeout> | null>
   >({});
@@ -304,11 +403,15 @@ export function useThreads({
   });
 
   const pushThreadErrorMessage = useCallback(
-    (threadId: string, message: string) => {
+    (workspaceId: string, threadId: string, message: string) => {
       const normalized = message.trim();
       if (normalized) {
         const now = Date.now();
-        const recent = recentThreadErrorsRef.current[threadId];
+        const recent = workspaceScopedGet(
+          recentThreadErrorsRef.current,
+          workspaceId,
+          threadId,
+        );
         if (
           recent
           && recent.message === normalized
@@ -316,7 +419,12 @@ export function useThreads({
         ) {
           return;
         }
-        recentThreadErrorsRef.current[threadId] = { message: normalized, at: now };
+        workspaceScopedSet(
+          recentThreadErrorsRef.current,
+          workspaceId,
+          threadId,
+          { message: normalized, at: now },
+        );
       }
       dispatch({
         type: "addAssistantMessage",
@@ -380,30 +488,27 @@ export function useThreads({
     onDebug,
   });
 
+  // chat-stream-render-isolation-2026-06 task 4: collapse the five
+  // per-slice ref-sync effects into a single effect so dispatching
+  // state only schedules one React commit's worth of ref work.
   useEffect(() => {
     activeThreadIdByWorkspaceRef.current = state.activeThreadIdByWorkspace;
-  }, [state.activeThreadIdByWorkspace]);
+    threadStatusByIdRef.current = state.threadStatusById;
+    itemsByThreadRef.current = state.itemsByThread;
+    activeTurnIdByThreadRef.current = state.activeTurnIdByThread;
+    threadsByWorkspaceRef.current = state.threadsByWorkspace;
+  }, [
+    state.activeThreadIdByWorkspace,
+    state.threadStatusById,
+    state.itemsByThread,
+    state.activeTurnIdByThread,
+    state.threadsByWorkspace,
+  ]);
 
   useEffect(() => {
     Object.entries(state.threadsByWorkspace).forEach(([workspaceId, threads]) => {
       saveSidebarSnapshotThreads(workspaceId, threads);
     });
-  }, [state.threadsByWorkspace]);
-
-  useEffect(() => {
-    threadStatusByIdRef.current = state.threadStatusById;
-  }, [state.threadStatusById]);
-
-  useEffect(() => {
-    itemsByThreadRef.current = state.itemsByThread;
-  }, [state.itemsByThread]);
-
-  useEffect(() => {
-    activeTurnIdByThreadRef.current = state.activeTurnIdByThread;
-  }, [state.activeTurnIdByThread]);
-
-  useEffect(() => {
-    threadsByWorkspaceRef.current = state.threadsByWorkspace;
   }, [state.threadsByWorkspace]);
 
   useEffect(() => {
@@ -637,30 +742,47 @@ export function useThreads({
       rememberThreadAlias(oldThreadId, newThreadId);
       const oldCanonicalThreadId = resolveCanonicalThreadId(oldThreadId);
       const newCanonicalThreadId = resolveCanonicalThreadId(newThreadId);
-      const pendingEntries = Object.entries(pendingMemoryCaptureRef.current).filter(
-        ([, entry]) =>
-          entry.threadId === oldThreadId || entry.threadId === oldCanonicalThreadId,
-      );
+      const pendingEntries = workspaceScopedEntries(pendingMemoryCaptureRef.current)
+        .flatMap(({ workspaceId, threadId, value }) =>
+          Object.entries(value)
+            .filter(([, entry]) =>
+              entry.threadId === oldThreadId || entry.threadId === oldCanonicalThreadId,
+            )
+            .map(([key, pending]) => ({ workspaceId, threadId, key, pending })),
+        );
       if (pendingEntries.length > 0) {
         memoryDebugLog("rename pending capture key", {
           oldThreadId,
           newThreadId,
           count: pendingEntries.length,
         });
-        pendingEntries.forEach(([key, pending]) => {
-          delete pendingMemoryCaptureRef.current[key];
-          pendingMemoryCaptureRef.current[
-            buildMemoryTurnKey(newCanonicalThreadId, pending.turnId)
-          ] = {
+        pendingEntries.forEach(({ workspaceId, threadId, key, pending }) => {
+          deletePendingMemoryEntry(
+            pendingMemoryCaptureRef.current,
+            workspaceId,
+            threadId,
+            key,
+          );
+          setPendingMemoryEntry(
+            pendingMemoryCaptureRef.current,
+            workspaceId,
+            newCanonicalThreadId,
+            buildMemoryTurnKey(newCanonicalThreadId, pending.turnId),
+            {
             ...pending,
             threadId: newCanonicalThreadId,
-          };
+            },
+          );
         });
       }
-      const completedEntries = Object.entries(pendingAssistantCompletionRef.current).filter(
-        ([, entry]) =>
-          entry.threadId === oldThreadId || entry.threadId === oldCanonicalThreadId,
-      );
+      const completedEntries = workspaceScopedEntries(pendingAssistantCompletionRef.current)
+        .flatMap(({ workspaceId, threadId, value }) =>
+          Object.entries(value)
+            .filter(([, entry]) =>
+              entry.threadId === oldThreadId || entry.threadId === oldCanonicalThreadId,
+            )
+            .map(([key, completed]) => ({ workspaceId, threadId, key, completed })),
+        );
       if (completedEntries.length === 0) {
         return;
       }
@@ -669,14 +791,23 @@ export function useThreads({
         newThreadId,
         count: completedEntries.length,
       });
-      completedEntries.forEach(([key, completed]) => {
-        delete pendingAssistantCompletionRef.current[key];
-        pendingAssistantCompletionRef.current[
-          buildMemoryTurnKey(newCanonicalThreadId, completed.turnId)
-        ] = {
+      completedEntries.forEach(({ workspaceId, threadId, key, completed }) => {
+        deletePendingMemoryEntry(
+          pendingAssistantCompletionRef.current,
+          workspaceId,
+          threadId,
+          key,
+        );
+        setPendingMemoryEntry(
+          pendingAssistantCompletionRef.current,
+          workspaceId,
+          newCanonicalThreadId,
+          buildMemoryTurnKey(newCanonicalThreadId, completed.turnId),
+          {
           ...completed,
           threadId: newCanonicalThreadId,
-        };
+          },
+        );
       });
     },
     [rememberThreadAlias, renameCompletionEmailIntentThread, resolveCanonicalThreadId],
@@ -1274,24 +1405,35 @@ export function useThreads({
         threadId: canonicalThreadId,
       };
       const captureKey = buildMemoryTurnKey(canonicalThreadId, payload.turnId);
-      pendingMemoryCaptureRef.current[captureKey] = {
-        ...normalizedPayload,
-        createdAt: Date.now(),
-      };
+      setPendingMemoryEntry(
+        pendingMemoryCaptureRef.current,
+        payload.workspaceId,
+        canonicalThreadId,
+        captureKey,
+        {
+          ...normalizedPayload,
+          createdAt: Date.now(),
+        },
+      );
       const completedThreadIds = collectRelatedThreadIds(canonicalThreadId);
       const completedEntry = completedThreadIds
         .flatMap((threadId) =>
-          Object.entries(pendingAssistantCompletionRef.current)
-            .filter(([, completion]) => {
-              if (completion.threadId !== threadId) {
-                return false;
-              }
+          getPendingMemoryEntries(
+            pendingAssistantCompletionRef.current,
+            payload.workspaceId,
+            [threadId],
+          )
+            .filter(({ entry: completion }) => {
               if (!completion.turnId || !payload.turnId) {
                 return true;
               }
               return completion.turnId === payload.turnId;
             })
-            .map(([key, completion]) => ({ key, threadId, completion })),
+            .map(({ key, threadId, entry: completion }) => ({
+              key,
+              threadId,
+              completion,
+            })),
         )
         .find((entry) => Boolean(entry.completion));
       const nowMs = Date.now();
@@ -1306,24 +1448,40 @@ export function useThreads({
         const keepPendingCapture =
           shouldKeepPendingCaptureForAdditionalAssistantSegments(normalizedPayload);
         completedThreadIds.forEach((threadId) => {
-          Object.entries(pendingAssistantCompletionRef.current).forEach(([key, entry]) => {
+          getPendingMemoryEntries(
+            pendingAssistantCompletionRef.current,
+            payload.workspaceId,
+            [threadId],
+          ).forEach(({ key, entry }) => {
             if (
-              entry.threadId === threadId &&
               isSameMemoryTurn(entry.turnId, payload.turnId)
             ) {
               if (!keepPendingCapture) {
-                delete pendingAssistantCompletionRef.current[key];
+                deletePendingMemoryEntry(
+                  pendingAssistantCompletionRef.current,
+                  payload.workspaceId,
+                  threadId,
+                  key,
+                );
               }
             }
           });
-          Object.entries(pendingMemoryCaptureRef.current).forEach(([key, entry]) => {
+          getPendingMemoryEntries(
+            pendingMemoryCaptureRef.current,
+            payload.workspaceId,
+            [threadId],
+          ).forEach(({ key, entry }) => {
             if (
-              entry.threadId === threadId &&
               isSameMemoryTurn(entry.turnId, payload.turnId)
             ) {
               const isSameCanonicalEntry = key === captureKey;
               if (!keepPendingCapture || !isSameCanonicalEntry) {
-                delete pendingMemoryCaptureRef.current[key];
+                deletePendingMemoryEntry(
+                  pendingMemoryCaptureRef.current,
+                  payload.workspaceId,
+                  threadId,
+                  key,
+                );
               }
             }
           });
@@ -1341,7 +1499,12 @@ export function useThreads({
         return;
       }
       if (completedEntry) {
-        delete pendingAssistantCompletionRef.current[completedEntry.key];
+        deletePendingMemoryEntry(
+          pendingAssistantCompletionRef.current,
+          payload.workspaceId,
+          completedEntry.threadId,
+          completedEntry.key,
+        );
       }
       memoryDebugLog("input captured", {
         threadId: canonicalThreadId,
@@ -1388,31 +1551,42 @@ export function useThreads({
       const relatedThreadIds = collectRelatedThreadIds(canonicalThreadId);
       const pendingEntry = relatedThreadIds
         .flatMap((threadId) =>
-          Object.entries(pendingMemoryCaptureRef.current)
-            .filter(([, capture]) => {
-              if (capture.threadId !== threadId) {
-                return false;
-              }
+          getPendingMemoryEntries(
+            pendingMemoryCaptureRef.current,
+            payload.workspaceId,
+            [threadId],
+          )
+            .filter(({ entry: capture }) => {
               if (!completionTurnId || !capture.turnId) {
                 return true;
               }
               return capture.turnId === completionTurnId;
             })
-            .map(([key, capture]) => ({ key, threadId, capture })),
+            .map(({ key, threadId, entry: capture }) => ({ key, threadId, capture })),
         )
         .find((entry) => Boolean(entry.capture));
       if (!pendingEntry?.capture) {
         const completionKey = buildMemoryTurnKey(canonicalThreadId, completionTurnId);
-        pendingAssistantCompletionRef.current[completionKey] =
+        const existingBucket = workspaceScopedGet(
+          pendingAssistantCompletionRef.current,
+          payload.workspaceId,
+          canonicalThreadId,
+        );
+        setPendingMemoryEntry(
+          pendingAssistantCompletionRef.current,
+          payload.workspaceId,
+          canonicalThreadId,
+          completionKey,
           upsertPendingAssistantCompletionSegment(
-            pendingAssistantCompletionRef.current[completionKey],
+            existingBucket?.[completionKey],
             {
               ...payload,
               threadId: canonicalThreadId,
               turnId: completionTurnId,
             },
             Date.now(),
-          );
+          ),
+        );
         memoryDebugLog("assistant completed but no pending capture", {
           threadId: canonicalThreadId,
           turnId: completionTurnId,
@@ -1427,7 +1601,12 @@ export function useThreads({
           PENDING_MEMORY_STALE_MS,
         )
       ) {
-        delete pendingMemoryCaptureRef.current[pendingEntry.key];
+        deletePendingMemoryEntry(
+          pendingMemoryCaptureRef.current,
+          payload.workspaceId,
+          pendingEntry.threadId,
+          pendingEntry.key,
+        );
         memoryDebugLog("pending capture is stale, skip merge", {
           threadId: pendingEntry.threadId,
           turnId: pendingEntry.capture.turnId,
@@ -1436,7 +1615,11 @@ export function useThreads({
         return;
       }
       const completionKey = buildMemoryTurnKey(canonicalThreadId, pendingEntry.capture.turnId);
-      const previousCompletion = pendingAssistantCompletionRef.current[completionKey];
+      const previousCompletion = workspaceScopedGet(
+        pendingAssistantCompletionRef.current,
+        payload.workspaceId,
+        canonicalThreadId,
+      )?.[completionKey];
       const previousAssistantText = previousCompletion
         ? joinPendingAssistantCompletionText(previousCompletion)
         : "";
@@ -1449,7 +1632,13 @@ export function useThreads({
         },
         Date.now(),
       );
-      pendingAssistantCompletionRef.current[completionKey] = nextCompletion;
+      setPendingMemoryEntry(
+        pendingAssistantCompletionRef.current,
+        payload.workspaceId,
+        canonicalThreadId,
+        completionKey,
+        nextCompletion,
+      );
       const mergedAssistantText = joinPendingAssistantCompletionText(nextCompletion);
       if (previousAssistantText === mergedAssistantText) {
         memoryDebugLog("assistant completed text unchanged, skip memory rewrite", {
@@ -1462,26 +1651,48 @@ export function useThreads({
       const keepPendingCapture =
         shouldKeepPendingCaptureForAdditionalAssistantSegments(pendingEntry.capture);
       relatedThreadIds.forEach((threadId) => {
-        Object.entries(pendingMemoryCaptureRef.current).forEach(([key, entry]) => {
+        getPendingMemoryEntries(
+          pendingMemoryCaptureRef.current,
+          payload.workspaceId,
+          [threadId],
+        ).forEach(({ key, entry }) => {
           if (
-            entry.threadId === threadId &&
             isSameMemoryTurn(entry.turnId, pendingEntry.capture.turnId)
           ) {
             const isSameCanonicalEntry = key === pendingEntry.key;
             if (!keepPendingCapture || !isSameCanonicalEntry) {
-              delete pendingMemoryCaptureRef.current[key];
+              deletePendingMemoryEntry(
+                pendingMemoryCaptureRef.current,
+                payload.workspaceId,
+                threadId,
+                key,
+              );
             }
           }
         });
-        Object.entries(pendingAssistantCompletionRef.current).forEach(([key, entry]) => {
+        getPendingMemoryEntries(
+          pendingAssistantCompletionRef.current,
+          payload.workspaceId,
+          [threadId],
+        ).forEach(({ key, entry }) => {
           if (
-            entry.threadId === threadId &&
-              isSameMemoryTurn(entry.turnId, pendingEntry.capture.turnId)
+            isSameMemoryTurn(entry.turnId, pendingEntry.capture.turnId)
           ) {
             if (keepPendingCapture) {
-              pendingAssistantCompletionRef.current[key] = nextCompletion;
+              setPendingMemoryEntry(
+                pendingAssistantCompletionRef.current,
+                payload.workspaceId,
+                threadId,
+                key,
+                nextCompletion,
+              );
             } else {
-              delete pendingAssistantCompletionRef.current[key];
+              deletePendingMemoryEntry(
+                pendingAssistantCompletionRef.current,
+                payload.workspaceId,
+                threadId,
+                key,
+              );
             }
           }
         });
@@ -1794,7 +2005,14 @@ export function useThreads({
     const loadedThreadIds = Object.entries(loadedThreadsRef.current)
       .filter(([, isLoaded]) => isLoaded)
       .map(([threadId]) => threadId);
-    if (loadedThreadIds.length <= THREAD_ITEM_CACHE_MAX + THREAD_ITEM_CACHE_TRIM_WATERMARK) {
+    // chat-stream-render-isolation-2026-06 task 5: in-flight aware LRU.
+    // Count the number of threads currently streaming (`isProcessing`)
+    // and let the cache budget grow with them.
+    const inFlightCount = Object.values(state.threadStatusById).filter(
+      (status) => status?.isProcessing,
+    ).length;
+    const cacheMax = computeThreadItemCacheMax(inFlightCount);
+    if (loadedThreadIds.length <= cacheMax + THREAD_ITEM_CACHE_TRIM_WATERMARK) {
       return;
     }
 
@@ -1830,7 +2048,7 @@ export function useThreads({
       const workspaceId = threadWorkspaceMap.get(threadId);
       return workspaceId ? isThreadPinned(workspaceId, threadId) : false;
     }).length;
-    const keepableSlots = Math.max(0, THREAD_ITEM_CACHE_MAX - protectedLoadedCount);
+    const keepableSlots = Math.max(0, cacheMax - protectedLoadedCount);
 
     const evictableCandidates = loadedThreadIds
       .filter((threadId) => {
@@ -1862,6 +2080,37 @@ export function useThreads({
 
     evictedThreadIds.forEach((threadId) => {
       loadedThreadsRef.current[threadId] = false;
+    });
+    // chat-stream-render-isolation-2026-06 task 8.2: drop per-thread entries
+    // from all 6 workspace-scope refs before dispatching the evict so that
+    // dispatch + cleanup happen in the same microtask. Handler-owned transient
+    // refs are cleaned through the registered owner callback below.
+    let cleanedRefCount = 0;
+    const scopedStores: ReadonlyArray<WorkspaceScopedMap<unknown>> = [
+      pendingMemoryCaptureRef.current,
+      pendingAssistantCompletionRef.current,
+      pendingInterruptsRef.current,
+      interruptedThreadsRef.current,
+      recentThreadErrorsRef.current,
+      handledClaudeExitPlanToolIdsRef.current,
+    ];
+    for (const threadId of evictedThreadIds) {
+      const workspaceId = threadWorkspaceMap.get(threadId);
+      cleanedRefCount += cleanupThreadScopedRefs(
+        scopedStores,
+        workspaceId,
+        threadId,
+      );
+      cleanedRefCount += cleanupThreadTransientStateRef.current(
+        workspaceId,
+        threadId,
+      );
+    }
+    appendRendererDiagnostic("chat-stream/evict-thread", {
+      evictedCount: evictedThreadIds.length,
+      cleanedRefCount,
+      cacheMax,
+      inFlightCount,
     });
     dispatch({ type: "evictThreadItems", threadIds: evictedThreadIds });
   }, [
@@ -2202,6 +2451,12 @@ export function useThreads({
     onTurnTerminalExternal: ({ workspaceId, threadId, turnId, status }) => {
       settleCompletionEmailIntent(workspaceId, threadId, turnId, status);
     },
+    onThreadTransientCleanupReady: (cleanup) => {
+      cleanupThreadTransientStateRef.current = cleanup;
+      return () => {
+        cleanupThreadTransientStateRef.current = () => 0;
+      };
+    },
     onCollaborationModeResolved: onCollaborationModeResolved
       ? (event) => {
           onCollaborationModeResolved({
@@ -2222,10 +2477,21 @@ export function useThreads({
         return;
       }
       const handoffKey = `${threadId}:${itemId}`;
-      if (handledClaudeExitPlanToolIdsRef.current.has(handoffKey)) {
+      if (
+        workspaceScopedHas(
+          handledClaudeExitPlanToolIdsRef.current,
+          activeWorkspaceId,
+          handoffKey,
+        )
+      ) {
         return;
       }
-      handledClaudeExitPlanToolIdsRef.current.add(handoffKey);
+      workspaceScopedSet(
+        handledClaudeExitPlanToolIdsRef.current,
+        activeWorkspaceId,
+        handoffKey,
+        true,
+      );
       void interruptTurn({ reason: "plan-handoff" });
     },
   });

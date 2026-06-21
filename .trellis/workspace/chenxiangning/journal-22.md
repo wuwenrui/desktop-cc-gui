@@ -616,3 +616,607 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 842: 修复 Messages 测试 Suspense act 噪声
+
+**Date**: 2026-06-15
+**Task**: 修复 Messages 测试 Suspense act 噪声
+**Branch**: `bump-version-0.5.10`
+
+### Summary
+
+隔离 Messages 父组件测试中的 Markdown 懒加载运行时，消除 check:heavy-test-noise 中由 Suspense lazy import 触发的 React act warning；保留 Markdown 专项测试走真实组件。验证 npm run check:heavy-test-noise 通过，act warnings 为 0。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9f7002bf` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 843: 修复文件树首屏滚动容器布局
+
+**Date**: 2026-06-16
+**Task**: 修复文件树首屏滚动容器布局
+**Branch**: `feature/v0.5.10`
+
+### Summary
+
+修复右侧文件树首次进入时纵向 scrollbar 不出现、切换 Git 面板后才恢复的问题，并回写 OpenSpec proposal review。
+
+### Main Changes
+
+- 根因定位：`FileTreePanel` 首屏依赖 lazy-loaded `diff.css` 的 `.diff-panel` 布局 shell；未切过 Git 面板时 `.file-tree-list` 无法稳定形成正确 scroll container。
+- 修复实现：在 `src/styles/file-tree.css` 的 `.file-tree-panel` 内补齐 `display:flex`、`flex:1`、`flex-direction:column`、`min-height:0`、`padding`、`position` 和 `-webkit-app-region:no-drag`，保留 `.diff-panel.file-tree-panel` override 兼容既有样式链路。
+- 测试补强：在 `src/styles/client-typography-font-size.test.ts` 增加 CSS contract，锁定文件树 scroll shell 独立于 lazy Git diff styles。
+- 提案回写：新增 `openspec/changes/fix-file-tree-virtual-scroll-height/proposal-review.md`，记录现象、错误修复复盘、最终根因、兼容性 review、边界和验证结果。
+- 验证通过：`npm exec vitest run src/styles/client-typography-font-size.test.ts src/features/files/components/FileTreePanel.run.test.tsx`、`npm run typecheck`、`npm run lint`、`npm run check:large-files`。
+- OpenSpec strict validate 说明：`openspec validate fix-file-tree-virtual-scroll-height --strict` 返回 Unknown item，因为该 active change 当前只有目录骨架且无标准 `proposal.md/tasks.md/spec.md`，本次按 hotfix review artifact 收口，不伪造完整 lifecycle。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `269088b2` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 844: 修复 Composer 文件引用深层路径搜索
+
+**Date**: 2026-06-16
+**Task**: 修复 Composer 文件引用深层路径搜索
+**Branch**: `feature/v0.5.10`
+
+### Summary
+
+修复 Composer @ 文件引用无路径查询无法命中深层文件的问题，回写 OpenSpec contract 并完成 focused tests/typecheck/lint/OpenSpec 验证。
+
+### Main Changes
+
+## 本次工作
+- 修复 `ChatInputBoxAdapter.fileCompletionProvider` 的候选源分层问题：无 `/` 查询先匹配 root candidates，不足时按 workspace 缓存并搜索 full workspace snapshot。
+- 保留 `@dir/query` scoped 查询的 lazy directory-children lookup，避免破坏文件树 progressive loading 性能边界。
+- 同步 `useComposerAutocompleteState` 的 legacy/parent autocomplete 语义，避免父层 suggestionsOpen 与真实 dropdown 语义漂移。
+- 回写 `composer-file-reference-index-availability` main spec 与历史 proposal closure，记录 nested workspace path search contract。
+
+## 验证
+- `npx vitest run src/features/composer/components/ChatInputBox/ChatInputBoxAdapter.test.tsx src/features/composer/hooks/useComposerAutocompleteState.test.tsx`
+- `npm run typecheck`
+- `npm run lint`
+- `openspec validate --all --strict --no-interactive`
+- `git diff --check`
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3f08861b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 845: 稳定 FileViewPanel 慢 git marker 测试
+
+**Date**: 2026-06-16
+**Task**: 稳定 FileViewPanel 慢 git marker 测试
+**Branch**: `feature/v0.5.10`
+
+### Summary
+
+修复 FileViewPanel 慢 git marker 用例在 CI batch 下过早读取 editor value 的时序问题，并完成目标测试、整文件测试、eslint、typecheck 与 diff gate。
+
+### Main Changes
+
+## 本次工作
+- 修复 `FileViewPanel navigation > mounts the editor before slow git markers resolve` 在 Windows CI batch 下的时序不稳定。
+- 根因：测试只等待 `mock-codemirror` 节点存在，但 mock editor 的 `props.value` 还需要等 file read async state commit；慢 git diff promise 不 resolve 时，节点先出现、value 后更新。
+- 修复：改为 `waitFor` 等待 editor value 等于 `const value = 1;`，保留原行为断言：editor 内容不依赖 git markers resolve。
+
+## 验证
+- `npx vitest run src/features/files/components/FileViewPanel.test.tsx -t "mounts the editor before slow git markers resolve"`
+- `npx vitest run src/features/files/components/FileViewPanel.test.tsx`
+- `npx eslint src/features/files/components/FileViewPanel.test.tsx src/features/composer/components/Composer.rewind-confirm.test.tsx`
+- `npm run typecheck`
+- `git diff --check`
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `59399914` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 846: 审核聊天流渲染隔离提案
+
+**Date**: 2026-06-16
+**Task**: 审核聊天流渲染隔离提案
+**Branch**: `feature/v0.5.10`
+
+### Summary
+
+优化并提交 chat-stream-render-isolation-2026-06 OpenSpec 提案
+
+### Main Changes
+
+- 审核并优化 chat-stream-render-isolation-2026-06 OpenSpec proposal/design/tasks/spec delta。
+- 修正 useAppServerEvents、transient timer、TTL ownership、streaming virtualization 等执行口径。
+- 验证 openspec validate chat-stream-render-isolation-2026-06 --strict --no-interactive 通过。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `536a7b5c` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 847: 补齐聊天流式渲染隔离验证
+
+**Date**: 2026-06-16
+**Task**: 补齐聊天流式渲染隔离验证
+**Branch**: `feature/v0.5.10`
+
+### Summary
+
+实现并验证 chat-stream-render-isolation-2026-06：补齐 reducer fast path、workspace-scoped refs、LRU eviction cleanup、streaming complexity delta、virtualization 与 transient cleanup 的实现/测试/OpenSpec 校准。
+
+### Main Changes
+
+- OpenSpec change: `chat-stream-render-isolation-2026-06`
+- 实现 workspace-scoped refs 与 eviction cleanup，补充 `workspaceScopedMap` helper 与 handler transient cleanup。
+- 补齐 streaming hot path：reducer completed/upsert fast path、markdown complexity delta、streaming virtualization、Messages local transient timer cleanup。
+- 更新 runtime evidence budgets 与 OpenSpec proposal/design/tasks，使文档和实现对齐。
+- Review 后补充 `useThreads.integration.test.tsx` 覆盖 LRU formula、eviction diagnostic、同名 threadId 跨 workspace isolation。
+- 验证：targeted vitest 33 tests passed；`npx tsc --noEmit --pretty false` passed；`npm run lint` passed；`openspec validate chat-stream-render-isolation-2026-06 --strict --no-interactive` passed；`git diff --check` passed。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ae5def30` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 848: 收敛顶栏菜单按钮
+
+**Date**: 2026-06-17
+**Task**: 收敛顶栏菜单按钮
+**Branch**: `feature/v0.5.10`
+
+### Summary
+
+将主顶栏与右侧面板的平铺 icon 操作收敛为响应式 command menu，补齐 copy path，并回写前端组件规范。
+
+### Main Changes
+
+| Area | Work |
+|------|------|
+| MainHeader | 将运行控制台、终端、SOLO、浏览器、说明文档、右侧栏切换与 Copy path 合并进 open-app/Finder command menu。 |
+| Right panel | 新增 shared ResponsiveIconToolbar，让右侧 panel tab 默认只外显 active/live/promoted 项，其余进入 overflow。 |
+| Theme / platform | 菜单背景、hover、文字使用 theme token；顶栏交互控件保持 data-tauri-drag-region="false"，兼容 macOS/Windows titlebar 点击。 |
+| UI clipping | 主顶栏 open-app 菜单父容器改为 overflow visible；右侧 Radix menu 走 portal，避免浮层被吃。 |
+| Spec | 回写 .trellis/spec/frontend/component-guidelines.md 的 Topbar Consolidated Command Menus 规范。 |
+
+**Validation**:
+- PASS: `npx vitest run src/features/app/components/MainHeader.topbar-session-tabs.test.tsx src/features/app/components/OpenAppMenu.test.tsx src/features/app/components/MainHeaderActions.test.tsx src/features/layout/components/PanelTabs.test.tsx src/features/layout/hooks/useLayoutNodes.client-ui-visibility.test.tsx`
+- PASS: `npm run typecheck`
+- PASS: `npm run lint`
+- PASS: `git diff --check`
+- NOTE: `npm run test` / thread reducer focused test has pre-existing unrelated failures expecting `Apple event error -10000` while fixture text contains `Apple event error -100`; no current diff under `src/features/threads`.
+- NOTE: `npm run check:large-files` reports pre-existing unrelated `src/features/threads/hooks/useThreadEventHandlers.ts` large-file violation.
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b1907b3b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 849: 修复 Apple event 诊断码快照合并
+
+**Date**: 2026-06-17
+**Task**: 修复 Apple event 诊断码快照合并
+**Branch**: `feature/v0.5.10`
+
+### Summary
+
+修复 Codex assistant snapshot 去重时把 Apple event error -10000 回退成 -100 的问题，并补齐回归测试。
+
+### Main Changes
+
+| Area | Work |
+|------|------|
+| Assistant text normalization | 在 near-duplicate paragraph 选择中保留更完整的 Apple event diagnostic code，避免 `-10000` 被旧 `-100` 覆盖。 |
+| Thread reducer | `upsertItem` 的等价 assistant snapshot dedupe 使用 raw snapshot text 与 completed snapshot merge，并修复 incremental fast-path 误判 no-op。 |
+| Tests | 新增 completed snapshot merge 回归测试；恢复 `useThreadsReducer.completed-duplicate.test.ts` 失败用例。 |
+
+**Validation**:
+- PASS: `npx vitest run src/features/threads/hooks/threadReducerTextMerge.test.ts src/features/threads/hooks/useThreadsReducer.completed-duplicate.test.ts`
+- PASS: `npm run typecheck`
+- PASS: `npm run lint`
+- PASS: `npm run test`（671 test files completed）
+- PASS: `git diff --check`
+- NOTE: `npm run check:large-files` exits 0 but still reports existing unrelated `src/features/threads/hooks/useThreadEventHandlers.ts` large-file violation.
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5f618c20` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 850: 稳定长运行客户端运行时
+
+**Date**: 2026-06-17
+**Task**: 稳定长运行客户端运行时
+**Branch**: `feature/v0.5.10`
+
+### Summary
+
+完成 stabilize-long-running-client-runtime-2026-06 OpenSpec 提案与实现提交：补齐长列表虚拟化生产路径、runtime active process diagnostics age threshold、Markdown worker request metadata 与 diagnostics evidence gate。
+
+### Main Changes
+
+| Area | Details |
+|------|---------|
+| OpenSpec | 新增 `stabilize-long-running-client-runtime-2026-06` proposal/design/tasks/spec deltas/evidence，并明确 `5.4` long-run trace 与 `6.x` 为 follow-up/deferred。 |
+| Runtime | Gemini/OpenCode active child registry 改为记录 `registered_age_ms`，stale child candidates 只在达到阈值后输出；保留 `activeProcessIds` 兼容字段。 |
+| Frontend | HomeChat workspace picker 与 ThreadList 接入真实 virtualization helper，并补齐 bounded viewport、relative spacer、absolute row CSS。 |
+| Markdown | Worker request 增加 content-safe metadata，导出 hook/worker diagnostics，补充 focused tests。 |
+| Validation | `typecheck`、`lint`、`cargo check`、focused Vitest、focused cargo tests、OpenSpec strict validate、runtime evidence gate、diff check 均通过。 |
+
+**Manual Follow-up**:
+- 真实 30-60 分钟 long-run trace 仍建议由人工使用后补证据。
+- P2 `6.x` 保持后续增强项，不阻塞当前代码提交。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4e981689` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 851: 收口 AppShell 运行态稳定性与 OpenSpec 归档
+
+**Date**: 2026-06-17
+**Task**: 收口 AppShell 运行态稳定性与 OpenSpec 归档
+**Branch**: `feature/v0.5.10`
+
+### Summary
+
+完成 AppShell runtime state 稳定化、domain context 隔离、大文件门禁修复，并归档两个 OpenSpec change。
+
+### Main Changes
+
+- 实现运行态稳定性收口：稳定 `useRuntimeLogSession` 返回引用，runtime output 使用 RAF coalesce，过滤空 workspace / 空 payload。
+- 拆分 AppShell domain context：新增 `runtimeContext`、`modelSelectionContext`、`collaborationModeContext`，补全 owner map completeness gate 和 duplicate raw key guard。
+- 收窄 hot consumer boundary：layout / sections / render / search-composer 不再默认 full flatten；补 focused tests。
+- 稳定 topbar hot path：`MainHeader`、`PanelTabs` memo；`MainHeaderActions` action array memo。
+- 修复大文件硬门禁：抽出 `threadReconciliationStatusQuery.ts`，`useThreadEventHandlers.ts` 降至 2799 行，`check:large-files:gate` found=0。
+- OpenSpec 收口：归档 `topbar-runtime-state-stability-2026-06` 和 `app-shell-domain-context-isolation-2026-06`，同步主 specs。
+
+验证：
+- `npm run lint` pass
+- `npm run typecheck` pass
+- `npm run check:large-files:gate` pass, found=0
+- `npm run check:heavy-test-noise` pass, completed 680 test files
+- `openspec validate topbar-render-isolation --strict --no-interactive` pass
+- `openspec validate app-shell-domain-context-isolation --strict --no-interactive` pass
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7d8b987d` | (see git log) |
+| `29b835f0` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 852: 归档聊天流与长运行稳定性提案
+
+**Date**: 2026-06-17
+**Task**: 归档聊天流与长运行稳定性提案
+**Branch**: `feature/v0.5.10`
+
+### Summary
+
+完成 chat-stream-render-isolation 与 stabilize-long-running-client-runtime 两个 OpenSpec change 的收尾、验证、归档和主 spec 同步。
+
+### Main Changes
+
+- 将 chat-stream 的真实 Tauri/WebView measured trace 明确迁移到 release-grade evidence follow-up,同时记录 10.7 scope exception 为 accepted archive exception。
+- 将 long-running runtime 的 15-30min long-run trace 明确迁移到 release-grade evidence follow-up,不伪造本地沙盒不可观测结果。
+- 归档 `chat-stream-render-isolation-2026-06` 至 `openspec/changes/archive/2026-06-17-chat-stream-render-isolation-2026-06/`,同步 `conversation-realtime-cpu-stability` 主 spec。
+- 归档 `stabilize-long-running-client-runtime-2026-06` 至 `openspec/changes/archive/2026-06-17-stabilize-long-running-client-runtime-2026-06/`,同步 `long-list-virtualization-performance` / `markdown-parse-pipeline` / `parallel-conversation-runtime-residuals` / `runtime-performance-evidence-gates` 主 specs。
+- 刷新 runtime evidence gate report,OpenSpec active list 中这两个 change 已清除。
+
+验证：
+- `openspec validate chat-stream-render-isolation-2026-06 --strict --no-interactive` pass
+- `openspec validate stabilize-long-running-client-runtime-2026-06 --strict --no-interactive` pass
+- `npm run typecheck` pass
+- `npm run lint` pass
+- `npm run check:runtime-evidence-gates` pass
+- `npm run perf:realtime:boundary-guard` pass
+- `npm run check:realtime-event-batching` pass
+- `npm run check:large-files:gate` pass, found=0
+- archived main specs validate pass: conversation-realtime-cpu-stability, long-list-virtualization-performance, markdown-parse-pipeline, parallel-conversation-runtime-residuals, runtime-performance-evidence-gates
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `94562f8a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 853: 补齐稳定性归档文档
+
+**Date**: 2026-06-17
+**Task**: 补齐稳定性归档文档
+**Branch**: `feature/v0.5.10`
+
+### Summary
+
+补齐已归档稳定性 proposals 的 What Changes，并更新主 specs 的 Purpose，消除 archive 后 TBD 与 proposal section warning。
+
+### Main Changes
+
+- 为 `chat-stream-render-isolation-2026-06` archived proposal 增加 `## What Changes`,总结 reducer fast path、streaming virtualization、complexity delta、workspace-scoped refs、TTL cleanup、proxy budget/evidence deferral。
+- 为 `stabilize-long-running-client-runtime-2026-06` archived proposal 增加 `## What Changes`,总结 child process parity、active process diagnostics、stale diagnostics、long-list virtualization、Markdown worker lifecycle、S-LR evidence deferral。
+- 更新 5 个主 specs 的 Purpose,替换归档后残留的 `TBD - created by archiving change ...`:
+  - `topbar-render-isolation`
+  - `app-shell-domain-context-isolation`
+  - `long-list-virtualization-performance`
+  - `markdown-parse-pipeline`
+  - `runtime-performance-evidence-gates`
+
+验证：
+- `openspec validate topbar-render-isolation --strict --no-interactive` pass
+- `openspec validate app-shell-domain-context-isolation --strict --no-interactive` pass
+- `openspec validate long-list-virtualization-performance --strict --no-interactive` pass
+- `openspec validate markdown-parse-pipeline --strict --no-interactive` pass
+- `openspec validate runtime-performance-evidence-gates --strict --no-interactive` pass
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4e00c1ed` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 854: 合并 PR 696 供应商排序修复
+
+**Date**: 2026-06-17
+**Task**: 合并 PR 696 供应商排序修复
+**Branch**: `feature/v0.5.10`
+
+### Summary
+
+调查 GitHub PR #696，确认 Files 面板滚动修复当前分支已具备；语义合并 provider createdAt 补齐、更新时间保留与 createdAt/id 稳定排序逻辑到 src-tauri/src/vendors/commands.rs。验证 rustfmt、cargo test vendors::commands::tests、cargo test vendor、cargo check，以及现有 file tree typography/scroll Vitest 均通过。兼容性 review：旧配置 createdAt 保留，缺失 createdAt 的旧 provider 以 id 稳定兜底，新增 provider 自动补时间，不改 frontend bridge 或 command 注册。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c5fe5ea5` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 855: 修复 runtime 重连恢复卡片状态
+
+**Date**: 2026-06-17
+**Task**: 修复 runtime 重连恢复卡片状态
+**Branch**: `feature/v0.5.10`
+
+### Summary
+
+稳定 Messages runtime reconnect card 状态与 CI batch 回归
+
+### Main Changes
+
+本次处理客户端 runtime reconnect 恢复卡片再次出现的 CI batch failure，并收敛 React #185 同类前端 update-loop 风险。
+
+主要变更：
+- 创建 OpenSpec change `fix-runtime-reconnect-card-state-loop`，补充 proposal/design/spec delta/tasks。
+- `RuntimeReconnectCard` 将 reset effect 依赖从 `retryMessage` 对象引用改为语义签名，避免父层传入等价新对象时清掉刚完成的 error/restored 状态。
+- `Messages.runtime-reconnect.test.tsx` 的 Markdown mock 改为 effect-phase 调用 `onRenderedValueChange`，避免 render-phase callback 制造 React update-depth 风险。
+- runtime reconnect 成功/失败断言改为等待完整 recovery outcome，而不是只等待 `ensureRuntimeReady` 被调用。
+
+验证：
+- `npx vitest run --maxWorkers 1 --minWorkers 1 src/features/messages/components/Messages.reasoning-exit-plan.test.tsx src/features/messages/components/Messages.reasoning-render.test.tsx src/features/messages/components/Messages.rich-content.test.tsx src/features/messages/components/Messages.runtime-reconnect.test.tsx` 通过，72 tests passed。
+- `npx vitest run src/features/messages/components/Messages.runtime-reconnect.test.tsx --maxWorkers 1 --minWorkers 1` 通过，20 tests passed。
+- `npm run typecheck` 通过。
+- `npm run lint` 通过。
+- `openspec validate fix-runtime-reconnect-card-state-loop --strict --no-interactive` 通过。
+
+影响范围：
+- 前端 message runtime reconnect card 状态稳定性。
+- runtime reconnect focused tests。
+- OpenSpec conversation-runtime-stability delta。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `86f3ecb3` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

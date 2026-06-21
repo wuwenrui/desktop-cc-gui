@@ -469,8 +469,11 @@ describe("FileViewPanel navigation", () => {
       />,
     );
 
-    const editor = (await screen.findByTestId("mock-codemirror")) as HTMLTextAreaElement;
-    expect(editor.value).toBe("const value = 1;");
+    await waitFor(() => {
+      expect(
+        (screen.getByTestId("mock-codemirror") as HTMLTextAreaElement).value,
+      ).toBe("const value = 1;");
+    });
     expect(getGitFileFullDiff).toHaveBeenCalledWith(
       "ws-slow-git-marker",
       "src/value.ts",
@@ -2214,6 +2217,14 @@ describe("FileViewPanel markdown modes", () => {
       onClose: vi.fn(),
       openTabs,
     };
+    const findCodeMirrorContaining = async (expectedContent: string) => {
+      let editor: HTMLTextAreaElement | null = null;
+      await waitFor(() => {
+        editor = screen.getByTestId("mock-codemirror") as HTMLTextAreaElement;
+        expect(editor.value).toContain(expectedContent);
+      });
+      return editor;
+    };
 
     const { container, rerender } = render(
       <FileViewPanel
@@ -2239,8 +2250,7 @@ describe("FileViewPanel markdown modes", () => {
       />,
     );
 
-    const dockerfileEditor = await screen.findByTestId("mock-codemirror");
-    expect((dockerfileEditor as HTMLTextAreaElement).value).toContain("FROM node:20-alpine");
+    await findCodeMirrorContaining("FROM node:20-alpine");
     expect(screen.queryByText("Workspace title")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /preview/i }));
     await screen.findByTestId("file-structured-preview");
@@ -2253,8 +2263,7 @@ describe("FileViewPanel markdown modes", () => {
       />,
     );
 
-    const composeEditor = await screen.findByTestId("mock-codemirror");
-    expect((composeEditor as HTMLTextAreaElement).value).toContain("services:");
+    await findCodeMirrorContaining("services:");
     expect(screen.queryByTestId("file-structured-preview")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /preview/i }));
     await waitFor(() => {
@@ -2270,8 +2279,7 @@ describe("FileViewPanel markdown modes", () => {
       />,
     );
 
-    const envEditor = await screen.findByTestId("mock-codemirror");
-    expect((envEditor as HTMLTextAreaElement).value).toContain("APP_ENV=dev");
+    await findCodeMirrorContaining("APP_ENV=dev");
     expect(screen.queryByText("services:")).toBeNull();
 
     rerender(
@@ -2282,8 +2290,7 @@ describe("FileViewPanel markdown modes", () => {
       />,
     );
 
-    const gradleEditor = await screen.findByTestId("mock-codemirror");
-    expect((gradleEditor as HTMLTextAreaElement).value).toContain("kotlin(\"jvm\")");
+    await findCodeMirrorContaining("kotlin(\"jvm\")");
     fireEvent.click(screen.getByRole("button", { name: /preview/i }));
     await waitFor(() => {
       expect(container.querySelector(".fvp-code-preview")).toBeTruthy();

@@ -65,14 +65,19 @@ describe("client typography font-size coverage", () => {
     );
   });
 
-  it("keeps the file tree panel scroll layout independent from Git diff styles", () => {
+  it("keeps the file tree scroll shell independent from lazy Git diff styles", () => {
     const fileTreePanelRule = getCssRuleBlock(fileTreeCss, ".file-tree-panel");
+    const fileTreeDiffPanelRule = getCssRuleBlock(fileTreeCss, ".diff-panel.file-tree-panel");
 
     expect(fileTreePanelRule).toContain("display: flex;");
-    expect(fileTreePanelRule).toContain("flex-direction: column;");
     expect(fileTreePanelRule).toContain("flex: 1;");
+    expect(fileTreePanelRule).toContain("flex-direction: column;");
     expect(fileTreePanelRule).toContain("min-height: 0;");
+    expect(fileTreePanelRule).toContain("overflow: hidden;");
+    expect(fileTreePanelRule).toContain("padding: 8px 8px 0;");
     expect(fileTreePanelRule).toContain("position: relative;");
+    expect(fileTreeDiffPanelRule).toContain("gap: 0;");
+    expect(fileTreeDiffPanelRule).toContain("padding: 8px 8px 0;");
   });
 
   it("routes Git file tree typography through shared client tokens", () => {

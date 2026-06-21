@@ -5,19 +5,20 @@ use super::claude_forwarder::{
 };
 use super::{
     build_engine_active_process_diagnostics, build_provider_prefill_query,
-    delete_opencode_session_files, delete_opencode_session_from_datastore,
-    extract_turn_result_text, is_likely_foreign_model_for_gemini,
-    is_likely_legacy_claude_model_id, is_valid_claude_model_for_passthrough,
-    merge_opencode_agents, next_gemini_routed_item_id, normalize_provider_key,
-    opencode_data_candidate_roots, opencode_session_candidate_paths, parse_imported_session_id,
-    parse_json_value, parse_opencode_agent_list, parse_opencode_auth_providers,
-    parse_opencode_debug_config_agents, parse_opencode_help_commands,
-    parse_opencode_mcp_servers, parse_opencode_session_list, parse_opencode_updated_at,
-    provider_keys_match,
+    collect_stale_child_candidates, delete_opencode_session_files,
+    delete_opencode_session_from_datastore, extract_turn_result_text,
+    is_likely_foreign_model_for_gemini, is_likely_legacy_claude_model_id,
+    is_valid_claude_model_for_passthrough, merge_opencode_agents, next_gemini_routed_item_id,
+    normalize_provider_key, opencode_data_candidate_roots, opencode_session_candidate_paths,
+    parse_imported_session_id, parse_json_value, parse_opencode_agent_list,
+    parse_opencode_auth_providers, parse_opencode_debug_config_agents,
+    parse_opencode_help_commands, parse_opencode_mcp_servers, parse_opencode_session_list,
+    parse_opencode_updated_at, provider_keys_match,
     record_claude_auto_session_metadata_for_sync_result,
     resolve_claude_auto_session_metadata_session_id, resolve_claude_session_id_for_engine_send,
     EngineConfig, EngineWorkspaceActiveProcessDiagnostics, GeminiRenderLane,
-    GeminiRenderRoutingState, OpenCodeAgentEntry,
+    GeminiRenderRoutingState, OpenCodeAgentEntry, RegisteredEngineActiveProcessDiagnostic,
+    StaleChildCandidate,
 };
 use crate::backend::events::AppServerEvent;
 use crate::engine::events::EngineEvent;
@@ -44,13 +45,28 @@ fn engine_active_process_diagnostics_sorts_workspaces_and_counts_processes() {
                 workspace_id: "ws-z".to_string(),
                 engine: crate::engine::EngineType::Claude,
                 active_process_ids: vec![301],
+                registered_active_processes: vec![RegisteredEngineActiveProcessDiagnostic {
+                    pid: 301,
+                    registered_age_ms: 0,
+                }],
             },
             EngineWorkspaceActiveProcessDiagnostics {
                 workspace_id: "ws-a".to_string(),
                 engine: crate::engine::EngineType::Claude,
                 active_process_ids: vec![101, 102],
+                registered_active_processes: vec![
+                    RegisteredEngineActiveProcessDiagnostic {
+                        pid: 101,
+                        registered_age_ms: 0,
+                    },
+                    RegisteredEngineActiveProcessDiagnostic {
+                        pid: 102,
+                        registered_age_ms: 0,
+                    },
+                ],
             },
         ],
+        Vec::new(),
     );
 
     assert!(diagnostics.measured);
@@ -66,6 +82,77 @@ fn engine_active_process_diagnostics_sorts_workspaces_and_counts_processes() {
     );
     assert_eq!(diagnostics.workspaces[0].active_process_ids, vec![101, 102]);
     assert!(diagnostics.unsupported_reason.is_none());
+    assert_eq!(diagnostics.os_child_liveness.evidence_class, "unsupported");
+    assert!(diagnostics.os_child_liveness.rationale.is_some());
+    assert!(diagnostics.stale_child_candidates.is_empty());
+}
+
+#[test]
+fn engine_active_process_diagnostics_records_stale_candidates_separately_from_os_liveness() {
+    let diagnostics = build_engine_active_process_diagnostics(
+        1_765_647_000_000,
+        vec![EngineWorkspaceActiveProcessDiagnostics {
+            workspace_id: "ws-a".to_string(),
+            engine: crate::engine::EngineType::OpenCode,
+            active_process_ids: vec![777],
+            registered_active_processes: vec![RegisteredEngineActiveProcessDiagnostic {
+                pid: 777,
+                registered_age_ms: 5 * 60 * 1000,
+            }],
+        }],
+        vec![StaleChildCandidate {
+            workspace_id: "ws-a".to_string(),
+            engine: "opencode".to_string(),
+            pid: 777,
+            registered_age_ms: 0,
+            stale_reason: "diagnostics-only-candidate".to_string(),
+            progress_evidence: "unsupported".to_string(),
+        }],
+    );
+
+    // Registry count is one; OS-liveness evidence remains unsupported; the
+    // stale candidate is recorded separately with progressEvidence="unsupported"
+    // because OpenCode does not expose structured IO/progress metadata.
+    assert_eq!(diagnostics.total_active_process_count, 1);
+    assert_eq!(diagnostics.os_child_liveness.evidence_class, "unsupported");
+    assert_eq!(diagnostics.stale_child_candidates.len(), 1);
+    assert_eq!(
+        diagnostics.stale_child_candidates[0].progress_evidence,
+        "unsupported"
+    );
+}
+
+#[test]
+fn stale_child_candidates_respect_registered_age_threshold() {
+    let fresh = collect_stale_child_candidates(
+        &[EngineWorkspaceActiveProcessDiagnostics {
+            workspace_id: "ws-fresh".to_string(),
+            engine: crate::engine::EngineType::OpenCode,
+            active_process_ids: vec![701],
+            registered_active_processes: vec![RegisteredEngineActiveProcessDiagnostic {
+                pid: 701,
+                registered_age_ms: 4 * 60 * 1000,
+            }],
+        }],
+        1_765_647_000_000,
+    );
+    assert!(fresh.is_empty());
+
+    let stale = collect_stale_child_candidates(
+        &[EngineWorkspaceActiveProcessDiagnostics {
+            workspace_id: "ws-stale".to_string(),
+            engine: crate::engine::EngineType::Gemini,
+            active_process_ids: vec![702],
+            registered_active_processes: vec![RegisteredEngineActiveProcessDiagnostic {
+                pid: 702,
+                registered_age_ms: 5 * 60 * 1000,
+            }],
+        }],
+        1_765_647_000_000,
+    );
+    assert_eq!(stale.len(), 1);
+    assert_eq!(stale[0].pid, 702);
+    assert_eq!(stale[0].progress_evidence, "unsupported");
 }
 
 #[test]

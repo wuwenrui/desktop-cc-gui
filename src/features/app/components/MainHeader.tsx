@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Check from "lucide-react/dist/esm/icons/check";
+import ClipboardCopy from "lucide-react/dist/esm/icons/clipboard-copy";
 import Copy from "lucide-react/dist/esm/icons/copy";
 import Folder from "lucide-react/dist/esm/icons/folder";
 import GitBranch from "lucide-react/dist/esm/icons/git-branch";
@@ -8,7 +9,7 @@ import Search from "lucide-react/dist/esm/icons/search";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import type { BranchInfo, OpenAppTarget, WorkspaceInfo } from "../../../types";
 import type { FocusEvent, ReactNode } from "react";
-import { OpenAppMenu } from "./OpenAppMenu";
+import { OpenAppMenu, type OpenAppMenuExtraAction } from "./OpenAppMenu";
 import { LaunchScriptButton } from "./LaunchScriptButton";
 import { LaunchScriptEntryButton } from "./LaunchScriptEntryButton";
 import type { WorkspaceLaunchScriptsState } from "../hooks/useWorkspaceLaunchScripts";
@@ -41,6 +42,7 @@ type MainHeaderProps = {
   onCopyThread?: () => void | Promise<void>;
   onLockPanel?: () => void;
   extraActionsNode?: ReactNode;
+  openAppExtraActions?: OpenAppMenuExtraAction[];
   launchScript?: string | null;
   launchScriptEditorOpen?: boolean;
   launchScriptDraft?: string;
@@ -77,7 +79,9 @@ type MainHeaderProps = {
   onSelectWorkspace?: (workspaceId: string) => void;
 };
 
-export function MainHeader({
+const EMPTY_OPEN_APP_EXTRA_ACTIONS: OpenAppMenuExtraAction[] = [];
+
+function MainHeaderImpl({
   workspace,
   parentName = null,
   worktreeLabel = null,
@@ -97,6 +101,7 @@ export function MainHeader({
   onCopyThread: _onCopyThread,
   onLockPanel: _onLockPanel,
   extraActionsNode,
+  openAppExtraActions = EMPTY_OPEN_APP_EXTRA_ACTIONS,
   launchScript = null,
   launchScriptEditorOpen = false,
   launchScriptDraft = "",
@@ -209,6 +214,21 @@ export function MainHeader({
     return null;
   }, [trimmedQuery, t]);
   const resolvedWorktreePath = worktreePath ?? workspace.path;
+  const copyPathAction: OpenAppMenuExtraAction = useMemo(
+    () => ({
+      id: "copy-path",
+      label: t("files.copyPath"),
+      icon: <ClipboardCopy size={18} aria-hidden />,
+      onSelect: () => {
+        void navigator.clipboard?.writeText(resolvedWorktreePath);
+      },
+    }),
+    [resolvedWorktreePath, t],
+  );
+  const openAppMenuActions = useMemo(
+    () => [...openAppExtraActions, copyPathAction],
+    [copyPathAction, openAppExtraActions],
+  );
   const relativeWorktreePath = useMemo(() => {
     if (!parentPath) {
       return resolvedWorktreePath;
@@ -800,6 +820,7 @@ export function MainHeader({
             onSelectOpenAppId={onSelectOpenAppId}
             iconById={openAppIconById}
             iconOnly
+            extraActions={openAppMenuActions}
           />
         ) : null}
         {extraActionsNode}
@@ -807,3 +828,6 @@ export function MainHeader({
     </header>
   );
 }
+
+export const MainHeader = memo(MainHeaderImpl);
+MainHeader.displayName = "MainHeader";

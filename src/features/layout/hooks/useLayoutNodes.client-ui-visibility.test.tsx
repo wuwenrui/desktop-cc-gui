@@ -852,7 +852,7 @@ function createLayoutOptions(
       onNewDraftLabelChange: noop,
       onCreateNew: asyncNoop,
     },
-    mainHeaderActionsNode: null,
+    mainHeaderActions: [],
     browserDockOpen: false,
     onCloseBrowserDock: noop,
     externalChangeMonitoringEnabled: false,

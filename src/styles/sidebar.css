@@ -1616,6 +1616,26 @@
   padding: 1px 0 2px;
 }
 
+.thread-list[data-virtualized="true"] {
+  display: block;
+  max-height: 360px;
+  overflow-y: auto;
+  contain: strict;
+}
+
+.thread-list-virtual-spacer {
+  position: relative;
+  width: 100%;
+}
+
+.thread-list-virtual-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  min-height: 36px;
+}
+
 .pinned-thread-list {
   padding: 0 4px;
 }

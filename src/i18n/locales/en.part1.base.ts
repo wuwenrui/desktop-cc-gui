@@ -38,6 +38,7 @@ const enPart1Base = {
     name: "Name",
     terminal: "Terminal",
     toggleTerminalPanel: "Toggle terminal panel",
+    moreActions: "More actions",
   },
 
   // App

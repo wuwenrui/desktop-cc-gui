@@ -56,6 +56,7 @@ import {
 import { parseReasoning } from "./messagesReasoning";
 import {
   analyzeStreamingMarkdownComplexity,
+  analyzeStreamingMarkdownComplexityDelta,
   EMPTY_STREAMING_MARKDOWN_COMPLEXITY,
   resolveAssistantMessageStreamingThrottleMs,
   resolveReasoningStreamingThrottleMs,
@@ -1026,12 +1027,29 @@ export const MessageRow = memo(function MessageRow({
         return EMPTY_STREAMING_MARKDOWN_COMPLEXITY;
       }
       const previousCache = streamingMarkdownComplexityCacheRef.current;
-      if (
-        previousCache &&
-        previousCache.complexity.isHuge &&
-        displayText.startsWith(previousCache.value)
-      ) {
-        return previousCache.complexity;
+      if (previousCache) {
+        // chat-stream-render-isolation-2026-06 task 3.1: prefer the delta
+        // path when displayText strictly extends the cached prefix, so
+        // long streaming bursts avoid re-scanning the full prefix.
+        if (displayText === previousCache.value) {
+          return previousCache.complexity;
+        }
+        if (displayText.startsWith(previousCache.value)) {
+          const deltaText = displayText.slice(previousCache.value.length);
+          const nextComplexity = analyzeStreamingMarkdownComplexityDelta(
+            previousCache.complexity,
+            previousCache.value,
+            deltaText,
+          );
+          streamingMarkdownComplexityCacheRef.current = {
+            value: displayText,
+            complexity: nextComplexity,
+          };
+          return nextComplexity;
+        }
+        if (previousCache.complexity.isHuge) {
+          return previousCache.complexity;
+        }
       }
       const nextComplexity = analyzeStreamingMarkdownComplexity(displayText);
       streamingMarkdownComplexityCacheRef.current = {

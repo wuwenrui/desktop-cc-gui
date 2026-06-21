@@ -13,6 +13,7 @@ const REALTIME_TURN_TRACE_PATH = "docs/perf/realtime-turn-trace.json";
 const REALTIME_RUNTIME_EVIDENCE_PATH = "docs/perf/realtime-runtime-evidence.json";
 const REALTIME_PROFILE_PATH = "docs/perf/realtime-profile.jsonl";
 const LARGE_FILE_WATCHLIST_PATH = ".artifacts/large-files-near-threshold.json";
+const LONGRUNNING_RUNTIME_EVIDENCE_PATH = "docs/perf/long-running-runtime-evidence.json";
 const OUTPUT_JSON_PATH = "docs/perf/runtime-evidence-gates.json";
 const OUTPUT_PERF_MARKDOWN_PATH = "docs/perf/runtime-evidence-gates.md";
 const OUTPUT_OPENSPEC_MARKDOWN_PATH = "openspec/docs/runtime-evidence-gates-2026-05-24.md";
@@ -1026,6 +1027,7 @@ async function main() {
   const browserScroll = await readJsonIfExists(BROWSER_SCROLL_PATH);
   const realtimeTurnTrace = await readJsonIfExists(REALTIME_TURN_TRACE_PATH);
   const realtimeRuntimeEvidence = await readJsonIfExists(REALTIME_RUNTIME_EVIDENCE_PATH);
+  const longrunningRuntimeEvidence = await readJsonIfExists(LONGRUNNING_RUNTIME_EVIDENCE_PATH);
   const realtimeProfile = await readJsonlIfExists(REALTIME_PROFILE_PATH);
   const largeFileReport = await readJsonIfExists(LARGE_FILE_WATCHLIST_PATH);
   const openSpecState = runJson("openspec", ["list", "--json"]);
@@ -1034,6 +1036,7 @@ async function main() {
     { path: COMPOSER_BASELINE_PATH, fragment: composerBaseline },
     { path: BROWSER_SCROLL_PATH, fragment: browserScroll },
     { path: REALTIME_RUNTIME_EVIDENCE_PATH, fragment: realtimeRuntimeEvidence },
+    { path: LONGRUNNING_RUNTIME_EVIDENCE_PATH, fragment: longrunningRuntimeEvidence },
   ]);
   performanceEvidence.push(...buildRealtimeProfileEvidence(realtimeProfile));
   // Enrich baseline rows in place; the function mutates and returns the same array.
@@ -1047,6 +1050,7 @@ async function main() {
       browserScroll: existsSync(repoPath(BROWSER_SCROLL_PATH)) ? BROWSER_SCROLL_PATH : null,
       realtimeTurnTrace: existsSync(repoPath(REALTIME_TURN_TRACE_PATH)) ? REALTIME_TURN_TRACE_PATH : null,
       realtimeRuntimeEvidence: existsSync(repoPath(REALTIME_RUNTIME_EVIDENCE_PATH)) ? REALTIME_RUNTIME_EVIDENCE_PATH : null,
+      longrunningRuntimeEvidence: existsSync(repoPath(LONGRUNNING_RUNTIME_EVIDENCE_PATH)) ? LONGRUNNING_RUNTIME_EVIDENCE_PATH : null,
       realtimeProfile: existsSync(repoPath(REALTIME_PROFILE_PATH)) ? REALTIME_PROFILE_PATH : null,
       largeFileWatchlist: existsSync(repoPath(LARGE_FILE_WATCHLIST_PATH)) ? LARGE_FILE_WATCHLIST_PATH : null,
       openSpec: "openspec list --json",

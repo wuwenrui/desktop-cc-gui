@@ -59,13 +59,16 @@ export function RuntimeReconnectCard({
       retryMessageUnavailable ||
       !threadId ||
       !onRecoverThreadRuntimeAndResend;
+  const retryMessageSignature = retryMessage
+    ? JSON.stringify([retryMessage.text, retryMessage.images ?? []])
+    : "none";
 
   useEffect(() => {
     setIsReconnectRunning(false);
     setReconnectStatus("idle");
     setLastAction("reconnect");
     setReconnectErrorDetail(null);
-  }, [hint.rawMessage, retryMessage, threadId, workspaceId]);
+  }, [hint.rawMessage, retryMessageSignature, threadId, workspaceId]);
 
   const handleReconnectRuntime = useCallback(async (mode: "reconnect" | "resend") => {
     if (isReconnectRunning) {

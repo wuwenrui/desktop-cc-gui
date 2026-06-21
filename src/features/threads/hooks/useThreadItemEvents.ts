@@ -1,4 +1,5 @@
 import { startTransition, useCallback, useEffect, useRef } from "react";
+import { workspaceScopedHas, type WorkspaceScopedMap } from "./workspaceScopedMap";
 import type { Dispatch, MutableRefObject } from "react";
 import { buildConversationItem } from "../../../utils/threadItems";
 import type { NormalizedThreadEvent } from "../contracts/conversationCurtainContracts";
@@ -78,10 +79,11 @@ function inferItemEngineSource(
 }
 
 function isInterruptedThread(
-  interruptedThreadsRef: MutableRefObject<Set<string>>,
+  interruptedThreadsRef: MutableRefObject<WorkspaceScopedMap<true>>,
+  workspaceId: string | null,
   threadId: string,
 ) {
-  return interruptedThreadsRef.current.has(threadId);
+  return workspaceScopedHas(interruptedThreadsRef.current, workspaceId, threadId);
 }
 
 function isClaudeStreamDebugEnabled() {
@@ -129,7 +131,7 @@ type UseThreadItemEventsOptions = {
     threadId: string,
     item: Record<string, unknown>,
   ) => void;
-  interruptedThreadsRef: MutableRefObject<Set<string>>;
+  interruptedThreadsRef: MutableRefObject<WorkspaceScopedMap<true>>;
   onDebug?: (entry: DebugEntry) => void;
   onAgentMessageCompletedExternal?: (payload: {
     workspaceId: string;
@@ -428,7 +430,7 @@ export function useThreadItemEvents({
         markedProcessingThreads?: Set<string>;
       },
     ) => {
-      if (isInterruptedThread(interruptedThreadsRef, operation.threadId)) {
+      if (isInterruptedThread(interruptedThreadsRef, operation.workspaceId, operation.threadId)) {
         return;
       }
       if (isRealtimeTurnTerminal(operation.threadId, operation.turnId)) {
@@ -912,7 +914,7 @@ export function useThreadItemEvents({
       shouldMarkProcessing: boolean,
       shouldIncrementAgentSegment: boolean,
     ) => {
-      if (isInterruptedThread(interruptedThreadsRef, threadId)) {
+      if (isInterruptedThread(interruptedThreadsRef, workspaceId, threadId)) {
         return;
       }
       flushRealtimeDeltaOps();
@@ -1159,7 +1161,7 @@ export function useThreadItemEvents({
       turnId?: string | null;
     }) => {
       // Skip late-arriving deltas for threads that have been interrupted
-      if (isInterruptedThread(interruptedThreadsRef, threadId)) {
+      if (isInterruptedThread(interruptedThreadsRef, workspaceId, threadId)) {
         logClaudeStream("agent-delta-skipped", {
           workspaceId,
           threadId,
@@ -1221,7 +1223,7 @@ export function useThreadItemEvents({
       text: string;
       turnId?: string | null;
     }) => {
-      if (isInterruptedThread(interruptedThreadsRef, threadId)) {
+      if (isInterruptedThread(interruptedThreadsRef, workspaceId, threadId)) {
         return;
       }
       const resolvedText = applyPendingClaudeMcpOutputNoticeToAgentCompleted(
@@ -1336,7 +1338,7 @@ export function useThreadItemEvents({
         itemId,
         deltaLength: delta.length,
       });
-      if (interruptedThreadsRef.current.has(threadId)) {
+      if (workspaceScopedHas(interruptedThreadsRef.current, workspaceId, threadId)) {
         logClaudeStream("reasoning-summary-delta-skipped", {
           workspaceId,
           threadId,
@@ -1381,7 +1383,7 @@ export function useThreadItemEvents({
         threadId,
         itemId,
       });
-      if (interruptedThreadsRef.current.has(threadId)) {
+      if (workspaceScopedHas(interruptedThreadsRef.current, workspaceId, threadId)) {
         logClaudeStream("reasoning-summary-boundary-skipped", {
           workspaceId,
           threadId,
@@ -1423,7 +1425,7 @@ export function useThreadItemEvents({
         itemId,
         deltaLength: delta.length,
       });
-      if (interruptedThreadsRef.current.has(threadId)) {
+      if (workspaceScopedHas(interruptedThreadsRef.current, workspaceId, threadId)) {
         logClaudeStream("reasoning-text-delta-skipped", {
           workspaceId,
           threadId,
@@ -1497,7 +1499,7 @@ export function useThreadItemEvents({
   const onNormalizedRealtimeEvent = useCallback(
     (event: NormalizedThreadEvent) => {
       const { workspaceId, threadId } = event;
-      if (isInterruptedThread(interruptedThreadsRef, threadId)) {
+      if (isInterruptedThread(interruptedThreadsRef, workspaceId, threadId)) {
         return;
       }
       const hasCustomName = Boolean(getCustomName(workspaceId, threadId));

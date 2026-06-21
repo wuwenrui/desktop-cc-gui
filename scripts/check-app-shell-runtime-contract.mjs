@@ -15,8 +15,11 @@ const APP_SHELL_DOMAIN_CONTEXT_NAMES = new Set([
   "layoutContext",
   "fileEditorContext",
   "settingsContext",
+  "runtimeContext",
+  "modelSelectionContext",
+  "collaborationModeContext",
 ]);
-const CONTEXT_DESTRUCTURE_IDENTIFIERS = new Set(["ctx", "legacyCtx"]);
+const LEGACY_CONTEXT_DESTRUCTURE_IDENTIFIERS = new Set(["ctx", "legacyCtx"]);
 
 const CONTRACT_FILES = [
   APP_SHELL_FILE,
@@ -325,6 +328,15 @@ function getCtxDestructureKeys(sourceFile, functionName, checker) {
   const allKeys = new Set();
   const bindingSymbols = new Map();
   const bindingNameNodes = new Set();
+  const contextDestructureIdentifiers = new Set(
+    LEGACY_CONTEXT_DESTRUCTURE_IDENTIFIERS,
+  );
+
+  for (const parameter of fn.parameters) {
+    if (ts.isIdentifier(parameter.name)) {
+      contextDestructureIdentifiers.add(parameter.name.text);
+    }
+  }
 
   visitNode(fn.body, (node) => {
     if (
@@ -332,7 +344,7 @@ function getCtxDestructureKeys(sourceFile, functionName, checker) {
       ts.isObjectBindingPattern(node.name) &&
       node.initializer &&
       ts.isIdentifier(node.initializer) &&
-      CONTEXT_DESTRUCTURE_IDENTIFIERS.has(node.initializer.text)
+      contextDestructureIdentifiers.has(node.initializer.text)
     ) {
       for (const element of node.name.elements) {
         if (element.dotDotDotToken) {

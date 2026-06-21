@@ -5,6 +5,12 @@ import type { ConversationItem } from "../../../types";
 import type { ConversationState } from "../../threads/contracts/conversationCurtainContracts";
 import { Messages } from "./Messages";
 
+vi.mock("./Markdown", () => ({
+  Markdown: ({ value, className }: { value: string; className?: string }) => (
+    <div className={className}>{value}</div>
+  ),
+}));
+
 describe("Messages live behavior", () => {
   afterEach(() => {
     cleanup();

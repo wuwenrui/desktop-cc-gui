@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
@@ -21,6 +21,14 @@ type OpenTarget = {
   target: OpenAppTarget;
 };
 
+export type OpenAppMenuExtraAction = {
+  id: string;
+  label: string;
+  icon: ReactNode;
+  onSelect: () => void;
+  active?: boolean;
+};
+
 type OpenAppMenuProps = {
   path: string;
   openTargets: OpenAppTarget[];
@@ -28,15 +36,20 @@ type OpenAppMenuProps = {
   onSelectOpenAppId: (id: string) => void;
   iconById?: Record<string, string>;
   iconOnly?: boolean;
+  extraActions?: OpenAppMenuExtraAction[];
 };
+
+const EMPTY_OPEN_APP_ICON_BY_ID: Record<string, string> = {};
+const EMPTY_OPEN_APP_EXTRA_ACTIONS: OpenAppMenuExtraAction[] = [];
 
 export function OpenAppMenu({
   path,
   openTargets,
   selectedOpenAppId,
   onSelectOpenAppId,
-  iconById = {},
+  iconById = EMPTY_OPEN_APP_ICON_BY_ID,
   iconOnly = false,
+  extraActions = EMPTY_OPEN_APP_EXTRA_ACTIONS,
 }: OpenAppMenuProps) {
   const { t } = useTranslation();
   const [openMenuOpen, setOpenMenuOpen] = useState(false);
@@ -163,6 +176,11 @@ export function OpenAppMenu({
     await openWithTarget(target);
   };
 
+  const handleSelectExtraAction = (action: OpenAppMenuExtraAction) => {
+    setOpenMenuOpen(false);
+    action.onSelect();
+  };
+
   if (iconOnly) {
     return (
       <div className="open-app-menu is-icon-only" ref={openMenuRef}>
@@ -183,12 +201,12 @@ export function OpenAppMenu({
           <ChevronDown size={14} aria-hidden />
         </TooltipIconButton>
         {openMenuOpen && (
-          <div className="open-app-secondary-group popover-surface" role="menu">
-            {resolvedOpenTargets.map((target) => (
+          <div className="open-app-command-menu popover-surface" role="menu">
+            {resolvedOpenTargets.map((target, index) => (
               <button
                 key={target.id}
                 type="button"
-                className={`open-app-secondary-option${
+                className={`open-app-command-option${
                   target.id === resolvedOpenAppId ? " is-active" : ""
                 }`}
                 onClick={() => handleSelectOpenTarget(target)}
@@ -197,7 +215,31 @@ export function OpenAppMenu({
                 aria-label={target.label}
                 title={target.label}
               >
-                <img className="open-app-icon" src={target.icon} alt="" aria-hidden />
+                <span className="open-app-command-icon" aria-hidden>
+                  <img className="open-app-icon" src={target.icon} alt="" />
+                </span>
+                <span className="open-app-command-label">{target.label}</span>
+                <span className="open-app-command-shortcut" aria-hidden>
+                  {index + 1}
+                </span>
+              </button>
+            ))}
+            {extraActions.map((action, index) => (
+              <button
+                key={action.id}
+                type="button"
+                className={`open-app-command-option${action.active ? " is-active" : ""}`}
+                onClick={() => handleSelectExtraAction(action)}
+                role="menuitem"
+                data-tauri-drag-region="false"
+              >
+                <span className="open-app-command-icon" aria-hidden>
+                  {action.icon}
+                </span>
+                <span className="open-app-command-label">{action.label}</span>
+                <span className="open-app-command-shortcut" aria-hidden>
+                  {resolvedOpenTargets.length + index + 1}
+                </span>
               </button>
             ))}
           </div>

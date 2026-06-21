@@ -19,6 +19,7 @@ import type {
   ReviewPromptStep,
 } from "../../threads/hooks/useReviewPrompt";
 import type { WorkspaceLaunchScriptsState } from "../../app/hooks/useWorkspaceLaunchScripts";
+import type { OpenAppMenuExtraAction } from "../../app/components/OpenAppMenu";
 import type {
   AccessMode,
   AppMode,
@@ -316,7 +317,7 @@ export type LayoutNodesFlatOptions = {
   onLaunchScriptDraftChange: (value: string) => void;
   onSaveLaunchScript: () => void;
   launchScriptsState?: WorkspaceLaunchScriptsState;
-  mainHeaderActionsNode?: ReactNode;
+  mainHeaderActions?: OpenAppMenuExtraAction[];
   browserDockOpen?: boolean;
   onCloseBrowserDock?: () => void;
   centerMode:
@@ -850,7 +851,7 @@ export type ChromeLayoutNodesOptions = Pick<
   | "onLaunchScriptDraftChange"
   | "onSaveLaunchScript"
   | "launchScriptsState"
-  | "mainHeaderActionsNode"
+  | "mainHeaderActions"
   | "filePanelMode"
   | "onFilePanelModeChange"
   | "liveEditPreviewEnabled"

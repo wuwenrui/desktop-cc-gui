@@ -1297,7 +1297,7 @@ export function useLayoutNodes(input: LayoutNodesOptions): LayoutNodesResult {
       launchScriptsState={options.launchScriptsState}
       showLaunchScriptControls={showTopRunControls}
       showOpenAppMenu={showOpenWorkspaceAppControl}
-      extraActionsNode={options.mainHeaderActionsNode}
+      openAppExtraActions={options.mainHeaderActions}
       groupedWorkspaces={groupedWorkspacesForHeader}
       activeWorkspaceId={options.activeWorkspaceId}
       onSelectWorkspace={options.onSelectWorkspace}

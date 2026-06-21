@@ -320,6 +320,28 @@ describe("threadReducerTextMerge", () => {
     expect(merged).toContain("Apple event error -10000");
   });
 
+  it("keeps newer Apple event diagnostic code when merging completed snapshots", () => {
+    const firstPass = [
+      "Computer Use 当前没法拉起浏览器：系统返回 Apple event error -100: Sender process is not authenticated。",
+      "",
+      "这通常是 macOS 辅助功能/自动化权限没给到当前宿主进程。你需要在系统里给运行 Codex/终端的应用授权：",
+      "",
+      "授权完成后告诉我，我再继续拉起 mac 浏览器。",
+    ].join("\n");
+    const completedSnapshot = [
+      "Computer Use 当前没法拉起浏览器：系统返回 Apple event error -10000: Sender process is not authenticated。",
+      "",
+      "这通常是 macOS 辅助功能/自动化权限没给到当前宿主进程。你需要在系统里给运行 Codex/终端的应用授权：",
+      "",
+      "授权完成后告诉我，我再继续拉起 mac 浏览器。",
+    ].join("\n");
+
+    const merged = mergeCompletedAgentText(firstPass, completedSnapshot);
+
+    expect(merged).toContain("Apple event error -10000");
+    expect(merged).not.toContain("Apple event error -100:");
+  });
+
   it("collapses repeated Computer Use permission blocks when a bridge sentence sits between copies", () => {
     const firstPass = [
       "Computer Use 没拉起来：系统返回 Apple event error -100: Sender process is not authenticated。",

@@ -1,4 +1,9 @@
 import { useDeferredValue, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import {
+  resolveWorkspaceVirtualItemKey,
+  shouldVirtualizeWorkspaceList,
+} from "./HomeChatVirtualization";
 import Check from "lucide-react/dist/esm/icons/check";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import Folder from "lucide-react/dist/esm/icons/folder";
@@ -83,13 +88,6 @@ export function HomeChat({
     ?? workspaces[0]
     ?? null;
   const deferredWorkspaceQuery = useDeferredValue(workspaceQuery.trim().toLowerCase());
-  const branchLabel = selectedWorkspace
-    ? selectedBranchName?.trim() || selectedWorkspace.worktree?.branch || null
-    : null;
-  const branchDescriptor = selectedWorkspace?.kind === "worktree"
-    ? t("workspace.homeBranchLabelWorktree")
-    : t("workspace.homeBranchLabelMain");
-  const resolvedWorkspaceId = selectedWorkspace?.id ?? workspaces[0]?.id ?? "";
   const filteredWorkspaces = deferredWorkspaceQuery.length === 0
     ? workspaces
     : workspaces.filter((workspace) => {
@@ -97,7 +95,36 @@ export function HomeChat({
       const path = workspace.path?.toLowerCase() ?? "";
       return name.includes(deferredWorkspaceQuery) || path.includes(deferredWorkspaceQuery);
     });
-
+  const workspaceListRef = useRef<HTMLDivElement | null>(null);
+  const workspaceListHeightRef = useRef<number | null>(null);
+  const shouldVirtualizeWorkspacePicker = shouldVirtualizeWorkspaceList(filteredWorkspaces.length);
+  const workspaceListHeight =
+    workspaceListHeightRef.current ?? Math.min(360, Math.max(48, filteredWorkspaces.length * 36));
+  const workspaceVirtualizer = useVirtualizer({
+    count: shouldVirtualizeWorkspacePicker ? filteredWorkspaces.length : 0,
+    getScrollElement: () => workspaceListRef.current,
+    estimateSize: () => 36,
+    overscan: 8,
+    getItemKey: (index) =>
+      resolveWorkspaceVirtualItemKey(filteredWorkspaces, index),
+  });
+  useEffect(() => {
+    if (!shouldVirtualizeWorkspacePicker) {
+      workspaceListHeightRef.current = null;
+      return;
+    }
+    workspaceListHeightRef.current = Math.min(
+      360,
+      Math.max(48, filteredWorkspaces.length * 36),
+    );
+  }, [filteredWorkspaces.length, shouldVirtualizeWorkspacePicker]);
+  const branchLabel = selectedWorkspace
+    ? selectedBranchName?.trim() || selectedWorkspace.worktree?.branch || null
+    : null;
+  const branchDescriptor = selectedWorkspace?.kind === "worktree"
+    ? t("workspace.homeBranchLabelWorktree")
+    : t("workspace.homeBranchLabelMain");
+  const resolvedWorkspaceId = selectedWorkspace?.id ?? workspaces[0]?.id ?? "";
   useEffect(() => {
     if (!workspaceMenuOpen) {
       setWorkspaceQuery("");
@@ -191,40 +218,90 @@ export function HomeChat({
 
                         <div
                           id={workspacePanelId}
+                          ref={workspaceListRef}
                           className="home-chat-workspace-picker-list"
                           role="list"
                           aria-label={t("homeChat.workspaceSelectLabel", "Workspace")}
+                          data-virtualized={shouldVirtualizeWorkspacePicker ? "true" : undefined}
+                          style={
+                            shouldVirtualizeWorkspacePicker
+                              ? { maxHeight: `${workspaceListHeight}px` }
+                              : undefined
+                          }
                         >
                           {filteredWorkspaces.length > 0 ? (
-                            filteredWorkspaces.map((workspace) => {
-                              const isSelected = workspace.id === resolvedWorkspaceId;
+                            shouldVirtualizeWorkspacePicker ? (
+                              <div
+                                className="home-chat-workspace-picker-virtual-spacer"
+                                style={{ height: `${workspaceVirtualizer.getTotalSize()}px` }}
+                              >
+                                {workspaceVirtualizer.getVirtualItems().map((virtualRow) => {
+                                  const workspace = filteredWorkspaces[virtualRow.index];
+                                  if (!workspace) {
+                                    return null;
+                                  }
+                                  const isSelected = workspace.id === resolvedWorkspaceId;
+                                  return (
+                                    <button
+                                      key={virtualRow.key}
+                                      type="button"
+                                      className="home-chat-workspace-picker-item"
+                                      data-selected={isSelected ? "true" : undefined}
+                                      onClick={() => handleWorkspaceSelect(workspace.id)}
+                                      style={{
+                                        transform: `translateY(${virtualRow.start}px)`,
+                                      }}
+                                    >
+                                      <Folder
+                                        size={16}
+                                        aria-hidden
+                                        className="home-chat-workspace-picker-item-icon"
+                                      />
+                                      <span className="home-chat-workspace-picker-item-label">
+                                        {workspace.name}
+                                      </span>
+                                      {isSelected ? (
+                                        <Check
+                                          size={16}
+                                          aria-hidden
+                                          className="home-chat-workspace-picker-item-check"
+                                        />
+                                      ) : null}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              filteredWorkspaces.map((workspace) => {
+                                const isSelected = workspace.id === resolvedWorkspaceId;
 
-                              return (
-                                <button
-                                  key={workspace.id}
-                                  type="button"
-                                  className="home-chat-workspace-picker-item"
-                                  data-selected={isSelected ? "true" : undefined}
-                                  onClick={() => handleWorkspaceSelect(workspace.id)}
-                                >
-                                  <Folder
-                                    size={16}
-                                    aria-hidden
-                                    className="home-chat-workspace-picker-item-icon"
-                                  />
-                                  <span className="home-chat-workspace-picker-item-label">
-                                    {workspace.name}
-                                  </span>
-                                  {isSelected ? (
-                                    <Check
+                                return (
+                                  <button
+                                    key={workspace.id}
+                                    type="button"
+                                    className="home-chat-workspace-picker-item"
+                                    data-selected={isSelected ? "true" : undefined}
+                                    onClick={() => handleWorkspaceSelect(workspace.id)}
+                                  >
+                                    <Folder
                                       size={16}
                                       aria-hidden
-                                      className="home-chat-workspace-picker-item-check"
+                                      className="home-chat-workspace-picker-item-icon"
                                     />
-                                  ) : null}
-                                </button>
-                              );
-                            })
+                                    <span className="home-chat-workspace-picker-item-label">
+                                      {workspace.name}
+                                    </span>
+                                    {isSelected ? (
+                                      <Check
+                                        size={16}
+                                        aria-hidden
+                                        className="home-chat-workspace-picker-item-check"
+                                      />
+                                    ) : null}
+                                  </button>
+                                );
+                              })
+                            )
                           ) : (
                             <div className="home-chat-workspace-picker-empty">
                               {t("homeChat.workspaceNoMatch", "No projects found")}

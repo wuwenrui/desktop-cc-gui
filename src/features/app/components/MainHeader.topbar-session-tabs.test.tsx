@@ -86,6 +86,7 @@ function renderHeaderWithWidth(width: number) {
 describe("MainHeader topbar session tabs integration", () => {
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
   });
 
   it.each([1280, 1024, 800])(
@@ -111,6 +112,21 @@ describe("MainHeader topbar session tabs integration", () => {
 
     const dragLane = document.querySelector(".main-header-session-tabs-drag-lane");
     expect(dragLane?.hasAttribute("data-tauri-drag-region")).toBe(true);
+  });
+
+  it("adds Copy path to the open app menu", () => {
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+
+    renderHeaderWithWidth(1280);
+
+    fireEvent.click(screen.getByRole("button", { name: "settings.openInTarget" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /files\.copyPath/ }));
+
+    expect(writeText).toHaveBeenCalledWith("/tmp/w1");
   });
 
   it("removes hidden launch and open-app controls from the header", () => {

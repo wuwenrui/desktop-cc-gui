@@ -170,8 +170,8 @@ describe("useThreadMessaging command entrypoints", () => {
         codexAcceptedTurnByThread: {},
         tokenUsageByThread: {},
         rateLimitsByWorkspace: {},
-        pendingInterruptsRef: { current: new Set<string>() },
-        interruptedThreadsRef: { current: new Set<string>() },
+        pendingInterruptsRef: { current: new Map<string, Map<string, true>>() },
+        interruptedThreadsRef: { current: new Map<string, Map<string, true>>() },
         dispatch,
         getCustomName: () => undefined,
         getThreadEngine: (_workspaceId, threadId) =>

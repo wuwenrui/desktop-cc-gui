@@ -453,3 +453,105 @@ export function shouldEmitServerDebugEntry(method: string) {
     method.includes("warning")
   );
 }
+
+// chat-stream-render-isolation-2026-06 task 8.4: 30min TTL for transient
+// turn refs (turnDiagnosticsRef / quarantinedCodexTurnsRef /
+// assistantSnapshotIngressLengthRef). 60s sweep interval evicts entries that
+// have been settled for `ttlMs` while leaving active turns (no settled
+// timestamp) untouched.
+
+export const TRANSIENT_TURN_STATE_TTL_MS = 30 * 60 * 1000;
+export const TRANSIENT_TURN_STATE_SWEEP_INTERVAL_MS = 60 * 1000;
+
+export function resolveTransientSettledAt(
+  diagnostic: TurnDiagnosticState,
+): number | null {
+  return (
+    diagnostic.completedAt ??
+    diagnostic.errorAt ??
+    diagnostic.assistantCompletedAt
+  );
+}
+
+export type TransientTurnRef = {
+  workspaceId: string;
+  threadId: string;
+  state: { completedAt: number | null; errorAt: number | null; assistantCompletedAt: number | null };
+};
+
+export function resolveRefSettledAt(ref: TransientTurnRef): number | null {
+  const { state } = ref;
+  return state.completedAt ?? state.errorAt ?? state.assistantCompletedAt;
+}
+
+export type SweepableThreadDiagnostic = {
+  threadId: string;
+  settledAt: number | null;
+};
+
+export type TransientSweepResult = {
+  expiredThreadIds: string[];
+  remainingCount: number;
+};
+
+export type ThreadTransientStateRefs = {
+  turnDiagnosticsRef: {
+    current: Map<string, TurnDiagnosticState>;
+  };
+  quarantinedCodexTurnsRef: {
+    current: Map<string, CodexQuarantinedTurn>;
+  };
+  assistantSnapshotIngressLengthRef: {
+    current: Map<string, number>;
+  };
+};
+
+export function cleanupThreadTransientState(
+  refs: ThreadTransientStateRefs,
+  workspaceId: string | null | undefined,
+  threadId: string,
+): number {
+  let cleaned = 0;
+  if (refs.turnDiagnosticsRef.current.delete(threadId)) {
+    cleaned += 1;
+  }
+  for (const [key, entry] of refs.quarantinedCodexTurnsRef.current) {
+    if (
+      entry.threadId === threadId &&
+      (workspaceId == null || entry.workspaceId === workspaceId)
+    ) {
+      refs.quarantinedCodexTurnsRef.current.delete(key);
+      cleaned += 1;
+    }
+  }
+  const ingressPrefix = `${threadId}\u0000`;
+  for (const key of refs.assistantSnapshotIngressLengthRef.current.keys()) {
+    if (key.startsWith(ingressPrefix)) {
+      refs.assistantSnapshotIngressLengthRef.current.delete(key);
+      cleaned += 1;
+    }
+  }
+  return cleaned;
+}
+
+/**
+ * Pure helper for chat-stream-render-isolation-2026-06 task 8.4.
+ * Returns the threadIds whose settled timestamp is older than `ttlMs` ago.
+ * Entries with no settled timestamp are considered active and never expire.
+ */
+export function sweepThreadTransientState(
+  entries: Iterable<SweepableThreadDiagnostic>,
+  now: number,
+  ttlMs: number = TRANSIENT_TURN_STATE_TTL_MS,
+): TransientSweepResult {
+  const expiredThreadIds: string[] = [];
+  let remainingCount = 0;
+  for (const entry of entries) {
+    if (typeof entry.settledAt === "number" && now - entry.settledAt >= ttlMs) {
+      expiredThreadIds.push(entry.threadId);
+    } else {
+      remainingCount += 1;
+    }
+  }
+  return { expiredThreadIds, remainingCount };
+}

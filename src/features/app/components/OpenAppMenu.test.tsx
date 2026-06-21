@@ -119,4 +119,38 @@ describe("OpenAppMenu", () => {
       { enabled: true },
     );
   });
+
+  it("renders extra header actions inside the selected app menu", () => {
+    const onToggleTerminal = vi.fn();
+
+    render(
+      <OpenAppMenu
+        path="/tmp/demo"
+        openTargets={[
+          {
+            id: "finder",
+            label: "Finder",
+            kind: "finder",
+            args: [],
+          },
+        ]}
+        selectedOpenAppId="finder"
+        onSelectOpenAppId={vi.fn()}
+        iconOnly
+        extraActions={[
+          {
+            id: "terminal",
+            label: "common.toggleTerminalPanel",
+            icon: <span>terminal</span>,
+            onSelect: onToggleTerminal,
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /(?:Open in Finder|settings\.openInTarget)/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /common\.toggleTerminalPanel/ }));
+
+    expect(onToggleTerminal).toHaveBeenCalledTimes(1);
+  });
 });

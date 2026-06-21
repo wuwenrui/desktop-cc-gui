@@ -1,4 +1,5 @@
 import type { Dispatch, MutableRefObject } from "react";
+import type { WorkspaceScopedMap } from "./workspaceScopedMap";
 import type {
   CollaborationModeResolvedRequest,
   DebugEntry,
@@ -26,7 +27,11 @@ export type ThreadEventHandlersOptions = {
     threadId: string,
     timestamp?: number,
   ) => void;
-  pushThreadErrorMessage: (threadId: string, message: string) => void;
+  pushThreadErrorMessage: (
+    workspaceId: string,
+    threadId: string,
+    message: string,
+  ) => void;
   onDebug?: (entry: DebugEntry) => void;
   onWorkspaceConnected: (workspaceId: string) => void;
   applyCollabThreadLinks: (
@@ -34,8 +39,8 @@ export type ThreadEventHandlersOptions = {
     item: Record<string, unknown>,
   ) => void;
   approvalAllowlistRef: MutableRefObject<Record<string, string[][]>>;
-  pendingInterruptsRef: MutableRefObject<Set<string>>;
-  interruptedThreadsRef: MutableRefObject<Set<string>>;
+  pendingInterruptsRef: MutableRefObject<WorkspaceScopedMap<true>>;
+  interruptedThreadsRef: MutableRefObject<WorkspaceScopedMap<true>>;
   renameCustomNameKey: (
     workspaceId: string,
     oldThreadId: string,
@@ -88,6 +93,9 @@ export type ThreadEventHandlersOptions = {
     turnId: string;
     status: "completed" | "error" | "stalled";
   }) => void;
+  onThreadTransientCleanupReady?: (
+    cleanup: (workspaceId: string | null | undefined, threadId: string) => number,
+  ) => () => void;
   onCollaborationModeResolved?: (
     event: CollaborationModeResolvedRequest,
   ) => void;

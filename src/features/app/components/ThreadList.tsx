@@ -13,9 +13,11 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
-import type { CSSProperties, KeyboardEvent, MouseEvent } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import type { CSSProperties, KeyboardEvent, MouseEvent, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { EngineType, ThreadSummary } from "../../../types";
@@ -31,6 +33,13 @@ import {
   useThreadRowStatus,
   type ThreadStatusMap,
 } from "./threadRowStatusStore";
+import {
+  flattenSidebarWorkspaceItems,
+  resolveSidebarItemKey,
+  shouldVirtualizeSidebarList,
+  type SidebarVirtualItem,
+} from "./sidebarVirtualItems";
+import { getThreadRowProjection } from "../utils/threadRowProjection";
 
 type ThreadRow = {
   thread: ThreadSummary;
@@ -90,6 +99,26 @@ type ThreadRowItemProps = {
 };
 
 const EMPTY_MOVE_FOLDER_TARGETS: ThreadMoveFolderTarget[] = [];
+const EMPTY_FOLDER_ROWS: Array<{ workspaceId: string; folderId: string }> = [];
+const EMPTY_WORKTREE_ROWS: Array<{
+  parentWorkspaceId: string;
+  worktreeWorkspaceId: string;
+}> = [];
+
+function renderSidebarVirtualItem(
+  item: SidebarVirtualItem,
+  rowsByKey: ReadonlyMap<string, ThreadRow>,
+  renderThreadRow: (row: ThreadRow) => ReactNode,
+) {
+  if (item.kind === "separator") {
+    return <div className="thread-list-separator" aria-hidden="true" />;
+  }
+  if (item.kind !== "thread" && item.kind !== "pinned") {
+    return null;
+  }
+  const row = rowsByKey.get(item.key);
+  return row ? renderThreadRow(row) : null;
+}
 
 function isPendingSubagentThread(thread: ThreadSummary) {
   return thread.id.startsWith("claude-pending-subagent:");
@@ -166,11 +195,23 @@ const ThreadRowItem = memo(function ThreadRowItem({
     onThreadRowRender?.(thread.id);
   });
   const status = useThreadRowStatus(thread.id);
+  const rowProjection = getThreadRowProjection({
+    workspaceId: nestedWorkspaceId,
+    threadId: thread.id,
+    statusVersion: `${status?.isProcessing ? "1" : "0"}:${status?.hasUnread ? "1" : "0"}:${status?.isReviewing ? "1" : "0"}`,
+    isProcessing: Boolean(status?.isProcessing),
+    hasUnread: Boolean(status?.hasUnread),
+    backgroundActivityLabel: status?.isReviewing
+      ? "reviewing"
+      : status?.isProcessing
+        ? "processing"
+        : null,
+  });
   const statusClass = status?.isReviewing
     ? "reviewing"
-    : status?.isProcessing
+    : rowProjection.isProcessing
       ? "processing"
-      : status?.hasUnread
+      : rowProjection.hasUnread
         ? "unread"
         : "ready";
   const runtimeBadge = status?.isReviewing
@@ -178,7 +219,7 @@ const ThreadRowItem = memo(function ThreadRowItem({
     : status?.isProcessing
       ? { label: t("threads.runtimeProcessing"), severity: "processing" as const }
       : null;
-  const isProcessing = Boolean(status?.isProcessing);
+  const isProcessing = rowProjection.isProcessing;
   const showProxyBadge = systemProxyEnabled && isProcessing;
   const indentStyle =
     indentPx !== null
@@ -428,6 +469,7 @@ export function ThreadList({
 }: ThreadListProps) {
   const { t } = useTranslation();
   const indentUnit = nested ? 10 : 14;
+  const threadListRef = useRef<HTMLDivElement | null>(null);
   const [collapsedParentThreadIds, setCollapsedParentThreadIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -473,6 +515,46 @@ export function ThreadList({
     () => filterCollapsedThreadRows(visibleUnpinnedRows, collapsedParentThreadIds),
     [collapsedParentThreadIds, visibleUnpinnedRows],
   );
+  const rowsBySidebarVirtualKey = useMemo(() => {
+    const next = new Map<string, ThreadRow>();
+    displayedPinnedRows.forEach((row) => {
+      next.set(`pinned:${workspaceId}:${row.thread.id}`, row);
+    });
+    displayedUnpinnedRows.forEach((row) => {
+      next.set(`thread:${workspaceId}:${row.thread.id}`, row);
+    });
+    return next;
+  }, [displayedPinnedRows, displayedUnpinnedRows, workspaceId]);
+  const sidebarVirtualItems = useMemo(
+    () =>
+      flattenSidebarWorkspaceItems({
+        pinnedRows: displayedPinnedRows.map((row) => ({
+          thread: row.thread,
+          workspaceId,
+        })),
+        unpinnedRows: displayedUnpinnedRows.map((row) => ({
+          thread: row.thread,
+          workspaceId,
+        })),
+        folders: EMPTY_FOLDER_ROWS,
+        worktrees: EMPTY_WORKTREE_ROWS,
+        hasMoreThreads: false,
+        isEmpty: false,
+      }),
+    [
+      displayedPinnedRows,
+      displayedUnpinnedRows,
+      workspaceId,
+    ],
+  );
+  const shouldVirtualizeThreads = shouldVirtualizeSidebarList(sidebarVirtualItems.length);
+  const threadRowVirtualizer = useVirtualizer({
+    count: shouldVirtualizeThreads ? sidebarVirtualItems.length : 0,
+    getScrollElement: () => threadListRef.current,
+    estimateSize: () => 36,
+    overscan: 8,
+    getItemKey: (index) => resolveSidebarItemKey(sidebarVirtualItems, index),
+  });
   const activeThreadParentId = useMemo(() => {
     if (workspaceId !== activeWorkspaceId || !activeThreadId) {
       return null;
@@ -605,45 +687,114 @@ export function ThreadList({
 
   return (
     <ThreadRowStatusProvider threadStatusById={threadStatusById}>
-      <div className={`thread-list${nested ? " thread-list-nested" : ""}`}>
-        {displayedPinnedRows.map((row) => renderThreadRow(row))}
-        {displayedPinnedRows.length > 0 && displayedUnpinnedRows.length > 0 && (
-          <div className="thread-list-separator" aria-hidden="true" />
-        )}
-        {displayedUnpinnedRows.map((row) => renderThreadRow(row))}
-        {showHiddenExitedSummary && (
-          <div className="thread-list-hidden-summary">
-            {t("threads.exitedSessionsHidden", { count: hiddenExitedCount })}
+      <div
+        ref={threadListRef}
+        className={`thread-list${nested ? " thread-list-nested" : ""}`}
+        data-virtualized={shouldVirtualizeThreads ? "true" : undefined}
+      >
+        {shouldVirtualizeThreads ? (
+          <div
+            className="thread-list-virtual-spacer"
+            style={{ height: `${threadRowVirtualizer.getTotalSize()}px` }}
+          >
+            {threadRowVirtualizer.getVirtualItems().map((virtualRow) => {
+              const item = sidebarVirtualItems[virtualRow.index];
+              if (!item) {
+                return null;
+              }
+              const content = renderSidebarVirtualItem(item, rowsBySidebarVirtualKey, renderThreadRow);
+              if (!content) {
+                return null;
+              }
+              return (
+                <div
+                  key={virtualRow.key}
+                  ref={threadRowVirtualizer.measureElement}
+                  data-index={virtualRow.index}
+                  className="thread-list-virtual-row"
+                  style={{ transform: `translateY(${virtualRow.start}px)` }}
+                >
+                  {content}
+                </div>
+              );
+            })}
+            {showHiddenExitedSummary && (
+              <div className="thread-list-hidden-summary">
+                {t("threads.exitedSessionsHidden", { count: hiddenExitedCount })}
+              </div>
+            )}
+            {totalThreadRoots > visibleThreadRootCount && (
+              <button
+                className="thread-more"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onToggleExpanded(workspaceId);
+                }}
+              >
+                {isExpanded ? t("threads.showLess") : t("threads.more")}
+              </button>
+            )}
+            {showLoadOlder &&
+              nextCursor &&
+              (isExpanded || totalThreadRoots <= visibleThreadRootCount) && (
+              <button
+                className="thread-more"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onLoadOlderThreads(workspaceId);
+                }}
+                disabled={isPaging}
+              >
+                {isPaging
+                  ? t("threads.loading")
+                  : totalThreadRoots === 0
+                    ? t("threads.searchOlder")
+                    : t("threads.loadOlder")}
+              </button>
+            )}
           </div>
-        )}
-        {totalThreadRoots > visibleThreadRootCount && (
-          <button
-            className="thread-more"
-            onClick={(event) => {
-              event.stopPropagation();
-              onToggleExpanded(workspaceId);
-            }}
-          >
-            {isExpanded ? t("threads.showLess") : t("threads.more")}
-          </button>
-        )}
-        {showLoadOlder &&
-          nextCursor &&
-          (isExpanded || totalThreadRoots <= visibleThreadRootCount) && (
-          <button
-            className="thread-more"
-            onClick={(event) => {
-              event.stopPropagation();
-              onLoadOlderThreads(workspaceId);
-            }}
-            disabled={isPaging}
-          >
-            {isPaging
-              ? t("threads.loading")
-              : totalThreadRoots === 0
-                ? t("threads.searchOlder")
-                : t("threads.loadOlder")}
-          </button>
+        ) : (
+          <>
+            {displayedPinnedRows.map((row) => renderThreadRow(row))}
+            {displayedPinnedRows.length > 0 && displayedUnpinnedRows.length > 0 && (
+              <div className="thread-list-separator" aria-hidden="true" />
+            )}
+            {displayedUnpinnedRows.map((row) => renderThreadRow(row))}
+            {showHiddenExitedSummary && (
+              <div className="thread-list-hidden-summary">
+                {t("threads.exitedSessionsHidden", { count: hiddenExitedCount })}
+              </div>
+            )}
+            {totalThreadRoots > visibleThreadRootCount && (
+              <button
+                className="thread-more"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onToggleExpanded(workspaceId);
+                }}
+              >
+                {isExpanded ? t("threads.showLess") : t("threads.more")}
+              </button>
+            )}
+            {showLoadOlder &&
+              nextCursor &&
+              (isExpanded || totalThreadRoots <= visibleThreadRootCount) && (
+              <button
+                className="thread-more"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onLoadOlderThreads(workspaceId);
+                }}
+                disabled={isPaging}
+              >
+                {isPaging
+                  ? t("threads.loading")
+                  : totalThreadRoots === 0
+                    ? t("threads.searchOlder")
+                    : t("threads.loadOlder")}
+              </button>
+            )}
+          </>
         )}
       </div>
     </ThreadRowStatusProvider>

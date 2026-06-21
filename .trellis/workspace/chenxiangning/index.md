@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-22.md`
-- **Total Sessions**: 841
-- **Last Active**: 2026-06-14
+- **Total Sessions**: 855
+- **Last Active**: 2026-06-17
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-22.md` | ~618 | Active |
+| `journal-22.md` | ~1222 | Active |
 | `journal-21.md` | ~1970 | Archived |
 | `journal-20.md` | ~1997 | Archived |
 | `journal-19.md` | ~1989 | Archived |
@@ -50,6 +50,20 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 855 | 2026-06-17 | 修复 runtime 重连恢复卡片状态 | `86f3ecb3` | `feature/v0.5.10` |
+| 854 | 2026-06-17 | 合并 PR 696 供应商排序修复 | `c5fe5ea5` | `feature/v0.5.10` |
+| 853 | 2026-06-17 | 补齐稳定性归档文档 | `4e00c1ed` | `feature/v0.5.10` |
+| 852 | 2026-06-17 | 归档聊天流与长运行稳定性提案 | `94562f8a` | `feature/v0.5.10` |
+| 851 | 2026-06-17 | 收口 AppShell 运行态稳定性与 OpenSpec 归档 | `7d8b987d`, `29b835f0` | `feature/v0.5.10` |
+| 850 | 2026-06-17 | 稳定长运行客户端运行时 | `4e981689` | `feature/v0.5.10` |
+| 849 | 2026-06-17 | 修复 Apple event 诊断码快照合并 | `5f618c20` | `feature/v0.5.10` |
+| 848 | 2026-06-17 | 收敛顶栏菜单按钮 | `b1907b3b` | `feature/v0.5.10` |
+| 847 | 2026-06-16 | 补齐聊天流式渲染隔离验证 | `ae5def30` | `feature/v0.5.10` |
+| 846 | 2026-06-16 | 审核聊天流渲染隔离提案 | `536a7b5c` | `feature/v0.5.10` |
+| 845 | 2026-06-16 | 稳定 FileViewPanel 慢 git marker 测试 | `59399914` | `feature/v0.5.10` |
+| 844 | 2026-06-16 | 修复 Composer 文件引用深层路径搜索 | `3f08861b` | `feature/v0.5.10` |
+| 843 | 2026-06-16 | 修复文件树首屏滚动容器布局 | `269088b2` | `feature/v0.5.10` |
+| 842 | 2026-06-15 | 修复 Messages 测试 Suspense act 噪声 | `9f7002bf` | `bump-version-0.5.10` |
 | 841 | 2026-06-14 | 稳定 Suspense host-task teardown | `d4fcbbee5422b68c7c42e4efc9ad6099fe9fcc85` | `feature/v0.5.9` |
 | 840 | 2026-06-14 | 稳定 heavy-test-noise Suspense teardown | `ce59b8118fe1a09adc22289298c9b98c6cec8de7` | `feature/v0.5.9` |
 | 839 | 2026-06-14 | 修复 fork provider 选择测试时序 | `8c3bc5fe` | `feature/v0.5.9` |

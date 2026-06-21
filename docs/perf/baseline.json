@@ -344,6 +344,101 @@
       "unit": "ms",
       "unsupportedReason": "Tauri/webview startup marker snapshot was not provided; bundle baseline is recorded.",
       "evidenceClass": "unsupported"
+    },
+    {
+      "scenario": "S-CHAT-100",
+      "metric": "longConversationFrameP95",
+      "value": 24,
+      "unit": "ms",
+      "notes": "500-row + 2-thread parallel streaming 5min trace; baseline derived from S-RS-VL2 (proxy)",
+      "evidenceClass": "proxy",
+      "budget": {
+        "observed": 24,
+        "target": 16.8,
+        "hardFail": 33.6,
+        "unit": "ms",
+        "evidenceClass": "proxy",
+        "source": "docs/perf/baseline.json",
+        "owner": "chat-stream-render-isolation-2026-06",
+        "status": "approved-proxy-derived-from-s-rs-vl2",
+        "rollout": "proxy-advisory-pending-tauri-webview-trace"
+      }
+    },
+    {
+      "scenario": "S-CHAT-101",
+      "metric": "reducerFastPathHitRate",
+      "value": 0,
+      "unit": "ratio",
+      "notes": "fraction of streaming deltas that returned prior state reference; chat-stream-render-isolation-2026-06 task 1.x",
+      "evidenceClass": "proxy",
+      "budget": {
+        "observed": 0,
+        "target": 0.85,
+        "hardFail": 0.6,
+        "unit": "ratio",
+        "evidenceClass": "proxy",
+        "source": "docs/perf/baseline.json",
+        "owner": "chat-stream-render-isolation-2026-06",
+        "status": "approved-proxy-pending-test-coverage",
+        "rollout": "proxy-advisory-pending-real-trace"
+      }
+    },
+    {
+      "scenario": "S-CHAT-102",
+      "metric": "virtualizerActiveDuringStreaming",
+      "value": true,
+      "unit": "bool",
+      "notes": "shouldVirtualizeTimelineRows must be true when rowCount>=200 even if isThinking===true; chat-stream-render-isolation-2026-06 task 2.x",
+      "evidenceClass": "proxy",
+      "budget": {
+        "observed": true,
+        "target": true,
+        "hardFail": false,
+        "unit": "bool",
+        "evidenceClass": "proxy",
+        "source": "docs/perf/baseline.json",
+        "owner": "chat-stream-render-isolation-2026-06",
+        "status": "approved-proxy-pending-test-coverage",
+        "rollout": "proxy-advisory-pending-real-trace"
+      }
+    },
+    {
+      "scenario": "S-CHAT-103",
+      "metric": "workspaceScopedRefEvictions",
+      "value": 0,
+      "unit": "count",
+      "notes": "orphan workspace-scope ref entries after LRU eviction; chat-stream-render-isolation-2026-06 task 8.x",
+      "evidenceClass": "proxy",
+      "budget": {
+        "observed": 0,
+        "target": 0,
+        "hardFail": 0,
+        "unit": "count",
+        "evidenceClass": "proxy",
+        "source": "docs/perf/baseline.json",
+        "owner": "chat-stream-render-isolation-2026-06",
+        "status": "approved-proxy-pending-test-coverage",
+        "rollout": "proxy-advisory-pending-real-trace"
+      }
+    },
+    {
+      "scenario": "S-CHAT-104",
+      "metric": "transientTimerCleanups",
+      "value": 1.0,
+      "unit": "ratio",
+      "notes": "fraction of active-thread switches that cleared all 7 RAF/timeout refs in Messages; chat-stream-render-isolation-2026-06 task 7.1",
+      "evidenceClass": "proxy",
+      "budget": {
+        "observed": 1.0,
+        "target": 1.0,
+        "hardFail": 1.0,
+        "unit": "ratio",
+        "evidenceClass": "proxy",
+        "source": "docs/perf/baseline.json",
+        "owner": "chat-stream-render-isolation-2026-06",
+        "status": "approved-proxy-pending-test-coverage",
+        "rollout": "proxy-advisory-pending-real-trace"
+      }
     }
   ],
   "sources": [

@@ -137,8 +137,12 @@ export function makeThreadMessagingHook(
   const safeMessageActivity = vi.fn();
   const pushThreadErrorMessage = vi.fn();
   const onDebug = vi.fn();
-  const pendingInterruptsRef = { current: new Set<string>() };
-  const interruptedThreadsRef = { current: new Set<string>() };
+  const pendingInterruptsRef = { current: new Map<string, Map<string, true>>() };
+  // chat-stream-render-isolation-2026-06 task 8: workspace-scope ref
+  // shape migrated from Set<threadId> to Map<workspaceId, Map<threadId, true>>.
+  const interruptedThreadsRef = {
+    current: new Map<string, Map<string, true>>(),
+  };
   const codexCompactionInFlightByThreadRef = {
     current: {} as Record<string, boolean>,
   };

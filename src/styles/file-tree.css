@@ -4,12 +4,22 @@
   --file-tree-content-font-size: var(--client-content-font-size, 12px);
   --file-tree-title-font-size: var(--client-title-font-size, 14px);
   display: flex;
-  flex-direction: column;
   flex: 1;
+  flex-direction: column;
   gap: 0;
   min-height: 0;
   overflow: hidden;
+  padding: 8px 8px 0;
   position: relative;
+  background: transparent;
+  -webkit-app-region: no-drag;
+}
+
+.diff-panel.file-tree-panel {
+  gap: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: 8px 8px 0;
 }
 
 .file-tree-top-zone {

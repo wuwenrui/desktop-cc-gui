@@ -1,12 +1,13 @@
 {
   "schemaVersion": "1.0",
-  "generatedAt": "2026-06-13T05:53:58.534Z",
+  "generatedAt": "2026-06-17T09:50:58.775Z",
   "sources": {
     "perfBaseline": "docs/perf/baseline.json",
     "composerBaseline": "docs/perf/composer-baseline.json",
     "browserScroll": "docs/perf/long-list-browser-scroll.json",
     "realtimeTurnTrace": "docs/perf/realtime-turn-trace.json",
     "realtimeRuntimeEvidence": "docs/perf/realtime-runtime-evidence.json",
+    "longrunningRuntimeEvidence": "docs/perf/long-running-runtime-evidence.json",
     "realtimeProfile": null,
     "largeFileWatchlist": ".artifacts/large-files-near-threshold.json",
     "openSpec": "openspec list --json"
@@ -156,7 +157,17 @@
       "value": 0,
       "unit": "count",
       "evidenceClass": "proxy",
-      "budget": null,
+      "budget": {
+        "observed": 0,
+        "target": 0,
+        "hardFail": 0,
+        "unit": "count",
+        "evidenceClass": "proxy",
+        "source": "openspec/changes/archive/2026-06-13-collect-release-grade-performance-evidence/budget-decision-table.md",
+        "owner": "input-latency-budget",
+        "status": "approved",
+        "rollout": "fail-ready"
+      },
       "reason": "Fixture or replay evidence; useful for regression comparison, not release-grade runtime proof.",
       "nextAction": "Keep as regression baseline and add runtime/browser evidence before release-grade closure."
     },
@@ -197,7 +208,17 @@
       "value": 0,
       "unit": "count",
       "evidenceClass": "proxy",
-      "budget": null,
+      "budget": {
+        "observed": 0,
+        "target": 0,
+        "hardFail": 0,
+        "unit": "count",
+        "evidenceClass": "proxy",
+        "source": "openspec/changes/archive/2026-06-13-collect-release-grade-performance-evidence/budget-decision-table.md",
+        "owner": "input-latency-budget",
+        "status": "approved",
+        "rollout": "fail-ready"
+      },
       "reason": "Fixture or replay evidence; useful for regression comparison, not release-grade runtime proof.",
       "nextAction": "Keep as regression baseline and add runtime/browser evidence before release-grade closure."
     },
@@ -409,6 +430,111 @@
       "nextAction": "Collect real Tauri webview cold-start timing on a supported runner."
     },
     {
+      "source": "docs/perf/baseline.json",
+      "scenario": "S-CHAT-100",
+      "metric": "longConversationFrameP95",
+      "value": 24,
+      "unit": "ms",
+      "evidenceClass": "proxy",
+      "budget": {
+        "observed": 24,
+        "target": 16.8,
+        "hardFail": 33.6,
+        "unit": "ms",
+        "evidenceClass": "proxy",
+        "source": "docs/perf/baseline.json",
+        "owner": "chat-stream-render-isolation-2026-06",
+        "status": "approved-proxy-derived-from-s-rs-vl2",
+        "rollout": "proxy-advisory-pending-tauri-webview-trace"
+      },
+      "reason": "500-row + 2-thread parallel streaming 5min trace; baseline derived from S-RS-VL2 (proxy)",
+      "nextAction": "Keep as regression baseline and add runtime/browser evidence before release-grade closure."
+    },
+    {
+      "source": "docs/perf/baseline.json",
+      "scenario": "S-CHAT-101",
+      "metric": "reducerFastPathHitRate",
+      "value": 0,
+      "unit": "ratio",
+      "evidenceClass": "proxy",
+      "budget": {
+        "observed": 0,
+        "target": 0.85,
+        "hardFail": 0.6,
+        "unit": "ratio",
+        "evidenceClass": "proxy",
+        "source": "docs/perf/baseline.json",
+        "owner": "chat-stream-render-isolation-2026-06",
+        "status": "approved-proxy-pending-test-coverage",
+        "rollout": "proxy-advisory-pending-real-trace"
+      },
+      "reason": "fraction of streaming deltas that returned prior state reference; chat-stream-render-isolation-2026-06 task 1.x",
+      "nextAction": "Keep as regression baseline and add runtime/browser evidence before release-grade closure."
+    },
+    {
+      "source": "docs/perf/baseline.json",
+      "scenario": "S-CHAT-102",
+      "metric": "virtualizerActiveDuringStreaming",
+      "value": true,
+      "unit": "bool",
+      "evidenceClass": "proxy",
+      "budget": {
+        "observed": true,
+        "target": true,
+        "hardFail": false,
+        "unit": "bool",
+        "evidenceClass": "proxy",
+        "source": "docs/perf/baseline.json",
+        "owner": "chat-stream-render-isolation-2026-06",
+        "status": "approved-proxy-pending-test-coverage",
+        "rollout": "proxy-advisory-pending-real-trace"
+      },
+      "reason": "shouldVirtualizeTimelineRows must be true when rowCount>=200 even if isThinking===true; chat-stream-render-isolation-2026-06 task 2.x",
+      "nextAction": "Keep as regression baseline and add runtime/browser evidence before release-grade closure."
+    },
+    {
+      "source": "docs/perf/baseline.json",
+      "scenario": "S-CHAT-103",
+      "metric": "workspaceScopedRefEvictions",
+      "value": 0,
+      "unit": "count",
+      "evidenceClass": "proxy",
+      "budget": {
+        "observed": 0,
+        "target": 0,
+        "hardFail": 0,
+        "unit": "count",
+        "evidenceClass": "proxy",
+        "source": "docs/perf/baseline.json",
+        "owner": "chat-stream-render-isolation-2026-06",
+        "status": "approved-proxy-pending-test-coverage",
+        "rollout": "proxy-advisory-pending-real-trace"
+      },
+      "reason": "orphan workspace-scope ref entries after LRU eviction; chat-stream-render-isolation-2026-06 task 8.x",
+      "nextAction": "Keep as regression baseline and add runtime/browser evidence before release-grade closure."
+    },
+    {
+      "source": "docs/perf/baseline.json",
+      "scenario": "S-CHAT-104",
+      "metric": "transientTimerCleanups",
+      "value": 1,
+      "unit": "ratio",
+      "evidenceClass": "proxy",
+      "budget": {
+        "observed": 1,
+        "target": 1,
+        "hardFail": 1,
+        "unit": "ratio",
+        "evidenceClass": "proxy",
+        "source": "docs/perf/baseline.json",
+        "owner": "chat-stream-render-isolation-2026-06",
+        "status": "approved-proxy-pending-test-coverage",
+        "rollout": "proxy-advisory-pending-real-trace"
+      },
+      "reason": "fraction of active-thread switches that cleared all 7 RAF/timeout refs in Messages; chat-stream-render-isolation-2026-06 task 7.1",
+      "nextAction": "Keep as regression baseline and add runtime/browser evidence before release-grade closure."
+    },
+    {
       "source": "docs/perf/composer-baseline.json",
       "scenario": "S-CI-50",
       "metric": "keystrokeToCommitP95",
@@ -560,6 +686,83 @@
       },
       "reason": "measured runtime turn trace from .artifacts/realtime-runtime-diagnostics.json",
       "nextAction": "Correlate replay metrics with runtime visible-lag and terminal-pressure traces."
+    },
+    {
+      "source": "docs/perf/long-running-runtime-evidence.json",
+      "scenario": "S-LR-100",
+      "metric": "activeEngineProcessCountAfterClose",
+      "value": 0,
+      "unit": "count",
+      "evidenceClass": "measured",
+      "budget": null,
+      "reason": "registered runtime handle count; OS child liveness recorded separately under S-LR-101",
+      "nextAction": "Track for regression."
+    },
+    {
+      "source": "docs/perf/long-running-runtime-evidence.json",
+      "scenario": "S-LR-101",
+      "metric": "sampledOsChildLivenessAfterClose",
+      "value": null,
+      "unit": "count",
+      "evidenceClass": "unsupported",
+      "budget": null,
+      "reason": "Runtime does not ship a cross-platform OS child process sampler; sampler added in release-grade-evidence follow-up (task 6.4)",
+      "nextAction": "Provide supported environment evidence or preserve explicit qualifier."
+    },
+    {
+      "source": "docs/perf/long-running-runtime-evidence.json",
+      "scenario": "S-LR-110",
+      "metric": "staleEngineChildCandidateCount",
+      "value": 0,
+      "unit": "count",
+      "evidenceClass": "measured",
+      "budget": null,
+      "reason": "diagnostics-only; no auto-kill; candidates require registeredAgeMs >= 5min; OpenCode/Gemini report progress_evidence=unsupported",
+      "nextAction": "Track for regression."
+    },
+    {
+      "source": "docs/perf/long-running-runtime-evidence.json",
+      "scenario": "S-LR-200",
+      "metric": "moduleSwitchP95Ms",
+      "value": null,
+      "unit": "ms",
+      "evidenceClass": "unsupported",
+      "budget": null,
+      "reason": "jsdom cannot produce real module switch latency; requires Tauri/WebView trace",
+      "nextAction": "Provide supported environment evidence or preserve explicit qualifier."
+    },
+    {
+      "source": "docs/perf/long-running-runtime-evidence.json",
+      "scenario": "S-LR-210",
+      "metric": "visibleListRowCount",
+      "value": 36,
+      "unit": "rows",
+      "evidenceClass": "proxy",
+      "budget": 100,
+      "reason": "200-workspace / 200-thread fixture; DOM mounted row count is bounded by virtualizer overscan, not by list size; CSS defines bounded scroll viewport plus relative/absolute virtual rows",
+      "nextAction": "Keep as regression baseline and add runtime/browser evidence before release-grade closure."
+    },
+    {
+      "source": "docs/perf/long-running-runtime-evidence.json",
+      "scenario": "S-LR-300",
+      "metric": "markdownWorkerPendingRequests",
+      "value": 0,
+      "unit": "count",
+      "evidenceClass": "proxy",
+      "budget": null,
+      "reason": "pending count returns to 0 after worker dispose; worker request carries content-safe requestMeta; unit-tested in workerAdapterDiagnostics.test.ts",
+      "nextAction": "Keep as regression baseline and add runtime/browser evidence before release-grade closure."
+    },
+    {
+      "source": "docs/perf/long-running-runtime-evidence.json",
+      "scenario": "S-LR-310",
+      "metric": "streamingVisibleLagP95Ms",
+      "value": 24,
+      "unit": "ms",
+      "evidenceClass": "proxy",
+      "budget": null,
+      "reason": "reuses S-RS-VL2 proxy from chat-stream-render-isolation-2026-06; no fresh runtime trace in this change",
+      "nextAction": "Keep as regression baseline and add runtime/browser evidence before release-grade closure."
     }
   ],
   "realtimeSummary": {
@@ -1032,7 +1235,17 @@
       "value": 0,
       "unit": "count",
       "evidenceClass": "proxy",
-      "budget": null,
+      "budget": {
+        "observed": 0,
+        "target": 0,
+        "hardFail": 0,
+        "unit": "count",
+        "evidenceClass": "proxy",
+        "source": "openspec/changes/archive/2026-06-13-collect-release-grade-performance-evidence/budget-decision-table.md",
+        "owner": "input-latency-budget",
+        "status": "approved",
+        "rollout": "fail-ready"
+      },
       "reason": "Fixture or replay evidence; useful for regression comparison, not release-grade runtime proof.",
       "nextAction": "Keep as regression baseline and add runtime/browser evidence before release-grade closure."
     },
@@ -1073,7 +1286,17 @@
       "value": 0,
       "unit": "count",
       "evidenceClass": "proxy",
-      "budget": null,
+      "budget": {
+        "observed": 0,
+        "target": 0,
+        "hardFail": 0,
+        "unit": "count",
+        "evidenceClass": "proxy",
+        "source": "openspec/changes/archive/2026-06-13-collect-release-grade-performance-evidence/budget-decision-table.md",
+        "owner": "input-latency-budget",
+        "status": "approved",
+        "rollout": "fail-ready"
+      },
       "reason": "Fixture or replay evidence; useful for regression comparison, not release-grade runtime proof.",
       "nextAction": "Keep as regression baseline and add runtime/browser evidence before release-grade closure."
     },
@@ -1285,6 +1508,111 @@
       "nextAction": "Collect real Tauri webview cold-start timing on a supported runner."
     },
     {
+      "source": "docs/perf/baseline.json",
+      "scenario": "S-CHAT-100",
+      "metric": "longConversationFrameP95",
+      "value": 24,
+      "unit": "ms",
+      "evidenceClass": "proxy",
+      "budget": {
+        "observed": 24,
+        "target": 16.8,
+        "hardFail": 33.6,
+        "unit": "ms",
+        "evidenceClass": "proxy",
+        "source": "docs/perf/baseline.json",
+        "owner": "chat-stream-render-isolation-2026-06",
+        "status": "approved-proxy-derived-from-s-rs-vl2",
+        "rollout": "proxy-advisory-pending-tauri-webview-trace"
+      },
+      "reason": "500-row + 2-thread parallel streaming 5min trace; baseline derived from S-RS-VL2 (proxy)",
+      "nextAction": "Keep as regression baseline and add runtime/browser evidence before release-grade closure."
+    },
+    {
+      "source": "docs/perf/baseline.json",
+      "scenario": "S-CHAT-101",
+      "metric": "reducerFastPathHitRate",
+      "value": 0,
+      "unit": "ratio",
+      "evidenceClass": "proxy",
+      "budget": {
+        "observed": 0,
+        "target": 0.85,
+        "hardFail": 0.6,
+        "unit": "ratio",
+        "evidenceClass": "proxy",
+        "source": "docs/perf/baseline.json",
+        "owner": "chat-stream-render-isolation-2026-06",
+        "status": "approved-proxy-pending-test-coverage",
+        "rollout": "proxy-advisory-pending-real-trace"
+      },
+      "reason": "fraction of streaming deltas that returned prior state reference; chat-stream-render-isolation-2026-06 task 1.x",
+      "nextAction": "Keep as regression baseline and add runtime/browser evidence before release-grade closure."
+    },
+    {
+      "source": "docs/perf/baseline.json",
+      "scenario": "S-CHAT-102",
+      "metric": "virtualizerActiveDuringStreaming",
+      "value": true,
+      "unit": "bool",
+      "evidenceClass": "proxy",
+      "budget": {
+        "observed": true,
+        "target": true,
+        "hardFail": false,
+        "unit": "bool",
+        "evidenceClass": "proxy",
+        "source": "docs/perf/baseline.json",
+        "owner": "chat-stream-render-isolation-2026-06",
+        "status": "approved-proxy-pending-test-coverage",
+        "rollout": "proxy-advisory-pending-real-trace"
+      },
+      "reason": "shouldVirtualizeTimelineRows must be true when rowCount>=200 even if isThinking===true; chat-stream-render-isolation-2026-06 task 2.x",
+      "nextAction": "Keep as regression baseline and add runtime/browser evidence before release-grade closure."
+    },
+    {
+      "source": "docs/perf/baseline.json",
+      "scenario": "S-CHAT-103",
+      "metric": "workspaceScopedRefEvictions",
+      "value": 0,
+      "unit": "count",
+      "evidenceClass": "proxy",
+      "budget": {
+        "observed": 0,
+        "target": 0,
+        "hardFail": 0,
+        "unit": "count",
+        "evidenceClass": "proxy",
+        "source": "docs/perf/baseline.json",
+        "owner": "chat-stream-render-isolation-2026-06",
+        "status": "approved-proxy-pending-test-coverage",
+        "rollout": "proxy-advisory-pending-real-trace"
+      },
+      "reason": "orphan workspace-scope ref entries after LRU eviction; chat-stream-render-isolation-2026-06 task 8.x",
+      "nextAction": "Keep as regression baseline and add runtime/browser evidence before release-grade closure."
+    },
+    {
+      "source": "docs/perf/baseline.json",
+      "scenario": "S-CHAT-104",
+      "metric": "transientTimerCleanups",
+      "value": 1,
+      "unit": "ratio",
+      "evidenceClass": "proxy",
+      "budget": {
+        "observed": 1,
+        "target": 1,
+        "hardFail": 1,
+        "unit": "ratio",
+        "evidenceClass": "proxy",
+        "source": "docs/perf/baseline.json",
+        "owner": "chat-stream-render-isolation-2026-06",
+        "status": "approved-proxy-pending-test-coverage",
+        "rollout": "proxy-advisory-pending-real-trace"
+      },
+      "reason": "fraction of active-thread switches that cleared all 7 RAF/timeout refs in Messages; chat-stream-render-isolation-2026-06 task 7.1",
+      "nextAction": "Keep as regression baseline and add runtime/browser evidence before release-grade closure."
+    },
+    {
       "source": "docs/perf/composer-baseline.json",
       "scenario": "S-CI-50",
       "metric": "keystrokeToCommitP95",
@@ -1436,6 +1764,83 @@
       },
       "reason": "measured runtime turn trace from .artifacts/realtime-runtime-diagnostics.json",
       "nextAction": "Correlate replay metrics with runtime visible-lag and terminal-pressure traces."
+    },
+    {
+      "source": "docs/perf/long-running-runtime-evidence.json",
+      "scenario": "S-LR-100",
+      "metric": "activeEngineProcessCountAfterClose",
+      "value": 0,
+      "unit": "count",
+      "evidenceClass": "measured",
+      "budget": null,
+      "reason": "registered runtime handle count; OS child liveness recorded separately under S-LR-101",
+      "nextAction": "Track for regression."
+    },
+    {
+      "source": "docs/perf/long-running-runtime-evidence.json",
+      "scenario": "S-LR-101",
+      "metric": "sampledOsChildLivenessAfterClose",
+      "value": null,
+      "unit": "count",
+      "evidenceClass": "unsupported",
+      "budget": null,
+      "reason": "Runtime does not ship a cross-platform OS child process sampler; sampler added in release-grade-evidence follow-up (task 6.4)",
+      "nextAction": "Provide supported environment evidence or preserve explicit qualifier."
+    },
+    {
+      "source": "docs/perf/long-running-runtime-evidence.json",
+      "scenario": "S-LR-110",
+      "metric": "staleEngineChildCandidateCount",
+      "value": 0,
+      "unit": "count",
+      "evidenceClass": "measured",
+      "budget": null,
+      "reason": "diagnostics-only; no auto-kill; candidates require registeredAgeMs >= 5min; OpenCode/Gemini report progress_evidence=unsupported",
+      "nextAction": "Track for regression."
+    },
+    {
+      "source": "docs/perf/long-running-runtime-evidence.json",
+      "scenario": "S-LR-200",
+      "metric": "moduleSwitchP95Ms",
+      "value": null,
+      "unit": "ms",
+      "evidenceClass": "unsupported",
+      "budget": null,
+      "reason": "jsdom cannot produce real module switch latency; requires Tauri/WebView trace",
+      "nextAction": "Provide supported environment evidence or preserve explicit qualifier."
+    },
+    {
+      "source": "docs/perf/long-running-runtime-evidence.json",
+      "scenario": "S-LR-210",
+      "metric": "visibleListRowCount",
+      "value": 36,
+      "unit": "rows",
+      "evidenceClass": "proxy",
+      "budget": 100,
+      "reason": "200-workspace / 200-thread fixture; DOM mounted row count is bounded by virtualizer overscan, not by list size; CSS defines bounded scroll viewport plus relative/absolute virtual rows",
+      "nextAction": "Keep as regression baseline and add runtime/browser evidence before release-grade closure."
+    },
+    {
+      "source": "docs/perf/long-running-runtime-evidence.json",
+      "scenario": "S-LR-300",
+      "metric": "markdownWorkerPendingRequests",
+      "value": 0,
+      "unit": "count",
+      "evidenceClass": "proxy",
+      "budget": null,
+      "reason": "pending count returns to 0 after worker dispose; worker request carries content-safe requestMeta; unit-tested in workerAdapterDiagnostics.test.ts",
+      "nextAction": "Keep as regression baseline and add runtime/browser evidence before release-grade closure."
+    },
+    {
+      "source": "docs/perf/long-running-runtime-evidence.json",
+      "scenario": "S-LR-310",
+      "metric": "streamingVisibleLagP95Ms",
+      "value": 24,
+      "unit": "ms",
+      "evidenceClass": "proxy",
+      "budget": null,
+      "reason": "reuses S-RS-VL2 proxy from chat-stream-render-isolation-2026-06; no fresh runtime trace in this change",
+      "nextAction": "Keep as regression baseline and add runtime/browser evidence before release-grade closure."
     }
   ],
   "coldStartSummary": {
@@ -1447,23 +1852,11 @@
   "archiveReadiness": {
     "source": "openspec list --json",
     "completed": [],
-    "previousArchiveContext": [
-      {
-        "name": "close-performance-iteration-2026-06",
-        "tasks": "25/25",
-        "recommendation": "previous-closure-context",
-        "qualifier": "Retained as historical closure context; not a current completed-active archive candidate."
-      }
-    ],
+    "previousArchiveContext": [],
     "inProgress": [
       {
-        "name": "close-client-performance-residual-2026-06",
-        "tasks": "0/30",
-        "recommendation": "not-archive-ready"
-      },
-      {
-        "name": "collect-release-grade-performance-evidence",
-        "tasks": "28/32",
+        "name": "fix-file-tree-virtual-scroll-height",
+        "tasks": "0/0",
         "recommendation": "not-archive-ready"
       }
     ],
@@ -1497,28 +1890,38 @@
   ],
   "largeFileSummary": {
     "source": ".artifacts/large-files-near-threshold.json",
-    "generatedAt": "2026-06-13T04:17:57.746Z",
+    "generatedAt": "2026-06-17T07:16:36.950Z",
     "status": "warn",
     "candidates": [
       {
         "path": "src/app-shell.tsx",
-        "lines": 2547,
+        "lines": 2593,
         "priority": "P0",
         "policyId": "bridge-runtime-critical",
-        "headroom": 53,
+        "headroom": 7,
         "owner": "code-health",
-        "followUp": "Declare public facade before splitting. Next split must be scoped to bridge-runtime-critical (53 lines headroom).",
+        "followUp": "Declare public facade before splitting. Next split must be scoped to bridge-runtime-critical (7 lines headroom).",
         "facade": "Declare public facade before splitting."
       },
       {
         "path": "src/services/tauri.ts",
-        "lines": 2514,
+        "lines": 2567,
         "priority": "P0",
         "policyId": "bridge-runtime-critical",
-        "headroom": 86,
+        "headroom": 33,
         "owner": "frontend-tauri-bridge",
-        "followUp": "Preserve service exports, payload mapping, and web/Tauri fallback semantics. Next split must be scoped to bridge-runtime-critical (86 lines headroom).",
+        "followUp": "Preserve service exports, payload mapping, and web/Tauri fallback semantics. Next split must be scoped to bridge-runtime-critical (33 lines headroom).",
         "facade": "Preserve service exports, payload mapping, and web/Tauri fallback semantics."
+      },
+      {
+        "path": "src-tauri/src/engine/commands.rs",
+        "lines": 2528,
+        "priority": "P0",
+        "policyId": "bridge-runtime-critical",
+        "headroom": 72,
+        "owner": "backend-engine-runtime",
+        "followUp": "Preserve command registration, Rust module facade, payload shape, and cross-platform paths. Next split must be scoped to bridge-runtime-critical (72 lines headroom).",
+        "facade": "Preserve command registration, Rust module facade, payload shape, and cross-platform paths."
       },
       {
         "path": "src-tauri/src/engine/claude_history.rs",
@@ -1561,24 +1964,24 @@
         "facade": "Preserve command registration, Rust module facade, payload shape, and cross-platform paths."
       },
       {
-        "path": "src-tauri/src/engine/commands.rs",
-        "lines": 2286,
+        "path": "src-tauri/src/engine/claude.rs",
+        "lines": 2309,
         "priority": "P0",
         "policyId": "bridge-runtime-critical",
-        "headroom": 314,
+        "headroom": 291,
         "owner": "backend-engine-runtime",
-        "followUp": "Preserve command registration, Rust module facade, payload shape, and cross-platform paths. Next split must be scoped to bridge-runtime-critical (314 lines headroom).",
+        "followUp": "Preserve command registration, Rust module facade, payload shape, and cross-platform paths. Next split must be scoped to bridge-runtime-critical (291 lines headroom).",
         "facade": "Preserve command registration, Rust module facade, payload shape, and cross-platform paths."
       },
       {
-        "path": "src-tauri/src/engine/claude.rs",
-        "lines": 2272,
-        "priority": "P0",
-        "policyId": "bridge-runtime-critical",
-        "headroom": 328,
-        "owner": "backend-engine-runtime",
-        "followUp": "Preserve command registration, Rust module facade, payload shape, and cross-platform paths. Next split must be scoped to bridge-runtime-critical (328 lines headroom).",
-        "facade": "Preserve command registration, Rust module facade, payload shape, and cross-platform paths."
+        "path": "src/features/threads/hooks/useThreadEventHandlers.ts",
+        "lines": 2799,
+        "priority": "P1",
+        "policyId": "feature-hotpath",
+        "headroom": 1,
+        "owner": "frontend-thread-runtime",
+        "followUp": "Preserve hook input/output shape and async cleanup semantics. Next split must be scoped to feature-hotpath (1 lines headroom).",
+        "facade": "Preserve hook input/output shape and async cleanup semantics."
       },
       {
         "path": "src-tauri/src/session_management.rs",
@@ -1589,16 +1992,6 @@
         "owner": "backend-runtime",
         "followUp": "Preserve command registration, Rust module facade, payload shape, and cross-platform paths. Next split must be scoped to default-source (24 lines headroom).",
         "facade": "Preserve command registration, Rust module facade, payload shape, and cross-platform paths."
-      },
-      {
-        "path": "src/features/threads/hooks/useThreadEventHandlers.ts",
-        "lines": 2747,
-        "priority": "P1",
-        "policyId": "feature-hotpath",
-        "headroom": 53,
-        "owner": "frontend-thread-runtime",
-        "followUp": "Preserve hook input/output shape and async cleanup semantics. Next split must be scoped to feature-hotpath (53 lines headroom).",
-        "facade": "Preserve hook input/output shape and async cleanup semantics."
       }
     ],
     "nextAction": "Pick one coherent runtime boundary; do not batch unrelated hot paths together."

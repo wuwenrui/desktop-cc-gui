@@ -49,7 +49,19 @@ export {
   compileFastMarkdownInWorker,
   compileFastMarkdownWithWorkerFallback,
   disposeFastMarkdownWorker,
+  getFastMarkdownWorkerDiagnostics,
+  resetFastMarkdownWorkerDiagnostics,
 } from "./workerAdapter";
+
+export {
+  getFastMarkdownHookDiagnostics,
+  resetFastMarkdownHookDiagnostics,
+  type FastMarkdownHookDiagnostics,
+} from "./hookDiagnostics";
+
+export type {
+  FastMarkdownWorkerDiagnostics,
+} from "./types";
 
 export {
   FileMarkdownFastPreview,

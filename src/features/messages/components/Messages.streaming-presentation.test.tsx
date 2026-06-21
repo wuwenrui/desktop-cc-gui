@@ -25,6 +25,12 @@ vi.mock("./MessagesTimeline", () => ({
   },
 }));
 
+vi.mock("./Markdown", () => ({
+  Markdown: ({ value, className }: { value: string; className?: string }) => (
+    <div className={className}>{value}</div>
+  ),
+}));
+
 import { Messages } from "./Messages";
 
 describe("Messages streaming presentation contract", () => {

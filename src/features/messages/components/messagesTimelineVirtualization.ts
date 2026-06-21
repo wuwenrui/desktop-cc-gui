@@ -5,6 +5,16 @@ import type { TimelineProjectionRow } from "./messagesTimelineProjection";
 export const TIMELINE_VIRTUALIZATION_MIN_ROWS = 200;
 export const TIMELINE_VIRTUALIZATION_MIN_RENDER_WEIGHT = 96;
 
+/**
+ * Escape hatch for chat-stream-render-isolation-2026-06 task 2.1.
+ * When `true`, `shouldVirtualizeTimelineRows` keeps the long-row virtualizer
+ * enabled during streaming even when `isThinking === true`; the legacy
+ * `!isThinking` short-circuit only ran for short conversations and let
+ * row counts above 200 produce unvirtualized DOM trees during long
+ * parallel-streaming sessions.
+ */
+export const TIMELINE_VIRTUALIZATION_DURING_STREAMING_ENABLED = true;
+
 export function shouldVirtualizeTimelineRows(input: {
   isThinking: boolean;
   rowCount: number;
@@ -17,7 +27,10 @@ export function shouldVirtualizeTimelineRows(input: {
   if (hasHighRenderDensity) {
     return true;
   }
-  return input.rowCount >= TIMELINE_VIRTUALIZATION_MIN_ROWS && !input.isThinking;
+  if (!TIMELINE_VIRTUALIZATION_DURING_STREAMING_ENABLED && input.isThinking) {
+    return input.rowCount >= TIMELINE_VIRTUALIZATION_MIN_ROWS;
+  }
+  return input.rowCount >= TIMELINE_VIRTUALIZATION_MIN_ROWS;
 }
 
 function estimateConversationItemRenderWeight(

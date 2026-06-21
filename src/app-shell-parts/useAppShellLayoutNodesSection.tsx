@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { useLayoutNodes } from "../features/layout/hooks/useLayoutNodes";
-import { MainHeaderActions } from "../features/app/components/MainHeaderActions";
+import { useMainHeaderActionItems } from "../features/app/components/MainHeaderActions";
 import { WorkspaceAliasPrompt } from "../features/workspaces/components/WorkspaceAliasPrompt";
 import { useClientUiVisibility } from "../features/client-ui-visibility/hooks/useClientUiVisibility";
 import { useProjectMapDataset } from "../features/project-map/hooks/useProjectMapDataset";
@@ -33,7 +33,8 @@ import {
   shouldPreserveEditorOnThreadSelect,
 } from "./threadEditorPreservation";
 import {
-  flattenAppShellDomainContexts,
+  flattenSelectedAppShellDomainContexts,
+  type AppShellDomainContextName,
   type AppShellDomainContexts,
 } from "./appShellDomainContexts";
 
@@ -55,6 +56,17 @@ type WorkspaceAliasPromptState = {
   error: string | null;
   isSaving: boolean;
 };
+
+const APP_SHELL_LAYOUT_NODES_DOMAIN_NAMES = [
+  "workspaceNavigationContext",
+  "composerContext",
+  "layoutContext",
+  "fileEditorContext",
+  "settingsContext",
+  "runtimeContext",
+  "modelSelectionContext",
+  "collaborationModeContext",
+] as const satisfies readonly AppShellDomainContextName[];
 
 function formatWorkspaceAliasError(error: unknown) {
   if (error instanceof Error) {
@@ -89,7 +101,10 @@ function flattenAppShellLayoutNodesContext(
   input: AppShellLayoutNodesSectionInput,
 ): AppShellLayoutNodesContext {
   return {
-    ...flattenAppShellDomainContexts(input.appShellDomainContexts),
+    ...flattenSelectedAppShellDomainContexts(
+      input.appShellDomainContexts,
+      APP_SHELL_LAYOUT_NODES_DOMAIN_NAMES,
+    ),
     ...input.searchAndComposerSection,
     ...input.sections,
     isPullRequestComposer: input.isPullRequestComposer,
@@ -102,6 +117,8 @@ export function useAppShellLayoutNodesSection(
   input: AppShellLayoutNodesSectionInput,
 ) {
   const ctx = flattenAppShellLayoutNodesContext(input);
+  const runtimeRunState = input.appShellDomainContexts.runtimeContext
+    .runtimeRunState as any;
   const clientUiVisibility = useClientUiVisibility();
   const [workspaceAliasPrompt, setWorkspaceAliasPrompt] =
     useState<WorkspaceAliasPromptState | null>(null);
@@ -421,7 +438,6 @@ export function useAppShellLayoutNodesSection(
     resetPullRequestSelection,
     reviewPrompt,
     rightPanelCollapsed,
-    runtimeRunState,
     scanGitRoots,
     selectBranch,
     selectBranchAtIndex,
@@ -862,6 +878,32 @@ export function useAppShellLayoutNodesSection(
       alertError(error instanceof Error ? error.message : String(error));
     });
   }, [activeWorkspace?.name, activeWorkspaceId, alertError]);
+
+  const mainHeaderActions = useMainHeaderActionItems({
+    isCompact,
+    rightPanelCollapsed,
+    sidebarToggleProps: mainHeaderSidebarToggleProps,
+    showRuntimeConsoleButton:
+      !isCompact && clientUiVisibility.isControlVisible("topTool.runtimeConsole"),
+    isRuntimeConsoleVisible: runtimeRunState.runtimeConsoleVisible,
+    onToggleRuntimeConsole: handleToggleRuntimeConsole,
+    showTerminalButton:
+      !isCompact && clientUiVisibility.isControlVisible("topTool.terminal"),
+    isTerminalOpen: terminalOpen,
+    onToggleTerminal: handleToggleTerminalPanel,
+    showSoloButton:
+      soloModeEnabled && clientUiVisibility.isControlVisible("topTool.focus"),
+    isSoloMode,
+    onToggleSoloMode: toggleSoloMode,
+    isBrowserDockOpen: browserDockOpen,
+    onToggleBrowserDock: clientUiVisibility.isControlVisible("topTool.browserDock")
+      ? handleToggleBrowserDock
+      : undefined,
+    showClientDocumentationButton:
+      !isCompact &&
+      clientUiVisibility.isControlVisible("topTool.clientDocumentation"),
+    onOpenClientDocumentation: handleOpenClientDocumentation,
+  });
   const handleCloseBrowserDock = useCallback(() => {
     // Browser Agent now lives in its own tool window.
   }, []);
@@ -1402,42 +1444,7 @@ export function useAppShellLayoutNodesSection(
       onLaunchScriptDraftChange: launchScriptState.onDraftScriptChange,
       onSaveLaunchScript: launchScriptState.onSaveLaunchScript,
       launchScriptsState,
-      mainHeaderActionsNode: (
-        <MainHeaderActions
-          isCompact={isCompact}
-          rightPanelCollapsed={rightPanelCollapsed}
-          sidebarToggleProps={mainHeaderSidebarToggleProps}
-          showRuntimeConsoleButton={
-            !isCompact &&
-            clientUiVisibility.isControlVisible("topTool.runtimeConsole")
-          }
-          isRuntimeConsoleVisible={runtimeRunState.runtimeConsoleVisible}
-          onToggleRuntimeConsole={handleToggleRuntimeConsole}
-          showTerminalButton={
-            !isCompact &&
-            clientUiVisibility.isControlVisible("topTool.terminal")
-          }
-          isTerminalOpen={terminalOpen}
-          onToggleTerminal={handleToggleTerminalPanel}
-          showSoloButton={
-            soloModeEnabled &&
-            clientUiVisibility.isControlVisible("topTool.focus")
-          }
-          isSoloMode={isSoloMode}
-          onToggleSoloMode={toggleSoloMode}
-          isBrowserDockOpen={browserDockOpen}
-          onToggleBrowserDock={
-            clientUiVisibility.isControlVisible("topTool.browserDock")
-              ? handleToggleBrowserDock
-              : undefined
-          }
-          showClientDocumentationButton={
-            !isCompact &&
-            clientUiVisibility.isControlVisible("topTool.clientDocumentation")
-          }
-          onOpenClientDocumentation={handleOpenClientDocumentation}
-        />
-      ),
+      mainHeaderActions,
       filePanelMode,
       onFilePanelModeChange: setFilePanelMode,
       liveEditPreviewEnabled,

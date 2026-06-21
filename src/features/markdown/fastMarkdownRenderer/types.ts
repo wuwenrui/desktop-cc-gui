@@ -96,10 +96,30 @@ export type CompileFastMarkdownArgs = {
   };
 };
 
+export type FastMarkdownWorkerRequestMeta = {
+  requestId: string;
+  documentKey: string;
+  contentHash: string;
+  optionsHash: string;
+  schemaVersion: "fast-markdown-worker-v1";
+  createdAtMs: number;
+};
+
 export type FastMarkdownCompileCacheKey = {
   documentKey: string;
   contentHash: string;
   rendererProfile: FastMarkdownRendererProfileId;
   boundedLineLimit: number;
   featureFlagFingerprint: string;
+};
+
+export type FastMarkdownWorkerDiagnostics = {
+  hasWorker: boolean;
+  pendingRequestCount: number;
+  disposedCount: number;
+  fallbackCount: number;
+  unknownResponseCount: number;
+  staleResultDropCount: number;
+  postMessageFailureCount: number;
+  lastFallbackReason: string | null;
 };

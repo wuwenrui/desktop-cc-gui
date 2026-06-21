@@ -30,7 +30,8 @@ import { useAppShellKanbanComposerSection } from "./useAppShellKanbanComposerSec
 import { useAppShellKanbanExecutionSection } from "./useAppShellKanbanExecutionSection";
 import {
   adaptAppShellLegacyFlatContext,
-  flattenAppShellDomainContexts,
+  flattenSelectedAppShellDomainContexts,
+  type AppShellDomainContextName,
 } from "./appShellDomainContexts";
 import type {
   UseAppShellSectionsContext,
@@ -50,11 +51,25 @@ export {
   syncKanbanExecutionEngineAndModel,
 } from "./useAppShellSections.kanbanHelpers";
 
+const APP_SHELL_SECTIONS_DOMAIN_NAMES = [
+  "workspaceNavigationContext",
+  "composerContext",
+  "layoutContext",
+  "fileEditorContext",
+  "settingsContext",
+  "runtimeContext",
+  "modelSelectionContext",
+  "collaborationModeContext",
+] as const satisfies readonly AppShellDomainContextName[];
+
 function flattenAppShellSectionsContext(
   input: UseAppShellSectionsInput,
 ): UseAppShellSectionsContext {
   return adaptAppShellLegacyFlatContext<UseAppShellSectionsContext>({
-    ...flattenAppShellDomainContexts(input.appShellDomainContexts),
+    ...flattenSelectedAppShellDomainContexts(
+      input.appShellDomainContexts,
+      APP_SHELL_SECTIONS_DOMAIN_NAMES,
+    ),
     ...input.searchAndComposerSection,
   });
 }

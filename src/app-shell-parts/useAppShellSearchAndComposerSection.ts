@@ -22,11 +22,6 @@ import {
   getThreadSelectDiffCleanupAction,
   shouldPreserveEditorOnThreadSelect,
 } from "./threadEditorPreservation";
-import {
-  adaptAppShellLegacyFlatContext,
-  flattenSelectedAppShellDomainContexts,
-  type AppShellDomainContextSelection,
-} from "./appShellDomainContexts";
 
 type AppShellTab = "projects" | "codex" | "spec" | "git" | "log";
 type CenterMode =
@@ -48,28 +43,70 @@ type FilePanelMode =
   | "radar";
 type GitPanelMode = "diff" | "log" | "issues" | "prs";
 
-type ComposerSearchLegacyPassthrough = Record<string, unknown>;
-
-const COMPOSER_SEARCH_DOMAIN_NAMES = [
-  "workspaceNavigationContext",
-  "composerContext",
-  "layoutContext",
-  "fileEditorContext",
-  "settingsContext",
-] as const;
-
-export type ComposerSearchShellDomainInput = AppShellDomainContextSelection<
-  (typeof COMPOSER_SEARCH_DOMAIN_NAMES)[number]
->;
-
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.length > 0;
 }
 
-export type ComposerSearchShellBoundary = ComposerSearchLegacyPassthrough & {
+export const COMPOSER_SEARCH_BOUNDARY_FIELD_GROUPS = {
+  searchPalette: [
+    "activeDraft",
+    "activeEditorFilePath",
+    "activeWorkspaceId",
+    "appSettings",
+    "canInterrupt",
+    "centerMode",
+    "exitDiffView",
+    "handleDraftChange",
+    "handleOpenFile",
+    "interruptTurn",
+    "isCompact",
+    "isSearchPaletteOpen",
+    "searchPaletteQuery",
+    "searchResults",
+    "searchScope",
+    "selectWorkspace",
+    "setActiveTab",
+    "setActiveThreadId",
+    "setDiffSource",
+    "setIsSearchPaletteOpen",
+    "setSearchContentFilters",
+    "setSearchPaletteQuery",
+    "setSearchPaletteSelectedIndex",
+    "setSearchScope",
+    "setSelectedCommitSha",
+    "setSelectedDiffPath",
+    "setSelectedPullRequest",
+  ],
+  composerSend: [
+    "activeWorkspace",
+    "clearActiveImages",
+    "connectWorkspace",
+    "gitPullRequestDiffs",
+    "handleSend",
+    "queueMessage",
+    "selectedPullRequest",
+    "sendUserMessageToThread",
+    "startThreadForWorkspace",
+  ],
+  gitSearchOpen: [
+    "filePanelMode",
+    "gitPanelMode",
+    "setCenterMode",
+    "setGitPanelMode",
+    "setPrefillDraft",
+  ],
+  kanbanBridge: [
+    "kanbanTasks",
+    "setAppMode",
+    "setKanbanViewState",
+    "setSelectedKanbanTaskId",
+    "workspacesByPath",
+  ],
+} as const;
+
+export type SearchPaletteBoundary = {
   activeDraft: string;
   activeEditorFilePath: string | null | undefined;
-  activeWorkspace: WorkspaceInfo | null;
   activeWorkspaceId: string | null;
   appSettings: Pick<
     AppSettings,
@@ -77,57 +114,20 @@ export type ComposerSearchShellBoundary = ComposerSearchLegacyPassthrough & {
   >;
   canInterrupt: boolean;
   centerMode: CenterMode;
-  clearActiveImages: () => void;
-  connectWorkspace: (workspace: WorkspaceInfo) => Promise<void>;
   exitDiffView: () => void;
-  filePanelMode: FilePanelMode;
-  gitPanelMode: GitPanelMode;
-  gitPullRequestDiffs: GitHubPullRequestDiff[];
   handleDraftChange: (draft: string) => void;
   handleOpenFile: (filePath: string) => void;
-  handleSend: (
-    text: string,
-    images: string[],
-    options?: MessageSendOptions,
-  ) => Promise<void>;
   interruptTurn: () => Promise<unknown> | unknown;
   isCompact: boolean;
   isSearchPaletteOpen: boolean;
-  kanbanTasks: KanbanTask[];
-  queueMessage: (
-    text: string,
-    images: string[],
-    options?: MessageSendOptions,
-  ) => Promise<void>;
   searchPaletteQuery: string;
   searchResults: SearchResult[];
   searchScope: SearchScope;
   selectWorkspace: (workspaceId: string) => void;
-  selectedPullRequest: GitHubPullRequest | null;
-  sendUserMessageToThread: (
-    workspace: WorkspaceInfo,
-    threadId: string,
-    text: string,
-    images?: string[],
-    options?: MessageSendOptions,
-  ) => Promise<void>;
   setActiveTab: (tab: AppShellTab) => void;
   setActiveThreadId: (threadId: string, workspaceId: string) => void;
-  setAppMode: (mode: "chat" | "kanban") => void;
-  setCenterMode: (mode: CenterMode) => void;
   setDiffSource: (source: DiffSource) => void;
-  setGitPanelMode: (mode: GitPanelMode) => void;
   setIsSearchPaletteOpen: (open: boolean) => void;
-  setKanbanViewState: (state: {
-    view: "board";
-    workspaceId: string;
-    panelId: string;
-  }) => void;
-  setPrefillDraft: (draft: {
-    id: string;
-    text: string;
-    createdAt: number;
-  }) => void;
   setSearchContentFilters: (
     updater: (previous: SearchContentFilter[]) => SearchContentFilter[],
   ) => void;
@@ -138,27 +138,70 @@ export type ComposerSearchShellBoundary = ComposerSearchLegacyPassthrough & {
   setSearchScope: (scope: SearchScope) => void;
   setSelectedCommitSha: (sha: string | null) => void;
   setSelectedDiffPath: (path: string | null) => void;
-  setSelectedKanbanTaskId: (taskId: string | null) => void;
   setSelectedPullRequest: (pullRequest: GitHubPullRequest | null) => void;
+};
+
+export type ComposerSendBoundary = {
+  activeWorkspace: WorkspaceInfo | null;
+  clearActiveImages: () => void;
+  connectWorkspace: (workspace: WorkspaceInfo) => Promise<void>;
+  gitPullRequestDiffs: GitHubPullRequestDiff[];
+  handleSend: (
+    text: string,
+    images: string[],
+    options?: MessageSendOptions,
+  ) => Promise<void>;
+  queueMessage: (
+    text: string,
+    images: string[],
+    options?: MessageSendOptions,
+  ) => Promise<void>;
+  selectedPullRequest: GitHubPullRequest | null;
+  sendUserMessageToThread: (
+    workspace: WorkspaceInfo,
+    threadId: string,
+    text: string,
+    images?: string[],
+    options?: MessageSendOptions,
+  ) => Promise<void>;
   startThreadForWorkspace: (
     workspaceId: string,
     options?: { activate?: boolean },
   ) => Promise<string | null>;
+};
+
+export type GitSearchOpenBoundary = {
+  filePanelMode: FilePanelMode;
+  gitPanelMode: GitPanelMode;
+  setCenterMode: (mode: CenterMode) => void;
+  setGitPanelMode: (mode: GitPanelMode) => void;
+  setPrefillDraft: (draft: {
+    id: string;
+    text: string;
+    createdAt: number;
+  }) => void;
+};
+
+export type KanbanComposerBridgeBoundary = {
+  kanbanTasks: KanbanTask[];
+  setAppMode: (mode: "chat" | "kanban") => void;
+  setKanbanViewState: (state: {
+    view: "board";
+    workspaceId: string;
+    panelId: string;
+  }) => void;
+  setSelectedKanbanTaskId: (taskId: string | null) => void;
   workspacesByPath: Map<string, WorkspaceInfo>;
 };
 
-function flattenComposerSearchShellBoundary(
-  input: ComposerSearchShellDomainInput,
-): ComposerSearchShellBoundary {
-  return adaptAppShellLegacyFlatContext<ComposerSearchShellBoundary>(
-    flattenSelectedAppShellDomainContexts(input, COMPOSER_SEARCH_DOMAIN_NAMES),
-  );
-}
+export type ComposerSearchShellBoundary = SearchPaletteBoundary &
+  ComposerSendBoundary &
+  GitSearchOpenBoundary &
+  KanbanComposerBridgeBoundary;
 
 export function useAppShellSearchAndComposerSection(
-  input: ComposerSearchShellDomainInput,
+  input: ComposerSearchShellBoundary,
 ) {
-  const ctx = flattenComposerSearchShellBoundary(input);
   const {
     activeDraft,
     activeEditorFilePath,
@@ -206,7 +249,7 @@ export function useAppShellSearchAndComposerSection(
     setSelectedPullRequest,
     startThreadForWorkspace,
     workspacesByPath,
-  } = ctx;
+  } = input;
 
   const closeSearchPalette = useCallback(() => {
     setIsSearchPaletteOpen(false);

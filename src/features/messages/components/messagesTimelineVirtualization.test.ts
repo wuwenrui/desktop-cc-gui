@@ -24,10 +24,18 @@ describe("messagesTimelineVirtualization", () => {
     })).toBe(false);
   });
 
-  it("keeps active streaming timelines out of row-count virtualization", () => {
+  it("keeps active streaming timelines virtualized when rowCount is above the minimum (chat-stream-render-isolation-2026-06 task 2.1)", () => {
     expect(shouldVirtualizeTimelineRows({
       isThinking: true,
       rowCount: 1_000,
+    })).toBe(true);
+    expect(shouldVirtualizeTimelineRows({
+      isThinking: true,
+      rowCount: 200,
+    })).toBe(true);
+    expect(shouldVirtualizeTimelineRows({
+      isThinking: true,
+      rowCount: 50,
     })).toBe(false);
   });
 

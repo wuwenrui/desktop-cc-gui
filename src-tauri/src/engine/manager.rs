@@ -308,6 +308,23 @@ impl EngineManager {
         sessions.get(workspace_id).cloned()
     }
 
+    /// Snapshot all tracked OpenCode sessions.
+    pub async fn list_opencode_sessions(&self) -> Vec<(String, Arc<OpenCodeSession>)> {
+        let sessions = self.opencode_sessions.lock().await;
+        sessions
+            .iter()
+            .map(|(workspace_id, session)| (workspace_id.clone(), session.clone()))
+            .collect()
+    }
+
+    /// Snapshot all tracked Gemini sessions.
+    pub async fn list_gemini_sessions(&self) -> Vec<(String, Arc<GeminiSession>)> {
+        let sessions = self.gemini_sessions.lock().await;
+        sessions
+            .iter()
+            .map(|(workspace_id, session)| (workspace_id.clone(), session.clone()))
+            .collect()
+    }
     /// Remove a Gemini session
     pub async fn remove_gemini_session(&self, workspace_id: &str) {
         let mut sessions = self.gemini_sessions.lock().await;

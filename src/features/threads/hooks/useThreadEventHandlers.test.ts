@@ -2,6 +2,10 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  createWorkspaceScopedMap,
+  workspaceScopedSet,
+} from "./workspaceScopedMap";
+import {
   CODEX_EXECUTION_ACTIVE_NO_PROGRESS_STALL_MS,
   CODEX_TURN_NO_PROGRESS_STALL_MS,
   useThreadEventHandlers,
@@ -222,8 +226,8 @@ function makeOptions(onDebug = vi.fn()) {
     onWorkspaceConnected: vi.fn(),
     applyCollabThreadLinks: vi.fn(),
     approvalAllowlistRef: { current: {} },
-    pendingInterruptsRef: { current: new Set<string>() },
-    interruptedThreadsRef: { current: new Set<string>() },
+    pendingInterruptsRef: { current: createWorkspaceScopedMap<true>() },
+    interruptedThreadsRef: { current: createWorkspaceScopedMap<true>() },
     renameCustomNameKey: vi.fn(),
     renameAutoTitlePendingKey: vi.fn(),
     renameThreadTitleMapping: vi.fn(),
@@ -611,7 +615,7 @@ describe("useThreadEventHandlers diagnostics", () => {
 
     act(() => {
       result.current.onTurnStarted("ws-1", "thread-1", "turn-1");
-      options.interruptedThreadsRef.current.add("thread-1");
+      workspaceScopedSet(options.interruptedThreadsRef.current, "ws-1", "thread-1", true);
       vi.advanceTimersByTime(CODEX_TURN_NO_PROGRESS_STALL_MS);
     });
 
@@ -672,7 +676,7 @@ describe("useThreadEventHandlers diagnostics", () => {
 
     act(() => {
       result.current.onTurnStarted("ws-1", "thread-1", "claude-turn-1");
-      options.interruptedThreadsRef.current.add("thread-1");
+      workspaceScopedSet(options.interruptedThreadsRef.current, "ws-1", "thread-1", true);
       vi.advanceTimersByTime(CODEX_TURN_NO_PROGRESS_STALL_MS);
     });
 
@@ -2173,7 +2177,7 @@ describe("useThreadEventHandlers diagnostics", () => {
   it("does not record first-delta diagnostics for interrupted threads", () => {
     const onDebug = vi.fn();
     const options = makeOptions(onDebug);
-    options.interruptedThreadsRef.current.add("thread-1");
+    workspaceScopedSet(options.interruptedThreadsRef.current, "ws-1", "thread-1", true);
     const { result } = renderHook(() => useThreadEventHandlers(options));
 
     act(() => {

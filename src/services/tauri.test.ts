@@ -2584,15 +2584,34 @@ describe("tauri invoke wrappers", () => {
           workspaceId: "ws-1",
           engine: "claude",
           activeProcessIds: [101, 102],
+          registeredActiveProcesses: [
+            { pid: 101, registeredAgeMs: 0 },
+            { pid: 102, registeredAgeMs: 0 },
+          ],
         },
       ],
       unsupportedReason: null,
+      osChildLiveness: {
+        evidenceClass: "unsupported",
+        sampledAfterCloseMs: 0,
+        sampledOsChildCount: null,
+        sampler: null,
+        rationale:
+          "Runtime does not ship a cross-platform OS child process sampler.",
+      },
+      staleChildCandidates: [],
     });
 
     const diagnostics = await getEngineActiveProcessDiagnostics();
 
     expect(diagnostics.totalActiveProcessCount).toBe(2);
     expect(diagnostics.workspaces[0]?.activeProcessIds).toEqual([101, 102]);
+    expect(diagnostics.workspaces[0]?.registeredActiveProcesses).toEqual([
+      { pid: 101, registeredAgeMs: 0 },
+      { pid: 102, registeredAgeMs: 0 },
+    ]);
+    expect(diagnostics.osChildLiveness.evidenceClass).toBe("unsupported");
+    expect(diagnostics.staleChildCandidates).toEqual([]);
     expect(invokeMock).toHaveBeenCalledWith(
       "get_engine_active_process_diagnostics",
     );

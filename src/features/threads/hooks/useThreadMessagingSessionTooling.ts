@@ -66,7 +66,11 @@ type UseThreadMessagingSessionToolingOptions = {
     options?: { activate?: boolean; providerProfileId?: string | null },
   ) => Promise<string | null>;
   updateThreadParent: (parentId: string, childIds: string[]) => void;
-  pushThreadErrorMessage: (threadId: string, message: string) => void;
+  pushThreadErrorMessage: (
+    workspaceId: string,
+    threadId: string,
+    message: string,
+  ) => void;
   recordThreadActivity: (
     workspaceId: string,
     threadId: string,
@@ -256,6 +260,7 @@ export function useThreadMessagingSessionTooling({
           safeMessageActivity();
         } catch (error) {
           pushThreadErrorMessage(
+            activeWorkspace.id,
             threadId,
             error instanceof Error ? error.message : String(error),
           );
@@ -554,7 +559,7 @@ export function useThreadMessagingSessionTooling({
           const message = reason
             ? t("threads.contextCompactionFailedWithMessage", { message: reason })
             : t("threads.contextCompactionFailed");
-          pushThreadErrorMessage(threadId, message);
+          pushThreadErrorMessage(activeWorkspace.id, threadId, message);
           safeMessageActivity();
         }
         return;
@@ -603,7 +608,7 @@ export function useThreadMessagingSessionTooling({
         const message = reason
           ? t("threads.contextCompactionFailedWithMessage", { message: reason })
           : t("threads.contextCompactionFailed");
-        pushThreadErrorMessage(threadId, message);
+        pushThreadErrorMessage(activeWorkspace.id, threadId, message);
         safeMessageActivity();
       }
     },
@@ -785,6 +790,7 @@ export function useThreadMessagingSessionTooling({
       const sessionId = resolveOpenCodeSessionId(threadId, text);
       if (!sessionId) {
         pushThreadErrorMessage(
+          activeWorkspace.id,
           threadId,
           "OpenCode export requires an opencode session. Open an OpenCode thread first.",
         );
@@ -809,6 +815,7 @@ export function useThreadMessagingSessionTooling({
         safeMessageActivity();
       } catch (error) {
         pushThreadErrorMessage(
+          activeWorkspace.id,
           threadId,
           error instanceof Error ? error.message : String(error),
         );
@@ -838,6 +845,7 @@ export function useThreadMessagingSessionTooling({
       const sessionId = resolveOpenCodeSessionId(threadId, text);
       if (!sessionId) {
         pushThreadErrorMessage(
+          activeWorkspace.id,
           threadId,
           "OpenCode share requires an opencode session. Open an OpenCode thread first.",
         );
@@ -856,6 +864,7 @@ export function useThreadMessagingSessionTooling({
         safeMessageActivity();
       } catch (error) {
         pushThreadErrorMessage(
+          activeWorkspace.id,
           threadId,
           error instanceof Error ? error.message : String(error),
         );
@@ -887,6 +896,7 @@ export function useThreadMessagingSessionTooling({
       );
       if (!source) {
         pushThreadErrorMessage(
+          activeWorkspace.id,
           threadId,
           "Usage: /import <path-or-url>",
         );
@@ -936,6 +946,7 @@ export function useThreadMessagingSessionTooling({
         });
       } catch (error) {
         pushThreadErrorMessage(
+          activeWorkspace.id,
           threadId,
           error instanceof Error ? error.message : String(error),
         );
@@ -1167,6 +1178,7 @@ export function useThreadMessagingSessionTooling({
         });
       } catch (error) {
         pushThreadErrorMessage(
+          activeWorkspace.id,
           threadId,
           error instanceof Error ? error.message : String(error),
         );

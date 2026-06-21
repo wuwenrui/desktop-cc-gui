@@ -15,7 +15,8 @@ import {
 } from "../features/layout/utils/sidebarTogglePlacement";
 import {
   adaptAppShellLegacyFlatContext,
-  flattenAppShellDomainContexts,
+  flattenSelectedAppShellDomainContexts,
+  type AppShellDomainContextName,
 } from "./appShellDomainContexts";
 import {
   GitHistoryPanel,
@@ -29,6 +30,17 @@ import type {
   RenderAppShellContext,
   RenderAppShellFlattenedContext,
 } from "./renderAppShellTypes";
+
+const RENDER_APP_SHELL_DOMAIN_NAMES = [
+  "workspaceNavigationContext",
+  "composerContext",
+  "layoutContext",
+  "fileEditorContext",
+  "settingsContext",
+  "runtimeContext",
+  "modelSelectionContext",
+  "collaborationModeContext",
+] as const satisfies readonly AppShellDomainContextName[];
 
 export function injectSidebarTopbarNode(
   sidebarNode: React.ReactNode,
@@ -62,7 +74,10 @@ export function injectSidebarTopbarNode(
 export function renderAppShell(ctx: RenderAppShellContext) {
   const legacyCtx =
     adaptAppShellLegacyFlatContext<RenderAppShellFlattenedContext>({
-      ...flattenAppShellDomainContexts(ctx.appShellDomainContexts),
+      ...flattenSelectedAppShellDomainContexts(
+        ctx.appShellDomainContexts,
+        RENDER_APP_SHELL_DOMAIN_NAMES,
+      ),
       ...ctx.searchAndComposerSection,
       ...ctx.sections,
       ...ctx.layoutNodes,

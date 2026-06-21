@@ -4,6 +4,7 @@ import {
   compactComparableConversationText,
 } from "../assembly/conversationNormalization";
 import {
+  chooseAppleEventDiagnosticTextVariant,
   collapseNearDuplicateParagraphRepeats,
   mergeNearDuplicateParagraphVariants,
 } from "../../../utils/assistantDuplicateParagraphs";
@@ -527,6 +528,10 @@ function scoreParagraphFragmentation(value: string) {
 }
 
 function chooseReadableText(existing: string, incoming: string) {
+  const diagnosticText = chooseAppleEventDiagnosticTextVariant(existing, incoming);
+  if (diagnosticText) {
+    return diagnosticText;
+  }
   const existingScore = scoreParagraphFragmentation(existing);
   const incomingScore = scoreParagraphFragmentation(incoming);
   if (incomingScore < existingScore) {
@@ -888,7 +893,7 @@ export function mergeCompletedAgentText(
     normalizedCompleted,
   );
   if (nearDuplicateParagraphMerge) {
-    return nearDuplicateParagraphMerge;
+    return chooseReadableText(nearDuplicateParagraphMerge, normalizedCompleted);
   }
 
   const comparableExisting = compactComparableStreamingText(existing);

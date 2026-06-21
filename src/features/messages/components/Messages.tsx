@@ -451,9 +451,35 @@ export const Messages = memo(function Messages({
     setIsSelectionFrozen(false);
     frozenItemsRef.current = null;
     pendingHistoryExpansionScrollSnapshotRef.current = null;
-    if (assistantFinalizingTimerRef.current !== null) {
-      window.clearTimeout(assistantFinalizingTimerRef.current);
-      assistantFinalizingTimerRef.current = null;
+    if (typeof window !== "undefined") {
+      if (anchorUpdateRafRef.current !== null) {
+        window.cancelAnimationFrame(anchorUpdateRafRef.current);
+        anchorUpdateRafRef.current = null;
+      }
+      if (historyStickyUpdateRafRef.current !== null) {
+        window.cancelAnimationFrame(historyStickyUpdateRafRef.current);
+        historyStickyUpdateRafRef.current = null;
+      }
+      if (planPanelFocusRafRef.current !== null) {
+        window.cancelAnimationFrame(planPanelFocusRafRef.current);
+        planPanelFocusRafRef.current = null;
+      }
+      if (planPanelFocusTimeoutRef.current !== null) {
+        window.clearTimeout(planPanelFocusTimeoutRef.current);
+        planPanelFocusTimeoutRef.current = null;
+      }
+      if (assistantFinalizingTimerRef.current !== null) {
+        window.clearTimeout(assistantFinalizingTimerRef.current);
+        assistantFinalizingTimerRef.current = null;
+      }
+      if (copyTimeoutRef.current !== null) {
+        window.clearTimeout(copyTimeoutRef.current);
+        copyTimeoutRef.current = null;
+      }
+      if (scrollThrottleRef.current) {
+        window.clearTimeout(scrollThrottleRef.current);
+        scrollThrottleRef.current = 0;
+      }
     }
     setFinalizingAssistantMessageId(null);
     previousAssistantThinkingRef.current = false;

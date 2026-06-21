@@ -833,3 +833,24 @@ fn collect_latest_turn_reasoning_texts_stops_at_latest_user_boundary() {
         vec!["先看目录".to_string(), "再读 README".to_string()]
     );
 }
+
+#[tokio::test]
+async fn active_process_ids_is_empty_when_no_processes_running() {
+    let session = GeminiSession::new(
+        "ws-drop-test".to_string(),
+        PathBuf::from("/tmp/ws-drop-test"),
+        None,
+    );
+    assert!(session.active_process_ids().await.is_empty());
+    drop(session);
+}
+
+#[tokio::test]
+async fn drop_fallback_does_not_panic_on_empty_active_processes() {
+    let session = GeminiSession::new(
+        "ws-drop-test-2".to_string(),
+        PathBuf::from("/tmp/ws-drop-test-2"),
+        None,
+    );
+    drop(session);
+}

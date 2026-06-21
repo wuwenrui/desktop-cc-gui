@@ -10,6 +10,9 @@ import {
   buildLiveAssistantShadowTranscriptId,
 } from "../utils/liveAssistantShadowTranscript";
 import { useThreadItemEvents } from "./useThreadItemEvents";
+import {
+  workspaceScopedSet,
+} from "./workspaceScopedMap";
 
 vi.mock("../../../utils/threadItems", () => ({
   buildConversationItem: vi.fn(),
@@ -47,8 +50,10 @@ const makeOptions = (overrides: SetupOverrides = {}) => {
   const getCustomName =
     overrides.getCustomName ?? vi.fn(() => undefined);
   const resolveCollaborationUiMode = overrides.resolveCollaborationUiMode ?? undefined;
+  // chat-stream-render-isolation-2026-06 task 8: workspace-scope ref
+  // shape migrated from Set<threadId> to Map<workspaceId, Map<threadId, true>>.
   const interruptedThreadsRef = {
-    current: new Set<string>(),
+    current: new Map<string, Map<string, true>>(),
   };
   const onAgentMessageCompletedExternal =
     overrides.onAgentMessageCompletedExternal ?? undefined;
@@ -999,7 +1004,7 @@ describe("useThreadItemEvents", () => {
   it("skips reasoning deltas for interrupted threads", () => {
     const { result, dispatch, markProcessing, safeMessageActivity, interruptedThreadsRef } =
       makeOptions();
-    interruptedThreadsRef.current.add("claude:session-1");
+    workspaceScopedSet(interruptedThreadsRef.current, "ws-1", "claude:session-1", true);
 
     act(() => {
       result.current.onReasoningSummaryDelta(
@@ -1040,7 +1045,7 @@ describe("useThreadItemEvents", () => {
 
   it("skips agent message deltas for interrupted threads", () => {
     const { result, dispatch, markProcessing, interruptedThreadsRef } = makeOptions();
-    interruptedThreadsRef.current.add("thread-1");
+    workspaceScopedSet(interruptedThreadsRef.current, "ws-1", "thread-1", true);
 
     act(() => {
       result.current.onAgentMessageDelta({
@@ -1058,7 +1063,7 @@ describe("useThreadItemEvents", () => {
   it("skips gemini item snapshots for interrupted threads", () => {
     const { result, dispatch, markProcessing, interruptedThreadsRef, safeMessageActivity } =
       makeOptions();
-    interruptedThreadsRef.current.add("gemini:session-1");
+    workspaceScopedSet(interruptedThreadsRef.current, "ws-1", "gemini:session-1", true);
 
     act(() => {
       result.current.onItemStarted("ws-1", "gemini:session-1", {
@@ -1075,7 +1080,7 @@ describe("useThreadItemEvents", () => {
   it("skips claude item snapshots for interrupted threads", () => {
     const { result, dispatch, markProcessing, interruptedThreadsRef, safeMessageActivity } =
       makeOptions();
-    interruptedThreadsRef.current.add("claude:session-1");
+    workspaceScopedSet(interruptedThreadsRef.current, "ws-1", "claude:session-1", true);
 
     act(() => {
       result.current.onItemUpdated("ws-1", "claude:session-1", {
@@ -1099,7 +1104,7 @@ describe("useThreadItemEvents", () => {
     } = makeOptions({
       onAgentMessageCompletedExternal: vi.fn(),
     });
-    interruptedThreadsRef.current.add("gemini:session-1");
+    workspaceScopedSet(interruptedThreadsRef.current, "ws-1", "gemini:session-1", true);
 
     act(() => {
       result.current.onAgentMessageCompleted({
@@ -1123,7 +1128,7 @@ describe("useThreadItemEvents", () => {
     } = makeOptions({
       onAgentMessageCompletedExternal: vi.fn(),
     });
-    interruptedThreadsRef.current.add("claude:session-1");
+    workspaceScopedSet(interruptedThreadsRef.current, "ws-1", "claude:session-1", true);
 
     act(() => {
       result.current.onAgentMessageCompleted({

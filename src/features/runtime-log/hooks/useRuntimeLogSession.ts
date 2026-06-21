@@ -351,6 +351,11 @@ export function useRuntimeLogSession({
   >({});
   const exitBufferByWorkspaceRef = useRef<Record<string, string>>({});
   const detectedProfilesByWorkspaceRef = useRef<Record<string, RuntimeProfileDescriptor[]>>({});
+  const pendingChunkByWorkspaceRef = useRef<Map<string, string>>(new Map());
+  const flushScheduledRef = useRef(false);
+  const rafHandleRef = useRef<number | null>(null);
+  const timeoutHandleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
     detectedProfilesByWorkspaceRef.current = detectedProfilesByWorkspace;
@@ -405,28 +410,40 @@ export function useRuntimeLogSession({
     return exitCode;
   }, []);
 
-  useEffect(() => {
-    const unsubscribe = subscribeTerminalOutput((event: TerminalOutputEvent) => {
-      if (event.terminalId !== RUNTIME_TERMINAL_ID) {
-        return;
-      }
+  const flushPendingChunks = useCallback(() => {
+    if (!mountedRef.current) {
+      return;
+    }
 
-      appendWorkspaceLog(event.workspaceId, event.data);
+    flushScheduledRef.current = false;
+    rafHandleRef.current = null;
+    timeoutHandleRef.current = null;
 
-      const exitCode = consumeExitCode(event.workspaceId, event.data);
+    const pendingChunks = pendingChunkByWorkspaceRef.current;
+    if (pendingChunks.size === 0) {
+      return;
+    }
+
+    const chunksByWorkspace = new Map(pendingChunks);
+    pendingChunks.clear();
+
+    for (const [workspaceId, data] of chunksByWorkspace) {
+      appendWorkspaceLog(workspaceId, data);
+
+      const exitCode = consumeExitCode(workspaceId, data);
       if (exitCode !== null) {
-        updateWorkspaceSession(event.workspaceId, (current) => ({
+        updateWorkspaceSession(workspaceId, (current) => ({
           ...current,
           visible: true,
           exitCode,
           status: exitCode === 0 ? "stopped" : "error",
           error: exitCode === 0 ? null : `Process exited with code ${exitCode}.`,
         }));
-        void runtimeLogMarkExit(event.workspaceId, exitCode).catch(() => undefined);
-        return;
+        void runtimeLogMarkExit(workspaceId, exitCode).catch(() => undefined);
+        continue;
       }
 
-      updateWorkspaceSession(event.workspaceId, (current) => ({
+      updateWorkspaceSession(workspaceId, (current) => ({
         ...current,
         visible: true,
         status:
@@ -434,11 +451,60 @@ export function useRuntimeLogSession({
             ? "running"
             : current.status,
       }));
+    }
+  }, [appendWorkspaceLog, consumeExitCode, updateWorkspaceSession]);
+
+  const schedulePendingChunkFlush = useCallback(() => {
+    if (flushScheduledRef.current) {
+      return;
+    }
+
+    flushScheduledRef.current = true;
+    if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+      rafHandleRef.current = window.requestAnimationFrame(() => {
+        flushPendingChunks();
+      });
+      return;
+    }
+
+    timeoutHandleRef.current = setTimeout(flushPendingChunks, 0);
+  }, [flushPendingChunks]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    const pendingChunks = pendingChunkByWorkspaceRef.current;
+    const unsubscribe = subscribeTerminalOutput((event: TerminalOutputEvent) => {
+      if (
+        event.terminalId !== RUNTIME_TERMINAL_ID ||
+        !event.workspaceId ||
+        event.data.length === 0
+      ) {
+        return;
+      }
+
+      const currentChunk = pendingChunks.get(event.workspaceId) ?? "";
+      pendingChunks.set(event.workspaceId, `${currentChunk}${event.data}`);
+      schedulePendingChunkFlush();
     });
     return () => {
+      mountedRef.current = false;
       unsubscribe();
+      if (
+        rafHandleRef.current !== null &&
+        typeof window !== "undefined" &&
+        typeof window.cancelAnimationFrame === "function"
+      ) {
+        window.cancelAnimationFrame(rafHandleRef.current);
+      }
+      if (timeoutHandleRef.current !== null) {
+        clearTimeout(timeoutHandleRef.current);
+      }
+      rafHandleRef.current = null;
+      timeoutHandleRef.current = null;
+      flushScheduledRef.current = false;
+      pendingChunks.clear();
     };
-  }, [appendWorkspaceLog, consumeExitCode, updateWorkspaceSession]);
+  }, [schedulePendingChunkFlush]);
 
   useEffect(() => {
     const unsubscribeStatus = subscribeRuntimeLogStatus((event) => {
@@ -799,28 +865,54 @@ export function useRuntimeLogSession({
     }));
   }, [activeWorkspaceId, updateWorkspaceSession]);
 
-  return {
-    onOpenRuntimeConsole,
-    onSelectRuntimeCommandPreset,
-    onChangeRuntimeCommandInput,
-    onRunProject,
-    onStopProject,
-    onClearRuntimeLogs,
-    onCopyRuntimeLogs,
-    onToggleRuntimeAutoScroll,
-    onToggleRuntimeWrapLines,
-    onCloseRuntimeConsole,
-    runtimeAutoScroll: activeSession.autoScroll,
-    runtimeWrapLines: activeSession.wrapLines,
-    runtimeConsoleVisible: activeSession.visible,
-    runtimeConsoleStatus: activeSession.status,
-    runtimeConsoleCommandPreview: activeSession.commandPreview,
-    runtimeCommandPresetOptions,
-    runtimeCommandPresetId: activeSession.commandPresetId,
-    runtimeCommandInput: activeSession.commandInput,
-    runtimeConsoleLog: activeSession.log,
-    runtimeConsoleError: activeSession.error,
-    runtimeConsoleTruncated: activeSession.truncated,
-    runtimeConsoleExitCode: activeSession.exitCode,
-  };
+  return useMemo<RuntimeLogSessionState>(
+    () => ({
+      onOpenRuntimeConsole,
+      onSelectRuntimeCommandPreset,
+      onChangeRuntimeCommandInput,
+      onRunProject,
+      onStopProject,
+      onClearRuntimeLogs,
+      onCopyRuntimeLogs,
+      onToggleRuntimeAutoScroll,
+      onToggleRuntimeWrapLines,
+      onCloseRuntimeConsole,
+      runtimeAutoScroll: activeSession.autoScroll,
+      runtimeWrapLines: activeSession.wrapLines,
+      runtimeConsoleVisible: activeSession.visible,
+      runtimeConsoleStatus: activeSession.status,
+      runtimeConsoleCommandPreview: activeSession.commandPreview,
+      runtimeCommandPresetOptions,
+      runtimeCommandPresetId: activeSession.commandPresetId,
+      runtimeCommandInput: activeSession.commandInput,
+      runtimeConsoleLog: activeSession.log,
+      runtimeConsoleError: activeSession.error,
+      runtimeConsoleTruncated: activeSession.truncated,
+      runtimeConsoleExitCode: activeSession.exitCode,
+    }),
+    [
+      onOpenRuntimeConsole,
+      onSelectRuntimeCommandPreset,
+      onChangeRuntimeCommandInput,
+      onRunProject,
+      onStopProject,
+      onClearRuntimeLogs,
+      onCopyRuntimeLogs,
+      onToggleRuntimeAutoScroll,
+      onToggleRuntimeWrapLines,
+      onCloseRuntimeConsole,
+      activeSession.autoScroll,
+      activeSession.wrapLines,
+      activeSession.visible,
+      activeSession.status,
+      activeSession.commandPreview,
+      runtimeCommandPresetOptions,
+      activeSession.commandPresetId,
+      activeSession.commandInput,
+      activeSession.log,
+      activeSession.error,
+      activeSession.truncated,
+      activeSession.exitCode,
+    ],
+  );
 }

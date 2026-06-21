@@ -1,7 +1,11 @@
 import { compileFastMarkdown } from "./compile";
+import { workerDiagnostics } from "./workerAdapterDiagnostics";
+import { hashStableString } from "../../files/utils/fileMarkdownDocument";
 import type {
   CompileFastMarkdownArgs,
   FastMarkdownRenderResult,
+  FastMarkdownWorkerRequestMeta,
+  FastMarkdownWorkerDiagnostics,
 } from "./types";
 
 type FastMarkdownWorkerResponse =
@@ -22,6 +26,7 @@ type FastMarkdownWorkerResponse =
 type PendingWorkerRequest = {
   resolve: (result: FastMarkdownRenderResult) => void;
   reject: (error: Error) => void;
+  requestMeta: FastMarkdownWorkerRequestMeta;
 };
 
 let sharedWorker: Worker | null = null;
@@ -38,8 +43,12 @@ export async function compileFastMarkdownWithWorkerFallback(
     if (workerResult) {
       return workerResult;
     }
+    workerDiagnostics.recordFallback("worker-not-available");
   } catch (error: unknown) {
     reportWorkerFallback(error);
+    workerDiagnostics.recordFallback(
+      error instanceof Error ? error.message : "unknown",
+    );
   }
   return compileFastMarkdown(args);
 }
@@ -49,23 +58,38 @@ export function compileFastMarkdownInWorker(
 ): Promise<FastMarkdownRenderResult> | null {
   const worker = getSharedWorker();
   if (!worker) {
+    workerDiagnostics.setHasWorker(false);
     return null;
   }
 
   const requestId = createRequestId(args.documentKey);
+  const requestMeta = createWorkerRequestMeta(requestId, args);
+  workerDiagnostics.setPendingCount(pendingRequests.size + 1);
   return new Promise<FastMarkdownRenderResult>((resolve, reject) => {
-    pendingRequests.set(requestId, { resolve, reject });
+    pendingRequests.set(requestId, { resolve, reject, requestMeta });
     try {
       worker.postMessage({
         type: "compile-fast-markdown",
         requestId,
+        requestMeta,
         args,
       });
     } catch (error: unknown) {
       pendingRequests.delete(requestId);
+      workerDiagnostics.setPendingCount(pendingRequests.size);
+      workerDiagnostics.recordPostMessageFailure();
       reject(error instanceof Error ? error : new Error(String(error)));
     }
   });
+}
+
+export function getFastMarkdownWorkerDiagnostics(): FastMarkdownWorkerDiagnostics {
+  return workerDiagnostics.snapshot();
+}
+
+export function resetFastMarkdownWorkerDiagnostics(): void {
+  workerDiagnostics.reset();
+  workerDiagnostics.setPendingCount(pendingRequests.size);
 }
 
 export function disposeFastMarkdownWorker() {
@@ -75,6 +99,8 @@ export function disposeFastMarkdownWorker() {
   sharedWorker = null;
   listenersAttached = false;
   rejectAllPendingRequests(new Error("Fast Markdown worker disposed"));
+  workerDiagnostics.recordDispose();
+  workerDiagnostics.setHasWorker(false);
 }
 
 function getSharedWorker(): Worker | null {
@@ -86,8 +112,11 @@ function getSharedWorker(): Worker | null {
       sharedWorker = new Worker(new URL("./fastMarkdown.worker.ts", import.meta.url), {
         type: "module",
       });
+      workerDiagnostics.setHasWorker(true);
     } catch {
       sharedWorker = null;
+      workerDiagnostics.setHasWorker(false);
+      workerDiagnostics.recordFallback("worker-creation-failed");
       return null;
     }
   }
@@ -107,14 +136,17 @@ function attachWorkerListeners(worker: Worker) {
 function handleWorkerMessage(event: MessageEvent<unknown>) {
   const message = event.data;
   if (!isWorkerResponse(message)) {
+    workerDiagnostics.recordUnknownResponse();
     return;
   }
 
   const pending = pendingRequests.get(message.requestId);
   if (!pending) {
+    workerDiagnostics.recordUnknownResponse();
     return;
   }
   pendingRequests.delete(message.requestId);
+  workerDiagnostics.setPendingCount(pendingRequests.size);
 
   if (message.type === "fast-markdown-error") {
     pending.reject(createWorkerError(message.error));
@@ -135,6 +167,8 @@ function disposeBrokenWorker(error: Error) {
   sharedWorker = null;
   listenersAttached = false;
   rejectAllPendingRequests(error);
+  workerDiagnostics.recordFallback("worker-disposed-after-error");
+  workerDiagnostics.setHasWorker(false);
 }
 
 function rejectAllPendingRequests(error: Error) {
@@ -142,12 +176,32 @@ function rejectAllPendingRequests(error: Error) {
     pending.reject(error);
   }
   pendingRequests.clear();
+  workerDiagnostics.setPendingCount(0);
 }
 
 function createRequestId(documentKey: string) {
   const ordinal = nextRequestOrdinal;
   nextRequestOrdinal += 1;
   return `${documentKey}:${ordinal}`;
+}
+
+function createWorkerRequestMeta(
+  requestId: string,
+  args: CompileFastMarkdownArgs,
+): FastMarkdownWorkerRequestMeta {
+  return {
+    requestId,
+    documentKey: args.documentKey,
+    contentHash: hashStableString(args.rawMarkdown),
+    optionsHash: hashStableString(JSON.stringify({
+      rendererProfile: args.rendererProfile,
+      featureFlags: args.featureFlags ?? null,
+      options: args.options ?? null,
+      bodyStartLine: args.bodyStartLine ?? null,
+    })),
+    schemaVersion: "fast-markdown-worker-v1",
+    createdAtMs: Date.now(),
+  };
 }
 
 function isWorkerResponse(value: unknown): value is FastMarkdownWorkerResponse {

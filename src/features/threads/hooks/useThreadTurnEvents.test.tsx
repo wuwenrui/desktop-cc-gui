@@ -12,6 +12,7 @@ import {
   normalizeTokenUsage,
 } from "../utils/threadNormalize";
 import { useThreadTurnEvents } from "./useThreadTurnEvents";
+import { workspaceScopedHas } from "./workspaceScopedMap";
 
 vi.mock("../../../services/tauri", () => ({
   engineInterrupt: vi.fn(),
@@ -34,6 +35,7 @@ type SetupOverrides = {
   activeTurnIdByThread?: Record<string, string | null>;
   resolveCanonicalThreadId?: (threadId: string) => string;
   onDebug?: ReturnType<typeof vi.fn>;
+  activeWorkspaceId?: string;
 };
 
 const makeOptions = (overrides: SetupOverrides = {}) => {
@@ -59,11 +61,26 @@ const makeOptions = (overrides: SetupOverrides = {}) => {
     (threadId: string) => activeTurnIdByThread[threadId] ?? null,
   );
   const renamePendingMemoryCaptureKey = vi.fn();
+  // chat-stream-render-isolation-2026-06 task 8: workspace-scope ref
+  // shape migrated from Set<threadId> to Map<workspaceId, Map<threadId, true>>.
+  const seedWorkspace = overrides.activeWorkspaceId ?? "ws-1";
+  const seedWorkspaceScoped = (ids: string[]) => {
+    const store = new Map<string, Map<string, true>>();
+    if (ids.length === 0) {
+      return store;
+    }
+    const bucket = new Map<string, true>();
+    for (const id of ids) {
+      bucket.set(id, true);
+    }
+    store.set(seedWorkspace, bucket);
+    return store;
+  };
   const pendingInterruptsRef = {
-    current: new Set(overrides.pendingInterrupts ?? []),
+    current: seedWorkspaceScoped(overrides.pendingInterrupts ?? []),
   };
   const interruptedThreadsRef = {
-    current: new Set(overrides.interruptedThreads ?? []),
+    current: seedWorkspaceScoped(overrides.interruptedThreads ?? []),
   };
   const codexCompactionInFlightByThreadRef = {
     current: {} as Record<string, boolean>,
@@ -355,7 +372,7 @@ describe("useThreadTurnEvents", () => {
       result.current.onTurnStarted("ws-1", "thread-1", "turn-2");
     });
 
-    expect(pendingInterruptsRef.current.has("thread-1")).toBe(false);
+    expect(workspaceScopedHas(pendingInterruptsRef.current, "ws-1", "thread-1")).toBe(false);
     expect(interruptTurn).toHaveBeenCalledWith("ws-1", "thread-1", "turn-2");
     expect(markProcessing).not.toHaveBeenCalled();
     expect(setActiveTurnId).not.toHaveBeenCalled();
@@ -370,7 +387,7 @@ describe("useThreadTurnEvents", () => {
       result.current.onTurnStarted("ws-1", "gemini:session-1", "turn-2");
     });
 
-    expect(pendingInterruptsRef.current.has("gemini:session-1")).toBe(false);
+    expect(workspaceScopedHas(pendingInterruptsRef.current, "ws-1", "gemini:session-1")).toBe(false);
     expect(engineInterruptTurn).toHaveBeenCalledWith("ws-1", "turn-2", "gemini");
     expect(interruptTurn).not.toHaveBeenCalled();
     expect(markProcessing).not.toHaveBeenCalled();
@@ -385,7 +402,7 @@ describe("useThreadTurnEvents", () => {
       result.current.onTurnStarted("ws-1", "claude:session-1", "turn-7");
     });
 
-    expect(pendingInterruptsRef.current.has("claude:session-1")).toBe(false);
+    expect(workspaceScopedHas(pendingInterruptsRef.current, "ws-1", "claude:session-1")).toBe(false);
     expect(engineInterruptTurn).toHaveBeenCalledWith("ws-1", "turn-7", "claude");
     expect(interruptTurn).not.toHaveBeenCalled();
   });
@@ -420,7 +437,7 @@ describe("useThreadTurnEvents", () => {
     });
     expect(markProcessing).toHaveBeenCalledWith("thread-1", false);
     expect(setActiveTurnId).toHaveBeenCalledWith("thread-1", null);
-    expect(pendingInterruptsRef.current.has("thread-1")).toBe(false);
+    expect(workspaceScopedHas(pendingInterruptsRef.current, "ws-1", "thread-1")).toBe(false);
   });
 
   it("also settles pending alias thread on completed event", () => {
@@ -726,10 +743,10 @@ describe("useThreadTurnEvents", () => {
       );
     });
 
-    expect(pendingInterruptsRef.current.has("claude-pending-abc")).toBe(false);
-    expect(pendingInterruptsRef.current.has("claude:session-xyz")).toBe(true);
-    expect(interruptedThreadsRef.current.has("claude-pending-abc")).toBe(false);
-    expect(interruptedThreadsRef.current.has("claude:session-xyz")).toBe(true);
+    expect(workspaceScopedHas(pendingInterruptsRef.current, "ws-1", "claude-pending-abc")).toBe(false);
+    expect(workspaceScopedHas(pendingInterruptsRef.current, "ws-1", "claude:session-xyz")).toBe(true);
+    expect(workspaceScopedHas(interruptedThreadsRef.current, "ws-1", "claude-pending-abc")).toBe(false);
+    expect(workspaceScopedHas(interruptedThreadsRef.current, "ws-1", "claude:session-xyz")).toBe(true);
   });
 
   it("executes migrated pending interrupt immediately when finalized thread already has an active turn", () => {
@@ -750,7 +767,7 @@ describe("useThreadTurnEvents", () => {
     });
 
     expect(engineInterruptTurn).toHaveBeenCalledWith("ws-1", "turn-42", "claude");
-    expect(pendingInterruptsRef.current.has("claude:session-xyz")).toBe(false);
+    expect(workspaceScopedHas(pendingInterruptsRef.current, "ws-1", "claude:session-xyz")).toBe(false);
     expect(interruptTurn).not.toHaveBeenCalled();
   });
 
@@ -812,10 +829,10 @@ describe("useThreadTurnEvents", () => {
       );
     });
 
-    expect(pendingInterruptsRef.current.has("opencode-pending-abc")).toBe(false);
-    expect(pendingInterruptsRef.current.has("opencode:session-xyz")).toBe(true);
-    expect(interruptedThreadsRef.current.has("opencode-pending-abc")).toBe(false);
-    expect(interruptedThreadsRef.current.has("opencode:session-xyz")).toBe(true);
+    expect(workspaceScopedHas(pendingInterruptsRef.current, "ws-1", "opencode-pending-abc")).toBe(false);
+    expect(workspaceScopedHas(pendingInterruptsRef.current, "ws-1", "opencode:session-xyz")).toBe(true);
+    expect(workspaceScopedHas(interruptedThreadsRef.current, "ws-1", "opencode-pending-abc")).toBe(false);
+    expect(workspaceScopedHas(interruptedThreadsRef.current, "ws-1", "opencode:session-xyz")).toBe(true);
   });
 
   it("does not fallback to pending when event thread id is same-engine finalized", () => {
@@ -1574,6 +1591,7 @@ describe("useThreadTurnEvents", () => {
     expect(markReviewing).toHaveBeenCalledWith("thread-1", false);
     expect(setActiveTurnId).toHaveBeenCalledWith("thread-1", null);
     expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+      "ws-1",
       "thread-1",
       "会话失败：boom",
     );
@@ -1690,6 +1708,7 @@ describe("useThreadTurnEvents", () => {
     expect(markReviewing).toHaveBeenCalledWith("thread-1", false);
     expect(setActiveTurnId).toHaveBeenCalledWith("thread-1", null);
     expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+      "ws-1",
       "thread-1",
       "threads.turnStalledWithMessage",
     );
@@ -1926,6 +1945,7 @@ describe("useThreadTurnEvents", () => {
     });
 
     expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+      "ws-1",
       "codex-canonical-thread",
       "threads.contextCompactionFailedWithMessage",
     );
@@ -2025,6 +2045,7 @@ describe("useThreadTurnEvents", () => {
       timestamp: 4444,
     });
     expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+      "ws-1",
       "thread-1",
       "threads.contextCompactionFailedWithMessage",
     );
@@ -2086,7 +2107,7 @@ describe("useThreadTurnEvents", () => {
     expect(pushThreadErrorMessage).not.toHaveBeenCalled();
     expect(safeMessageActivity).toHaveBeenCalled();
     // Interrupted flag should be cleared
-    expect(interruptedThreadsRef.current.has("thread-1")).toBe(false);
+    expect(workspaceScopedHas(interruptedThreadsRef.current, "ws-1", "thread-1")).toBe(false);
   });
 
   it("keeps gemini interrupted flag until a later terminal cleanup", () => {
@@ -2102,7 +2123,7 @@ describe("useThreadTurnEvents", () => {
     });
 
     expect(pushThreadErrorMessage).not.toHaveBeenCalled();
-    expect(interruptedThreadsRef.current.has("gemini:session-1")).toBe(true);
+    expect(workspaceScopedHas(interruptedThreadsRef.current, "ws-1", "gemini:session-1")).toBe(true);
   });
 
   it("clears interrupted thread flag on turn completed", () => {
@@ -2114,7 +2135,7 @@ describe("useThreadTurnEvents", () => {
       result.current.onTurnCompleted("ws-1", "thread-1", "turn-1");
     });
 
-    expect(interruptedThreadsRef.current.has("thread-1")).toBe(false);
+    expect(workspaceScopedHas(interruptedThreadsRef.current, "ws-1", "thread-1")).toBe(false);
   });
 
   it("ignores stale turn completed events when a newer active turn is already running", () => {
