@@ -2311,6 +2311,54 @@ describe("useThreadMessaging", () => {
     });
   });
 
+  it("retries codex send once when stale thread reports conversation not found", async () => {
+    vi.mocked(sendUserMessage)
+      .mockResolvedValueOnce({
+        error: {
+          message: "conversation not found: legacy-thread-id",
+        },
+      } as never)
+      .mockResolvedValueOnce({
+        result: { turn: { id: "turn-rebound-conversation-not-found" } },
+      } as never);
+    const refreshThread = vi.fn(async () => "thread-rebound-conversation");
+    const dispatch = vi.fn();
+    const { result, onDebug } = makeThreadMessagingHook("codex", {
+      activeThreadId: "legacy-thread-id",
+      ensuredThreadId: "legacy-thread-id",
+      refreshThread,
+      dispatch,
+    });
+
+    await act(async () => {
+      await result.current.sendUserMessage("hello codex");
+    });
+
+    await waitFor(() => {
+      expect(refreshThread).toHaveBeenCalledWith("ws-1", "legacy-thread-id");
+      expect(sendUserMessage).toHaveBeenCalledTimes(2);
+      expect(sendUserMessage).toHaveBeenNthCalledWith(
+        2,
+        "ws-1",
+        "thread-rebound-conversation",
+        "hello codex",
+        expect.any(Object),
+      );
+      expect(onDebug).toHaveBeenCalledWith(
+        expect.objectContaining({
+          label: "turn/start thread rebind retry",
+          payload: expect.objectContaining({
+            reasonCode: "stale-thread-binding",
+            staleReason: "thread-not-found",
+            retryable: true,
+            userAction: "recover-thread",
+            outcome: "rebound",
+          }),
+        }),
+      );
+    });
+  });
+
   it("forks a stale codex thread before falling back to a fresh continuation", async () => {
     vi.mocked(sendUserMessage)
       .mockResolvedValueOnce({

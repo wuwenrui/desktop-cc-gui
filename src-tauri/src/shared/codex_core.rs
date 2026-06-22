@@ -321,7 +321,10 @@ fn is_collaboration_mode_capability_error(value: &Value) -> bool {
 
 fn is_thread_not_found_error_message(message: &str) -> bool {
     let normalized = message.to_ascii_lowercase();
-    normalized.contains("thread not found") || normalized.contains("thread_not_found")
+    normalized.contains("thread not found")
+        || normalized.contains("thread_not_found")
+        || normalized.contains("conversation not found")
+        || normalized.contains("conversation_not_found")
 }
 
 fn is_thread_not_found_response(value: &Value) -> bool {
@@ -919,8 +922,17 @@ mod tests {
         assert!(is_thread_not_found_error_message(
             "THREAD_NOT_FOUND: 019eaae1-51d8"
         ));
+        assert!(is_thread_not_found_error_message(
+            "conversation not found: 019eaae1-51d8"
+        ));
+        assert!(is_thread_not_found_error_message(
+            "CONVERSATION_NOT_FOUND: 019eaae1-51d8"
+        ));
         assert!(is_thread_not_found_response(&json!({
             "error": { "message": "thread not found: 019eaae1-51d8" }
+        })));
+        assert!(is_thread_not_found_response(&json!({
+            "error": { "message": "conversation not found: 019eaae1-51d8" }
         })));
         assert!(is_thread_not_found_response(&json!({
             "result": {

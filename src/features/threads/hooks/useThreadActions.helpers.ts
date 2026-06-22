@@ -540,6 +540,8 @@ export function scoreDetailedReplacementThreadCandidates(params: {
 
 const THREAD_RECOVERY_PATTERNS = [
   "thread not found",
+  "conversation not found",
+  "conversation_not_found",
   "[session_not_found]",
   "session not found",
   "session file not found",
@@ -548,6 +550,8 @@ const THREAD_RECOVERY_PATTERNS = [
 const THREAD_RECOVERY_ERROR_PREFIXES = [
   "会话启动失败",
   "thread not found",
+  "conversation not found",
+  "conversation_not_found",
   "session not found",
   "session file not found",
   "[session_not_found]",
@@ -555,6 +559,8 @@ const THREAD_RECOVERY_ERROR_PREFIXES = [
   "turn failed to start",
   "session failed to start",
   "error: thread not found",
+  "error: conversation not found",
+  "error: conversation_not_found",
   "error: session not found",
 ] as const;
 

@@ -46,6 +46,8 @@ const RUNTIME_PIPE_DISCONNECT_PATTERNS = [
 
 const THREAD_RECOVERY_PATTERNS = [
   "thread not found",
+  "conversation not found",
+  "conversation_not_found",
   "[session_not_found]",
   "session not found",
   "session file not found",
@@ -62,6 +64,8 @@ const RECOVERABLE_ERROR_PREFIXES = [
   "turn failed",
   "context compaction failed",
   "thread not found",
+  "conversation not found",
+  "conversation_not_found",
   "session not found",
   "session file not found",
   "[session_not_found]",
@@ -69,6 +73,8 @@ const RECOVERABLE_ERROR_PREFIXES = [
   "turn failed to start",
   "session failed to start",
   "error: thread not found",
+  "error: conversation not found",
+  "error: conversation_not_found",
   "error: session not found",
 ] as const;
 
