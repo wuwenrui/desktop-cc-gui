@@ -63,7 +63,7 @@
 
 ## 10. Archive Gate
 
-- [ ] 10.1 [P0][depends:8.2, 8.3, 8.4, 9.1, 9.2, 9.3, 9.4][I: 全部 task 完成 + OpenSpec 校验通过 + typecheck + vitest + live 验证通过][O: `openspec archive 2026-06-22-add-mermaid-block-fullscreen-viewer` 同步 spec delta 到 main spec][V: `openspec/specs/markdown-mermaid-block-fullscreen-viewer/spec.md` 内容已同步] 跑 archive 命令。
+- [x] 10.1 [P0][depends:8.2, 8.3, 8.4, 9.1, 9.2, 9.3, 9.4][I: 全部 task 完成 + OpenSpec 校验通过 + typecheck + vitest + live 验证通过][O: 由于当前 `openspec` CLI 拒绝以数字开头的 change id，等价手工同步 spec delta 到 main spec 并移动 change 目录到 archive][V: `openspec/specs/markdown-mermaid-block-fullscreen-viewer/spec.md` 内容已同步] 跑 archive 命令。
 
 ## 11. Follow-up: 入口按钮去文案（保留 icon）
 
@@ -108,4 +108,4 @@
 
 - [x] 16.2 [P0][depends:16.1,15.3][I: 仓库级 TS / vitest / openspec 校验][O: `npx tsc --noEmit` 退出码 0; `npx vitest run <4 个 mermaid-fullscreen 相关文件>` 23/23 通过; `openspec validate --strict --no-interactive` 退出码 0][V: 三条命令全 0] **硬门禁绿**。
 
-- [ ] 16.3 [P1][depends:16.2][I: 用户手动 commit + openspec archive][O: `git add` + `git commit` (按用户"期间不提交"指令暂缓) + `openspec archive 2026-06-22-add-mermaid-block-fullscreen-viewer` 同步 spec delta 到 main spec][V: `openspec/specs/markdown-mermaid-block-fullscreen-viewer/spec.md` 内容已同步] **archive**。
+- [x] 16.3 [P1][depends:16.2][I: 用户手动 commit + openspec archive][O: 按用户本轮授权继续推进；未执行 commit；由于当前 `openspec` CLI 拒绝以数字开头的 change id，等价手工同步 spec delta 到 main spec 并移动 change 目录到 archive][V: `openspec/specs/markdown-mermaid-block-fullscreen-viewer/spec.md` 内容已同步] **archive**。
