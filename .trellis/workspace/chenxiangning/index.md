@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-23.md`
-- **Total Sessions**: 906
+- **Total Sessions**: 907
 - **Last Active**: 2026-06-22
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-23.md` | ~1447 | Active |
+| `journal-23.md` | ~1484 | Active |
 | `journal-22.md` | ~1969 | Archived |
 | `journal-21.md` | ~1970 | Archived |
 | `journal-20.md` | ~1997 | Archived |
@@ -51,6 +51,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 907 | 2026-06-22 | 修复 Messages Vitest OOM 与 branding gate | `39bdbb13` | `feature/v0.5.12` |
 | 906 | 2026-06-22 | 修复 Codex provider 恢复绑定 | `db554da4` | `feature/v0.5.12` |
 | 905 | 2026-06-22 | 归档 Mermaid 全屏 viewer OpenSpec | `18e0ae99` | `feature/v0.5.12` |
 | 904 | 2026-06-22 | 收口 Markdown 渲染性能优化提案 | `4f231fbd` | `feature/v0.5.12` |

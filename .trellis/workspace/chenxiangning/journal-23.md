@@ -1445,3 +1445,40 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 907: 修复 Messages Vitest OOM 与 branding gate
+
+**Date**: 2026-06-22
+**Task**: 修复 Messages Vitest OOM 与 branding gate
+**Branch**: `feature/v0.5.12`
+
+### Summary
+
+拆分 Messages live streaming 测试，避免 full Markdown runtime 在批量 Vitest 中触发 OOM；清理 file markdown feature flag 中的 mossx disable key，恢复 doctor:win branding gate。
+
+### Main Changes
+
+- 将 Messages.test.tsx 中的 live streaming / finalizing / selection freeze / rapid reasoning contract 测试迁移到 Messages.live-markdown-streaming.test.tsx，并 mock Markdown renderer，保留 Messages 层行为断言。
+- 删除 Messages.test.tsx 中重复覆盖且成本过高的 live inline code throttle 集成测试；该行为由 Markdown.file-links.test.tsx、Markdown streaming throttle 测试与 MessagesRows.stream-mitigation.test.tsx 分层覆盖。
+- 移除 src/features/files/utils/fileMarkdownFeatureFlags.ts 中的 mossx.fileMarkdownDisableLargeFastHtml legacy storage read，保留 ccgui key。
+- 验证：doctor:win、typecheck、lint --quiet、Messages 失败批次附近组合测试、Messages live markdown streaming、MessagesRows stream mitigation、Markdown file links 均通过。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `39bdbb13` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
