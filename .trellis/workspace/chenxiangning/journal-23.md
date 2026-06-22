@@ -1554,3 +1554,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 910: 修复 Mermaid 全屏测试竞态
+
+**Date**: 2026-06-22
+**Task**: 修复 Mermaid 全屏测试竞态
+**Branch**: `feature/v0.5.12`
+
+### Summary
+
+定位 MermaidBlock fullscreen 测试偶发 timeout 根因：测试在按钮存在但仍 disabled 时点击，click 被忽略后等待 portal 超过 testTimeout。新增 waitForEnabledFullscreenButton 辅助函数，统一等待按钮存在且可用后再点击；验证目标批次、全量 test、typecheck、lint 与 heavy-test-noise 均通过。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4cc6389e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

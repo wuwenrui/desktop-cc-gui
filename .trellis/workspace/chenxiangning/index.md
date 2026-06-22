@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-23.md`
-- **Total Sessions**: 909
+- **Total Sessions**: 910
 - **Last Active**: 2026-06-22
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-23.md` | ~1556 | Active |
+| `journal-23.md` | ~1589 | Active |
 | `journal-22.md` | ~1969 | Archived |
 | `journal-21.md` | ~1970 | Archived |
 | `journal-20.md` | ~1997 | Archived |
@@ -51,6 +51,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 910 | 2026-06-22 | 修复 Mermaid 全屏测试竞态 | `4cc6389e` | `feature/v0.5.12` |
 | 909 | 2026-06-22 | 修复供应商模型目录与 Codex 刷新断联 | `657d1351` | `feature/v0.5.12` |
 | 908 | 2026-06-22 | 移除首页最近会话入口 | `118e4eb7` | `feature/v0.5.12` |
 | 907 | 2026-06-22 | 修复 Messages Vitest OOM 与 branding gate | `39bdbb13` | `feature/v0.5.12` |
