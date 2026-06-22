@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import i18n from "../../../i18n";
+import i18n, { i18nReady } from "../../../i18n";
 import type { RequestUserInputRequest, RequestUserInputResponse } from "../../../types";
 import { respondToUserInputRequest } from "../../../services/tauri";
 import { useThreadUserInput } from "./useThreadUserInput";
@@ -34,10 +34,12 @@ const request: RequestUserInputRequest = {
 describe("useThreadUserInput", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
+    await i18nReady;
     await i18n.changeLanguage("en");
   });
 
   afterEach(async () => {
+    await i18nReady;
     await i18n.changeLanguage("zh");
   });
 

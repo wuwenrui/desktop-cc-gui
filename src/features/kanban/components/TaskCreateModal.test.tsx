@@ -289,17 +289,18 @@ describe("TaskCreateModal", () => {
       onCancel: vi.fn(),
     };
 
-    const { getByRole } = render(<TaskCreateModal {...props} isOpen />);
+    const { container } = render(<TaskCreateModal {...props} isOpen />);
 
-    expect(
-      getByRole("option", { name: "[kanban.task.schedule.manual] Manual task" }),
-    ).toBeTruthy();
-    expect(
-      getByRole("option", { name: "[kanban.task.schedule.once] One-time task" }),
-    ).toBeTruthy();
-    expect(
-      getByRole("option", { name: "[kanban.task.schedule.recurring] Recurring task" }),
-    ).toBeTruthy();
+    const chainSelect = Array.from(container.querySelectorAll("select")).find((select) =>
+      Array.from(select.options).some((option) => option.value === "task-manual"),
+    );
+    const chainOptionLabels = Array.from(chainSelect?.options ?? []).map(
+      (option) => option.textContent,
+    );
+
+    expect(chainOptionLabels).toContain("[kanban.task.schedule.manual] Manual task");
+    expect(chainOptionLabels).toContain("[kanban.task.schedule.once] One-time task");
+    expect(chainOptionLabels).toContain("[kanban.task.schedule.recurring] Recurring task");
   });
 
   it("shows start toggle only for manual schedule mode", () => {
