@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-23.md`
-- **Total Sessions**: 901
+- **Total Sessions**: 902
 - **Last Active**: 2026-06-22
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-23.md` | ~1242 | Active |
+| `journal-23.md` | ~1275 | Active |
 | `journal-22.md` | ~1969 | Archived |
 | `journal-21.md` | ~1970 | Archived |
 | `journal-20.md` | ~1997 | Archived |
@@ -51,6 +51,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 902 | 2026-06-22 | Markdown 图片全屏与消息目录 | `12f99419` | `feature/v0.5.12` |
 | 901 | 2026-06-22 | Mermaid 图表全屏查看 | `4c38fa13` | `feature/v0.5.12` |
 | 900 | 2026-06-22 | 优化 release Rust 编译缓存 | `11b64eb5` | `feature/v0.5.12` |
 | 899 | 2026-06-22 | 修复 Codex conversation not found 会话恢复 | `9ed9e648` | `feature/v0.5.12` |

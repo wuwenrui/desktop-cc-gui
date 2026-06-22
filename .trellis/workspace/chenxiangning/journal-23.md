@@ -1240,3 +1240,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 902: Markdown 图片全屏与消息目录
+
+**Date**: 2026-06-22
+**Task**: Markdown 图片全屏与消息目录
+**Branch**: `feature/v0.5.12`
+
+### Summary
+
+完成并归档 OpenSpec change add-image-fullscreen-and-messages-outline：新增 Markdown 图片全屏 viewer、消息 outline 浮窗、文件预览本地相对图片兼容修复；同步主 specs，补充 focused tests，并通过 typecheck、lint、OpenSpec specs validate、large-file check 与 54 个 focused vitest 用例。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `12f99419` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
