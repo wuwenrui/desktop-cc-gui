@@ -1688,3 +1688,52 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 913: 归档已验证 OpenSpec 提案
+
+**Date**: 2026-06-23
+**Task**: 归档已验证 OpenSpec 提案
+**Branch**: `feature/v0.5.13`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+完成 OpenSpec active proposal closure batch：归档 9 个已验证 changes，并同步主 specs。
+
+主要内容：
+- 归档 `fix-app-shell-startup-react-depth-loop`、`fix-codex-exec-command-file-change-replay`、`fix-codex-provider-recovery-binding`、`fix-message-outline-streaming-jank`、`fix-provider-model-catalog-and-codex-refresh-isolation`、`fix-user-input-stale-submit-settlement`、`refine-home-recent-conversations-ui`、`relocate-runtime-notice-dock-sidebar-entry`、`soften-transient-runtime-reconnect-card`。
+- 通过 `openspec archive <change> -y` 同步 17 个主 spec 文件，并将 change 移入 `openspec/changes/archive/2026-06-23-*`。
+- 更新 `openspec/project.md`：刷新 active/archive/specs 统计，补充 2026-06-23 v0.5.13 Closure Batch，记录剩余 active changes 和需求池目录结构警告。
+- 修正 `relocate-runtime-notice-dock-sidebar-entry` delta requirement header，使其与当前主 spec header 匹配后成功归档。
+
+验证：
+- `openspec validate --specs --strict --no-interactive`：357 passed, 0 failed。
+- `openspec validate --all --strict --no-interactive`：358 passed, 0 failed。
+- `python3 .claude/skills/osp-openspec-sync/scripts/validate-consistency.py --project-path . --full`：0 errors，360 warnings；warnings 为既有 spec title 格式问题及 3 个 demand-pool active 目录缺 `proposal.md` / `tasks.md`。
+
+后续：
+- `2026-06-22-release-pipeline-cache-sccache` 仍需 live release run / artifact verification 后再归档。
+- `2026-06-18-add-shortcuts-overview-and-conflict-detection`、`2026-06-18-extend-editor-file-tab-lifecycle`、`2026-06-18-extend-search-palette-with-commands` 仍需补齐 proposal/tasks/spec delta 或清理。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `bbbf3f39` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
