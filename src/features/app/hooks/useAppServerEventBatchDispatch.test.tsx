@@ -137,4 +137,44 @@ describe("useAppServerEventBatchDispatch (v2)", () => {
     expect(typeof instr.inputPendingYieldCount).toBe("number");
     expect(typeof instr.budgetMissCount).toBe("number");
   });
+
+  it("does not use requestIdleCallback in baseline tier", async () => {
+    window.localStorage.setItem("ccgui.perf.streamingScheduleTier", "baseline");
+    const requestIdleCallback = vi.fn();
+    const cancelIdleCallback = vi.fn();
+    Object.defineProperty(window, "requestIdleCallback", {
+      configurable: true,
+      value: requestIdleCallback,
+    });
+    Object.defineProperty(window, "cancelIdleCallback", {
+      configurable: true,
+      value: cancelIdleCallback,
+    });
+
+    const onProcessingHeartbeat = vi.fn();
+    const { result } = renderHook(() =>
+      useAppServerEventBatchDispatch(
+        { onProcessingHeartbeat },
+        baseOptions,
+      ),
+    );
+
+    await act(async () => {
+      deliverBatch([
+        {
+          workspace_id: "ws-1",
+          message: {
+            method: "processing/heartbeat",
+            params: { threadId: "thread-1", pulse: 1 },
+          },
+        },
+      ]);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    expect(onProcessingHeartbeat).toHaveBeenCalledTimes(1);
+    expect(requestIdleCallback).not.toHaveBeenCalled();
+    expect(result.current.__getInstrumentationForTests().idleCallbackCount).toBe(0);
+    expect(result.current.__getInstrumentationForTests().timeoutFallbackCount).toBeGreaterThan(0);
+  });
 });

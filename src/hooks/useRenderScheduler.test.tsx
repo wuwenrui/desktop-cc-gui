@@ -75,6 +75,75 @@ describe("useRenderScheduler", () => {
     expect(instr.inputPendingYieldCount).toBe(1);
   });
 
+  it("continues draining after an input-pending yield", () => {
+    const onYield = vi.fn();
+    let inputPendingChecks = 0;
+    const { result } = renderHook(() =>
+      useRenderScheduler({
+        budgetMs: 0,
+        idleTimeoutMs: 0,
+        isInputPending: () => inputPendingChecks++ === 0,
+        onYield,
+      }),
+    );
+
+    let calls = 0;
+    const run = () => {
+      calls += 1;
+      return calls < 2;
+    };
+
+    act(() => {
+      result.current.scheduleChunk(run);
+    });
+    act(() => {
+      vi.runOnlyPendingTimers();
+    });
+    expect(calls).toBe(1);
+    expect(onYield).toHaveBeenCalledWith("input-pending");
+
+    act(() => {
+      vi.runOnlyPendingTimers();
+    });
+    expect(calls).toBe(2);
+    expect(result.current.__getInstrumentationForTests().chunkCount).toBe(2);
+  });
+
+  it("continues draining after a budget yield", () => {
+    const nowSpy = vi
+      .spyOn(performance, "now")
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(10)
+      .mockReturnValueOnce(20)
+      .mockReturnValueOnce(21);
+    const onYield = vi.fn();
+    const { result } = renderHook(() =>
+      useRenderScheduler({ budgetMs: 4, idleTimeoutMs: 0, onYield }),
+    );
+
+    let calls = 0;
+    const run = () => {
+      calls += 1;
+      return calls < 2;
+    };
+
+    act(() => {
+      result.current.scheduleChunk(run);
+    });
+    act(() => {
+      vi.runOnlyPendingTimers();
+    });
+    expect(calls).toBe(1);
+    expect(onYield).toHaveBeenCalledWith("budget");
+
+    act(() => {
+      vi.runOnlyPendingTimers();
+    });
+    expect(calls).toBe(2);
+    expect(result.current.__getInstrumentationForTests().budgetMissCount).toBe(1);
+    nowSpy.mockRestore();
+  });
+
   it("cancels pending callbacks on unmount and does not run the chunk", () => {
     const onChunk = vi.fn();
     const { result, unmount } = renderHook(() =>

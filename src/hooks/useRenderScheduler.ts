@@ -26,9 +26,9 @@ export type UseRenderSchedulerOptions = {
 export type UseRenderScheduler = {
   /**
    * Schedule a chunk. The `run` callback is expected to return `true` while
-   * more work remains in the current tick. The scheduler will chain another
-   * idle callback when `run` returns `true` and the budget is still within
-   * tolerance; otherwise it yields and waits for the next schedule call.
+   * more work remains. The scheduler keeps draining across idle callbacks until
+   * `run()` returns `false`; budget and input-pending only decide when to yield,
+   * not whether the remaining queue should be abandoned.
    */
   scheduleChunk: (run: () => boolean) => void;
   /** Drain the queue immediately, bypassing the idle-callback. */
@@ -167,10 +167,10 @@ export function useRenderScheduler(
       if (inputPending) {
         invokeYield("input-pending");
       }
-      // Auto-reschedule when the chunk indicated more work and we are
-      // not in a "must-yield" state. Callers that need tighter control
-      // can return false from `run()` and reschedule externally.
-      if (more && !budgetExceeded && !inputPending && !cancelledRef.current) {
+      // Auto-reschedule while work remains. Budget/input-pending affect the
+      // yield reason and counters, but queue liveness must not depend on a new
+      // external event arriving later.
+      if (more && !cancelledRef.current) {
         pendingRef.current = false;
         scheduleRef.current?.(run);
       }

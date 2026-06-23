@@ -39,9 +39,13 @@ describe("renderSchedulingPolicy (v2 naming)", () => {
   });
 
   it("returns the tier schedule constants deterministically", () => {
-    expect(getTierSchedule("baseline").budgetMs).toBeGreaterThan(
-      getTierSchedule("guarded").budgetMs,
-    );
+    expect(getTierSchedule("baseline")).toMatchObject({
+      useTransition: false,
+      useRafDelay: false,
+      allowDrop: false,
+      budgetMs: 0,
+      idleTimeoutMs: 0,
+    });
     expect(getTierSchedule("guarded").budgetMs).toBeGreaterThan(
       getTierSchedule("aggressive").budgetMs,
     );
@@ -94,7 +98,8 @@ describe("renderSchedulingPolicy (v2 naming)", () => {
     expect(baseline.useTransition).toBe(false);
     expect(guarded.useTransition).toBe(true);
     expect(aggressive.useTransition).toBe(true);
-    expect(baseline.budgetMs).toBeGreaterThan(guarded.budgetMs);
+    expect(baseline.budgetMs).toBe(0);
+    expect(baseline.idleTimeoutMs).toBe(0);
     expect(guarded.budgetMs).toBeGreaterThan(aggressive.budgetMs);
   });
 

@@ -43,8 +43,8 @@ const BASELINE_SCHEDULE: DispatchSchedule = {
   useTransition: false,
   useRafDelay: false,
   allowDrop: false,
-  budgetMs: 32,
-  idleTimeoutMs: 120,
+  budgetMs: 0,
+  idleTimeoutMs: 0,
 };
 
 const GUARDED_SCHEDULE: DispatchSchedule = {
