@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-24.md`
-- **Total Sessions**: 922
+- **Total Sessions**: 923
 - **Last Active**: 2026-06-24
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-24.md` | ~120 | Active |
+| `journal-24.md` | ~168 | Active |
 | `journal-23.md` | ~1965 | Archived |
 | `journal-22.md` | ~1969 | Archived |
 | `journal-21.md` | ~1970 | Archived |
@@ -52,6 +52,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 923 | 2026-06-24 | 归档 fast-markdown 与 codex-provider 两个 fix 提案 | `7abed3bf` | `feature/v0.5.13` |
 | 922 | 2026-06-24 | 修复会话选择迁移重复写入 | `acb8bc4e` | `feature/v0.5.13` |
 | 921 | 2026-06-24 | 提交幕布 File changes 误判修复 | `3112e90f` | `feature/v0.5.13` |
 | 920 | 2026-06-24 | 修复幕布 File changes 误判输出捕获 | - | `feature/v0.5.13` |

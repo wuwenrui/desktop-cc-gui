@@ -118,3 +118,51 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 923: 归档 fast-markdown 与 codex-provider 两个 fix 提案
+
+**Date**: 2026-06-24
+**Task**: 归档 fast-markdown 与 codex-provider 两个 fix 提案
+**Branch**: `feature/v0.5.13`
+
+### Summary
+
+归档两个已验证 OpenSpec fix 提案并单独提交
+
+### Main Changes
+
+### Summary
+
+通过 `openspec archive` 将两个已验证的 fix 提案归档，把 spec deltas 合并到 `openspec/specs/` 主线，并把 change 目录迁移到 `openspec/changes/archive/2026-06-24-*`，全程在单独一次 commit 中完成。
+
+### Main Changes
+
+| 项目 | 内容 |
+|---|---|
+| 目标 | 归档 `fix-codex-provider-composer-cold-start-binding` 与 `fix-fast-markdown-annotation-action` 两个已验证 OpenSpec 提案。 |
+| 归档方式 | 连续执行 `openspec archive fix-fast-markdown-annotation-action -y` 与 `openspec archive fix-codex-provider-composer-cold-start-binding -y`，CLI 自动完成 spec 合并 + change 迁移。 |
+| spec 影响 | `codex-provider-scoped-session-launch` / `composer-model-selector-config-actions` / `composer-send-readiness-ux` / `file-markdown-preview-render-architecture` 共 4 个 spec 收到 deltas 合并。 |
+| 提交流程 | 仅暂存两个归档相关 change 与对应 4 个 spec 的更新，使用 git rename 检测把 12 个文件以 rename 形式提交，避免大段 churn。 |
+| 验证 | `openspec archive` 自身执行了 spec 合并并报告 `Specs updated successfully`；`git status` 确认 changes 根目录已无 `fix-*` 残留；archive 目录新增两条 `2026-06-24-*` 条目。 |
+| Git 状态 | 提交 `7abed3bf` 在 `feature/v0.5.13`，16 files changed, +76；commit message 主体为中文 Conventional Commits，符合 AGENTS.md 全局 Gate。 |
+| 注意 | 工作区还存在 `openspec/changes/2026-06-24-{curated-skill-bundles, infer-thread-rename-from-claude-codex-jsonl, retire-opencode-and-gemini-cli}/` 三个 untracked 提案目录，与本次归档无关，留给用户后续处理。 |
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7abed3bf` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
