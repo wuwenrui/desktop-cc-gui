@@ -3,6 +3,7 @@ import type { ConversationItem } from "../types";
 import {
   inferFileChangesFromCommandExecutionArtifacts,
   inferFileChangesFromPayload,
+  inferMutatingFileChangesFromCommand,
   mergeToolChanges,
   normalizeFileChangeKind,
 } from "./threadItemsFileChanges";
@@ -153,6 +154,19 @@ describe("threadItemsFileChanges.mergeToolChanges", () => {
         diff: undefined,
       },
     ]);
+  });
+
+  it("does not infer file changes from command output capture redirection", () => {
+    expect(
+      inferMutatingFileChangesFromCommand(
+        "claude --help > claude_help.txt 2>&1; grep -E \"--append-system-prompt-file\" claude_help.txt",
+      ),
+    ).toEqual([]);
+    expect(
+      inferMutatingFileChangesFromCommand(
+        'rg -n "useAppSettings" src --include="*.rs" 2>&1 | head -10',
+      ),
+    ).toEqual([]);
   });
 
   it("does not treat structured codex tool field paths as file changes", () => {
