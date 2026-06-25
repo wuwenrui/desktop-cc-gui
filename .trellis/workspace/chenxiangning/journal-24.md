@@ -327,3 +327,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 928: 稳定实时对话渲染与 Codex 创建
+
+**Date**: 2026-06-25
+**Task**: 稳定实时对话渲染与 Codex 创建
+**Branch**: `feature/v0.5.13`
+
+### Summary
+
+完成实时对话大历史渲染止损、Markdown heavy island 降载、消息幕布虚拟化/轻量模式/错误边界、renderer diagnostics 增强，以及 disk Codex 创建会话 ready confirmation 和一次性自动恢复；验证 typecheck、lint、runtime contracts、large-file governance、cargo no-run、Codex 相关 cargo tests、focused vitest 与 heavy-test-noise。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `982f6ed0` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
