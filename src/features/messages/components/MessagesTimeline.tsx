@@ -85,7 +85,9 @@ import {
   getActiveLiveTimelineRowKeys,
   getTimelineVirtualizationThresholdReason,
   observeTimelineElementOffset,
+  resolveTimelineCanvasOverscan,
   resolveTimelineVirtualizerStabilityRecovery,
+  resolveVirtualizedTimelineRowPlaceholderHeight,
   resolveVirtualizedTimelineScopeReset,
   shouldVirtualizeTimelineRows,
   summarizeTimelineProjectionRenderWeight,
@@ -464,7 +466,12 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     getItemKey: (index) => timelineProjectionRows[index]?.key ?? `missing:${index}`,
     getScrollElement: () => scrollElementRef.current,
     observeElementOffset: observeTimelineElementOffset,
-    overscan: isThinking || isWorking ? 24 : 12,
+    overscan: resolveTimelineCanvasOverscan({
+      isThinking,
+      isWorking,
+      rowCount: timelineProjectionRows.length,
+      renderWeight: timelineRenderWeightSummary.renderWeight,
+    }),
   });
   const virtualTimelineRows = timelineVirtualizer.getVirtualItems();
   const activeLiveTimelineRowKeys = useMemo(
@@ -1540,16 +1547,25 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       {virtualTimelineRows.map((virtualRow) => {
         const row = timelineProjectionRows[virtualRow.index];
         const isActiveLiveTimelineRow = activeLiveTimelineRowKeySet.has(String(virtualRow.key));
+        const estimatedRowSize = estimateTimelineProjectionRowSize(row ?? {
+          kind: "bottomAnchor",
+          key: "bottom-anchor",
+        });
+        const placeholderHeight = resolveVirtualizedTimelineRowPlaceholderHeight(
+          virtualRow.size ?? estimatedRowSize,
+        );
         return (
           <div
             key={virtualRow.key}
             data-index={virtualRow.index}
             data-active-live-row={isActiveLiveTimelineRow ? "true" : undefined}
             data-timeline-row-kind={row?.kind}
+            data-virtual-row-size={placeholderHeight}
             className={isActiveLiveTimelineRow ? "messages-virtualized-row is-active-live-row" : "messages-virtualized-row"}
             ref={timelineVirtualizer.measureElement}
             style={{
               left: 0,
+              minHeight: `${placeholderHeight}px`,
               position: "absolute",
               top: 0,
               transform: `translateY(${virtualRow.start}px)`,

@@ -11,7 +11,7 @@ import {
   type AppServerEventHandlers,
   type DispatchAppServerEventOptions,
 } from "./useAppServerEvents";
-import { resolveDispatchSchedule } from "../../threads/utils/renderSchedulingPolicy";
+import { resolveLaneSchedule } from "../../threads/utils/renderSchedulingPolicy";
 import { readStreamingScheduleTier } from "../../threads/utils/realtimePerfFlags";
 
 // 2026-06-24-harden-realtime-interaction-jank-during-tool-call
@@ -75,7 +75,8 @@ export function useAppServerEventBatchDispatch(
   dispatcherOptionsRef.current = options;
 
   const tier = readStreamingScheduleTier();
-  const schedule = resolveDispatchSchedule({
+  const schedule = resolveLaneSchedule({
+    lane: "canvas",
     tier,
     isLiveRow: false,
     isHeavy: false,

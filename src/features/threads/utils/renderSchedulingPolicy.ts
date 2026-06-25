@@ -39,6 +39,18 @@ export type ResolveDispatchScheduleInput = {
   isCritical: boolean;
 };
 
+export const RENDER_WORK_LANE_VALUES = [
+  "interaction",
+  "canvas",
+  "background",
+] as const;
+
+export type RenderWorkLane = (typeof RENDER_WORK_LANE_VALUES)[number];
+
+export type ResolveLaneScheduleInput = ResolveDispatchScheduleInput & {
+  lane: RenderWorkLane;
+};
+
 const BASELINE_SCHEDULE: DispatchSchedule = {
   useTransition: false,
   useRafDelay: false,
@@ -61,6 +73,22 @@ const AGGRESSIVE_SCHEDULE: DispatchSchedule = {
   allowDrop: true,
   budgetMs: 4,
   idleTimeoutMs: 40,
+};
+
+const INTERACTION_SCHEDULE: DispatchSchedule = {
+  useTransition: false,
+  useRafDelay: false,
+  allowDrop: false,
+  budgetMs: 0,
+  idleTimeoutMs: 0,
+};
+
+const BACKGROUND_SCHEDULE: DispatchSchedule = {
+  useTransition: true,
+  useRafDelay: true,
+  allowDrop: true,
+  budgetMs: 2,
+  idleTimeoutMs: 120,
 };
 
 export function isRenderScheduleTier(value: unknown): value is RenderScheduleTier {
@@ -103,6 +131,19 @@ export function resolveDispatchSchedule(
     default:
       return GUARDED_SCHEDULE;
   }
+}
+
+export function resolveLaneSchedule(input: ResolveLaneScheduleInput): DispatchSchedule {
+  if (input.lane === "interaction") {
+    return INTERACTION_SCHEDULE;
+  }
+  if (input.lane === "background" && !input.isCritical && !input.isLiveRow) {
+    if (input.tier === "baseline") {
+      return BASELINE_SCHEDULE;
+    }
+    return BACKGROUND_SCHEDULE;
+  }
+  return resolveDispatchSchedule(input);
 }
 
 export function getTierSchedule(tier: RenderScheduleTier): DispatchSchedule {

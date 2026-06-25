@@ -20,6 +20,7 @@ vi.mock("@tanstack/react-virtual", () => ({
         Array.from({ length: visibleCount }, (_, index) => ({
           index,
           key: options.getItemKey(index),
+          size: options.estimateSize(index),
           start: index * options.estimateSize(index),
         })),
       getTotalSize: () =>
@@ -39,6 +40,7 @@ vi.mock("./Markdown", () => ({
 }));
 
 import { Messages } from "./Messages";
+import { TIMELINE_VIRTUAL_ROW_PLACEHOLDER_MAX_HEIGHT } from "./messagesTimelineVirtualization";
 
 describe("Messages virtualized jump behavior", () => {
   beforeAll(() => {
@@ -147,6 +149,15 @@ describe("Messages virtualized jump behavior", () => {
       expect.any(Number),
       { align: "center" },
     ]);
+    const virtualRows = Array.from(
+      container.querySelectorAll<HTMLElement>(".messages-virtualized-row"),
+    );
+    expect(virtualRows.length).toBeGreaterThan(0);
+    for (const virtualRow of virtualRows) {
+      expect(Number(virtualRow.dataset.virtualRowSize)).toBeLessThanOrEqual(
+        TIMELINE_VIRTUAL_ROW_PLACEHOLDER_MAX_HEIGHT,
+      );
+    }
   });
 
   it("toggles lightweight summaries and hydrates details on request", async () => {

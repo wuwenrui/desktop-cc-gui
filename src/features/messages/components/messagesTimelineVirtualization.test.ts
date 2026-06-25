@@ -10,10 +10,16 @@ import {
   DEFAULT_TIMELINE_VIRTUALIZER_STABILITY_RECOVERY_BUDGET,
   summarizeTimelineProjectionRenderWeight,
   observeTimelineElementOffset,
+  resolveTimelineCanvasOverscan,
   resolveTimelineVirtualizerStabilityRecovery,
+  resolveVirtualizedTimelineRowPlaceholderHeight,
   resolveVirtualizedTimelineScopeReset,
   shouldVirtualizeTimelineRows,
+  TIMELINE_CANVAS_STABLE_OVERSCAN,
+  TIMELINE_CANVAS_STREAMING_OVERSCAN,
   TIMELINE_RENDER_WEIGHT_BASELINE_FLAG_KEY,
+  TIMELINE_VIRTUAL_ROW_PLACEHOLDER_MAX_HEIGHT,
+  TIMELINE_VIRTUAL_ROW_PLACEHOLDER_MIN_HEIGHT,
   TIMELINE_VIRTUALIZER_STABILITY_MAX_REMEASURE_COUNT,
   TIMELINE_VIRTUALIZATION_MIN_RENDER_WEIGHT,
   TIMELINE_VIRTUALIZATION_MIN_ROWS,
@@ -58,6 +64,44 @@ describe("messagesTimelineVirtualization", () => {
       rowCount: 12,
       renderWeight: TIMELINE_VIRTUALIZATION_MIN_RENDER_WEIGHT,
     })).toBe(false);
+  });
+
+  it("reduces canvas overscan during active heavy streaming", () => {
+    expect(resolveTimelineCanvasOverscan({
+      isThinking: false,
+      isWorking: false,
+      rowCount: 24,
+      renderWeight: 12,
+    })).toBe(TIMELINE_CANVAS_STABLE_OVERSCAN);
+
+    expect(resolveTimelineCanvasOverscan({
+      isThinking: true,
+      isWorking: false,
+      rowCount: TIMELINE_VIRTUALIZATION_MIN_ROWS,
+      renderWeight: 12,
+    })).toBe(TIMELINE_CANVAS_STREAMING_OVERSCAN);
+
+    expect(resolveTimelineCanvasOverscan({
+      isThinking: false,
+      isWorking: true,
+      rowCount: 12,
+      renderWeight: TIMELINE_VIRTUALIZATION_MIN_RENDER_WEIGHT,
+    })).toBe(TIMELINE_CANVAS_STREAMING_OVERSCAN);
+  });
+
+  it("clamps virtual row placeholder height for invalid and extreme measurements", () => {
+    expect(resolveVirtualizedTimelineRowPlaceholderHeight(undefined)).toBe(
+      TIMELINE_VIRTUAL_ROW_PLACEHOLDER_MIN_HEIGHT,
+    );
+    expect(resolveVirtualizedTimelineRowPlaceholderHeight(Number.NaN)).toBe(
+      TIMELINE_VIRTUAL_ROW_PLACEHOLDER_MIN_HEIGHT,
+    );
+    expect(resolveVirtualizedTimelineRowPlaceholderHeight(-10)).toBe(
+      TIMELINE_VIRTUAL_ROW_PLACEHOLDER_MIN_HEIGHT,
+    );
+    expect(resolveVirtualizedTimelineRowPlaceholderHeight(10_000)).toBe(
+      TIMELINE_VIRTUAL_ROW_PLACEHOLDER_MAX_HEIGHT,
+    );
   });
 
   it("can restore the baseline eager behavior below the row-count threshold", () => {

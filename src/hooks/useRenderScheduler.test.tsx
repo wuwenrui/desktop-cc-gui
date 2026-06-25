@@ -1,11 +1,19 @@
 // @vitest-environment jsdom
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const rendererDiagnosticMocks = vi.hoisted(() => ({
+  appendRenderSchedulerResourceDiagnostic: vi.fn(),
+}));
+
+vi.mock("../services/rendererDiagnostics", () => rendererDiagnosticMocks);
+
 import { useRenderScheduler } from "./useRenderScheduler";
 
 describe("useRenderScheduler", () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    rendererDiagnosticMocks.appendRenderSchedulerResourceDiagnostic.mockClear();
   });
 
   afterEach(() => {
@@ -158,6 +166,34 @@ describe("useRenderScheduler", () => {
       vi.runOnlyPendingTimers();
     });
     expect(onChunk).not.toHaveBeenCalled();
+  });
+
+  it("records a cleanup diagnostic when unmount cancels pending work", () => {
+    const { result, unmount } = renderHook(() =>
+      useRenderScheduler({
+        budgetMs: 0,
+        idleTimeoutMs: 0,
+        diagnosticSurfaceId: "test-canvas-lane",
+      }),
+    );
+
+    act(() => {
+      result.current.scheduleChunk(() => true);
+    });
+    unmount();
+
+    expect(rendererDiagnosticMocks.appendRenderSchedulerResourceDiagnostic)
+      .toHaveBeenCalledWith(expect.objectContaining({
+        surfaceId: "test-canvas-lane",
+        pendingCallback: true,
+        timeoutFallbackPending: true,
+        cancelled: true,
+      }));
+
+    act(() => {
+      vi.runOnlyPendingTimers();
+    });
+    expect(result.current.__getInstrumentationForTests().chunkCount).toBe(0);
   });
 
   it("flush() runs the chunk synchronously without queuing a callback", () => {

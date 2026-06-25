@@ -8,6 +8,7 @@ import {
   readRenderScheduleTierFromStorage,
   resolveDispatchSchedule,
   resolveDispatchSubmitMode,
+  resolveLaneSchedule,
   resolveRenderScheduleTier,
   type RenderScheduleTier,
 } from "./renderSchedulingPolicy";
@@ -101,6 +102,56 @@ describe("renderSchedulingPolicy (v2 naming)", () => {
     expect(baseline.budgetMs).toBe(0);
     expect(baseline.idleTimeoutMs).toBe(0);
     expect(guarded.budgetMs).toBeGreaterThan(aggressive.budgetMs);
+  });
+
+  it("keeps interaction lane urgent even under aggressive canvas pressure", () => {
+    const interaction = resolveLaneSchedule({
+      lane: "interaction",
+      tier: "aggressive",
+      isLiveRow: false,
+      isHeavy: true,
+      isCritical: false,
+    });
+
+    expect(interaction).toMatchObject({
+      useTransition: false,
+      useRafDelay: false,
+      allowDrop: false,
+      budgetMs: 0,
+      idleTimeoutMs: 0,
+    });
+  });
+
+  it("bounds canvas and background lanes without changing critical fast paths", () => {
+    const canvas = resolveLaneSchedule({
+      lane: "canvas",
+      tier: "guarded",
+      isLiveRow: false,
+      isHeavy: true,
+      isCritical: false,
+    });
+    const background = resolveLaneSchedule({
+      lane: "background",
+      tier: "guarded",
+      isLiveRow: false,
+      isHeavy: true,
+      isCritical: false,
+    });
+    const criticalCanvas = resolveLaneSchedule({
+      lane: "canvas",
+      tier: "aggressive",
+      isLiveRow: false,
+      isHeavy: true,
+      isCritical: true,
+    });
+
+    expect(canvas.allowDrop).toBe(true);
+    expect(canvas.budgetMs).toBe(8);
+    expect(background.allowDrop).toBe(true);
+    expect(background.budgetMs).toBeLessThan(canvas.budgetMs);
+    expect(background.idleTimeoutMs).toBeGreaterThan(canvas.idleTimeoutMs);
+    expect(criticalCanvas.allowDrop).toBe(false);
+    expect(criticalCanvas.budgetMs).toBe(0);
   });
 
   it("reads tier from localStorage and never throws on invalid input", () => {

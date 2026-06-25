@@ -33,6 +33,10 @@ describe("PanelTabs", () => {
     expect(onSelect).toHaveBeenCalledWith("search");
   });
 
+  it("keeps the memoized identity visible to interaction-lane guards", () => {
+    expect(PanelTabs.displayName).toBe("PanelTabs");
+  });
+
   it("shows a tooltip when hovering an icon-only panel tab", async () => {
     const onSelect = vi.fn();
 
