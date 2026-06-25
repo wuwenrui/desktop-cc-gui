@@ -40,7 +40,9 @@ type FilePanelMode =
   | "prompts"
   | "memory"
   | "activity"
-  | "radar";
+  | "radar"
+  | "evidence"
+  | "memoryInspector";
 type GitPanelMode = "diff" | "log" | "issues" | "prs";
 
 function isNonEmptyString(value: unknown): value is string {

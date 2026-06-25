@@ -1,6 +1,6 @@
 import { useCallback, useEffect } from "react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { getWorkspaceFiles } from "../services/tauri";
+import { getWorkspaceFiles, startWechatBridge } from "../services/tauri";
 import { pushErrorToast } from "../services/toasts";
 import { useSoloMode } from "../features/layout/hooks/useSoloMode";
 import { useLiveEditPreview } from "../features/live-edit-preview/hooks/useLiveEditPreview";
@@ -18,6 +18,7 @@ import {
   openOrFocusDetachedSpecHub,
 } from "../features/spec/detachedSpecHub";
 import { openOrFocusClientDocumentationWindow } from "../features/client-documentation/clientDocumentationWindow";
+import { startWeChatBridgeFromMenu } from "../features/app/utils/wechatBridgeMenuActions";
 import type { WorkspaceHomeDeleteResult } from "../features/workspaces/components/WorkspaceHome";
 import type { EngineType, WorkspaceInfo } from "../types";
 import { isRewindSupportedThreadId } from "./useAppShellSections.kanbanHelpers";
@@ -1018,6 +1019,17 @@ export function useAppShellSections(input: UseAppShellSectionsInput) {
       void handleAddCloneAgent(workspace);
     },
     onOpenSettings: () => openSettings(),
+    onOpenWeChatBridgeSettings: () =>
+      openSettings("advanced-features", "wechat-bridge"),
+    onStartWeChatBridge: () => {
+      void startWeChatBridgeFromMenu({
+        workspaceId: activeWorkspaceRef.current?.id ?? null,
+        openSettings,
+        startBridge: startWechatBridge,
+        pushErrorToast,
+        errorTitle: t("settings.wechatBridgeTitle"),
+      });
+    },
     onCycleAgent: handleCycleAgent,
     onCycleWorkspace: handleCycleWorkspace,
     onToggleDebug: handleDebugClick,

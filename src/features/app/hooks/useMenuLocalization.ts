@@ -20,6 +20,14 @@ export function useMenuLocalization() {
       { id: "about", text: t("menu.about", { appName: APP_NAME }) },
       { id: "check_for_updates", text: t("menu.checkForUpdates") },
       { id: "file_open_settings", text: t("menu.settings") },
+      {
+        id: "file_open_wechat_bridge_settings",
+        text: t("menu.wechatConnection"),
+      },
+      {
+        id: "file_start_wechat_bridge",
+        text: t("menu.startWechatConnection"),
+      },
 
       // File menu
       { id: "file_menu", text: t("menu.file") },

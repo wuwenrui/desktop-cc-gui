@@ -1551,6 +1551,7 @@ pub async fn engine_send_message(
                 model: sanitized_model,
                 effort,
                 disable_thinking: disable_thinking.unwrap_or(false),
+                safe_mode: false,
                 access_mode,
                 images,
                 continue_session: continue_session_for_send,
@@ -1560,6 +1561,7 @@ pub async fn engine_send_message(
                 variant: None,
                 collaboration_mode: None,
                 custom_spec_root: normalized_custom_spec_root.clone(),
+                append_system_prompt: None,
             };
 
             // Generate unique render item ids for Claude's assistant/reasoning lanes.
@@ -1777,6 +1779,7 @@ pub async fn engine_send_message(
                 model: model_for_send,
                 effort,
                 disable_thinking: false,
+                safe_mode: false,
                 access_mode,
                 images,
                 continue_session,
@@ -1786,6 +1789,7 @@ pub async fn engine_send_message(
                 variant,
                 collaboration_mode: None,
                 custom_spec_root: normalized_custom_spec_root.clone(),
+                append_system_prompt: None,
             };
 
             let turn_id = format!("opencode-turn-{}", uuid::Uuid::new_v4());
@@ -1932,6 +1936,7 @@ pub async fn engine_send_message(
                 model: sanitized_model,
                 effort,
                 disable_thinking: false,
+                safe_mode: false,
                 access_mode,
                 images,
                 continue_session,
@@ -1941,6 +1946,7 @@ pub async fn engine_send_message(
                 variant: None,
                 collaboration_mode: None,
                 custom_spec_root: normalized_custom_spec_root.clone(),
+                append_system_prompt: None,
             };
 
             let turn_id = format!("gemini-turn-{}", uuid::Uuid::new_v4());
@@ -2207,6 +2213,7 @@ pub async fn engine_send_message_sync(
                 model: sanitized_model,
                 effort,
                 disable_thinking: disable_thinking.unwrap_or(false),
+                safe_mode: false,
                 access_mode,
                 images,
                 continue_session: continue_session_for_send,
@@ -2216,6 +2223,7 @@ pub async fn engine_send_message_sync(
                 variant: None,
                 collaboration_mode: None,
                 custom_spec_root: normalized_custom_spec_root.clone(),
+                append_system_prompt: None,
             };
 
             let turn_id = format!("claude-sync-{}", uuid::Uuid::new_v4());
@@ -2296,6 +2304,7 @@ pub async fn engine_send_message_sync(
                 model: model_for_send,
                 effort,
                 disable_thinking: false,
+                safe_mode: false,
                 access_mode,
                 images,
                 continue_session,
@@ -2305,6 +2314,7 @@ pub async fn engine_send_message_sync(
                 variant,
                 collaboration_mode: None,
                 custom_spec_root: normalized_custom_spec_root.clone(),
+                append_system_prompt: None,
             };
 
             let turn_id = format!("opencode-sync-{}", uuid::Uuid::new_v4());
@@ -2388,6 +2398,7 @@ pub async fn engine_send_message_sync(
                 model: sanitized_model,
                 effort,
                 disable_thinking: false,
+                safe_mode: false,
                 access_mode,
                 images,
                 continue_session,
@@ -2397,6 +2408,7 @@ pub async fn engine_send_message_sync(
                 variant: None,
                 collaboration_mode: None,
                 custom_spec_root: normalized_custom_spec_root.clone(),
+                append_system_prompt: None,
             };
 
             let turn_id = format!("gemini-sync-{}", uuid::Uuid::new_v4());

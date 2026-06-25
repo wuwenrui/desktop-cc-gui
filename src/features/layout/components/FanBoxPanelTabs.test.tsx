@@ -48,21 +48,29 @@ describe("FanBoxPanelTabs", () => {
     const moreButton = screen.getByRole("button", { name: "fanbox.tabs.more" });
     fireEvent.click(moreButton);
 
-    // 展开后现有图标 tabs 全部可选（能力不破坏）
+    // 展开后现有图标 tabs 仍可通过响应式工具栏访问。
+    expect(screen.getByRole("button", { name: "panels.files" })).toBeTruthy();
+    const toolbarMoreButton = screen.getByRole("button", {
+      name: "common.moreActions",
+    });
+    fireEvent.pointerDown(toolbarMoreButton, {
+      button: 0,
+      ctrlKey: false,
+    });
+
     for (const name of [
       "panels.activity",
       "panels.projectMap",
       "panels.intentCanvas",
       "panels.radar",
       "panels.git",
-      "panels.files",
       "panels.search",
       "panels.notes",
     ]) {
-      expect(screen.getByRole("button", { name })).toBeTruthy();
+      expect(screen.getByRole("menuitem", { name })).toBeTruthy();
     }
 
-    fireEvent.click(screen.getByRole("button", { name: "panels.search" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "panels.search" }));
     expect(onSelect).toHaveBeenCalledWith("search");
 
     // 再点一次收起

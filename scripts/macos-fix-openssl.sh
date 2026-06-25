@@ -44,8 +44,12 @@ fi
 libssl="${openssl_prefix}/lib/libssl.3.dylib"
 libcrypto="${openssl_prefix}/lib/libcrypto.3.dylib"
 frameworks_dir="${app_path}/Contents/Frameworks"
-bin_path="${app_path}/Contents/MacOS/cc-gui"
-daemon_path="${app_path}/Contents/MacOS/cc_gui_daemon"
+managed_bin_paths=(
+  "${app_path}/Contents/MacOS/cc-gui"
+  "${app_path}/Contents/MacOS/cc_gui_daemon"
+  "${app_path}/Contents/MacOS/wx_bridge"
+  "${app_path}/Contents/MacOS/weclaw"
+)
 
 if [[ ! -f "${libssl}" || ! -f "${libcrypto}" ]]; then
   echo "OpenSSL dylibs not found at ${openssl_prefix}/lib"
@@ -67,7 +71,7 @@ if [[ -n "${crypto_ref}" && "${crypto_ref}" != "@rpath/libcrypto.3.dylib" ]]; th
 fi
 
 # Fix binary references dynamically
-for bin in "${bin_path}" "${daemon_path}"; do
+for bin in "${managed_bin_paths[@]}"; do
   [[ -f "${bin}" ]] || continue
 
   ssl_ref=$(otool -L "${bin}" | grep 'libssl' | awk '{print $1}' || true)
@@ -97,7 +101,7 @@ for lib in "${frameworks_dir}/libssl.3.dylib" "${frameworks_dir}/libcrypto.3.dyl
     verify_failed=1
   fi
 done
-for bin in "${bin_path}" "${daemon_path}"; do
+for bin in "${managed_bin_paths[@]}"; do
   [[ -f "${bin}" ]] || continue
   if otool -L "${bin}" | grep -E 'libssl|libcrypto' | grep -v '@rpath' | grep -q '/opt/\|/usr/local/'; then
     echo "ERROR: ${bin} still has absolute references:"
@@ -113,10 +117,10 @@ echo "All library references verified OK."
 
 codesign --force --options runtime --timestamp --sign "${identity}" "${frameworks_dir}/libcrypto.3.dylib"
 codesign --force --options runtime --timestamp --sign "${identity}" "${frameworks_dir}/libssl.3.dylib"
-codesign --force --options runtime --timestamp --sign "${identity}" "${codesign_entitlements[@]}" "${bin_path}"
-if [[ -f "${daemon_path}" ]]; then
-  codesign --force --options runtime --timestamp --sign "${identity}" "${codesign_entitlements[@]}" "${daemon_path}"
-fi
+for bin in "${managed_bin_paths[@]}"; do
+  [[ -f "${bin}" ]] || continue
+  codesign --force --options runtime --timestamp --sign "${identity}" "${codesign_entitlements[@]}" "${bin}"
+done
 codesign --force --options runtime --timestamp --sign "${identity}" "${codesign_entitlements[@]}" "${app_path}"
 
 echo "Bundled OpenSSL dylibs and re-signed ${app_path}"

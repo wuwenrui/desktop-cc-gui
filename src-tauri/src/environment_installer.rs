@@ -11,8 +11,7 @@ const COMMAND_TIMEOUT: Duration = Duration::from_secs(600);
 const CHECK_TIMEOUT: Duration = Duration::from_secs(12);
 const EVENT_NAME: &str = "environment-installer-event";
 
-const TUNA_BREW_GIT_REMOTE: &str =
-    "https://mirrors.tuna.tsinghua.edu.cn/git/homebrew/brew.git";
+const TUNA_BREW_GIT_REMOTE: &str = "https://mirrors.tuna.tsinghua.edu.cn/git/homebrew/brew.git";
 const TUNA_CORE_GIT_REMOTE: &str =
     "https://mirrors.tuna.tsinghua.edu.cn/git/homebrew/homebrew-core.git";
 const TUNA_INSTALL_GIT_REMOTE: &str =
@@ -362,7 +361,12 @@ async fn build_macos_dependencies() -> Vec<EnvironmentDependencyStatus> {
         dependency_status(EnvironmentDependencyId::Homebrew, brew, false, true),
         // CMake is never invoked by the app itself (whisper.cpp is compiled into the binary at
         // build time); only the user's own projects might need it, so it is optional.
-        dependency_status(EnvironmentDependencyId::Cmake, detect_command("cmake").await, false, true),
+        dependency_status(
+            EnvironmentDependencyId::Cmake,
+            detect_command("cmake").await,
+            false,
+            true,
+        ),
         dependency_status(
             EnvironmentDependencyId::ClaudeCli,
             detect_command("claude").await,
@@ -434,7 +438,10 @@ fn build_macos_install_plan(doctor: &EnvironmentDoctorResult) -> EnvironmentInst
         steps.push(build_homebrew_install_step());
     }
     if dependency_missing(doctor, EnvironmentDependencyId::Cmake) {
-        steps.push(build_brew_package_step(EnvironmentDependencyId::Cmake, "cmake"));
+        steps.push(build_brew_package_step(
+            EnvironmentDependencyId::Cmake,
+            "cmake",
+        ));
     }
     if dependency_missing(doctor, EnvironmentDependencyId::ClaudeCli) {
         steps.push(build_macos_claude_cli_step());
@@ -609,7 +616,10 @@ fn tuna_homebrew_environment() -> Vec<(String, String)> {
             TUNA_CORE_GIT_REMOTE.to_string(),
         ),
         ("HOMEBREW_INSTALL_FROM_API".to_string(), "1".to_string()),
-        ("HOMEBREW_API_DOMAIN".to_string(), TUNA_API_DOMAIN.to_string()),
+        (
+            "HOMEBREW_API_DOMAIN".to_string(),
+            TUNA_API_DOMAIN.to_string(),
+        ),
         (
             "HOMEBREW_BOTTLE_DOMAIN".to_string(),
             TUNA_BOTTLE_DOMAIN.to_string(),
@@ -650,9 +660,8 @@ async fn launch_homebrew_in_terminal(
 
     let shell_command = homebrew_terminal_shell_command();
     let escaped = shell_command.replace('\\', "\\\\").replace('"', "\\\"");
-    let applescript = format!(
-        "tell application \"Terminal\"\nactivate\ndo script \"{escaped}\"\nend tell"
-    );
+    let applescript =
+        format!("tell application \"Terminal\"\nactivate\ndo script \"{escaped}\"\nend tell");
 
     emit_output_event(
         app,
@@ -838,7 +847,11 @@ async fn run_command(
     } else {
         let stderr = sanitize_installer_output(&String::from_utf8_lossy(&output.stderr));
         Err(if stderr.trim().is_empty() {
-            format!("{} failed with status {:?}", step.label, output.status.code())
+            format!(
+                "{} failed with status {:?}",
+                step.label,
+                output.status.code()
+            )
         } else {
             stderr
         })
@@ -991,20 +1004,18 @@ fn unix_command_candidates(command: &str) -> Vec<PathBuf> {
     let home = dirs::home_dir().unwrap_or_default();
     // Directories every CLI we detect may land in. macOS-focused but valid on Linux too.
     let mut dirs: Vec<PathBuf> = vec![
-        home.join(".local/bin"),       // claude native installer, pipx, user-local installs
-        home.join(".claude/local"),    // claude alternate local layout
+        home.join(".local/bin"), // claude native installer, pipx, user-local installs
+        home.join(".claude/local"), // claude alternate local layout
         PathBuf::from("/opt/homebrew/bin"), // Homebrew on Apple Silicon
-        PathBuf::from("/usr/local/bin"),    // Homebrew on Intel / manual installs
-        home.join(".bun/bin"),         // bun global bin
-        home.join(".npm-global/bin"),  // npm global prefix override
+        PathBuf::from("/usr/local/bin"), // Homebrew on Intel / manual installs
+        home.join(".bun/bin"),   // bun global bin
+        home.join(".npm-global/bin"), // npm global prefix override
     ];
     // nvm installs node/npm-managed CLIs under ~/.nvm/versions/node/<ver>/bin; include every
     // installed version's bin so the active one is covered without parsing nvm state.
     dirs.extend(nvm_version_bins(&home));
 
-    dirs.into_iter()
-        .map(|dir| dir.join(command))
-        .collect()
+    dirs.into_iter().map(|dir| dir.join(command)).collect()
 }
 
 /// All `~/.nvm/versions/node/*/bin` directories that currently exist.
@@ -1036,12 +1047,19 @@ fn windows_command_candidates(command: &str) -> Vec<PathBuf> {
 
     // node MSI / winget installs into Program Files.
     if let Some(program_files) = std::env::var_os("ProgramFiles") {
-        candidates.push(PathBuf::from(&program_files).join("nodejs").join(format!("{command}.exe")));
+        candidates.push(
+            PathBuf::from(&program_files)
+                .join("nodejs")
+                .join(format!("{command}.exe")),
+        );
     }
 
     // winget "Links" shim directory (claude native installer + many winget packages land here).
     if let Some(local_appdata) = std::env::var_os("LOCALAPPDATA") {
-        let links = PathBuf::from(&local_appdata).join("Microsoft").join("WinGet").join("Links");
+        let links = PathBuf::from(&local_appdata)
+            .join("Microsoft")
+            .join("WinGet")
+            .join("Links");
         candidates.push(links.join(format!("{command}.exe")));
         candidates.push(links.join(format!("{command}.cmd")));
     }
@@ -1127,10 +1145,12 @@ fn normalize_run_id(run_id: Option<String>) -> String {
 }
 
 fn sanitize_installer_output(text: &str) -> String {
-    let home_path_pattern = Regex::new(r"(/Users|/home|C:\\Users)[/\\][^/\\\s:]+").expect("valid home path regex");
+    let home_path_pattern =
+        Regex::new(r"(/Users|/home|C:\\Users)[/\\][^/\\\s:]+").expect("valid home path regex");
     let env_secret_pattern =
         Regex::new(r"(?i)(token|password|secret|api[_-]?key)=\S+").expect("valid env regex");
-    let bearer_pattern = Regex::new(r"(?i)bearer\s+[A-Za-z0-9._~+/=-]+").expect("valid bearer regex");
+    let bearer_pattern =
+        Regex::new(r"(?i)bearer\s+[A-Za-z0-9._~+/=-]+").expect("valid bearer regex");
 
     let redacted = home_path_pattern.replace_all(text, "<home>");
     let redacted = env_secret_pattern.replace_all(&redacted, "$1=<redacted>");
@@ -1176,12 +1196,13 @@ mod tests {
         let deps = build_macos_dependencies().await;
 
         let required = |id: EnvironmentDependencyId| {
-            deps.iter()
-                .find(|dep| dep.id == id)
-                .map(|dep| dep.required)
+            deps.iter().find(|dep| dep.id == id).map(|dep| dep.required)
         };
 
-        assert_eq!(required(EnvironmentDependencyId::XcodeCommandLineTools), Some(false));
+        assert_eq!(
+            required(EnvironmentDependencyId::XcodeCommandLineTools),
+            Some(false)
+        );
         assert_eq!(required(EnvironmentDependencyId::ClaudeCli), Some(false));
         assert_eq!(required(EnvironmentDependencyId::Homebrew), Some(false));
         assert_eq!(required(EnvironmentDependencyId::Cmake), Some(false));
@@ -1225,7 +1246,10 @@ mod tests {
 
         let plan = build_install_plan_from_doctor(&doctor);
         assert_eq!(plan.steps.len(), 1);
-        assert_eq!(plan.steps[0].dependency_id, EnvironmentDependencyId::ClaudeCli);
+        assert_eq!(
+            plan.steps[0].dependency_id,
+            EnvironmentDependencyId::ClaudeCli
+        );
     }
 
     #[test]
@@ -1279,9 +1303,7 @@ mod tests {
     fn non_homebrew_steps_do_not_require_tty() {
         assert!(!build_xcode_clt_step().requires_tty);
         assert!(!build_macos_claude_cli_step().requires_tty);
-        assert!(
-            !build_brew_package_step(EnvironmentDependencyId::Cmake, "cmake").requires_tty
-        );
+        assert!(!build_brew_package_step(EnvironmentDependencyId::Cmake, "cmake").requires_tty);
     }
 
     #[test]
@@ -1335,7 +1357,9 @@ mod tests {
         std::env::set_var("ProgramFiles", r"C:\Program Files");
         std::env::set_var("LOCALAPPDATA", r"C:\Users\test\AppData\Local");
         let candidates = windows_command_candidates("claude");
-        assert!(candidates.contains(&PathBuf::from(r"C:\Users\test\AppData\Roaming\npm\claude.cmd")));
+        assert!(candidates.contains(&PathBuf::from(
+            r"C:\Users\test\AppData\Roaming\npm\claude.cmd"
+        )));
         let node = windows_command_candidates("node");
         assert!(node.contains(&PathBuf::from(r"C:\Program Files\nodejs\node.exe")));
         assert!(candidates.contains(&PathBuf::from(
@@ -1355,16 +1379,19 @@ mod tests {
         std::fs::create_dir_all(&dir).expect("create temp dir");
         let bin = dir.join("faketool");
         let mut file = std::fs::File::create(&bin).expect("create fake binary");
-        file.write_all(b"#!/bin/sh\necho '9.9.9 (fake)'\n").expect("write script");
+        file.write_all(b"#!/bin/sh\necho '9.9.9 (fake)'\n")
+            .expect("write script");
         file.flush().expect("flush");
         drop(file);
-        std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755))
-            .expect("chmod +x");
+        std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).expect("chmod +x");
 
         let result = command_version(&bin.to_string_lossy(), &["--version"]).await;
         std::fs::remove_dir_all(&dir).ok();
 
-        assert!(result.installed, "absolute-path probe should succeed: {result:?}");
+        assert!(
+            result.installed,
+            "absolute-path probe should succeed: {result:?}"
+        );
         assert_eq!(result.version.as_deref(), Some("9.9.9 (fake)"));
     }
 

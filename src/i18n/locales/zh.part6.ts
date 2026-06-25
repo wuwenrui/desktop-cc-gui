@@ -52,6 +52,8 @@ const zhPart6 = {
     about: "关于 {{appName}}",
     checkForUpdates: "检查更新…",
     settings: "设置…",
+    wechatConnection: "微信连接…",
+    startWechatConnection: "启动微信连接…",
     // 文件菜单
     file: "文件",
     newAgent: "新建会话",

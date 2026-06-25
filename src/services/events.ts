@@ -224,6 +224,12 @@ const menuNewCloneAgentHub = createEventHub<void>("menu-new-clone-agent");
 const menuNewWindowHub = createEventHub<void>("menu-new-window");
 const menuAddWorkspaceHub = createEventHub<void>("menu-add-workspace");
 const menuOpenSettingsHub = createEventHub<void>("menu-open-settings");
+const menuOpenWeChatBridgeSettingsHub = createEventHub<void>(
+  "menu-open-wechat-bridge-settings",
+);
+const menuStartWeChatBridgeHub = createEventHub<void>(
+  "menu-start-wechat-bridge",
+);
 const menuToggleProjectsSidebarHub = createEventHub<void>(
   "menu-toggle-projects-sidebar",
 );
@@ -431,6 +437,24 @@ export function subscribeMenuOpenSettings(
   options?: SubscriptionOptions,
 ): Unsubscribe {
   return menuOpenSettingsHub.subscribe(() => {
+    onEvent();
+  }, options);
+}
+
+export function subscribeMenuOpenWeChatBridgeSettings(
+  onEvent: () => void,
+  options?: SubscriptionOptions,
+): Unsubscribe {
+  return menuOpenWeChatBridgeSettingsHub.subscribe(() => {
+    onEvent();
+  }, options);
+}
+
+export function subscribeMenuStartWeChatBridge(
+  onEvent: () => void,
+  options?: SubscriptionOptions,
+): Unsubscribe {
+  return menuStartWeChatBridgeHub.subscribe(() => {
     onEvent();
   }, options);
 }

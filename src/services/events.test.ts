@@ -9,6 +9,8 @@ import {
   subscribeMenuCycleCollaborationMode,
   subscribeMenuCycleModel,
   subscribeMenuNewAgent,
+  subscribeMenuOpenWeChatBridgeSettings,
+  subscribeMenuStartWeChatBridge,
   subscribeRuntimeLogStatus,
   subscribeTerminalOutput,
 } from "./events";
@@ -178,6 +180,50 @@ describe("events subscriptions", () => {
       payload: undefined,
     };
     listener(event);
+    expect(onEvent).toHaveBeenCalledTimes(1);
+
+    cleanup();
+  });
+
+  it("delivers WeChat bridge settings menu events to subscribers", async () => {
+    let listener: EventCallback<void> = () => {};
+    const unlisten = vi.fn();
+
+    vi.mocked(listen).mockImplementation((_event, handler) => {
+      listener = handler as EventCallback<void>;
+      return Promise.resolve(unlisten);
+    });
+
+    const onEvent = vi.fn();
+    const cleanup = subscribeMenuOpenWeChatBridgeSettings(onEvent);
+
+    listener({
+      event: "menu-open-wechat-bridge-settings",
+      id: 1,
+      payload: undefined,
+    });
+    expect(onEvent).toHaveBeenCalledTimes(1);
+
+    cleanup();
+  });
+
+  it("delivers start WeChat bridge menu events to subscribers", async () => {
+    let listener: EventCallback<void> = () => {};
+    const unlisten = vi.fn();
+
+    vi.mocked(listen).mockImplementation((_event, handler) => {
+      listener = handler as EventCallback<void>;
+      return Promise.resolve(unlisten);
+    });
+
+    const onEvent = vi.fn();
+    const cleanup = subscribeMenuStartWeChatBridge(onEvent);
+
+    listener({
+      event: "menu-start-wechat-bridge",
+      id: 1,
+      payload: undefined,
+    });
     expect(onEvent).toHaveBeenCalledTimes(1);
 
     cleanup();

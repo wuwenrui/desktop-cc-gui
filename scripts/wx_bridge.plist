@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  launchd LaunchAgent template for wx_bridge (R-Guard).
+  Keeps the WeChat bridge process alive. The cc_gui_daemon itself is supervised
+  by the desktop app's daemon_bootstrap, not here.
+
+  Setup:
+    1. Replace __BIN__, __TOKEN__, __WORKSPACE__, __HOME__ below.
+    2. cp this to ~/Library/LaunchAgents/work.codingrui.wx_bridge.plist
+    3. launchctl load ~/Library/LaunchAgents/work.codingrui.wx_bridge.plist
+  Tear down:
+    launchctl unload ~/Library/LaunchAgents/work.codingrui.wx_bridge.plist
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>work.codingrui.wx_bridge</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>__BIN__</string>
+        <string>--token</string>
+        <string>__TOKEN__</string>
+        <string>--daemon-host</string>
+        <string>127.0.0.1:4732</string>
+        <string>--listen</string>
+        <string>127.0.0.1:18012</string>
+        <string>--default-workspace</string>
+        <string>__WORKSPACE__</string>
+        <string>--data-dir</string>
+        <string>__HOME__/.wx_bridge</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>5</integer>
+    <key>StandardOutPath</key>
+    <string>__HOME__/.wx_bridge/stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>__HOME__/.wx_bridge/stderr.log</string>
+</dict>
+</plist>

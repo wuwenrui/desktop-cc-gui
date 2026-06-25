@@ -6,7 +6,9 @@ import {
   subscribeMenuNewCloneAgent,
   subscribeMenuNewWindow,
   subscribeMenuNewWorktreeAgent,
+  subscribeMenuOpenWeChatBridgeSettings,
   subscribeMenuOpenSettings,
+  subscribeMenuStartWeChatBridge,
   subscribeMenuPrevAgent,
   subscribeMenuNextAgent,
   subscribeMenuPrevWorkspace,
@@ -32,6 +34,8 @@ type Params = {
   onAddWorktreeAgent: (workspace: WorkspaceInfo) => void;
   onAddCloneAgent: (workspace: WorkspaceInfo) => void;
   onOpenSettings: () => void;
+  onOpenWeChatBridgeSettings: () => void;
+  onStartWeChatBridge: () => void;
   onCycleAgent: (direction: "next" | "prev") => void;
   onCycleWorkspace: (direction: "next" | "prev") => void;
   onToggleDebug: () => void;
@@ -55,6 +59,8 @@ export function useAppMenuEvents({
   onAddWorktreeAgent,
   onAddCloneAgent,
   onOpenSettings,
+  onOpenWeChatBridgeSettings,
+  onStartWeChatBridge,
   onCycleAgent,
   onCycleWorkspace,
   onToggleDebug,
@@ -99,6 +105,14 @@ export function useAppMenuEvents({
 
   useTauriEvent(subscribeMenuOpenSettings, () => {
     onOpenSettings();
+  });
+
+  useTauriEvent(subscribeMenuOpenWeChatBridgeSettings, () => {
+    onOpenWeChatBridgeSettings();
+  });
+
+  useTauriEvent(subscribeMenuStartWeChatBridge, () => {
+    onStartWeChatBridge();
   });
 
   useTauriEvent(subscribeMenuNextAgent, () => {

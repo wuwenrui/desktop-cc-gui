@@ -1158,6 +1158,7 @@ export function useAppShellLayoutNodesSection(
     },
     chrome: {
       onOpenSettings: () => openSettings(),
+      onOpenEnvironment: () => openSettings("runtime-environment"),
       onOpenAgentSettings: () =>
         openSettings("agent-prompt-management", "agent-management"),
       onOpenPromptSettings: () =>

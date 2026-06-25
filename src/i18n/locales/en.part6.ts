@@ -227,6 +227,8 @@ const enPart6 = {
     about: "About {{appName}}",
     checkForUpdates: "Check for Updates…",
     settings: "Settings…",
+    wechatConnection: "WeChat Connection…",
+    startWechatConnection: "Start WeChat Connection…",
     // File menu
     file: "File",
     newAgent: "New Agent",

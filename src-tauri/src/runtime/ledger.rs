@@ -187,6 +187,8 @@ impl RuntimeManager {
         if let Ok(serialized) = serde_json::to_string_pretty(&payload) {
             let _ = write_json_atomically(&self.ledger_path, &serialized);
         }
-        *self.diagnostics.blocking_lock() = diagnostics;
+        if let Ok(mut guard) = self.diagnostics.try_lock() {
+            *guard = diagnostics;
+        }
     }
 }

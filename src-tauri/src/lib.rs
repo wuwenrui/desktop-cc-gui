@@ -145,9 +145,11 @@ mod linux_startup_guard;
 mod local_usage;
 mod mcp_writer;
 mod menu;
-// Lawyer copilot: new-api balance/usage command
+// Lawyer copilot: new-api balance/usage and paid entitlements
+mod newapi_entitlements;
 mod newapi_usage;
 mod note_cards;
+pub mod path_env;
 mod project_canvas;
 mod project_identity;
 mod project_map;
@@ -177,6 +179,7 @@ mod types;
 mod utils;
 mod vendors;
 mod web_service;
+mod wechat_bridge_control;
 mod window;
 mod workspaces;
 
@@ -265,6 +268,7 @@ pub fn run() {
                     state.sync_engine_configs_from_settings().await;
                 });
             }
+            wechat_bridge_control::spawn_wechat_bridge_keep_online_task(app.handle().clone());
             {
                 let app_handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
@@ -335,6 +339,8 @@ pub fn run() {
             });
 
             let window = win_builder.build()?;
+            let _ = window.show();
+            let _ = window.set_focus();
 
             // Hide the menu bar on Windows while keeping accelerator shortcuts active.
             #[cfg(target_os = "windows")]

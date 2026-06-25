@@ -109,8 +109,7 @@ fn safe_relative_path(name: &str) -> Result<PathBuf, ZipUnsafeError> {
 /// `dest_dir` 之下，目录条目只建目录、文件条目写内容。返回写出的文件数。
 fn extract_zip_into(zip_bytes: &[u8], dest_dir: &Path) -> Result<usize, String> {
     let reader = Cursor::new(zip_bytes);
-    let mut archive =
-        zip::ZipArchive::new(reader).map_err(|e| format!("打开 zip 失败: {e}"))?;
+    let mut archive = zip::ZipArchive::new(reader).map_err(|e| format!("打开 zip 失败: {e}"))?;
 
     std::fs::create_dir_all(dest_dir).map_err(|e| format!("创建目标目录失败: {e}"))?;
 
@@ -166,8 +165,7 @@ fn read_installed_index(skills_dir: &Path) -> Result<BTreeMap<String, InstalledE
     if !path.exists() {
         return Ok(BTreeMap::new());
     }
-    let content = std::fs::read_to_string(&path)
-        .map_err(|e| format!("读取已装索引失败: {e}"))?;
+    let content = std::fs::read_to_string(&path).map_err(|e| format!("读取已装索引失败: {e}"))?;
     if content.trim().is_empty() {
         return Ok(BTreeMap::new());
     }
@@ -182,8 +180,8 @@ fn write_installed_index(
     index: &BTreeMap<String, InstalledEntry>,
 ) -> Result<(), String> {
     std::fs::create_dir_all(skills_dir).map_err(|e| format!("创建 skills 目录失败: {e}"))?;
-    let json = serde_json::to_string_pretty(index)
-        .map_err(|e| format!("序列化已装索引失败: {e}"))?;
+    let json =
+        serde_json::to_string_pretty(index).map_err(|e| format!("序列化已装索引失败: {e}"))?;
     std::fs::write(installed_index_path(skills_dir), json)
         .map_err(|e| format!("写入已装索引失败: {e}"))
 }
@@ -296,10 +294,18 @@ fn collect_tree(root: &Path, dir: &Path, out: &mut Vec<SkillTreeEntry>) -> Resul
             continue;
         }
         if meta.is_dir() {
-            out.push(SkillTreeEntry { path: rel_str, size: 0, is_dir: true });
+            out.push(SkillTreeEntry {
+                path: rel_str,
+                size: 0,
+                is_dir: true,
+            });
             collect_tree(root, &path, out)?;
         } else if meta.is_file() {
-            out.push(SkillTreeEntry { path: rel_str, size: meta.len(), is_dir: false });
+            out.push(SkillTreeEntry {
+                path: rel_str,
+                size: meta.len(),
+                is_dir: false,
+            });
         }
     }
     Ok(())
@@ -321,8 +327,8 @@ fn skill_tree_core(skills_dir: &Path, name: &str) -> Result<Vec<SkillTreeEntry>,
     }
 
     let single_file = skills_dir.join(format!("{name}.md"));
-    let meta = std::fs::symlink_metadata(&single_file)
-        .map_err(|_| format!("skill 目录不存在: {name}"))?;
+    let meta =
+        std::fs::symlink_metadata(&single_file).map_err(|_| format!("skill 目录不存在: {name}"))?;
     if meta.file_type().is_symlink() || !meta.is_file() {
         return Err(format!("skill 目录不存在: {name}"));
     }
@@ -401,8 +407,8 @@ fn skill_file_core(
     }
 
     let single_file = skills_dir.join(format!("{name}.md"));
-    let meta = std::fs::symlink_metadata(&single_file)
-        .map_err(|_| format!("skill 目录不存在: {name}"))?;
+    let meta =
+        std::fs::symlink_metadata(&single_file).map_err(|_| format!("skill 目录不存在: {name}"))?;
     if meta.file_type().is_symlink() || !meta.is_file() {
         return Err(format!("skill 目录不存在: {name}"));
     }
@@ -480,7 +486,12 @@ pub(crate) async fn market_add_skill(
     let next = upsert_installed(
         &index,
         &name,
-        InstalledEntry { skill_id, version, installed_at, display_name },
+        InstalledEntry {
+            skill_id,
+            version,
+            installed_at,
+            display_name,
+        },
     );
     write_installed_index(&skills_dir, &next)?;
 
@@ -595,7 +606,10 @@ mod tests {
         let zip = make_zip(&[("../escape.md", b"pwned")]);
 
         let err = extract_zip_into(&zip, &dest).unwrap_err();
-        assert!(err.contains("traversal") || err.contains("unsafe"), "got: {err}");
+        assert!(
+            err.contains("traversal") || err.contains("unsafe"),
+            "got: {err}"
+        );
         // 逃逸文件绝不能被写到目标目录之外。
         assert!(!base.join("skills").join("escape.md").exists());
         assert!(!base.join("escape.md").exists());
@@ -636,7 +650,12 @@ mod tests {
         // 不存在 → 空。
         assert!(read_installed_index(&skills).unwrap().is_empty());
 
-        let entry = InstalledEntry { skill_id: 7, version: 3, installed_at: Some(1718000000000), display_name: None };
+        let entry = InstalledEntry {
+            skill_id: 7,
+            version: 3,
+            installed_at: Some(1718000000000),
+            display_name: None,
+        };
         let index = upsert_installed(&BTreeMap::new(), "劳动用工小助理", entry.clone());
         write_installed_index(&skills, &index).unwrap();
 
@@ -647,7 +666,12 @@ mod tests {
         let updated = upsert_installed(
             &read,
             "劳动用工小助理",
-            InstalledEntry { skill_id: 7, version: 5, installed_at: Some(1718000000000), display_name: None },
+            InstalledEntry {
+                skill_id: 7,
+                version: 5,
+                installed_at: Some(1718000000000),
+                display_name: None,
+            },
         );
         write_installed_index(&skills, &updated).unwrap();
         let read2 = read_installed_index(&skills).unwrap();
@@ -661,7 +685,12 @@ mod tests {
         let mut index = BTreeMap::new();
         index.insert(
             "alpha".to_string(),
-            InstalledEntry { skill_id: 1, version: 2, installed_at: None, display_name: None },
+            InstalledEntry {
+                skill_id: 1,
+                version: 2,
+                installed_at: None,
+                display_name: None,
+            },
         );
         let v = index_to_value(&index);
         assert_eq!(v["alpha"]["skill_id"], Value::from(1));
@@ -680,7 +709,10 @@ mod tests {
         // 新装但未提供 → None。
         assert_eq!(resolve_display_name(&index, "civil", None), None);
         // 空白串视为未提供。
-        assert_eq!(resolve_display_name(&index, "civil", Some("  ".to_string())), None);
+        assert_eq!(
+            resolve_display_name(&index, "civil", Some("  ".to_string())),
+            None
+        );
 
         index.insert(
             "civil".to_string(),
@@ -697,7 +729,10 @@ mod tests {
             Some("新名".to_string()),
         );
         // 升级未提供 → 保留旧值。
-        assert_eq!(resolve_display_name(&index, "civil", None), Some("旧名".to_string()));
+        assert_eq!(
+            resolve_display_name(&index, "civil", None),
+            Some("旧名".to_string())
+        );
     }
 
     #[test]
@@ -724,7 +759,10 @@ mod tests {
     #[test]
     fn new_install_gets_current_installed_at() {
         let index: BTreeMap<String, InstalledEntry> = BTreeMap::new();
-        assert_eq!(resolve_installed_at(&index, "fresh", 1718000000123), Some(1718000000123));
+        assert_eq!(
+            resolve_installed_at(&index, "fresh", 1718000000123),
+            Some(1718000000123)
+        );
     }
 
     #[test]
@@ -732,11 +770,21 @@ mod tests {
         let mut index = BTreeMap::new();
         index.insert(
             "kept".to_string(),
-            InstalledEntry { skill_id: 1, version: 1, installed_at: Some(111), display_name: None },
+            InstalledEntry {
+                skill_id: 1,
+                version: 1,
+                installed_at: Some(111),
+                display_name: None,
+            },
         );
         index.insert(
             "legacy".to_string(),
-            InstalledEntry { skill_id: 2, version: 1, installed_at: None, display_name: None },
+            InstalledEntry {
+                skill_id: 2,
+                version: 1,
+                installed_at: None,
+                display_name: None,
+            },
         );
         // 已有时间戳 → 原样保留，不被 now 覆盖。
         assert_eq!(resolve_installed_at(&index, "kept", 999_999), Some(111));
@@ -769,11 +817,21 @@ mod tests {
         let mut index = BTreeMap::new();
         index.insert(
             "with-ts".to_string(),
-            InstalledEntry { skill_id: 1, version: 2, installed_at: Some(123), display_name: None },
+            InstalledEntry {
+                skill_id: 1,
+                version: 2,
+                installed_at: Some(123),
+                display_name: None,
+            },
         );
         index.insert(
             "without-ts".to_string(),
-            InstalledEntry { skill_id: 3, version: 4, installed_at: None, display_name: None },
+            InstalledEntry {
+                skill_id: 3,
+                version: 4,
+                installed_at: None,
+                display_name: None,
+            },
         );
         let v = index_to_value(&index);
         assert_eq!(v["with-ts"]["installed_at"], Value::from(123u64));
@@ -936,7 +994,11 @@ mod tests {
         let got = skill_file_core(&skills, "demo-skill", "big.md").unwrap();
         assert!(got.truncated);
         assert_eq!(got.size, 525_000);
-        assert!(got.content.len() <= 524_288, "content len = {}", got.content.len());
+        assert!(
+            got.content.len() <= 524_288,
+            "content len = {}",
+            got.content.len()
+        );
         // 截断点必须落在字符边界（524288 % 3 == 2 → 回退到 524286）。
         assert_eq!(got.content.len(), 524_286);
         assert!(got.content.chars().all(|c| c == '你'));
@@ -954,7 +1016,10 @@ mod tests {
         .unwrap();
 
         let err = skill_file_core(&skills, "demo-skill", "blob.bin").unwrap_err();
-        assert!(err.contains("binary") || err.contains("二进制"), "got: {err}");
+        assert!(
+            err.contains("binary") || err.contains("二进制"),
+            "got: {err}"
+        );
 
         std::fs::remove_dir_all(&base).ok();
     }

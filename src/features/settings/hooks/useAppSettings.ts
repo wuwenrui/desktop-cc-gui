@@ -149,6 +149,7 @@ const defaultSettings: AppSettings = {
   remoteBackendToken: null,
   webServicePort: 3080,
   webServiceToken: null,
+  wechatBridgeKeepOnline: false,
   systemProxyEnabled: false,
   systemProxyUrl: null,
   defaultAccessMode: "full-access",
@@ -330,6 +331,7 @@ function normalizeAppSettings(
         : "related",
     webServicePort: normalizeWebServicePort(settings.webServicePort),
     webServiceToken: normalizeWebServiceToken(settings.webServiceToken),
+    wechatBridgeKeepOnline: settings.wechatBridgeKeepOnline === true,
     systemProxyUrl: settings.systemProxyUrl?.trim()
       ? settings.systemProxyUrl.trim()
       : null,

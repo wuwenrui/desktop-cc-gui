@@ -29,6 +29,7 @@ const ROOT_DIR = join(__dirname, "..");
 const RELEASE_DIR = join(ROOT_DIR, "release-local");
 const TAURI_DIR = join(ROOT_DIR, "src-tauri");
 const BUILD_NPM_USERCONFIG = join(ROOT_DIR, ".npmrc.build-platform");
+const MAC_HELPER_EXECUTABLES = ["cc_gui_daemon", "wx_bridge", "weclaw"];
 const LEGACY_NPM_CONFIG_ENV_KEYS = [
   "npm_config_electron_mirror",
   "npm_config_electron-mirror",
@@ -100,7 +101,12 @@ function getMacInstallerTitle(config = getTauriConfig()) {
   return `${getProductName(config)} Installer`;
 }
 
+function getMacManagedExecutableNames() {
+  return ["cc-gui", ...MAC_HELPER_EXECUTABLES];
+}
+
 export const buildPlatformInternals = {
+  getMacManagedExecutableNames,
   getMacBundlePath,
   getMacDmgName,
   getMacInstallerTitle,
@@ -247,13 +253,15 @@ async function buildMacOS(arch, options = {}) {
   const buildEnv = arch === "arm64" ? "" : `X86_64_APPLE_DARWIN_OPENSSL_DIR=${CONFIG.openssl.x64} `;
   exec(`${buildEnv}npm run tauri -- build --target ${target} --bundles app`);
 
-  // For universal builds, merge daemon binary
+  // For universal builds, merge helper binaries
   if (arch === "universal") {
-    console.log("\nMerging daemon binary for universal build...");
-    exec(`lipo -create \\
-      ${TAURI_DIR}/target/aarch64-apple-darwin/release/cc_gui_daemon \\
-      ${TAURI_DIR}/target/x86_64-apple-darwin/release/cc_gui_daemon \\
-      -output ${TAURI_DIR}/target/universal-apple-darwin/release/cc_gui_daemon`);
+    console.log("\nMerging helper binaries for universal build...");
+    for (const helperName of MAC_HELPER_EXECUTABLES) {
+      exec(`lipo -create \\
+        ${TAURI_DIR}/target/aarch64-apple-darwin/release/${helperName} \\
+        ${TAURI_DIR}/target/x86_64-apple-darwin/release/${helperName} \\
+        -output ${TAURI_DIR}/target/universal-apple-darwin/release/${helperName}`);
+    }
 
     // Rebuild bundle
     exec(`${buildEnv}npm run tauri -- build --target ${target} --bundles app`);
@@ -284,7 +292,7 @@ async function buildMacOS(arch, options = {}) {
       exec(`install_name_tool -change ${CONFIG.openssl.arm64}/lib/libcrypto.3.dylib @rpath/libcrypto.3.dylib "${frameworksPath}/libssl.3.dylib"`, { ignoreError: true });
 
       // Fix binary paths
-      for (const bin of ["cc-gui", "cc_gui_daemon"]) {
+      for (const bin of getMacManagedExecutableNames()) {
         const binPath = join(bundlePath, "Contents/MacOS", bin);
         exec(`install_name_tool -add_rpath "@executable_path/../Frameworks" "${binPath}"`, { ignoreError: true });
         exec(`install_name_tool -change ${CONFIG.openssl.arm64}/lib/libssl.3.dylib @rpath/libssl.3.dylib "${binPath}"`, { ignoreError: true });
@@ -296,8 +304,9 @@ async function buildMacOS(arch, options = {}) {
       const entitlements = CONFIG.entitlements;
       exec(`codesign --force --options runtime --sign "${identity}" --entitlements "${entitlements}" --timestamp "${frameworksPath}/libcrypto.3.dylib"`);
       exec(`codesign --force --options runtime --sign "${identity}" --entitlements "${entitlements}" --timestamp "${frameworksPath}/libssl.3.dylib"`);
-      exec(`codesign --force --options runtime --sign "${identity}" --entitlements "${entitlements}" --timestamp "${bundlePath}/Contents/MacOS/cc-gui"`);
-      exec(`codesign --force --options runtime --sign "${identity}" --entitlements "${entitlements}" --timestamp "${bundlePath}/Contents/MacOS/cc_gui_daemon"`);
+      for (const bin of getMacManagedExecutableNames()) {
+        exec(`codesign --force --options runtime --sign "${identity}" --entitlements "${entitlements}" --timestamp "${bundlePath}/Contents/MacOS/${bin}"`);
+      }
       exec(`codesign --force --options runtime --sign "${identity}" --entitlements "${entitlements}" --timestamp "${bundlePath}"`);
     } else {
       // Use existing script for single-arch builds

@@ -271,7 +271,10 @@ mod tests {
             "user edited",
             "existing files must never be overwritten"
         );
-        assert_eq!(fs::read_to_string(dst.join("新技能.md")).unwrap(), "brand new");
+        assert_eq!(
+            fs::read_to_string(dst.join("新技能.md")).unwrap(),
+            "brand new"
+        );
 
         fs::remove_dir_all(&base).ok();
     }

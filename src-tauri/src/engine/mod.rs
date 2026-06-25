@@ -321,6 +321,8 @@ pub struct SendMessageParams {
     pub effort: Option<String>,
     /// Force-disable Claude Code extended thinking for this request.
     pub disable_thinking: bool,
+    /// Start Claude with customizations disabled for automation-safe sessions.
+    pub safe_mode: bool,
     /// Access/permission mode
     pub access_mode: Option<String>,
     /// Image paths to include
@@ -339,6 +341,8 @@ pub struct SendMessageParams {
     pub collaboration_mode: Option<Value>,
     /// Optional external OpenSpec root to expose for the session.
     pub custom_spec_root: Option<String>,
+    /// Extra system prompt to append without recording it as the user's visible message.
+    pub append_system_prompt: Option<String>,
 }
 
 impl Default for SendMessageParams {
@@ -348,6 +352,7 @@ impl Default for SendMessageParams {
             model: None,
             effort: None,
             disable_thinking: false,
+            safe_mode: false,
             access_mode: None,
             images: None,
             continue_session: false,
@@ -357,6 +362,7 @@ impl Default for SendMessageParams {
             variant: None,
             collaboration_mode: None,
             custom_spec_root: None,
+            append_system_prompt: None,
         }
     }
 }

@@ -19,6 +19,7 @@ import type {
   WorkspaceInfo,
   BrowserContextSendAttachment,
   IntentCanvasContextSendAttachment,
+  VisionPreflightOptions,
 } from "../../../types";
 import type { AutoSessionMetadata } from "../../../services/tauri";
 import {
@@ -113,6 +114,10 @@ import {
   withMemoryScoutTimeout,
 } from "./messageRuntimeController";
 import { useCodexMessageRecovery } from "./useCodexMessageRecovery";
+import {
+  injectVisionPreflightContext,
+  runVisionPreflight,
+} from "../../vision/visionPreflight";
 
 type SendMessageOptions = {
   skipPromptExpansion?: boolean;
@@ -136,6 +141,7 @@ type SendMessageOptions = {
   } | null;
   browserContextAttachment?: BrowserContextSendAttachment | null;
   intentCanvasContextAttachments?: IntentCanvasContextSendAttachment[];
+  visionPreflight?: VisionPreflightOptions | null;
   codexInvalidThreadRetryAttempted?: boolean;
   autoSession?: AutoSessionMetadata | null;
 };
@@ -519,6 +525,7 @@ export function useThreadMessaging({
           new Set([...finalImages, ...noteInjectionResult.imagePaths]),
         );
       }
+      const visibleUserImages = [...finalImages];
       const resolvedSelectedAgent =
         resolvedEngine !== "opencode" ? options?.selectedAgent ?? null : null;
       const selectedAgentName =
@@ -586,6 +593,63 @@ export function useThreadMessaging({
           finalText,
           options.browserContextAttachment,
         );
+      }
+      let visionPreflightInjected = false;
+      if (options?.visionPreflight && finalImages.length > 0) {
+        try {
+          const visionPreflightResult = await runVisionPreflight({
+            workspaceId: workspace.id,
+            userText: finalText,
+            images: finalImages,
+            preflight: options.visionPreflight,
+          });
+          if (visionPreflightResult) {
+            finalText = injectVisionPreflightContext(
+              finalText,
+              visionPreflightResult,
+            );
+            finalImages = [];
+            visionPreflightInjected = true;
+            onDebug?.({
+              id: `${Date.now()}-vision-preflight-injected`,
+              timestamp: Date.now(),
+              source: "client",
+              label: "vision/preflight-injected",
+              payload: {
+                workspaceId: workspace.id,
+                threadId,
+                model: visionPreflightResult.model,
+                mode: visionPreflightResult.mode,
+                skillName: visionPreflightResult.skillName,
+                imageCount: visionPreflightResult.imageCount,
+              },
+            });
+          }
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          pushThreadErrorMessage(
+            workspace.id,
+            threadId,
+            t("threads.turnFailedWithMessage", { message }),
+          );
+          safeMessageActivity();
+          onDebug?.({
+            id: `${Date.now()}-vision-preflight-failed`,
+            timestamp: Date.now(),
+            source: "client",
+            label: "vision/preflight-failed",
+            payload: {
+              workspaceId: workspace.id,
+              threadId,
+              model: options.visionPreflight.model,
+              mode: options.visionPreflight.mode,
+              skillName: options.visionPreflight.skillName,
+              message,
+            },
+          });
+          return;
+        }
       }
       if (injectionResult.injectedCount > 0 && injectionResult.previewText) {
         dispatch({
@@ -836,14 +900,22 @@ export function useThreadMessaging({
           options?.browserContextAttachment ||
           options?.intentCanvasContextAttachments?.length
         ) {
+          const optimisticDisplayImages = visionPreflightInjected
+            ? visibleUserImages
+            : optimisticImages;
           optimisticUserItem = {
             id: `optimistic-user-${Date.now()}-${Math.random()
               .toString(36)
               .slice(2, 8)}`,
             kind: "message",
             role: "user",
-            text: optimisticText,
-            images: optimisticImages.length > 0 ? optimisticImages : undefined,
+            text: visionPreflightInjected
+              ? optimisticDisplayText
+              : optimisticText,
+            images:
+              optimisticDisplayImages.length > 0
+                ? optimisticDisplayImages
+                : undefined,
             collaborationMode: userCollaborationMode,
             selectedAgentName,
             selectedAgentIcon,

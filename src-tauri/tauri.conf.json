@@ -4,9 +4,9 @@
   "version": "0.5.33",
   "identifier": "com.zhukunpenglinyutong.ccgui",
   "build": {
-    "beforeDevCommand": "node scripts/tauri-dev-frontend.mjs",
+    "beforeDevCommand": "node scripts/prepare-tauri-sidecars.mjs && node scripts/tauri-dev-frontend.mjs",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "node scripts/prepare-tauri-sidecars.mjs && npm run build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -39,6 +39,11 @@
       "../dist/assets/**/*": "dist/assets/",
       "../skills/**/*": "skills/"
     },
+    "externalBin": [
+      "binaries/cc_gui_daemon",
+      "binaries/wx_bridge",
+      "binaries/weclaw"
+    ],
     "macOS": {
       "minimumSystemVersion": "10.13",
       "entitlements": "./Entitlements.plist",

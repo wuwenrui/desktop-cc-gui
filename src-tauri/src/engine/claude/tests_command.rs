@@ -78,6 +78,43 @@ fn build_command_marks_gui_launch_as_claude_non_interactive() {
 }
 
 #[test]
+fn build_command_adds_safe_mode_when_requested() {
+    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+    let mut params = SendMessageParams::default();
+    params.text = "hello".to_string();
+    params.safe_mode = true;
+
+    let command = session.build_command(&params, false, true);
+    let args: Vec<String> = command
+        .as_std()
+        .get_args()
+        .map(|arg| arg.to_string_lossy().to_string())
+        .collect();
+
+    assert!(args.iter().any(|arg| arg == "--safe-mode"));
+}
+
+#[test]
+fn build_command_appends_hidden_system_prompt_when_requested() {
+    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+    let mut params = SendMessageParams::default();
+    params.text = "微信原文".to_string();
+    params.append_system_prompt = Some("微信规则：只输出微信回复".to_string());
+
+    let command = session.build_command(&params, true, true);
+    let args: Vec<String> = command
+        .as_std()
+        .get_args()
+        .map(|arg| arg.to_string_lossy().to_string())
+        .collect();
+
+    assert!(args.windows(2).any(|window| {
+        window[0] == "--append-system-prompt" && window[1] == "微信规则：只输出微信回复"
+    }));
+    assert!(args.iter().all(|arg| arg != "微信原文"));
+}
+
+#[test]
 fn build_command_can_omit_hook_events_for_legacy_retry() {
     let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
     let mut params = SendMessageParams::default();

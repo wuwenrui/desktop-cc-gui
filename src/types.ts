@@ -764,6 +764,7 @@ export type AppSettings = {
   remoteBackendToken: string | null;
   webServicePort: number;
   webServiceToken: string | null;
+  wechatBridgeKeepOnline?: boolean;
   systemProxyEnabled: boolean;
   systemProxyUrl: string | null;
   defaultAccessMode: AccessMode;

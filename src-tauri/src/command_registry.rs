@@ -62,6 +62,12 @@ pub(crate) fn invoke_handler(
         crate::web_service::get_daemon_status,
         crate::web_service::start_daemon,
         crate::web_service::stop_daemon,
+        crate::wechat_bridge_control::get_wechat_bridge_status,
+        crate::wechat_bridge_control::reset_wechat_bridge_login,
+        crate::wechat_bridge_control::run_wechat_bridge_diagnostics,
+        crate::wechat_bridge_control::send_wechat_bridge_verification_prompt,
+        crate::wechat_bridge_control::start_wechat_bridge,
+        crate::wechat_bridge_control::stop_wechat_bridge,
         // Agents
         crate::agents::agent_list,
         crate::agents::agent_add,
@@ -387,7 +393,12 @@ pub(crate) fn invoke_handler(
         // Lawyer copilot: skill install + court-crawler MCP
         crate::skill_installer::install_bundled_skills,
         crate::mcp_writer::write_court_crawler_mcp,
-        // Lawyer copilot: new-api balance/usage
+        // Lawyer copilot: new-api balance/usage and paid entitlements
+        crate::newapi_entitlements::create_wechat_bridge_manual_subscription_order,
+        crate::newapi_entitlements::get_newapi_entitlement_account,
+        crate::newapi_entitlements::get_newapi_entitlements,
+        crate::newapi_entitlements::get_wechat_bridge_subscription_plans,
+        crate::newapi_entitlements::save_newapi_entitlement_account,
         crate::newapi_usage::get_newapi_usage,
         // Lawyer copilot: claude CLI self-check + native installer
         crate::claude_installer::check_claude_cli,

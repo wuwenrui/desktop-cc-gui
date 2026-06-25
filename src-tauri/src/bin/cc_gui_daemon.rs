@@ -1508,6 +1508,7 @@ async fn handle_rpc_request(
             let model = parse_optional_string(&params, "model");
             let effort = parse_optional_string(&params, "effort");
             let disable_thinking = parse_optional_bool(&params, "disableThinking");
+            let safe_mode = parse_optional_bool(&params, "safeMode");
             let access_mode = parse_optional_string(&params, "accessMode");
             let images = parse_optional_string_array(&params, "images");
             let continue_session = parse_optional_bool(&params, "continueSession").unwrap_or(false);
@@ -1530,6 +1531,7 @@ async fn handle_rpc_request(
                     model,
                     effort,
                     disable_thinking,
+                    safe_mode,
                     access_mode,
                     images,
                     continue_session,
@@ -1552,6 +1554,7 @@ async fn handle_rpc_request(
             let model = parse_optional_string(&params, "model");
             let effort = parse_optional_string(&params, "effort");
             let disable_thinking = parse_optional_bool(&params, "disableThinking");
+            let safe_mode = parse_optional_bool(&params, "safeMode");
             let access_mode = parse_optional_string(&params, "accessMode");
             let images = parse_optional_string_array(&params, "images");
             let continue_session = parse_optional_bool(&params, "continueSession").unwrap_or(false);
@@ -1560,6 +1563,7 @@ async fn handle_rpc_request(
             let agent = parse_optional_string(&params, "agent");
             let variant = parse_optional_string(&params, "variant");
             let custom_spec_root = parse_optional_string(&params, "customSpecRoot");
+            let append_system_prompt = parse_optional_string(&params, "appendSystemPrompt");
             let auto_session =
                 serde_json::from_value::<Option<session_management::AutoSessionMetadata>>(
                     params.get("autoSession").cloned().unwrap_or(Value::Null),
@@ -1573,6 +1577,7 @@ async fn handle_rpc_request(
                     model,
                     effort,
                     disable_thinking,
+                    safe_mode,
                     access_mode,
                     images,
                     continue_session,
@@ -1581,6 +1586,7 @@ async fn handle_rpc_request(
                     agent,
                     variant,
                     custom_spec_root,
+                    append_system_prompt,
                     auto_session,
                 )
                 .await
@@ -2183,9 +2189,13 @@ async fn handle_client(
     write_task.abort();
 }
 
+fn should_sync_path_env_at_startup() -> bool {
+    false
+}
+
 fn main() {
-    if let Err(err) = fix_path_env::fix() {
-        eprintln!("Failed to sync PATH from shell: {err}");
+    if should_sync_path_env_at_startup() {
+        cc_gui_lib::path_env::sync_path_env_at_startup();
     }
     let config = match parse_args() {
         Ok(config) => config,
@@ -2235,4 +2245,14 @@ fn main() {
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn daemon_startup_skips_login_shell_path_sync() {
+        assert!(!should_sync_path_env_at_startup());
+    }
 }

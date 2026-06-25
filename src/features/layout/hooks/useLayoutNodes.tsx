@@ -159,12 +159,24 @@ function HeavyPanelFallback() {
   return <div className="heavy-panel-fallback" aria-hidden="true" />;
 }
 
+function resolveGitDiffPanelFilePanelMode(mode: FilePanelMode): PanelTabId {
+  if (mode === "evidence") {
+    return "git";
+  }
+  if (mode === "memoryInspector") {
+    return "memory";
+  }
+  return mode;
+}
+
 import type {
+  FilePanelMode,
   LayoutNodesFlatOptions,
   LayoutNodesOptions,
   LayoutNodesResult,
   RightPanelTabSelection,
 } from "./layoutNodesTypes";
+import type { PanelTabId } from "../components/PanelTabs";
 const EMPTY_COMMANDS: CustomCommandOption[] = [];
 let lastOrchestrationProjectionSignature: string | null = null;
 
@@ -618,6 +630,7 @@ export function useLayoutNodes(input: LayoutNodesOptions): LayoutNodesResult {
         onCancelSwitchAccount={options.onCancelSwitchAccount}
         accountSwitching={options.accountSwitching}
         onOpenSettings={options.onOpenSettings}
+        onOpenEnvironment={options.onOpenEnvironment}
         onOpenDebug={options.onOpenDebug}
         showDebugButton={options.showDebugButton}
         onAddWorkspace={options.onAddWorkspace}
@@ -1590,7 +1603,7 @@ export function useLayoutNodes(input: LayoutNodesOptions): LayoutNodesResult {
           gitDiffListView={options.gitDiffListView}
           onGitDiffListViewChange={options.onGitDiffListViewChange}
           toggleGitDiffListViewShortcut={options.toggleGitDiffListViewShortcut}
-          filePanelMode={options.filePanelMode}
+          filePanelMode={resolveGitDiffPanelFilePanelMode(options.filePanelMode)}
           onFilePanelModeChange={options.onFilePanelModeChange}
           worktreeApplyLabel={options.worktreeApplyLabel}
           worktreeApplyTitle={options.worktreeApplyTitle}

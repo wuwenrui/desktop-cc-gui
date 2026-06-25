@@ -263,7 +263,10 @@ mod tests {
     fn native_path_targets_local_bin() {
         if let Some(path) = native_claude_path() {
             let display = path.to_string_lossy();
-            assert!(display.contains(".local"), "expected .local/bin path: {display}");
+            assert!(
+                display.contains(".local"),
+                "expected .local/bin path: {display}"
+            );
             if cfg!(windows) {
                 assert!(display.ends_with("claude.exe"));
             } else {

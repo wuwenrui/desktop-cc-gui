@@ -13,6 +13,7 @@ export type SettingsSection =
   | "dictation"
   | "git"
   | "runtime-environment"
+  | "advanced-features"
   | "other"
   | "community"
   | "vendors";

@@ -90,7 +90,7 @@ describe("shouldCollapseRightPanelOnThreadSelect", () => {
 });
 
 describe("useAppShellLayoutNodesSection adapter contract", () => {
-  it("passes the fork's flat option list into useLayoutNodes", () => {
+  it("passes grouped option sections into useLayoutNodes", () => {
     const source = readFileSync(
       join(currentDir, "useAppShellLayoutNodesSection.tsx"),
       "utf8",
@@ -106,9 +106,10 @@ describe("useAppShellLayoutNodesSection adapter contract", () => {
     expect(layoutNodesOptions).toContain("workspaces,");
     expect(layoutNodesOptions).toContain("activeItems,");
     expect(layoutNodesOptions).toContain("onSend:");
-    expect(layoutNodesOptions).not.toContain("workspace: {");
-    expect(layoutNodesOptions).not.toContain("runtime: {");
-    expect(layoutNodesOptions).not.toContain("composer: {");
+    expect(layoutNodesOptions).toContain("workspace: {");
+    expect(layoutNodesOptions).toContain("runtime: {");
+    expect(layoutNodesOptions).toContain("chrome: {");
+    expect(layoutNodesOptions).toContain("composer: {");
   });
 
   it("forwards Project Map toggle state into useLayoutNodes despite ts-nocheck", () => {

@@ -33,7 +33,8 @@ export type SettingsHighlightTarget =
   | "mcp-skills"
   | "runtime-pool"
   | "cli-validation"
-  | "environment-dependencies";
+  | "environment-dependencies"
+  | "wechat-bridge";
 
 export function useSettingsModalState() {
   const [settingsOpen, setSettingsOpen] = useState(false);

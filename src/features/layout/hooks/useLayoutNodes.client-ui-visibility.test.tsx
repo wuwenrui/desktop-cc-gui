@@ -420,7 +420,15 @@ const asyncNull = vi.fn(async () => null);
 function createGroupedLayoutNodesOptionsForTest(
   flatOptions: LayoutNodesFlatOptions,
 ): LayoutNodesOptions {
-  return flatOptions;
+  return {
+    workspace: flatOptions,
+    runtime: flatOptions,
+    chrome: flatOptions,
+    editor: flatOptions,
+    git: flatOptions,
+    composer: flatOptions,
+    panels: flatOptions,
+  };
 }
 
 function createLayoutOptions(
@@ -722,7 +730,6 @@ function createLayoutOptions(
     selectedEngine: "codex",
     models: [],
     selectedModelId: null,
-    visionModelId: "",
     onSelectModel: noop,
     reasoningOptions: [],
     selectedEffort: null,

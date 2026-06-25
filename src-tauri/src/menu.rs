@@ -166,11 +166,20 @@ pub(crate) fn build_menu<R: tauri::Runtime>(
     let settings_item = MenuItemBuilder::with_id("file_open_settings", "设置…")
         .accelerator("CmdOrCtrl+,")
         .build(handle)?;
+    let wechat_bridge_settings_item =
+        MenuItemBuilder::with_id("file_open_wechat_bridge_settings", "微信连接…").build(handle)?;
+    let start_wechat_bridge_item =
+        MenuItemBuilder::with_id("file_start_wechat_bridge", "启动微信连接…").build(handle)?;
 
     // Register items for localization
     registry.register("about", &about_item);
     registry.register("check_for_updates", &check_updates_item);
     registry.register("file_open_settings", &settings_item);
+    registry.register(
+        "file_open_wechat_bridge_settings",
+        &wechat_bridge_settings_item,
+    );
+    registry.register("file_start_wechat_bridge", &start_wechat_bridge_item);
 
     let app_menu = Submenu::with_items(
         handle,
@@ -180,6 +189,8 @@ pub(crate) fn build_menu<R: tauri::Runtime>(
             &about_item,
             &check_updates_item,
             &settings_item,
+            &wechat_bridge_settings_item,
+            &start_wechat_bridge_item,
             &PredefinedMenuItem::separator(handle)?,
             &PredefinedMenuItem::services(handle, Some("服务"))?,
             &PredefinedMenuItem::separator(handle)?,
@@ -521,6 +532,8 @@ fn menu_event_name_for_id(menu_id: &str) -> Option<&'static str> {
         "file_new_window" => Some("menu-new-window"),
         "file_add_workspace" => Some("menu-add-workspace"),
         "file_open_settings" => Some("menu-open-settings"),
+        "file_open_wechat_bridge_settings" => Some("menu-open-wechat-bridge-settings"),
+        "file_start_wechat_bridge" => Some("menu-start-wechat-bridge"),
         "view_toggle_projects_sidebar" => Some("menu-toggle-projects-sidebar"),
         "view_toggle_git_sidebar" => Some("menu-toggle-git-sidebar"),
         "view_toggle_global_search" => Some("menu-toggle-global-search"),
@@ -575,6 +588,22 @@ mod tests {
             Some("menu-new-window")
         );
         assert_eq!(menu_event_name_for_id("unknown"), None);
+    }
+
+    #[test]
+    fn menu_event_mapping_includes_wechat_bridge_settings() {
+        assert_eq!(
+            menu_event_name_for_id("file_open_wechat_bridge_settings"),
+            Some("menu-open-wechat-bridge-settings")
+        );
+    }
+
+    #[test]
+    fn menu_event_mapping_includes_start_wechat_bridge() {
+        assert_eq!(
+            menu_event_name_for_id("file_start_wechat_bridge"),
+            Some("menu-start-wechat-bridge")
+        );
     }
 
     #[test]

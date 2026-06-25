@@ -69,6 +69,7 @@ import type { RuntimeReconnectRecoveryCallbackResult } from "../../messages/comp
 import type { QueuedHandoffBubble } from "../../threads/utils/queuedHandoffBubble";
 import type { SessionRadarEntry } from "../../session-activity/hooks/useSessionRadarFeed";
 import type { CodexProviderProfileSelection } from "../../threads/constants/codexProviderProfiles";
+import type { PanelToolbarTabId } from "../components/PanelTabs";
 
 export type ThreadActivityStatus = {
   isProcessing: boolean;
@@ -98,6 +99,11 @@ export type GitDiffViewerItem = {
 };
 
 export type GitDiffListView = "flat" | "tree";
+
+export type FilePanelMode = Exclude<
+  PanelToolbarTabId,
+  "projectMap" | "intentCanvas"
+>;
 
 export type WorktreeRenameState = {
   name: string;
@@ -197,6 +203,7 @@ export type LayoutNodesFlatOptions = {
     mode: Extract<AccessMode, "default" | "full-access">,
   ) => Promise<void> | void;
   onOpenSettings: () => void;
+  onOpenEnvironment: () => void;
   onOpenExperimentalSettings: () => void;
   onOpenDictationSettings?: () => void;
   onOpenDebug: () => void;
@@ -391,26 +398,8 @@ export type LayoutNodesFlatOptions = {
   worktreeApplyError: string | null;
   worktreeApplySuccess: boolean;
   onApplyWorktreeChanges?: () => void | Promise<void>;
-  filePanelMode:
-    | "git"
-    | "files"
-    | "search"
-    | "notes"
-    | "prompts"
-    | "memory"
-    | "activity"
-    | "radar";
-  onFilePanelModeChange: (
-    mode:
-      | "git"
-      | "files"
-      | "search"
-      | "notes"
-      | "prompts"
-      | "memory"
-      | "activity"
-      | "radar",
-  ) => void;
+  filePanelMode: FilePanelMode;
+  onFilePanelModeChange: (mode: FilePanelMode) => void;
   focusedProjectMemoryId?: string | null;
   focusedProjectMemoryRequestKey?: number;
   focusedWorkspaceNoteId?: string | null;
@@ -778,6 +767,7 @@ export type RuntimeLayoutNodesOptions = Pick<
 export type ChromeLayoutNodesOptions = Pick<
   LayoutNodesFlatOptions,
   | "onOpenSettings"
+  | "onOpenEnvironment"
   | "onOpenAgentSettings"
   | "onOpenPromptSettings"
   | "onOpenModelSettings"
@@ -1231,7 +1221,4 @@ export type LayoutNodesResult = {
   compactGitBackNode: ReactNode;
 };
 
-export type RightPanelTabSelection =
-  | LayoutNodesFlatOptions["filePanelMode"]
-  | "projectMap"
-  | "intentCanvas";
+export type RightPanelTabSelection = PanelToolbarTabId;

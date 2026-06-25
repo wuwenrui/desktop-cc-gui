@@ -26,6 +26,7 @@ import NotebookPen from "lucide-react/dist/esm/icons/notebook-pen";
 import Boxes from "lucide-react/dist/esm/icons/boxes";
 import Wrench from "lucide-react/dist/esm/icons/wrench";
 import Bot from "lucide-react/dist/esm/icons/bot";
+import MessageCircle from "lucide-react/dist/esm/icons/message-circle";
 import type {
   AppSettings,
   CodexDoctorResult,
@@ -113,6 +114,7 @@ import {
 } from "./settings-view/sections/RuntimePoolSection";
 import { DetachedExternalChangeToggles } from "./settings-view/sections/DetachedExternalChangeToggles";
 import { WebServiceSettings } from "./settings-view/sections/WebServiceSettings";
+import { WeChatBridgeSettings } from "./settings-view/sections/WeChatBridgeSettings";
 import { EmailSenderSettings } from "./settings-view/sections/EmailSenderSettings";
 import { DictationSection } from "./settings-view/sections/DictationSection";
 import { ExperimentalToggleRow } from "./settings-view/components/ExperimentalToggleRow";
@@ -231,7 +233,8 @@ export type SettingsViewProps = {
     | "mcp-skills"
     | "runtime-pool"
     | "cli-validation"
-    | "environment-dependencies";
+    | "environment-dependencies"
+    | "wechat-bridge";
 };
 const TEMPORARILY_DISABLED_SIDEBAR_SECTIONS: ReadonlySet<SettingsViewSection> =
   BASE_DISABLED_SIDEBAR_SECTIONS as ReadonlySet<SettingsViewSection>;
@@ -387,7 +390,9 @@ export function SettingsView({
     "servers" | "skills"
   >("servers");
   const [runtimeEnvironmentSubTab, setRuntimeEnvironmentSubTab] = useState<
-    "runtime-pool" | "cli-validation" | "environment-dependencies"
+    | "runtime-pool"
+    | "cli-validation"
+    | "environment-dependencies"
   >("runtime-pool");
   const [commitPrompt, setCommitPrompt] = useState("");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -911,6 +916,9 @@ export function SettingsView({
       case "environment-dependencies":
         setActiveSection("runtime-environment");
         setRuntimeEnvironmentSubTab("environment-dependencies");
+        return;
+      case "wechat-bridge":
+        setActiveSection("advanced-features");
         return;
       default:
         return;
@@ -1813,6 +1821,15 @@ export function SettingsView({
           </button>
           <button
             type="button"
+            className={`settings-nav ${activeSection === "advanced-features" ? "active" : ""}`}
+            onClick={() => setActiveSection("advanced-features")}
+            title={sidebarCollapsed ? t("settings.sidebarAdvancedFeatures") : ""}
+          >
+            <MessageCircle aria-hidden />
+            {!sidebarCollapsed && t("settings.sidebarAdvancedFeatures")}
+          </button>
+          <button
+            type="button"
             className={`settings-nav ${activeSection === "other" ? "active" : ""}`}
             onClick={() => setActiveSection("other")}
             title={sidebarCollapsed ? t("settings.sidebarOther") : ""}
@@ -2395,6 +2412,27 @@ export function SettingsView({
               />
               <EnvironmentDependenciesSection
                 active={runtimeEnvironmentSubTab === "environment-dependencies"}
+              />
+            </section>
+          )}
+          {activeSection === "advanced-features" && (
+            <section className="settings-section">
+              <div className="settings-section-title">
+                {t("settings.sidebarAdvancedFeatures")}
+              </div>
+              <div className="settings-section-subtitle">
+                {t("settings.advancedFeaturesDescription")}
+              </div>
+              <WeChatBridgeSettings
+                t={t}
+                activeWorkspace={activeWorkspace}
+                keepOnlineEnabled={appSettings.wechatBridgeKeepOnline === true}
+                onKeepOnlineChange={(enabled) =>
+                  onUpdateAppSettings({
+                    ...appSettings,
+                    wechatBridgeKeepOnline: enabled,
+                  })
+                }
               />
             </section>
           )}

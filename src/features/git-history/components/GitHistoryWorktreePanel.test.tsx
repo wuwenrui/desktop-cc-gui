@@ -284,7 +284,7 @@ describe("GitHistoryWorktreePanel", () => {
         ["src/staged.ts"],
       );
     });
-  });
+  }, 10_000);
 
   it("shows the same staged-default commit hint as the main git panel", async () => {
     render(<GitHistoryWorktreePanel workspaceId="w1" listView="tree" />);

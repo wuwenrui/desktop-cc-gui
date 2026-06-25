@@ -643,6 +643,7 @@ pub struct SendMessageParams {
     pub model: Option<String>,
     pub effort: Option<String>,
     pub disable_thinking: bool,
+    pub safe_mode: bool,
     pub access_mode: Option<String>,
     pub images: Option<Vec<String>>,
     pub continue_session: bool,
@@ -652,6 +653,7 @@ pub struct SendMessageParams {
     pub variant: Option<String>,
     pub collaboration_mode: Option<Value>,
     pub custom_spec_root: Option<String>,
+    pub append_system_prompt: Option<String>,
 }
 
 impl Default for SendMessageParams {
@@ -661,6 +663,7 @@ impl Default for SendMessageParams {
             model: None,
             effort: None,
             disable_thinking: false,
+            safe_mode: false,
             access_mode: None,
             images: None,
             continue_session: false,
@@ -670,6 +673,7 @@ impl Default for SendMessageParams {
             variant: None,
             collaboration_mode: None,
             custom_spec_root: None,
+            append_system_prompt: None,
         }
     }
 }

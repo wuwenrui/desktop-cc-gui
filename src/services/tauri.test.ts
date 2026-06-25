@@ -114,9 +114,15 @@ import {
   deleteClaudeSession,
   deleteGeminiSession,
   sendConversationCompletionEmail,
-  appendClientErrorLog,
-  exportDiagnosticsBundle,
-  hydrateClaudeDeferredImage,
+    appendClientErrorLog,
+    createWechatBridgeManualSubscriptionOrder,
+    exportDiagnosticsBundle,
+    getNewapiEntitlementAccount,
+    getNewapiEntitlements,
+    getWechatBridgeSubscriptionPlans,
+    hydrateClaudeDeferredImage,
+    saveNewapiEntitlementAccount,
+    sendWechatBridgeVerificationPrompt,
   setMainWindowOpacity,
   fetchClaudeProviderModels,
   reorderClaudeProviders,
@@ -237,6 +243,102 @@ describe("tauri invoke wrappers", () => {
     expect(invokeMock).toHaveBeenCalledWith("set_main_window_opacity", {
       opacity: 0.72,
     });
+  });
+
+  it("maps WeChat verification prompts to the Tauri command", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({
+      phase: "running",
+      components: [],
+      lastError: null,
+    });
+
+    await sendWechatBridgeVerificationPrompt({ workspaceId: "ws-a" });
+
+    expect(invokeMock).toHaveBeenCalledWith("send_wechat_bridge_verification_prompt", {
+      workspaceId: "ws-a",
+    });
+  });
+
+    it("maps new-api entitlement checks to the Tauri command", async () => {
+      const invokeMock = vi.mocked(invoke);
+      invokeMock.mockResolvedValueOnce({
+        features: { wechat_bridge: true },
+        entitlements: {},
+    });
+
+    await getNewapiEntitlements();
+
+      expect(invokeMock).toHaveBeenCalledWith("get_newapi_entitlements");
+    });
+
+    it("maps new-api entitlement account reads to the Tauri command", async () => {
+      const invokeMock = vi.mocked(invoke);
+      invokeMock.mockResolvedValueOnce({
+        baseUrl: "https://model.codingrui.work",
+        hasToken: true,
+        tokenPreview: "sk-...1234",
+        source: "provider",
+      });
+
+      await getNewapiEntitlementAccount();
+
+      expect(invokeMock).toHaveBeenCalledWith("get_newapi_entitlement_account");
+    });
+
+    it("maps new-api entitlement account saves to the Tauri command", async () => {
+      const invokeMock = vi.mocked(invoke);
+      invokeMock.mockResolvedValueOnce({
+        baseUrl: "https://model.codingrui.work",
+        hasToken: true,
+        tokenPreview: "sk-...1234",
+        source: "explicit",
+      });
+
+      await saveNewapiEntitlementAccount({
+        baseUrl: "https://model.codingrui.work",
+        apiKey: "sk-test",
+      });
+
+      expect(invokeMock).toHaveBeenCalledWith("save_newapi_entitlement_account", {
+        baseUrl: "https://model.codingrui.work",
+        apiKey: "sk-test",
+      });
+    });
+
+  it("maps WeChat subscription plan requests to the Tauri command", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce([]);
+
+    await getWechatBridgeSubscriptionPlans();
+
+    expect(invokeMock).toHaveBeenCalledWith("get_wechat_bridge_subscription_plans");
+  });
+
+  it("maps WeChat manual subscription orders to the Tauri command", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({
+      trade_no: "SUBMAN1",
+      money: 99,
+      payment_method: "manual_wechat",
+      payment_name: "WeChat",
+      qr_url: "https://pay.example/qr.png",
+      instructions: "",
+      plan: {},
+    });
+
+    await createWechatBridgeManualSubscriptionOrder({
+      planId: 3,
+      paymentMethod: "manual_wechat",
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith(
+      "create_wechat_bridge_manual_subscription_order",
+      {
+        planId: 3,
+        paymentMethod: "manual_wechat",
+      },
+    );
   });
 
   it("maps workspace_id to workspaceId for git status", async () => {

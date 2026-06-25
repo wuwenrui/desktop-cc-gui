@@ -7,9 +7,9 @@ use super::{
     build_engine_observability, replace_workspace_session_with_source,
     replace_workspace_session_with_terminator, terminate_replaced_workspace_session,
     write_json_atomically, RuntimeAcquireDisposition, RuntimeEndedRecord,
-    RuntimeEngineObservability, RuntimeLifecycleState, RuntimeManager, RuntimeProcessDiagnostics,
-    RuntimeState, TurnReconciliationRuntimeStatus, TurnReconciliationStatusQuery,
-    TurnReconciliationStatusSource,
+    RuntimeEngineObservability, RuntimeLifecycleState, RuntimeManager, RuntimePoolDiagnostics,
+    RuntimeProcessDiagnostics, RuntimeState, TurnReconciliationRuntimeStatus,
+    TurnReconciliationStatusQuery, TurnReconciliationStatusSource,
 };
 use crate::backend::app_server::{
     dispose_test_workspace_session, make_test_workspace_session, RuntimeShutdownSource,
@@ -1581,6 +1581,24 @@ fn write_json_atomically_replaces_existing_file() {
 
     let persisted = fs::read_to_string(&path).expect("read persisted file");
     assert_eq!(persisted, "{\"new\":true}");
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[tokio::test]
+async fn orphan_sweep_on_startup_does_not_panic_inside_async_runtime() {
+    let temp_dir = std::env::temp_dir().join(format!("ccgui-runtime-sweep-{}", Uuid::new_v4()));
+    fs::create_dir_all(&temp_dir).expect("create temp dir");
+    let manager = RuntimeManager::new(&temp_dir);
+    let path = temp_dir.join("runtime-pool-ledger.json");
+    let payload = json!({
+        "rows": [],
+        "diagnostics": RuntimePoolDiagnostics::default()
+    });
+    write_json_atomically(&path, &serde_json::to_string_pretty(&payload).unwrap())
+        .expect("write ledger");
+
+    manager.orphan_sweep_on_startup(true);
 
     let _ = fs::remove_dir_all(&temp_dir);
 }

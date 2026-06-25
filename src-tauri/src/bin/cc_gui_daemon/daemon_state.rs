@@ -863,6 +863,7 @@ impl DaemonState {
         model: Option<String>,
         effort: Option<String>,
         disable_thinking: Option<bool>,
+        safe_mode: Option<bool>,
         access_mode: Option<String>,
         images: Option<Vec<String>>,
         continue_session: bool,
@@ -970,6 +971,7 @@ impl DaemonState {
                     model: sanitized_model,
                     effort,
                     disable_thinking: disable_thinking.unwrap_or(false),
+                    safe_mode: safe_mode.unwrap_or(false),
                     access_mode,
                     images,
                     continue_session: continue_session_for_send,
@@ -979,6 +981,7 @@ impl DaemonState {
                     variant: None,
                     collaboration_mode: None,
                     custom_spec_root: normalized_custom_spec_root.clone(),
+                    append_system_prompt: None,
                 };
 
                 let turn_id = format!("claude-turn-{}", uuid::Uuid::new_v4());
@@ -1195,6 +1198,7 @@ impl DaemonState {
                     model: model_for_send,
                     effort,
                     disable_thinking: false,
+                    safe_mode: false,
                     access_mode,
                     images,
                     continue_session,
@@ -1204,6 +1208,7 @@ impl DaemonState {
                     variant,
                     collaboration_mode: None,
                     custom_spec_root: normalized_custom_spec_root.clone(),
+                    append_system_prompt: None,
                 };
 
                 let turn_id = format!("opencode-turn-{}", uuid::Uuid::new_v4());
@@ -1336,6 +1341,7 @@ impl DaemonState {
                     model: sanitized_model,
                     effort,
                     disable_thinking: false,
+                    safe_mode: false,
                     access_mode,
                     images,
                     continue_session,
@@ -1345,6 +1351,7 @@ impl DaemonState {
                     variant: None,
                     collaboration_mode: None,
                     custom_spec_root: normalized_custom_spec_root.clone(),
+                    append_system_prompt: None,
                 };
 
                 let turn_id = format!("gemini-turn-{}", uuid::Uuid::new_v4());
@@ -1515,6 +1522,7 @@ impl DaemonState {
         model: Option<String>,
         effort: Option<String>,
         disable_thinking: Option<bool>,
+        safe_mode: Option<bool>,
         access_mode: Option<String>,
         images: Option<Vec<String>>,
         continue_session: bool,
@@ -1523,6 +1531,7 @@ impl DaemonState {
         agent: Option<String>,
         variant: Option<String>,
         custom_spec_root: Option<String>,
+        append_system_prompt: Option<String>,
         auto_session: Option<session_management::AutoSessionMetadata>,
     ) -> Result<Value, String> {
         self.sync_engine_configs().await;
@@ -1581,6 +1590,7 @@ impl DaemonState {
                     model: sanitized_model,
                     effort,
                     disable_thinking: disable_thinking.unwrap_or(false),
+                    safe_mode: safe_mode.unwrap_or(false),
                     access_mode,
                     images,
                     continue_session: continue_session_for_send,
@@ -1590,6 +1600,7 @@ impl DaemonState {
                     variant: None,
                     collaboration_mode: None,
                     custom_spec_root: normalized_custom_spec_root.clone(),
+                    append_system_prompt,
                 };
                 let turn_id = format!("claude-sync-{}", uuid::Uuid::new_v4());
                 let response = tokio::time::timeout(std::time::Duration::from_secs(900), async {
@@ -1650,6 +1661,7 @@ impl DaemonState {
                     model: model_for_send,
                     effort,
                     disable_thinking: false,
+                    safe_mode: false,
                     access_mode,
                     images,
                     continue_session,
@@ -1659,6 +1671,7 @@ impl DaemonState {
                     variant,
                     collaboration_mode: None,
                     custom_spec_root: normalized_custom_spec_root.clone(),
+                    append_system_prompt: None,
                 };
                 let turn_id = format!("opencode-sync-{}", uuid::Uuid::new_v4());
                 let response = tokio::time::timeout(
@@ -1712,6 +1725,7 @@ impl DaemonState {
                     model: sanitized_model,
                     effort,
                     disable_thinking: false,
+                    safe_mode: false,
                     access_mode,
                     images,
                     continue_session,
@@ -1721,6 +1735,7 @@ impl DaemonState {
                     variant: None,
                     collaboration_mode: None,
                     custom_spec_root: normalized_custom_spec_root.clone(),
+                    append_system_prompt: None,
                 };
                 let turn_id = format!("gemini-sync-{}", uuid::Uuid::new_v4());
                 let response = tokio::time::timeout(

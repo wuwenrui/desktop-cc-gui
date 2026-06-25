@@ -982,7 +982,9 @@ pub(crate) async fn vendor_fetch_claude_models(
         let value = match serde_json::from_str::<Value>(&body) {
             Ok(value) => value,
             Err(error) => {
-                last_error = Some(format!("{endpoint}: failed to parse JSON response: {error}"));
+                last_error = Some(format!(
+                    "{endpoint}: failed to parse JSON response: {error}"
+                ));
                 continue;
             }
         };

@@ -54,7 +54,7 @@ fn claude_settings_path() -> Result<PathBuf, String> {
 
 /// Read `(base_url, auth_token)` from `~/.claude/settings.json` `env` block.
 /// Returns the "未配置 new-api" error when either value is missing/empty.
-fn read_newapi_credentials() -> Result<(String, String), String> {
+pub(crate) fn read_newapi_credentials() -> Result<(String, String), String> {
     let path = claude_settings_path()?;
     if !path.exists() {
         return Err("未配置 new-api".to_string());
@@ -80,14 +80,15 @@ fn read_newapi_credentials() -> Result<(String, String), String> {
         .filter(|s| !s.is_empty());
 
     match (base_url, token) {
-        (Some(base_url), Some(token)) => {
-            Ok((base_url.trim_end_matches('/').to_string(), token.to_string()))
-        }
+        (Some(base_url), Some(token)) => Ok((
+            base_url.trim_end_matches('/').to_string(),
+            token.to_string(),
+        )),
         _ => Err("未配置 new-api".to_string()),
     }
 }
 
-fn http_client() -> Result<reqwest::Client, String> {
+pub(crate) fn http_client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(10))
         .timeout(Duration::from_secs(20))

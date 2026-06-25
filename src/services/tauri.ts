@@ -1231,6 +1231,193 @@ export async function completeEmailMailCommand(
   return invoke<EmailMailSessionList>("complete_email_mail_command", { request });
 }
 
+export type WeChatBridgePhase =
+  | "not_ready"
+  | "stopped"
+  | "starting"
+  | "waiting_scan"
+  | "running"
+  | "error";
+
+export type WeChatBridgeActivity = {
+  tsSecs: number;
+  wxid: string;
+  workspace: string;
+  decision: "allow" | "deny" | "error" | string;
+};
+
+export type WeChatBridgeMediaActivity = {
+  ts: string;
+  wxid: string;
+  kind: "image" | string;
+  status: "saved" | "failed" | "skipped" | "unsupported" | string;
+  path?: string | null;
+  bytes?: number | null;
+  detail?: string | null;
+};
+
+export type WeChatBridgeQuoteActivity = {
+  ts: string;
+  wxid: string;
+  status?: "parsed" | "unparsed" | "message_shape";
+  detail?: string | null;
+};
+
+export type WeChatBridgeStatus = {
+  phase: WeChatBridgePhase;
+  bridgeRunning: boolean;
+  weclawRunning: boolean;
+  daemonRunning: boolean;
+  bridgeAvailable: boolean;
+  weclawAvailable: boolean;
+  daemonHost: string;
+  bridgeEndpoint: string;
+  qrText?: string | null;
+  loginUrl?: string | null;
+  logPath?: string | null;
+  lastError?: string | null;
+  lastActivity?: WeChatBridgeActivity | null;
+  lastMediaActivity?: WeChatBridgeMediaActivity | null;
+  lastQuoteActivity?: WeChatBridgeQuoteActivity | null;
+  hasLocalSmokeActivity: boolean;
+  wechatBound: boolean;
+  boundWechatUserId?: string | null;
+  boundWechatBotId?: string | null;
+  weclawSyncFresh: boolean;
+  weclawSyncAgeSecs?: number | null;
+};
+
+export type WeChatBridgeDiagnosticState = "pass" | "warn" | "fail";
+
+export type WeChatBridgeDiagnosticCheck = {
+  key:
+    | "component"
+    | "daemon"
+    | "bridge"
+    | "weclaw"
+    | "weclawSync"
+    | "scan"
+    | string;
+  state: WeChatBridgeDiagnosticState;
+  detail?: string | null;
+};
+
+export type WeChatBridgeDiagnostics = {
+  ok: boolean;
+  checks: WeChatBridgeDiagnosticCheck[];
+  status: WeChatBridgeStatus;
+};
+
+export async function getWechatBridgeStatus(): Promise<WeChatBridgeStatus> {
+  return invoke<WeChatBridgeStatus>("get_wechat_bridge_status");
+}
+
+export async function runWechatBridgeDiagnostics(): Promise<WeChatBridgeDiagnostics> {
+  return invoke<WeChatBridgeDiagnostics>("run_wechat_bridge_diagnostics");
+}
+
+export async function startWechatBridge(options: {
+  workspaceId?: string | null;
+} = {}): Promise<WeChatBridgeStatus> {
+  return invoke<WeChatBridgeStatus>("start_wechat_bridge", {
+    workspaceId: options.workspaceId ?? null,
+  });
+}
+
+export async function stopWechatBridge(): Promise<WeChatBridgeStatus> {
+  return invoke<WeChatBridgeStatus>("stop_wechat_bridge");
+}
+
+export async function resetWechatBridgeLogin(options: {
+  workspaceId?: string | null;
+} = {}): Promise<WeChatBridgeStatus> {
+  return invoke<WeChatBridgeStatus>("reset_wechat_bridge_login", {
+    workspaceId: options.workspaceId ?? null,
+  });
+}
+
+export async function sendWechatBridgeVerificationPrompt(options: {
+  workspaceId?: string | null;
+} = {}): Promise<WeChatBridgeStatus> {
+  return invoke<WeChatBridgeStatus>("send_wechat_bridge_verification_prompt", {
+    workspaceId: options.workspaceId ?? null,
+  });
+}
+
+export type NewapiFeatureEntitlement = {
+  feature_key: string;
+  active: boolean;
+  expires_at: number;
+  plan_id: number;
+  plan_title: string;
+};
+
+export type NewapiEntitlements = {
+  features: Record<string, boolean>;
+  entitlements: Record<string, NewapiFeatureEntitlement>;
+};
+
+export type NewapiEntitlementAccount = {
+  baseUrl: string;
+  hasToken: boolean;
+  tokenPreview?: string | null;
+  source: "explicit" | "provider" | "claude_settings" | "missing" | string;
+};
+
+export type NewapiSubscriptionPlanDto = {
+  plan: {
+    id: number;
+    title?: string;
+    price_amount?: number;
+    [key: string]: unknown;
+  };
+};
+
+export type NewapiWechatBridgeManualSubscriptionOrder = {
+  trade_no: string;
+  money: number;
+  payment_method: string;
+  payment_name: string;
+  qr_url: string;
+  instructions: string;
+  plan: Record<string, unknown>;
+};
+
+export async function getNewapiEntitlements(): Promise<NewapiEntitlements> {
+  return invoke<NewapiEntitlements>("get_newapi_entitlements");
+}
+
+export async function getNewapiEntitlementAccount(): Promise<NewapiEntitlementAccount> {
+  return invoke<NewapiEntitlementAccount>("get_newapi_entitlement_account");
+}
+
+export async function saveNewapiEntitlementAccount(input: {
+  baseUrl: string;
+  apiKey: string;
+}): Promise<NewapiEntitlementAccount> {
+  return invoke<NewapiEntitlementAccount>("save_newapi_entitlement_account", {
+    baseUrl: input.baseUrl,
+    apiKey: input.apiKey,
+  });
+}
+
+export async function getWechatBridgeSubscriptionPlans(): Promise<NewapiSubscriptionPlanDto[]> {
+  return invoke<NewapiSubscriptionPlanDto[]>("get_wechat_bridge_subscription_plans");
+}
+
+export async function createWechatBridgeManualSubscriptionOrder(input: {
+  planId: number;
+  paymentMethod: string;
+}): Promise<NewapiWechatBridgeManualSubscriptionOrder> {
+  return invoke<NewapiWechatBridgeManualSubscriptionOrder>(
+    "create_wechat_bridge_manual_subscription_order",
+    {
+      planId: input.planId,
+      paymentMethod: input.paymentMethod,
+    },
+  );
+}
+
 type MenuAcceleratorUpdate = {
   id: string;
   accelerator: string | null;

@@ -113,9 +113,17 @@ export function useEnvironmentInstaller(): UseEnvironmentInstaller {
         return;
       }
       setError(result.details || "环境安装失败");
+      if (plan?.steps.length === 1) {
+        const failedStep = plan.steps[0];
+        setFailedStepId((current) => current ?? failedStep.id);
+        setStepStatuses((current) => ({
+          ...current,
+          [failedStep.id]: current[failedStep.id] ?? "failed",
+        }));
+      }
       setPhase("failed");
     },
-    [],
+    [plan],
   );
 
   const runInstall = useCallback(async () => {

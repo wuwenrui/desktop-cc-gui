@@ -857,6 +857,9 @@ impl ClaudeSession {
         if include_hook_events {
             cmd.arg("--include-hook-events");
         }
+        if params.safe_mode {
+            cmd.arg("--safe-mode");
+        }
 
         // Access mode / permission handling
         // Maps UI access modes to Claude Code CLI permission flags
@@ -937,6 +940,16 @@ impl ClaudeSession {
                 cmd.arg("--add-dir");
                 cmd.arg(spec_root);
             }
+        }
+
+        if let Some(prompt) = params
+            .append_system_prompt
+            .as_ref()
+            .map(|value| value.trim())
+            .filter(|value| !value.is_empty())
+        {
+            cmd.arg("--append-system-prompt");
+            cmd.arg(prompt);
         }
 
         // Custom arguments

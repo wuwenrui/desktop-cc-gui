@@ -20,7 +20,11 @@ import {
   archiveWorkspaceSessions,
   deleteWorkspaceSessions,
   exportDiagnosticsBundle,
-  getDaemonStatus,
+    getDaemonStatus,
+    getNewapiEntitlementAccount,
+    getNewapiEntitlements,
+    getWechatBridgeSubscriptionPlans,
+    getWechatBridgeStatus,
   getWorkspaceSessionProjectionSummary,
   getEmailSenderSettings,
   getWebServerStatus,
@@ -99,8 +103,12 @@ vi.mock("../../../services/tauri", async () => {
     deleteWorkspaceSessions: vi.fn(),
     exportDiagnosticsBundle: vi.fn(),
     localUsageStatistics: vi.fn(),
-    getWebServerStatus: vi.fn(),
-    getDaemonStatus: vi.fn(),
+      getWebServerStatus: vi.fn(),
+      getDaemonStatus: vi.fn(),
+      getNewapiEntitlementAccount: vi.fn(),
+      getNewapiEntitlements: vi.fn(),
+      getWechatBridgeSubscriptionPlans: vi.fn(),
+      getWechatBridgeStatus: vi.fn(),
     getEmailSenderSettings: vi.fn(),
   };
 });
@@ -170,9 +178,38 @@ beforeEach(() => {
     webAccessToken: null,
     lastError: null,
   });
-  vi.mocked(getDaemonStatus).mockResolvedValue({
-    running: false,
-    host: "127.0.0.1:4732",
+    vi.mocked(getDaemonStatus).mockResolvedValue({
+      running: false,
+      host: "127.0.0.1:4732",
+      lastError: null,
+    });
+    vi.mocked(getNewapiEntitlementAccount).mockResolvedValue({
+      baseUrl: "https://model.codingrui.work",
+      hasToken: true,
+      tokenPreview: "sk-...1234",
+      source: "provider",
+    });
+    vi.mocked(getNewapiEntitlements).mockResolvedValue({
+      features: { wechat_bridge: true },
+      entitlements: {},
+    });
+    vi.mocked(getWechatBridgeSubscriptionPlans).mockResolvedValue([]);
+    vi.mocked(getWechatBridgeStatus).mockResolvedValue({
+    phase: "stopped",
+    bridgeRunning: false,
+    weclawRunning: false,
+    daemonRunning: false,
+    bridgeAvailable: true,
+    weclawAvailable: true,
+    daemonHost: "127.0.0.1:4732",
+    bridgeEndpoint: "http://127.0.0.1:18012/v1/chat/completions",
+    qrText: null,
+    loginUrl: null,
+    logPath: null,
+    hasLocalSmokeActivity: false,
+    wechatBound: false,
+    weclawSyncFresh: false,
+    weclawSyncAgeSecs: null,
     lastError: null,
   });
   vi.mocked(getEmailSenderSettings).mockResolvedValue({
@@ -399,6 +436,11 @@ const renderDisplaySection = (
     onWindowOpacityChange?: ComponentProps<
       typeof SettingsView
     >["onWindowOpacityChange"];
+    activeWorkspace?: WorkspaceInfo | null;
+    initialSection?: ComponentProps<typeof SettingsView>["initialSection"];
+    initialHighlightTarget?: ComponentProps<
+      typeof SettingsView
+    >["initialHighlightTarget"];
   } = {},
 ) => {
   cleanup();
@@ -431,7 +473,7 @@ const renderDisplaySection = (
     onDeleteWorkspaceGroup: vi.fn().mockResolvedValue(null),
     onAssignWorkspaceGroup: vi.fn().mockResolvedValue(null),
     onRunDoctor: vi.fn().mockResolvedValue(createDoctorResult()),
-    activeWorkspace: null,
+    activeWorkspace: options.activeWorkspace ?? null,
     activeEngine: "codex",
     onUpdateWorkspaceCodexBin: vi.fn().mockResolvedValue(undefined),
     onUpdateWorkspaceSettings: vi.fn().mockResolvedValue(undefined),
@@ -442,6 +484,8 @@ const renderDisplaySection = (
     onDownloadDictationModel: vi.fn(),
     onCancelDictationDownload: vi.fn(),
     onRemoveDictationModel: vi.fn(),
+    initialSection: options.initialSection,
+    initialHighlightTarget: options.initialHighlightTarget,
   };
 
   const view = render(<SettingsView {...props} />);
@@ -679,13 +723,28 @@ describe("SettingsView Display", () => {
     expect(
       sidebarQueries.getByRole("button", { name: "Agents / Prompts" }),
     ).toBeTruthy();
-    expect(
-      sidebarQueries.getByRole("button", { name: "Runtime Environment" }),
-    ).toBeTruthy();
+      expect(
+        sidebarQueries.getByRole("button", { name: "Runtime Environment" }),
+      ).toBeTruthy();
+      expect(
+        sidebarQueries.getByRole("button", { name: "Advanced Features" }),
+      ).toBeTruthy();
     expect(
       sidebarQueries.queryByRole("button", { name: "Experimental" }),
     ).toBeNull();
   });
+
+    it("opens the WeChat connection panel from Advanced Features", async () => {
+      renderDisplaySection({
+        activeWorkspace: workspaceA,
+        initialSection: "advanced-features",
+        initialHighlightTarget: "wechat-bridge",
+      });
+
+      expect(await screen.findByRole("button", { name: "Advanced Features" })).toBeTruthy();
+      expect(await screen.findByText("WeChat connection")).toBeTruthy();
+      expect(screen.getByText("Workspace A")).toBeTruthy();
+    });
 
   it("removes the dead multi-agent toggle and no longer shows background terminal in experimental", async () => {
     cleanup();
