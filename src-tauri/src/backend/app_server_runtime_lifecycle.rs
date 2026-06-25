@@ -38,6 +38,99 @@ impl WorkspaceSession {
         super::event_helpers::apply_runtime_event_activity(&mut active_turns, value);
     }
 
+    pub(super) async fn enrich_codex_turn_timing(
+        &self,
+        value: &mut Value,
+        stdout_received_at_ms: u64,
+    ) {
+        let Some(thread_id) = extract_thread_id(value) else {
+            return;
+        };
+        let normalized_thread_id = thread_id.trim();
+        if normalized_thread_id.is_empty() {
+            return;
+        }
+        let method = extract_event_method(value).map(ToOwned::to_owned);
+        let method_name = method.as_deref();
+        let has_agent_text_delta = has_agent_message_text_delta(value);
+        let is_reasoning_event = is_reasoning_event_method(method_name);
+        let is_assistant_item_event = is_assistant_item_event(value);
+        let is_tool_event = is_tool_event(value);
+        let should_count_before_first_text = !has_agent_text_delta;
+        let timing_snapshot = {
+            let mut timing = self.codex_turn_timing.lock().await;
+            let Some(state) = timing.get_mut(normalized_thread_id) else {
+                return;
+            };
+            if state.first_runtime_event_received_at_ms.is_none() {
+                state.first_runtime_event_received_at_ms = Some(stdout_received_at_ms);
+                state.first_runtime_event_method = method.clone();
+            }
+            if state.first_stream_event_received_at_ms.is_none() {
+                state.first_stream_event_received_at_ms = Some(stdout_received_at_ms);
+                state.first_stream_event_method = method.clone();
+            }
+            if is_reasoning_event && state.first_reasoning_event_received_at_ms.is_none() {
+                state.first_reasoning_event_received_at_ms = Some(stdout_received_at_ms);
+                state.first_reasoning_event_method = method.clone();
+            }
+            if is_assistant_item_event && state.first_assistant_item_event_received_at_ms.is_none()
+            {
+                state.first_assistant_item_event_received_at_ms = Some(stdout_received_at_ms);
+                state.first_assistant_item_event_method = method.clone();
+            }
+            if method_name == Some("item/agentMessage/delta")
+                && state.first_agent_message_event_received_at_ms.is_none()
+            {
+                state.first_agent_message_event_received_at_ms = Some(stdout_received_at_ms);
+                state.first_agent_message_event_method = method.clone();
+            }
+            if is_tool_event && state.first_tool_event_received_at_ms.is_none() {
+                state.first_tool_event_received_at_ms = Some(stdout_received_at_ms);
+                state.first_tool_event_method = method.clone();
+            }
+            if state.first_text_delta_received_at_ms.is_none() && should_count_before_first_text {
+                state.event_count_before_first_text_delta =
+                    state.event_count_before_first_text_delta.saturating_add(1);
+                if is_reasoning_event {
+                    state.reasoning_event_count_before_first_text_delta = state
+                        .reasoning_event_count_before_first_text_delta
+                        .saturating_add(1);
+                }
+                if is_tool_event {
+                    state.tool_event_count_before_first_text_delta = state
+                        .tool_event_count_before_first_text_delta
+                        .saturating_add(1);
+                }
+                if let Some(method) = method_name {
+                    if state.methods_before_first_text_delta.len()
+                        < CODEX_TIMING_METHODS_BEFORE_FIRST_TEXT_LIMIT
+                        && !state
+                            .methods_before_first_text_delta
+                            .iter()
+                            .any(|existing| existing == method)
+                    {
+                        state
+                            .methods_before_first_text_delta
+                            .push(method.to_string());
+                    }
+                }
+            }
+            if has_agent_text_delta && state.first_text_delta_received_at_ms.is_none() {
+                state.first_text_delta_received_at_ms = Some(stdout_received_at_ms);
+                state.first_text_delta_method = method.clone();
+            }
+            state.clone()
+        };
+        attach_codex_timing_to_event(value, &timing_snapshot, stdout_received_at_ms);
+        if matches!(method.as_deref(), Some("turn/completed" | "turn/error")) {
+            self.codex_turn_timing
+                .lock()
+                .await
+                .remove(normalized_thread_id);
+        }
+    }
+
     pub(crate) fn mark_shutdown_requested(&self, source: RuntimeShutdownSource) {
         self.manual_shutdown_requested.store(true, Ordering::SeqCst);
         let mut shutdown_source = self
@@ -208,6 +301,246 @@ impl WorkspaceSession {
     }
 }
 
+fn has_agent_message_text_delta(value: &Value) -> bool {
+    if extract_event_method(value) != Some("item/agentMessage/delta") {
+        return false;
+    }
+    value
+        .get("params")
+        .and_then(|params| params.get("delta").or_else(|| params.get("text")))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+        .is_some()
+}
+
+fn is_reasoning_event_method(method: Option<&str>) -> bool {
+    method
+        .map(|method| method.starts_with("item/reasoning/"))
+        .unwrap_or(false)
+}
+
+fn is_assistant_item_event(value: &Value) -> bool {
+    let Some(method) = extract_event_method(value) else {
+        return false;
+    };
+    if !matches!(method, "item/started" | "item/updated" | "item/completed") {
+        return false;
+    }
+    value
+        .get("params")
+        .and_then(|params| params.get("item"))
+        .and_then(Value::as_object)
+        .and_then(|item| {
+            item.get("type")
+                .or_else(|| item.get("kind"))
+                .and_then(Value::as_str)
+        })
+        .map(|type_text| {
+            let normalized = type_text
+                .chars()
+                .filter(|character| *character != '_' && *character != '-')
+                .collect::<String>()
+                .to_ascii_lowercase();
+            normalized == "agentmessage" || normalized == "assistantmessage"
+        })
+        .unwrap_or(false)
+}
+
+fn is_tool_event(value: &Value) -> bool {
+    let Some(method) = extract_event_method(value) else {
+        return false;
+    };
+    if !matches!(method, "item/started" | "item/updated" | "item/completed") {
+        return false;
+    }
+    let Some(item) = value
+        .get("params")
+        .and_then(|params| params.get("item"))
+        .and_then(Value::as_object)
+    else {
+        return false;
+    };
+    let type_text = item
+        .get("type")
+        .or_else(|| item.get("kind"))
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    type_text.contains("tool")
+        || type_text.contains("call")
+        || item.get("tool").and_then(Value::as_str).is_some()
+        || item.get("toolName").and_then(Value::as_str).is_some()
+        || item.get("tool_name").and_then(Value::as_str).is_some()
+}
+
+fn non_negative_gap_ms(later: Option<u64>, earlier: Option<u64>) -> Option<u64> {
+    match (later, earlier) {
+        (Some(later), Some(earlier)) => Some(later.saturating_sub(earlier)),
+        _ => None,
+    }
+}
+
+fn attach_codex_timing_to_event(
+    value: &mut Value,
+    timing: &CodexTurnTimingState,
+    stdout_received_at_ms: u64,
+) {
+    let Some(params) = value.get_mut("params").and_then(Value::as_object_mut) else {
+        return;
+    };
+    let response_received_at_ms = timing.turn_start_response_received_at_ms;
+    let mut payload = serde_json::Map::new();
+    payload.insert("source".to_string(), json!("codex-app-server"));
+    payload.insert(
+        "turnStartRequestStartedAtMs".to_string(),
+        json!(timing.turn_start_request_started_at_ms),
+    );
+    payload.insert(
+        "turnStartResponseReceivedAtMs".to_string(),
+        json!(response_received_at_ms),
+    );
+    payload.insert(
+        "firstRuntimeEventReceivedAtMs".to_string(),
+        json!(timing.first_runtime_event_received_at_ms),
+    );
+    payload.insert(
+        "firstStreamEventReceivedAtMs".to_string(),
+        json!(timing.first_stream_event_received_at_ms),
+    );
+    payload.insert(
+        "firstReasoningEventReceivedAtMs".to_string(),
+        json!(timing.first_reasoning_event_received_at_ms),
+    );
+    payload.insert(
+        "firstAssistantItemEventReceivedAtMs".to_string(),
+        json!(timing.first_assistant_item_event_received_at_ms),
+    );
+    payload.insert(
+        "firstAgentMessageEventReceivedAtMs".to_string(),
+        json!(timing.first_agent_message_event_received_at_ms),
+    );
+    payload.insert(
+        "firstToolEventReceivedAtMs".to_string(),
+        json!(timing.first_tool_event_received_at_ms),
+    );
+    payload.insert(
+        "firstTextDeltaReceivedAtMs".to_string(),
+        json!(timing.first_text_delta_received_at_ms),
+    );
+    payload.insert(
+        "stdoutReceivedAtMs".to_string(),
+        json!(stdout_received_at_ms),
+    );
+    payload.insert(
+        "turnStartRequestToResponseMs".to_string(),
+        json!(non_negative_gap_ms(
+            timing.turn_start_response_received_at_ms,
+            Some(timing.turn_start_request_started_at_ms),
+        )),
+    );
+    payload.insert(
+        "turnStartResponseToFirstStreamEventMs".to_string(),
+        json!(non_negative_gap_ms(
+            timing.first_stream_event_received_at_ms,
+            response_received_at_ms,
+        )),
+    );
+    payload.insert(
+        "turnStartResponseToFirstRuntimeEventMs".to_string(),
+        json!(non_negative_gap_ms(
+            timing.first_runtime_event_received_at_ms,
+            response_received_at_ms,
+        )),
+    );
+    payload.insert(
+        "turnStartResponseToFirstTextDeltaMs".to_string(),
+        json!(non_negative_gap_ms(
+            timing.first_text_delta_received_at_ms,
+            response_received_at_ms,
+        )),
+    );
+    payload.insert(
+        "firstRuntimeEventToFirstTextDeltaMs".to_string(),
+        json!(non_negative_gap_ms(
+            timing.first_text_delta_received_at_ms,
+            timing.first_runtime_event_received_at_ms,
+        )),
+    );
+    payload.insert(
+        "firstRuntimeEventToFirstAssistantItemEventMs".to_string(),
+        json!(non_negative_gap_ms(
+            timing.first_assistant_item_event_received_at_ms,
+            timing.first_runtime_event_received_at_ms,
+        )),
+    );
+    payload.insert(
+        "firstAssistantItemEventToFirstTextDeltaMs".to_string(),
+        json!(non_negative_gap_ms(
+            timing.first_text_delta_received_at_ms,
+            timing.first_assistant_item_event_received_at_ms,
+        )),
+    );
+    payload.insert(
+        "turnStartResponseToThisEventMs".to_string(),
+        json!(non_negative_gap_ms(
+            Some(stdout_received_at_ms),
+            response_received_at_ms,
+        )),
+    );
+    payload.insert(
+        "firstStreamEventMethod".to_string(),
+        json!(timing.first_stream_event_method.as_deref()),
+    );
+    payload.insert(
+        "firstRuntimeEventMethod".to_string(),
+        json!(timing.first_runtime_event_method.as_deref()),
+    );
+    payload.insert(
+        "firstReasoningEventMethod".to_string(),
+        json!(timing.first_reasoning_event_method.as_deref()),
+    );
+    payload.insert(
+        "firstAssistantItemEventMethod".to_string(),
+        json!(timing.first_assistant_item_event_method.as_deref()),
+    );
+    payload.insert(
+        "firstAgentMessageEventMethod".to_string(),
+        json!(timing.first_agent_message_event_method.as_deref()),
+    );
+    payload.insert(
+        "firstToolEventMethod".to_string(),
+        json!(timing.first_tool_event_method.as_deref()),
+    );
+    payload.insert(
+        "firstTextDeltaMethod".to_string(),
+        json!(timing.first_text_delta_method.as_deref()),
+    );
+    payload.insert(
+        "eventCountBeforeFirstTextDelta".to_string(),
+        json!(timing.event_count_before_first_text_delta),
+    );
+    payload.insert(
+        "reasoningEventCountBeforeFirstTextDelta".to_string(),
+        json!(timing.reasoning_event_count_before_first_text_delta),
+    );
+    payload.insert(
+        "toolEventCountBeforeFirstTextDelta".to_string(),
+        json!(timing.tool_event_count_before_first_text_delta),
+    );
+    payload.insert(
+        "methodsBeforeFirstTextDelta".to_string(),
+        json!(timing.methods_before_first_text_delta),
+    );
+
+    match params.get_mut("ccguiTiming").and_then(Value::as_object_mut) {
+        Some(existing) => existing.extend(payload),
+        None => {
+            params.insert("ccguiTiming".to_string(), Value::Object(payload));
+        }
+    }
+}
+
 fn runtime_shutdown_message(source: Option<RuntimeShutdownSource>) -> String {
     let source = source.unwrap_or(RuntimeShutdownSource::CompatibilityManual);
     format!(
@@ -372,6 +705,7 @@ async fn process_workspace_stdout_value<E: EventSink>(
     workspace_id: &str,
     mut value: Value,
 ) {
+    let stdout_received_at_ms = now_millis();
     if let Some(blocked_event) = session.intercept_request_user_input_if_needed(&value).await {
         value = blocked_event;
     }
@@ -393,6 +727,9 @@ async fn process_workspace_stdout_value<E: EventSink>(
             .handle_codex_runtime_event(&session.entry, &value)
             .await;
     }
+    session
+        .enrich_codex_turn_timing(&mut value, stdout_received_at_ms)
+        .await;
 
     let synthetic_plan_event = session.maybe_emit_plan_blocker_user_input(&value).await;
     let synthetic_plan_apply_event = session.maybe_emit_plan_apply_user_input(&value).await;

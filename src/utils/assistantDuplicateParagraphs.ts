@@ -201,7 +201,35 @@ function isNearDuplicateParagraph(left: string, right: string) {
   return calculateEditSimilarity(leftCompact, rightCompact) >= 0.72;
 }
 
+export function chooseAppleEventDiagnosticTextVariant(left: string, right: string) {
+  const errorCodeRegex = /Apple event error -(\d+)/g;
+  const leftCodes = Array.from(left.matchAll(errorCodeRegex), (match) => match[1] ?? "");
+  const rightCodes = Array.from(right.matchAll(errorCodeRegex), (match) => match[1] ?? "");
+  if (leftCodes.length === 0 || rightCodes.length === 0) {
+    return null;
+  }
+  const longestLeftCode = leftCodes.reduce(
+    (longest, code) => (code.length > longest.length ? code : longest),
+    "",
+  );
+  const longestRightCode = rightCodes.reduce(
+    (longest, code) => (code.length > longest.length ? code : longest),
+    "",
+  );
+  if (longestRightCode.length > longestLeftCode.length) {
+    return right;
+  }
+  if (longestLeftCode.length > longestRightCode.length) {
+    return left;
+  }
+  return null;
+}
+
 function chooseReadableParagraph(left: string, right: string) {
+  const diagnosticParagraph = chooseAppleEventDiagnosticTextVariant(left, right);
+  if (diagnosticParagraph) {
+    return diagnosticParagraph;
+  }
   return right.length >= left.length ? right : left;
 }
 

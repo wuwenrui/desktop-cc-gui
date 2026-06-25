@@ -7,6 +7,11 @@ import {
   workspace,
 } from "./useThreadMessaging.test-utils";
 import {
+  workspaceScopedHas,
+  workspaceScopedSet,
+} from "./workspaceScopedMap";
+
+import {
   compactThreadContext,
   engineInterruptTurn,
   engineInterrupt,
@@ -566,7 +571,7 @@ describe("useThreadMessaging", () => {
 
   it("clears gemini interrupted guard before a new send starts", async () => {
     const { result, interruptedThreadsRef } = makeThreadMessagingHook("gemini");
-    interruptedThreadsRef.current.add("gemini:session-1");
+    workspaceScopedSet(interruptedThreadsRef.current, workspace.id, "gemini:session-1", true);
 
     await act(async () => {
       await result.current.sendUserMessageToThread(
@@ -576,7 +581,7 @@ describe("useThreadMessaging", () => {
       );
     });
 
-    expect(interruptedThreadsRef.current.has("gemini:session-1")).toBe(false);
+    expect(workspaceScopedHas(interruptedThreadsRef.current, workspace.id, "gemini:session-1")).toBe(false);
     expect(engineSendMessage).toHaveBeenCalledWith(
       "ws-1",
       expect.objectContaining({
@@ -601,7 +606,7 @@ describe("useThreadMessaging", () => {
             ? { [threadId]: "codex" }
             : { [threadId]: engine },
       });
-      interruptedThreadsRef.current.add(threadId);
+      workspaceScopedSet(interruptedThreadsRef.current, workspace.id, threadId, true);
 
       await act(async () => {
         await result.current.sendUserMessageToThread(
@@ -611,7 +616,7 @@ describe("useThreadMessaging", () => {
         );
       });
 
-      expect(interruptedThreadsRef.current.has(threadId)).toBe(false);
+      expect(workspaceScopedHas(interruptedThreadsRef.current, workspace.id, threadId)).toBe(false);
     },
   );
 
@@ -695,6 +700,7 @@ describe("useThreadMessaging", () => {
     );
     expect(engineSendMessage).toHaveBeenCalledTimes(1);
     expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+      workspace.id,
       "claude-pending-abc",
       CLAUDE_PENDING_NATIVE_SESSION_WAIT_MESSAGE,
     );
@@ -818,6 +824,7 @@ describe("useThreadMessaging", () => {
     );
     expect(engineSendMessage).toHaveBeenCalledTimes(1);
     expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+      workspace.id,
       "claude-pending-user-only",
       CLAUDE_PENDING_NATIVE_SESSION_WAIT_MESSAGE,
     );
@@ -849,6 +856,7 @@ describe("useThreadMessaging", () => {
 
     expect(engineSendMessage).not.toHaveBeenCalled();
     expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+      workspace.id,
       "claude-pending-restored",
       CLAUDE_PENDING_NATIVE_SESSION_WAIT_MESSAGE,
     );
@@ -919,6 +927,7 @@ describe("useThreadMessaging", () => {
 
     expect(engineSendMessage).toHaveBeenCalledTimes(1);
     expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+      workspace.id,
       "claude-pending-snake",
       CLAUDE_PENDING_NATIVE_SESSION_WAIT_MESSAGE,
     );
@@ -1088,6 +1097,7 @@ describe("useThreadMessaging", () => {
 
     expect(engineSendMessage).toHaveBeenCalledTimes(1);
     expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+      workspace.id,
       "claude-pending-def",
       CLAUDE_PENDING_NATIVE_SESSION_WAIT_MESSAGE,
     );
@@ -1258,6 +1268,7 @@ describe("useThreadMessaging", () => {
       text: "threads.codexCompactionStarted",
     });
     expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+      workspace.id,
       "thread-1",
       "threads.contextCompactionFailedWithMessage",
     );
@@ -1370,8 +1381,8 @@ describe("useThreadMessaging", () => {
       threadId: "thread-1",
       text: "正在切换到融合回复，等待新的接续事件…",
     });
-    expect(interruptedThreadsRef.current.has("thread-1")).toBe(false);
-    expect(pendingInterruptsRef.current.has("thread-1")).toBe(false);
+    expect(workspaceScopedHas(interruptedThreadsRef.current, workspace.id, "thread-1")).toBe(false);
+    expect(workspaceScopedHas(pendingInterruptsRef.current, workspace.id, "thread-1")).toBe(false);
   });
 
   it("keeps the default stop copy for a normal manual interrupt", async () => {
@@ -1391,7 +1402,7 @@ describe("useThreadMessaging", () => {
       threadId: "thread-1",
       text: "会话已停止。",
     });
-    expect(interruptedThreadsRef.current.has("thread-1")).toBe(true);
+    expect(workspaceScopedHas(interruptedThreadsRef.current, workspace.id, "thread-1")).toBe(true);
   });
 
   it("keeps plan handoff interrupts silent while still stopping the active turn", async () => {
@@ -1472,7 +1483,7 @@ describe("useThreadMessaging", () => {
       await result.current.interruptTurn();
     });
 
-    expect(pendingInterruptsRef.current.has("claude:session-1")).toBe(true);
+    expect(workspaceScopedHas(pendingInterruptsRef.current, workspace.id, "claude:session-1")).toBe(true);
     expect(engineInterruptTurn).not.toHaveBeenCalled();
     expect(engineInterrupt).not.toHaveBeenCalled();
     expect(interruptTurn).not.toHaveBeenCalled();
@@ -1499,7 +1510,7 @@ describe("useThreadMessaging", () => {
       await result.current.interruptTurn();
     });
 
-    expect(pendingInterruptsRef.current.has("thread-stalled")).toBe(false);
+    expect(workspaceScopedHas(pendingInterruptsRef.current, workspace.id, "thread-stalled")).toBe(false);
     expect(dispatch).not.toHaveBeenCalledWith(
       expect.objectContaining({
         type: "addAssistantMessage",
@@ -1516,7 +1527,7 @@ describe("useThreadMessaging", () => {
       ensuredThreadId: "claude:session-1",
       activeTurnIdByThread: {},
     });
-    pendingInterruptsRef.current.add("claude:session-1");
+    workspaceScopedSet(pendingInterruptsRef.current, workspace.id, "claude:session-1", true);
 
     await act(async () => {
       await result.current.sendUserMessage("resume execution", [], {
@@ -1526,7 +1537,7 @@ describe("useThreadMessaging", () => {
       });
     });
 
-    expect(pendingInterruptsRef.current.has("claude:session-1")).toBe(false);
+    expect(workspaceScopedHas(pendingInterruptsRef.current, workspace.id, "claude:session-1")).toBe(false);
     expect(engineSendMessage).toHaveBeenCalled();
   });
 
@@ -1813,6 +1824,7 @@ describe("useThreadMessaging", () => {
       expect(startThreadForWorkspace).not.toHaveBeenCalled();
       expect(sendUserMessage).toHaveBeenCalledTimes(1);
       expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+        workspace.id,
         "durable-thread-id",
         expect.any(String),
       );
@@ -1853,6 +1865,7 @@ describe("useThreadMessaging", () => {
       expect(startThreadForWorkspace).not.toHaveBeenCalled();
       expect(sendUserMessage).toHaveBeenCalledTimes(1);
       expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+        workspace.id,
         "legacy-thread-id",
         expect.any(String),
       );
@@ -2046,6 +2059,7 @@ describe("useThreadMessaging", () => {
       expect(startThreadForWorkspace).not.toHaveBeenCalled();
       expect(sendUserMessage).toHaveBeenCalledTimes(1);
       expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+        workspace.id,
         "durable-thread-id",
         expect.any(String),
       );
@@ -2063,6 +2077,7 @@ describe("useThreadMessaging", () => {
         result: { turn: { id: "turn-fresh-draft" } },
       } as never);
     const refreshThread = vi.fn(async () => null);
+    const forkThreadForWorkspace = vi.fn(async () => "thread-fork-should-not-use");
     const startThreadForWorkspace = vi.fn(async () => "thread-fresh-draft");
     const dispatch = vi.fn();
     const { result, recordThreadActivity } = makeThreadMessagingHook("codex", {
@@ -2070,6 +2085,7 @@ describe("useThreadMessaging", () => {
       ensuredThreadId: "legacy-thread-id",
       startThreadForWorkspace,
       refreshThread,
+      forkThreadForWorkspace,
       dispatch,
       codexAcceptedTurnByThread: {
         "legacy-thread-id": {
@@ -2086,6 +2102,7 @@ describe("useThreadMessaging", () => {
 
     await waitFor(() => {
       expect(refreshThread).toHaveBeenCalledWith("ws-1", "legacy-thread-id");
+      expect(forkThreadForWorkspace).not.toHaveBeenCalled();
       expect(startThreadForWorkspace).toHaveBeenCalledWith("ws-1", {
         activate: true,
         engine: "codex",
@@ -2137,6 +2154,73 @@ describe("useThreadMessaging", () => {
     });
   });
 
+  it("freshly resends first prompt when a newly started empty codex draft refreshes to the same missing thread", async () => {
+    vi.mocked(sendUserMessage)
+      .mockResolvedValueOnce({
+        error: {
+          message: "thread not found: legacy-thread-id",
+        },
+      } as never)
+      .mockResolvedValueOnce({
+        result: { turn: { id: "turn-fresh-after-same-id" } },
+      } as never);
+    const refreshThread = vi.fn(async () => "legacy-thread-id");
+    const forkThreadForWorkspace = vi.fn(async () => "thread-fork-should-not-use");
+    const startThreadForWorkspace = vi
+      .fn()
+      .mockResolvedValueOnce("legacy-thread-id")
+      .mockResolvedValueOnce("thread-fresh-after-same-id");
+    const dispatch = vi.fn();
+    const { result, recordThreadActivity } = makeThreadMessagingHook("codex", {
+      activeThreadId: null,
+      ensuredThreadId: null,
+      startThreadForWorkspace,
+      refreshThread,
+      forkThreadForWorkspace,
+      dispatch,
+    });
+
+    await act(async () => {
+      await result.current.sendUserMessage("hello codex");
+    });
+
+    await waitFor(() => {
+      expect(refreshThread).toHaveBeenCalledWith("ws-1", "legacy-thread-id");
+      expect(forkThreadForWorkspace).not.toHaveBeenCalled();
+      expect(startThreadForWorkspace).toHaveBeenCalledTimes(2);
+      expect(sendUserMessage).toHaveBeenCalledTimes(2);
+      expect(sendUserMessage).toHaveBeenNthCalledWith(
+        1,
+        "ws-1",
+        "legacy-thread-id",
+        "hello codex",
+        expect.any(Object),
+      );
+      expect(sendUserMessage).toHaveBeenNthCalledWith(
+        2,
+        "ws-1",
+        "thread-fresh-after-same-id",
+        "hello codex",
+        expect.any(Object),
+      );
+      expect(dispatch).toHaveBeenCalledWith({
+        type: "setActiveThreadId",
+        workspaceId: "ws-1",
+        threadId: "thread-fresh-after-same-id",
+      });
+      expect(recordThreadActivity).not.toHaveBeenCalledWith(
+        "ws-1",
+        "legacy-thread-id",
+        expect.any(Number),
+      );
+      expect(recordThreadActivity).toHaveBeenCalledWith(
+        "ws-1",
+        "thread-fresh-after-same-id",
+        expect.any(Number),
+      );
+    });
+  });
+
   it("mirrors codex turn-start rpc failures into runtime notices", async () => {
     vi.mocked(sendUserMessage).mockResolvedValueOnce({
       error: {
@@ -2153,6 +2237,7 @@ describe("useThreadMessaging", () => {
 
     await waitFor(() => {
       expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+        workspace.id,
         "thread-1",
         "会话启动失败：The 'demo' model is not supported when using Codex with a ChatGPT account.",
       );
@@ -2280,6 +2365,54 @@ describe("useThreadMessaging", () => {
           type: "setThreadItems",
           threadId: "legacy-thread-id",
         }),
+      );
+      expect(onDebug).toHaveBeenCalledWith(
+        expect.objectContaining({
+          label: "turn/start thread rebind retry",
+          payload: expect.objectContaining({
+            reasonCode: "stale-thread-binding",
+            staleReason: "thread-not-found",
+            retryable: true,
+            userAction: "recover-thread",
+            outcome: "rebound",
+          }),
+        }),
+      );
+    });
+  });
+
+  it("retries codex send once when stale thread reports conversation not found", async () => {
+    vi.mocked(sendUserMessage)
+      .mockResolvedValueOnce({
+        error: {
+          message: "conversation not found: legacy-thread-id",
+        },
+      } as never)
+      .mockResolvedValueOnce({
+        result: { turn: { id: "turn-rebound-conversation-not-found" } },
+      } as never);
+    const refreshThread = vi.fn(async () => "thread-rebound-conversation");
+    const dispatch = vi.fn();
+    const { result, onDebug } = makeThreadMessagingHook("codex", {
+      activeThreadId: "legacy-thread-id",
+      ensuredThreadId: "legacy-thread-id",
+      refreshThread,
+      dispatch,
+    });
+
+    await act(async () => {
+      await result.current.sendUserMessage("hello codex");
+    });
+
+    await waitFor(() => {
+      expect(refreshThread).toHaveBeenCalledWith("ws-1", "legacy-thread-id");
+      expect(sendUserMessage).toHaveBeenCalledTimes(2);
+      expect(sendUserMessage).toHaveBeenNthCalledWith(
+        2,
+        "ws-1",
+        "thread-rebound-conversation",
+        "hello codex",
+        expect.any(Object),
       );
       expect(onDebug).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -2554,6 +2687,7 @@ describe("useThreadMessaging", () => {
     expect(markProcessing).toHaveBeenCalledWith("thread-1", false);
     expect(setActiveTurnId).toHaveBeenCalledWith("thread-1", null);
     expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+      workspace.id,
       "thread-1",
       "threads.firstPacketTimeout",
     );
@@ -2587,6 +2721,7 @@ describe("useThreadMessaging", () => {
     expect(markProcessing).toHaveBeenCalledWith("thread-1", false);
     expect(setActiveTurnId).toHaveBeenCalledWith("thread-1", null);
     expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+      workspace.id,
       "thread-1",
       "threads.firstPacketTimeout",
     );

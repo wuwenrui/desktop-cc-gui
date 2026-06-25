@@ -3,39 +3,24 @@ import { describe, expect, it, vi } from "vitest";
 import { refreshCodexModelConfig } from "./refreshCodexModelConfig";
 
 describe("refreshCodexModelConfig", () => {
-  it("reloads Codex runtime config before refreshing model list", async () => {
-    const calls: string[] = [];
-    const reloadRuntimeConfig = vi.fn(async () => {
-      calls.push("reload-runtime-config");
-      return {
-        status: "applied",
-        stage: "swapped",
-        restartedSessions: 1,
-        message: null,
-      };
-    });
-    const refreshModels = vi.fn(async () => {
-      calls.push("refresh-models");
-    });
+  it("refreshes Codex model catalog without reloading runtime config", async () => {
+    const refreshModels = vi.fn(async () => {});
 
-    await refreshCodexModelConfig({ reloadRuntimeConfig, refreshModels });
+    await refreshCodexModelConfig({ refreshModels });
 
-    expect(reloadRuntimeConfig).toHaveBeenCalledTimes(1);
     expect(refreshModels).toHaveBeenCalledTimes(1);
-    expect(calls).toEqual(["reload-runtime-config", "refresh-models"]);
   });
 
-  it("does not refresh model list when runtime config reload fails", async () => {
-    const reloadError = new Error("reload failed");
-    const reloadRuntimeConfig = vi.fn(async () => {
-      throw reloadError;
+  it("propagates model catalog refresh failures", async () => {
+    const refreshError = new Error("refresh failed");
+    const refreshModels = vi.fn(async () => {
+      throw refreshError;
     });
-    const refreshModels = vi.fn();
 
     await expect(
-      refreshCodexModelConfig({ reloadRuntimeConfig, refreshModels }),
-    ).rejects.toThrow(reloadError);
+      refreshCodexModelConfig({ refreshModels }),
+    ).rejects.toThrow(refreshError);
 
-    expect(refreshModels).not.toHaveBeenCalled();
+    expect(refreshModels).toHaveBeenCalledTimes(1);
   });
 });

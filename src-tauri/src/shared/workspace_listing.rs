@@ -575,13 +575,25 @@ fn with_workspace_listing_cache_state(
     response
 }
 
+#[cfg(test)]
 pub(crate) fn list_workspace_files_inner(
     root: &PathBuf,
     max_files: usize,
 ) -> WorkspaceFilesResponse {
+    list_workspace_files_inner_with_refresh(root, max_files, false)
+}
+
+pub(crate) fn list_workspace_files_inner_with_refresh(
+    root: &PathBuf,
+    max_files: usize,
+    force_refresh: bool,
+) -> WorkspaceFilesResponse {
     let canonical_root = root.canonicalize().unwrap_or_else(|_| root.clone());
     let mode = WorkspaceListingCacheMode::Initial;
     let cache_key = workspace_listing_cache_key(&canonical_root, mode.clone(), None, max_files);
+    if force_refresh {
+        workspace_listing_cache().invalidate(&cache_key);
+    }
     let (response, evidence) = workspace_listing_cache().get_or_compute_with_signatures(
         cache_key,
         |cached_response| {
@@ -829,10 +841,20 @@ fn list_workspace_files_uncached(root: &PathBuf, max_files: usize) -> WorkspaceF
     )
 }
 
+#[cfg(test)]
 pub(crate) fn list_workspace_directory_children_inner(
     root: &PathBuf,
     directory_path: &str,
     max_entries: usize,
+) -> Result<WorkspaceFilesResponse, String> {
+    list_workspace_directory_children_inner_with_refresh(root, directory_path, max_entries, false)
+}
+
+pub(crate) fn list_workspace_directory_children_inner_with_refresh(
+    root: &PathBuf,
+    directory_path: &str,
+    max_entries: usize,
+    force_refresh: bool,
 ) -> Result<WorkspaceFilesResponse, String> {
     let normalized_path = normalize_workspace_relative_directory_path(directory_path)?;
     let canonical_root = root
@@ -858,6 +880,9 @@ pub(crate) fn list_workspace_directory_children_inner(
         Some(normalized_path.clone()),
         max_entries,
     );
+    if force_refresh {
+        workspace_listing_cache().invalidate(&cache_key);
+    }
     let source_signature = workspace_directory_listing_source_signature(
         &canonical_root,
         &canonical_path,

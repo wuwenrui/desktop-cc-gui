@@ -93,6 +93,28 @@ export function useSelectedAgentSession({
     [],
   );
 
+  const writeSelectedAgentForSessionKey = useCallback(
+    (sessionKey: string, agent: SelectedAgentOption | null) => {
+      setSelectedAgentBySessionKey((prev) => {
+        if (selectedAgentSelectionsEqual(prev[sessionKey] ?? null, agent)) {
+          return prev;
+        }
+        return {
+          ...prev,
+          [sessionKey]: agent,
+        };
+      });
+      const stored = parseStoredThreadAgentSelectionEntry(
+        getClientStoreSync<unknown>("app", sessionKey),
+      );
+      if (stored.exists && selectedAgentSelectionsEqual(stored.value, agent)) {
+        return;
+      }
+      writeClientStoreValue("app", sessionKey, agent);
+    },
+    [],
+  );
+
   const reloadAgentCatalog = useCallback(async () => {
     try {
       const configs = await listAgentConfigs();
@@ -139,13 +161,15 @@ export function useSelectedAgentSession({
       if (!sessionKey) {
         return;
       }
-      setSelectedAgentBySessionKey((prev) => ({
-        ...prev,
-        [sessionKey]: normalizedFromCatalog,
-      }));
-      writeClientStoreValue("app", sessionKey, normalizedFromCatalog);
+      writeSelectedAgentForSessionKey(sessionKey, normalizedFromCatalog);
     },
-    [activeThreadId, activeWorkspaceId, agentCatalogById, resolveSelectedAgentSessionKey],
+    [
+      activeThreadId,
+      activeWorkspaceId,
+      agentCatalogById,
+      resolveSelectedAgentSessionKey,
+      writeSelectedAgentForSessionKey,
+    ],
   );
 
   const reloadSelectedAgent = useCallback(() => {
@@ -191,10 +215,7 @@ export function useSelectedAgentSession({
         writeClientStoreValue("app", sessionKey, candidate);
       }
       if (hasCandidate) {
-        setSelectedAgentBySessionKey((prev) => ({
-          ...prev,
-          [sessionKey]: candidate ?? null,
-        }));
+        writeSelectedAgentForSessionKey(sessionKey, candidate ?? null);
       }
     }
 
@@ -214,11 +235,7 @@ export function useSelectedAgentSession({
         || (candidate.prompt ?? null) !== (resolved.prompt ?? null)
         || (candidate.icon ?? null) !== (resolved.icon ?? null))
     ) {
-      setSelectedAgentBySessionKey((prev) => ({
-        ...prev,
-        [sessionKey]: resolved,
-      }));
-      writeClientStoreValue("app", sessionKey, resolved);
+      writeSelectedAgentForSessionKey(sessionKey, resolved);
     }
   }, [
     activeThreadId,
@@ -227,6 +244,7 @@ export function useSelectedAgentSession({
     selectedAgentBySessionKey,
     agentCatalogById,
     resolveSelectedAgentSessionKey,
+    writeSelectedAgentForSessionKey,
   ]);
 
   const previousThreadIdForDraftCarryRef = useRef<string | null>(activeThreadId ?? null);
@@ -302,11 +320,7 @@ export function useSelectedAgentSession({
     ) {
       const targetSessionKey = activeSelectedAgentSessionKey;
       const migratedSelection = previousSelectedAgentValue;
-      setSelectedAgentBySessionKey((prev) => ({
-        ...prev,
-        [targetSessionKey]: migratedSelection,
-      }));
-      writeClientStoreValue("app", targetSessionKey, migratedSelection);
+      writeSelectedAgentForSessionKey(targetSessionKey, migratedSelection);
     }
     previousThreadIdRef.current = activeThreadId ?? null;
     previousThreadWorkspaceIdRef.current = activeWorkspaceId ?? null;
@@ -316,6 +330,7 @@ export function useSelectedAgentSession({
     resolveCanonicalThreadId,
     selectedAgentBySessionKey,
     resolveSelectedAgentSessionKey,
+    writeSelectedAgentForSessionKey,
   ]);
 
   useEffect(() => {

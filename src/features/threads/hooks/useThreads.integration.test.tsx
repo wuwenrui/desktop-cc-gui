@@ -13,11 +13,15 @@ import {
   sendUserMessage,
   startThread,
 } from "../../../services/tauri";
-import { useThreads } from "./useThreads";
+import { appendRendererDiagnostic } from "../../../services/rendererDiagnostics";
+import { computeThreadItemCacheMax, useThreads } from "./useThreads";
 
 type AppServerHandlers = Parameters<typeof useAppServerEvents>[0];
 
 let handlers: AppServerHandlers | null = null;
+const rendererDiagnosticsMocks = vi.hoisted(() => ({
+  appendRendererDiagnostic: vi.fn(),
+}));
 
 vi.mock("../../app/hooks/useAppServerEvents", () => ({
   useAppServerEvents: (incoming: AppServerHandlers) => {
@@ -63,6 +67,15 @@ vi.mock("../../../services/tauri", () => ({
   claimNextEmailMailCommand: vi.fn().mockResolvedValue({ command: null }),
   completeEmailMailCommand: vi.fn(),
 }));
+
+vi.mock("../../../services/rendererDiagnostics", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../../../services/rendererDiagnostics")>();
+  return {
+    ...actual,
+    appendRendererDiagnostic: rendererDiagnosticsMocks.appendRendererDiagnostic,
+  };
+});
 
 const workspace: WorkspaceInfo = {
   id: "ws-1",
@@ -583,6 +596,306 @@ describe("useThreads UX integration", () => {
     }
   });
 
+  it("does not revive processing from late raw item updates after turn completion", async () => {
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    act(() => {
+      result.current.setActiveThreadId("thread-late-raw");
+    });
+
+    await act(async () => {
+      handlers?.onTurnStarted?.("ws-1", "thread-late-raw", "turn-raw-1");
+      handlers?.onAgentMessageCompleted?.({
+        workspaceId: "ws-1",
+        threadId: "thread-late-raw",
+        itemId: "assistant-raw-1",
+        text: "visible raw answer",
+        turnId: "turn-raw-1",
+      });
+      handlers?.onTurnCompleted?.("ws-1", "thread-late-raw", "turn-raw-1");
+    });
+
+    expect(result.current.threadStatusById["thread-late-raw"]?.isProcessing).toBe(false);
+
+    await act(async () => {
+      handlers?.onItemUpdated?.("ws-1", "thread-late-raw", {
+        id: "assistant-raw-1",
+        type: "agentMessage",
+        text: "visible raw answer\nlate raw update",
+        turnId: "turn-raw-1",
+      });
+    });
+
+    expect(result.current.threadStatusById["thread-late-raw"]?.isProcessing).toBe(false);
+    const assistant = result.current.activeItems.find(
+      (item) =>
+        item.kind === "message" &&
+        item.role === "assistant" &&
+        item.id === "assistant-raw-1",
+    );
+    expect(assistant?.kind).toBe("message");
+    if (assistant?.kind === "message") {
+      expect(assistant.text).toBe("visible raw answer");
+    }
+
+    await act(async () => {
+      handlers?.onItemUpdated?.("ws-1", "thread-late-raw", {
+        id: "assistant-raw-1",
+        type: "agentMessage",
+        text: "visible raw answer\nturnless late raw update",
+      });
+    });
+
+    expect(result.current.threadStatusById["thread-late-raw"]?.isProcessing).toBe(false);
+    const assistantAfterTurnlessLateEvent = result.current.activeItems.find(
+      (item) =>
+        item.kind === "message" &&
+        item.role === "assistant" &&
+        item.id === "assistant-raw-1",
+    );
+    expect(assistantAfterTurnlessLateEvent?.kind).toBe("message");
+    if (assistantAfterTurnlessLateEvent?.kind === "message") {
+      expect(assistantAfterTurnlessLateEvent.text).toBe("visible raw answer");
+    }
+  });
+
+  it("does not revive processing from turnless raw updates after ownerless runtime settlement", async () => {
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    act(() => {
+      result.current.setActiveThreadId("thread-turnless-runtime-ended");
+    });
+
+    await act(async () => {
+      handlers?.onTurnStarted?.(
+        "ws-1",
+        "thread-turnless-runtime-ended",
+        "turn-runtime-ended-1",
+      );
+      handlers?.onAgentMessageCompleted?.({
+        workspaceId: "ws-1",
+        threadId: "thread-turnless-runtime-ended",
+        itemId: "assistant-runtime-ended-1",
+        text: "runtime ended answer",
+        turnId: "turn-runtime-ended-1",
+      });
+      handlers?.onTurnError?.("ws-1", "thread-turnless-runtime-ended", "", {
+        message: "[RUNTIME_ENDED] Runtime ended after the answer settled.",
+        willRetry: false,
+        engine: "codex",
+      });
+    });
+
+    expect(
+      result.current.threadStatusById["thread-turnless-runtime-ended"]
+        ?.isProcessing,
+    ).toBe(false);
+    expect(
+      result.current.activeTurnIdByThread["thread-turnless-runtime-ended"],
+    ).toBeNull();
+
+    await act(async () => {
+      handlers?.onItemUpdated?.("ws-1", "thread-turnless-runtime-ended", {
+        id: "assistant-runtime-ended-1",
+        type: "agentMessage",
+        text: "runtime ended answer\nlate turnless raw update",
+      });
+    });
+
+    expect(
+      result.current.threadStatusById["thread-turnless-runtime-ended"]
+        ?.isProcessing,
+    ).toBe(false);
+    expect(
+      result.current.activeTurnIdByThread["thread-turnless-runtime-ended"],
+    ).toBeNull();
+    const assistant = result.current.activeItems.find(
+      (item) =>
+        item.kind === "message" &&
+        item.role === "assistant" &&
+        item.id === "assistant-runtime-ended-1",
+    );
+    expect(assistant?.kind).toBe("message");
+    if (assistant?.kind === "message") {
+      expect(assistant.text).toBe("runtime ended answer");
+    }
+  });
+
+  it("does not revive processing from a late duplicate Codex turn start after completion", async () => {
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    act(() => {
+      result.current.setActiveThreadId("thread-late-start");
+    });
+
+    await act(async () => {
+      handlers?.onTurnStarted?.("ws-1", "thread-late-start", "turn-late-start-1");
+      handlers?.onAgentMessageCompleted?.({
+        workspaceId: "ws-1",
+        threadId: "thread-late-start",
+        itemId: "assistant-late-start-1",
+        text: "visible answer",
+        turnId: "turn-late-start-1",
+      });
+      handlers?.onTurnCompleted?.("ws-1", "thread-late-start", "turn-late-start-1");
+    });
+
+    expect(result.current.threadStatusById["thread-late-start"]?.isProcessing).toBe(false);
+    expect(result.current.activeTurnIdByThread["thread-late-start"]).toBeNull();
+
+    await act(async () => {
+      handlers?.onTurnStarted?.("ws-1", "thread-late-start", "turn-late-start-1");
+    });
+
+    expect(result.current.threadStatusById["thread-late-start"]?.isProcessing).toBe(false);
+    expect(result.current.activeTurnIdByThread["thread-late-start"]).toBeNull();
+  });
+
+  it("keeps parallel Codex turns isolated when one settled turn emits a late duplicate start", async () => {
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    await act(async () => {
+      handlers?.onTurnStarted?.("ws-1", "thread-parallel-a", "turn-parallel-a");
+      handlers?.onTurnStarted?.("ws-1", "thread-parallel-b", "turn-parallel-b");
+    });
+
+    expect(result.current.threadStatusById["thread-parallel-a"]?.isProcessing).toBe(true);
+    expect(result.current.threadStatusById["thread-parallel-b"]?.isProcessing).toBe(true);
+
+    await act(async () => {
+      handlers?.onTurnCompleted?.("ws-1", "thread-parallel-a", "turn-parallel-a");
+    });
+
+    expect(result.current.threadStatusById["thread-parallel-a"]?.isProcessing).toBe(false);
+    expect(result.current.threadStatusById["thread-parallel-b"]?.isProcessing).toBe(true);
+
+    await act(async () => {
+      handlers?.onTurnStarted?.("ws-1", "thread-parallel-a", "turn-parallel-a");
+    });
+
+    expect(result.current.threadStatusById["thread-parallel-a"]?.isProcessing).toBe(false);
+    expect(result.current.activeTurnIdByThread["thread-parallel-a"]).toBeNull();
+    expect(result.current.threadStatusById["thread-parallel-b"]?.isProcessing).toBe(true);
+    expect(result.current.activeTurnIdByThread["thread-parallel-b"]).toBe("turn-parallel-b");
+
+    await act(async () => {
+      handlers?.onTurnCompleted?.("ws-1", "thread-parallel-b", "turn-parallel-b");
+    });
+
+    expect(result.current.threadStatusById["thread-parallel-a"]?.isProcessing).toBe(false);
+    expect(result.current.threadStatusById["thread-parallel-b"]?.isProcessing).toBe(false);
+    expect(result.current.activeTurnIdByThread["thread-parallel-b"]).toBeNull();
+  });
+
+  it("exposes a Codex fallback owner only when exactly one Codex thread is processing", async () => {
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    await act(async () => {
+      handlers?.onThreadStarted?.("ws-1", {
+        id: "thread-provider-a",
+        preview: "Provider A",
+        providerProfileId: "provider-a",
+        providerProfileSource: "managed",
+        providerProfileName: "Provider A",
+      });
+      handlers?.onTurnStarted?.("ws-1", "thread-provider-a", "turn-a");
+      handlers?.onThreadStarted?.("ws-1", {
+        id: "claude:session-1",
+        preview: "Claude",
+      });
+      handlers?.onTurnStarted?.("ws-1", "claude:session-1", "turn-claude");
+    });
+
+    expect(result.current.threadStatusById["thread-provider-a"]?.isProcessing).toBe(true);
+    expect(result.current.threadStatusById["claude:session-1"]?.isProcessing).toBe(true);
+    expect(handlers?.getSingleProcessingCodexThreadId?.("ws-1")).toBe(
+      "thread-provider-a",
+    );
+
+    await act(async () => {
+      handlers?.onThreadStarted?.("ws-1", {
+        id: "thread-provider-a-sibling",
+        preview: "Provider A sibling",
+        providerProfileId: "provider-a",
+        providerProfileSource: "managed",
+        providerProfileName: "Provider A",
+      });
+      handlers?.onTurnStarted?.(
+        "ws-1",
+        "thread-provider-a-sibling",
+        "turn-a-sibling",
+      );
+    });
+
+    expect(handlers?.getSingleProcessingCodexThreadId?.("ws-1")).toBeNull();
+
+    await act(async () => {
+      handlers?.onThreadStarted?.("ws-1", {
+        id: "thread-provider-b",
+        preview: "Provider B",
+        providerProfileId: "provider-b",
+        providerProfileSource: "managed",
+        providerProfileName: "Provider B",
+      });
+      handlers?.onTurnStarted?.("ws-1", "thread-provider-b", "turn-b");
+    });
+
+    expect(handlers?.getSingleProcessingCodexThreadId?.("ws-1")).toBeNull();
+  });
+
+  it("exposes a newly started Codex fallback owner before the React state ref effect runs", async () => {
+    renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    let ownerDuringSameTick: string | null | undefined = undefined;
+
+    await act(async () => {
+      handlers?.onThreadStarted?.("ws-1", {
+        id: "thread-immediate-owner",
+        preview: "Immediate owner",
+      });
+      handlers?.onTurnStarted?.(
+        "ws-1",
+        "thread-immediate-owner",
+        "turn-immediate-owner",
+      );
+      ownerDuringSameTick =
+        handlers?.getSingleProcessingCodexThreadId?.("ws-1");
+      await Promise.resolve();
+    });
+
+    expect(ownerDuringSameTick).toBe("thread-immediate-owner");
+  });
+
   it("orders thread lists, applies custom names, and keeps pin ordering stable", async () => {
     const expectedThreadIds = new Set(["thread-a", "thread-b", "thread-c"]);
     const { result } = renderHook(() =>
@@ -660,6 +973,115 @@ describe("useThreads UX integration", () => {
       "thread-a",
     ]);
     expect(unpinnedRows.map((row) => row.thread.id)).toEqual(["thread-b"]);
+  });
+
+  it("computes the adaptive thread item cache cap from in-flight count", () => {
+    expect(computeThreadItemCacheMax(0)).toBe(12);
+    expect(computeThreadItemCacheMax(8)).toBe(22);
+    expect(computeThreadItemCacheMax(20)).toBe(46);
+  });
+
+  it("evicts stale loaded thread items and emits a chat-stream diagnostic", async () => {
+    const startThreadMock = vi.mocked(startThread);
+    startThreadMock.mockImplementation(async () => {
+      const callIndex = startThreadMock.mock.calls.length;
+      return {
+        result: {
+          thread: {
+            id: `thread-${callIndex}`,
+          },
+        },
+      } as never;
+    });
+
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+        activeEngine: "codex",
+      }),
+    );
+
+    for (let index = 0; index < 15; index += 1) {
+      const threadId = `thread-${index + 1}`;
+      now += 100;
+      await act(async () => {
+        await result.current.startThread();
+        handlers?.onAgentMessageCompleted?.({
+          workspaceId: "ws-1",
+          threadId,
+          itemId: `assistant-${index + 1}`,
+          text: `answer ${index + 1}`,
+          turnId: `turn-${index + 1}`,
+        });
+      });
+    }
+
+    await waitFor(() => {
+      expect(result.current.threadItemsByThread["thread-1"]).toBeUndefined();
+      expect(result.current.threadItemsByThread["thread-2"]).toBeUndefined();
+      expect(result.current.threadItemsByThread["thread-3"]).toBeUndefined();
+    });
+
+    expect(result.current.threadItemsByThread["thread-4"]).toHaveLength(1);
+    expect(result.current.threadItemsByThread["thread-15"]).toHaveLength(1);
+    expect(appendRendererDiagnostic).toHaveBeenCalledWith(
+      "chat-stream/evict-thread",
+      expect.objectContaining({
+        evictedCount: 3,
+        cacheMax: 12,
+        inFlightCount: 0,
+      }),
+    );
+  });
+
+  it("keeps interrupted guards scoped by workspace for matching thread ids", async () => {
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    await act(async () => {
+      handlers?.onThreadStarted?.("ws-1", {
+        id: "thread-shared",
+        preview: "Workspace one",
+        updated_at: 1000,
+      });
+      handlers?.onThreadStarted?.("ws-2", {
+        id: "thread-shared",
+        preview: "Workspace two",
+        updated_at: 1000,
+      });
+      result.current.setActiveThreadId("thread-shared");
+      handlers?.onTurnStarted?.("ws-1", "thread-shared", "turn-ws-1");
+    });
+
+    await act(async () => {
+      await result.current.interruptTurn();
+    });
+
+    await act(async () => {
+      handlers?.onAgentMessageCompleted?.({
+        workspaceId: "ws-2",
+        threadId: "thread-shared",
+        itemId: "assistant-ws-2",
+        text: "workspace two answer",
+        turnId: "turn-ws-2",
+      });
+    });
+
+    expect(result.current.threadItemsByThread["thread-shared"]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "assistant-ws-2",
+          kind: "message",
+          role: "assistant",
+          text: "workspace two answer",
+        }),
+      ]),
+    );
   });
 
 });

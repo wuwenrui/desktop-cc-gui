@@ -8,6 +8,7 @@ const closeMock = vi.fn(async () => undefined);
 const refreshFilesMock = vi.fn(async () => undefined);
 const refreshGitStatusMock = vi.fn(async () => undefined);
 const useCodeCssVarsMock = vi.fn();
+const loadDetachedFileExplorerStylesMock = vi.fn(async () => undefined);
 const configureDetachedExternalChangeMonitorMock = vi.fn(async (): Promise<{
   mode: "watcher" | "polling";
   fallbackReason?: string | null;
@@ -68,6 +69,11 @@ vi.mock("../../app/hooks/useAppSettingsController", () => ({
 
 vi.mock("../../app/hooks/useCodeCssVars", () => ({
   useCodeCssVars: (...args: any[]) => (useCodeCssVarsMock as any)(...args),
+}));
+
+vi.mock("../../../styles/featureStyleLoaders", () => ({
+  loadDetachedFileExplorerStyles: (...args: any[]) =>
+    (loadDetachedFileExplorerStylesMock as any)(...args),
 }));
 
 vi.mock("@tauri-apps/api/window", () => ({
@@ -134,6 +140,7 @@ describe("DetachedFileExplorerWindow", () => {
     refreshFilesMock.mockClear();
     refreshGitStatusMock.mockClear();
     useCodeCssVarsMock.mockClear();
+    loadDetachedFileExplorerStylesMock.mockClear();
     useWorkspaceFilesMock.mockClear();
     useGitStatusMock.mockClear();
     fileExplorerWorkspaceMock.mockClear();
@@ -176,6 +183,7 @@ describe("DetachedFileExplorerWindow", () => {
         codeFontFamily: "Test Code Font",
       }),
     );
+    expect(loadDetachedFileExplorerStylesMock).toHaveBeenCalledTimes(1);
     expect(container.firstElementChild?.className).toContain("app");
     expect(container.firstElementChild?.className).toContain("layout-desktop");
     expect(container.firstElementChild?.className).toContain("macos-desktop");

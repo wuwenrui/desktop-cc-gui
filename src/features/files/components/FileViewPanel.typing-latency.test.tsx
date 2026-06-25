@@ -142,6 +142,7 @@ describe("FileViewPanel typing latency contract", () => {
     );
 
     const editor = (await screen.findByTestId("mock-codemirror")) as HTMLTextAreaElement;
+    vi.useFakeTimers();
     onActiveCodeAnchorChange.mockClear();
 
     const returnOffset = editor.value.indexOf("return 1");
@@ -150,20 +151,28 @@ describe("FileViewPanel typing latency contract", () => {
 
     expect(onActiveCodeAnchorChange).not.toHaveBeenCalled();
 
-    await act(async () => {
-      await new Promise((resolve) => window.setTimeout(resolve, 40));
+    act(() => {
+      vi.advanceTimersByTime(40);
     });
     expect(onActiveCodeAnchorChange).not.toHaveBeenCalled();
 
-    await waitFor(() => {
-      expect(onActiveCodeAnchorChange).toHaveBeenCalledWith(
-        expect.objectContaining({
-          filePath: "src/value.ts",
-          symbolName: "alpha",
-          startLine: 1,
-        }),
-      );
+    await act(async () => {
+      vi.advanceTimersByTime(50);
+      await Promise.resolve();
     });
+    expect(onActiveCodeAnchorChange).not.toHaveBeenCalled();
+
+    await act(async () => {
+      vi.advanceTimersByTime(90);
+      await Promise.resolve();
+    });
+    expect(onActiveCodeAnchorChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filePath: "src/value.ts",
+        symbolName: "alpha",
+        startLine: 1,
+      }),
+    );
   });
 
   it("flushes latest editor draft before save when parent publish is pending", async () => {

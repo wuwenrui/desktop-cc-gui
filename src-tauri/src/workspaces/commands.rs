@@ -17,7 +17,7 @@ use super::external_changes::{
 use super::files::{
     copy_workspace_item_inner, create_workspace_directory_inner, duplicate_workspace_item_inner,
     list_external_absolute_directory_children_inner, list_external_spec_tree_inner,
-    list_workspace_directory_children_inner, list_workspace_files_inner,
+    list_workspace_directory_children_inner_with_refresh, list_workspace_files_inner_with_refresh,
     paste_external_workspace_items_inner, paste_workspace_item_inner,
     read_external_absolute_file_inner, read_external_spec_file_inner, read_workspace_file_inner,
     read_workspace_file_preview_inner, rename_workspace_item_inner,
@@ -2055,6 +2055,7 @@ pub(crate) async fn connect_workspace(
 #[tauri::command]
 pub(crate) async fn list_workspace_files(
     workspace_id: String,
+    force_refresh: Option<bool>,
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<WorkspaceFilesResponse, String> {
@@ -2064,15 +2065,16 @@ pub(crate) async fn list_workspace_files(
             &*state,
             app,
             "list_workspace_files",
-            json!({ "workspaceId": workspace_id }),
+            json!({ "workspaceId": workspace_id, "forceRefresh": force_refresh.unwrap_or(false) }),
         )
         .await?;
         return serde_json::from_value(response).map_err(|err| err.to_string());
     }
 
     let root = workspaces_core::resolve_workspace_root(&state.workspaces, &workspace_id).await?;
+    let force_refresh = force_refresh.unwrap_or(false);
     tokio::task::spawn_blocking(move || {
-        list_workspace_files_inner(&root, MAX_WORKSPACE_FILE_ENTRIES)
+        list_workspace_files_inner_with_refresh(&root, MAX_WORKSPACE_FILE_ENTRIES, force_refresh)
     })
     .await
     .map_err(|err| format!("failed to join workspace file scan task: {err}"))
@@ -2115,6 +2117,7 @@ pub(crate) async fn workspace_file_times(
 pub(crate) async fn list_workspace_directory_children(
     workspace_id: String,
     path: String,
+    force_refresh: Option<bool>,
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<WorkspaceFilesResponse, String> {
@@ -2124,15 +2127,21 @@ pub(crate) async fn list_workspace_directory_children(
             &*state,
             app,
             "list_workspace_directory_children",
-            json!({ "workspaceId": workspace_id, "path": path }),
+            json!({ "workspaceId": workspace_id, "path": path, "forceRefresh": force_refresh.unwrap_or(false) }),
         )
         .await?;
         return serde_json::from_value(response).map_err(|err| err.to_string());
     }
 
     let root = workspaces_core::resolve_workspace_root(&state.workspaces, &workspace_id).await?;
+    let force_refresh = force_refresh.unwrap_or(false);
     tokio::task::spawn_blocking(move || {
-        list_workspace_directory_children_inner(&root, &path, MAX_WORKSPACE_DIRECTORY_CHILDREN)
+        list_workspace_directory_children_inner_with_refresh(
+            &root,
+            &path,
+            MAX_WORKSPACE_DIRECTORY_CHILDREN,
+            force_refresh,
+        )
     })
     .await
     .map_err(|err| format!("failed to join workspace directory scan task: {err}"))?

@@ -178,12 +178,62 @@ const CODEX_TUI_COMPAT_CLIENT_NAME: &str = "codex-tui";
 const FALLBACK_CODEX_TUI_COMPAT_VERSION: &str = "0.137.0";
 const FALLBACK_TERM_PROGRAM: &str = "Apple_Terminal";
 const FALLBACK_TERM_PROGRAM_VERSION: &str = "470.2";
+const CODEX_TIMING_METHODS_BEFORE_FIRST_TEXT_LIMIT: usize = 12;
 
 #[derive(Debug, Clone)]
 struct TimedOutRequest {
     method: String,
     thread_id: Option<String>,
     timed_out_at_ms: u64,
+}
+
+#[derive(Debug, Clone)]
+pub(super) struct CodexTurnTimingState {
+    turn_start_request_started_at_ms: u64,
+    turn_start_response_received_at_ms: Option<u64>,
+    first_runtime_event_received_at_ms: Option<u64>,
+    first_stream_event_received_at_ms: Option<u64>,
+    first_reasoning_event_received_at_ms: Option<u64>,
+    first_assistant_item_event_received_at_ms: Option<u64>,
+    first_agent_message_event_received_at_ms: Option<u64>,
+    first_tool_event_received_at_ms: Option<u64>,
+    first_text_delta_received_at_ms: Option<u64>,
+    first_stream_event_method: Option<String>,
+    first_runtime_event_method: Option<String>,
+    first_reasoning_event_method: Option<String>,
+    first_assistant_item_event_method: Option<String>,
+    first_agent_message_event_method: Option<String>,
+    first_tool_event_method: Option<String>,
+    first_text_delta_method: Option<String>,
+    event_count_before_first_text_delta: u32,
+    reasoning_event_count_before_first_text_delta: u32,
+    tool_event_count_before_first_text_delta: u32,
+    methods_before_first_text_delta: Vec<String>,
+}
+
+fn new_codex_turn_timing_state(request_started_at_ms: u64) -> CodexTurnTimingState {
+    CodexTurnTimingState {
+        turn_start_request_started_at_ms: request_started_at_ms,
+        turn_start_response_received_at_ms: None,
+        first_runtime_event_received_at_ms: None,
+        first_stream_event_received_at_ms: None,
+        first_reasoning_event_received_at_ms: None,
+        first_assistant_item_event_received_at_ms: None,
+        first_agent_message_event_received_at_ms: None,
+        first_tool_event_received_at_ms: None,
+        first_text_delta_received_at_ms: None,
+        first_stream_event_method: None,
+        first_runtime_event_method: None,
+        first_reasoning_event_method: None,
+        first_assistant_item_event_method: None,
+        first_agent_message_event_method: None,
+        first_tool_event_method: None,
+        first_text_delta_method: None,
+        event_count_before_first_text_delta: 0,
+        reasoning_event_count_before_first_text_delta: 0,
+        tool_event_count_before_first_text_delta: 0,
+        methods_before_first_text_delta: Vec::new(),
+    }
 }
 
 fn non_empty_env_var(key: &str) -> Option<String> {
@@ -346,7 +396,7 @@ struct ResumePendingTurnState {
     source: ResumePendingSource,
 }
 
-fn now_millis() -> u64 {
+pub(crate) fn now_millis() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_else(|_| Duration::from_millis(0))
@@ -452,6 +502,7 @@ pub(crate) struct WorkspaceSession {
     local_user_input_requests: Mutex<HashMap<String, String>>,
     local_request_seq: AtomicU64,
     resume_pending_turns: Mutex<HashMap<String, ResumePendingTurnState>>,
+    codex_turn_timing: Mutex<HashMap<String, CodexTurnTimingState>>,
     runtime_manager: StdMutex<Option<Arc<RuntimeManager>>>,
     active_turns: Mutex<HashMap<String, String>>,
     manual_shutdown_requested: AtomicBool,
@@ -581,6 +632,37 @@ impl WorkspaceSession {
                 )
                 .await;
         }
+    }
+
+    pub(crate) async fn start_codex_turn_timing(
+        &self,
+        thread_id: &str,
+        request_started_at_ms: u64,
+    ) {
+        let normalized_thread_id = thread_id.trim();
+        if normalized_thread_id.is_empty() {
+            return;
+        }
+        self.codex_turn_timing.lock().await.insert(
+            normalized_thread_id.to_string(),
+            new_codex_turn_timing_state(request_started_at_ms),
+        );
+    }
+
+    pub(crate) async fn record_codex_turn_start_response(
+        &self,
+        thread_id: &str,
+        response_received_at_ms: u64,
+    ) {
+        let normalized_thread_id = thread_id.trim();
+        if normalized_thread_id.is_empty() {
+            return;
+        }
+        let mut timing = self.codex_turn_timing.lock().await;
+        let entry = timing
+            .entry(normalized_thread_id.to_string())
+            .or_insert_with(|| new_codex_turn_timing_state(response_received_at_ms));
+        entry.turn_start_response_received_at_ms = Some(response_received_at_ms);
     }
 
     pub(crate) async fn note_codex_thread_create_pending(&self, timeout_duration: Duration) {
@@ -1036,6 +1118,7 @@ async fn spawn_workspace_session_once<E: EventSink>(
         local_user_input_requests: Mutex::new(HashMap::new()),
         local_request_seq: AtomicU64::new(1),
         resume_pending_turns: Mutex::new(HashMap::new()),
+        codex_turn_timing: Mutex::new(HashMap::new()),
         runtime_manager: StdMutex::new(None),
         active_turns: Mutex::new(HashMap::new()),
         manual_shutdown_requested: AtomicBool::new(false),
@@ -1173,6 +1256,7 @@ pub(crate) async fn make_test_workspace_session(id: &str) -> Arc<WorkspaceSessio
         local_user_input_requests: Mutex::new(HashMap::new()),
         local_request_seq: AtomicU64::new(1),
         resume_pending_turns: Mutex::new(HashMap::new()),
+        codex_turn_timing: Mutex::new(HashMap::new()),
         runtime_manager: StdMutex::new(None),
         active_turns: Mutex::new(HashMap::new()),
         manual_shutdown_requested: AtomicBool::new(false),

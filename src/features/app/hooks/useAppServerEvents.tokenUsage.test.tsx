@@ -180,7 +180,7 @@ describe("useAppServerEvents token usage", () => {
   it("keeps token_count last usage as zero when only total snapshot exists", async () => {
     const handlers: Handlers = {
       onThreadTokenUsageUpdated: vi.fn(),
-      getActiveCodexThreadId: vi.fn(() => "thread-codex-2"),
+      getSingleProcessingCodexThreadId: vi.fn(() => "thread-codex-2"),
     };
     const { root } = await mount(handlers);
 
@@ -324,7 +324,7 @@ describe("useAppServerEvents token usage", () => {
   it("prefers token_count last snapshot while keeping total snapshot", async () => {
     const handlers: Handlers = {
       onThreadTokenUsageUpdated: vi.fn(),
-      getActiveCodexThreadId: vi.fn(() => "thread-codex-1"),
+      getSingleProcessingCodexThreadId: vi.fn(() => "thread-codex-1"),
     };
     const { root } = await mount(handlers);
 

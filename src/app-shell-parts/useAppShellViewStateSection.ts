@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { shouldHideHomeOnThreadActivation } from "../features/home/utils/homeVisibility";
 
 export function useAppShellViewStateSection({
@@ -48,10 +48,20 @@ export function useAppShellViewStateSection({
       appMode === "chat" &&
       (isCompact ? (isTablet ? tabletTab : activeTab) === "codex" : activeTab !== "spec"),
   );
+  const pendingDefaultWorkspaceActivationRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!showHome || activeWorkspaceId || !homeWorkspaceDefaultId) {
+    if (activeWorkspaceId) {
+      pendingDefaultWorkspaceActivationRef.current = null;
       return;
     }
+    if (!showHome || !homeWorkspaceDefaultId) {
+      pendingDefaultWorkspaceActivationRef.current = null;
+      return;
+    }
+    if (pendingDefaultWorkspaceActivationRef.current === homeWorkspaceDefaultId) {
+      return;
+    }
+    pendingDefaultWorkspaceActivationRef.current = homeWorkspaceDefaultId;
     setActiveWorkspaceId(homeWorkspaceDefaultId);
     setActiveThreadId(null, homeWorkspaceDefaultId);
   }, [

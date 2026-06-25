@@ -38,6 +38,11 @@ const zhPart1 = {
     name: "名称",
     terminal: "终端",
     toggleTerminalPanel: "切换终端面板",
+    moreActions: "更多操作",
+    markdownMermaidFullscreen: "全屏",
+    markdownMermaidFullscreenHint: "放大查看图表",
+    markdownImageFullscreen: "全屏",
+    markdownImageFullscreenHint: "放大查看图片",
   },
 
   // 应用
@@ -1642,6 +1647,7 @@ const zhPart1 = {
       edit: "编辑",
       delete: "删除",
       enable: "启用",
+      dragToReorder: "拖动调整顺序",
       inUse: "使用中",
       availableForNewCodexSessions: "新会话可选",
       currentConfig: "当前ClaudeCode配置",
@@ -1714,6 +1720,12 @@ const zhPart1 = {
         opusModelPlaceholder: "例如：claude-opus-4-5",
         modelMappingHint:
           "可选：指定默认使用的 Claude 模型，留空则使用系统默认。",
+        fetchModels: "拉取模型",
+        fetchModelsLoading: "拉取中…",
+        fetchModelsCount: "已加载 {{count}} 个模型",
+        fetchModelsEmpty: "未返回模型",
+        fetchModelsNeedUrl: "请先填写 API URL",
+        fetchModelsError: "拉取模型失败",
         jsonConfig: "JSON 配置",
         jsonConfigDescription:
           "此处可配置完整的 settings.json 内容，支持所有字段（如 model、alwaysThinkingEnabled、ccSwitchProviderId、codemossProviderId 等）",
@@ -2452,6 +2464,11 @@ const zhPart1 = {
 
   // 消息
   messages: {
+    outlineShow: "显示目录",
+    outlineHide: "隐藏目录",
+    outlinePin: "固定目录",
+    outlineUnpin: "取消固定",
+    outlineEmpty: "此消息没有可导航的标题",
     userMessage: "你",
     assistantMessage: "助手",
     thinking: "思考中…",
@@ -2488,6 +2505,7 @@ const zhPart1 = {
     restoringHistory: "正在恢复会话历史…",
     restoringHistoryHint: "正在加载本地 transcript 和会话状态。",
     generatingResponse: "正在生成响应...",
+    codexWaitingForFirstText: "Codex 已启动，正在等待首段文本...",
     codexSilentSuspected: "Codex 暂时没有新输出，仍在监听运行状态...",
     nonStreamingHint: "该模型可能非流式返回，或网络暂不可达，请稍候...",
     proxyBadge: "代理",
@@ -2519,12 +2537,17 @@ const zhPart1 = {
     streamingPlainTextCollapsed:
       "为保持实时渲染流畅，已折叠 {{omittedChars}} 字符。",
     runtimeReconnectTitle: "Runtime 连接已中断",
+    runtimeReconnectTransientTitle: "Runtime 切换中",
     runtimeReconnectBrokenPipe:
       "当前这条会话消息对应的 runtime pipe 已断开。你可以先重新连接 runtime，再重试发送。",
     runtimeReconnectWorkspaceNotConnected:
       "当前工作区没有可用的受管 runtime。你可以先重新连接 runtime，再继续发送。",
     runtimeReconnectEnded:
       "受管 runtime 在本轮对话结束前就已经退出。你可以先重新连接 runtime，再继续重试或重发上一条提示词。",
+    runtimeReconnectTransientCleanup:
+      "正在切换到可用 runtime，通常会自动继续。",
+    runtimeReconnectStoppingRace:
+      "当前 runtime 正在停止或重建。你可以等待自动恢复，或手动重新连接 runtime。",
     runtimeReconnectQuarantined:
       "Runtime 正在冷却恢复窗口内。请等待短暂冷却结束后，再重新连接或重发上一条提示词。",
     runtimeReconnectAction: "重新连接 runtime",

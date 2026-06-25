@@ -1,7 +1,7 @@
 use super::*;
 use crate::workspace_io::{
     list_external_absolute_directory_children_inner, list_external_spec_tree_inner,
-    list_workspace_directory_children_inner, list_workspace_files_inner,
+    list_workspace_directory_children_inner_with_refresh, list_workspace_files_inner_with_refresh,
     read_external_absolute_file_inner, read_external_spec_file_inner, read_workspace_file_inner,
     read_workspace_file_preview_inner, write_external_absolute_file_inner,
     write_external_spec_file_inner, ExternalSpecFileResponse, WorkspaceFileResponse,
@@ -117,23 +117,25 @@ impl DaemonState {
     pub(crate) async fn list_workspace_files(
         &self,
         workspace_id: String,
+        force_refresh: bool,
     ) -> Result<WorkspaceFilesResponse, String> {
         let root = workspaces_core::resolve_workspace_root(&self.workspaces, &workspace_id).await?;
-        Ok(
-            tokio::task::spawn_blocking(move || list_workspace_files_inner(&root, 12_000))
-                .await
-                .map_err(|err| format!("failed to join workspace file scan task: {err}"))?,
-        )
+        Ok(tokio::task::spawn_blocking(move || {
+            list_workspace_files_inner_with_refresh(&root, 12_000, force_refresh)
+        })
+        .await
+        .map_err(|err| format!("failed to join workspace file scan task: {err}"))?)
     }
 
     pub(crate) async fn list_workspace_directory_children(
         &self,
         workspace_id: String,
         path: String,
+        force_refresh: bool,
     ) -> Result<WorkspaceFilesResponse, String> {
         let root = workspaces_core::resolve_workspace_root(&self.workspaces, &workspace_id).await?;
         tokio::task::spawn_blocking(move || {
-            list_workspace_directory_children_inner(&root, &path, 2_000)
+            list_workspace_directory_children_inner_with_refresh(&root, &path, 2_000, force_refresh)
         })
         .await
         .map_err(|err| format!("failed to join workspace directory scan task: {err}"))?

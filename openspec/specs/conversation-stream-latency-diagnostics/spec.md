@@ -147,3 +147,85 @@ The system MUST classify Claude Code first-token delay separately from backend f
 - **THEN** diagnostics MUST ignore or clamp those fields safely
 - **AND** diagnostic gap calculations MUST NOT produce negative durations
 
+### Requirement: Codex Backend Phase Timing Diagnostics MUST Be Content Safe
+Codex backend phase timing diagnostics MUST remain bounded and content-safe while exposing enough timestamps to split post-ack first-delta latency.
+
+#### Scenario: backend timing metadata excludes conversation content
+- **WHEN** backend enriches a Codex app-server event with `ccguiTiming`
+- **THEN** the timing metadata MUST include only ids, method/source labels, timestamps, durations, and bounded counters
+- **AND** it MUST NOT include prompt text, assistant text, tool output, terminal output, or file content
+
+#### Scenario: backend timing separates runtime activity from assistant first text
+- **WHEN** Codex emits reasoning, tool, lifecycle, or assistant message events before the first assistant text delta
+- **THEN** `ccguiTiming` MUST preserve `firstRuntimeEventReceivedAtMs`, `firstReasoningEventReceivedAtMs`, `firstAssistantItemEventReceivedAtMs`, `firstAgentMessageEventReceivedAtMs`, `firstToolEventReceivedAtMs`, and `firstTextDeltaReceivedAtMs` independently
+- **AND** `firstTextDeltaReceivedAtMs` MUST only be set by a non-empty `item/agentMessage/delta`, not by reasoning deltas
+- **AND** `firstAssistantItemEventReceivedAtMs` MUST be set by the first `item/started`, `item/updated`, or `item/completed` event whose item type is `agentMessage` or `assistantMessage`
+- **AND** `eventCountBeforeFirstTextDelta`, `reasoningEventCountBeforeFirstTextDelta`, `toolEventCountBeforeFirstTextDelta`, and `methodsBeforeFirstTextDelta` MUST remain bounded and content-free
+
+#### Scenario: malformed or missing timing remains safe
+- **WHEN** an app-server event lacks timing metadata or contains malformed timing fields
+- **THEN** renderer diagnostics MUST ignore or normalize those fields without throwing
+- **AND** report generation MUST mark unavailable metrics as unsupported rather than inventing proxy values
+
+#### Scenario: long sessions preserve realtime evidence
+- **WHEN** renderer diagnostics contain high-volume lifecycle, `perf.*`, `realtime.turnTrace.summary`, and `stream-latency/*` entries
+- **THEN** `realtime.turnTrace.summary` entries MUST be retained in an independent bounded bucket
+- **AND** `stream-latency/*` entries MUST be retained in an independent bounded bucket
+- **AND** retention MUST remain content-safe and bounded rather than preserving unbounded raw diagnostics
+
+### Requirement: Turn Trace Summary MUST Be Consistent With Visible Stream Evidence
+
+The system MUST validate turn-level trace summary counters and deltas against visible stream latency evidence before using them as proof of client-side batch, reducer, or render lag.
+
+#### Scenario: fast visible output is not reported as client batch lag without corroboration
+
+- **WHEN** a completed streaming turn has measured visible text growth with `firstVisibleTextAfterDeltaMs` and `lastVisibleTextAfterDeltaMs` under the configured visible-output thresholds
+- **AND** `realtime.turnTrace.summary` reports large `batchFlushDurationAvgMs`, `firstDeltaToBatchFlushEndMs`, or `batchFlushEndToReducerCommitMs`
+- **THEN** diagnostics MUST preserve the measured summary values
+- **AND** performance reports MUST mark the turn as requiring trace consistency review or equivalent caution instead of claiming confirmed client-side batch/reducer lag
+
+#### Scenario: visible text growth counter reflects latest bounded growth count
+
+- **WHEN** a streaming turn renders visible assistant text multiple times after the first engine delta
+- **THEN** the turn trace summary MUST keep the first visible text growth milestone as the first growth timestamp
+- **AND** `counters.visibleTextGrowthCount` MUST reflect the latest bounded visible text growth count reported by stream latency diagnostics
+- **AND** the counter MUST NOT remain pinned to `1` after later visible text growth has been observed
+
+#### Scenario: batch flush duration remains distinct from route work duration
+
+- **WHEN** batch flush timing is recorded with precise route timing fields
+- **THEN** diagnostics MUST keep queue/window duration, app server event route duration, and per-delta route duration as separate counters
+- **AND** performance reports MUST NOT use batch flush duration alone as proof of route work or reducer work latency
+
+#### Scenario: reducer amplification is interpreted only with matching delta counters
+
+- **WHEN** `reducerCommitCount`, `deltaCount`, or `reducerAmplification` are exported in `realtime.turnTrace.summary`
+- **THEN** the report MUST include enough context to determine whether reducer amplification is based on assistant/runtime deltas for the same correlated turn
+- **AND** missing or inconsistent counters MUST be treated as incomplete evidence rather than release-grade proof of reducer pressure
+
+### Requirement: First Delta Diagnostics MUST Preserve Provider Dimensions
+
+Stream latency diagnostics MUST preserve enough bounded dimensions to classify first-delta waiting separately from frontend render, batch, and reducer latency.
+
+#### Scenario: Codex first-delta wait remains upstream pending until delta ingress
+
+- **WHEN** a Codex-compatible turn has started and no assistant delta or snapshot ingress has arrived
+- **THEN** diagnostics MUST classify the wait as upstream pending, first-delta latency, first-token delay, or equivalent
+- **AND** records MUST include `workspaceId`, `threadId`, `turnId`, `engine`, `providerId/providerName/baseUrl` when available, `model`, and `platform` when available
+- **AND** diagnostics MUST NOT classify the wait as client render amplification before assistant delta ingress exists
+
+#### Scenario: first delta arrival closes the first-delta wait window
+
+- **WHEN** the first assistant delta or snapshot ingress arrives for the correlated turn
+- **THEN** diagnostics MUST preserve the elapsed first-delta latency window
+- **AND** subsequent visible text latency MUST be measured from delta ingress to visible growth rather than from user send
+
+### Requirement: Codex Turn Start Ack Diagnostics MUST Be Content Safe
+
+Codex turn-start acknowledgement diagnostics MUST remain bounded and content-safe.
+
+#### Scenario: prompt text is not emitted in ack diagnostics
+
+- **WHEN** a user sends a Codex message
+- **THEN** the turn-start ack diagnostic MUST include workspace id, thread id, model, duration, and outcome where available
+- **AND** it MUST NOT include prompt text, assistant text, tool output, terminal output, or file content

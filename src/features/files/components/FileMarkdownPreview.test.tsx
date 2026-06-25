@@ -101,6 +101,21 @@ describe("FileMarkdownPreview render budget", () => {
     expect(preview.textContent).not.toContain("paragraph-7000");
   });
 
+  it("resolves local markdown image paths relative to the source markdown file", () => {
+    render(
+      <FileMarkdownPreview
+        documentKey="docs:local-image"
+        value="![forecast](assets/images/overview_forecast_command_center.png)"
+        workspaceId="ws-preview"
+        sourceFilePath="/repo/docs.vehicle-sales-forecast/01-report.md"
+      />,
+    );
+
+    expect(screen.getByRole("img", { name: "forecast" }).getAttribute("src")).toBe(
+      "asset://localhost//repo/docs.vehicle-sales-forecast/assets/images/overview_forecast_command_center.png",
+    );
+  });
+
   it("keeps annotation draft rerenders inside the projected markdown window", () => {
     vi.useFakeTimers();
     const markdown = makeParagraphMarkdown(500);

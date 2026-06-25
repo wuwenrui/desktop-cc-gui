@@ -1,9 +1,7 @@
 ## Purpose
 
 Harness governance gate consolidation defines how independent governance gates become one policy-consumable and audit-renderable decision while preserving per-gate traceability and advisory ceilings.
-
 ## Requirements
-
 ### Requirement: Harness Gates MUST Consolidate Through Governance Evidence
 
 The system MUST project realtime replay harness, batching/perf reports, OpenSpec validation, large-file governance, heavy-test-noise sentry, engine capability matrix, and engine runtime contract results into `GovernanceEvidence` variants. The consolidated checkpoint or release gate decision MUST be a pure function of the bridge snapshot. Consolidation MUST NOT execute any check itself.
@@ -41,18 +39,25 @@ The system MUST compose gate severities by selecting the most severe contributin
 
 ### Requirement: Advisory Gates MUST NOT Block Release Alone
 
-Heavy-test-noise sentry results and large-file near-threshold (watchlist) results MUST be treated as advisory. They MUST contribute at most `warn` to the consolidated decision. Hard release blocking MUST come from non-advisory gates such as realtime contract violations, OpenSpec strict-validation failures, or large-file hard-debt regressions.
-
-#### Scenario: heavy-test-noise alone never blocks release
-
-- **WHEN** heavy-test-noise sentry is the only gate reporting an issue
-- **THEN** the consolidated status MUST NOT be `fail`
-- **AND** the consolidated status MUST be `warn` or weaker
+Heavy-test-noise sentry results and large-file near-threshold watchlist results MUST be treated as advisory unless they represent repo-owned noise gate failure or hard large-file debt. Advisory contributions MUST remain visible without becoming the only release-blocking reason.
 
 #### Scenario: near-threshold large-file alone never blocks release
 
 - **WHEN** large-file near-threshold is the only gate reporting an issue
 - **THEN** the consolidated status MUST NOT be `fail`
+- **AND** the evidence MUST remain visible as advisory watch output
+
+#### Scenario: hard large-file debt remains blocking
+
+- **WHEN** large-file hard-debt gate reports new or regressed fail-threshold debt
+- **THEN** the consolidated status MAY be `fail`
+- **AND** the decision MUST cite the hard-debt source separately from near-threshold advisory watch output
+
+#### Scenario: heavy-test-noise failure remains distinct from artifact availability
+
+- **WHEN** heavy-test-noise fails because of repo-owned act/stdout/stderr noise
+- **THEN** the consolidated status MAY be `fail`
+- **AND** missing success-path log artifacts MUST NOT be interpreted as a failed heavy-test-noise gate
 
 ### Requirement: Consolidated Decision MUST Be Consumable By Policy Chain And Audit Surface
 

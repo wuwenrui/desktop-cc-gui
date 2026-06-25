@@ -56,6 +56,23 @@ describe("LocalImage", () => {
     });
   });
 
+  it("forwards click handlers without changing image fallback behavior", () => {
+    const onClick = vi.fn();
+
+    render(
+      <LocalImage
+        src="https://example.com/image.png"
+        alt="clickable"
+        onClick={onClick}
+      />,
+    );
+
+    fireEvent.click(screen.getByAltText("clickable"));
+
+    expect(onClick).toHaveBeenCalledTimes(1);
+    expect(readLocalImageDataUrlMock).not.toHaveBeenCalled();
+  });
+
   it("normalizes windows file urls before requesting backend fallback", async () => {
     readLocalImageDataUrlMock.mockResolvedValueOnce("data:image/png;base64,BBBB");
 

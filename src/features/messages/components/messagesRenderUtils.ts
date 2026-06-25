@@ -399,6 +399,19 @@ export function findLastAssistantMessageIndex(items: ConversationItem[]) {
   return -1;
 }
 
+export function findLatestAssistantMessageIdAfterIndex(
+  items: ConversationItem[],
+  startIndex: number,
+) {
+  for (let index = items.length - 1; index > startIndex; index -= 1) {
+    const item = items[index];
+    if (isAssistantMessageConversationItem(item)) {
+      return item.id;
+    }
+  }
+  return null;
+}
+
 export function shouldDisplayWorkingActivityLabel(
   reasoningLabel: string | null,
   activityLabel: string | null,

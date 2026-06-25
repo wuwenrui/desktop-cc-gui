@@ -2,27 +2,49 @@
 import { cleanup, render, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConversationItem } from "../../../types";
+import type { GroupedEntry } from "../utils/groupToolItems";
 
 const timelineSnapshots = vi.hoisted(() => ({
   entries: [] as Array<{
     assistantFinalBoundaryIds: string[];
+    renderedTexts: string[];
+    threadId: string | null;
     liveAssistantIsFinal: boolean | null;
     liveAssistantText: string | null;
   }>,
 }));
 
+function collectGroupedEntryTexts(entries: GroupedEntry[]) {
+  return entries.flatMap((entry) => {
+    if (entry.kind === "item") {
+      return entry.item.kind === "message" ? [entry.item.text] : [];
+    }
+    return entry.items.flatMap((item) => [item.title, item.output ?? ""]);
+  });
+}
+
 vi.mock("./MessagesTimeline", () => ({
   MessagesTimeline: (props: {
     assistantFinalBoundarySet: Set<string>;
+    groupedEntries: GroupedEntry[];
+    threadId: string | null;
     liveAssistantItem: Extract<ConversationItem, { kind: "message" }> | null;
   }) => {
     timelineSnapshots.entries.push({
       assistantFinalBoundaryIds: Array.from(props.assistantFinalBoundarySet),
+      renderedTexts: collectGroupedEntryTexts(props.groupedEntries),
+      threadId: props.threadId,
       liveAssistantIsFinal: props.liveAssistantItem?.isFinal ?? null,
       liveAssistantText: props.liveAssistantItem?.text ?? null,
     });
     return <div data-testid="messages-timeline-probe" />;
   },
+}));
+
+vi.mock("./Markdown", () => ({
+  Markdown: ({ value, className }: { value: string; className?: string }) => (
+    <div className={className}>{value}</div>
+  ),
 }));
 
 import { Messages } from "./Messages";
@@ -115,5 +137,79 @@ describe("Messages streaming presentation contract", () => {
         ),
       ).toBe(true);
     });
+  });
+
+  it("does not reuse a stable presentation snapshot after switching threads", () => {
+    const threadAItems: ConversationItem[] = [
+      {
+        id: "user-a",
+        kind: "message",
+        role: "user",
+        text: "分析 A 会话",
+      },
+      {
+        id: "assistant-a",
+        kind: "message",
+        role: "assistant",
+        text: "A 会话的最终总结",
+        isFinal: true,
+      },
+    ];
+    const threadBItems: ConversationItem[] = [
+      {
+        id: "user-b",
+        kind: "message",
+        role: "user",
+        text: "分析 B 会话",
+      },
+      {
+        id: "assistant-b",
+        kind: "message",
+        role: "assistant",
+        text: "B 会话正在输出",
+        isFinal: false,
+      },
+    ];
+
+    const view = render(
+      <Messages
+        items={threadAItems}
+        threadId="thread-a"
+        workspaceId="ws-1"
+        isThinking
+        activeEngine="codex"
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    timelineSnapshots.entries = [];
+
+    view.rerender(
+      <Messages
+        items={threadBItems}
+        threadId="thread-b"
+        workspaceId="ws-1"
+        isThinking
+        activeEngine="codex"
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const threadBSnapshots = timelineSnapshots.entries.filter(
+      (entry) => entry.threadId === "thread-b",
+    );
+    expect(threadBSnapshots.length).toBeGreaterThan(0);
+    expect(
+      threadBSnapshots.some((entry) =>
+        entry.renderedTexts.some((text) => text.includes("A 会话")),
+      ),
+    ).toBe(false);
+    expect(
+      threadBSnapshots.some((entry) =>
+        entry.renderedTexts.some((text) => text.includes("B 会话")),
+      ),
+    ).toBe(true);
   });
 });

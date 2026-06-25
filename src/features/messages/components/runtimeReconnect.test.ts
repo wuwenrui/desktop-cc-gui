@@ -10,10 +10,12 @@ describe("resolveRuntimeReconnectHint", () => {
     expect(resolveRuntimeReconnectHint("Broken pipe (os error 32)")).toEqual({
       reason: "broken-pipe",
       rawMessage: "Broken pipe (os error 32)",
+      tone: "blocking",
     });
     expect(resolveRuntimeReconnectHint("The pipe is being closed. (os error 232)")).toEqual({
       reason: "broken-pipe",
       rawMessage: "The pipe is being closed. (os error 232)",
+      tone: "blocking",
     });
   });
 
@@ -21,10 +23,12 @@ describe("resolveRuntimeReconnectHint", () => {
     expect(resolveRuntimeReconnectHint("workspace not connected")).toEqual({
       reason: "workspace-not-connected",
       rawMessage: "workspace not connected",
+      tone: "blocking",
     });
     expect(resolveRuntimeReconnectHint("thread not found: 019da207-c1ae-7cb3-9cb6-25f281fbfb30")).toEqual({
       reason: "thread-not-found",
       rawMessage: "thread not found: 019da207-c1ae-7cb3-9cb6-25f281fbfb30",
+      tone: "blocking",
     });
     expect(
       resolveRuntimeReconnectHint(
@@ -34,10 +38,12 @@ describe("resolveRuntimeReconnectHint", () => {
       reason: "thread-not-found",
       rawMessage:
         "Context compaction failed: thread not found: 019da207-c1ae-7cb3-9cb6-25f281fbfb30",
+      tone: "blocking",
     });
     expect(resolveRuntimeReconnectHint("会话启动失败： [SESSION_NOT_FOUND] session file not found")).toEqual({
       reason: "session-not-found",
       rawMessage: "会话启动失败： [SESSION_NOT_FOUND] session file not found",
+      tone: "blocking",
     });
     expect(
       resolveRuntimeReconnectHint(
@@ -47,8 +53,41 @@ describe("resolveRuntimeReconnectHint", () => {
       reason: "recovery-quarantined",
       rawMessage:
         "会话启动失败： [RUNTIME_RECOVERY_QUARANTINED] Runtime recovery paused for workspace ws-1 (engine codex).",
+      tone: "blocking",
     });
     expect(resolveRuntimeReconnectHint("request timed out")).toBeNull();
+  });
+
+  it("marks managed runtime cleanup diagnostics as transient UI", () => {
+    expect(
+      resolveRuntimeReconnectHint(
+        "[RUNTIME_ENDED] Managed runtime stopped after manual shutdown (source: stale_reuse_cleanup).",
+      ),
+    ).toEqual({
+      reason: "stopping-runtime-race",
+      rawMessage:
+        "[RUNTIME_ENDED] Managed runtime stopped after manual shutdown (source: stale_reuse_cleanup).",
+      tone: "transient",
+    });
+    expect(
+      resolveRuntimeReconnectHint(
+        "[RUNTIME_ENDED] Managed runtime stopped after manual shutdown (source: internal_replacement).",
+      ),
+    ).toEqual({
+      reason: "stopping-runtime-race",
+      rawMessage:
+        "[RUNTIME_ENDED] Managed runtime stopped after manual shutdown (source: internal_replacement).",
+      tone: "transient",
+    });
+    expect(
+      resolveRuntimeReconnectHint(
+        "[RUNTIME_ENDED] Managed runtime process exited unexpectedly.",
+      ),
+    ).toEqual({
+      reason: "runtime-ended",
+      rawMessage: "[RUNTIME_ENDED] Managed runtime process exited unexpectedly.",
+      tone: "blocking",
+    });
   });
 
   it("ignores long assistant replies that only quote runtime disconnect text", () => {
@@ -73,6 +112,7 @@ describe("resolveRuntimeReconnectHint", () => {
     ).toEqual({
       reason: "broken-pipe",
       rawMessage: "Broken pipe (os error 32)",
+      tone: "blocking",
     });
   });
 });

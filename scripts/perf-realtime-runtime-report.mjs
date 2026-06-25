@@ -21,8 +21,20 @@ function isRecord(value) {
 }
 
 function toFiniteNumber(value) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
   const numberValue = Number(value);
   return Number.isFinite(numberValue) ? numberValue : null;
+}
+
+function normalizeStringList(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((item) => (typeof item === "string" ? item.trim() : ""))
+    .filter((item) => item.length > 0);
 }
 
 function percentile(values, ratio) {
@@ -78,6 +90,95 @@ function collectMeasuredSummaries(entries) {
     .filter((payload) => payload.evidenceClass === "measured");
 }
 
+function collectCodexTurnStartAckDiagnostics(entries) {
+  return entries
+    .filter((entry) => isRecord(entry) && entry.label === "stream-latency/codex-turn-start-ack")
+    .map((entry) => (isRecord(entry.payload) ? entry.payload : null))
+    .filter((payload) => payload !== null);
+}
+
+function collectCodexAppServerTimingDiagnostics(entries) {
+  return entries
+    .filter((entry) => isRecord(entry) && entry.label === "stream-latency/app-server-event")
+    .map((entry) => (isRecord(entry.payload) ? entry.payload : null))
+    .filter((payload) => payload !== null)
+    .filter((payload) => payload.traceSource === "codex-app-server");
+}
+
+function collectCodexPostAckFirstDeltaByTurn(codexTimingDiagnostics) {
+  const byTurn = new Map();
+  let fallbackIndex = 0;
+  for (const diagnostic of codexTimingDiagnostics) {
+    const firstTextDeltaMs = toFiniteNumber(diagnostic.turnStartResponseToFirstTextDeltaMs);
+    if (firstTextDeltaMs === null) {
+      continue;
+    }
+    const rawTurnId = typeof diagnostic.turnId === "string"
+      ? diagnostic.turnId.trim()
+      : "";
+    const turnKey = rawTurnId || `event-${fallbackIndex += 1}`;
+    const existing = byTurn.get(turnKey);
+    if (existing && existing.firstTextDeltaMs <= firstTextDeltaMs) {
+      existing.eventCount += 1;
+      continue;
+    }
+    byTurn.set(turnKey, {
+      turnId: rawTurnId || null,
+      threadId: typeof diagnostic.threadId === "string" ? diagnostic.threadId : null,
+      model: typeof diagnostic.model === "string" ? diagnostic.model : null,
+      firstTextDeltaMs,
+      firstRuntimeEventMs: toFiniteNumber(diagnostic.turnStartResponseToFirstRuntimeEventMs),
+      firstRuntimeEventToFirstTextDeltaMs: toFiniteNumber(
+        diagnostic.firstRuntimeEventToFirstTextDeltaMs,
+      ),
+      firstRuntimeEventToFirstAssistantItemEventMs: toFiniteNumber(
+        diagnostic.firstRuntimeEventToFirstAssistantItemEventMs,
+      ),
+      firstAssistantItemEventToFirstTextDeltaMs: toFiniteNumber(
+        diagnostic.firstAssistantItemEventToFirstTextDeltaMs,
+      ),
+      firstStreamEventMs: toFiniteNumber(diagnostic.turnStartResponseToFirstStreamEventMs),
+      turnStartAckMs: toFiniteNumber(diagnostic.turnStartRequestToResponseMs),
+      eventCountBeforeFirstTextDelta: toFiniteNumber(
+        diagnostic.eventCountBeforeFirstTextDelta,
+      ),
+      reasoningEventCountBeforeFirstTextDelta: toFiniteNumber(
+        diagnostic.reasoningEventCountBeforeFirstTextDelta,
+      ),
+      toolEventCountBeforeFirstTextDelta: toFiniteNumber(
+        diagnostic.toolEventCountBeforeFirstTextDelta,
+      ),
+      methodsBeforeFirstTextDelta: normalizeStringList(
+        diagnostic.methodsBeforeFirstTextDelta,
+      ),
+      firstRuntimeEventMethod:
+        typeof diagnostic.firstRuntimeEventMethod === "string"
+          ? diagnostic.firstRuntimeEventMethod
+          : null,
+      firstReasoningEventMethod:
+        typeof diagnostic.firstReasoningEventMethod === "string"
+          ? diagnostic.firstReasoningEventMethod
+          : null,
+      firstAssistantItemEventMethod:
+        typeof diagnostic.firstAssistantItemEventMethod === "string"
+          ? diagnostic.firstAssistantItemEventMethod
+          : null,
+      firstToolEventMethod:
+        typeof diagnostic.firstToolEventMethod === "string"
+          ? diagnostic.firstToolEventMethod
+          : null,
+      firstTextDeltaMethod:
+        typeof diagnostic.firstTextDeltaMethod === "string"
+          ? diagnostic.firstTextDeltaMethod
+          : null,
+      eventCount: existing ? existing.eventCount + 1 : 1,
+    });
+  }
+  return [...byTurn.values()].sort(
+    (left, right) => right.firstTextDeltaMs - left.firstTextDeltaMs,
+  );
+}
+
 function metricFromValues({ scenario, metric, values, unit, notes, unsupportedReason }) {
   const value = metric === "reducerAmplificationMedian"
     ? median(values)
@@ -93,21 +194,286 @@ function metricFromValues({ scenario, metric, values, unit, notes, unsupportedRe
   };
 }
 
-function buildFragment(summaries, sourcePath) {
+function collectTraceConsistencyCautions(summaries) {
+  const cautions = [];
+  for (const [index, summary] of summaries.entries()) {
+    const visibleTextLagMs = toFiniteNumber(summary.deltas?.firstDeltaToFirstVisibleTextMs);
+    const batchFlushWindowMs = toFiniteNumber(summary.deltas?.firstDeltaToBatchFlushEndMs);
+    const reducerCommitWindowMs = toFiniteNumber(summary.deltas?.batchFlushEndToReducerCommitMs);
+    const batchFlushDurationAvgMs = toFiniteNumber(summary.counters?.batchFlushDurationAvgMs);
+    const visibleTextGrowthCount = toFiniteNumber(summary.counters?.visibleTextGrowthCount);
+    const hasFastVisibleOutput = visibleTextLagMs !== null && visibleTextLagMs <= 500;
+    const hasLargeSummaryWindow = [batchFlushWindowMs, reducerCommitWindowMs, batchFlushDurationAvgMs]
+      .some((value) => value !== null && value >= 2_000);
+    if (!hasFastVisibleOutput || !hasLargeSummaryWindow) {
+      continue;
+    }
+    const traceId = typeof summary.traceId === "string" && summary.traceId.length > 0
+      ? summary.traceId
+      : `summary-${index + 1}`;
+    const growthNote = visibleTextGrowthCount === null
+      ? "visibleTextGrowthCount=missing"
+      : `visibleTextGrowthCount=${visibleTextGrowthCount}`;
+    cautions.push(
+      `traceConsistencyCaution=${traceId}: fast visible text lag (${visibleTextLagMs}ms) coexists with large batch/reducer summary windows; ${growthNote}; inspect turnTrace/snapshot consistency before claiming client batch or reducer lag`,
+    );
+  }
+  return cautions;
+}
+
+function collectFirstDeltaDominanceNotes(summaries) {
+  const notes = [];
+  for (const [index, summary] of summaries.entries()) {
+    const firstDeltaLatencyMs = toFiniteNumber(summary.deltas?.sendToFirstDeltaMs);
+    const visibleTextLagMs = toFiniteNumber(summary.deltas?.firstDeltaToFirstVisibleTextMs);
+    const reducerAmplification = toFiniteNumber(summary.counters?.reducerAmplification);
+    if (
+      firstDeltaLatencyMs === null ||
+      visibleTextLagMs === null ||
+      firstDeltaLatencyMs < 2_000 ||
+      visibleTextLagMs > 500 ||
+      (reducerAmplification !== null && reducerAmplification > 1)
+    ) {
+      continue;
+    }
+    const traceId = typeof summary.traceId === "string" && summary.traceId.length > 0
+      ? summary.traceId
+      : `summary-${index + 1}`;
+    const engine = typeof summary.engine === "string" && summary.engine.length > 0
+      ? summary.engine
+      : "unknown-engine";
+    const model = typeof summary.model === "string" && summary.model.length > 0
+      ? summary.model
+      : "unknown-model";
+    notes.push(
+      `firstDeltaDominates=${traceId}: ${engine}/${model} waited ${firstDeltaLatencyMs}ms before first delta while visible lag was ${visibleTextLagMs}ms and reducerAmplification=${reducerAmplification ?? "missing"}; investigate upstream/provider/startup phase before client render optimization`,
+    );
+  }
+  return notes;
+}
+
+function collectTurnStartAckComparisonNotes(summaries, ackDiagnostics) {
+  const firstDeltaP95 = percentile(
+    summaries.map((summary) => summary.deltas?.sendToFirstDeltaMs),
+    0.95,
+  );
+  const turnStartAckP95 = percentile(
+    ackDiagnostics.map((diagnostic) => diagnostic.durationMs),
+    0.95,
+  );
+  if (firstDeltaP95 === null || turnStartAckP95 === null) {
+    return [];
+  }
+  const postAckWaitMs = Math.max(0, Number((firstDeltaP95 - turnStartAckP95).toFixed(2)));
+  return [
+    `turnStartAckComparison=firstDeltaLatencyP95:${firstDeltaP95}ms turnStartAckLatencyP95:${turnStartAckP95}ms postAckFirstDeltaWaitApprox:${postAckWaitMs}ms`,
+  ];
+}
+
+function collectCodexPostAckComparisonNotes(summaries, ackDiagnostics, codexTimingDiagnostics) {
+  const firstDeltaP95 = percentile(
+    summaries.map((summary) => summary.deltas?.sendToFirstDeltaMs),
+    0.95,
+  );
+  const turnStartAckP95 = percentile(
+    ackDiagnostics.map((diagnostic) => diagnostic.durationMs),
+    0.95,
+  );
+  const codexPostAckByTurn = collectCodexPostAckFirstDeltaByTurn(codexTimingDiagnostics);
+  const postAckFirstDeltaP95 = percentile(
+    codexPostAckByTurn.map((diagnostic) => diagnostic.firstTextDeltaMs),
+    0.95,
+  );
+  if (firstDeltaP95 === null || turnStartAckP95 === null || postAckFirstDeltaP95 === null) {
+    return [];
+  }
+  return [
+    `codexPostAckComparison=firstDeltaLatencyP95:${firstDeltaP95}ms turnStartAckLatencyP95:${turnStartAckP95}ms codexPostAckFirstDeltaP95:${postAckFirstDeltaP95}ms`,
+  ];
+}
+
+function collectCodexPostAckPhaseNotes(codexPostAckFirstDeltaByTurn) {
+  const postAckFirstRuntimeP95 = percentile(
+    codexPostAckFirstDeltaByTurn.map((diagnostic) => diagnostic.firstRuntimeEventMs),
+    0.95,
+  );
+  const firstRuntimeToTextP95 = percentile(
+    codexPostAckFirstDeltaByTurn.map(
+      (diagnostic) => diagnostic.firstRuntimeEventToFirstTextDeltaMs,
+    ),
+    0.95,
+  );
+  const firstRuntimeToAssistantItemP95 = percentile(
+    codexPostAckFirstDeltaByTurn.map(
+      (diagnostic) => diagnostic.firstRuntimeEventToFirstAssistantItemEventMs,
+    ),
+    0.95,
+  );
+  const firstAssistantItemToTextP95 = percentile(
+    codexPostAckFirstDeltaByTurn.map(
+      (diagnostic) => diagnostic.firstAssistantItemEventToFirstTextDeltaMs,
+    ),
+    0.95,
+  );
+  const postAckFirstTextP95 = percentile(
+    codexPostAckFirstDeltaByTurn.map((diagnostic) => diagnostic.firstTextDeltaMs),
+    0.95,
+  );
+  if (
+    postAckFirstRuntimeP95 === null ||
+    firstRuntimeToTextP95 === null ||
+    postAckFirstTextP95 === null
+  ) {
+    return [];
+  }
+  const assistantItemBreakdown =
+    firstRuntimeToAssistantItemP95 === null || firstAssistantItemToTextP95 === null
+      ? ""
+      : ` firstRuntimeEventToFirstAssistantItemP95:${firstRuntimeToAssistantItemP95}ms firstAssistantItemToFirstTextDeltaP95:${firstAssistantItemToTextP95}ms`;
+  return [
+    `codexPostAckPhaseBreakdown=firstRuntimeEventP95:${postAckFirstRuntimeP95}ms firstRuntimeEventToFirstTextDeltaP95:${firstRuntimeToTextP95}ms${assistantItemBreakdown} firstTextDeltaP95:${postAckFirstTextP95}ms`,
+  ];
+}
+
+function collectCodexProviderFirstResponseDominanceNotes(codexPostAckFirstDeltaByTurn) {
+  const notes = [];
+  for (const diagnostic of codexPostAckFirstDeltaByTurn.slice(0, 5)) {
+    const firstRuntimeToTextMs = toFiniteNumber(
+      diagnostic.firstRuntimeEventToFirstTextDeltaMs,
+    );
+    const firstRuntimeToAssistantItemMs = toFiniteNumber(
+      diagnostic.firstRuntimeEventToFirstAssistantItemEventMs,
+    );
+    const firstAssistantItemToTextMs = toFiniteNumber(
+      diagnostic.firstAssistantItemEventToFirstTextDeltaMs,
+    );
+    const hasDominantAssistantItemWait =
+      firstRuntimeToTextMs !== null &&
+      firstRuntimeToAssistantItemMs !== null &&
+      firstAssistantItemToTextMs !== null &&
+      firstRuntimeToAssistantItemMs >= 2_000 &&
+      firstRuntimeToAssistantItemMs >= firstRuntimeToTextMs * 0.75 &&
+      firstAssistantItemToTextMs <= 500;
+    if (!hasDominantAssistantItemWait) {
+      continue;
+    }
+    const turnId = diagnostic.turnId ?? "unknown-turn";
+    const model = diagnostic.model ?? "unknown-model";
+    const reasoningCount = diagnostic.reasoningEventCountBeforeFirstTextDelta ?? "missing";
+    const toolCount = diagnostic.toolEventCountBeforeFirstTextDelta ?? "missing";
+    notes.push(
+      `providerFirstResponseDominates=${turnId}: ${model} waited ${firstRuntimeToAssistantItemMs}ms from first runtime event to first assistant item, then ${firstAssistantItemToTextMs}ms to first text; reasoningBeforeFirstText=${reasoningCount} toolBeforeFirstText=${toolCount}; firstRuntimeEventMethod=${diagnostic.firstRuntimeEventMethod ?? "missing"} firstAssistantItemEventMethod=${diagnostic.firstAssistantItemEventMethod ?? "missing"}; investigate provider/model first-response phase before client render optimization`,
+    );
+  }
+  return notes;
+}
+
+function buildFragment(summaries, ackDiagnostics, codexTimingDiagnostics, sourcePath) {
   const unsupportedReason = summaries.length === 0
     ? "No measured realtime.turnTrace.summary diagnostics were found. Enable turn trace in a Tauri/webview session and export renderer diagnostics."
     : undefined;
+  const missingPreciseRouteTimingReason =
+    "Measured realtime.turnTrace.summary diagnostics do not contain appServerEventRouteDurationAvgMs. Run a build with precise route timing instrumentation before claiming batch flush duration.";
   const visibleTextLagValues = summaries.map((summary) => summary.deltas?.firstDeltaToFirstVisibleTextMs);
+  const firstDeltaLatencyValues = summaries.map((summary) => summary.deltas?.sendToFirstDeltaMs);
   const reducerAmplificationValues = summaries.map((summary) => summary.counters?.reducerAmplification);
-  const batchFlushDurationValues = summaries.map((summary) => summary.counters?.batchFlushDurationAvgMs);
+  const batchFlushDurationValues = summaries.map((summary) =>
+    summary.counters?.appServerEventRouteDurationAvgMs
+  );
   const terminalSettlementValues = summaries.map((summary) =>
     summary.counters?.terminalSettlementLagMs ?? summary.deltas?.lastReducerCommitToTerminalSettlementMs
+  );
+  const turnStartAckLatencyValues = ackDiagnostics.map((diagnostic) => diagnostic.durationMs);
+  const codexPostAckFirstDeltaByTurn =
+    collectCodexPostAckFirstDeltaByTurn(codexTimingDiagnostics);
+  const codexPostAckFirstDeltaValues = codexPostAckFirstDeltaByTurn.map(
+    (diagnostic) => diagnostic.firstTextDeltaMs,
+  );
+  const codexPostAckFirstRuntimeEventValues = codexPostAckFirstDeltaByTurn.map(
+    (diagnostic) => diagnostic.firstRuntimeEventMs,
+  );
+  const codexFirstRuntimeEventToFirstTextDeltaValues = codexPostAckFirstDeltaByTurn.map(
+    (diagnostic) => diagnostic.firstRuntimeEventToFirstTextDeltaMs,
+  );
+  const codexFirstRuntimeEventToFirstAssistantItemValues = codexPostAckFirstDeltaByTurn.map(
+    (diagnostic) => diagnostic.firstRuntimeEventToFirstAssistantItemEventMs,
+  );
+  const codexFirstAssistantItemToFirstTextDeltaValues = codexPostAckFirstDeltaByTurn.map(
+    (diagnostic) => diagnostic.firstAssistantItemEventToFirstTextDeltaMs,
   );
   return {
     schemaVersion: "1.0",
     generatedAt: new Date().toISOString(),
     source: "realtime-runtime",
     metrics: [
+      metricFromValues({
+        scenario: "S-RS-FT",
+        metric: "firstDeltaLatencyP95",
+        values: firstDeltaLatencyValues,
+        unit: "ms",
+        notes: `measured runtime turn trace sendToFirstDeltaMs from ${sourcePath}`,
+        unsupportedReason,
+      }),
+      metricFromValues({
+        scenario: "S-RS-TA",
+        metric: "turnStartAckLatencyP95",
+        values: turnStartAckLatencyValues,
+        unit: "ms",
+        notes: `measured renderer Codex send_user_message ack diagnostics from ${sourcePath}`,
+        unsupportedReason:
+          unsupportedReason ??
+          "No stream-latency/codex-turn-start-ack diagnostics were found. Run a build with Codex turn-start ack instrumentation.",
+      }),
+      metricFromValues({
+        scenario: "S-RS-PA",
+        metric: "codexPostAckFirstDeltaP95",
+        values: codexPostAckFirstDeltaValues,
+        unit: "ms",
+        notes: `measured renderer stream-latency/app-server-event Codex ccguiTiming from ${sourcePath}`,
+        unsupportedReason:
+          unsupportedReason ??
+          "No Codex stream-latency/app-server-event diagnostics with turnStartResponseToFirstTextDeltaMs were found. Run a build with Codex backend post-ack timing instrumentation.",
+      }),
+      metricFromValues({
+        scenario: "S-RS-PR",
+        metric: "codexPostAckFirstRuntimeEventP95",
+        values: codexPostAckFirstRuntimeEventValues,
+        unit: "ms",
+        notes: `measured renderer stream-latency/app-server-event Codex first runtime event from ${sourcePath}`,
+        unsupportedReason:
+          unsupportedReason ??
+          "No Codex ccguiTiming.turnStartResponseToFirstRuntimeEventMs diagnostics were found. Run a build with Codex backend phase timing instrumentation.",
+      }),
+      metricFromValues({
+        scenario: "S-RS-RT",
+        metric: "codexFirstRuntimeEventToFirstTextDeltaP95",
+        values: codexFirstRuntimeEventToFirstTextDeltaValues,
+        unit: "ms",
+        notes: `measured renderer stream-latency/app-server-event Codex runtime-event-to-text phase from ${sourcePath}`,
+        unsupportedReason:
+          unsupportedReason ??
+          "No Codex ccguiTiming.firstRuntimeEventToFirstTextDeltaMs diagnostics were found. Run a build with Codex backend phase timing instrumentation.",
+      }),
+      metricFromValues({
+        scenario: "S-RS-RI",
+        metric: "codexFirstRuntimeEventToFirstAssistantItemP95",
+        values: codexFirstRuntimeEventToFirstAssistantItemValues,
+        unit: "ms",
+        notes: `measured renderer stream-latency/app-server-event Codex runtime-event-to-assistant-item phase from ${sourcePath}`,
+        unsupportedReason:
+          unsupportedReason ??
+          "No Codex ccguiTiming.firstRuntimeEventToFirstAssistantItemEventMs diagnostics were found. Run a build with Codex assistant item phase timing instrumentation.",
+      }),
+      metricFromValues({
+        scenario: "S-RS-IT",
+        metric: "codexFirstAssistantItemToFirstTextDeltaP95",
+        values: codexFirstAssistantItemToFirstTextDeltaValues,
+        unit: "ms",
+        notes: `measured renderer stream-latency/app-server-event Codex assistant-item-to-text phase from ${sourcePath}`,
+        unsupportedReason:
+          unsupportedReason ??
+          "No Codex ccguiTiming.firstAssistantItemEventToFirstTextDeltaMs diagnostics were found. Run a build with Codex assistant item phase timing instrumentation.",
+      }),
       metricFromValues({
         scenario: "S-RS-VL",
         metric: "visibleTextLagP95",
@@ -129,8 +495,8 @@ function buildFragment(summaries, sourcePath) {
         metric: "batchFlushDurationP95",
         values: batchFlushDurationValues,
         unit: "ms",
-        notes: `measured runtime turn trace from ${sourcePath}`,
-        unsupportedReason,
+        notes: `measured runtime turn trace appServerEventRouteDurationAvgMs from ${sourcePath}`,
+        unsupportedReason: unsupportedReason ?? missingPreciseRouteTimingReason,
       }),
       metricFromValues({
         scenario: "S-RS-TS",
@@ -141,10 +507,22 @@ function buildFragment(summaries, sourcePath) {
         unsupportedReason,
       }),
     ],
+    diagnostics: {
+      codexPostAckFirstDeltaByTurn: codexPostAckFirstDeltaByTurn.slice(0, 20),
+    },
     notes: [
       `input=${sourcePath}`,
       `measuredSummaryCount=${summaries.length}`,
+      `turnStartAckDiagnosticCount=${ackDiagnostics.length}`,
+      `codexAppServerTimingDiagnosticCount=${codexTimingDiagnostics.length}`,
+      `codexPostAckFirstDeltaTurnCount=${codexPostAckFirstDeltaByTurn.length}`,
       "contentSafety=ids, durations, counters, and dimensions only; no prompt, assistant text, tool output, or file content",
+      ...collectTraceConsistencyCautions(summaries),
+      ...collectFirstDeltaDominanceNotes(summaries),
+      ...collectTurnStartAckComparisonNotes(summaries, ackDiagnostics),
+      ...collectCodexPostAckComparisonNotes(summaries, ackDiagnostics, codexTimingDiagnostics),
+      ...collectCodexPostAckPhaseNotes(codexPostAckFirstDeltaByTurn),
+      ...collectCodexProviderFirstResponseDominanceNotes(codexPostAckFirstDeltaByTurn),
     ],
   };
 }
@@ -162,8 +540,11 @@ async function main() {
   if (existsSync(resolve(process.cwd(), inputPath))) {
     input = JSON.parse(await readFile(resolve(process.cwd(), inputPath), "utf-8"));
   }
-  const summaries = collectMeasuredSummaries(collectEntries(input));
-  await writeJson(outputPath, buildFragment(summaries, inputPath));
+  const entries = collectEntries(input);
+  const summaries = collectMeasuredSummaries(entries);
+  const ackDiagnostics = collectCodexTurnStartAckDiagnostics(entries);
+  const codexTimingDiagnostics = collectCodexAppServerTimingDiagnostics(entries);
+  await writeJson(outputPath, buildFragment(summaries, ackDiagnostics, codexTimingDiagnostics, inputPath));
   if (process.argv.includes("--verbose")) {
     console.info(`realtime runtime measured summaries: ${summaries.length}`);
   }

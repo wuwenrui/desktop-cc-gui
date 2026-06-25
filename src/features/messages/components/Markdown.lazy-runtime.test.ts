@@ -19,6 +19,14 @@ describe("Markdown lazy runtime boundary", () => {
     expect(shellSource).toContain('import("./FullMarkdownRuntime")');
   });
 
+  it("keeps file-preview fast HTML body renderer out of live message Markdown", () => {
+    const shellSource = readComponentSource("Markdown.tsx");
+
+    expect(shellSource).not.toContain("FileMarkdownFastPreview");
+    expect(shellSource).not.toContain("FileMarkdownPreviewFast");
+    expect(shellSource).not.toContain("dangerouslySetInnerHTML={{ __html: result.html }}");
+  });
+
   it("keeps the full parser stack isolated in FullMarkdownRuntime", () => {
     const runtimeSource = readComponentSource("FullMarkdownRuntime.tsx");
 

@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { ClaudeDeferredImageLocator, ClaudeHydratedImage } from "../types";
+import { appendRendererDiagnostic } from "./rendererDiagnostics";
 import { open } from "@tauri-apps/plugin-dialog";
 import type {
   AppSettings,
@@ -21,32 +21,11 @@ import type {
   LocalUsageSnapshot,
   LocalUsageStatistics,
   WorkspaceInfo,
-  EngineStatus,
   EngineType,
-  EngineModelInfo,
   CustomPromptOption,
-  BridgePayloadBudgetMetadata,
-} from "../types";
-import type {
-  GitFileDiff,
-  GitFileStatus,
-  GitHistoryResponse,
-  GitCommitDetails,
-  GitCommitDiff,
-  GitBranchCompareCommitSets,
-  GitBranchListResponse,
-  GitBranchUpdateResult,
-  GitPrWorkflowDefaults,
-  GitPrWorkflowResult,
-  GitHubIssuesResponse,
-  GitHubPullRequestComment,
-  GitHubPullRequestDiff,
-  GitHubPullRequestsResponse,
-  GitLogResponse,
-  GitPushPreviewResponse,
   ReviewTarget,
 } from "../types";
-import type { AutoSessionMetadata } from "./tauri/sessionManagement";
+import { engineSendMessageSync } from "./tauri/appServer";
 export type {
   WorkspaceSessionCatalogEntry,
   WorkspaceSessionCatalogQuery,
@@ -270,12 +249,14 @@ export {
   addCodexProvider,
   deleteClaudeProvider,
   deleteCodexProvider,
+  fetchClaudeProviderModels,
   getClaudeAlwaysThinkingEnabled,
   getClaudeProviders,
   getCodexProviders,
   getCurrentClaudeConfig,
   getGeminiVendorPreflight,
   getGeminiVendorSettings,
+  reorderClaudeProviders,
   saveGeminiVendorSettings,
   setClaudeAlwaysThinkingEnabled,
   switchClaudeProvider,
@@ -283,7 +264,12 @@ export {
   updateClaudeProvider,
   updateCodexProvider,
 } from "./tauri/vendors";
-export type { GeminiVendorPreflightCheck, GeminiVendorPreflightResult, GeminiVendorSettings } from "./tauri/vendors";
+export type {
+  GeminiVendorPreflightCheck,
+  GeminiVendorPreflightResult,
+  GeminiVendorSettings,
+  VendorModelListResult,
+} from "./tauri/vendors";
 export {
   addAgentConfig,
   applyImportAgentConfigs,
@@ -325,15 +311,176 @@ export {
   updateWorkspaceSettings,
   writePanelLockPasswordFile,
 } from "./tauri/workspaceRuntime";
+export type {
+  CreateGitPrWorkflowOptions,
+  GitPullOptions,
+  GitPullStrategyOption,
+  GitPushOptions,
+  GitResetMode,
+} from "./tauri/git";
+export {
+  checkoutGitBranch,
+  cherryPickCommit,
+  commitGit,
+  createGitBranch,
+  createGitBranchFromBranch,
+  createGitBranchFromCommit,
+  createGitPrWorkflow,
+  deleteGitBranch,
+  fetchGit,
+  getGitBranchCompareCommits,
+  getGitBranchDiffBetweenBranches,
+  getGitBranchDiffFileBetweenBranches,
+  getGitCommitDetails,
+  getGitCommitDiff,
+  getGitCommitHistory,
+  getGitDiffs,
+  getGitFileFullDiff,
+  getGitHubIssues,
+  getGitHubPullRequestComments,
+  getGitHubPullRequestDiff,
+  getGitHubPullRequests,
+  getGitLog,
+  getGitPrWorkflowDefaults,
+  getGitPushPreview,
+  getGitRemote,
+  getGitStatus,
+  getGitWorktreeDiffAgainstBranch,
+  getGitWorktreeDiffFileAgainstBranch,
+  listGitBranches,
+  listGitRoots,
+  mergeGitBranch,
+  pullGit,
+  pushGit,
+  rebaseGitBranch,
+  renameGitBranch,
+  resetGitCommit,
+  resolveGitCommitRef,
+  revertCommit,
+  revertGitAll,
+  revertGitFile,
+  stageGitAll,
+  stageGitFile,
+  syncGit,
+  unstageGitFile,
+  updateGitBranch,
+} from "./tauri/git";
+export type {
+  DetachedExternalChangeMonitorStatus,
+  EngineTaskOutputArtifactTailResponse,
+  ExportRewindFilesParams,
+  ExportRewindFilesResult,
+  ExternalSpecFileResponse,
+  FilePreviewHandle,
+  WorkspaceCommandResult,
+  WorkspaceDirectoryChildState,
+  WorkspaceDirectoryEntry,
+  WorkspaceDirectorySpecialKind,
+  WorkspaceFileItemKind,
+  WorkspaceFileListingBudgetMetadata,
+  WorkspaceFileListingCacheState,
+  WorkspaceFileOperationResult,
+  WorkspaceFilesResponse,
+  WorkspaceFileScanState,
+  WorkspaceTextSearchFileResult,
+  WorkspaceTextSearchMatch,
+  WorkspaceTextSearchResponse,
+} from "./tauri/workspaceFiles";
+export {
+  clearDetachedExternalChangeMonitor,
+  compactProjectCanvasFiles,
+  configureDetachedExternalChangeMonitor,
+  copyWorkspaceItem,
+  createWorkspaceDirectory,
+  duplicateWorkspaceItem,
+  exportRewindFiles,
+  getWorkspaceDirectoryChildren,
+  getWorkspaceFiles,
+  listExternalAbsoluteDirectoryChildren,
+  listExternalSpecTree,
+  pasteExternalWorkspaceItems,
+  pasteWorkspaceItem,
+  readEngineTaskOutputArtifact,
+  readExternalAbsoluteFile,
+  readExternalSpecFile,
+  readLocalImageDataUrl,
+  readProjectCanvasFile,
+  readWorkspaceFile,
+  readWorkspaceFilePreview,
+  renameWorkspaceItem,
+  resolveFilePreviewHandle,
+  runSpecCommand,
+  runWorkspaceCommand,
+  searchWorkspaceText,
+  trashProjectCanvasFile,
+  trashWorkspaceItem,
+  writeExternalAbsoluteFile,
+  writeExternalSpecFile,
+  writeProjectCanvasFile,
+  writeWorkspaceFile,
+} from "./tauri/workspaceFiles";
+export {
+  getDaemonStatus,
+  getWebServerStatus,
+  startDaemon,
+  startWebServer,
+  stopDaemon,
+  stopWebServer,
+  detectEngines,
+  engineInterrupt,
+  engineSendMessage,
+  engineSendMessageSync,
+  getActiveEngine,
+  getEngineActiveProcessDiagnostics,
+  getEngineModels,
+  getEngineStatus,
+  switchEngine,
+} from "./tauri/appServer";
+export type {
+  DaemonStatus,
+  EngineActiveProcessDiagnostics,
+  EngineOsChildLivenessEvidence,
+  EngineStaleChildCandidate,
+  EngineWorkspaceActiveProcessDiagnostics,
+  WebServerStatus,
+} from "./tauri/appServer";
+export {
+  respondToServerRequest,
+  respondToUserInputRequest,
+  rememberApprovalRule,
+} from "./tauri/permission";
+export {
+  archiveThread,
+  deleteClaudeSession,
+  deleteCodexSession,
+  deleteCodexSessions,
+  deleteGeminiSession,
+  deleteOpenCodeSession,
+  forkClaudeSession,
+  forkClaudeSessionFromMessage,
+  forkThread,
+  hydrateClaudeDeferredImage,
+  listClaudeSessions,
+  listGeminiSessions,
+  listGlobalMcpServers,
+  listMcpServerStatus,
+  listThreads,
+  loadClaudeSession,
+  loadCodexSession,
+  loadGeminiSession,
+  resumeThread,
+  rewindCodexThread,
+  startThread,
+} from "./tauri/session";
+export type {
+  ClaudeSessionSummaryPayload,
+  GlobalMcpServerEntry,
+  ThreadListPayload,
+  ThreadListResultPayload,
+} from "./tauri/session";
 export { isWebServiceRuntime } from "./tauri/runtimeMode";
 import {
-  isEngineRpcFallbackMode,
   isMissingTauriInvokeError,
-  isUnknownMethodError,
-  markDaemonEngineRpcSupported,
-  shouldUseWebServiceFallback,
-  WEB_SERVICE_CLI_ENGINE_MESSAGE,
-  webServiceCodexOnlyStatuses,
 } from "./tauri/runtimeMode";
 import { traceStartupCommand, type StartupWorkspaceScope } from "../features/startup-orchestration/utils/startupTrace";
 
@@ -397,32 +544,6 @@ export async function listWorkspaces(): Promise<WorkspaceInfo[]> {
   }
 }
 
-type RpcObject = Record<string, unknown>;
-
-export interface ThreadListResultPayload extends RpcObject {
-  data?: unknown[];
-  nextCursor?: string | null;
-  next_cursor?: string | null;
-  partialSource?: string;
-  partial_source?: string;
-}
-
-export interface ThreadListPayload extends RpcObject {
-  result?: ThreadListResultPayload;
-  data?: unknown[];
-  nextCursor?: string | null;
-  next_cursor?: string | null;
-}
-
-export interface ClaudeSessionSummaryPayload {
-  sessionId: string;
-  firstMessage: string;
-  updatedAt: number;
-  fileSizeBytes?: number;
-  parentSessionId?: string | null;
-  subagentType?: string | null;
-}
-
 export async function getConfigModel(workspaceId: string): Promise<string | null> {
   const response = await invoke<{ model?: string | null }>("get_config_model", {
     workspaceId,
@@ -435,90 +556,23 @@ export async function getConfigModel(workspaceId: string): Promise<string | null
   return trimmed.length > 0 ? trimmed : null;
 }
 
-export async function startThread(
-  workspaceId: string,
-  options?: {
-    autoSession?: AutoSessionMetadata | null;
-    providerProfileId?: string | null;
-  },
-) {
-  return invoke<Record<string, unknown> | null | undefined>("start_thread", {
-    workspaceId,
-    autoSession: options?.autoSession ?? null,
-    providerProfileId: options?.providerProfileId ?? null,
-  });
-}
+type CodexTurnStartAckDiagnosticPayload = {
+  workspaceId: string;
+  threadId: string;
+  model: string | null;
+  requestStartedAtMs: number;
+  respondedAtMs: number;
+  durationMs: number;
+  outcome: "ok" | "error";
+  errorName?: string;
+};
 
-export async function forkThread(
-  workspaceId: string,
-  threadId: string,
-  messageId?: string | null,
-  options?: {
-    providerProfileId?: string | null;
-    targetUserTurnIndex?: number | null;
-    targetUserMessageText?: string | null;
-    targetUserMessageOccurrence?: number | null;
-    localUserMessageCount?: number | null;
-  },
-) {
-  const targetUserTurnIndex =
-    typeof options?.targetUserTurnIndex === "number" &&
-    Number.isFinite(options.targetUserTurnIndex)
-      ? Math.max(0, Math.floor(options.targetUserTurnIndex))
-      : null;
-  const targetUserMessageOccurrence =
-    typeof options?.targetUserMessageOccurrence === "number" &&
-    Number.isFinite(options.targetUserMessageOccurrence)
-      ? Math.max(1, Math.floor(options.targetUserMessageOccurrence))
-      : null;
-  const localUserMessageCount =
-    typeof options?.localUserMessageCount === "number" &&
-    Number.isFinite(options.localUserMessageCount)
-      ? Math.max(1, Math.floor(options.localUserMessageCount))
-      : null;
-  const targetUserMessageText = options?.targetUserMessageText?.trim() || null;
-  return invoke<Record<string, unknown> | null | undefined>("fork_thread", {
-    workspaceId,
-    threadId,
-    messageId: messageId ?? null,
-    providerProfileId: options?.providerProfileId ?? null,
-    targetUserTurnIndex,
-    targetUserMessageText,
-    targetUserMessageOccurrence,
-    localUserMessageCount,
-  });
-}
-
-export async function rewindCodexThread(
-  workspaceId: string,
-  threadId: string,
-  targetUserTurnIndex: number,
-  messageId?: string | null,
-  rewindHint?: {
-    targetUserMessageText?: string | null;
-    targetUserMessageOccurrence?: number | null;
-    localUserMessageCount?: number | null;
-  },
-) {
-  const normalizedTargetUserTurnIndex = Number.isFinite(targetUserTurnIndex) ? Math.trunc(targetUserTurnIndex) : Number.NaN;
-  if (!(normalizedTargetUserTurnIndex >= 1)) {
-    throw new Error("targetUserTurnIndex must be >= 1 for codex rewind");
+function appendCodexTurnStartAckDiagnostic(payload: CodexTurnStartAckDiagnosticPayload) {
+  try {
+    appendRendererDiagnostic("stream-latency/codex-turn-start-ack", payload);
+  } catch {
+    // Diagnostics must not change send_user_message invoke behavior.
   }
-  const normalizedMessageId = typeof messageId === "string" ? messageId.trim() : "";
-  const targetUserMessageText = typeof rewindHint?.targetUserMessageText === "string" ? rewindHint.targetUserMessageText.trim() : "";
-  const targetUserMessageOccurrence =
-    typeof rewindHint?.targetUserMessageOccurrence === "number" && Number.isFinite(rewindHint.targetUserMessageOccurrence) ? Math.trunc(rewindHint.targetUserMessageOccurrence) : null;
-  const localUserMessageCount = typeof rewindHint?.localUserMessageCount === "number" && Number.isFinite(rewindHint.localUserMessageCount) ? Math.trunc(rewindHint.localUserMessageCount) : null;
-
-  return invoke<Record<string, unknown> | null | undefined>("rewind_codex_thread", {
-    workspaceId,
-    threadId,
-    messageId: normalizedMessageId || null,
-    targetUserTurnIndex: normalizedTargetUserTurnIndex,
-    ...(targetUserMessageText ? { targetUserMessageText } : {}),
-    ...(targetUserMessageOccurrence && targetUserMessageOccurrence > 0 ? { targetUserMessageOccurrence } : {}),
-    ...(localUserMessageCount && localUserMessageCount > 0 ? { localUserMessageCount } : {}),
-  });
 }
 
 export async function sendUserMessage(
@@ -538,6 +592,7 @@ export async function sendUserMessage(
     resumeTurnId?: string | null;
   },
 ) {
+  const requestStartedAtMs = Date.now();
   const payload: Record<string, unknown> = {
     workspaceId,
     threadId,
@@ -557,7 +612,33 @@ export async function sendUserMessage(
   if (options?.collaborationMode) {
     payload.collaborationMode = options.collaborationMode;
   }
-  return invoke("send_user_message", payload);
+  try {
+    const response = await invoke("send_user_message", payload);
+    const respondedAtMs = Date.now();
+    appendCodexTurnStartAckDiagnostic({
+      workspaceId,
+      threadId,
+      model: options?.model ?? null,
+      requestStartedAtMs,
+      respondedAtMs,
+      durationMs: Math.max(0, respondedAtMs - requestStartedAtMs),
+      outcome: "ok",
+    });
+    return response;
+  } catch (error) {
+    const respondedAtMs = Date.now();
+    appendCodexTurnStartAckDiagnostic({
+      workspaceId,
+      threadId,
+      model: options?.model ?? null,
+      requestStartedAtMs,
+      respondedAtMs,
+      durationMs: Math.max(0, respondedAtMs - requestStartedAtMs),
+      outcome: "error",
+      errorName: error instanceof Error ? error.name : typeof error,
+    });
+    throw error;
+  }
 }
 
 export async function interruptTurn(workspaceId: string, threadId: string, turnId: string) {
@@ -582,301 +663,6 @@ export async function startReview(workspaceId: string, threadId: string, target:
     payload.delivery = delivery;
   }
   return invoke("start_review", payload);
-}
-
-export async function respondToServerRequest(workspaceId: string, requestId: number | string, decision: "accept" | "decline") {
-  return invoke("respond_to_server_request", {
-    workspaceId,
-    requestId,
-    result: { decision },
-  });
-}
-
-export async function respondToUserInputRequest(
-  workspaceId: string,
-  requestId: number | string,
-  answers: Record<string, { answers: string[] }>,
-  options?: {
-    threadId?: string | null;
-    turnId?: string | null;
-    skippedQuestionIds?: string[];
-  },
-) {
-  const result: Record<string, unknown> = { answers };
-  if (options?.skippedQuestionIds?.length) {
-    result.skippedQuestionIds = options.skippedQuestionIds;
-  }
-  return invoke("respond_to_server_request", {
-    workspaceId,
-    requestId,
-    result,
-    threadId: options?.threadId ?? null,
-    turnId: options?.turnId ?? null,
-  });
-}
-
-export async function rememberApprovalRule(workspaceId: string, command: string[]) {
-  return invoke("remember_approval_rule", { workspaceId, command });
-}
-
-export async function getGitStatus(workspace_id: string): Promise<{
-  isGitRepository?: boolean;
-  branchName: string;
-  files: GitFileStatus[];
-  stagedFiles: GitFileStatus[];
-  unstagedFiles: GitFileStatus[];
-  totalAdditions: number;
-  totalDeletions: number;
-}> {
-  return traceStartupInvoke("get_git_status", workspaceScope(workspace_id), () =>
-    invoke("get_git_status", { workspaceId: workspace_id }),
-  );
-}
-
-export async function listGitRoots(workspace_id: string, depth: number): Promise<string[]> {
-  return invoke("list_git_roots", { workspaceId: workspace_id, depth });
-}
-
-export async function getGitDiffs(workspace_id: string): Promise<GitFileDiff[]> {
-  return traceStartupInvoke("get_git_diffs", workspaceScope(workspace_id), () =>
-    invoke("get_git_diffs", { workspaceId: workspace_id }),
-  );
-}
-
-export async function getGitFileFullDiff(workspace_id: string, path: string): Promise<string> {
-  return invoke("get_git_file_full_diff", { workspaceId: workspace_id, path });
-}
-
-export async function getGitLog(workspace_id: string, limit = 40): Promise<GitLogResponse> {
-  return invoke("get_git_log", { workspaceId: workspace_id, limit });
-}
-
-export async function getGitCommitHistory(
-  workspace_id: string,
-  options?: {
-    branch?: string | null;
-    query?: string | null;
-    author?: string | null;
-    dateFrom?: number | null;
-    dateTo?: number | null;
-    snapshotId?: string | null;
-    offset?: number;
-    limit?: number;
-  },
-): Promise<GitHistoryResponse> {
-  return invoke("get_git_commit_history", {
-    workspaceId: workspace_id,
-    branch: options?.branch ?? null,
-    query: options?.query ?? null,
-    author: options?.author ?? null,
-    dateFrom: options?.dateFrom ?? null,
-    dateTo: options?.dateTo ?? null,
-    snapshotId: options?.snapshotId ?? null,
-    offset: options?.offset ?? 0,
-    limit: options?.limit ?? 100,
-  });
-}
-
-export async function getGitPushPreview(
-  workspace_id: string,
-  options: {
-    remote: string;
-    branch: string;
-    limit?: number;
-  },
-): Promise<GitPushPreviewResponse> {
-  return invoke("get_git_push_preview", {
-    workspaceId: workspace_id,
-    remote: options.remote,
-    branch: options.branch,
-    limit: options.limit ?? 120,
-  });
-}
-
-export type CreateGitPrWorkflowOptions = {
-  upstreamRepo: string;
-  baseBranch: string;
-  headOwner: string;
-  headBranch: string;
-  title: string;
-  body?: string | null;
-  commentAfterCreate?: boolean;
-  commentBody?: string | null;
-};
-
-export async function getGitPrWorkflowDefaults(workspaceId: string): Promise<GitPrWorkflowDefaults> {
-  return invoke<GitPrWorkflowDefaults>("get_git_pr_workflow_defaults", {
-    workspaceId,
-  });
-}
-
-export async function createGitPrWorkflow(workspaceId: string, options: CreateGitPrWorkflowOptions): Promise<GitPrWorkflowResult> {
-  return invoke<GitPrWorkflowResult>("create_git_pr_workflow", {
-    workspaceId,
-    upstreamRepo: options.upstreamRepo,
-    baseBranch: options.baseBranch,
-    headOwner: options.headOwner,
-    headBranch: options.headBranch,
-    title: options.title,
-    body: options.body ?? null,
-    commentAfterCreate: options.commentAfterCreate ?? null,
-    commentBody: options.commentBody ?? null,
-  });
-}
-
-export async function resolveGitCommitRef(workspace_id: string, target: string): Promise<string> {
-  return invoke("resolve_git_commit_ref", {
-    workspaceId: workspace_id,
-    target,
-  });
-}
-
-export async function getGitCommitDetails(workspace_id: string, commitHash: string, maxDiffLines = 10_000): Promise<GitCommitDetails> {
-  return invoke("get_git_commit_details", {
-    workspaceId: workspace_id,
-    commitHash,
-    maxDiffLines,
-  });
-}
-
-export async function getGitCommitDiff(
-  workspace_id: string,
-  sha: string,
-  options?: {
-    path?: string | null;
-    contextLines?: number;
-  },
-): Promise<GitCommitDiff[]> {
-  return invoke("get_git_commit_diff", {
-    workspaceId: workspace_id,
-    sha,
-    path: options?.path ?? null,
-    contextLines: options?.contextLines ?? null,
-  });
-}
-
-export async function getGitRemote(workspace_id: string): Promise<string | null> {
-  return invoke("get_git_remote", { workspaceId: workspace_id });
-}
-
-export async function stageGitFile(workspaceId: string, path: string) {
-  return invoke("stage_git_file", { workspaceId, path });
-}
-
-export async function stageGitAll(workspaceId: string): Promise<void> {
-  return invoke("stage_git_all", { workspaceId });
-}
-
-export async function unstageGitFile(workspaceId: string, path: string) {
-  return invoke("unstage_git_file", { workspaceId, path });
-}
-
-export async function revertGitFile(workspaceId: string, path: string) {
-  return invoke("revert_git_file", { workspaceId, path });
-}
-
-export async function revertGitAll(workspaceId: string) {
-  return invoke("revert_git_all", { workspaceId });
-}
-
-export async function commitGit(workspaceId: string, message: string): Promise<void> {
-  return invoke("commit_git", { workspaceId, message });
-}
-
-export type GitPushOptions = {
-  remote?: string | null;
-  branch?: string | null;
-  forceWithLease?: boolean;
-  pushTags?: boolean;
-  runHooks?: boolean;
-  pushToGerrit?: boolean;
-  topic?: string | null;
-  reviewers?: string | null;
-  cc?: string | null;
-};
-
-export type GitPullStrategyOption = "--rebase" | "--ff-only" | "--no-ff" | "--squash";
-
-export type GitPullOptions = {
-  remote?: string | null;
-  branch?: string | null;
-  strategy?: GitPullStrategyOption | null;
-  noCommit?: boolean;
-  noVerify?: boolean;
-};
-
-export async function pushGit(workspaceId: string, options?: GitPushOptions): Promise<void> {
-  return invoke("push_git", {
-    workspaceId,
-    remote: options?.remote ?? null,
-    branch: options?.branch ?? null,
-    forceWithLease: options?.forceWithLease ?? null,
-    pushTags: options?.pushTags ?? null,
-    runHooks: options?.runHooks ?? null,
-    pushToGerrit: options?.pushToGerrit ?? null,
-    topic: options?.topic ?? null,
-    reviewers: options?.reviewers ?? null,
-    cc: options?.cc ?? null,
-  });
-}
-
-export async function pullGit(workspaceId: string, options?: GitPullOptions): Promise<void> {
-  return invoke("pull_git", {
-    workspaceId,
-    remote: options?.remote ?? null,
-    branch: options?.branch ?? null,
-    strategy: options?.strategy ?? null,
-    noCommit: options?.noCommit ?? null,
-    noVerify: options?.noVerify ?? null,
-  });
-}
-
-export async function syncGit(workspaceId: string): Promise<void> {
-  return invoke("sync_git", { workspaceId });
-}
-
-export async function fetchGit(workspaceId: string, remote?: string | null): Promise<void> {
-  return invoke("git_fetch", { workspaceId, remote: remote ?? null });
-}
-
-export async function updateGitBranch(workspaceId: string, branchName: string): Promise<GitBranchUpdateResult> {
-  return invoke<GitBranchUpdateResult>("update_git_branch", { workspaceId, branchName });
-}
-
-export async function cherryPickCommit(workspaceId: string, commitHash: string): Promise<void> {
-  return invoke("cherry_pick_commit", { workspaceId, commitHash });
-}
-
-export async function revertCommit(workspaceId: string, commitHash: string): Promise<void> {
-  return invoke("revert_commit", { workspaceId, commitHash });
-}
-
-export type GitResetMode = "soft" | "mixed" | "hard" | "keep";
-
-export async function resetGitCommit(workspaceId: string, commitHash: string, mode: GitResetMode): Promise<void> {
-  return invoke("reset_git_commit", { workspaceId, commitHash, mode });
-}
-
-export async function getGitHubIssues(workspace_id: string): Promise<GitHubIssuesResponse> {
-  return invoke("get_github_issues", { workspaceId: workspace_id });
-}
-
-export async function getGitHubPullRequests(workspace_id: string): Promise<GitHubPullRequestsResponse> {
-  return invoke("get_github_pull_requests", { workspaceId: workspace_id });
-}
-
-export async function getGitHubPullRequestDiff(workspace_id: string, prNumber: number): Promise<GitHubPullRequestDiff[]> {
-  return invoke("get_github_pull_request_diff", {
-    workspaceId: workspace_id,
-    prNumber,
-  });
-}
-
-export async function getGitHubPullRequestComments(workspace_id: string, prNumber: number): Promise<GitHubPullRequestComment[]> {
-  return invoke("get_github_pull_request_comments", {
-    workspaceId: workspace_id,
-    prNumber,
-  });
 }
 
 export async function localUsageSnapshot(days?: number, workspacePath?: string | null): Promise<LocalUsageSnapshot> {
@@ -1445,48 +1231,6 @@ export async function completeEmailMailCommand(
   return invoke<EmailMailSessionList>("complete_email_mail_command", { request });
 }
 
-export type WebServerStatus = {
-  running: boolean;
-  rpcEndpoint: string;
-  webPort: number;
-  addresses: string[];
-  webAccessToken: string | null;
-  lastError?: string | null;
-};
-
-export type DaemonStatus = {
-  running: boolean;
-  host: string;
-  lastError?: string | null;
-};
-
-export async function startWebServer(options: { port?: number | null; token?: string | null }): Promise<WebServerStatus> {
-  return invoke<WebServerStatus>("start_web_server", {
-    port: options.port ?? null,
-    token: options.token ?? null,
-  });
-}
-
-export async function stopWebServer(): Promise<WebServerStatus> {
-  return invoke<WebServerStatus>("stop_web_server");
-}
-
-export async function getWebServerStatus(): Promise<WebServerStatus> {
-  return invoke<WebServerStatus>("get_web_server_status");
-}
-
-export async function getDaemonStatus(): Promise<DaemonStatus> {
-  return invoke<DaemonStatus>("get_daemon_status");
-}
-
-export async function startDaemon(): Promise<DaemonStatus> {
-  return invoke<DaemonStatus>("start_daemon");
-}
-
-export async function stopDaemon(): Promise<DaemonStatus> {
-  return invoke<DaemonStatus>("stop_daemon");
-}
-
 type MenuAcceleratorUpdate = {
   id: string;
   accelerator: string | null;
@@ -1503,567 +1247,6 @@ type MenuLabelUpdate = {
 
 export async function updateMenuLabels(updates: MenuLabelUpdate[]): Promise<void> {
   return invoke("menu_update_labels", { updates });
-}
-
-export type WorkspaceFilesResponse = {
-  files: string[];
-  directories: string[];
-  gitignored_files: string[];
-  gitignored_directories: string[];
-  scan_state?: WorkspaceFileScanState;
-  limit_hit?: boolean;
-  directory_entries?: WorkspaceDirectoryEntry[];
-  listingBudget?: WorkspaceFileListingBudgetMetadata | null;
-  sourceVersion?: string | null;
-  payloadBudget?: BridgePayloadBudgetMetadata | null;
-};
-
-export type WorkspaceFileScanState = "complete" | "partial";
-
-export type WorkspaceFileListingCacheState =
-  | "hit"
-  | "miss"
-  | "invalidated"
-  | "unsupported";
-
-export type WorkspaceFileListingBudgetMetadata = {
-  depth?: number | null;
-  maxEntries: number;
-  returnedEntries: number;
-  payloadBytes: number;
-  sourceVersion: string;
-  scanState: WorkspaceFileScanState;
-  limitHit: boolean;
-  cacheState: WorkspaceFileListingCacheState;
-  requestedPath?: string | null;
-  partial: boolean;
-  pageCursor?: string | null;
-};
-
-export type WorkspaceDirectoryChildState =
-  | "unknown"
-  | "loaded"
-  | "empty"
-  | "partial";
-
-export type WorkspaceDirectorySpecialKind = "dependency" | "build_artifact";
-
-export type WorkspaceDirectoryEntry = {
-  path: string;
-  child_state: WorkspaceDirectoryChildState;
-  special_kind?: WorkspaceDirectorySpecialKind | null;
-  has_more?: boolean;
-};
-
-export type WorkspaceTextSearchMatch = {
-  line: number;
-  column: number;
-  end_column: number;
-  preview: string;
-};
-
-export type WorkspaceTextSearchFileResult = {
-  path: string;
-  match_count: number;
-  matches: WorkspaceTextSearchMatch[];
-};
-
-export type WorkspaceTextSearchResponse = {
-  files: WorkspaceTextSearchFileResult[];
-  file_count: number;
-  match_count: number;
-  limit_hit: boolean;
-};
-
-export type ExternalSpecFileResponse = {
-  exists: boolean;
-  content: string;
-  truncated: boolean;
-};
-
-export type DetachedExternalChangeMonitorStatus = {
-  mode: "watcher" | "polling";
-  fallbackReason?: string | null;
-};
-
-export type EngineTaskOutputArtifactTailResponse = {
-  exists: boolean;
-  content: string;
-  truncated: boolean;
-  byteLength: number;
-};
-
-export async function getWorkspaceFiles(workspaceId: string) {
-  return traceStartupInvoke("list_workspace_files", workspaceScope(workspaceId), () =>
-    invoke<WorkspaceFilesResponse>("list_workspace_files", {
-      workspaceId,
-    }),
-  );
-}
-
-export async function getWorkspaceDirectoryChildren(workspaceId: string, path: string) {
-  return invoke<WorkspaceFilesResponse>("list_workspace_directory_children", {
-    workspaceId,
-    path,
-  });
-}
-
-export async function listExternalAbsoluteDirectoryChildren(workspaceId: string, path: string) {
-  return invoke<WorkspaceFilesResponse>("list_external_absolute_directory_children", {
-    workspaceId,
-    path,
-  });
-}
-
-export async function searchWorkspaceText(
-  workspaceId: string,
-  options: {
-    query: string;
-    caseSensitive: boolean;
-    wholeWord: boolean;
-    isRegex: boolean;
-    includePattern?: string | null;
-    excludePattern?: string | null;
-  },
-) {
-  return invoke<WorkspaceTextSearchResponse>("search_workspace_text", {
-    workspaceId,
-    query: options.query,
-    caseSensitive: options.caseSensitive,
-    wholeWord: options.wholeWord,
-    isRegex: options.isRegex,
-    includePattern: options.includePattern ?? null,
-    excludePattern: options.excludePattern ?? null,
-  });
-}
-
-export async function listExternalSpecTree(workspaceId: string, specRoot: string) {
-  return invoke<WorkspaceFilesResponse>("list_external_spec_tree", {
-    workspaceId,
-    specRoot,
-  });
-}
-
-export async function readWorkspaceFile(workspaceId: string, path: string): Promise<{ content: string; truncated: boolean }> {
-  return invoke<{ content: string; truncated: boolean }>("read_workspace_file", {
-    workspaceId,
-    path,
-  });
-}
-
-export async function readWorkspaceFilePreview(workspaceId: string, path: string): Promise<{ content: string; truncated: boolean }> {
-  return invoke<{ content: string; truncated: boolean }>("read_workspace_file_preview", {
-    workspaceId,
-    path,
-  });
-}
-
-export async function readExternalSpecFile(workspaceId: string, specRoot: string, path: string): Promise<ExternalSpecFileResponse> {
-  return invoke<ExternalSpecFileResponse>("read_external_spec_file", {
-    workspaceId,
-    specRoot,
-    path,
-  });
-}
-
-export async function readExternalAbsoluteFile(workspaceId: string, path: string): Promise<{ content: string; truncated: boolean }> {
-  return invoke<{ content: string; truncated: boolean }>("read_external_absolute_file", {
-    workspaceId,
-    path,
-  });
-}
-
-export async function readEngineTaskOutputArtifact(input: {
-  workspaceId: string;
-  path: string;
-}): Promise<EngineTaskOutputArtifactTailResponse> {
-  return invoke<EngineTaskOutputArtifactTailResponse>("engine_task_output_read_artifact", {
-    workspaceId: input.workspaceId,
-    path: input.path,
-  });
-}
-
-export type FilePreviewHandle = {
-  absolutePath: string;
-  byteLength: number;
-  extension: string | null;
-};
-
-export async function resolveFilePreviewHandle(
-  workspaceId: string,
-  options: {
-    domain: "workspace" | "external-spec" | "external-absolute";
-    path: string;
-    specRoot?: string | null;
-  },
-): Promise<FilePreviewHandle> {
-  return invoke<FilePreviewHandle>("resolve_file_preview_handle", {
-    workspaceId,
-    domain: options.domain,
-    path: options.path,
-    specRoot: options.specRoot ?? null,
-  });
-}
-
-export async function readLocalImageDataUrl(workspaceId: string, path: string): Promise<string | null> {
-  try {
-    const result = await invoke<string>("read_local_image_data_url", {
-      workspaceId,
-      path,
-    });
-    return typeof result === "string" && result.startsWith("data:image/") ? result : null;
-  } catch (error) {
-    if (isUnknownMethodError(error, "read_local_image_data_url")) {
-      return null;
-    }
-    return null;
-  }
-}
-
-export async function writeWorkspaceFile(workspaceId: string, path: string, content: string): Promise<void> {
-  return invoke("write_workspace_file", { workspaceId, path, content });
-}
-
-export async function readProjectCanvasFile(workspaceId: string, path: string): Promise<{ content: string; truncated: boolean }> {
-  return invoke<{ content: string; truncated: boolean }>("project_canvas_read_file", {
-    workspaceId,
-    path,
-  });
-}
-
-export async function writeProjectCanvasFile(workspaceId: string, path: string, content: string): Promise<void> {
-  return invoke("project_canvas_write_file", { workspaceId, path, content });
-}
-
-export async function trashProjectCanvasFile(workspaceId: string, path: string): Promise<void> {
-  return invoke("project_canvas_trash_file", { workspaceId, path });
-}
-
-export async function compactProjectCanvasFiles(
-  workspaceId: string,
-): Promise<{ deletedDocuments: number; deletedTempFiles: number }> {
-  return invoke<{ deletedDocuments: number; deletedTempFiles: number }>("project_canvas_compact_files", {
-    workspaceId,
-  });
-}
-
-export type ExportRewindFilesParams = {
-  workspaceId: string;
-  engine: "claude" | "codex" | "gemini";
-  sessionId: string;
-  targetMessageId: string;
-  conversationLabel: string;
-  files: Array<{
-    path: string;
-    status?: "A" | "D" | "R" | "M";
-  }>;
-};
-
-export type ExportRewindFilesResult = {
-  outputPath: string;
-  filesPath: string;
-  manifestPath: string;
-  exportId: string;
-  fileCount: number;
-};
-
-export async function exportRewindFiles(params: ExportRewindFilesParams): Promise<ExportRewindFilesResult> {
-  return invoke<ExportRewindFilesResult>("export_rewind_files", params);
-}
-
-export async function createWorkspaceDirectory(workspaceId: string, path: string): Promise<void> {
-  return invoke("create_workspace_directory", { workspaceId, path });
-}
-
-export async function writeExternalSpecFile(workspaceId: string, specRoot: string, path: string, content: string): Promise<void> {
-  return invoke("write_external_spec_file", {
-    workspaceId,
-    specRoot,
-    path,
-    content,
-  });
-}
-
-export async function writeExternalAbsoluteFile(workspaceId: string, path: string, content: string): Promise<void> {
-  return invoke("write_external_absolute_file", { workspaceId, path, content });
-}
-
-export async function trashWorkspaceItem(workspaceId: string, path: string): Promise<void> {
-  return invoke("trash_workspace_item", { workspaceId, path });
-}
-
-export type WorkspaceFileItemKind = "file" | "folder";
-
-export type WorkspaceFileOperationResult = {
-  path: string;
-  kind: WorkspaceFileItemKind;
-};
-
-export async function copyWorkspaceItem(workspaceId: string, path: string): Promise<string> {
-  return invoke("copy_workspace_item", { workspaceId, path });
-}
-
-export async function duplicateWorkspaceItem(workspaceId: string, path: string): Promise<WorkspaceFileOperationResult> {
-  return invoke<WorkspaceFileOperationResult>("duplicate_workspace_item", { workspaceId, path });
-}
-
-export async function pasteWorkspaceItem(
-  workspaceId: string,
-  sourcePath: string,
-  targetDirectory: string,
-): Promise<WorkspaceFileOperationResult> {
-  return invoke<WorkspaceFileOperationResult>("paste_workspace_item", {
-    workspaceId,
-    sourcePath,
-    targetDirectory,
-  });
-}
-
-export async function renameWorkspaceItem(
-  workspaceId: string,
-  path: string,
-  newName: string,
-): Promise<WorkspaceFileOperationResult> {
-  return invoke<WorkspaceFileOperationResult>("rename_workspace_item", {
-    workspaceId,
-    path,
-    newName,
-  });
-}
-
-export async function pasteExternalWorkspaceItems(
-  workspaceId: string,
-  sourcePaths: string[],
-  targetDirectory: string,
-): Promise<WorkspaceFileOperationResult[]> {
-  return invoke<WorkspaceFileOperationResult[]>("paste_external_workspace_items", {
-    workspaceId,
-    sourcePaths,
-    targetDirectory,
-  });
-}
-
-export async function configureDetachedExternalChangeMonitor(
-  workspaceId: string,
-  workspacePath: string,
-  activeFilePath: string,
-  watcherEnabled: boolean,
-): Promise<DetachedExternalChangeMonitorStatus> {
-  return invoke<DetachedExternalChangeMonitorStatus>("configure_detached_external_change_monitor", {
-    workspaceId,
-    workspacePath,
-    activeFilePath,
-    watcherEnabled,
-  });
-}
-
-export async function clearDetachedExternalChangeMonitor(workspaceId: string): Promise<void> {
-  return invoke("clear_detached_external_change_monitor", { workspaceId });
-}
-
-export type WorkspaceCommandResult = {
-  command: string[];
-  exitCode: number;
-  success: boolean;
-  stdout: string;
-  stderr: string;
-};
-
-export async function runWorkspaceCommand(workspaceId: string, command: string[], timeoutMs?: number | null): Promise<WorkspaceCommandResult> {
-  return invoke<WorkspaceCommandResult>("run_workspace_command", {
-    workspaceId,
-    command,
-    timeoutMs: timeoutMs ?? null,
-  });
-}
-
-export async function runSpecCommand(
-  workspaceId: string,
-  command: string[],
-  options?: {
-    customSpecRoot?: string | null;
-    timeoutMs?: number | null;
-  },
-): Promise<WorkspaceCommandResult> {
-  return invoke<WorkspaceCommandResult>("run_spec_command", {
-    workspaceId,
-    command,
-    customSpecRoot: options?.customSpecRoot ?? null,
-    timeoutMs: options?.timeoutMs ?? null,
-  });
-}
-
-export async function listGitBranches(workspaceId: string): Promise<GitBranchListResponse> {
-  return invoke<GitBranchListResponse>("list_git_branches", { workspaceId });
-}
-
-export async function checkoutGitBranch(workspaceId: string, name: string) {
-  return invoke("checkout_git_branch", { workspaceId, name });
-}
-
-export async function createGitBranch(workspaceId: string, name: string) {
-  return invoke("create_git_branch", { workspaceId, name });
-}
-
-export async function createGitBranchFromBranch(workspaceId: string, name: string, sourceBranch: string) {
-  return invoke("create_git_branch_from_branch", {
-    workspaceId,
-    name,
-    sourceBranch,
-  });
-}
-
-export async function createGitBranchFromCommit(workspaceId: string, name: string, commitHash: string) {
-  return invoke("create_git_branch_from_commit", {
-    workspaceId,
-    name,
-    commitHash,
-  });
-}
-
-export async function deleteGitBranch(
-  workspaceId: string,
-  name: string,
-  options?: {
-    force?: boolean;
-    removeOccupiedWorktree?: boolean;
-  },
-) {
-  return invoke("delete_git_branch", {
-    workspaceId,
-    name,
-    force: options?.force ?? false,
-    removeOccupiedWorktree: options?.removeOccupiedWorktree ?? false,
-  });
-}
-
-export async function renameGitBranch(workspaceId: string, oldName: string, newName: string) {
-  return invoke("rename_git_branch", { workspaceId, oldName, newName });
-}
-
-export async function mergeGitBranch(workspaceId: string, name: string) {
-  return invoke("merge_git_branch", { workspaceId, name });
-}
-
-export async function rebaseGitBranch(workspaceId: string, ontoBranch: string) {
-  return invoke("rebase_git_branch", { workspaceId, ontoBranch });
-}
-
-export async function getGitBranchCompareCommits(workspaceId: string, targetBranch: string, currentBranch: string, limit = 200): Promise<GitBranchCompareCommitSets> {
-  return invoke<GitBranchCompareCommitSets>("get_git_branch_compare_commits", {
-    workspaceId,
-    targetBranch,
-    currentBranch,
-    limit,
-  });
-}
-
-export async function getGitBranchDiffBetweenBranches(workspaceId: string, fromBranch: string, toBranch: string): Promise<GitCommitDiff[]> {
-  return invoke<GitCommitDiff[]>("get_git_branch_diff_between_branches", {
-    workspaceId,
-    fromBranch,
-    toBranch,
-  });
-}
-
-export async function getGitBranchDiffFileBetweenBranches(workspaceId: string, fromBranch: string, toBranch: string, path: string): Promise<GitCommitDiff> {
-  return invoke<GitCommitDiff>("get_git_branch_file_diff_between_branches", {
-    workspaceId,
-    fromBranch,
-    toBranch,
-    path,
-  });
-}
-
-export async function getGitWorktreeDiffAgainstBranch(workspaceId: string, branch: string): Promise<GitCommitDiff[]> {
-  return invoke<GitCommitDiff[]>("get_git_worktree_diff_against_branch", {
-    workspaceId,
-    branch,
-  });
-}
-
-export async function getGitWorktreeDiffFileAgainstBranch(workspaceId: string, branch: string, path: string): Promise<GitCommitDiff> {
-  return invoke<GitCommitDiff>("get_git_worktree_file_diff_against_branch", {
-    workspaceId,
-    branch,
-    path,
-  });
-}
-
-export async function listThreads(workspaceId: string, cursor?: string | null, limit?: number | null) {
-  return traceStartupInvoke("list_threads", workspaceScope(workspaceId), () =>
-    invoke<ThreadListPayload | null | undefined>("list_threads", {
-      workspaceId,
-      cursor,
-      limit,
-    }),
-  );
-}
-
-export async function listMcpServerStatus(workspaceId: string, cursor?: string | null, limit?: number | null) {
-  return invoke<unknown>("list_mcp_server_status", {
-    workspaceId,
-    cursor,
-    limit,
-  });
-}
-
-export type GlobalMcpServerEntry = {
-  name: string;
-  enabled: boolean;
-  transport?: string | null;
-  command?: string | null;
-  url?: string | null;
-  argsCount: number;
-  source: "claude_json" | "ccgui_config";
-};
-
-export async function listGlobalMcpServers() {
-  return invoke<GlobalMcpServerEntry[]>("list_global_mcp_servers");
-}
-
-export async function resumeThread(workspaceId: string, threadId: string) {
-  return invoke<Record<string, unknown> | null>("resume_thread", {
-    workspaceId,
-    threadId,
-  });
-}
-
-export async function archiveThread(workspaceId: string, threadId: string) {
-  return invoke<Record<string, unknown> | null>("archive_thread", {
-    workspaceId,
-    threadId,
-  });
-}
-
-export async function deleteCodexSession(workspaceId: string, sessionId: string) {
-  return invoke<{
-    deleted: boolean;
-    deletedCount: number;
-    method: "filesystem";
-    archivedBeforeDelete?: boolean;
-  }>("delete_codex_session", {
-    workspaceId,
-    sessionId,
-  });
-}
-export async function deleteCodexSessions(workspaceId: string, sessionIds: string[]) {
-  return invoke<{
-    results: Array<{
-      sessionId: string;
-      deleted: boolean;
-      deletedCount: number;
-      method: "filesystem";
-      archivedBeforeDelete?: boolean;
-      error?: string | null;
-    }>;
-  }>("delete_codex_sessions", {
-    workspaceId,
-    sessionIds,
-  });
-}
-export async function deleteOpenCodeSession(workspaceId: string, sessionId: string) {
-  return invoke<{ deleted: boolean; method: "cli" | "filesystem" }>("opencode_delete_session", { workspaceId, sessionId });
 }
 
 export type CommitMessageLanguage = "zh" | "en";
@@ -2133,391 +1316,6 @@ export async function generateThreadTitle(workspaceId: string, threadId: string,
     threadId,
     userMessage,
     preferredLanguage: preferredLanguage ?? null,
-  });
-}
-
-// ==================== Engine API ====================
-
-/**
- * Detect all installed engines and their status
- */
-export async function detectEngines(): Promise<EngineStatus[]> {
-  try {
-    const statuses = await invoke<EngineStatus[]>("detect_engines");
-    markDaemonEngineRpcSupported(true);
-    return statuses;
-  } catch (error) {
-    if (isUnknownMethodError(error, "detect_engines")) {
-      if (!shouldUseWebServiceFallback()) {
-        throw error;
-      }
-      markDaemonEngineRpcSupported(false);
-      return webServiceCodexOnlyStatuses();
-    }
-    throw error;
-  }
-}
-
-/**
- * Get the currently active engine type
- */
-export async function getActiveEngine(): Promise<EngineType> {
-  try {
-    const engine = await invoke<EngineType>("get_active_engine");
-    markDaemonEngineRpcSupported(true);
-    return engine;
-  } catch (error) {
-    if (isUnknownMethodError(error, "get_active_engine")) {
-      if (!shouldUseWebServiceFallback()) {
-        throw error;
-      }
-      markDaemonEngineRpcSupported(false);
-      return "codex";
-    }
-    throw error;
-  }
-}
-
-/**
- * Switch to a different engine
- */
-export async function switchEngine(engineType: EngineType): Promise<void> {
-  if (isEngineRpcFallbackMode() && engineType !== "codex") {
-    throw new Error(WEB_SERVICE_CLI_ENGINE_MESSAGE);
-  }
-  try {
-    await invoke("switch_engine", { engineType });
-    markDaemonEngineRpcSupported(true);
-    return;
-  } catch (error) {
-    if (isUnknownMethodError(error, "switch_engine")) {
-      if (!shouldUseWebServiceFallback()) {
-        throw error;
-      }
-      markDaemonEngineRpcSupported(false);
-      if (engineType === "codex") {
-        return;
-      }
-      throw new Error(WEB_SERVICE_CLI_ENGINE_MESSAGE);
-    }
-    throw error;
-  }
-}
-
-/**
- * Get status of a specific engine
- */
-export async function getEngineStatus(engineType: EngineType): Promise<EngineStatus | null> {
-  try {
-    const status = await invoke<EngineStatus | null>("get_engine_status", {
-      engineType,
-    });
-    markDaemonEngineRpcSupported(true);
-    return status;
-  } catch (error) {
-    if (isUnknownMethodError(error, "get_engine_status")) {
-      if (!shouldUseWebServiceFallback()) {
-        throw error;
-      }
-      markDaemonEngineRpcSupported(false);
-      return webServiceCodexOnlyStatuses().find((entry) => entry.engineType === engineType) ?? null;
-    }
-    throw error;
-  }
-}
-
-export type EngineWorkspaceActiveProcessDiagnostics = {
-  workspaceId: string;
-  engine: EngineType;
-  activeProcessIds: number[];
-};
-
-export type EngineActiveProcessDiagnostics = {
-  measured: boolean;
-  sampledAtMs: number;
-  totalActiveProcessCount: number;
-  workspaces: EngineWorkspaceActiveProcessDiagnostics[];
-  unsupportedReason: string | null;
-};
-
-export async function getEngineActiveProcessDiagnostics(): Promise<EngineActiveProcessDiagnostics> {
-  return invoke<EngineActiveProcessDiagnostics>(
-    "get_engine_active_process_diagnostics",
-  );
-}
-
-/**
- * Get available models for a specific engine
- */
-export async function getEngineModels(
-  engineType: EngineType,
-  options: { forceRefresh?: boolean } = {},
-): Promise<EngineModelInfo[]> {
-  if (isEngineRpcFallbackMode() && engineType !== "codex") {
-    return [];
-  }
-  try {
-    const params: { engineType: EngineType; forceRefresh?: boolean } = {
-      engineType,
-    };
-    if (options.forceRefresh) {
-      params.forceRefresh = true;
-    }
-    const models = await traceStartupInvoke("get_engine_models", "global", () =>
-      invoke<EngineModelInfo[]>("get_engine_models", params),
-    );
-    markDaemonEngineRpcSupported(true);
-    return models;
-  } catch (error) {
-    if (isUnknownMethodError(error, "get_engine_models")) {
-      if (!shouldUseWebServiceFallback()) {
-        throw error;
-      }
-      markDaemonEngineRpcSupported(false);
-      return [];
-    }
-    throw error;
-  }
-}
-
-/**
- * Send a message using an engine
- */
-export async function engineSendMessage(
-  workspaceId: string,
-  params: {
-    text: string;
-    engine?: EngineType | null;
-    model?: string | null;
-    effort?: string | null;
-    disableThinking?: boolean | null;
-    images?: string[] | null;
-    continueSession?: boolean;
-    sessionId?: string | null;
-    forkSessionId?: string | null;
-    accessMode?: string | null;
-    threadId?: string | null;
-    agent?: string | null;
-    variant?: string | null;
-    customSpecRoot?: string | null;
-    autoSession?: AutoSessionMetadata | null;
-  },
-): Promise<Record<string, unknown>> {
-  if (isEngineRpcFallbackMode() && params.engine && params.engine !== "codex") {
-    return {
-      error: {
-        message: WEB_SERVICE_CLI_ENGINE_MESSAGE,
-      },
-    };
-  }
-  try {
-    return await invoke<Record<string, unknown>>("engine_send_message", {
-      workspaceId,
-      text: params.text,
-      engine: params.engine ?? null,
-      model: params.model ?? null,
-      effort: params.effort ?? null,
-      disableThinking: params.disableThinking ?? false,
-      images: params.images ?? null,
-      continueSession: params.continueSession ?? false,
-      accessMode: params.accessMode ?? null,
-      threadId: params.threadId ?? null,
-      sessionId: params.sessionId ?? null,
-      forkSessionId: params.forkSessionId ?? null,
-      agent: params.agent ?? null,
-      variant: params.variant ?? null,
-      customSpecRoot: params.customSpecRoot ?? null,
-      autoSession: params.autoSession ?? null,
-    });
-  } catch (error) {
-    if (isUnknownMethodError(error, "engine_send_message")) {
-      if (!shouldUseWebServiceFallback()) {
-        throw error;
-      }
-      markDaemonEngineRpcSupported(false);
-      return {
-        error: {
-          message: WEB_SERVICE_CLI_ENGINE_MESSAGE,
-        },
-      };
-    }
-    throw error;
-  }
-}
-
-/**
- * Send a message using an engine and wait for a final plain-text response.
- */
-export async function engineSendMessageSync(
-  workspaceId: string,
-  params: {
-    text: string;
-    engine?: EngineType | null;
-    model?: string | null;
-    effort?: string | null;
-    disableThinking?: boolean | null;
-    images?: string[] | null;
-    continueSession?: boolean;
-    sessionId?: string | null;
-    forkSessionId?: string | null;
-    accessMode?: string | null;
-    agent?: string | null;
-    variant?: string | null;
-    customSpecRoot?: string | null;
-    autoSession?: AutoSessionMetadata | null;
-  },
-): Promise<{ engine: EngineType; text: string }> {
-  if (isEngineRpcFallbackMode() && params.engine && params.engine !== "codex") {
-    throw new Error(WEB_SERVICE_CLI_ENGINE_MESSAGE);
-  }
-  try {
-    return await invoke<{ engine: EngineType; text: string }>("engine_send_message_sync", {
-      workspaceId,
-      text: params.text,
-      engine: params.engine ?? null,
-      model: params.model ?? null,
-      effort: params.effort ?? null,
-      disableThinking: params.disableThinking ?? false,
-      images: params.images ?? null,
-      continueSession: params.continueSession ?? false,
-      accessMode: params.accessMode ?? null,
-      sessionId: params.sessionId ?? null,
-      forkSessionId: params.forkSessionId ?? null,
-      agent: params.agent ?? null,
-      variant: params.variant ?? null,
-      customSpecRoot: params.customSpecRoot ?? null,
-      autoSession: params.autoSession ?? null,
-    });
-  } catch (error) {
-    if (isUnknownMethodError(error, "engine_send_message_sync")) {
-      if (!shouldUseWebServiceFallback()) {
-        throw error;
-      }
-      markDaemonEngineRpcSupported(false);
-      throw new Error(WEB_SERVICE_CLI_ENGINE_MESSAGE);
-    }
-    throw error;
-  }
-}
-
-/**
- * Interrupt the current engine operation
- */
-export async function engineInterrupt(workspaceId: string): Promise<void> {
-  return invoke("engine_interrupt", { workspaceId });
-}
-
-/**
- * List Claude Code session history for a workspace path.
- * Reads JSONL files from ~/.claude/projects/{encoded-path}/.
- *
- * This is a native history/detail source. Workspace session membership should
- * come from listWorkspaceSessions so catalog source status can decide whether
- * an empty Claude result is authoritative.
- */
-export async function listClaudeSessions(workspacePath: string, limit?: number | null): Promise<ClaudeSessionSummaryPayload[] | Record<string, unknown> | null | undefined> {
-  return traceStartupInvoke("list_claude_sessions", "global", () =>
-    invoke<ClaudeSessionSummaryPayload[] | Record<string, unknown> | null | undefined>("list_claude_sessions", {
-      workspacePath,
-      limit: limit ?? null,
-    }),
-  );
-}
-
-/**
- * Load full message history for a specific Claude Code session.
- */
-export async function loadClaudeSession(workspacePath: string, sessionId: string): Promise<Record<string, unknown> | null> {
-  return invoke<Record<string, unknown> | null>("load_claude_session", {
-    workspacePath,
-    sessionId,
-  });
-}
-
-/**
- * Hydrate one deferred Claude Code history image. This must be called only after
- * explicit user action because it can return a large data URL.
- */
-export async function hydrateClaudeDeferredImage(
-  workspacePath: string,
-  locator: ClaudeDeferredImageLocator,
-): Promise<ClaudeHydratedImage> {
-  return invoke<ClaudeHydratedImage>("hydrate_claude_deferred_image", {
-    workspacePath,
-    locator,
-  });
-}
-
-/**
- * List Gemini CLI session history for a workspace path.
- */
-export async function listGeminiSessions(workspacePath: string, limit?: number | null): Promise<Record<string, unknown> | unknown[] | null> {
-  return traceStartupInvoke("list_gemini_sessions", "global", () =>
-    invoke<Record<string, unknown> | unknown[] | null>("list_gemini_sessions", {
-      workspacePath,
-      limit: limit ?? null,
-    }),
-  );
-}
-
-/**
- * Load full message history for a specific Gemini CLI session.
- */
-export async function loadGeminiSession(workspacePath: string, sessionId: string): Promise<Record<string, unknown> | null> {
-  return invoke<Record<string, unknown> | null>("load_gemini_session", {
-    workspacePath,
-    sessionId,
-  });
-}
-
-/**
- * Load full Codex local session history for a specific workspace/session.
- */
-export async function loadCodexSession(workspaceId: string, sessionId: string): Promise<Record<string, unknown> | null> {
-  return invoke<Record<string, unknown> | null>("load_codex_session", {
-    workspaceId,
-    sessionId,
-  });
-}
-
-/**
- * Fork a Claude Code session into a new session id.
- */
-export async function forkClaudeSession(workspacePath: string, sessionId: string): Promise<Record<string, unknown> | null> {
-  return invoke<Record<string, unknown> | null>("fork_claude_session", {
-    workspacePath,
-    sessionId,
-  });
-}
-
-/**
- * Fork a Claude Code session from a target user message.
- */
-export async function forkClaudeSessionFromMessage(workspacePath: string, sessionId: string, messageId: string): Promise<Record<string, unknown> | null> {
-  return invoke<Record<string, unknown> | null>("fork_claude_session_from_message", {
-    workspacePath,
-    sessionId,
-    messageId,
-  });
-}
-
-/**
- * Delete a Claude Code session (remove JSONL file from disk).
- */
-export async function deleteClaudeSession(workspacePath: string, sessionId: string): Promise<void> {
-  return invoke<void>("delete_claude_session", {
-    workspacePath,
-    sessionId,
-  });
-}
-
-/**
- * Delete a Gemini CLI session (remove session JSON file from disk).
- */
-export async function deleteGeminiSession(workspacePath: string, sessionId: string): Promise<void> {
-  return invoke<void>("delete_gemini_session", {
-    workspacePath,
-    sessionId,
   });
 }
 

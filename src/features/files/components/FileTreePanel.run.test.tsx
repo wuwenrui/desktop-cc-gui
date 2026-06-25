@@ -837,6 +837,66 @@ describe("FileTreePanel run action isolation", () => {
     });
   });
 
+  it("clears loaded lazy directories when the file tree refresh button is clicked", async () => {
+    const onRefreshFiles = vi.fn();
+    invokeMock.mockImplementation(async (...args: any[]): Promise<any> => {
+      const command = args[0];
+      if (command === "list_workspace_directory_children") {
+        return {
+          files: ["packages/large/index.ts"],
+          directories: [] as string[],
+          gitignored_files: [] as string[],
+          gitignored_directories: [] as string[],
+          scan_state: "complete",
+          limit_hit: false,
+          directory_entries: [
+            {
+              path: "packages/large",
+              child_state: "loaded",
+            },
+          ],
+        };
+      }
+      return null;
+    });
+
+    render(
+      <FileTreePanel
+        workspaceId="workspace-1"
+        workspacePath="/tmp/workspace"
+        files={[]}
+        directories={["packages/large"]}
+        directoryMetadata={[
+          {
+            path: "packages/large",
+            child_state: "unknown",
+          },
+        ]}
+        isLoading={false}
+        filePanelMode="files"
+        onFilePanelModeChange={() => undefined}
+        onOpenFile={() => undefined}
+        onInsertText={() => undefined}
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={() => undefined}
+        gitStatusFiles={[]}
+        gitignoredFiles={new Set<string>()}
+        onRefreshFiles={onRefreshFiles}
+      />,
+    );
+
+    fireEvent.doubleClick(screen.getByRole("button", { name: /packages/ }));
+    fireEvent.doubleClick(screen.getByRole("button", { name: /large/ }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole("button", { name: "files.refreshFiles" }));
+
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledTimes(2));
+    expect(onRefreshFiles).toHaveBeenCalledTimes(1);
+  });
+
   it("drops stale lazy directory responses when the root source version changes", async () => {
     const childrenResponse = createDeferred<any>();
     invokeMock.mockImplementation(async (...args: any[]): Promise<any> => {

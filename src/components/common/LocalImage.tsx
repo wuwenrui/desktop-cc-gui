@@ -54,6 +54,7 @@ export const LocalImage = memo(function LocalImage({
   localPath,
   workspaceId,
   onError,
+  onClick,
   ...props
 }: LocalImageProps) {
   const [resolvedSrc, setResolvedSrc] = useState(src);
@@ -86,5 +87,5 @@ export const LocalImage = memo(function LocalImage({
     [localPath, onError, resolvedSrc, workspaceId],
   );
 
-  return <img {...props} src={resolvedSrc} onError={handleError} />;
+  return <img {...props} src={resolvedSrc} onError={handleError} onClick={onClick} />;
 });

@@ -59,13 +59,13 @@ async function mount(handlers: Handlers, options?: HookOptions) {
 }
 
 describe("useAppServerEvents", () => {
-  it("falls back to active codex thread for reasoning events without threadId", async () => {
+  it("falls back to the unique processing Codex thread for reasoning events without threadId", async () => {
     const handlers: Handlers = {
       onAppServerEvent: vi.fn(),
       onReasoningSummaryDelta: vi.fn(),
       onReasoningTextDelta: vi.fn(),
       onReasoningSummaryBoundary: vi.fn(),
-      getActiveCodexThreadId: vi.fn(() => "codex:active-thread"),
+      getSingleProcessingCodexThreadId: vi.fn(() => "codex:processing-thread"),
     };
     const { root } = await mount(handlers);
 
@@ -83,7 +83,7 @@ describe("useAppServerEvents", () => {
     });
     expect(handlers.onReasoningSummaryDelta).toHaveBeenCalledWith(
       "ws-1",
-      "codex:active-thread",
+      "codex:processing-thread",
       "reasoning-1",
       "checking sibling specs",
     );
@@ -101,7 +101,7 @@ describe("useAppServerEvents", () => {
     });
     expect(handlers.onReasoningSummaryBoundary).toHaveBeenCalledWith(
       "ws-1",
-      "codex:active-thread",
+      "codex:processing-thread",
       "reasoning-2",
     );
 
@@ -119,10 +119,111 @@ describe("useAppServerEvents", () => {
     });
     expect(handlers.onReasoningTextDelta).toHaveBeenCalledWith(
       "ws-1",
-      "codex:active-thread",
+      "codex:processing-thread",
       "reasoning-3",
       "I am verifying sibling spec directories.",
     );
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("does not route ownerless reasoning progress to the active Codex thread", async () => {
+    const handlers: Handlers = {
+      onReasoningTextDelta: vi.fn(),
+      getActiveCodexThreadId: vi.fn(() => "codex:active-thread"),
+      getSingleProcessingCodexThreadId: vi.fn(() => null),
+    };
+    const { root } = await mount(handlers);
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "response.reasoning_text.delta",
+          params: {
+            item_id: "reasoning-ambiguous",
+            text: "late ownerless progress",
+          },
+        },
+      });
+    });
+
+    expect(handlers.getSingleProcessingCodexThreadId).toHaveBeenCalledWith(
+      "ws-1",
+    );
+    expect(handlers.getActiveCodexThreadId).not.toHaveBeenCalled();
+    expect(handlers.onReasoningTextDelta).not.toHaveBeenCalled();
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("routes ownerless progress to the unique processing Codex thread instead of a completed active thread", async () => {
+    const handlers: Handlers = {
+      onReasoningTextDelta: vi.fn(),
+      getActiveCodexThreadId: vi.fn(() => "codex:completed-active"),
+      getSingleProcessingCodexThreadId: vi.fn(() => "codex:still-processing"),
+    };
+    const { root } = await mount(handlers);
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "response.reasoning_text.delta",
+          params: {
+            item_id: "reasoning-late",
+            text: "ownerless progress belongs to the only live candidate",
+          },
+        },
+      });
+    });
+
+    expect(handlers.getActiveCodexThreadId).not.toHaveBeenCalled();
+    expect(handlers.onReasoningTextDelta).toHaveBeenCalledWith(
+      "ws-1",
+      "codex:still-processing",
+      "reasoning-late",
+      "ownerless progress belongs to the only live candidate",
+    );
+    expect(handlers.onReasoningTextDelta).not.toHaveBeenCalledWith(
+      "ws-1",
+      "codex:completed-active",
+      expect.any(String),
+      expect.any(String),
+    );
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("does not start a turn from ownerless turn/started events", async () => {
+    const handlers: Handlers = {
+      onTurnStarted: vi.fn(),
+      getActiveCodexThreadId: vi.fn(() => "codex:active-thread"),
+      getSingleProcessingCodexThreadId: vi.fn(() => "codex:processing-thread"),
+    };
+    const { root } = await mount(handlers);
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "turn/started",
+          params: {
+            turnId: "ownerless-turn",
+          },
+        },
+      });
+    });
+
+    expect(handlers.getActiveCodexThreadId).not.toHaveBeenCalled();
+    expect(handlers.getSingleProcessingCodexThreadId).not.toHaveBeenCalled();
+    expect(handlers.onTurnStarted).not.toHaveBeenCalled();
 
     await act(async () => {
       root.unmount();
@@ -1448,10 +1549,12 @@ describe("useAppServerEvents", () => {
     });
   });
 
-  it("routes codex/raw image generation events to the active codex thread when thread identity is missing", async () => {
+  it("routes codex/raw image generation events to the unique processing Codex thread when thread identity is missing", async () => {
     const handlers: Handlers = {
       onItemStarted: vi.fn(),
-      getActiveCodexThreadId: vi.fn(() => "thread-codex-image-active"),
+      getSingleProcessingCodexThreadId: vi.fn(
+        () => "thread-codex-image-processing",
+      ),
     };
     const { root } = await mount(handlers);
 
@@ -1473,10 +1576,12 @@ describe("useAppServerEvents", () => {
       });
     });
 
-    expect(handlers.getActiveCodexThreadId).toHaveBeenCalledWith("ws-codex");
+    expect(handlers.getSingleProcessingCodexThreadId).toHaveBeenCalledWith(
+      "ws-codex",
+    );
     expect(handlers.onItemStarted).toHaveBeenCalledWith(
       "ws-codex",
-      "thread-codex-image-active",
+      "thread-codex-image-processing",
       expect.objectContaining({
         id: "ig-raw-active-1",
         type: "image_generation_call",
@@ -1491,7 +1596,7 @@ describe("useAppServerEvents", () => {
   it("ignores codex/raw image generation events without any thread identity fallback", async () => {
     const handlers: Handlers = {
       onItemStarted: vi.fn(),
-      getActiveCodexThreadId: vi.fn(() => ""),
+      getSingleProcessingCodexThreadId: vi.fn(() => null),
     };
     const { root } = await mount(handlers);
 
@@ -1513,7 +1618,9 @@ describe("useAppServerEvents", () => {
       });
     });
 
-    expect(handlers.getActiveCodexThreadId).toHaveBeenCalledWith("ws-codex");
+    expect(handlers.getSingleProcessingCodexThreadId).toHaveBeenCalledWith(
+      "ws-codex",
+    );
     expect(handlers.onItemStarted).not.toHaveBeenCalled();
 
     await act(async () => {

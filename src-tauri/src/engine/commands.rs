@@ -39,10 +39,18 @@ use super::{
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct RegisteredEngineActiveProcessDiagnostic {
+    pub pid: u32,
+    pub registered_age_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct EngineWorkspaceActiveProcessDiagnostics {
     pub workspace_id: String,
     pub engine: EngineType,
     pub active_process_ids: Vec<u32>,
+    pub registered_active_processes: Vec<RegisteredEngineActiveProcessDiagnostic>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -53,6 +61,49 @@ pub struct EngineActiveProcessDiagnostics {
     pub total_active_process_count: usize,
     pub workspaces: Vec<EngineWorkspaceActiveProcessDiagnostics>,
     pub unsupported_reason: Option<String>,
+    /// Separate OS-level child process liveness evidence. The total_active_process_count
+    /// above counts handles still registered in the runtime maps; this field makes
+    /// clear that the registry count is NOT proof of OS process exit.
+    pub os_child_liveness: OsChildLivenessEvidence,
+    /// Diagnostics-only stale child candidates. The reconciler never auto-kills.
+    pub stale_child_candidates: Vec<StaleChildCandidate>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OsChildLivenessEvidence {
+    /// "measured" | "proxy" | "manual-only" | "unsupported"
+    pub evidence_class: &'static str,
+    pub sampled_after_close_ms: u64,
+    pub sampled_os_child_count: Option<u32>,
+    pub sampler: Option<String>,
+    /// Bounded rationale when evidence is unsupported or manual-only.
+    pub rationale: Option<String>,
+}
+
+impl OsChildLivenessEvidence {
+    fn unsupported(rationale: &str) -> Self {
+        Self {
+            evidence_class: "unsupported",
+            sampled_after_close_ms: 0,
+            sampled_os_child_count: None,
+            sampler: None,
+            rationale: Some(rationale.to_string()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StaleChildCandidate {
+    pub workspace_id: String,
+    pub engine: String,
+    pub pid: u32,
+    pub registered_age_ms: u64,
+    pub stale_reason: String,
+    /// "timing-only" | "unsupported" — only Claude has structured stream timing
+    /// metadata; OpenCode/Gemini currently emit age-only and report unsupported.
+    pub progress_evidence: String,
 }
 
 #[path = "claude_forwarder.rs"]
@@ -87,6 +138,7 @@ fn unix_timestamp_ms_for_diagnostics() -> u64 {
 fn build_engine_active_process_diagnostics(
     sampled_at_ms: u64,
     mut workspaces: Vec<EngineWorkspaceActiveProcessDiagnostics>,
+    stale_child_candidates: Vec<StaleChildCandidate>,
 ) -> EngineActiveProcessDiagnostics {
     workspaces.sort_by(|left, right| left.workspace_id.cmp(&right.workspace_id));
     let total_active_process_count = workspaces
@@ -100,6 +152,58 @@ fn build_engine_active_process_diagnostics(
         total_active_process_count,
         workspaces,
         unsupported_reason: None,
+        // OS process liveness sampling is intentionally split from the registry
+        // count. The runtime does not ship a cross-platform OS process sampler
+        // (no /proc, no ps binding, no Windows API helper), so this is currently
+        // reported as `unsupported` rather than inferred from registry zero.
+        os_child_liveness: OsChildLivenessEvidence::unsupported(
+            "Runtime does not ship a cross-platform OS child process sampler. Registry total_active_process_count=0 means no handles are registered; it does NOT prove OS processes have been reaped.",
+        ),
+        stale_child_candidates,
+    }
+}
+
+const STALE_CHILD_CANDIDATE_MIN_AGE_MS: u64 = 5 * 60 * 1000;
+
+fn collect_stale_child_candidates(
+    workspaces: &[EngineWorkspaceActiveProcessDiagnostics],
+    sampled_at_ms: u64,
+) -> Vec<StaleChildCandidate> {
+    // Diagnostics-only: report candidates without killing. Engines without
+    // progress metadata (OpenCode, Gemini) emit progress_evidence=unsupported.
+    let mut candidates = Vec::new();
+    for workspace in workspaces {
+        for process in &workspace.registered_active_processes {
+            if process.registered_age_ms < STALE_CHILD_CANDIDATE_MIN_AGE_MS {
+                continue;
+            }
+            let progress_evidence = match workspace.engine {
+                EngineType::Claude => "timing-only",
+                EngineType::OpenCode | EngineType::Gemini => "unsupported",
+                // Codex is intentionally not part of this child-process parity
+                // path (it has its own wrapper runtime).
+                EngineType::Codex => "unsupported",
+            };
+            candidates.push(StaleChildCandidate {
+                workspace_id: workspace.workspace_id.clone(),
+                engine: engine_type_label(workspace.engine).to_string(),
+                pid: process.pid,
+                registered_age_ms: process.registered_age_ms,
+                stale_reason: "diagnostics-only-candidate".to_string(),
+                progress_evidence: progress_evidence.to_string(),
+            });
+        }
+    }
+    let _ = sampled_at_ms;
+    candidates
+}
+
+fn engine_type_label(engine: EngineType) -> &'static str {
+    match engine {
+        EngineType::Claude => "claude",
+        EngineType::OpenCode => "opencode",
+        EngineType::Gemini => "gemini",
+        EngineType::Codex => "codex",
     }
 }
 
@@ -1104,21 +1208,81 @@ pub async fn get_engine_active_process_diagnostics(
                 "active process diagnostics are only available for local runtime sessions"
                     .to_string(),
             ),
+            os_child_liveness: OsChildLivenessEvidence::unsupported(
+                "Remote backend mode does not have local runtime registry access; OS process liveness cannot be sampled.",
+            ),
+            stale_child_candidates: Vec::new(),
         });
     }
 
     let mut workspaces = Vec::new();
     for (workspace_id, session) in state.engine_manager.claude_manager.list_sessions().await {
         let active_process_ids = session.active_process_ids().await;
+        let registered_active_processes = active_process_ids
+            .iter()
+            .map(|pid| RegisteredEngineActiveProcessDiagnostic {
+                pid: *pid,
+                registered_age_ms: 0,
+            })
+            .collect();
         workspaces.push(EngineWorkspaceActiveProcessDiagnostics {
             workspace_id,
             engine: EngineType::Claude,
             active_process_ids,
+            registered_active_processes,
         });
     }
+    for (workspace_id, session) in state.engine_manager.list_opencode_sessions().await {
+        let active_process_snapshots = session.active_process_snapshots(sampled_at_ms).await;
+        let active_process_ids = active_process_snapshots
+            .iter()
+            .map(|process| process.pid)
+            .collect::<Vec<_>>();
+        if active_process_ids.is_empty() {
+            continue;
+        }
+        let registered_active_processes = active_process_snapshots
+            .into_iter()
+            .map(|process| RegisteredEngineActiveProcessDiagnostic {
+                pid: process.pid,
+                registered_age_ms: process.registered_age_ms,
+            })
+            .collect();
+        workspaces.push(EngineWorkspaceActiveProcessDiagnostics {
+            workspace_id,
+            engine: EngineType::OpenCode,
+            active_process_ids,
+            registered_active_processes,
+        });
+    }
+    for (workspace_id, session) in state.engine_manager.list_gemini_sessions().await {
+        let active_process_snapshots = session.active_process_snapshots(sampled_at_ms).await;
+        let active_process_ids = active_process_snapshots
+            .iter()
+            .map(|process| process.pid)
+            .collect::<Vec<_>>();
+        if active_process_ids.is_empty() {
+            continue;
+        }
+        let registered_active_processes = active_process_snapshots
+            .into_iter()
+            .map(|process| RegisteredEngineActiveProcessDiagnostic {
+                pid: process.pid,
+                registered_age_ms: process.registered_age_ms,
+            })
+            .collect();
+        workspaces.push(EngineWorkspaceActiveProcessDiagnostics {
+            workspace_id,
+            engine: EngineType::Gemini,
+            active_process_ids,
+            registered_active_processes,
+        });
+    }
+    let stale_child_candidates = collect_stale_child_candidates(&workspaces, sampled_at_ms);
     Ok(build_engine_active_process_diagnostics(
         sampled_at_ms,
         workspaces,
+        stale_child_candidates,
     ))
 }
 

@@ -12,6 +12,9 @@ const {
   buildRealtimeSummary,
   buildMarkdownPrecomputeSummary,
   buildWorkspaceFileListingSummary,
+  buildRealtimeInputRenderBudgetSummary,
+  buildFileChangeEventDebounceSummary,
+  buildBackendFileIoIsolationSummary,
 } = runtimeEvidenceReportInternals;
 
 test("buildPerfEvidence emits unsupported evidence when browser source is missing", () => {
@@ -142,6 +145,97 @@ test("buildRealtimeProfileEvidence accepts backend file I/O metrics", () => {
   assert.equal(evidence[0]?.metric, "file_io_command_wall_ms_p95");
   assert.equal(evidence[0]?.value, 12.5);
   assert.equal(evidence[0]?.evidenceClass, "measured");
+});
+
+test("buildPerfEvidence preserves v0.5.11 S-IO producer evidence", () => {
+  const evidence = buildPerfEvidence([
+    {
+      path: "docs/perf/v0511-runtime-evidence.json",
+      fragment: {
+        metrics: [
+          {
+            scenario: "S-IO-FC",
+            metric: "fs_event_same_path_coalesce_ratio",
+            value: 0.999,
+            unit: "ratio",
+            evidenceClass: "proxy",
+            notes: "same-path burst fixture",
+            measurementBlocker: "native watcher diagnostic is not available",
+            requiredSourceArtifact: "native file watcher throughput artifact",
+          },
+        ],
+      },
+    },
+  ]);
+
+  assert.equal(evidence[0]?.source, "docs/perf/v0511-runtime-evidence.json");
+  assert.equal(evidence[0]?.scenario, "S-IO-FC");
+  assert.equal(evidence[0]?.metric, "fs_event_same_path_coalesce_ratio");
+  assert.equal(evidence[0]?.value, 0.999);
+  assert.equal(evidence[0]?.evidenceClass, "proxy");
+  assert.match(evidence[0]?.reason ?? "", /same-path burst/);
+  assert.match(evidence[0]?.reason ?? "", /native watcher diagnostic is not available/);
+  assert.match(evidence[0]?.nextAction ?? "", /native file watcher throughput artifact/);
+});
+
+test("S-IO summaries use producer-aware reason text", () => {
+  const inputSummary = buildRealtimeInputRenderBudgetSummary([
+    {
+      scenario: "S-IO-RR",
+      metric: "prepareThreadItems_calls_per_1000_delta",
+      value: 0,
+      evidenceClass: "proxy",
+    },
+  ]);
+  assert.equal(inputSummary.evidenceClass, "proxy");
+  assert.match(inputSummary.reason, /Producer artifact is present/);
+  assert.doesNotMatch(inputSummary.nextAction, /Wire prepareThreadItems/);
+
+  const completeInputSummary = buildRealtimeInputRenderBudgetSummary([
+    {
+      scenario: "S-IO-RR",
+      metric: "prepareThreadItems_calls_per_1000_delta",
+      value: 0,
+      evidenceClass: "proxy",
+    },
+    {
+      scenario: "S-IO-RR",
+      metric: "thread_reducer_flush_ms_p95",
+      value: 0.03,
+      evidenceClass: "proxy",
+    },
+    {
+      scenario: "S-IO-RR",
+      metric: "realtime_delta_route_ms_p95",
+      value: 0.01,
+      evidenceClass: "proxy",
+    },
+  ]);
+  assert.match(completeInputSummary.reason, /route timing proxy evidence/);
+  assert.doesNotMatch(completeInputSummary.reason, /unsupported/);
+
+  const debounceSummary = buildFileChangeEventDebounceSummary([
+    {
+      scenario: "S-IO-FC",
+      metric: "fs_event_same_path_coalesce_ratio",
+      value: 0.999,
+      evidenceClass: "proxy",
+    },
+  ]);
+  assert.equal(debounceSummary.evidenceClass, "proxy");
+  assert.match(debounceSummary.reason, /same-path burst/);
+
+  const backendSummary = buildBackendFileIoIsolationSummary([
+    {
+      scenario: "S-IO-FS",
+      metric: "file_io_command_wall_ms_p95",
+      value: null,
+      evidenceClass: "unsupported",
+      reason: "No reproducible backend file I/O timing producer exists yet.",
+    },
+  ]);
+  assert.equal(backendSummary.evidenceClass, "unsupported");
+  assert.match(backendSummary.reason, /No reproducible backend file I\/O timing producer/);
 });
 
 test("buildRealtimeSummary keeps malformed proxy values from looking bounded", () => {

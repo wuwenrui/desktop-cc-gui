@@ -40,6 +40,21 @@ function completedMessage(): NormalizedThreadEvent {
   };
 }
 
+function reasoningContentDelta(delta: string, itemId = "reasoning-1"): NormalizedThreadEvent {
+  return {
+    ...textDelta(delta, itemId),
+    sourceMethod: "response.reasoning_summary_text.delta",
+    operation: "appendReasoningContentDelta",
+    itemKind: "reasoning",
+    item: {
+      id: itemId,
+      kind: "reasoning",
+      summary: "",
+      content: delta,
+    },
+  };
+}
+
 describe("realtimeEventBatcher", () => {
   it("flushes first visible assistant delta immediately", () => {
     const batcher = createRealtimeEventBatcher();
@@ -48,6 +63,17 @@ describe("realtimeEventBatcher", () => {
       {
         reason: "first-token",
         events: [textDelta("hello")],
+      },
+    ]);
+  });
+
+  it("flushes first visible reasoning content delta immediately", () => {
+    const batcher = createRealtimeEventBatcher();
+
+    expect(batcher.push(reasoningContentDelta("checking files"))).toEqual([
+      {
+        reason: "first-token",
+        events: [reasoningContentDelta("checking files")],
       },
     ]);
   });

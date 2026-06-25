@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useEffect } from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConversationItem } from "../../../types";
 import { ensureRuntimeReady } from "../../../services/tauri";
@@ -22,7 +23,9 @@ vi.mock("./Markdown", () => ({
     value: string;
     onRenderedValueChange?: (value: string) => void;
   }) => {
-    onRenderedValueChange?.(value);
+    useEffect(() => {
+      onRenderedValueChange?.(value);
+    }, [onRenderedValueChange, value]);
     return (
       <div className="markdown">
         {value.split(/\n+/).map((line) => (
@@ -109,10 +112,10 @@ describe("Messages runtime reconnect", () => {
 
     await waitFor(() => {
       expect(vi.mocked(ensureRuntimeReady)).toHaveBeenCalledWith("ws-runtime");
+      expect(onRecoverThreadRuntime).toHaveBeenCalledWith("ws-runtime", "thread-runtime-reconnect");
+      expect(screen.getByText("messages.runtimeReconnectRestored")).toBeTruthy();
+      expect(screen.getByText("messages.runtimeReconnectRestoredDetail")).toBeTruthy();
     });
-    expect(onRecoverThreadRuntime).toHaveBeenCalledWith("ws-runtime", "thread-runtime-reconnect");
-    expect(screen.getByText("messages.runtimeReconnectRestored")).toBeTruthy();
-    expect(screen.getByText("messages.runtimeReconnectRestoredDetail")).toBeTruthy();
   });
 
   it("shows a recover-specific error when runtime resumes but thread recovery returns null", async () => {
@@ -135,10 +138,10 @@ describe("Messages runtime reconnect", () => {
 
     await waitFor(() => {
       expect(vi.mocked(ensureRuntimeReady)).toHaveBeenCalledWith("ws-runtime");
+      expect(onRecoverThreadRuntime).toHaveBeenCalledWith("ws-runtime", "thread-runtime-reconnect-null");
+      expect(screen.getByText("messages.runtimeReconnectFailed")).toBeTruthy();
+      expect(screen.getByText("messages.runtimeReconnectRecoverFailed")).toBeTruthy();
     });
-    expect(onRecoverThreadRuntime).toHaveBeenCalledWith("ws-runtime", "thread-runtime-reconnect-null");
-    expect(screen.getByText("messages.runtimeReconnectFailed")).toBeTruthy();
-    expect(screen.getByText("messages.runtimeReconnectRecoverFailed")).toBeTruthy();
   });
 
   it("dedupes repeated runtime reconnect cards and only renders the latest one", () => {
@@ -230,6 +233,85 @@ describe("Messages runtime reconnect", () => {
 
     expect(screen.getByRole("group", { name: "messages.runtimeReconnectTitle" })).toBeTruthy();
     expect(screen.getByText("messages.runtimeReconnectEnded")).toBeTruthy();
+  });
+
+  it("keeps the runtime reconnect card when only a user follow-up follows the diagnostic", () => {
+    renderMessages([
+      {
+        id: "assistant-runtime-ended",
+        kind: "message",
+        role: "assistant",
+        text:
+          "[RUNTIME_ENDED] Managed runtime ended before this conversation turn settled.",
+      },
+      {
+        id: "user-follow-up",
+        kind: "message",
+        role: "user",
+        text: "继续",
+      },
+    ], {
+      threadId: "thread-runtime-ended-user-follow-up",
+    });
+
+    expect(screen.getByRole("group", { name: "messages.runtimeReconnectTitle" })).toBeTruthy();
+    expect(screen.getByText("messages.runtimeReconnectEnded")).toBeTruthy();
+  });
+
+  it("hides stale runtime reconnect diagnostics after a newer assistant reply", () => {
+    renderMessages([
+      {
+        id: "assistant-runtime-ended",
+        kind: "message",
+        role: "assistant",
+        text:
+          "[RUNTIME_ENDED] Managed runtime ended before this conversation turn settled.",
+      },
+      {
+        id: "assistant-after-recovery",
+        kind: "message",
+        role: "assistant",
+        text: "恢复后继续输出。",
+      },
+    ], {
+      threadId: "thread-runtime-ended-after-recovery",
+    });
+
+    expect(screen.queryByRole("group", { name: "messages.runtimeReconnectTitle" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "messages.runtimeReconnectTransientTitle" })).toBeNull();
+    expect(
+      screen.queryByText("[RUNTIME_ENDED] Managed runtime ended before this conversation turn settled."),
+    ).toBeNull();
+    expect(screen.getByText("恢复后继续输出。")).toBeTruthy();
+  });
+
+  it("shows transient runtime cleanup diagnostics as lightweight notice without raw details", () => {
+    renderMessages([
+      {
+        id: "assistant-runtime-stale-cleanup",
+        kind: "message",
+        role: "assistant",
+        text:
+          "[RUNTIME_ENDED] Managed runtime stopped after manual shutdown (source: stale_reuse_cleanup).",
+      },
+    ], {
+      threadId: "thread-runtime-stale-cleanup",
+    });
+
+    const transientCard = screen.getByRole("group", {
+      name: "messages.runtimeReconnectTransientTitle",
+    });
+    expect(transientCard).toBeTruthy();
+    expect(transientCard.className).toContain("is-transient");
+    expect(screen.getByText("messages.runtimeReconnectTransientCleanup")).toBeTruthy();
+    expect(
+      screen.queryByText(
+        "[RUNTIME_ENDED] Managed runtime stopped after manual shutdown (source: stale_reuse_cleanup).",
+      ),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("group", { name: "messages.runtimeReconnectTitle" }),
+    ).toBeNull();
   });
 
   it("shows only the fork action for stale thread recovery cards", () => {

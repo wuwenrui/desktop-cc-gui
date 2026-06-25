@@ -1698,6 +1698,24 @@
   margin: 0;
 }
 
+.fvp-fast-markdown-surface-frame {
+  position: relative;
+}
+
+.fvp-fast-markdown-annotation-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.fvp-fast-markdown-annotation-inline {
+  position: absolute;
+  right: 0;
+  left: 0;
+  z-index: 2;
+  pointer-events: auto;
+}
+
 .fvp-file-markdown :where(h1, h2, h3, h4, h5, h6) {
   margin-top: 24px;
   margin-bottom: 16px;

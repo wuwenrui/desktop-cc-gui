@@ -2,6 +2,10 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  createWorkspaceScopedMap,
+  workspaceScopedSet,
+} from "./workspaceScopedMap";
+import {
   CODEX_EXECUTION_ACTIVE_NO_PROGRESS_STALL_MS,
   CODEX_TURN_NO_PROGRESS_STALL_MS,
   useThreadEventHandlers,
@@ -222,8 +226,8 @@ function makeOptions(onDebug = vi.fn()) {
     onWorkspaceConnected: vi.fn(),
     applyCollabThreadLinks: vi.fn(),
     approvalAllowlistRef: { current: {} },
-    pendingInterruptsRef: { current: new Set<string>() },
-    interruptedThreadsRef: { current: new Set<string>() },
+    pendingInterruptsRef: { current: createWorkspaceScopedMap<true>() },
+    interruptedThreadsRef: { current: createWorkspaceScopedMap<true>() },
     renameCustomNameKey: vi.fn(),
     renameAutoTitlePendingKey: vi.fn(),
     renameThreadTitleMapping: vi.fn(),
@@ -257,6 +261,7 @@ describe("useThreadEventHandlers diagnostics", () => {
     turnHookFactory.setOnTurnCompletedOverride(null);
     itemHookFactory.reset();
     window.localStorage.removeItem("ccgui.debug.turnDiagnosticsVerbose");
+    window.localStorage.removeItem("ccgui.debug.turnTrace.enabled");
     streamLatencyMocks.getCurrentClaudeConfig.mockReset();
     streamLatencyMocks.queryTurnReconciliationStatus.mockReset();
     streamLatencyMocks.queryTurnReconciliationStatus.mockResolvedValue({
@@ -280,6 +285,7 @@ describe("useThreadEventHandlers diagnostics", () => {
   });
 
   afterEach(() => {
+    window.localStorage.removeItem("ccgui.debug.turnTrace.enabled");
     vi.useRealTimers();
     vi.clearAllMocks();
   });
@@ -611,7 +617,7 @@ describe("useThreadEventHandlers diagnostics", () => {
 
     act(() => {
       result.current.onTurnStarted("ws-1", "thread-1", "turn-1");
-      options.interruptedThreadsRef.current.add("thread-1");
+      workspaceScopedSet(options.interruptedThreadsRef.current, "ws-1", "thread-1", true);
       vi.advanceTimersByTime(CODEX_TURN_NO_PROGRESS_STALL_MS);
     });
 
@@ -672,7 +678,7 @@ describe("useThreadEventHandlers diagnostics", () => {
 
     act(() => {
       result.current.onTurnStarted("ws-1", "thread-1", "claude-turn-1");
-      options.interruptedThreadsRef.current.add("thread-1");
+      workspaceScopedSet(options.interruptedThreadsRef.current, "ws-1", "thread-1", true);
       vi.advanceTimersByTime(CODEX_TURN_NO_PROGRESS_STALL_MS);
     });
 
@@ -786,6 +792,64 @@ describe("useThreadEventHandlers diagnostics", () => {
         workspaceId: "ws-1",
         threadId: "thread-1",
         turnId: "turn-1",
+        cleanupSource: "three-evidence-query-resolved",
+        status: "runtime-ended",
+        decisionAction: "cleanup-residue",
+        clearedProcessing: true,
+      }),
+    );
+  });
+
+  it("clears background codex busy residue after scoped backend terminal reconciliation", async () => {
+    const onDebug = vi.fn();
+    const options = {
+      ...makeOptions(onDebug),
+      activeThreadId: "thread-visible",
+    };
+    streamLatencyMocks.queryTurnReconciliationStatus.mockResolvedValueOnce({
+      workspaceId: "ws-1",
+      engine: "codex",
+      threadId: "thread-background",
+      turnId: "turn-background-1",
+      runtimeSessionId: null,
+      runtimeLeaseId: null,
+      status: "runtime-ended",
+      statusSource: "runtime-end-context",
+      observedAtMs: Date.now(),
+      boundedReason: "background runtime ended with matching scope",
+    });
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-background", "turn-background-1");
+      vi.advanceTimersByTime(CODEX_TURN_NO_PROGRESS_STALL_MS);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(streamLatencyMocks.queryTurnReconciliationStatus).toHaveBeenCalledWith({
+      workspaceId: "ws-1",
+      engine: "codex",
+      threadId: "thread-background",
+      turnId: "turn-background-1",
+      runtimeSessionId: null,
+      runtimeLeaseId: null,
+      requestSource: "three-evidence-reconciliation",
+      requestedAtMs: Date.now(),
+    });
+    expect(options.markProcessing).toHaveBeenCalledWith("thread-background", false);
+    expect(options.setActiveTurnId).toHaveBeenCalledWith("thread-background", null);
+    const cleanupEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) =>
+        entry.label ===
+        "thread/session:turn-diagnostic:three-evidence-reconciliation-cleanup-applied",
+    );
+    expect(cleanupEntry?.payload).toEqual(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        threadId: "thread-background",
+        turnId: "turn-background-1",
         cleanupSource: "three-evidence-query-resolved",
         status: "runtime-ended",
         decisionAction: "cleanup-residue",
@@ -1516,7 +1580,200 @@ describe("useThreadEventHandlers diagnostics", () => {
     expect(flushedEntry?.payload.diagnosticCategory).toBe("codex-collab-terminal-order");
   });
 
-  it("flushes deferred codex completion from final assistant text with remaining child blockers", () => {
+  it("flushes deferred codex completion after scoped backend terminal reconciliation", async () => {
+    const onDebug = vi.fn();
+    const options = makeOptions(onDebug);
+    streamLatencyMocks.queryTurnReconciliationStatus.mockResolvedValueOnce({
+      workspaceId: "ws-1",
+      engine: "codex",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      runtimeSessionId: null,
+      runtimeLeaseId: null,
+      status: "runtime-ended",
+      statusSource: "runtime-end-context",
+      observedAtMs: Date.now(),
+      boundedReason: "runtime ended with matching deferred completion scope",
+    });
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-1");
+      result.current.onItemStarted("ws-1", "thread-1", {
+        id: "agent-call-1",
+        type: "collabAgentToolCall",
+        tool: "spawn_agent",
+        status: "running",
+      });
+    });
+    options.markProcessing.mockClear();
+    options.setActiveTurnId.mockClear();
+
+    act(() => {
+      result.current.onTurnCompleted("ws-1", "thread-1", "turn-1");
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(streamLatencyMocks.queryTurnReconciliationStatus).toHaveBeenCalledWith({
+      workspaceId: "ws-1",
+      engine: "codex",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      runtimeSessionId: null,
+      runtimeLeaseId: null,
+      requestSource: "three-evidence-reconciliation",
+      requestedAtMs: Date.now(),
+    });
+    expect(options.markProcessing).toHaveBeenCalledWith("thread-1", false);
+    expect(options.setActiveTurnId).toHaveBeenCalledWith("thread-1", null);
+    const resolvedEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) =>
+        entry.label ===
+        "thread/session:turn-diagnostic:deferred-completion-reconciliation-query-resolved",
+    );
+    expect(resolvedEntry?.payload).toEqual(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        turnId: "turn-1",
+        diagnosticCategory: "deferred-completion-reconciliation",
+        status: "runtime-ended",
+        scopeMatches: true,
+        stillDeferred: true,
+        activeTurnMatches: true,
+      }),
+    );
+    const flushedEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) => entry.label === "thread/session:turn-diagnostic:turn-completed-deferred-flushed",
+    );
+    expect(flushedEntry?.payload).toEqual(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        turnId: "turn-1",
+        source: "scoped-reconciliation-terminal",
+        forcedByScopedReconciliation: true,
+      }),
+    );
+  });
+
+  it("keeps deferred codex completion when scoped backend says still running", async () => {
+    const onDebug = vi.fn();
+    const options = makeOptions(onDebug);
+    streamLatencyMocks.queryTurnReconciliationStatus.mockResolvedValueOnce({
+      workspaceId: "ws-1",
+      engine: "codex",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      runtimeSessionId: null,
+      runtimeLeaseId: null,
+      status: "running",
+      statusSource: "runtime",
+      observedAtMs: Date.now(),
+      boundedReason: "runtime still has matching active work",
+    });
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-1");
+      result.current.onItemStarted("ws-1", "thread-1", {
+        id: "agent-call-1",
+        type: "collabAgentToolCall",
+        tool: "spawn_agent",
+        status: "running",
+      });
+    });
+    options.markProcessing.mockClear();
+    options.setActiveTurnId.mockClear();
+
+    act(() => {
+      result.current.onTurnCompleted("ws-1", "thread-1", "turn-1");
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(options.markProcessing).not.toHaveBeenCalledWith("thread-1", false);
+    expect(options.setActiveTurnId).not.toHaveBeenCalledWith("thread-1", null);
+    const skippedEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) =>
+        entry.label ===
+        "thread/session:turn-diagnostic:deferred-completion-reconciliation-cleanup-skipped",
+    );
+    expect(skippedEntry?.payload).toEqual(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        turnId: "turn-1",
+        status: "running",
+        skipReason: "status-not-terminal",
+      }),
+    );
+  });
+
+  it("only clears the matching deferred codex thread among three parallel sessions", async () => {
+    const onDebug = vi.fn();
+    const options = makeOptions(onDebug);
+    streamLatencyMocks.queryTurnReconciliationStatus.mockResolvedValueOnce({
+      workspaceId: "ws-1",
+      engine: "codex",
+      threadId: "thread-a",
+      turnId: "turn-a",
+      runtimeSessionId: null,
+      runtimeLeaseId: null,
+      status: "completed",
+      statusSource: "runtime-end-context",
+      observedAtMs: Date.now(),
+      boundedReason: "only thread-a completed",
+    });
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-a", "turn-a");
+      result.current.onItemStarted("ws-1", "thread-a", {
+        id: "agent-call-a",
+        type: "collabAgentToolCall",
+        tool: "spawn_agent",
+        status: "running",
+      });
+      result.current.onTurnStarted("ws-1", "thread-b", "turn-b");
+      result.current.onTurnStarted("ws-1", "thread-c", "turn-c");
+    });
+    options.markProcessing.mockClear();
+    options.setActiveTurnId.mockClear();
+
+    act(() => {
+      result.current.onTurnCompleted("ws-1", "thread-a", "turn-a");
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(options.markProcessing).toHaveBeenCalledWith("thread-a", false);
+    expect(options.setActiveTurnId).toHaveBeenCalledWith("thread-a", null);
+    expect(options.markProcessing).not.toHaveBeenCalledWith("thread-b", false);
+    expect(options.markProcessing).not.toHaveBeenCalledWith("thread-c", false);
+    expect(options.setActiveTurnId).not.toHaveBeenCalledWith("thread-b", null);
+    expect(options.setActiveTurnId).not.toHaveBeenCalledWith("thread-c", null);
+    const resolvedEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) =>
+        entry.label ===
+        "thread/session:turn-diagnostic:deferred-completion-reconciliation-query-resolved",
+    );
+    expect(resolvedEntry?.payload).toEqual(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        threadId: "thread-a",
+        turnId: "turn-a",
+        status: "completed",
+        scopeMatches: true,
+      }),
+    );
+  });
+
+  it("keeps codex completion deferred when assistant text completes with remaining child blockers", () => {
     const onDebug = vi.fn();
     const options = makeOptions(onDebug);
     const { result } = renderHook(() => useThreadEventHandlers(options));
@@ -1542,22 +1799,20 @@ describe("useThreadEventHandlers diagnostics", () => {
       });
     });
 
-    expect(options.markProcessing).toHaveBeenCalledWith("thread-1", false);
-    expect(options.setActiveTurnId).toHaveBeenCalledWith("thread-1", null);
+    expect(options.markProcessing).not.toHaveBeenCalledWith("thread-1", false);
+    expect(options.setActiveTurnId).not.toHaveBeenCalledWith("thread-1", null);
+    const deferredEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) => entry.label === "thread/session:turn-diagnostic:turn-completed-deferred",
+    );
+    expect(deferredEntry?.payload.diagnosticCategory).toBe("codex-collab-terminal-order");
+    expect(deferredEntry?.payload.blockerCount).toBe(1);
     const flushedEntry = collectDiagnosticCalls(onDebug).find(
       (entry) => entry.label === "thread/session:turn-diagnostic:turn-completed-deferred-flushed",
     );
-    expect(flushedEntry?.payload.source).toBe("assistant-completed");
-    expect(flushedEntry?.payload.forcedByAssistantCompletion).toBe(true);
-    expect(flushedEntry?.payload.remainingBlockers).toEqual([
-      expect.objectContaining({
-        itemType: "collabAgentToolCall",
-        status: null,
-      }),
-    ]);
+    expect(flushedEntry).toBeUndefined();
   });
 
-  it("flushes deferred codex completion after final assistant text even when child status is explicitly running", () => {
+  it("keeps codex completion deferred after assistant text when child status is explicitly running", () => {
     const onDebug = vi.fn();
     const options = makeOptions(onDebug);
     const { result } = renderHook(() => useThreadEventHandlers(options));
@@ -1584,22 +1839,24 @@ describe("useThreadEventHandlers diagnostics", () => {
       });
     });
 
-    expect(options.markProcessing).toHaveBeenCalledWith("thread-1", false);
-    expect(options.setActiveTurnId).toHaveBeenCalledWith("thread-1", null);
-    const flushedEntry = collectDiagnosticCalls(onDebug).find(
-      (entry) => entry.label === "thread/session:turn-diagnostic:turn-completed-deferred-flushed",
+    expect(options.markProcessing).not.toHaveBeenCalledWith("thread-1", false);
+    expect(options.setActiveTurnId).not.toHaveBeenCalledWith("thread-1", null);
+    const deferredEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) => entry.label === "thread/session:turn-diagnostic:turn-completed-deferred",
     );
-    expect(flushedEntry?.payload.source).toBe("assistant-completed");
-    expect(flushedEntry?.payload.forcedByAssistantCompletion).toBe(true);
-    expect(flushedEntry?.payload.remainingBlockers).toEqual([
+    expect(deferredEntry?.payload.blockers).toEqual([
       expect.objectContaining({
         itemType: "collabAgentToolCall",
         status: "running",
       }),
     ]);
+    const flushedEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) => entry.label === "thread/session:turn-diagnostic:turn-completed-deferred-flushed",
+    );
+    expect(flushedEntry).toBeUndefined();
   });
 
-  it("bypasses codex completion deferral when assistant stream ingress arrived before turn completion", () => {
+  it("defers codex completion when assistant stream ingress arrived before turn completion", () => {
     const onDebug = vi.fn();
     const options = makeOptions(onDebug);
     const { result } = renderHook(() => useThreadEventHandlers(options));
@@ -1626,21 +1883,23 @@ describe("useThreadEventHandlers diagnostics", () => {
       result.current.onTurnCompleted("ws-1", "thread-1", "turn-1");
     });
 
-    expect(options.markProcessing).toHaveBeenCalledWith("thread-1", false);
-    expect(options.setActiveTurnId).toHaveBeenCalledWith("thread-1", null);
+    expect(options.markProcessing).not.toHaveBeenCalledWith("thread-1", false);
+    expect(options.setActiveTurnId).not.toHaveBeenCalledWith("thread-1", null);
     const labels = collectDiagnosticCalls(onDebug).map((entry) => entry.label);
-    expect(labels).not.toContain("thread/session:turn-diagnostic:turn-completed-deferred");
-    const bypassedEntry = collectDiagnosticCalls(onDebug).find(
-      (entry) => entry.label === "thread/session:turn-diagnostic:turn-completed-deferred-bypassed",
+    expect(labels).toContain("thread/session:turn-diagnostic:turn-completed-deferred");
+    expect(labels).not.toContain(
+      "thread/session:turn-diagnostic:turn-completed-deferred-bypassed",
     );
-    expect(bypassedEntry?.payload).toEqual(
+    const deferredEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) => entry.label === "thread/session:turn-diagnostic:turn-completed-deferred",
+    );
+    expect(deferredEntry?.payload).toEqual(
       expect.objectContaining({
         diagnosticCategory: "codex-collab-terminal-order",
-        deltaCount: 1,
         blockerCount: 1,
       }),
     );
-    expect(bypassedEntry?.payload.remainingBlockers).toEqual([
+    expect(deferredEntry?.payload.blockers).toEqual([
       expect.objectContaining({
         itemType: "collabAgentToolCall",
         status: "running",
@@ -1648,7 +1907,7 @@ describe("useThreadEventHandlers diagnostics", () => {
     ]);
   });
 
-  it("bypasses codex completion deferral when final assistant text arrived before turn completion", () => {
+  it("defers codex completion when assistant text arrived before turn completion", () => {
     const onDebug = vi.fn();
     const options = makeOptions(onDebug);
     const { result } = renderHook(() => useThreadEventHandlers(options));
@@ -1664,7 +1923,7 @@ describe("useThreadEventHandlers diagnostics", () => {
         workspaceId: "ws-1",
         threadId: "thread-1",
         itemId: "assistant-1",
-        text: "final answer",
+        text: "assistant message",
       });
     });
     options.markProcessing.mockClear();
@@ -1674,18 +1933,21 @@ describe("useThreadEventHandlers diagnostics", () => {
       result.current.onTurnCompleted("ws-1", "thread-1", "turn-1");
     });
 
-    expect(options.markProcessing).toHaveBeenCalledWith("thread-1", false);
-    expect(options.setActiveTurnId).toHaveBeenCalledWith("thread-1", null);
+    expect(options.markProcessing).not.toHaveBeenCalledWith("thread-1", false);
+    expect(options.setActiveTurnId).not.toHaveBeenCalledWith("thread-1", null);
     const labels = collectDiagnosticCalls(onDebug).map((entry) => entry.label);
-    expect(labels).not.toContain("thread/session:turn-diagnostic:turn-completed-deferred");
-    const bypassedEntry = collectDiagnosticCalls(onDebug).find(
-      (entry) => entry.label === "thread/session:turn-diagnostic:turn-completed-deferred-bypassed",
+    expect(labels).toContain("thread/session:turn-diagnostic:turn-completed-deferred");
+    expect(labels).not.toContain(
+      "thread/session:turn-diagnostic:turn-completed-deferred-bypassed",
     );
-    expect(bypassedEntry?.payload.diagnosticCategory).toBe("codex-collab-terminal-order");
-    expect(bypassedEntry?.payload.assistantCompletedItemId).toBe("assistant-1");
+    const deferredEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) => entry.label === "thread/session:turn-diagnostic:turn-completed-deferred",
+    );
+    expect(deferredEntry?.payload.diagnosticCategory).toBe("codex-collab-terminal-order");
+    expect(deferredEntry?.payload.blockerCount).toBe(1);
   });
 
-  it("bypasses codex completion deferral after final assistant text even when child is explicitly running", () => {
+  it("defers codex completion after assistant text when child is explicitly running", () => {
     const onDebug = vi.fn();
     const options = makeOptions(onDebug);
     const { result } = renderHook(() => useThreadEventHandlers(options));
@@ -1702,7 +1964,7 @@ describe("useThreadEventHandlers diagnostics", () => {
         workspaceId: "ws-1",
         threadId: "thread-1",
         itemId: "assistant-1",
-        text: "final answer",
+        text: "assistant message",
       });
     });
     options.markProcessing.mockClear();
@@ -1712,15 +1974,17 @@ describe("useThreadEventHandlers diagnostics", () => {
       result.current.onTurnCompleted("ws-1", "thread-1", "turn-1");
     });
 
-    expect(options.markProcessing).toHaveBeenCalledWith("thread-1", false);
-    expect(options.setActiveTurnId).toHaveBeenCalledWith("thread-1", null);
+    expect(options.markProcessing).not.toHaveBeenCalledWith("thread-1", false);
+    expect(options.setActiveTurnId).not.toHaveBeenCalledWith("thread-1", null);
     const labels = collectDiagnosticCalls(onDebug).map((entry) => entry.label);
-    expect(labels).not.toContain("thread/session:turn-diagnostic:turn-completed-deferred");
-    const bypassedEntry = collectDiagnosticCalls(onDebug).find(
-      (entry) => entry.label === "thread/session:turn-diagnostic:turn-completed-deferred-bypassed",
+    expect(labels).toContain("thread/session:turn-diagnostic:turn-completed-deferred");
+    expect(labels).not.toContain(
+      "thread/session:turn-diagnostic:turn-completed-deferred-bypassed",
     );
-    expect(bypassedEntry?.payload.assistantCompletedItemId).toBe("assistant-1");
-    expect(bypassedEntry?.payload.remainingBlockers).toEqual([
+    const deferredEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) => entry.label === "thread/session:turn-diagnostic:turn-completed-deferred",
+    );
+    expect(deferredEntry?.payload.blockers).toEqual([
       expect.objectContaining({
         itemType: "collabAgentToolCall",
         status: "running",
@@ -1766,6 +2030,42 @@ describe("useThreadEventHandlers diagnostics", () => {
         diagnosticCategory: "frontend-terminal-settlement",
         reason: "turn-completed-settlement-fallback-applied",
       }),
+    );
+  });
+
+  it("does not settle a codex turn from assistant message completion without a terminal event", () => {
+    const onDebug = vi.fn();
+    const options = makeOptions(onDebug);
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-1");
+    });
+    options.markProcessing.mockClear();
+    options.setActiveTurnId.mockClear();
+
+    act(() => {
+      result.current.onAgentMessageCompleted({
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        turnId: "turn-1",
+        itemId: "assistant-1",
+        text: "final answer",
+      });
+    });
+
+    expect(options.markProcessing).not.toHaveBeenCalledWith("thread-1", false);
+    expect(options.setActiveTurnId).not.toHaveBeenCalledWith("thread-1", null);
+
+    act(() => {
+      vi.advanceTimersByTime(3_000);
+    });
+
+    expect(options.markProcessing).not.toHaveBeenCalledWith("thread-1", false);
+    expect(options.setActiveTurnId).not.toHaveBeenCalledWith("thread-1", null);
+    expect(itemHookFactory.getMarkRealtimeTurnTerminal()).not.toHaveBeenCalledWith(
+      "thread-1",
+      "turn-1",
     );
   });
 
@@ -1985,6 +2285,104 @@ describe("useThreadEventHandlers diagnostics", () => {
     expect(options.markProcessing).not.toHaveBeenCalledWith("thread-1", true);
   });
 
+  it("skips turnless late raw item updates after a Codex turn has settled", () => {
+    const onDebug = vi.fn();
+    const options = makeOptions(onDebug);
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-1");
+      result.current.onTurnCompleted("ws-1", "thread-1", "turn-1");
+    });
+
+    const mockedItemHook = vi.mocked(useThreadItemEvents);
+    const latestReturn = mockedItemHook.mock.results.at(-1)?.value;
+    vi.mocked(latestReturn?.onItemUpdated).mockClear();
+    options.markProcessing.mockClear();
+
+    act(() => {
+      result.current.onItemUpdated("ws-1", "thread-1", {
+        type: "agentMessage",
+        id: "assistant-turnless-late",
+        text: "late snapshot without turn id",
+      });
+    });
+
+    expect(latestReturn?.onItemUpdated).not.toHaveBeenCalled();
+    expect(options.markProcessing).not.toHaveBeenCalledWith("thread-1", true);
+    const skippedEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) =>
+        entry.label ===
+        "thread/session:turn-diagnostic:quarantined-codex-event-skipped",
+    );
+    expect(skippedEntry?.payload.eventTurnId).toBeNull();
+    expect(skippedEntry?.payload.quarantineReason).toBe("turn-completed");
+  });
+
+  it("does not revive a settled Codex turn from a late duplicate turn start", () => {
+    const onDebug = vi.fn();
+    const options = makeOptions(onDebug);
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-1");
+      result.current.onTurnCompleted("ws-1", "thread-1", "turn-1");
+    });
+
+    options.markProcessing.mockClear();
+    options.setActiveTurnId.mockClear();
+    itemHookFactory.getNoteRealtimeTurnStarted().mockClear();
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-1");
+    });
+
+    expect(options.markProcessing).not.toHaveBeenCalledWith("thread-1", true);
+    expect(options.setActiveTurnId).not.toHaveBeenCalledWith("thread-1", "turn-1");
+    expect(itemHookFactory.getNoteRealtimeTurnStarted()).not.toHaveBeenCalled();
+    const skippedEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) =>
+        entry.label ===
+        "thread/session:turn-diagnostic:quarantined-codex-event-skipped",
+    );
+    expect(skippedEntry?.payload.eventTurnId).toBe("turn-1");
+    expect(skippedEntry?.payload.operation).toBe("turnStarted");
+    expect(skippedEntry?.payload.quarantineReason).toBe("turn-completed");
+  });
+
+  it("keeps turnless raw item updates for a newer active Codex turn", () => {
+    const options = makeOptions();
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-1");
+      result.current.onTurnCompleted("ws-1", "thread-1", "turn-1");
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-2");
+    });
+
+    const mockedItemHook = vi.mocked(useThreadItemEvents);
+    const latestReturn = mockedItemHook.mock.results.at(-1)?.value;
+    vi.mocked(latestReturn?.onItemUpdated).mockClear();
+
+    act(() => {
+      result.current.onItemUpdated("ws-1", "thread-1", {
+        type: "agentMessage",
+        id: "assistant-active-turnless",
+        text: "current snapshot without turn id",
+      });
+    });
+
+    expect(latestReturn?.onItemUpdated).toHaveBeenCalledWith(
+      "ws-1",
+      "thread-1",
+      {
+        type: "agentMessage",
+        id: "assistant-active-turnless",
+        text: "current snapshot without turn id",
+      },
+    );
+  });
+
   it("skips late assistant completion side effects when the realtime turn is already terminal", () => {
     const options = makeOptions();
     itemHookFactory.getIsRealtimeTurnTerminalExact().mockReturnValue(true);
@@ -2173,7 +2571,7 @@ describe("useThreadEventHandlers diagnostics", () => {
   it("does not record first-delta diagnostics for interrupted threads", () => {
     const onDebug = vi.fn();
     const options = makeOptions(onDebug);
-    options.interruptedThreadsRef.current.add("thread-1");
+    workspaceScopedSet(options.interruptedThreadsRef.current, "ws-1", "thread-1", true);
     const { result } = renderHook(() => useThreadEventHandlers(options));
 
     act(() => {
@@ -2194,6 +2592,7 @@ describe("useThreadEventHandlers diagnostics", () => {
 
   it("emits detailed diagnostics when verbose flag is enabled", () => {
     window.localStorage.setItem("ccgui.debug.turnDiagnosticsVerbose", "1");
+    window.localStorage.setItem("ccgui.debug.turnTrace.enabled", "1");
     const onDebug = vi.fn();
     const { result } = renderHook(() => useThreadEventHandlers(makeOptions(onDebug)));
 
@@ -2217,6 +2616,20 @@ describe("useThreadEventHandlers diagnostics", () => {
     expect(labels).toContain("thread/session:turn-diagnostic:first-delta");
     expect(labels).toContain("thread/session:turn-diagnostic:first-execution-item");
     expect(labels).toContain("thread/session:turn-diagnostic:completed");
+    expect(streamLatencyMocks.appendRendererDiagnostic).toHaveBeenCalledWith(
+      "realtime.turnTrace.summary",
+      expect.objectContaining({
+        threadId: "thread-1",
+        turnId: "turn-1",
+        endedReason: "completed",
+        evidenceClass: "proxy",
+        counters: expect.objectContaining({
+          deltaCount: 1,
+          reducerCommitCount: 1,
+          reducerAmplification: 1,
+        }),
+      }),
+    );
   });
 
   it("includes latest progress evidence in terminal diagnostics", () => {

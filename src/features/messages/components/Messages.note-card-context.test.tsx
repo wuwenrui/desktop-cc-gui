@@ -5,6 +5,12 @@ import type { ConversationItem } from "../../../types";
 import { Messages } from "./Messages";
 import { buildSuppressedUserNoteCardContextMessageIdSet } from "./messagesNoteCardContext";
 
+vi.mock("./Markdown", () => ({
+  Markdown: ({ value, className }: { value: string; className?: string }) => (
+    <div className={className}>{value}</div>
+  ),
+}));
+
 describe("Messages note-card context", () => {
   afterEach(() => {
     cleanup();

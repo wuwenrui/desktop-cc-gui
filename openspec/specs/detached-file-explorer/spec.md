@@ -69,3 +69,12 @@ The detached file explorer SHALL not silently fail when internal file tree clipb
 - **WHEN** the detached explorer cannot resolve a valid workspace id and workspace root
 - **THEN** file management actions that mutate workspace files MUST be unavailable
 - **AND** the detached explorer SHALL show a recoverable missing-context state instead of silently failing
+
+### Requirement: Detached File Explorer Shell Styles Load Independently
+The detached file explorer SHALL load its own window-shell styles from the detached window root so the first paint does not depend on a file viewer being mounted.
+
+#### Scenario: Detached explorer opens without an active file
+- **WHEN** the detached explorer opens for a workspace with no active file selected
+- **THEN** the detached explorer SHALL render the detached menubar, left file tree, resizer, and empty viewer state using the detached file explorer layout styles
+- **AND** the detached explorer MUST NOT rely on `FileViewPanel` mounting before `detached-file-explorer.css` is loaded
+- **AND** the file browsing, session, polling, and file-open behavior SHALL remain unchanged

@@ -151,6 +151,68 @@ describe("rendererDiagnostics", () => {
     expect(persistedEntries.some((entry) => entry.payload.index === 1000 && entry.label === "perf.web-vital")).toBe(true);
   });
 
+  it("keeps realtime summaries and stream latency diagnostics in independent buckets", async () => {
+    clientStorageMocks.isPreloaded.mockReturnValue(true);
+    clientStorageMocks.getClientStoreSync.mockReturnValue([
+      ...Array.from({ length: 200 }, (_, index) => ({
+        timestamp: index,
+        label: `old-${index}`,
+        payload: { index },
+      })),
+      ...Array.from({ length: 1000 }, (_, index) => ({
+        timestamp: 1_000 + index,
+        label: "perf.web-vital",
+        payload: { index },
+      })),
+      ...Array.from({ length: 100 }, (_, index) => ({
+        timestamp: 2_000 + index,
+        label: "realtime.turnTrace.summary",
+        payload: { index },
+      })),
+      ...Array.from({ length: 600 }, (_, index) => ({
+        timestamp: 3_000 + index,
+        label: "stream-latency/app-server-event",
+        payload: { index },
+      })),
+    ]);
+    const diagnostics = await import("./rendererDiagnostics");
+
+    diagnostics.appendRendererDiagnostic("realtime.turnTrace.summary", { index: 100 });
+
+    const [, , persistedValue] =
+      clientStorageMocks.writeClientStoreValue.mock.calls[0] ?? [];
+    expect(Array.isArray(persistedValue)).toBe(true);
+    const persistedEntries = persistedValue as Array<{
+      label: string;
+      payload: { index?: number };
+    }>;
+    const regularEntries = persistedEntries.filter(
+      (entry) =>
+        !entry.label.startsWith("perf.") &&
+        !entry.label.startsWith("stream-latency/") &&
+        entry.label !== "realtime.turnTrace.summary",
+    );
+    const perfEntries = persistedEntries.filter((entry) => entry.label.startsWith("perf."));
+    const turnSummaryEntries = persistedEntries.filter(
+      (entry) => entry.label === "realtime.turnTrace.summary",
+    );
+    const streamLatencyEntries = persistedEntries.filter((entry) =>
+      entry.label.startsWith("stream-latency/"),
+    );
+
+    expect(persistedEntries).toHaveLength(1900);
+    expect(regularEntries).toHaveLength(200);
+    expect(perfEntries).toHaveLength(1000);
+    expect(turnSummaryEntries).toHaveLength(100);
+    expect(streamLatencyEntries).toHaveLength(600);
+    expect(
+      turnSummaryEntries.some((entry) => entry.payload.index === 0),
+    ).toBe(false);
+    expect(
+      turnSummaryEntries.some((entry) => entry.payload.index === 100),
+    ).toBe(true);
+  });
+
   it("records content-safe client interaction performance diagnostics", async () => {
     clientStorageMocks.isPreloaded.mockReturnValue(true);
     clientStorageMocks.getClientStoreSync.mockReturnValue([]);

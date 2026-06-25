@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   compileFastMarkdown,
   FileMarkdownFastPreview,
+  FAST_MARKDOWN_RENDERER_LIMITS,
   type FastMarkdownFeatureFlags,
   type FastMarkdownRendererProfileId,
   type MarkdownOutlineEntry,
@@ -9,6 +10,11 @@ import {
 import { FileMarkdownPreview, type FileMarkdownPreviewProps } from "./FileMarkdownPreview";
 import { PreviewOutlineSidebar } from "./PreviewOutlineSidebar";
 import type { PreviewOutlineItem } from "../utils/filePreviewOutline";
+
+const LOCAL_MARKDOWN_IMAGE_TARGET_REGEX =
+  /\.(?:apng|avif|bmp|gif|jpe?g|png|svg|webp)(?:[?#][^\s)]*)?$/i;
+const BROWSER_IMAGE_TARGET_REGEX = /^(?:https?:|data:|blob:|asset:)/i;
+const OUTLINE_REVEAL_LINE_PADDING = 80;
 
 export type FileMarkdownPreviewFastProps = FileMarkdownPreviewProps & {
   /**
@@ -70,6 +76,8 @@ export function FileMarkdownPreviewFast({
   value,
   documentKey,
   className,
+  workspaceId,
+  sourceFilePath,
   rendererProfile,
   featureFlags,
   onFastRendererFallback,
@@ -88,6 +96,11 @@ export function FileMarkdownPreviewFast({
   const [activeOutlineItemId, setActiveOutlineItemId] = useState<string | null>(null);
   const [isOutlinePinned, setIsOutlinePinned] = useState(false);
   const [isOutlineCollapsed, setIsOutlineCollapsed] = useState(true);
+  const [boundedFastLineLimit, setBoundedFastLineLimit] = useState(
+    FAST_MARKDOWN_RENDERER_LIMITS.DEFAULT_BOUNDED_LINE_LIMIT,
+  );
+  const [pendingFastOutlineAnchorId, setPendingFastOutlineAnchorId] = useState<string | null>(null);
+  const fastPreviewRootRef = useRef<HTMLDivElement | null>(null);
   const richPreviewRootRef = useRef<HTMLDivElement | null>(null);
   const reportedLocalFallbackRef = useRef<string | null>(null);
 
@@ -108,10 +121,10 @@ export function FileMarkdownPreviewFast({
 
   const isFastProfile =
     rendererProfile === "fast-html" || rendererProfile === "bounded-fast-html";
-  const hasRenderedAnnotationState =
-    annotationDraft !== null || annotations.length > 0;
-  const localFallbackReason = isFastProfile && hasRenderedAnnotationState
-    ? "annotation-overlay-rich-fallback"
+  const localFallbackReason = isFastProfile
+    ? hasLocalMarkdownImageReference(value)
+        ? "local-image-rich-fallback"
+        : null
     : null;
   const useFastPath =
     isFastProfile && !shouldFallBackToRichPath && localFallbackReason === null;
@@ -143,6 +156,16 @@ export function FileMarkdownPreviewFast({
     "files.markdownPreviewUnpinOutline",
     "Unpin outline",
   );
+  const richOutlineFeatureFlags = useMemo(
+    () => ({
+      fastHtmlRendererEnabled: featureFlags?.fastHtmlRendererEnabled === true,
+      boundedFastHtmlRendererEnabled: featureFlags?.boundedFastHtmlRendererEnabled === true,
+    }),
+    [
+      featureFlags?.boundedFastHtmlRendererEnabled,
+      featureFlags?.fastHtmlRendererEnabled,
+    ],
+  );
 
   useEffect(() => {
     setShouldFallBackToRichPath(false);
@@ -151,6 +174,8 @@ export function FileMarkdownPreviewFast({
     setActiveOutlineItemId(null);
     setIsOutlinePinned(false);
     setIsOutlineCollapsed(true);
+    setBoundedFastLineLimit(FAST_MARKDOWN_RENDERER_LIMITS.DEFAULT_BOUNDED_LINE_LIMIT);
+    setPendingFastOutlineAnchorId(null);
     reportedLocalFallbackRef.current = null;
   }, [documentKey, rendererProfile, value]);
 
@@ -172,7 +197,7 @@ export function FileMarkdownPreviewFast({
       documentKey: outlineDocumentKey,
       rawMarkdown: value,
       rendererProfile: "rich-react",
-      featureFlags,
+      featureFlags: richOutlineFeatureFlags,
     })
       .then((result) => {
         if (!isCurrentRequest) {
@@ -189,7 +214,7 @@ export function FileMarkdownPreviewFast({
     return () => {
       isCurrentRequest = false;
     };
-  }, [documentKey, featureFlags, useFastPath, value]);
+  }, [documentKey, richOutlineFeatureFlags, useFastPath, value]);
 
   useEffect(() => {
     if (useFastPath || richOutline.length === 0) {
@@ -242,12 +267,31 @@ export function FileMarkdownPreviewFast({
     }
   }, [isOutlinePinned]);
 
+  useEffect(() => {
+    if (!useFastPath || !pendingFastOutlineAnchorId) {
+      return;
+    }
+    const articleNode = fastPreviewRootRef.current?.querySelector(".fvp-file-markdown");
+    const anchorNode = articleNode?.ownerDocument.getElementById(pendingFastOutlineAnchorId);
+    if (!(articleNode instanceof HTMLElement) || !(anchorNode instanceof HTMLElement)) {
+      return;
+    }
+    if (!articleNode.contains(anchorNode)) {
+      return;
+    }
+    anchorNode.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+    setPendingFastOutlineAnchorId(null);
+  }, [boundedFastLineLimit, fastOutline, pendingFastOutlineAnchorId, useFastPath]);
+
   const handleSelectOutlineItem = useCallback((item: PreviewOutlineItem) => {
     if (item.target.kind !== "html-anchor") {
       return;
     }
     const articleNode = useFastPath
-      ? document.querySelector(".fvp-file-markdown")
+      ? fastPreviewRootRef.current?.querySelector(".fvp-file-markdown")
       : richPreviewRootRef.current?.querySelector(".fvp-file-markdown");
     if (!articleNode) {
       return;
@@ -270,6 +314,21 @@ export function FileMarkdownPreviewFast({
       }
     }
     if (!anchorNode) {
+      const sourceStartLine = item.target.sourceStartLine;
+      if (
+        useFastPath &&
+        rendererProfile === "bounded-fast-html" &&
+        typeof sourceStartLine === "number"
+      ) {
+        setActiveOutlineItemId(item.id);
+        setPendingFastOutlineAnchorId(item.target.anchorId);
+        setBoundedFastLineLimit((currentLineLimit) =>
+          Math.max(currentLineLimit, sourceStartLine + OUTLINE_REVEAL_LINE_PADDING),
+        );
+        if (!isOutlinePinned) {
+          setIsOutlineCollapsed(true);
+        }
+      }
       return;
     }
     setActiveOutlineItemId(item.id);
@@ -280,7 +339,7 @@ export function FileMarkdownPreviewFast({
     if (!isOutlinePinned) {
       setIsOutlineCollapsed(true);
     }
-  }, [isOutlinePinned, richOutline, useFastPath]);
+  }, [isOutlinePinned, rendererProfile, richOutline, useFastPath]);
 
   if (useFastPath) {
     return (
@@ -305,16 +364,30 @@ export function FileMarkdownPreviewFast({
             />
           ) : null}
         </div>
-        <div className="fvp-preview-scroll fvp-markdown-preview-scroll">
+        <div
+          ref={fastPreviewRootRef}
+          className="fvp-preview-scroll fvp-markdown-preview-scroll"
+          data-markdown-bounded-line-limit={
+            rendererProfile === "bounded-fast-html" ? String(boundedFastLineLimit) : undefined
+          }
+          data-markdown-pending-outline-anchor={pendingFastOutlineAnchorId ?? undefined}
+        >
           <FileMarkdownFastPreview
             value={value}
             documentKey={documentKey}
             className={className}
             rendererProfile={rendererProfile}
             featureFlags={featureFlags}
+            boundedLineLimit={
+              rendererProfile === "bounded-fast-html" ? boundedFastLineLimit : undefined
+            }
             onShouldFallback={handleFastRendererFallback}
             onOutlineReady={handleOutlineReady}
             onAnnotationStart={onAnnotationStart}
+            annotationDraft={annotationDraft}
+            annotations={annotations}
+            renderAnnotationDraft={renderAnnotationDraft}
+            renderAnnotationMarker={renderAnnotationMarker}
             annotationActionLabel={annotationActionLabel}
           />
         </div>
@@ -323,7 +396,14 @@ export function FileMarkdownPreviewFast({
   }
 
   return (
-    <div className="fvp-markdown-preview-frame">
+    <div
+      className="fvp-markdown-preview-frame"
+      data-markdown-render-profile={rendererProfile ?? "rich-react"}
+      data-markdown-fallback-reason={localFallbackReason ?? "none"}
+      data-markdown-annotation-overlay-count={String(
+        annotations.length + (annotationDraft ? 1 : 0),
+      )}
+    >
       <div className="fvp-markdown-outline-layer">
         {shouldRenderOutline ? (
           <PreviewOutlineSidebar
@@ -350,6 +430,8 @@ export function FileMarkdownPreviewFast({
             value={value}
             documentKey={documentKey}
             className={className}
+            workspaceId={workspaceId}
+            sourceFilePath={sourceFilePath}
             onAnnotationStart={onAnnotationStart}
             annotationDraft={annotationDraft}
             annotations={annotations}
@@ -388,7 +470,12 @@ function convertMdastOutlineToPreviewItems(
       title: entry.title,
       level: entry.depth,
       children: [],
-      target: { kind: "html-anchor", anchorId: entry.id },
+      target: {
+        kind: "html-anchor",
+        anchorId: entry.id,
+        sourceStartLine: entry.startLine,
+        sourceEndLine: entry.endLine,
+      },
     };
 
     while (
@@ -419,6 +506,39 @@ function flattenPreviewOutlineItems(items: PreviewOutlineItem[]): PreviewOutline
   };
   items.forEach(visit);
   return flattenedItems;
+}
+
+function hasLocalMarkdownImageReference(value: string): boolean {
+  const markdownImageRegex = /!\[[^\]]*]\(([^)\s]+)(?:\s+["'][^"']*["'])?\)/g;
+  for (const match of value.matchAll(markdownImageRegex)) {
+    if (isLocalImageTarget(match[1] ?? "")) {
+      return true;
+    }
+  }
+
+  const htmlImageRegex = /<img\b[^>]*\bsrc=(?:"([^"]+)"|'([^']+)'|([^\s>]+))/gi;
+  for (const match of value.matchAll(htmlImageRegex)) {
+    if (isLocalImageTarget(match[1] ?? match[2] ?? match[3] ?? "")) {
+      return true;
+    }
+  }
+
+  const imageTagRegex = /<image>\s*([\s\S]*?)\s*<\/image>|<image\b[^>]*\bsrc=(?:"([^"]+)"|'([^']+)'|([^\s/>]+))[^>]*\/?>/gi;
+  for (const match of value.matchAll(imageTagRegex)) {
+    if (isLocalImageTarget(match[1] ?? match[2] ?? match[3] ?? match[4] ?? "")) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function isLocalImageTarget(value: string): boolean {
+  const target = value.trim().replace(/^<(.+)>$/, "$1").replace(/^['"](.+)['"]$/, "$1");
+  if (!target || BROWSER_IMAGE_TARGET_REGEX.test(target)) {
+    return false;
+  }
+  return LOCAL_MARKDOWN_IMAGE_TARGET_REGEX.test(target.split(/[?#]/, 1)[0] ?? target);
 }
 
 function translatePreviewLabel(

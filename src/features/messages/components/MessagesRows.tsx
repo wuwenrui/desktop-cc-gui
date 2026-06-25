@@ -57,6 +57,7 @@ import {
 import { parseReasoning } from "./messagesReasoning";
 import {
   analyzeStreamingMarkdownComplexity,
+  analyzeStreamingMarkdownComplexityDelta,
   EMPTY_STREAMING_MARKDOWN_COMPLEXITY,
   resolveAssistantMessageStreamingThrottleMs,
   resolveReasoningStreamingThrottleMs,
@@ -133,6 +134,7 @@ type MessageRowProps = {
   }) => void;
   suppressMemorySummaryCard?: boolean;
   suppressNoteCardSummaryCard?: boolean;
+  onOutlineReady?: (outline: import("../../markdown/fastMarkdownRenderer").MarkdownOutlineEntry[]) => void;
 };
 
 type DeferredImageState = {
@@ -317,6 +319,10 @@ function areMessageRowPropsEqual(
   previous: MessageRowProps,
   next: MessageRowProps,
 ) {
+  const compareStreamingOnlyProps =
+    previous.isStreaming === true || next.isStreaming === true;
+  const compareRuntimeReconnectProps =
+    previous.showRuntimeReconnectCard === true || next.showRuntimeReconnectCard === true;
   return (
     areMessageItemsEqual(previous.item, next.item) &&
     previous.workspaceId === next.workspaceId &&
@@ -327,18 +333,29 @@ function areMessageRowPropsEqual(
     previous.enableCollaborationBadge === next.enableCollaborationBadge &&
     previous.presentationProfile === next.presentationProfile &&
     previous.showRuntimeReconnectCard === next.showRuntimeReconnectCard &&
-    previous.onRecoverThreadRuntime === next.onRecoverThreadRuntime &&
-    previous.onRecoverThreadRuntimeAndResend === next.onRecoverThreadRuntimeAndResend &&
-    previous.onThreadRecoveryFork === next.onThreadRecoveryFork &&
-    previous.retryMessage?.text === next.retryMessage?.text &&
-    areMessageImagesEqual(previous.retryMessage?.images, next.retryMessage?.images) &&
+    (
+      !compareRuntimeReconnectProps ||
+      (
+        previous.onRecoverThreadRuntime === next.onRecoverThreadRuntime &&
+        previous.onRecoverThreadRuntimeAndResend === next.onRecoverThreadRuntimeAndResend &&
+        previous.onThreadRecoveryFork === next.onThreadRecoveryFork &&
+        previous.retryMessage?.text === next.retryMessage?.text &&
+        areMessageImagesEqual(previous.retryMessage?.images, next.retryMessage?.images)
+      )
+    ) &&
     previous.isCopied === next.isCopied &&
     previous.onCopy === next.onCopy &&
     previous.codeBlockCopyUseModifier === next.codeBlockCopyUseModifier &&
     previous.onOpenFileLink === next.onOpenFileLink &&
     previous.onOpenFileLinkMenu === next.onOpenFileLinkMenu &&
-    previous.streamMitigationProfile === next.streamMitigationProfile &&
-    previous.onAssistantVisibleTextRender === next.onAssistantVisibleTextRender &&
+    previous.onOutlineReady === next.onOutlineReady &&
+    (
+      !compareStreamingOnlyProps ||
+      (
+        previous.streamMitigationProfile === next.streamMitigationProfile &&
+        previous.onAssistantVisibleTextRender === next.onAssistantVisibleTextRender
+      )
+    ) &&
     previous.suppressMemorySummaryCard === next.suppressMemorySummaryCard &&
     previous.suppressNoteCardSummaryCard === next.suppressNoteCardSummaryCard
   );
@@ -677,6 +694,7 @@ export const MessageRow = memo(function MessageRow({
   onAssistantVisibleTextRender,
   suppressMemorySummaryCard = false,
   suppressNoteCardSummaryCard = false,
+  onOutlineReady,
 }: MessageRowProps) {
   const renderStartedAtMs = readHighResolutionNowMs();
   const renderCountRef = useRef(0);
@@ -1027,12 +1045,29 @@ export const MessageRow = memo(function MessageRow({
         return EMPTY_STREAMING_MARKDOWN_COMPLEXITY;
       }
       const previousCache = streamingMarkdownComplexityCacheRef.current;
-      if (
-        previousCache &&
-        previousCache.complexity.isHuge &&
-        displayText.startsWith(previousCache.value)
-      ) {
-        return previousCache.complexity;
+      if (previousCache) {
+        // chat-stream-render-isolation-2026-06 task 3.1: prefer the delta
+        // path when displayText strictly extends the cached prefix, so
+        // long streaming bursts avoid re-scanning the full prefix.
+        if (displayText === previousCache.value) {
+          return previousCache.complexity;
+        }
+        if (displayText.startsWith(previousCache.value)) {
+          const deltaText = displayText.slice(previousCache.value.length);
+          const nextComplexity = analyzeStreamingMarkdownComplexityDelta(
+            previousCache.complexity,
+            previousCache.value,
+            deltaText,
+          );
+          streamingMarkdownComplexityCacheRef.current = {
+            value: displayText,
+            complexity: nextComplexity,
+          };
+          return nextComplexity;
+        }
+        if (previousCache.complexity.isHuge) {
+          return previousCache.complexity;
+        }
       }
       const nextComplexity = analyzeStreamingMarkdownComplexity(displayText);
       streamingMarkdownComplexityCacheRef.current = {
@@ -1118,6 +1153,17 @@ export const MessageRow = memo(function MessageRow({
     usePlainTextStreamingSurface,
   ]);
   useEffect(() => {
+    if (usePlainTextStreamingSurface || !useLightweightStreamingMarkdown) {
+      return;
+    }
+    handleRenderedAssistantValue(displayText);
+  }, [
+    displayText,
+    handleRenderedAssistantValue,
+    useLightweightStreamingMarkdown,
+    usePlainTextStreamingSurface,
+  ]);
+  useEffect(() => {
     if (
       !threadId ||
       item.role !== "assistant" ||
@@ -1152,6 +1198,10 @@ export const MessageRow = memo(function MessageRow({
     ),
     [agentTaskNotification, item],
   );
+  const showActiveRuntimeReconnectCard =
+    Boolean(runtimeReconnectHint) &&
+    showRuntimeReconnectCard;
+  const suppressRuntimeReconnectText = Boolean(runtimeReconnectHint);
 
   const bubbleNode = (
     <div className={`bubble message-bubble${agentTaskNotification ? " message-bubble-agent-task" : ""}`}>
@@ -1266,7 +1316,7 @@ export const MessageRow = memo(function MessageRow({
           })}
         </div>
       ) : null}
-      {runtimeReconnectHint && showRuntimeReconnectCard ? (
+      {runtimeReconnectHint && showActiveRuntimeReconnectCard ? (
         <RuntimeReconnectCard
           hint={runtimeReconnectHint}
           workspaceId={workspaceId}
@@ -1283,7 +1333,7 @@ export const MessageRow = memo(function MessageRow({
             content={displayText}
             parsedContent={parsedUserTextContent ?? undefined}
           />
-        ) : runtimeReconnectHint && showRuntimeReconnectCard ? null : usePlainTextStreamingSurface ? (
+        ) : suppressRuntimeReconnectText ? null : usePlainTextStreamingSurface ? (
           <div className={livePlainTextClassName}>
             {useLongFoldedMarkdownStreamingSurface ? liveFoldedStreamingSurfaceText : displayText}
           </div>
@@ -1307,6 +1357,7 @@ export const MessageRow = memo(function MessageRow({
             liveRenderMode={useLightweightStreamingMarkdown ? "lightweight" : "full"}
             progressiveReveal={useLightweightStreamingMarkdown}
             onRenderedValueChange={handleMarkdownRenderedAssistantValue}
+            onOutlineReady={onOutlineReady}
           />
         )
       )}
@@ -1372,8 +1423,8 @@ export const MessageRow = memo(function MessageRow({
     agentTaskNotification
     || imageItems.length > 0
     || deferredImageItems.length > 0
-    || (Boolean(runtimeReconnectHint) && showRuntimeReconnectCard)
-    || hasText
+    || showActiveRuntimeReconnectCard
+    || (hasText && !suppressRuntimeReconnectText)
     || shouldRenderMessageActions;
   const memoryPayloadDialogNode =
     memoryPayloadDialogOpen && memorySummaryRawPayload && typeof document !== "undefined"

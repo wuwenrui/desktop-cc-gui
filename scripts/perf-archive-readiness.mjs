@@ -36,7 +36,7 @@
 
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 const PERF_BASELINE_PATH = "docs/perf/baseline.json";
@@ -74,9 +74,19 @@ const BUDGET_RESIDUALS = new Map([
 const VALID_EVIDENCE_CLASSES = new Set([
   "measured",
   "proxy",
+  "synthetic",
   "manual-only",
   "unsupported",
 ]);
+
+const PROXY_RATIO_WARN_THRESHOLD = 0.5;
+const REQUIRED_ACCEPTED_DISPOSITION_FIELDS = [
+  "owner",
+  "source",
+  "reason",
+  "releaseDecision",
+  "nextAction",
+];
 
 function repoPath(path) {
   return resolve(process.cwd(), path);
@@ -103,21 +113,49 @@ function readOpenSpecActiveNamesFromJson(parsed) {
   return new Set(names);
 }
 
+async function readOpenSpecActiveNamesFromDirectory() {
+  const changesDir = repoPath("openspec/changes");
+  const entries = await readdir(changesDir, { withFileTypes: true });
+  return new Set(
+    entries
+      .filter((entry) => (
+        entry.isDirectory()
+        && entry.name !== "archive"
+        && !entry.name.startsWith(".")
+      ))
+      .map((entry) => entry.name),
+  );
+}
+
 async function getOpenSpecActiveNames(activeChangesJsonPath) {
   if (activeChangesJsonPath) {
     const parsed = await readJsonIfExists(activeChangesJsonPath);
-    return readOpenSpecActiveNamesFromJson(parsed);
+    return {
+      names: readOpenSpecActiveNamesFromJson(parsed),
+      source: activeChangesJsonPath,
+    };
   }
   try {
     const output = execFileSync("openspec", ["list", "--json"], {
       cwd: process.cwd(),
       encoding: "utf-8",
     });
-    return readOpenSpecActiveNamesFromJson(JSON.parse(output));
+    return {
+      names: readOpenSpecActiveNamesFromJson(JSON.parse(output)),
+      source: "openspec list --json",
+    };
   } catch (error) {
-    throw new Error(
-      `Failed to read \`openspec list --json\`: ${error.message ?? String(error)}`
-    );
+    try {
+      return {
+        names: await readOpenSpecActiveNamesFromDirectory(),
+        source: "openspec/changes directory fallback",
+      };
+    } catch (fallbackError) {
+      throw new Error(
+        `Failed to read \`openspec list --json\`: ${error.message ?? String(error)}; ` +
+          `directory fallback failed: ${fallbackError.message ?? String(fallbackError)}`
+      );
+    }
   }
 }
 
@@ -125,6 +163,44 @@ function recordLabel(record) {
   const scenario = record?.scenario ?? "?";
   const metric = record?.metric ?? "?";
   return `${scenario}/${metric}`;
+}
+
+function hasNonEmptyString(value) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function hasAcceptedDispositionFields(entry, extraFields = []) {
+  return [...REQUIRED_ACCEPTED_DISPOSITION_FIELDS, ...extraFields]
+    .every((field) => hasNonEmptyString(entry?.[field]));
+}
+
+function acceptedBudgetResidualsByRecord(runtimeGates) {
+  const entries = Array.isArray(runtimeGates?.archiveReadiness?.acceptedBudgetResiduals)
+    ? runtimeGates.archiveReadiness.acceptedBudgetResiduals
+    : [];
+  return new Map(
+    entries
+      .filter((entry) => hasNonEmptyString(entry?.record))
+      .map((entry) => [entry.record, entry]),
+  );
+}
+
+function acceptedUnsupportedEvidenceByRecord(runtimeGates) {
+  const entries = Array.isArray(runtimeGates?.archiveReadiness?.acceptedUnsupportedEvidence)
+    ? runtimeGates.archiveReadiness.acceptedUnsupportedEvidence
+    : [];
+  return new Map(
+    entries
+      .filter((entry) => hasNonEmptyString(entry?.record))
+      .map((entry) => [entry.record, entry]),
+  );
+}
+
+function hasAcceptedProxyEvidenceDebt(runtimeGates) {
+  return hasAcceptedDispositionFields(
+    runtimeGates?.archiveReadiness?.acceptedProxyEvidenceDebt,
+    ["status"],
+  );
 }
 
 function runtimeMetricRecords(runtimeGates) {
@@ -155,6 +231,13 @@ function runtimeEvidenceObjects(runtimeGates) {
   }
   visit(runtimeGates, "runtimeEvidenceGates");
   return records;
+}
+
+function evidenceClassMetricRecords(baseline, runtimeGates) {
+  return [
+    ...(Array.isArray(baseline?.metrics) ? baseline.metrics : []),
+    ...runtimeMetricRecords(runtimeGates),
+  ];
 }
 
 function evidenceObjectLabel(item) {
@@ -208,11 +291,16 @@ function checkUnitConsistency(baseline, runtimeGates) {
   const failures = [];
   const warnings = [];
   const metrics = Array.isArray(baseline?.metrics) ? baseline.metrics : [];
+  const acceptedResiduals = acceptedBudgetResidualsByRecord(runtimeGates);
   for (const metric of metrics) {
     const hasBudget = collectUnitConflict(metric, failures);
     if (!hasBudget) {
       const label = recordLabel(metric);
       const residual = BUDGET_RESIDUALS.get(label);
+      const acceptedResidual = acceptedResiduals.get(label);
+      if (acceptedResidual && hasAcceptedDispositionFields(acceptedResidual)) {
+        continue;
+      }
       warnings.push({
         check: "budget-missing",
         record: label,
@@ -226,6 +314,84 @@ function checkUnitConsistency(baseline, runtimeGates) {
     collectUnitConflict(record, failures);
   }
   return { failures, warnings };
+}
+
+function checkBudgetResidualTableMetadata() {
+  const failures = [];
+  for (const [record, residual] of BUDGET_RESIDUALS) {
+    const owner = residual?.[0];
+    const nextAction = residual?.[1];
+    if (!hasNonEmptyString(owner) || !hasNonEmptyString(nextAction)) {
+      failures.push({
+        check: "budget-residual-metadata-missing",
+        record,
+        detail: "BUDGET_RESIDUALS entry must include owner and next action",
+      });
+    }
+  }
+  return failures;
+}
+
+function checkResidualBudgetSync(baseline) {
+  const failures = [];
+  const metrics = Array.isArray(baseline?.metrics) ? baseline.metrics : [];
+  for (const metric of metrics) {
+    const label = recordLabel(metric);
+    if (metric?.budget && BUDGET_RESIDUALS.has(label)) {
+      failures.push({
+        check: "budget-residual-sync",
+        record: label,
+        detail: "metric has a real budget block but remains listed in BUDGET_RESIDUALS",
+        owner: metric.budget.owner ?? "unassigned",
+        source: metric.budget.source ?? "unknown",
+        nextAction: "Remove this record from BUDGET_RESIDUALS after owner-approved budget metadata lands.",
+      });
+    }
+  }
+  return failures;
+}
+
+function checkAcceptedDispositionMetadata(runtimeGates) {
+  const failures = [];
+  const budgetResiduals = Array.isArray(runtimeGates?.archiveReadiness?.acceptedBudgetResiduals)
+    ? runtimeGates.archiveReadiness.acceptedBudgetResiduals
+    : [];
+  for (const entry of budgetResiduals) {
+    if (!hasNonEmptyString(entry?.record) || !hasAcceptedDispositionFields(entry)) {
+      failures.push({
+        check: "accepted-budget-residual-metadata-missing",
+        record: entry?.record ?? "?",
+        detail: "accepted budget residual must include record, owner, source, reason, releaseDecision, and nextAction",
+      });
+    }
+  }
+
+  const proxyDebt = runtimeGates?.archiveReadiness?.acceptedProxyEvidenceDebt;
+  if (proxyDebt && !hasAcceptedDispositionFields(proxyDebt, ["status"])) {
+    failures.push({
+      check: "accepted-proxy-evidence-metadata-missing",
+      record: "performance-evidence",
+      detail: "accepted proxy evidence debt must include status, owner, source, reason, releaseDecision, and nextAction",
+    });
+  }
+
+  const unsupportedEvidence = Array.isArray(runtimeGates?.archiveReadiness?.acceptedUnsupportedEvidence)
+    ? runtimeGates.archiveReadiness.acceptedUnsupportedEvidence
+    : [];
+  for (const entry of unsupportedEvidence) {
+    if (
+      !hasNonEmptyString(entry?.record) ||
+      !hasAcceptedDispositionFields(entry, ["platformQualifier"])
+    ) {
+      failures.push({
+        check: "accepted-unsupported-evidence-metadata-missing",
+        record: entry?.record ?? "?",
+        detail: "accepted unsupported evidence must include record, platformQualifier, owner, source, reason, releaseDecision, and nextAction",
+      });
+    }
+  }
+
+  return failures;
 }
 
 function checkHardFailAnnotation(baseline, runtimeGates) {
@@ -412,9 +578,84 @@ function buildReleaseEvidenceClassification(baseline, runtimeGates) {
 }
 
 function summarizeUnsupported(runtimeGates) {
+  const acceptedUnsupported = acceptedUnsupportedEvidenceByRecord(runtimeGates);
   return runtimeEvidenceObjects(runtimeGates)
-    .filter((item) => item.record?.evidenceClass === "unsupported")
+    .filter((item) => {
+      if (item.record?.evidenceClass !== "unsupported") {
+        return false;
+      }
+      const accepted = acceptedUnsupported.get(recordLabel(item.record));
+      return !(accepted && hasAcceptedDispositionFields(accepted, ["platformQualifier"]));
+    })
     .map(evidenceObjectLabel);
+}
+
+function summarizeAcceptedUnsupported(runtimeGates) {
+  const acceptedUnsupported = acceptedUnsupportedEvidenceByRecord(runtimeGates);
+  return runtimeEvidenceObjects(runtimeGates)
+    .filter((item) => {
+      if (item.record?.evidenceClass !== "unsupported") {
+        return false;
+      }
+      const accepted = acceptedUnsupported.get(recordLabel(item.record));
+      return accepted && hasAcceptedDispositionFields(accepted, ["platformQualifier"]);
+    })
+    .map((item) => {
+      const accepted = acceptedUnsupported.get(recordLabel(item.record));
+      return {
+        record: recordLabel(item.record),
+        path: item.path,
+        owner: accepted.owner,
+        platformQualifier: accepted.platformQualifier,
+        reason: accepted.reason,
+        releaseDecision: accepted.releaseDecision,
+        nextAction: accepted.nextAction,
+        source: accepted.source,
+      };
+    });
+}
+
+function summarizeProxyRatio(records) {
+  const counts = {
+    measured: 0,
+    proxy: 0,
+    synthetic: 0,
+    unsupported: 0,
+    "manual-only": 0,
+  };
+  for (const record of records) {
+    const evidenceClass = record?.evidenceClass;
+    if (Object.prototype.hasOwnProperty.call(counts, evidenceClass)) {
+      counts[evidenceClass] += 1;
+    }
+  }
+  const denominator = counts.measured + counts.proxy + counts.synthetic;
+  const proxyRatio = denominator > 0
+    ? Number((counts.proxy / denominator).toFixed(4))
+    : 0;
+  return {
+    counts,
+    proxyRatio,
+    denominator,
+  };
+}
+
+function buildProxyRatioWarnings(summary, runtimeGates, releaseMode) {
+  if (summary.proxyRatio <= PROXY_RATIO_WARN_THRESHOLD) {
+    return [];
+  }
+  if (!releaseMode && hasAcceptedProxyEvidenceDebt(runtimeGates)) {
+    return [];
+  }
+  return [{
+    code: "proxy-ratio-too-high",
+    check: "proxy-ratio-too-high",
+    record: "performance-evidence",
+    detail:
+      `proxyRatio=${summary.proxyRatio} exceeds warn threshold=${PROXY_RATIO_WARN_THRESHOLD}; measured=${summary.counts.measured}, proxy=${summary.counts.proxy}, synthetic=${summary.counts.synthetic}, unsupported=${summary.counts.unsupported}, manualOnly=${summary.counts["manual-only"]}`,
+    owner: "runtime-perf-evidence-classification",
+    nextAction: "Upgrade proxy metrics to measured evidence before release-grade archive; this is warn-only for v0.5.11.",
+  }];
 }
 
 function renderTextReport(result) {
@@ -431,7 +672,7 @@ function renderTextReport(result) {
   lines.push("");
 
   if (result.hardFailures.length === 0 && result.warnings.length === 0) {
-    lines.push("No defects detected. Evidence metadata is ready for archive.");
+    lines.push("No unaccepted defects detected. Evidence metadata is ready for normal-mode archive.");
   } else {
     if (result.hardFailures.length > 0) {
       lines.push(`Hard failures (${result.hardFailures.length}):`);
@@ -454,6 +695,18 @@ function renderTextReport(result) {
     for (const label of result.unsupportedRecords) {
       lines.push(`  - ${label}`);
     }
+    lines.push("");
+  }
+  if (result.acceptedBudgetResiduals?.length > 0) {
+    lines.push(`Accepted budget residuals: ${result.acceptedBudgetResiduals.length}`);
+    lines.push("");
+  }
+  if (result.acceptedProxyEvidenceDebt) {
+    lines.push(`Accepted proxy evidence debt: ${result.acceptedProxyEvidenceDebt.status}`);
+    lines.push("");
+  }
+  if (result.acceptedUnsupportedRecords?.length > 0) {
+    lines.push(`Accepted unsupported evidence: ${result.acceptedUnsupportedRecords.length}`);
     lines.push("");
   }
 
@@ -520,9 +773,9 @@ async function main() {
     process.exit(3);
   }
 
-  let activeNames;
+  let activeChangeState;
   try {
-    activeNames = await getOpenSpecActiveNames(paths.activeChangesJson);
+    activeChangeState = await getOpenSpecActiveNames(paths.activeChangesJson);
   } catch (error) {
     const message = error.message ?? String(error);
     if (jsonMode) {
@@ -532,6 +785,7 @@ async function main() {
     }
     process.exit(3);
   }
+  const activeNames = activeChangeState.names;
 
   const unitCheck = checkUnitConsistency(baseline, runtimeGates);
   const releaseCheck = releaseMode
@@ -540,6 +794,9 @@ async function main() {
   const hardFailures = [
     ...checkEvidenceClassCoverage(baseline, runtimeGates),
     ...unitCheck.failures,
+    ...checkBudgetResidualTableMetadata(),
+    ...checkResidualBudgetSync(baseline),
+    ...checkAcceptedDispositionMetadata(runtimeGates),
     ...checkHardFailAnnotation(baseline, runtimeGates),
     ...checkArchiveReadinessStaleness(runtimeGates, activeNames),
     ...checkLargeFileOwnership(runtimeGates),
@@ -547,8 +804,16 @@ async function main() {
     ...releaseCheck.failures,
   ];
 
-  const warnings = [...unitCheck.warnings, ...releaseCheck.warnings];
+  const evidenceClassSummary = summarizeProxyRatio(evidenceClassMetricRecords(baseline, runtimeGates));
+  const proxyRatioWarnings = buildProxyRatioWarnings(evidenceClassSummary, runtimeGates, releaseMode);
+  const warnings = [
+    ...unitCheck.warnings,
+    ...releaseCheck.warnings,
+    ...proxyRatioWarnings,
+  ];
   const unsupportedRecords = summarizeUnsupported(runtimeGates);
+  const acceptedBudgetResiduals = Array.from(acceptedBudgetResidualsByRecord(runtimeGates).values());
+  const acceptedUnsupportedRecords = summarizeAcceptedUnsupported(runtimeGates);
   const budgetMissingCount = warnings.filter((w) => w.check === "budget-missing").length;
 
   let status;
@@ -572,13 +837,18 @@ async function main() {
     activeChangeCount: activeNames.size,
     metricCount: Array.isArray(baseline?.metrics) ? baseline.metrics.length : 0,
     budgetMissingCount,
+    proxyRatio: evidenceClassSummary.proxyRatio,
+    evidenceClassCounts: evidenceClassSummary.counts,
     hardFailures,
     warnings,
     unsupportedRecords,
+    acceptedBudgetResiduals,
+    acceptedProxyEvidenceDebt: runtimeGates?.archiveReadiness?.acceptedProxyEvidenceDebt ?? null,
+    acceptedUnsupportedRecords,
     inputs: {
       baseline: paths.baseline,
       runtimeEvidenceGates: paths.runtimeEvidenceGates,
-      openSpec: paths.activeChangesJson ?? "openspec list --json",
+      openSpec: activeChangeState.source,
     },
   };
 

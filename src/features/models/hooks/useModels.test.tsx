@@ -414,6 +414,66 @@ describe("useModels", () => {
     expect(result.current.globalSelectionReady).toBe(false);
   });
 
+  it("does not repeat active workspace refresh when model/list returns an empty catalog", async () => {
+    vi.mocked(getModelList).mockResolvedValue({
+      result: {
+        data: [],
+      },
+    });
+    vi.mocked(getConfigModel).mockResolvedValue(null);
+
+    const { result } = renderHook(() =>
+      useModels({
+        activeWorkspace: workspace,
+        preferredSelectionReady: true,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.modelsReady).toBe(true);
+    });
+
+    expect(getModelList).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(getModelList).toHaveBeenCalledTimes(1);
+    expect(result.current.models.length).toBeGreaterThan(0);
+  });
+
+  it("does not repeat active workspace refresh when model/list fails without config fallback", async () => {
+    vi.mocked(getModelList).mockRejectedValue(new Error("model/list failed"));
+    vi.mocked(getConfigModel).mockResolvedValue(null);
+
+    const { result } = renderHook(() =>
+      useModels({
+        activeWorkspace: workspace,
+        preferredSelectionReady: true,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(getModelList).toHaveBeenCalledWith("workspace-1");
+    });
+
+    await waitFor(() => {
+      expect(result.current.modelsReady).toBe(false);
+      expect(result.current.globalSelectionReady).toBe(false);
+    });
+
+    expect(getModelList).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(getModelList).toHaveBeenCalledTimes(1);
+  });
+
   it("does not mark the global selection as ready when the workspace catalog request fails", async () => {
     vi.mocked(getModelList).mockRejectedValueOnce(new Error("model/list failed"));
     vi.mocked(getConfigModel).mockResolvedValueOnce("gpt-5.5");

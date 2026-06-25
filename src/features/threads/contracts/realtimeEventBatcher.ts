@@ -27,8 +27,11 @@ function eventKey(event: NormalizedThreadEvent) {
   return `${event.workspaceId}:${event.threadId}:${event.turnId ?? ""}:${event.item.id}:${event.operation}`;
 }
 
-function isAssistantFirstTokenCandidate(event: NormalizedThreadEvent) {
-  return event.operation === "appendAgentMessageDelta" && event.item.kind === "message";
+function isFirstTokenCandidate(event: NormalizedThreadEvent) {
+  return (
+    (event.operation === "appendAgentMessageDelta" && event.item.kind === "message") ||
+    (event.operation === "appendReasoningContentDelta" && event.item.kind === "reasoning")
+  );
 }
 
 function isCoalescible(event: NormalizedThreadEvent) {
@@ -41,7 +44,7 @@ function isTerminal(event: NormalizedThreadEvent) {
 
 export function createRealtimeEventBatcher() {
   const pending = new Map<string, NormalizedThreadEvent>();
-  const deliveredAssistantKeys = new Set<string>();
+  const deliveredFirstTokenKeys = new Set<string>();
 
   function flushPending(reason: RealtimeBatcherFlushReason): RealtimeBatcherFlush | null {
     if (pending.size === 0) {
@@ -80,8 +83,8 @@ export function createRealtimeEventBatcher() {
         return output;
       }
 
-      if (isAssistantFirstTokenCandidate(event) && !deliveredAssistantKeys.has(key)) {
-        deliveredAssistantKeys.add(key);
+      if (isFirstTokenCandidate(event) && !deliveredFirstTokenKeys.has(key)) {
+        deliveredFirstTokenKeys.add(key);
         output.push({
           reason: "first-token",
           events: [event],

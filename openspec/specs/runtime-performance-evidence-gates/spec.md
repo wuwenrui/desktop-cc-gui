@@ -1,7 +1,8 @@
 # runtime-performance-evidence-gates Specification
 
 ## Purpose
-TBD - created by archiving change stabilize-runtime-performance-evidence-gates. Update Purpose after archive.
+
+Defines governance for runtime performance evidence gates. The spec requires every performance and stability closure claim to declare its evidence class (`measured`, `proxy`, `manual-only`, or `unsupported`), preserve platform qualifiers, keep archive-readiness explicit, and avoid treating proxy or registry-only evidence as release-grade measured proof.
 ## Requirements
 ### Requirement: Runtime Evidence Gate MUST Classify Closure Evidence
 
@@ -418,3 +419,166 @@ The system MUST keep `scripts/perf-archive-readiness.mjs` `BUDGET_RESIDUALS` tab
 - **THEN** the residual count MUST equal 15 (LL-200/500/1000 commit duration and first-paint = 9, CI compositionToCommit = 2, RS-PE dedupHitRatio and assemblerLatency = 2, CS-COLD firstPaintMs and firstInteractiveMs = 2)
 - **AND** the readiness report MUST keep those 15 records as `budget-missing` warnings
 
+### Requirement: Long-Running Client Runtime Evidence MUST Track Bounded Resources
+
+Runtime performance evidence MUST track long-running client resources that can make module switching and streaming degrade over time.
+
+#### Scenario: active engine process count is budgeted
+
+- **WHEN** long-running client runtime evidence is collected
+- **THEN** it MUST include `S-LR-100/activeEngineProcessCountAfterClose` or an explicit unsupported marker
+- **AND** the metric MUST report whether the evidence is measured, proxy, manual-only, or unsupported
+- **AND** a nonzero value after all local workspaces close MUST include a reason or external-process qualifier
+- **AND** the metric MUST be described as registered runtime handle evidence, not OS process liveness evidence
+
+#### Scenario: OS child liveness after close is explicit
+
+- **WHEN** long-running client runtime evidence is collected after closing local runtime workspaces
+- **THEN** it MUST include `S-LR-101/sampledOsChildLivenessAfterClose` or an explicit unsupported marker
+- **AND** a measured/manual/proxy value MUST include platform qualifier and sampling method
+- **AND** unsupported sampling MUST include bounded rationale
+
+#### Scenario: stale child candidates are visible
+
+- **WHEN** stale child reconciliation runs in diagnostics-only mode
+- **THEN** it MUST report `S-LR-110/staleEngineChildCandidateCount` or an explicit unsupported marker
+- **AND** diagnostics-only stale candidates MUST NOT be described as auto-killed
+- **AND** age-only stale candidates MUST state when progress evidence is unsupported
+
+#### Scenario: module switch latency is phase-aware
+
+- **WHEN** module or workspace switch performance evidence is collected
+- **THEN** it MUST include `S-LR-200/moduleSwitchP95Ms` or an explicit unsupported marker
+- **AND** the report SHOULD separate selection latency, list mount/commit cost, projection cost, and history/message availability where observable
+
+#### Scenario: long-list visible row count is bounded
+
+- **WHEN** long-list evidence is collected for Home/Sidebar/ThreadList
+- **THEN** it MUST include `S-LR-210/visibleListRowCount` or an explicit unsupported marker
+- **AND** the row count MUST be compared against the virtualizer overscan budget or marked unsupported with rationale
+
+#### Scenario: markdown worker pending requests are bounded
+
+- **WHEN** Markdown worker evidence is collected
+- **THEN** it MUST include `S-LR-300/markdownWorkerPendingRequests` or an explicit unsupported marker
+- **AND** pending requests MUST return to zero after worker dispose or test teardown
+
+#### Scenario: streaming visible lag is tracked or explicitly deferred
+
+- **WHEN** streaming runtime evidence is collected for this change
+- **THEN** it MUST include `S-LR-310/streamingVisibleLagP95Ms` or an explicit unsupported/manual-only marker
+- **AND** the report MUST state whether the value reuses `chat-stream-render-isolation-2026-06` baseline evidence or comes from a fresh runtime trace
+
+### Requirement: Long-Running Runtime Evidence MUST Remain Content-Safe
+
+Long-running runtime diagnostics MUST remain safe and bounded even during multi-engine long conversations.
+
+#### Scenario: long-run evidence excludes conversation content
+
+- **WHEN** process, module switch, list, streaming, or worker evidence is emitted
+- **THEN** the payload MUST NOT include prompt text, assistant body text, terminal output, tool output, file diff content, or raw Markdown body
+- **AND** it MAY include ids, process ids, counts, durations, lengths, hashes, evidence class, and bounded reason strings
+
+#### Scenario: proxy evidence is not promoted to measured
+
+- **WHEN** evidence is produced by jsdom, static counters, fixtures, synthetic worker tests, or manual notes without runtime timing
+- **THEN** it MUST be classified as `proxy` or `manual-only`
+- **AND** archive-readiness MUST list the measured runtime/WebView follow-up if release-grade proof is required
+
+### Requirement: V0511 Evidence Gates MUST Consume Producer Artifacts
+
+Runtime performance evidence gates MUST consume v0.5.11 producer artifacts for supported `S-IO-*` scenarios before classifying a summary as unsupported.
+
+#### Scenario: supported producer populates summary
+
+- **WHEN** a producer artifact contains valid metric rows for `S-IO-RR`, `S-IO-AS`, `S-IO-FC`, `S-IO-FS`, or `S-IO-FP`
+- **THEN** `scripts/generate-runtime-evidence-report.mjs` MUST populate the matching summary with those values
+- **AND** the summary MUST expose the evidence class from the producer artifact
+
+#### Scenario: missing producer remains explicit
+
+- **WHEN** no trustworthy producer artifact exists for a v0.5.11 runtime evidence summary
+- **THEN** the summary MUST remain `unsupported`
+- **AND** it MUST include a concrete reason and next action instead of a silent null value
+
+### Requirement: V0511 Archive Readiness MUST Distinguish Residual Warnings From Hard Failures
+
+Archive-readiness output MUST keep hard failures separate from visible residual performance debt.
+
+#### Scenario: warning result remains actionable
+
+- **WHEN** `npm run perf:archive-readiness -- --json` exits with warnings but no hard failures
+- **THEN** the JSON result MUST report `ok: true`
+- **AND** every warning MUST include a record id, owner, and next action
+
+### Requirement: Archive Readiness Debt Cleanup MUST Close Known Residual Budgets
+
+The performance archive-readiness gate MUST provide a closure path for known `budget-missing` residual records without inventing synthetic thresholds. A metric MAY stop appearing in `BUDGET_RESIDUALS` only after the evidence artifacts include an owner-approved budget block or an explicit measured-evidence prerequisite that keeps the residual visible through another audited check.
+
+#### Scenario: known residual metric gains owner-approved budget
+
+- **WHEN** a known residual metric such as `S-LL-200/commitDurationP50`, `S-CI-50/compositionToCommit`, `S-RS-PE/assemblerLatency`, or `S-CS-COLD/firstPaintMs` gains a `budget` block in `docs/perf/baseline.json`
+- **THEN** the budget block MUST include `target` or `hardFail`, `unit`, `owner`, `source`, and `status` or `rollout`
+- **AND** `scripts/perf-archive-readiness.mjs` `BUDGET_RESIDUALS` MUST NOT contain that metric
+- **AND** `npm run perf:archive-readiness -- --json` MUST NOT report that metric as `budget-missing`
+
+#### Scenario: known residual metric is not yet budgetable
+
+- **WHEN** a known residual metric cannot receive an owner-approved budget because runtime evidence is missing or platform support is incomplete
+- **THEN** the readiness artifacts MUST keep the metric visible with owner, source, reason, and next action
+- **AND** the implementation MUST NOT delete the residual entry solely to reduce warning count
+- **AND** the readiness report MUST keep a non-passing status until the residual is budgeted or explicitly accepted by a governance decision
+
+#### Scenario: residual table stays synchronized with baseline budgets
+
+- **WHEN** parser tests load `docs/perf/baseline.json` and `scripts/perf-archive-readiness.mjs`
+- **THEN** the tests MUST fail if any metric with an actual budget block remains listed in `BUDGET_RESIDUALS`
+- **AND** the tests MUST fail if a residual entry lacks owner and next-action guidance
+
+### Requirement: Proxy Evidence Debt MUST Be Reduced Or Explicitly Accepted Without Relaxing Gate Semantics
+
+The archive-readiness gate MUST keep proxy evidence pressure visible until the evidence mix is upgraded to measured runtime evidence or explicitly accepted as release debt. The implementation MUST NOT raise `PROXY_RATIO_WARN_THRESHOLD`, remove the proxy-ratio rule, or relabel proxy records as measured without a runtime source artifact.
+
+#### Scenario: proxy ratio exceeds threshold without accepted disposition
+
+- **WHEN** `npm run perf:archive-readiness -- --json` computes `proxyRatio` above `PROXY_RATIO_WARN_THRESHOLD`
+- **AND** no accepted proxy evidence disposition is present for normal-mode readiness
+- **THEN** the report MUST emit `proxy-ratio-too-high`
+- **AND** the warning MUST include measured, proxy, synthetic, unsupported, and manual-only counts
+- **AND** the warning MUST include owner and next action
+
+#### Scenario: proxy metric is upgraded to measured
+
+- **WHEN** a proxy metric is upgraded to `evidenceClass: "measured"`
+- **THEN** the record MUST point to a runtime source artifact that produced the measurement
+- **AND** the readiness evidence summary MUST reflect the new measured count
+- **AND** the change MUST NOT alter the metric's unit or budget metadata unless the budget source also changes
+
+#### Scenario: remaining proxy evidence is accepted debt
+
+- **WHEN** proxy evidence remains after the cleanup
+- **THEN** the readiness artifacts MUST identify the owner, reason, release decision, and next action for the remaining proxy records
+- **AND** normal-mode readiness MAY report `status=pass` only when that accepted disposition is present and complete
+- **AND** release-mode readiness MUST continue to apply stricter release evidence rules
+
+### Requirement: Unsupported Runtime Evidence MUST Have Explicit Disposition
+
+Runtime evidence records with `evidenceClass: "unsupported"` MUST resolve to measured evidence or an explicit unsupported disposition before the archive-readiness gate reports a clean normal-mode pass.
+
+#### Scenario: cold-start unsupported evidence is resolved
+
+- **WHEN** `S-CS-COLD/firstPaintMs` or `S-CS-COLD/firstInteractiveMs` appears in runtime evidence
+- **THEN** the record MUST be measured from a cold-start runtime artifact or carry an explicit unsupported disposition with platform qualifier, owner, reason, release decision, and next action
+- **AND** the readiness report MUST NOT silently drop the record from unsupported summaries
+
+#### Scenario: long-running runtime unsupported evidence is resolved
+
+- **WHEN** long-running runtime metrics such as `S-LR-101/sampledOsChildLivenessAfterClose` or `S-LR-200/moduleSwitchP95Ms` remain unsupported
+- **THEN** the record MUST include owner, platform qualifier, reason, release decision, and next action
+- **AND** release mode MUST still treat unsupported release-required records according to the stricter release evidence rules
+
+#### Scenario: unsupported disposition keeps audit truthfulness
+
+- **WHEN** an unsupported record has an accepted disposition
+- **THEN** the readiness output MUST distinguish accepted unsupported debt from measured pass
+- **AND** the output MUST preserve enough metadata for reviewers to identify the owner and follow-up path

@@ -49,7 +49,9 @@ function getCssRuleBlock(css: string, selector: string): string {
 
 describe("client typography font-size coverage", () => {
   it("routes file tree readable text through client typography tokens", () => {
-    expect(getCssRuleBlock(fileTreeCss, ".file-tree-panel")).toContain(
+    const fileTreePanelRule = getCssRuleBlock(fileTreeCss, ".file-tree-panel");
+
+    expect(fileTreePanelRule).toContain(
       "--file-tree-content-font-size: var(--client-content-font-size, 12px);",
     );
     expect(getCssRuleBlock(fileTreeCss, ".file-tree-row")).toContain(
@@ -61,6 +63,21 @@ describe("client typography font-size coverage", () => {
     expect(getCssRuleBlock(fileTreeCss, ".file-tree-lazy-state")).toContain(
       "font-size: var(--file-tree-caption-font-size);",
     );
+  });
+
+  it("keeps the file tree scroll shell independent from lazy Git diff styles", () => {
+    const fileTreePanelRule = getCssRuleBlock(fileTreeCss, ".file-tree-panel");
+    const fileTreeDiffPanelRule = getCssRuleBlock(fileTreeCss, ".diff-panel.file-tree-panel");
+
+    expect(fileTreePanelRule).toContain("display: flex;");
+    expect(fileTreePanelRule).toContain("flex: 1;");
+    expect(fileTreePanelRule).toContain("flex-direction: column;");
+    expect(fileTreePanelRule).toContain("min-height: 0;");
+    expect(fileTreePanelRule).toContain("overflow: hidden;");
+    expect(fileTreePanelRule).toContain("padding: 8px 8px 0;");
+    expect(fileTreePanelRule).toContain("position: relative;");
+    expect(fileTreeDiffPanelRule).toContain("gap: 0;");
+    expect(fileTreeDiffPanelRule).toContain("padding: 8px 8px 0;");
   });
 
   it("routes Git file tree typography through shared client tokens", () => {

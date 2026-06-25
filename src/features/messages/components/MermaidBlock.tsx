@@ -1,10 +1,15 @@
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
+import Maximize2 from "lucide-react/dist/esm/icons/maximize-2";
 import {
   isThemeMutationAttribute,
   mapAppearanceToMermaidTheme,
   readDocumentThemeAppearance,
 } from "../../theme/utils/themeAppearance";
+import {
+  MermaidFullscreenViewer,
+  preloadViewerjs,
+} from "../../markdown/mermaidFullscreen";
 
 type MermaidBlockProps = {
   value: string;
@@ -30,6 +35,7 @@ export default function MermaidBlock({
     status: "idle",
   });
   const [showSource, setShowSource] = useState(false);
+  const [isFullscreenOpen, setIsFullscreenOpen] = useState(false);
   const [copiedMode, setCopiedMode] = useState<"plain" | "fenced" | null>(null);
   const [renderKey, setRenderKey] = useState(0);
   const copyTimeoutRef = useRef<number | null>(null);
@@ -101,6 +107,14 @@ export default function MermaidBlock({
     };
   }, []);
 
+  // Warm the viewerjs import as soon as we have a successful render
+  // so the first Fullscreen click does not pay the dynamic-import cost.
+  useEffect(() => {
+    if (renderState.status === "success" && renderState.svg) {
+      void preloadViewerjs();
+    }
+  }, [renderState]);
+
   const fencedValue = `\`\`\`mermaid\n${value}\n\`\`\``;
 
   const handleCopy = async (event: MouseEvent<HTMLButtonElement>) => {
@@ -168,6 +182,17 @@ export default function MermaidBlock({
           >
             {copiedMode === "fenced" ? t("messages.copied") : t("messages.copyWithFence")}
           </button>
+          <button
+            type="button"
+            className="ghost markdown-codeblock-copy"
+            onClick={() => setIsFullscreenOpen(true)}
+            disabled={renderState.status !== "success"}
+            aria-label={t("common.markdownMermaidFullscreenHint")}
+            title={t("common.markdownMermaidFullscreen")}
+            data-testid="mermaid-fullscreen-button"
+          >
+            <Maximize2 size={14} aria-hidden />
+          </button>
         </div>
       </div>
 
@@ -194,6 +219,12 @@ export default function MermaidBlock({
           Rendering diagram...
         </div>
       )}
+
+      <MermaidFullscreenViewer
+        open={isFullscreenOpen}
+        svg={renderState.status === "success" ? renderState.svg : ""}
+        onClose={() => setIsFullscreenOpen(false)}
+      />
     </div>
   );
 }

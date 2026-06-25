@@ -33,6 +33,7 @@ const workerResult: FastMarkdownRenderResult = {
     profile: "fast-html",
     contentHash: "worker-content",
     cacheKey: "worker-cache-key",
+    cacheState: "miss",
     compileDurationMs: 12,
     sanitizeDurationMs: 2,
     totalSourceLines: 8,
@@ -88,6 +89,7 @@ describe("message markdown precompute", () => {
       totalSourceLines: 8,
       unsafeHtmlBoundary: "main-thread-sanitized-rich-render",
     });
+    expect(JSON.stringify(result.precomputeResult)).not.toContain(workerResult.html);
   });
 
   it("reuses cache for same profile/message/content/options/schema", async () => {

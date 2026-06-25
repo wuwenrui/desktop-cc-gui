@@ -11,31 +11,32 @@ describe("PanelTabs", () => {
   afterEach(() => {
     cleanup();
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
-  it("renders top toolbar buttons as non-drag interactive controls", () => {
+  it("renders the active tab and overflow trigger as non-drag interactive controls", () => {
     const onSelect = vi.fn();
 
     render(<PanelTabs active="files" onSelect={onSelect} />);
 
     const filesButton = screen.getByRole("button", { name: "panels.files" });
-    const searchButton = screen.getByRole("button", { name: "panels.search" });
-    const activityButton = screen.getByRole("button", { name: "panels.activity" });
-    const radarButton = screen.getByRole("button", { name: "panels.radar" });
+    const moreButton = screen.getByRole("button", { name: "common.moreActions" });
 
     expect(filesButton.getAttribute("data-tauri-drag-region")).toBe("false");
-    expect(searchButton.getAttribute("data-tauri-drag-region")).toBe("false");
-    expect(activityButton.getAttribute("data-tauri-drag-region")).toBe("false");
-    expect(radarButton.getAttribute("data-tauri-drag-region")).toBe("false");
+    expect(moreButton.getAttribute("data-tauri-drag-region")).toBe("false");
 
-    fireEvent.click(searchButton);
+    fireEvent.pointerDown(moreButton, {
+      button: 0,
+      ctrlKey: false,
+    });
+    fireEvent.click(screen.getByRole("menuitem", { name: "panels.search" }));
     expect(onSelect).toHaveBeenCalledWith("search");
   });
 
   it("shows a tooltip when hovering an icon-only panel tab", async () => {
     const onSelect = vi.fn();
 
-    render(<PanelTabs active="files" onSelect={onSelect} />);
+    render(<PanelTabs active="search" onSelect={onSelect} />);
 
     await act(async () => {
       fireEvent.mouseEnter(screen.getByRole("button", { name: "panels.search" }));
@@ -102,14 +103,43 @@ describe("PanelTabs", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "panels.git" }));
-    fireEvent.click(screen.getByRole("button", { name: "panels.files" }));
-    fireEvent.click(screen.getByRole("button", { name: "panels.search" }));
+    fireEvent.pointerDown(screen.getByRole("button", { name: "common.moreActions" }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    fireEvent.click(screen.getByRole("menuitem", { name: "panels.git" }));
+    fireEvent.pointerDown(screen.getByRole("button", { name: "common.moreActions" }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    fireEvent.click(screen.getByRole("menuitem", { name: "panels.files" }));
+    fireEvent.pointerDown(screen.getByRole("button", { name: "common.moreActions" }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    fireEvent.click(screen.getByRole("menuitem", { name: "panels.search" }));
     fireEvent.click(screen.getByRole("button", { name: "panels.memory" }));
 
     expect(onSelect).toHaveBeenNthCalledWith(1, "git");
     expect(onSelect).toHaveBeenNthCalledWith(2, "files");
     expect(onSelect).toHaveBeenNthCalledWith(3, "search");
     expect(onSelect).toHaveBeenNthCalledWith(4, "memory");
+  });
+
+  it("keeps inactive tabs in the overflow menu until selected", () => {
+    const onSelect = vi.fn();
+
+    render(<PanelTabs active="files" onSelect={onSelect} />);
+
+    expect(screen.queryByRole("button", { name: "panels.search" })).toBeNull();
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: "common.moreActions" }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    fireEvent.click(screen.getByRole("menuitem", { name: "panels.search" }));
+
+    expect(onSelect).toHaveBeenCalledWith("search");
+    expect(screen.getByRole("button", { name: "panels.search" })).toBeTruthy();
   });
 });

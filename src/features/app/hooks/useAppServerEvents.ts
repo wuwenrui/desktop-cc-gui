@@ -30,6 +30,10 @@ import {
 import { updateSharedSessionNativeBinding as updateSharedSessionNativeBindingService } from "../../shared-session/services/sharedSessions";
 import { noteThreadAppServerEventReceived } from "../../threads/utils/streamLatencyDiagnostics";
 import { isAppServerEventBatchConsumerEnabled } from "../../threads/utils/realtimePerfFlags";
+import {
+  classifyCodexEventRisk,
+  resolveCodexEventOwnership,
+} from "./codexEventOwnership";
 
 type AgentDelta = {
   workspaceId: string;
@@ -236,10 +240,15 @@ type AppServerEventHandlers = {
   ) => void;
   /**
    * 获取指定 workspace 当前活动的 Codex thread ID
-   * 用于处理没有 threadId 的 token_count 事件
-   * 奶奶请看：这就是那个"智能收件室"的功能，当信没有收件人时，它会自动查找正在使用的房间
+   * 仅用于低风险兼容展示路径，不能作为 lifecycle mutation owner。
    */
   getActiveCodexThreadId?: (workspaceId: string) => string | null;
+  /**
+   * Returns a thread only when the workspace has exactly one processing
+   * Codex conversation. This is the bounded fallback for owner-gated
+   * lifecycle events that lack explicit thread context.
+   */
+  getSingleProcessingCodexThreadId?: (workspaceId: string) => string | null;
 };
 
 type UseAppServerEventsOptions = {
@@ -345,6 +354,29 @@ function extractThreadIdFromParams(params: Record<string, unknown>): string {
       threadObj.id ??
       "",
   ).trim();
+}
+
+function resolveCodexOwnerThreadId(
+  handlers: AppServerEventHandlers,
+  workspaceId: string,
+  method: string,
+  params: Record<string, unknown>,
+): string {
+  const explicitThreadId = extractThreadIdFromParams(params);
+  const fallbackThreadId = explicitThreadId
+    ? null
+    : (handlers.getSingleProcessingCodexThreadId?.(workspaceId) ?? null);
+  const ownership = resolveCodexEventOwnership({
+    workspaceId,
+    risk: classifyCodexEventRisk(method),
+    explicitThreadId,
+    explicitTurnId: extractTurnIdFromParams(params),
+    ...(explicitThreadId ? { explicitSource: "payload" as const } : {}),
+    boundedFallbackThreadIds: fallbackThreadId ? [fallbackThreadId] : [],
+  });
+  return ownership.kind === "explicit" || ownership.kind === "boundedFallback"
+    ? ownership.threadId
+    : "";
 }
 
 function getAppServerEventMethod(payload: AppServerEvent): string {
@@ -1434,7 +1466,7 @@ export function dispatchAppServerEvent(
     !rawThreadId &&
     shouldForceNormalizedRealtimeRoute &&
     rawMethodEngine === "codex"
-      ? (handlers.getActiveCodexThreadId?.(workspace_id) ?? "")
+      ? resolveCodexOwnerThreadId(handlers, workspace_id, method, params)
       : "";
   const realtimeThreadId = rawThreadId || fallbackGeneratedImageThreadId;
   let sharedBridge = realtimeThreadId
@@ -1543,10 +1575,12 @@ export function dispatchAppServerEvent(
     if (requestId === null) {
       return;
     }
-    const fallbackThreadId =
-      handlers.getActiveCodexThreadId?.(workspace_id) ?? "";
-    const resolvedThreadId =
-      extractThreadIdFromParams(params) || fallbackThreadId;
+    const resolvedThreadId = resolveCodexOwnerThreadId(
+      handlers,
+      workspace_id,
+      method,
+      params,
+    );
     const effectiveThreadId =
       resolveSharedSessionBindingByNativeThread(workspace_id, resolvedThreadId)
         ?.sharedThreadId ?? resolvedThreadId;
@@ -1767,10 +1801,12 @@ export function dispatchAppServerEvent(
 
   if (method === "codex/parseError") {
     const params = (message.params as Record<string, unknown>) ?? {};
-    const fallbackThreadId =
-      handlers.getActiveCodexThreadId?.(workspace_id) ?? "";
-    const resolvedThreadId =
-      extractThreadIdFromParams(params) || fallbackThreadId;
+    const resolvedThreadId = resolveCodexOwnerThreadId(
+      handlers,
+      workspace_id,
+      method,
+      params,
+    );
     const threadId = sharedBridge?.sharedThreadId ?? resolvedThreadId;
     if (!threadId) {
       return;
@@ -1859,8 +1895,27 @@ export function dispatchAppServerEvent(
       return;
     }
 
-    const fallbackThreadId =
-      handlers.getActiveCodexThreadId?.(workspace_id) ?? "";
+    const explicitRuntimeThreadId = extractThreadIdFromParams(params);
+    const explicitRuntimeTurnId = extractTurnIdFromParams(params);
+    const hasExplicitRuntimeOwner =
+      Boolean(explicitRuntimeThreadId) ||
+      affectedThreadIds.length > 0 ||
+      affectedActiveTurns.size > 0;
+    const singleProcessingFallbackThreadId =
+      hasExplicitRuntimeOwner
+        ? null
+        : (handlers.getSingleProcessingCodexThreadId?.(workspace_id) ?? null);
+    const fallbackOwnership = resolveCodexEventOwnership({
+      workspaceId: workspace_id,
+      risk: classifyCodexEventRisk(method),
+      explicitThreadId: explicitRuntimeThreadId,
+      explicitTurnId: explicitRuntimeTurnId,
+      ...(explicitRuntimeThreadId ? { explicitSource: "payload" as const } : {}),
+      runtimeGeneration,
+      boundedFallbackThreadIds: singleProcessingFallbackThreadId
+        ? [singleProcessingFallbackThreadId]
+        : [],
+    });
     const normalizedMessage = rawMessage.startsWith("[RUNTIME_ENDED]")
       ? rawMessage
       : rawMessage
@@ -1870,8 +1925,9 @@ export function dispatchAppServerEvent(
       ? affectedThreadIds
       : affectedActiveTurns.size
         ? Array.from(affectedActiveTurns.keys())
-        : fallbackThreadId
-          ? [fallbackThreadId]
+        : fallbackOwnership.kind === "explicit" ||
+            fallbackOwnership.kind === "boundedFallback"
+          ? [fallbackOwnership.threadId]
           : [];
     const uniqueTargetThreadIds = Array.from(new Set(targetThreadIds));
     const shouldUseSingleAffectedTurnId =
@@ -1887,7 +1943,12 @@ export function dispatchAppServerEvent(
       }
       const targetTurnId =
         affectedActiveTurns.get(targetThreadId) ??
-        (shouldUseSingleAffectedTurnId ? (affectedTurnIds[0] ?? "") : "");
+        (shouldUseSingleAffectedTurnId
+          ? (affectedTurnIds[0] ?? "")
+          : fallbackOwnership.kind === "explicit" &&
+              fallbackOwnership.threadId === targetThreadId
+            ? (fallbackOwnership.turnId ?? "")
+            : "");
       handlers.onTurnError?.(workspace_id, reboundThreadId, targetTurnId, {
         message: normalizedMessage,
         willRetry: false,
@@ -2246,12 +2307,13 @@ export function dispatchAppServerEvent(
       threadId = sharedBridge.sharedThreadId;
     }
 
-    // If no threadId in event, try to resolve from the active Codex thread
-    if (!threadId && handlers.getActiveCodexThreadId) {
-      const activeThreadId = handlers.getActiveCodexThreadId(workspace_id);
-      if (activeThreadId) {
-        threadId = activeThreadId;
-      }
+    if (!threadId) {
+      threadId = resolveCodexOwnerThreadId(
+        handlers,
+        workspace_id,
+        method,
+        params,
+      );
     }
 
     // Skip this event if threadId is still unavailable
@@ -2535,10 +2597,12 @@ export function dispatchAppServerEvent(
     method === "response.reasoning_summary_part.done"
   ) {
     const params = message.params as Record<string, unknown>;
-    const fallbackThreadId =
-      handlers.getActiveCodexThreadId?.(workspace_id) ?? "";
-    const resolvedThreadId =
-      extractThreadIdFromParams(params) || fallbackThreadId;
+    const resolvedThreadId = resolveCodexOwnerThreadId(
+      handlers,
+      workspace_id,
+      method,
+      params,
+    );
     const sharedBridge = resolveSharedSessionBindingByNativeThread(
       workspace_id,
       resolvedThreadId,
@@ -2567,10 +2631,12 @@ export function dispatchAppServerEvent(
     method === "response.reasoning_summary_part.added"
   ) {
     const params = message.params as Record<string, unknown>;
-    const fallbackThreadId =
-      handlers.getActiveCodexThreadId?.(workspace_id) ?? "";
-    const resolvedThreadId =
-      extractThreadIdFromParams(params) || fallbackThreadId;
+    const resolvedThreadId = resolveCodexOwnerThreadId(
+      handlers,
+      workspace_id,
+      method,
+      params,
+    );
     const sharedBridge = resolveSharedSessionBindingByNativeThread(
       workspace_id,
       resolvedThreadId,
@@ -2598,10 +2664,12 @@ export function dispatchAppServerEvent(
     method === "response.reasoning_text.done"
   ) {
     const params = message.params as Record<string, unknown>;
-    const fallbackThreadId =
-      handlers.getActiveCodexThreadId?.(workspace_id) ?? "";
-    const resolvedThreadId =
-      extractThreadIdFromParams(params) || fallbackThreadId;
+    const resolvedThreadId = resolveCodexOwnerThreadId(
+      handlers,
+      workspace_id,
+      method,
+      params,
+    );
     const sharedBridge = resolveSharedSessionBindingByNativeThread(
       workspace_id,
       resolvedThreadId,
@@ -2629,10 +2697,12 @@ export function dispatchAppServerEvent(
   // without the "textDelta" suffix.
   if (method === "item/reasoning/delta") {
     const params = message.params as Record<string, unknown>;
-    const fallbackThreadId =
-      handlers.getActiveCodexThreadId?.(workspace_id) ?? "";
-    const resolvedThreadId =
-      extractThreadIdFromParams(params) || fallbackThreadId;
+    const resolvedThreadId = resolveCodexOwnerThreadId(
+      handlers,
+      workspace_id,
+      method,
+      params,
+    );
     const sharedBridge = resolveSharedSessionBindingByNativeThread(
       workspace_id,
       resolvedThreadId,

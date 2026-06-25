@@ -25,7 +25,7 @@ type ThreadAppServerEventDiagnosticsInput = {
     label: string,
     payload: Record<string, unknown>,
   ) => void;
-  noteCodexTurnProgressEvidence: (threadId: string, source: string) => void;
+  noteCodexTurnProgressEvidence: (workspaceId: string | null, threadId: string, source: string) => void;
 };
 
 export function isReasoningRawDebugEnabled() {
@@ -152,7 +152,7 @@ export function handleThreadAppServerEventDiagnostics({
         status === "processing" ||
         status === "alive")
     ) {
-      noteCodexTurnProgressEvidence(threadId, `status:${status}`);
+      noteCodexTurnProgressEvidence(event.workspace_id ?? null, threadId, `status:${status}`);
     }
   }
 

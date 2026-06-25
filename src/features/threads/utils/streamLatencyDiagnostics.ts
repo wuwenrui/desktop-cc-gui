@@ -7,6 +7,7 @@ import {
   completeTurnTrace,
   isTurnTraceEnabled,
   noteTurnBatchFlushBoundary,
+  noteTurnDeltaIngress,
   noteTurnFirstEngineDeltaIngress,
   noteTurnFirstVisibleRowRender,
   noteTurnFirstVisibleTextGrowth,
@@ -403,7 +404,9 @@ function getStreamLatencyThresholds() {
 
 export function isStreamLatencyTraceEnabled() {
   if (streamLatencyTraceEnabledCache === null) {
-    streamLatencyTraceEnabledCache = readBooleanDebugFlag(STREAM_LATENCY_TRACE_FLAG_KEY);
+    const env = (import.meta.env ?? {}) as Record<string, string | boolean | undefined>;
+    streamLatencyTraceEnabledCache = readBooleanDebugFlag(STREAM_LATENCY_TRACE_FLAG_KEY)
+      || (env.MODE !== "test" && (env.DEV === true || env.VITE_ENABLE_PERF_BASELINE === "1"));
   }
   return streamLatencyTraceEnabledCache;
 }
@@ -423,6 +426,15 @@ function normalizeNonNegativeFiniteNumber(value: unknown) {
 
 function normalizeString(value: unknown) {
   return typeof value === "string" ? value : "";
+}
+
+function normalizeStringArray(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((item) => normalizeString(item).trim())
+    .filter((item) => item.length > 0);
 }
 
 function clearVisibleOutputStallTimer(threadId: string) {
@@ -735,6 +747,7 @@ export function noteThreadAppServerEventReceived(input: {
   if (!timing) {
     return;
   }
+  const traceSource = normalizeString(timing.source) || "unknown";
   const threadId = extractThreadIdFromAppServerParams(params);
   if (!threadId) {
     return;
@@ -758,6 +771,54 @@ export function noteThreadAppServerEventReceived(input: {
   const sessionEmittedAtMs = normalizeNonNegativeFiniteNumber(timing.sessionEmittedAtMs);
   const forwarderReceivedAtMs = normalizeNonNegativeFiniteNumber(timing.forwarderReceivedAtMs);
   const appServerEmittedAtMs = normalizeNonNegativeFiniteNumber(timing.appServerEmittedAtMs);
+  const turnStartRequestStartedAtMs = normalizeNonNegativeFiniteNumber(
+    timing.turnStartRequestStartedAtMs,
+  );
+  const turnStartResponseReceivedAtMs = normalizeNonNegativeFiniteNumber(
+    timing.turnStartResponseReceivedAtMs,
+  );
+  const firstRuntimeEventReceivedAtMs = normalizeNonNegativeFiniteNumber(
+    timing.firstRuntimeEventReceivedAtMs,
+  );
+  const firstStreamEventReceivedAtMs = normalizeNonNegativeFiniteNumber(
+    timing.firstStreamEventReceivedAtMs,
+  );
+  const firstReasoningEventReceivedAtMs = normalizeNonNegativeFiniteNumber(
+    timing.firstReasoningEventReceivedAtMs,
+  );
+  const firstAssistantItemEventReceivedAtMs = normalizeNonNegativeFiniteNumber(
+    timing.firstAssistantItemEventReceivedAtMs,
+  );
+  const firstAgentMessageEventReceivedAtMs = normalizeNonNegativeFiniteNumber(
+    timing.firstAgentMessageEventReceivedAtMs,
+  );
+  const firstToolEventReceivedAtMs = normalizeNonNegativeFiniteNumber(
+    timing.firstToolEventReceivedAtMs,
+  );
+  const firstTextDeltaReceivedAtMs = normalizeNonNegativeFiniteNumber(
+    timing.firstTextDeltaReceivedAtMs,
+  );
+  const firstRuntimeEventMethod = normalizeNullableString(
+    normalizeString(timing.firstRuntimeEventMethod),
+  );
+  const firstStreamEventMethod = normalizeNullableString(
+    normalizeString(timing.firstStreamEventMethod),
+  );
+  const firstReasoningEventMethod = normalizeNullableString(
+    normalizeString(timing.firstReasoningEventMethod),
+  );
+  const firstAssistantItemEventMethod = normalizeNullableString(
+    normalizeString(timing.firstAssistantItemEventMethod),
+  );
+  const firstAgentMessageEventMethod = normalizeNullableString(
+    normalizeString(timing.firstAgentMessageEventMethod),
+  );
+  const firstToolEventMethod = normalizeNullableString(
+    normalizeString(timing.firstToolEventMethod),
+  );
+  const firstTextDeltaMethod = normalizeNullableString(
+    normalizeString(timing.firstTextDeltaMethod),
+  );
   const snapshot =
     snapshotByThread.get(threadId) ?? {
       ...createInitialSnapshot(threadId),
@@ -770,7 +831,7 @@ export function noteThreadAppServerEventReceived(input: {
       method: input.method,
       itemId: extractItemIdFromAppServerParams(params),
       deltaLength: normalizeString(params.delta).length,
-      traceSource: normalizeString(timing.source) || "unknown",
+      traceSource,
       stdoutReceivedAtMs,
       processSpawnStartedAtMs,
       processSpawnedAtMs,
@@ -783,6 +844,32 @@ export function noteThreadAppServerEventReceived(input: {
       sessionEmittedAtMs,
       forwarderReceivedAtMs,
       appServerEmittedAtMs,
+      turnStartRequestStartedAtMs,
+      turnStartResponseReceivedAtMs,
+      firstRuntimeEventReceivedAtMs,
+      firstStreamEventReceivedAtMs,
+      firstReasoningEventReceivedAtMs,
+      firstAssistantItemEventReceivedAtMs,
+      firstAgentMessageEventReceivedAtMs,
+      firstToolEventReceivedAtMs,
+      firstTextDeltaReceivedAtMs,
+      firstRuntimeEventMethod,
+      firstStreamEventMethod,
+      firstReasoningEventMethod,
+      firstAssistantItemEventMethod,
+      firstAgentMessageEventMethod,
+      firstToolEventMethod,
+      firstTextDeltaMethod,
+      eventCountBeforeFirstTextDelta: normalizeNonNegativeFiniteNumber(
+        timing.eventCountBeforeFirstTextDelta,
+      ),
+      reasoningEventCountBeforeFirstTextDelta: normalizeNonNegativeFiniteNumber(
+        timing.reasoningEventCountBeforeFirstTextDelta,
+      ),
+      toolEventCountBeforeFirstTextDelta: normalizeNonNegativeFiniteNumber(
+        timing.toolEventCountBeforeFirstTextDelta,
+      ),
+      methodsBeforeFirstTextDelta: normalizeStringArray(timing.methodsBeforeFirstTextDelta),
       rendererReceivedAtMs: receivedAt,
       spawnToStdinClosedMs: normalizeNonNegativeFiniteNumber(timing.spawnToStdinClosedMs),
       stdinClosedToFirstStdoutMs: normalizeNonNegativeFiniteNumber(
@@ -807,8 +894,36 @@ export function noteThreadAppServerEventReceived(input: {
       stdoutToAppServerEmitMs: normalizeNonNegativeFiniteNumber(
         timing.stdoutToAppServerEmitMs,
       ),
+      turnStartRequestToResponseMs: normalizeNonNegativeFiniteNumber(
+        timing.turnStartRequestToResponseMs,
+      ),
+      turnStartResponseToFirstStreamEventMs: normalizeNonNegativeFiniteNumber(
+        timing.turnStartResponseToFirstStreamEventMs,
+      ),
+      turnStartResponseToFirstRuntimeEventMs: normalizeNonNegativeFiniteNumber(
+        timing.turnStartResponseToFirstRuntimeEventMs,
+      ),
+      turnStartResponseToFirstTextDeltaMs: normalizeNonNegativeFiniteNumber(
+        timing.turnStartResponseToFirstTextDeltaMs,
+      ),
+      firstRuntimeEventToFirstTextDeltaMs: normalizeNonNegativeFiniteNumber(
+        timing.firstRuntimeEventToFirstTextDeltaMs,
+      ),
+      firstRuntimeEventToFirstAssistantItemEventMs: normalizeNonNegativeFiniteNumber(
+        timing.firstRuntimeEventToFirstAssistantItemEventMs,
+      ),
+      firstAssistantItemEventToFirstTextDeltaMs: normalizeNonNegativeFiniteNumber(
+        timing.firstAssistantItemEventToFirstTextDeltaMs,
+      ),
+      turnStartResponseToThisEventMs: normalizeNonNegativeFiniteNumber(
+        timing.turnStartResponseToThisEventMs,
+      ),
       appServerEmitToRendererMs: nonNegativeGapMs(receivedAt, appServerEmittedAtMs),
       stdoutToRendererMs: nonNegativeGapMs(receivedAt, stdoutReceivedAtMs),
+      turnStartResponseToRendererMs: nonNegativeGapMs(
+        receivedAt,
+        turnStartResponseReceivedAtMs,
+      ),
     }),
   );
 
@@ -1077,6 +1192,8 @@ export function noteThreadDeltaReceived(
         : undefined;
       if (wasFirstDeltaPending) {
         noteTurnFirstEngineDeltaIngress(dimensions, timestamp);
+      } else {
+        noteTurnDeltaIngress(dimensions, timestamp);
       }
       noteTurnReducerCommit({
         dimensions,
@@ -1500,7 +1617,6 @@ export function noteThreadVisibleTextRendered(
       current.pendingVisibleTextSinceDeltaAt === null
         ? null
         : Math.max(0, renderAt - current.pendingVisibleTextSinceDeltaAt);
-    const isFirstVisibleTextRender = current.firstVisibleTextRenderAt === null;
     clearVisibleOutputStallTimer(threadId);
     const nextSnapshotAfterText: ThreadStreamLatencySnapshot = {
       ...current,
@@ -1514,7 +1630,7 @@ export function noteThreadVisibleTextRendered(
       visibleTextGrowthCount: current.visibleTextGrowthCount + 1,
       pendingVisibleTextSinceDeltaAt: null,
     };
-    if (isFirstVisibleTextRender && isTurnTraceEnabled()) {
+    if (isTurnTraceEnabled()) {
       const dimensions = buildTraceDimensionsFromSnapshot(nextSnapshotAfterText);
       if (dimensions) {
         noteTurnFirstVisibleTextGrowth(dimensions, {
@@ -1694,6 +1810,8 @@ export function noteRealtimeCoalescedFlush(input: {
   itemKind: string;
   startedAt?: number;
   endedAt?: number;
+  routeStartedAt?: number;
+  routeEndedAt?: number;
   queueDepthAfter?: number;
 }) {
   // endedAt defaults to wall-clock now; callers (the realtime batcher in
@@ -1726,6 +1844,10 @@ export function noteRealtimeCoalescedFlush(input: {
   ) {
     const snapshot = snapshotByThread.get(input.threadId);
     if (snapshot) {
+      const routeTiming =
+        typeof input.routeStartedAt === "number" && typeof input.routeEndedAt === "number"
+          ? { routeStartedAt: input.routeStartedAt, routeEndedAt: input.routeEndedAt }
+          : {};
       noteTurnBatchFlushBoundary({
         dimensions: {
           workspaceId: input.workspaceId,
@@ -1740,6 +1862,7 @@ export function noteRealtimeCoalescedFlush(input: {
         },
         startedAt: input.startedAt,
         endedAt: now,
+        ...routeTiming,
         eventCount: input.eventCount,
         queueDepthAfter: input.queueDepthAfter ?? 0,
       });
@@ -1752,6 +1875,8 @@ export function noteThreadBatchFlushBoundary(input: {
   turnId: string;
   startedAt: number;
   endedAt: number;
+  routeStartedAt?: number;
+  routeEndedAt?: number;
   eventCount: number;
   queueDepthAfter?: number;
 }) {
@@ -1765,6 +1890,14 @@ export function noteThreadBatchFlushBoundary(input: {
     || !Number.isFinite(input.startedAt)
     || typeof input.endedAt !== "number"
     || !Number.isFinite(input.endedAt)
+    || (
+      input.routeStartedAt !== undefined &&
+      (typeof input.routeStartedAt !== "number" || !Number.isFinite(input.routeStartedAt))
+    )
+    || (
+      input.routeEndedAt !== undefined &&
+      (typeof input.routeEndedAt !== "number" || !Number.isFinite(input.routeEndedAt))
+    )
     || input.eventCount < 0
   ) {
     return;
@@ -1773,6 +1906,10 @@ export function noteThreadBatchFlushBoundary(input: {
   if (!snapshot) {
     return;
   }
+  const routeTiming =
+    typeof input.routeStartedAt === "number" && typeof input.routeEndedAt === "number"
+      ? { routeStartedAt: input.routeStartedAt, routeEndedAt: input.routeEndedAt }
+      : {};
   noteTurnBatchFlushBoundary({
     dimensions: {
       workspaceId: snapshot.workspaceId,
@@ -1787,6 +1924,7 @@ export function noteThreadBatchFlushBoundary(input: {
     },
     startedAt: input.startedAt,
     endedAt: input.endedAt,
+    ...routeTiming,
     eventCount: input.eventCount,
     queueDepthAfter: input.queueDepthAfter ?? 0,
   });

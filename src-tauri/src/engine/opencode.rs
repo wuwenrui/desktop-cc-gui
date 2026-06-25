@@ -9,6 +9,7 @@ use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::process::{Child, Command};
@@ -41,10 +42,50 @@ pub struct OpenCodeSession {
     bin_path: Option<String>,
     home_dir: Option<String>,
     custom_args: Option<String>,
-    active_processes: Mutex<HashMap<String, Child>>,
+    active_processes: Mutex<HashMap<String, ActiveOpenCodeChildProcess>>,
     session_model_hints: Mutex<HashMap<String, String>>,
     tool_output_snapshots: Mutex<HashMap<String, String>>,
     interrupted: AtomicBool,
+}
+
+#[allow(dead_code)]
+pub struct OpenCodeActiveProcessSnapshot {
+    pub pid: u32,
+    pub registered_age_ms: u64,
+}
+
+struct ActiveOpenCodeChildProcess {
+    child: Child,
+    #[allow(dead_code)]
+    started_at_ms: u64,
+}
+
+impl ActiveOpenCodeChildProcess {
+    fn new(child: Child) -> Self {
+        Self {
+            child,
+            started_at_ms: unix_timestamp_ms_for_process_diagnostics(),
+        }
+    }
+
+    fn into_child(self) -> Child {
+        self.child
+    }
+
+    #[allow(dead_code)]
+    fn snapshot(&self, sampled_at_ms: u64) -> Option<OpenCodeActiveProcessSnapshot> {
+        Some(OpenCodeActiveProcessSnapshot {
+            pid: self.child.id()?,
+            registered_age_ms: sampled_at_ms.saturating_sub(self.started_at_ms),
+        })
+    }
+}
+
+fn unix_timestamp_ms_for_process_diagnostics() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 impl OpenCodeSession {
@@ -378,7 +419,7 @@ impl OpenCodeSession {
 
         {
             let mut active = self.active_processes.lock().await;
-            active.insert(turn_id.to_string(), child);
+            active.insert(turn_id.to_string(), ActiveOpenCodeChildProcess::new(child));
         }
 
         self.emit_turn_event(
@@ -565,7 +606,9 @@ impl OpenCodeSession {
 
         let mut child = {
             let mut active = self.active_processes.lock().await;
-            active.remove(turn_id)
+            active
+                .remove(turn_id)
+                .map(ActiveOpenCodeChildProcess::into_child)
         };
 
         let status = if let Some(mut child_proc) = child.take() {
@@ -651,7 +694,10 @@ impl OpenCodeSession {
         self.interrupted.store(true, Ordering::SeqCst);
         let children: Vec<(String, Child)> = {
             let mut active = self.active_processes.lock().await;
-            active.drain().collect()
+            active
+                .drain()
+                .map(|(turn_id, process)| (turn_id, process.into_child()))
+                .collect()
         };
         let mut snapshots = self.tool_output_snapshots.lock().await;
         snapshots.clear();
@@ -679,12 +725,73 @@ impl OpenCodeSession {
         self.interrupted.store(true, Ordering::SeqCst);
         let mut child = {
             let mut active = self.active_processes.lock().await;
-            active.remove(turn_id)
+            active
+                .remove(turn_id)
+                .map(ActiveOpenCodeChildProcess::into_child)
         };
         if let Some(child_proc) = child.as_mut() {
             self.terminate_child_process(turn_id, child_proc).await?;
         }
         Ok(())
+    }
+
+    #[cfg(test)]
+    pub async fn active_process_ids(&self) -> Vec<u32> {
+        let active = self.active_processes.lock().await;
+        active
+            .values()
+            .filter_map(|process| process.child.id())
+            .collect()
+    }
+
+    #[allow(dead_code)]
+    pub async fn active_process_snapshots(
+        &self,
+        sampled_at_ms: u64,
+    ) -> Vec<OpenCodeActiveProcessSnapshot> {
+        let active = self.active_processes.lock().await;
+        active
+            .values()
+            .filter_map(|process| process.snapshot(sampled_at_ms))
+            .collect()
+    }
+}
+
+impl Drop for OpenCodeSession {
+    fn drop(&mut self) {
+        let Ok(mut active) = self.active_processes.try_lock() else {
+            log::warn!(
+                "[opencode] dropping session workspace={} while active_processes is locked; child cleanup fallback skipped",
+                self.workspace_id
+            );
+            return;
+        };
+        if active.is_empty() {
+            return;
+        }
+        for (turn_id, process) in active.drain() {
+            let mut child = process.into_child();
+            let pid = child.id();
+            match child.start_kill() {
+                Ok(()) => {
+                    log::info!(
+                        "[opencode] drop fallback started child kill workspace={} turn={} pid={:?}",
+                        self.workspace_id,
+                        turn_id,
+                        pid
+                    );
+                }
+                Err(error) => {
+                    log::warn!(
+                        "[opencode] drop fallback failed to kill child workspace={} turn={} pid={:?}: {}",
+                        self.workspace_id,
+                        turn_id,
+                        pid,
+                        error
+                    );
+                }
+            }
+        }
     }
 }
 
@@ -1676,5 +1783,27 @@ mod tests {
         });
         let parsed = extract_session_id(&event);
         assert_eq!(parsed.as_deref(), Some("ses_nested_123"));
+    }
+
+    #[tokio::test]
+    async fn active_process_ids_is_empty_when_no_processes_running() {
+        let session = OpenCodeSession::new(
+            "ws-drop-test".to_string(),
+            PathBuf::from("/tmp/ws-drop-test"),
+            None,
+        );
+        assert!(session.active_process_ids().await.is_empty());
+        drop(session);
+    }
+
+    #[tokio::test]
+    async fn drop_fallback_does_not_panic_on_empty_active_processes() {
+        let session = OpenCodeSession::new(
+            "ws-drop-test-2".to_string(),
+            PathBuf::from("/tmp/ws-drop-test-2"),
+            None,
+        );
+        // Drop should be a no-op when there are no active children.
+        drop(session);
     }
 }

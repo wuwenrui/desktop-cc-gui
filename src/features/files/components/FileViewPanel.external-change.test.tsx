@@ -628,9 +628,11 @@ describe("FileViewPanel external change awareness in detached mode", () => {
     );
 
     await screen.findByTestId("mock-codemirror");
+    await waitFor(() => {
+      expect((screen.getByTestId("mock-codemirror") as HTMLTextAreaElement).value)
+        .toBe("const startup = 1;");
+    });
     expect(vi.mocked(readWorkspaceFile)).toHaveBeenCalledTimes(1);
-    expect((screen.getByTestId("mock-codemirror") as HTMLTextAreaElement).value)
-      .toBe("const startup = 1;");
   });
 
   it("ignores backend watcher fallback notices without rereading the file", async () => {

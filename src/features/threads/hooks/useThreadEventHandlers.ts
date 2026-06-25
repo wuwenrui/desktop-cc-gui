@@ -1,18 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
+import {
+  workspaceScopedDelete,
+  workspaceScopedHas,
+} from "./workspaceScopedMap";
 import type {
   AppServerEvent,
   CollaborationModeBlockedRequest,
   CollaborationModeResolvedRequest,
   RequestUserInputRequest,
-  TurnReconciliationRuntimeStatus,
-  TurnReconciliationStatusRequest,
-  TurnReconciliationStatusResponse,
 } from "../../../types";
-import { queryTurnReconciliationStatus } from "../../../services/tauri";
 import { useThreadApprovalEvents } from "./useThreadApprovalEvents";
 import { useThreadItemEvents } from "./useThreadItemEvents";
 import { useThreadTurnEvents } from "./useThreadTurnEvents";
+import { queryTurnReconciliationStatusWithTimeout } from "./threadReconciliationStatusQuery";
 import { useThreadUserInputEvents } from "./useThreadUserInputEvents";
+import { useThreadTurnSettlementReconciliation } from "./useThreadTurnSettlementReconciliation";
 import { parseFirstPacketTimeoutSeconds } from "../utils/networkErrors";
 import { buildThreadDebugCorrelation } from "../utils/threadDebugCorrelation";
 import type {
@@ -28,18 +30,8 @@ import {
   reportThreadUpstreamPending,
   type StreamIngressSource,
 } from "../utils/streamLatencyDiagnostics";
-import {
-  buildCodexLivenessDiagnostic,
-} from "../utils/codexConversationLiveness";
-import {
-  DEFAULT_TURN_SETTLEMENT_POLICY,
-  evaluateTurnSettlement,
-  toDryRunSettlementDecisionLabel,
-  type TurnSettlementTerminalKind,
-} from "../utils/turnSettlementDecision";
-import {
-  domainEventFactories,
-} from "../domain-events";
+import { buildCodexLivenessDiagnostic } from "../utils/codexConversationLiveness";
+import { domainEventFactories } from "../domain-events";
 import type { ThreadEventHandlersOptions } from "./threadEventHandlerTypes";
 import { handleThreadAppServerEventDiagnostics } from "./threadAppServerEventDiagnostics";
 import {
@@ -49,10 +41,13 @@ import {
   asString,
   buildAssistantSnapshotIngressKey,
   buildCodexTurnIdentityKey,
+  cleanupThreadTransientState,
   createThreadLifecycleSnapshot,
   createTurnDiagnosticState,
   extractTurnIdFromRawItem,
   getCodexNoProgressTimeoutMs,
+  sweepThreadTransientState,
+  TRANSIENT_TURN_STATE_SWEEP_INTERVAL_MS,
   inferRawItemEngine,
   inferThreadEngine,
   isExecutionItemType,
@@ -66,33 +61,8 @@ import {
   type ThreadLifecycleSnapshot,
   type TurnDiagnosticState,
 } from "./threadEventDiagnostics";
-export {
-  CODEX_EXECUTION_ACTIVE_NO_PROGRESS_STALL_MS,
-  CODEX_TURN_NO_PROGRESS_STALL_MS,
-} from "./threadEventDiagnostics";
-const THREE_EVIDENCE_RECONCILIATION_QUERY_TIMEOUT_MS = 15_000;
-function queryTurnReconciliationStatusWithTimeout(
-  request: TurnReconciliationStatusRequest,
-): Promise<TurnReconciliationStatusResponse> {
-  let timeoutId: number | null = null;
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    timeoutId = window.setTimeout(() => {
-      reject(
-        new Error(
-          `three-evidence reconciliation status query timed out after ${THREE_EVIDENCE_RECONCILIATION_QUERY_TIMEOUT_MS}ms`,
-        ),
-      );
-    }, THREE_EVIDENCE_RECONCILIATION_QUERY_TIMEOUT_MS);
-  });
-  return Promise.race([
-    queryTurnReconciliationStatus(request),
-    timeoutPromise,
-  ]).finally(() => {
-    if (timeoutId !== null) {
-      window.clearTimeout(timeoutId);
-    }
-  });
-}
+export { CODEX_EXECUTION_ACTIVE_NO_PROGRESS_STALL_MS, CODEX_TURN_NO_PROGRESS_STALL_MS } from "./threadEventDiagnostics";
+
 export function useThreadEventHandlers({
   activeThreadId,
   dispatch,
@@ -125,6 +95,7 @@ export function useThreadEventHandlers({
   onAgentMessageCompletedExternal,
   onTurnCompletedExternal,
   onTurnTerminalExternal,
+  onThreadTransientCleanupReady,
   onCollaborationModeResolved,
   onExitPlanModeToolCompleted,
   domainEventController = null,
@@ -140,6 +111,22 @@ export function useThreadEventHandlers({
   >(null);
   const assistantSnapshotIngressLengthRef = useRef<Map<string, number>>(new Map());
   const quarantinedCodexTurnsRef = useRef<Map<string, CodexQuarantinedTurn>>(new Map());
+  const cleanupThreadTransientRefs = useCallback(
+    (workspaceId: string | null | undefined, threadId: string) =>
+      cleanupThreadTransientState(
+        {
+          turnDiagnosticsRef,
+          quarantinedCodexTurnsRef,
+          assistantSnapshotIngressLengthRef,
+        },
+        workspaceId,
+        threadId,
+      ),
+    [],
+  );
+  useEffect(() => {
+    return onThreadTransientCleanupReady?.(cleanupThreadTransientRefs);
+  }, [cleanupThreadTransientRefs, onThreadTransientCleanupReady]);
   const getThreadLifecycleSnapshot = useCallback((threadId: string) => {
     return (
       threadLifecycleSnapshotRef.current.get(threadId) ?? createThreadLifecycleSnapshot()
@@ -177,508 +164,23 @@ export function useThreadEventHandlers({
     },
     [onDebug],
   );
-  const emitForegroundSettlementDiagnostic = useCallback(
-    (label: string, payload: Record<string, unknown>) => {
-      emitTurnDiagnostic(label, {
-        diagnosticCategory: "foreground-terminal-settlement",
-        ...payload,
-      }, { force: true });
-    },
-    [emitTurnDiagnostic],
-  );
-  const buildReconciliationQueryKey = useCallback(
-    (input: {
-      workspaceId: string;
-      engine: ConversationEngine;
-      threadId: string;
-      turnId: string | null;
-      runtimeSessionId: string | null;
-      runtimeLeaseId: string | null;
-    }) => {
-      return [
-        input.workspaceId,
-        input.engine,
-        input.threadId,
-        input.turnId ?? "",
-        input.runtimeSessionId ?? "",
-        input.runtimeLeaseId ?? "",
-      ].join("\u0000");
-    },
-    [],
-  );
-  const terminalKindFromReconciliationStatus = useCallback(
-    (status: TurnReconciliationRuntimeStatus): TurnSettlementTerminalKind | null => {
-      switch (status) {
-        case "completed":
-          return "status-confirmed-completed";
-        case "failed":
-          return "status-confirmed-error";
-        case "stalled":
-          return "stalled";
-        case "runtime-ended":
-          return "runtime-ended";
-        case "running":
-        case "unknown":
-        case "query-failed":
-          return null;
-      }
-    },
-    [],
-  );
-  const settleForegroundTurnResidue = useCallback(
-    (input: {
-      workspaceId: string;
-      threadId: string;
-      turnId: string | null;
-      engine: ConversationEngine;
-      lifecycle: ThreadLifecycleSnapshot;
-      source: "three-evidence-query-skipped" | "three-evidence-query-resolved" | "watchdog-interrupted";
-      decisionAction: string;
-      decisionReason: string;
-      scopeMatch: Record<string, unknown>;
-      acceptedEvidence: Record<string, unknown>;
-      boundedReason: string | null;
-      status?: TurnReconciliationRuntimeStatus | null;
-      statusSource?: string | null;
-      lastProgressAgeMs?: number | null;
-      allowAbandonedActiveTurn?: boolean;
-    }) => {
-      const activeTurnId = input.lifecycle.activeTurnId;
-      const turnMatches =
-        activeTurnId === input.turnId ||
-        (input.allowAbandonedActiveTurn === true && activeTurnId === null);
-      const scopeMatched = input.scopeMatch.matched === true;
-      const engineMatched = input.scopeMatch.engine !== false;
-      const terminalAccepted = input.acceptedEvidence.terminal === true;
-      const stateAccepted = input.acceptedEvidence.state === true;
-      const cleanupAllowed =
-        input.decisionAction === "cleanup-residue" &&
-        input.lifecycle.isProcessing &&
-        turnMatches &&
-        engineMatched &&
-        (input.source === "watchdog-interrupted" ||
-          (scopeMatched && terminalAccepted && stateAccepted));
-
-      if (!cleanupAllowed) {
-        emitTurnDiagnostic("three-evidence-reconciliation-cleanup-skipped", {
-          workspaceId: input.workspaceId,
-          threadId: input.threadId,
-          turnId: input.turnId,
-          engine: input.engine,
-          diagnosticCategory: "three-evidence-reconciliation",
-          cleanupSource: input.source,
-          skipReason: !input.lifecycle.isProcessing
-            ? "not-processing"
-            : !turnMatches
-              ? "active-turn-mismatch"
-              : !engineMatched
-                ? "engine-mismatch"
-              : input.decisionAction !== "cleanup-residue"
-                ? "decision-not-cleanup-residue"
-                : input.source !== "watchdog-interrupted" && !scopeMatched
-                  ? "scope-mismatch"
-                  : input.source !== "watchdog-interrupted" &&
-                      (!terminalAccepted || !stateAccepted)
-                    ? "evidence-not-accepted"
-                    : "guard-rejected",
-          status: input.status ?? null,
-          statusSource: input.statusSource ?? null,
-          decisionAction: input.decisionAction,
-          decisionReason: input.decisionReason,
-          scopeMatch: input.scopeMatch,
-          acceptedEvidence: input.acceptedEvidence,
-          boundedReason: input.boundedReason,
-          lastProgressAgeMs: input.lastProgressAgeMs ?? null,
-          isProcessing: input.lifecycle.isProcessing,
-          activeTurnId,
-          activeThreadId,
-        }, { force: true });
-        return false;
-      }
-
-      threadLifecycleSnapshotRef.current.set(input.threadId, {
-        ...input.lifecycle,
-        isProcessing: false,
-        activeTurnId: null,
-      });
-      dispatch({ type: "clearCodexSilentSuspected", threadId: input.threadId });
-      markProcessing(input.threadId, false);
-      setActiveTurnId(input.threadId, null);
-      emitTurnDiagnostic("three-evidence-reconciliation-cleanup-applied", {
-        workspaceId: input.workspaceId,
-        threadId: input.threadId,
-        turnId: input.turnId,
-        engine: input.engine,
-        diagnosticCategory: "three-evidence-reconciliation",
-        cleanupSource: input.source,
-        status: input.status ?? null,
-        statusSource: input.statusSource ?? null,
-        decisionAction: input.decisionAction,
-        decisionReason: input.decisionReason,
-        scopeMatch: input.scopeMatch,
-        acceptedEvidence: input.acceptedEvidence,
-        boundedReason: input.boundedReason,
-        lastProgressAgeMs: input.lastProgressAgeMs ?? null,
-        wasProcessing: input.lifecycle.isProcessing,
-        previousActiveTurnId: activeTurnId,
-        clearedProcessing: true,
-        clearedActiveTurn: activeTurnId !== null,
-        activeThreadId,
-      }, { force: true });
-      return true;
-    },
-    [activeThreadId, dispatch, emitTurnDiagnostic, markProcessing, setActiveTurnId],
-  );
-  const emitThreeEvidenceDryRunDiagnostic = useCallback(
-    (input: {
-      workspaceId: string;
-      threadId: string;
-      turnId: string;
-      terminalKind: TurnSettlementTerminalKind | null;
-      sourceMethod: string | null;
-      lifecycle: ThreadLifecycleSnapshot;
-      diagnostic: TurnDiagnosticState | undefined;
-      handled: boolean;
-      fallbackApplied: boolean;
-    }) => {
-      if (activeThreadId !== null && activeThreadId !== input.threadId) {
-        return;
-      }
-      const now = Date.now();
-      const progressFreshWindowMs = input.diagnostic
-        ? getCodexNoProgressTimeoutMs(input.diagnostic)
-        : DEFAULT_TURN_SETTLEMENT_POLICY.progressFreshWindowMs;
-      const lastProgressAgeMs = input.diagnostic
-        ? Math.max(0, now - input.diagnostic.lastProgressAt)
-        : null;
-      const engine = inferThreadEngine(input.threadId);
-      const decision = evaluateTurnSettlement(
-        {
-          workspaceId: input.workspaceId,
-          engine,
-          threadId: input.threadId,
-          turnId: input.turnId || null,
-          runtimeSessionId: null,
-          runtimeLeaseId: null,
-          source: "event",
-          scope: {
-            foreground: true,
-            currentWorkspaceId: input.workspaceId,
-            currentEngine: engine,
-            currentThreadId: input.threadId,
-            currentTurnId: input.lifecycle.activeTurnId,
-            currentRuntimeLeaseId: null,
-          },
-          terminal: {
-            kind: input.terminalKind,
-            sourceMethod: input.sourceMethod,
-            receivedAtMs: input.terminalKind ? now : null,
-          },
-          state: {
-            isProcessing: input.lifecycle.isProcessing,
-            activeTurnId: input.lifecycle.activeTurnId,
-            aliasTurnId: null,
-            blockers: [],
-          },
-          progress: {
-            lastSource: input.diagnostic?.lastProgressSource ?? null,
-            lastAtMs: input.diagnostic?.lastProgressAt ?? null,
-            ageMs: lastProgressAgeMs,
-            sequence: input.diagnostic?.progressSequence ?? 0,
-            fresh:
-              lastProgressAgeMs !== null &&
-              lastProgressAgeMs < progressFreshWindowMs,
-          },
-        },
-        {
-          ...DEFAULT_TURN_SETTLEMENT_POLICY,
-          progressFreshWindowMs,
-        },
-        now,
-      );
-      emitTurnDiagnostic("three-evidence-dry-run", {
-        workspaceId: input.workspaceId,
-        threadId: input.threadId,
-        turnId: input.turnId,
-        diagnosticCategory: "three-evidence-settlement-dry-run",
-        dryRunDecision: toDryRunSettlementDecisionLabel(decision.action),
-        decisionAction: decision.action,
-        decisionReason: decision.reason,
-        scopeMatch: decision.scopeMatch,
-        acceptedEvidence: decision.acceptedEvidence,
-        boundedReason: decision.diagnostics.boundedReason,
-        missingScope: decision.diagnostics.missingScope ?? [],
-        staleEvidence: Boolean(decision.diagnostics.staleEvidence),
-        residue: Boolean(decision.diagnostics.residue),
-        handled: input.handled,
-        fallbackApplied: input.fallbackApplied,
-        isProcessing: input.lifecycle.isProcessing,
-        activeTurnId: input.lifecycle.activeTurnId,
-        lastProgressSource: input.diagnostic?.lastProgressSource ?? null,
-        lastProgressAgeMs,
-        progressSequence: input.diagnostic?.progressSequence ?? null,
-        activeThreadId,
-        ...buildThreadStreamCorrelationDimensions(input.threadId),
-      }, { force: decision.action !== "settle" });
-      if (decision.action !== "request-reconciliation") {
-        emitTurnDiagnostic("three-evidence-reconciliation-query-skipped", {
-          workspaceId: input.workspaceId,
-          threadId: input.threadId,
-          turnId: input.turnId || null,
-          engine,
-          diagnosticCategory: "three-evidence-reconciliation",
-          skipReason: "decision-not-reconciliation",
-          decisionAction: decision.action,
-          decisionReason: decision.reason,
-          scopeMatch: decision.scopeMatch,
-          acceptedEvidence: decision.acceptedEvidence,
-          boundedReason: decision.diagnostics.boundedReason,
-          missingScope: decision.diagnostics.missingScope ?? [],
-          staleEvidence: Boolean(decision.diagnostics.staleEvidence),
-          residue: Boolean(decision.diagnostics.residue),
-          handled: input.handled,
-          fallbackApplied: input.fallbackApplied,
-          isProcessing: input.lifecycle.isProcessing,
-          activeTurnId: input.lifecycle.activeTurnId,
-          lastProgressSource: input.diagnostic?.lastProgressSource ?? null,
-          lastProgressAgeMs,
-          progressSequence: input.diagnostic?.progressSequence ?? null,
-          activeThreadId,
-        }, { force: decision.action !== "settle" });
-        if (decision.action === "cleanup-residue") {
-          settleForegroundTurnResidue({
-            workspaceId: input.workspaceId,
-            threadId: input.threadId,
-            turnId: input.turnId || null,
-            engine,
-            lifecycle: input.lifecycle,
-            source: "three-evidence-query-skipped",
-            decisionAction: decision.action,
-            decisionReason: decision.reason,
-            scopeMatch: decision.scopeMatch,
-            acceptedEvidence: decision.acceptedEvidence,
-            boundedReason: decision.diagnostics.boundedReason,
-            lastProgressAgeMs,
-          });
-        }
-        return;
-      }
-
-      const request = {
-        workspaceId: input.workspaceId,
-        engine,
-        threadId: input.threadId,
-        turnId: input.turnId || null,
-        runtimeSessionId: null,
-        runtimeLeaseId: null,
-        requestSource: "three-evidence-reconciliation" as const,
-        requestedAtMs: now,
-      };
-      const queryKey = buildReconciliationQueryKey(request);
-      if (reconciliationQueryInFlightRef.current.has(queryKey)) {
-        emitTurnDiagnostic("three-evidence-reconciliation-query-skipped", {
-          workspaceId: input.workspaceId,
-          threadId: input.threadId,
-          turnId: input.turnId || null,
-          engine,
-          diagnosticCategory: "three-evidence-reconciliation",
-          skipReason: "query-already-in-flight",
-          requestSource: request.requestSource,
-          decisionAction: decision.action,
-          decisionReason: decision.reason,
-          boundedReason: decision.diagnostics.boundedReason,
-          queryKeyHash: queryKey.length,
-          isProcessing: input.lifecycle.isProcessing,
-          activeTurnId: input.lifecycle.activeTurnId,
-          lastProgressAgeMs,
-          activeThreadId,
-        }, { force: true });
-        return;
-      }
-      reconciliationQueryInFlightRef.current.add(queryKey);
-      emitTurnDiagnostic("three-evidence-reconciliation-query-requested", {
-        workspaceId: input.workspaceId,
-        threadId: input.threadId,
-        turnId: input.turnId || null,
-        engine,
-        diagnosticCategory: "three-evidence-reconciliation",
-        requestSource: request.requestSource,
-        lastProgressAgeMs,
-        decisionAction: decision.action,
-        decisionReason: decision.reason,
-        boundedReason: decision.diagnostics.boundedReason,
-        queryKeyHash: queryKey.length,
-        activeThreadId,
-      }, { force: true });
-
-      void queryTurnReconciliationStatusWithTimeout(request)
-        .then((response) => {
-          const latestLifecycle = getThreadLifecycleSnapshot(input.threadId);
-          const latestDiagnostic = turnDiagnosticsRef.current.get(input.threadId);
-          const responseNow = Date.now();
-          const responseLastProgressAgeMs = latestDiagnostic
-            ? Math.max(0, responseNow - latestDiagnostic.lastProgressAt)
-            : lastProgressAgeMs;
-          const responseTerminalKind = terminalKindFromReconciliationStatus(response.status);
-          const responseDecision = evaluateTurnSettlement(
-            {
-              workspaceId: response.workspaceId,
-              engine: response.engine,
-              threadId: response.threadId,
-              turnId: response.turnId,
-              runtimeSessionId: response.runtimeSessionId,
-              runtimeLeaseId: response.runtimeLeaseId,
-              source: "status-query",
-              scope: {
-                foreground: activeThreadId === null || activeThreadId === input.threadId,
-                currentWorkspaceId: input.workspaceId,
-                currentEngine: engine,
-                currentThreadId: input.threadId,
-                currentTurnId: latestLifecycle.activeTurnId,
-                currentRuntimeLeaseId: null,
-              },
-              terminal: {
-                kind: responseTerminalKind,
-                sourceMethod: "three-evidence-reconciliation-status-query",
-                receivedAtMs: responseTerminalKind ? responseNow : null,
-              },
-              state: {
-                isProcessing: latestLifecycle.isProcessing,
-                activeTurnId: latestLifecycle.activeTurnId,
-                aliasTurnId: null,
-                blockers: [],
-              },
-              progress: {
-                lastSource:
-                  latestDiagnostic?.lastProgressSource ??
-                  input.diagnostic?.lastProgressSource ??
-                  null,
-                lastAtMs:
-                  latestDiagnostic?.lastProgressAt ??
-                  input.diagnostic?.lastProgressAt ??
-                  null,
-                ageMs: responseLastProgressAgeMs,
-                sequence:
-                  latestDiagnostic?.progressSequence ??
-                  input.diagnostic?.progressSequence ??
-                  0,
-                fresh:
-                  responseLastProgressAgeMs !== null &&
-                  responseLastProgressAgeMs < progressFreshWindowMs,
-              },
-              reconciliation: {
-                attempted: true,
-                status: response.status,
-                replayRequested: false,
-              },
-            },
-            {
-              ...DEFAULT_TURN_SETTLEMENT_POLICY,
-              progressFreshWindowMs,
-              allowRuntimeEndedDegradedSettlement: true,
-            },
-            responseNow,
-          );
-          const label = responseDecision.scopeMatch.matched
-            ? "three-evidence-reconciliation-query-resolved"
-            : "three-evidence-reconciliation-query-rejected";
-          emitTurnDiagnostic(label, {
-            workspaceId: input.workspaceId,
-            threadId: input.threadId,
-            turnId: input.turnId || null,
-            engine,
-            diagnosticCategory: "three-evidence-reconciliation",
-            status: response.status,
-            statusSource: response.statusSource,
-            observedAtMs: response.observedAtMs,
-            responseWorkspaceId: response.workspaceId,
-            responseThreadId: response.threadId,
-            responseTurnId: response.turnId,
-            decisionAction: responseDecision.action,
-            decisionReason: responseDecision.reason,
-            scopeMatch: responseDecision.scopeMatch,
-            acceptedEvidence: responseDecision.acceptedEvidence,
-            boundedReason: response.boundedReason,
-            helperBoundedReason: responseDecision.diagnostics.boundedReason,
-            lastProgressAgeMs: responseLastProgressAgeMs,
-            isProcessing: latestLifecycle.isProcessing,
-            activeTurnId: latestLifecycle.activeTurnId,
-            activeThreadId,
-          }, { force: true });
-          if (responseDecision.action !== "cleanup-residue") {
-            emitTurnDiagnostic("three-evidence-reconciliation-cleanup-skipped", {
-              workspaceId: input.workspaceId,
-              threadId: input.threadId,
-              turnId: input.turnId || null,
-              engine,
-              diagnosticCategory: "three-evidence-reconciliation",
-              skipReason: responseDecision.scopeMatch.matched
-                ? "decision-not-cleanup-residue"
-                : "scope-mismatch",
-              status: response.status,
-              statusSource: response.statusSource,
-              decisionAction: responseDecision.action,
-              decisionReason: responseDecision.reason,
-              scopeMatch: responseDecision.scopeMatch,
-              acceptedEvidence: responseDecision.acceptedEvidence,
-              boundedReason: response.boundedReason,
-              helperBoundedReason: responseDecision.diagnostics.boundedReason,
-              lastProgressAgeMs: responseLastProgressAgeMs,
-              isProcessing: latestLifecycle.isProcessing,
-              activeTurnId: latestLifecycle.activeTurnId,
-              activeThreadId,
-            }, { force: true });
-            return;
-          }
-          settleForegroundTurnResidue({
-            workspaceId: input.workspaceId,
-            threadId: input.threadId,
-            turnId: input.turnId || null,
-            engine,
-            lifecycle: latestLifecycle,
-            source: "three-evidence-query-resolved",
-            decisionAction: responseDecision.action,
-            decisionReason: responseDecision.reason,
-            scopeMatch: responseDecision.scopeMatch,
-            acceptedEvidence: responseDecision.acceptedEvidence,
-            boundedReason: responseDecision.diagnostics.boundedReason,
-            status: response.status,
-            statusSource: response.statusSource,
-            lastProgressAgeMs: responseLastProgressAgeMs,
-          });
-        })
-        .catch((error: unknown) => {
-          const latestLifecycle = getThreadLifecycleSnapshot(input.threadId);
-          emitTurnDiagnostic("three-evidence-reconciliation-query-failed", {
-            workspaceId: input.workspaceId,
-            threadId: input.threadId,
-            turnId: input.turnId || null,
-            engine,
-            diagnosticCategory: "three-evidence-reconciliation",
-            status: "query-failed",
-            boundedReason:
-              error instanceof Error
-                ? error.message
-                : "status query failed with unknown error",
-            lastProgressAgeMs,
-            isProcessing: latestLifecycle.isProcessing,
-            activeTurnId: latestLifecycle.activeTurnId,
-            activeThreadId,
-          }, { force: true });
-        })
-        .finally(() => {
-          reconciliationQueryInFlightRef.current.delete(queryKey);
-        });
-    },
-    [
-      activeThreadId,
-      buildReconciliationQueryKey,
-      emitTurnDiagnostic,
-      getThreadLifecycleSnapshot,
-      settleForegroundTurnResidue,
-      terminalKindFromReconciliationStatus,
-    ],
-  );
+  const {
+    emitForegroundSettlementDiagnostic,
+    buildReconciliationQueryKey,
+    terminalKindFromReconciliationStatus,
+    settleForegroundTurnResidue,
+    emitThreeEvidenceDryRunDiagnostic,
+  } = useThreadTurnSettlementReconciliation({
+    activeThreadId,
+    dispatch,
+    markProcessing,
+    setActiveTurnId,
+    threadLifecycleSnapshotRef,
+    turnDiagnosticsRef,
+    reconciliationQueryInFlightRef,
+    getThreadLifecycleSnapshot,
+    emitTurnDiagnostic,
+  });
 
   const clearFirstDeltaTimer = useCallback((threadId: string) => {
     const timerId = turnFirstDeltaTimerRef.current.get(threadId);
@@ -769,6 +271,7 @@ export function useThreadEventHandlers({
     (
       stage: "scheduled" | "fired" | "skipped",
       input: {
+        workspaceId?: string | null;
         threadId: string;
         diagnostic: TurnDiagnosticState | null;
         reason?: string;
@@ -779,7 +282,7 @@ export function useThreadEventHandlers({
       },
     ) => {
       emitTurnDiagnostic(`codex-no-progress-watchdog-${stage}`, {
-        workspaceId: input.diagnostic?.workspaceId ?? null,
+        workspaceId: input.workspaceId ?? input.diagnostic?.workspaceId ?? null,
         threadId: input.threadId,
         turnId: input.diagnostic?.turnId ?? null,
         diagnosticCategory: "codex-no-progress-watchdog",
@@ -802,13 +305,14 @@ export function useThreadEventHandlers({
   );
 
   const scheduleCodexNoProgressTimer = useCallback(
-    (threadId: string) => {
+    (workspaceId: string | null, threadId: string) => {
       if (typeof window === "undefined" || inferThreadEngine(threadId) !== "codex") {
         return;
       }
       const diagnostic = turnDiagnosticsRef.current.get(threadId);
       if (!diagnostic) {
         emitCodexNoProgressWatchdogDiagnostic("skipped", {
+          workspaceId,
           threadId,
           diagnostic: null,
           reason: "missing-diagnostic",
@@ -821,6 +325,7 @@ export function useThreadEventHandlers({
       const elapsedSinceProgressMs = Math.max(0, now - diagnostic.lastProgressAt);
       const delayMs = Math.max(0, timeoutMs - elapsedSinceProgressMs);
       emitCodexNoProgressWatchdogDiagnostic("scheduled", {
+        workspaceId: diagnostic.workspaceId,
         threadId,
         diagnostic,
         timeoutMs,
@@ -831,6 +336,7 @@ export function useThreadEventHandlers({
         const latestDiagnostic = turnDiagnosticsRef.current.get(threadId);
         if (!latestDiagnostic) {
           emitCodexNoProgressWatchdogDiagnostic("skipped", {
+            workspaceId: diagnostic?.workspaceId ?? null,
             threadId,
             diagnostic: null,
             reason: "missing-diagnostic",
@@ -842,6 +348,7 @@ export function useThreadEventHandlers({
         const timeoutMs = getCodexNoProgressTimeoutMs(latestDiagnostic);
         const lifecycle = getThreadLifecycleSnapshot(threadId);
         emitCodexNoProgressWatchdogDiagnostic("fired", {
+          workspaceId: diagnostic?.workspaceId ?? null,
           threadId,
           diagnostic: latestDiagnostic,
           timeoutMs,
@@ -850,6 +357,7 @@ export function useThreadEventHandlers({
         });
         if (latestDiagnostic.completedAt !== null) {
           emitCodexNoProgressWatchdogDiagnostic("skipped", {
+            workspaceId: diagnostic?.workspaceId ?? null,
             threadId,
             diagnostic: latestDiagnostic,
             reason: "completed",
@@ -860,6 +368,7 @@ export function useThreadEventHandlers({
         }
         if (latestDiagnostic.errorAt !== null) {
           emitCodexNoProgressWatchdogDiagnostic("skipped", {
+            workspaceId: diagnostic?.workspaceId ?? null,
             threadId,
             diagnostic: latestDiagnostic,
             reason: "error",
@@ -868,7 +377,7 @@ export function useThreadEventHandlers({
           });
           return;
         }
-        if (interruptedThreadsRef.current.has(threadId)) {
+        if (workspaceScopedHas(interruptedThreadsRef.current, workspaceId ?? latestDiagnostic.workspaceId ?? null, threadId)) {
           const inferredEngine = inferThreadEngine(threadId);
           const correlationEngine =
             buildThreadStreamCorrelationDimensions(threadId).engine;
@@ -906,6 +415,7 @@ export function useThreadEventHandlers({
             allowAbandonedActiveTurn: true,
           });
           emitCodexNoProgressWatchdogDiagnostic("skipped", {
+            workspaceId: diagnostic?.workspaceId ?? null,
             threadId,
             diagnostic: latestDiagnostic,
             reason: "interrupted",
@@ -917,6 +427,7 @@ export function useThreadEventHandlers({
         }
         if (!lifecycle.isProcessing) {
           emitCodexNoProgressWatchdogDiagnostic("skipped", {
+            workspaceId: diagnostic?.workspaceId ?? null,
             threadId,
             diagnostic: latestDiagnostic,
             reason: "not-processing",
@@ -931,6 +442,7 @@ export function useThreadEventHandlers({
           lifecycle.activeTurnId !== latestDiagnostic.turnId
         ) {
           emitCodexNoProgressWatchdogDiagnostic("skipped", {
+            workspaceId: diagnostic?.workspaceId ?? null,
             threadId,
             diagnostic: latestDiagnostic,
             reason: "active-turn-mismatch",
@@ -942,6 +454,7 @@ export function useThreadEventHandlers({
         }
         if (elapsedSinceProgressMs < timeoutMs) {
           emitCodexNoProgressWatchdogDiagnostic("skipped", {
+            workspaceId: diagnostic?.workspaceId ?? null,
             threadId,
             diagnostic: latestDiagnostic,
             reason: "progress-still-fresh",
@@ -970,8 +483,8 @@ export function useThreadEventHandlers({
   );
 
   const noteCodexTurnProgressEvidence = useCallback(
-    (threadId: string, source: string) => {
-      if (inferThreadEngine(threadId) !== "codex" || interruptedThreadsRef.current.has(threadId)) {
+    (workspaceId: string | null, threadId: string, source: string) => {
+      if (inferThreadEngine(threadId) !== "codex" || workspaceScopedHas(interruptedThreadsRef.current, workspaceId, threadId)) {
         return;
       }
       const diagnostic = turnDiagnosticsRef.current.get(threadId);
@@ -1011,7 +524,7 @@ export function useThreadEventHandlers({
           ...buildThreadStreamCorrelationDimensions(threadId),
         }, { force: true });
       }
-      scheduleCodexNoProgressTimer(threadId);
+      scheduleCodexNoProgressTimer(workspaceId, threadId);
     },
     [
       emitTurnDiagnostic,
@@ -1023,13 +536,13 @@ export function useThreadEventHandlers({
   );
 
   const scheduleFirstDeltaTimer = useCallback(
-    (threadId: string) => {
+    (workspaceId: string | null, threadId: string) => {
       if (typeof window === "undefined") {
         return;
       }
       clearFirstDeltaTimer(threadId);
       const timerId = window.setTimeout(() => {
-        if (interruptedThreadsRef.current.has(threadId)) {
+        if (workspaceScopedHas(interruptedThreadsRef.current, workspaceId, threadId)) {
           return;
         }
         const diagnostic = turnDiagnosticsRef.current.get(threadId);
@@ -1178,6 +691,30 @@ export function useThreadEventHandlers({
     [],
   );
 
+  const findQuarantinedCodexTurn = useCallback(
+    (threadId: string, turnId?: string | null) => {
+      const normalizedThreadId = threadId.trim();
+      if (!normalizedThreadId) {
+        return null;
+      }
+      const normalizedTurnId = turnId?.trim() ?? "";
+      if (normalizedTurnId) {
+        return (
+          quarantinedCodexTurnsRef.current.get(
+            buildCodexTurnIdentityKey(normalizedThreadId, normalizedTurnId),
+          ) ?? null
+        );
+      }
+      for (const quarantinedTurn of quarantinedCodexTurnsRef.current.values()) {
+        if (quarantinedTurn.threadId === normalizedThreadId) {
+          return quarantinedTurn;
+        }
+      }
+      return null;
+    },
+    [],
+  );
+
   const shouldSkipCodexTurnEvent = useCallback(
     (input: {
       engine: "claude" | "codex" | "gemini" | "opencode";
@@ -1192,7 +729,40 @@ export function useThreadEventHandlers({
       }
       const eventTurnId = input.turnId.trim();
       if (!eventTurnId) {
-        return false;
+        const lifecycle = getThreadLifecycleSnapshot(input.threadId);
+        const activeQuarantinedTurn = lifecycle.activeTurnId
+          ? findQuarantinedCodexTurn(input.threadId, lifecycle.activeTurnId)
+          : null;
+        const settledTurnWithoutSuccessor =
+          lifecycle.activeTurnId === null && !lifecycle.isProcessing
+            ? findQuarantinedCodexTurn(input.threadId)
+            : null;
+        const quarantinedTurn = activeQuarantinedTurn ?? settledTurnWithoutSuccessor;
+        if (!quarantinedTurn) {
+          return false;
+        }
+        emitTurnDiagnostic("quarantined-codex-event-skipped", {
+          ...buildCodexLivenessDiagnostic({
+            workspaceId: input.workspaceId,
+            threadId: input.threadId,
+            stage: "abandoned",
+            outcome: "abandoned",
+            source: input.sourceMethod,
+            reason:
+              "turnless event follows a quarantined Codex turn without a verified successor",
+            turnId: quarantinedTurn.turnId,
+          }),
+          eventTurnId: null,
+          activeTurnId: lifecycle.activeTurnId,
+          isProcessing: lifecycle.isProcessing,
+          quarantinedAtMs: quarantinedTurn.settledAt,
+          quarantineReason: quarantinedTurn.reason,
+          quarantineSource: quarantinedTurn.source,
+          operation: input.operation,
+          sourceMethod: input.sourceMethod,
+          diagnosticCategory: "quarantined-codex-event",
+        }, { force: true });
+        return true;
       }
       const quarantineKey = buildCodexTurnIdentityKey(input.threadId, eventTurnId);
       const quarantinedTurn = quarantinedCodexTurnsRef.current.get(quarantineKey);
@@ -1242,7 +812,22 @@ export function useThreadEventHandlers({
       }, { force: true });
       return true;
     },
-    [emitTurnDiagnostic, getThreadLifecycleSnapshot],
+    [emitTurnDiagnostic, findQuarantinedCodexTurn, getThreadLifecycleSnapshot],
+  );
+
+  const resolveTerminalSettlementTurnId = useCallback(
+    (threadId: string, incomingTurnId: string) => {
+      const normalizedTurnId = incomingTurnId.trim();
+      if (normalizedTurnId) {
+        return normalizedTurnId;
+      }
+      return (
+        getThreadLifecycleSnapshot(threadId).activeTurnId ??
+        turnDiagnosticsRef.current.get(threadId)?.turnId ??
+        ""
+      );
+    },
+    [getThreadLifecycleSnapshot],
   );
 
   const markProcessingTracked = useCallback(
@@ -1273,6 +858,7 @@ export function useThreadEventHandlers({
 
   const captureTurnItemDiagnostic = useCallback(
     (
+      workspaceId: string | null,
       threadId: string,
       kind: "started" | "updated" | "completed",
       item: Record<string, unknown>,
@@ -1334,7 +920,7 @@ export function useThreadEventHandlers({
         }
       }
       if (applyActiveExecutionItemEvent(diagnostic, kind, itemType, itemId, item, now)) {
-        scheduleCodexNoProgressTimer(threadId);
+        scheduleCodexNoProgressTimer(workspaceId, threadId);
       }
     },
     [
@@ -1366,7 +952,7 @@ export function useThreadEventHandlers({
       textLength: number;
       source: StreamIngressSource;
     }) => {
-      if (interruptedThreadsRef.current.has(payload.threadId)) {
+      if (workspaceScopedHas(interruptedThreadsRef.current, payload.workspaceId, payload.threadId)) {
         return;
       }
       const diagnostic = turnDiagnosticsRef.current.get(payload.threadId);
@@ -1478,6 +1064,49 @@ export function useThreadEventHandlers({
       reconciliationQueryInFlight.clear();
     };
   }, []);
+
+  // chat-stream-render-isolation-2026-06 task 8.4: 60s interval sweep
+  // over turnDiagnosticsRef / quarantinedCodexTurnsRef. Active turns (no
+  // settled timestamp) are never evicted; settled entries expire 30min after
+  // their settledAt. See design.md §4 and sweepThreadTransientState in
+  // threadEventDiagnostics.ts.
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      const now = Date.now();
+      const diagnosticEntries = Array.from(
+        turnDiagnosticsRef.current.entries(),
+      ).map(([threadId, state]) => ({
+        threadId,
+        settledAt:
+          state.completedAt ?? state.errorAt ?? state.assistantCompletedAt,
+      }));
+      const diagnosticSweep = sweepThreadTransientState(
+        diagnosticEntries,
+        now,
+      );
+      for (const threadId of diagnosticSweep.expiredThreadIds) {
+        const workspaceId =
+          turnDiagnosticsRef.current.get(threadId)?.workspaceId ?? null;
+        cleanupThreadTransientRefs(workspaceId, threadId);
+      }
+      const quarantineEntries = Array.from(
+        quarantinedCodexTurnsRef.current.entries(),
+      ).map(([quarantineKey, entry]) => ({
+        threadId: quarantineKey,
+        settledAt: entry.settledAt,
+      }));
+      const quarantineSweep = sweepThreadTransientState(
+        quarantineEntries,
+        now,
+      );
+      for (const quarantineKey of quarantineSweep.expiredThreadIds) {
+        quarantinedCodexTurnsRef.current.delete(quarantineKey);
+      }
+    }, TRANSIENT_TURN_STATE_SWEEP_INTERVAL_MS);
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [cleanupThreadTransientRefs]);
 
   const onApprovalRequest = useThreadApprovalEvents({
     dispatch,
@@ -1663,7 +1292,7 @@ export function useThreadEventHandlers({
   const onThreadTokenUsageUpdatedTracked = useCallback(
     (workspaceId: string, threadId: string, tokenUsage: Record<string, unknown>) => {
       onThreadTokenUsageUpdatedBase(workspaceId, threadId, tokenUsage);
-      noteCodexTurnProgressEvidence(threadId, "thread-token-usage");
+      noteCodexTurnProgressEvidence(workspaceId, threadId, "thread-token-usage");
     },
     [noteCodexTurnProgressEvidence, onThreadTokenUsageUpdatedBase],
   );
@@ -1685,7 +1314,7 @@ export function useThreadEventHandlers({
       }
       dispatch({ type: "markHeartbeat", threadId, pulse });
       dispatch({ type: "markContinuationEvidence", threadId });
-      noteCodexTurnProgressEvidence(threadId, "processing-heartbeat");
+      noteCodexTurnProgressEvidence(_workspaceId, threadId, "processing-heartbeat");
       safeMessageActivity();
     },
     [dispatch, noteCodexTurnProgressEvidence, safeMessageActivity],
@@ -1726,6 +1355,31 @@ export function useThreadEventHandlers({
 
   const onTurnStartedTracked = useCallback(
     (workspaceId: string, threadId: string, turnId: string) => {
+      const normalizedTurnId = turnId.trim();
+      if (inferThreadEngine(threadId) === "codex" && normalizedTurnId) {
+        const quarantinedTurn = findQuarantinedCodexTurn(threadId, normalizedTurnId);
+        if (quarantinedTurn) {
+          emitTurnDiagnostic("quarantined-codex-event-skipped", {
+            ...buildCodexLivenessDiagnostic({
+              workspaceId,
+              threadId,
+              stage: "abandoned",
+              outcome: "abandoned",
+              source: "turn/started",
+              reason: "turn/started belongs to a quarantined Codex turn",
+              turnId: normalizedTurnId,
+            }),
+            eventTurnId: normalizedTurnId,
+            quarantinedAtMs: quarantinedTurn.settledAt,
+            quarantineReason: quarantinedTurn.reason,
+            quarantineSource: quarantinedTurn.source,
+            operation: "turnStarted",
+            sourceMethod: "turn/started",
+            diagnosticCategory: "quarantined-codex-event",
+          }, { force: true });
+          return;
+        }
+      }
       const startedAt = Date.now();
       noteRealtimeTurnStarted(threadId, turnId);
       clearAssistantSnapshotIngressForThread(threadId);
@@ -1742,8 +1396,8 @@ export function useThreadEventHandlers({
         createTurnDiagnosticState(workspaceId, threadId, turnId, startedAt),
       );
       dispatch({ type: "clearCodexSilentSuspected", threadId });
-      scheduleFirstDeltaTimer(threadId);
-      scheduleCodexNoProgressTimer(threadId);
+      scheduleFirstDeltaTimer(workspaceId, threadId);
+      scheduleCodexNoProgressTimer(workspaceId, threadId);
       onTurnStarted(workspaceId, threadId, turnId);
       dispatch({ type: "markContinuationEvidence", threadId });
       const lifecycle = getThreadLifecycleSnapshot(threadId);
@@ -1767,6 +1421,7 @@ export function useThreadEventHandlers({
       scheduleCodexNoProgressTimer,
       scheduleFirstDeltaTimer,
       clearAssistantSnapshotIngressForThread,
+      findQuarantinedCodexTurn,
     ],
   );
 
@@ -1800,10 +1455,10 @@ export function useThreadEventHandlers({
       }
       onAgentMessageDelta(payload);
       dispatch({ type: "markContinuationEvidence", threadId: payload.threadId });
-      if (interruptedThreadsRef.current.has(payload.threadId)) {
+      if (workspaceScopedHas(interruptedThreadsRef.current, payload.workspaceId, payload.threadId)) {
         return;
       }
-      noteCodexTurnProgressEvidence(payload.threadId, "agent-message-delta");
+      noteCodexTurnProgressEvidence(payload.workspaceId, payload.threadId, "agent-message-delta");
       recordAssistantStreamIngress({
         workspaceId: payload.workspaceId,
         threadId: payload.threadId,
@@ -1836,7 +1491,7 @@ export function useThreadEventHandlers({
         return;
       }
       onAgentMessageCompleted(payload);
-      if (interruptedThreadsRef.current.has(payload.threadId) || payload.text.length === 0) {
+      if (workspaceScopedHas(interruptedThreadsRef.current, payload.workspaceId, payload.threadId) || payload.text.length === 0) {
         return;
       }
       recordAssistantCompletionEvidence(payload.threadId, payload.itemId);
@@ -1847,10 +1502,6 @@ export function useThreadEventHandlers({
         textLength: payload.text.length,
         source: "completion",
       });
-      flushDeferredTurnCompletionRef.current?.(
-        payload.threadId,
-        "assistant-completed",
-      );
     },
     [
       interruptedThreadsRef,
@@ -1881,9 +1532,9 @@ export function useThreadEventHandlers({
       }
       onItemStarted(workspaceId, threadId, item);
       dispatch({ type: "markContinuationEvidence", threadId });
-      noteCodexTurnProgressEvidence(threadId, "item-started");
+      noteCodexTurnProgressEvidence(workspaceId, threadId, "item-started");
       maybeRecordAgentMessageSnapshotIngress(workspaceId, threadId, item);
-      captureTurnItemDiagnostic(threadId, "started", item);
+      captureTurnItemDiagnostic(workspaceId, threadId, "started", item);
     },
     [
       captureTurnItemDiagnostic,
@@ -1916,9 +1567,10 @@ export function useThreadEventHandlers({
       }
       onItemUpdated(workspaceId, threadId, item);
       dispatch({ type: "markContinuationEvidence", threadId });
-      noteCodexTurnProgressEvidence(threadId, "item-updated");
+      noteCodexTurnProgressEvidence(workspaceId, threadId, "item-updated");
       maybeRecordAgentMessageSnapshotIngress(workspaceId, threadId, item);
-      captureTurnItemDiagnostic(threadId, "updated", item);
+      captureTurnItemDiagnostic(workspaceId, threadId,
+        "updated", item);
       flushDeferredTurnCompletionRef.current?.(threadId, "item-terminal");
     },
     [
@@ -1952,8 +1604,9 @@ export function useThreadEventHandlers({
       }
       onItemCompleted(workspaceId, threadId, item);
       dispatch({ type: "markContinuationEvidence", threadId });
-      noteCodexTurnProgressEvidence(threadId, "item-completed");
-      captureTurnItemDiagnostic(threadId, "completed", item);
+      noteCodexTurnProgressEvidence(workspaceId, threadId, "item-completed");
+      captureTurnItemDiagnostic(workspaceId, threadId,
+        "completed", item);
       flushDeferredTurnCompletionRef.current?.(threadId, "item-terminal");
     },
     [
@@ -1993,7 +1646,7 @@ export function useThreadEventHandlers({
       }
       onNormalizedRealtimeEvent(event);
       dispatch({ type: "markContinuationEvidence", threadId: event.threadId });
-      noteCodexTurnProgressEvidence(event.threadId, `normalized:${event.operation}`);
+      noteCodexTurnProgressEvidence(event.workspaceId, event.threadId, `normalized:${event.operation}`);
       if (event.operation === "appendAgentMessageDelta") {
         const textLength =
           event.delta?.length ??
@@ -2034,10 +1687,6 @@ export function useThreadEventHandlers({
           source: "completion",
         });
         recordAssistantCompletionEvidence(event.threadId, event.item.id);
-        flushDeferredTurnCompletionRef.current?.(
-          event.threadId,
-          "assistant-completed",
-        );
       }
       if (!event.rawItem) {
         return;
@@ -2050,16 +1699,19 @@ export function useThreadEventHandlers({
         );
       }
       if (event.operation === "itemStarted") {
-        captureTurnItemDiagnostic(event.threadId, "started", event.rawItem);
+        captureTurnItemDiagnostic(event.workspaceId, event.threadId,
+        "started", event.rawItem);
         return;
       }
       if (event.operation === "itemUpdated") {
-        captureTurnItemDiagnostic(event.threadId, "updated", event.rawItem);
+        captureTurnItemDiagnostic(event.workspaceId, event.threadId,
+        "updated", event.rawItem);
         flushDeferredTurnCompletionRef.current?.(event.threadId, "item-terminal");
         return;
       }
       if (event.operation === "itemCompleted") {
-        captureTurnItemDiagnostic(event.threadId, "completed", event.rawItem);
+        captureTurnItemDiagnostic(event.workspaceId, event.threadId,
+        "completed", event.rawItem);
         flushDeferredTurnCompletionRef.current?.(event.threadId, "item-terminal");
       }
     },
@@ -2086,7 +1738,7 @@ export function useThreadEventHandlers({
       turnId?: string | null,
     ) => {
       onCommandOutputDelta(workspaceId, threadId, itemId, delta, turnId);
-      if (interruptedThreadsRef.current.has(threadId)) {
+      if (workspaceScopedHas(interruptedThreadsRef.current, workspaceId, threadId)) {
         return;
       }
       noteNonTextRuntimeProgress(threadId, "command-output-delta", {
@@ -2108,7 +1760,7 @@ export function useThreadEventHandlers({
       turnId?: string | null,
     ) => {
       onFileChangeOutputDelta(workspaceId, threadId, itemId, delta, turnId);
-      if (interruptedThreadsRef.current.has(threadId)) {
+      if (workspaceScopedHas(interruptedThreadsRef.current, workspaceId, threadId)) {
         return;
       }
       noteNonTextRuntimeProgress(threadId, "file-change-output-delta", {
@@ -2130,7 +1782,7 @@ export function useThreadEventHandlers({
       turnId?: string | null,
     ) => {
       onTerminalInteraction(workspaceId, threadId, itemId, stdin, turnId);
-      if (interruptedThreadsRef.current.has(threadId)) {
+      if (workspaceScopedHas(interruptedThreadsRef.current, workspaceId, threadId)) {
         return;
       }
       noteNonTextRuntimeProgress(threadId, "terminal-interaction", {
@@ -2235,8 +1887,20 @@ export function useThreadEventHandlers({
   );
 
   const settleCompletedTurn = useCallback(
-    (workspaceId: string, threadId: string, normalizedTurnId: string) => {
+    (
+      workspaceId: string,
+      threadId: string,
+      normalizedTurnId: string,
+      rawTurnId: string | null = normalizedTurnId,
+    ) => {
       markRealtimeTurnTerminal(threadId, normalizedTurnId);
+      quarantineCodexTurn(
+        workspaceId,
+        threadId,
+        normalizedTurnId,
+        "turn-completed",
+        "turn/completed",
+      );
       const handled = onTurnCompleted(workspaceId, threadId, normalizedTurnId);
       let fallbackApplied = false;
       if (handled) {
@@ -2245,6 +1909,7 @@ export function useThreadEventHandlers({
           workspaceId,
           threadId,
           turnId: normalizedTurnId,
+          rawTurnId,
           status: "completed",
         });
       }
@@ -2279,8 +1944,8 @@ export function useThreadEventHandlers({
           });
           markProcessingTracked(threadId, false);
           setActiveTurnIdTracked(threadId, null);
-          pendingInterruptsRef.current.delete(threadId);
-          interruptedThreadsRef.current.delete(threadId);
+          workspaceScopedDelete(pendingInterruptsRef.current, workspaceId, threadId);
+          workspaceScopedDelete(interruptedThreadsRef.current, workspaceId, threadId);
           dispatch({ type: "resetAgentSegment", threadId });
           dispatch({ type: "markLatestAssistantMessageFinal", threadId });
           onTurnCompletedExternal?.({
@@ -2292,6 +1957,7 @@ export function useThreadEventHandlers({
             workspaceId,
             threadId,
             turnId: normalizedTurnId,
+            rawTurnId,
             status: "completed",
           });
           fallbackApplied = true;
@@ -2398,7 +2064,166 @@ export function useThreadEventHandlers({
       onTurnCompletedExternal,
       onTurnTerminalExternal,
       pendingInterruptsRef,
+      quarantineCodexTurn,
       setActiveTurnIdTracked,
+    ],
+  );
+
+  const requestDeferredCompletionReconciliation = useCallback(
+    (workspaceId: string, threadId: string, turnId: string) => {
+      const engine = inferThreadEngine(threadId);
+      if (engine !== "codex" || !turnId) {
+        return;
+      }
+      const request = {
+        workspaceId,
+        engine,
+        threadId,
+        turnId,
+        runtimeSessionId: null,
+        runtimeLeaseId: null,
+        requestSource: "three-evidence-reconciliation" as const,
+        requestedAtMs: Date.now(),
+      };
+      const queryKey = buildReconciliationQueryKey(request);
+      if (reconciliationQueryInFlightRef.current.has(queryKey)) {
+        emitTurnDiagnostic("deferred-completion-reconciliation-query-skipped", {
+          workspaceId,
+          threadId,
+          turnId,
+          engine,
+          diagnosticCategory: "deferred-completion-reconciliation",
+          skipReason: "query-already-in-flight",
+          requestSource: request.requestSource,
+          queryKeyHash: queryKey.length,
+          activeThreadId,
+        }, { force: true });
+        return;
+      }
+
+      reconciliationQueryInFlightRef.current.add(queryKey);
+      emitTurnDiagnostic("deferred-completion-reconciliation-query-requested", {
+        workspaceId,
+        threadId,
+        turnId,
+        engine,
+        diagnosticCategory: "deferred-completion-reconciliation",
+        requestSource: request.requestSource,
+        queryKeyHash: queryKey.length,
+        activeThreadId,
+      }, { force: true });
+
+      void queryTurnReconciliationStatusWithTimeout(request)
+        .then((response) => {
+          const latestDiagnostic = turnDiagnosticsRef.current.get(threadId);
+          const latestLifecycle = getThreadLifecycleSnapshot(threadId);
+          const completion = latestDiagnostic?.deferredCompletion ?? null;
+          const responseTerminalKind = terminalKindFromReconciliationStatus(response.status);
+          const responseTurnId = response.turnId ?? null;
+          const scopeMatches =
+            response.workspaceId === workspaceId &&
+            response.engine === engine &&
+            response.threadId === threadId &&
+            responseTurnId === turnId;
+          const stillDeferred =
+            latestDiagnostic?.turnId === turnId &&
+            completion?.workspaceId === workspaceId &&
+            completion.threadId === threadId &&
+            completion.turnId === turnId;
+          const activeTurnMatches =
+            latestLifecycle.activeTurnId === null ||
+            latestLifecycle.activeTurnId === turnId;
+          const canFlush =
+            responseTerminalKind !== null &&
+            scopeMatches &&
+            stillDeferred &&
+            activeTurnMatches;
+          const label = scopeMatches
+            ? "deferred-completion-reconciliation-query-resolved"
+            : "deferred-completion-reconciliation-query-rejected";
+          emitTurnDiagnostic(label, {
+            workspaceId,
+            threadId,
+            turnId,
+            engine,
+            diagnosticCategory: "deferred-completion-reconciliation",
+            status: response.status,
+            statusSource: response.statusSource,
+            observedAtMs: response.observedAtMs,
+            responseWorkspaceId: response.workspaceId,
+            responseThreadId: response.threadId,
+            responseTurnId: response.turnId,
+            responseTerminalKind,
+            scopeMatches,
+            stillDeferred,
+            activeTurnMatches,
+            isProcessing: latestLifecycle.isProcessing,
+            activeTurnId: latestLifecycle.activeTurnId,
+            activeThreadId,
+          }, { force: true });
+
+          if (!canFlush) {
+            emitTurnDiagnostic("deferred-completion-reconciliation-cleanup-skipped", {
+              workspaceId,
+              threadId,
+              turnId,
+              engine,
+              diagnosticCategory: "deferred-completion-reconciliation",
+              status: response.status,
+              statusSource: response.statusSource,
+              skipReason:
+                responseTerminalKind === null
+                  ? "status-not-terminal"
+                  : !scopeMatches
+                    ? "scope-mismatch"
+                    : !stillDeferred
+                      ? "deferred-completion-missing"
+                      : !activeTurnMatches
+                        ? "active-turn-mismatch"
+                        : "guard-rejected",
+              responseWorkspaceId: response.workspaceId,
+              responseThreadId: response.threadId,
+              responseTurnId: response.turnId,
+              isProcessing: latestLifecycle.isProcessing,
+              activeTurnId: latestLifecycle.activeTurnId,
+              activeThreadId,
+            }, { force: true });
+            return;
+          }
+
+          flushDeferredTurnCompletionRef.current?.(
+            threadId,
+            "scoped-reconciliation-terminal",
+          );
+        })
+        .catch((error: unknown) => {
+          const latestLifecycle = getThreadLifecycleSnapshot(threadId);
+          emitTurnDiagnostic("deferred-completion-reconciliation-query-failed", {
+            workspaceId,
+            threadId,
+            turnId,
+            engine,
+            diagnosticCategory: "deferred-completion-reconciliation",
+            status: "query-failed",
+            boundedReason:
+              error instanceof Error
+                ? error.message
+                : "status query failed with unknown error",
+            isProcessing: latestLifecycle.isProcessing,
+            activeTurnId: latestLifecycle.activeTurnId,
+            activeThreadId,
+          }, { force: true });
+        })
+        .finally(() => {
+          reconciliationQueryInFlightRef.current.delete(queryKey);
+        });
+    },
+    [
+      activeThreadId,
+      buildReconciliationQueryKey,
+      emitTurnDiagnostic,
+      getThreadLifecycleSnapshot,
+      terminalKindFromReconciliationStatus,
     ],
   );
 
@@ -2418,53 +2243,6 @@ export function useThreadEventHandlers({
         return false;
       }
       const now = Date.now();
-      const assistantCompletedAt = diagnostic.assistantCompletedAt;
-      if (assistantCompletedAt !== null) {
-        const lifecycle = getThreadLifecycleSnapshot(threadId);
-        emitTurnDiagnostic("turn-completed-deferred-bypassed", {
-          workspaceId,
-          threadId,
-          turnId: normalizedTurnId,
-          elapsedMs: Math.max(0, now - diagnostic.startedAt),
-          assistantCompletedAtMs: Math.max(
-            0,
-            assistantCompletedAt - diagnostic.startedAt,
-          ),
-          assistantCompletedItemId: diagnostic.assistantCompletedItemId,
-          blockerCount: blockers.length,
-          remainingBlockers: blockers,
-          isProcessing: lifecycle.isProcessing,
-          activeTurnId: lifecycle.activeTurnId,
-          diagnosticCategory: "codex-collab-terminal-order",
-          reason:
-            "turn/completed arrived after final assistant text with remaining Codex collaboration blockers",
-          ...buildThreadStreamCorrelationDimensions(threadId),
-        }, { force: true });
-        return false;
-      }
-      if (diagnostic.firstDeltaAt !== null || diagnostic.deltaCount > 0) {
-        const lifecycle = getThreadLifecycleSnapshot(threadId);
-        emitTurnDiagnostic("turn-completed-deferred-bypassed", {
-          workspaceId,
-          threadId,
-          turnId: normalizedTurnId,
-          elapsedMs: Math.max(0, now - diagnostic.startedAt),
-          firstDeltaAtMs:
-            diagnostic.firstDeltaAt === null
-              ? null
-              : Math.max(0, diagnostic.firstDeltaAt - diagnostic.startedAt),
-          deltaCount: diagnostic.deltaCount,
-          blockerCount: blockers.length,
-          remainingBlockers: blockers,
-          isProcessing: lifecycle.isProcessing,
-          activeTurnId: lifecycle.activeTurnId,
-          diagnosticCategory: "codex-collab-terminal-order",
-          reason:
-            "turn/completed arrived after assistant stream ingress with remaining Codex collaboration blockers",
-          ...buildThreadStreamCorrelationDimensions(threadId),
-        }, { force: true });
-        return false;
-      }
       diagnostic.deferredCompletion = diagnostic.deferredCompletion ?? {
         workspaceId,
         threadId,
@@ -2485,9 +2263,10 @@ export function useThreadEventHandlers({
         reason: "turn/completed arrived while Codex collaboration child agents were still active",
         ...buildThreadStreamCorrelationDimensions(threadId),
       }, { force: true });
+      requestDeferredCompletionReconciliation(workspaceId, threadId, normalizedTurnId);
       return true;
     },
-    [emitTurnDiagnostic, getThreadLifecycleSnapshot],
+    [emitTurnDiagnostic, getThreadLifecycleSnapshot, requestDeferredCompletionReconciliation],
   );
 
   const flushDeferredTurnCompletionIfReady = useCallback(
@@ -2498,9 +2277,38 @@ export function useThreadEventHandlers({
         return;
       }
       const blockers = listDeferredCompletionBlockers(diagnostic);
-      const forcedByAssistantCompletion =
-        source === "assistant-completed" && blockers.length > 0;
-      if (blockers.length > 0 && !forcedByAssistantCompletion) {
+      const allowBlockedFlush = source === "scoped-reconciliation-terminal";
+      const lifecycle = getThreadLifecycleSnapshot(threadId);
+      if (diagnostic.turnId !== completion.turnId) {
+        emitTurnDiagnostic("turn-completed-deferred-flush-skipped", {
+          workspaceId: completion.workspaceId,
+          threadId: completion.threadId,
+          turnId: completion.turnId,
+          source,
+          diagnosticTurnId: diagnostic.turnId,
+          diagnosticCategory: "codex-collab-terminal-order",
+          skipReason: "diagnostic-turn-mismatch",
+          ...buildThreadStreamCorrelationDimensions(threadId),
+        }, { force: true });
+        return;
+      }
+      if (
+        lifecycle.activeTurnId !== null &&
+        lifecycle.activeTurnId !== completion.turnId
+      ) {
+        emitTurnDiagnostic("turn-completed-deferred-flush-skipped", {
+          workspaceId: completion.workspaceId,
+          threadId: completion.threadId,
+          turnId: completion.turnId,
+          source,
+          activeTurnId: lifecycle.activeTurnId,
+          diagnosticCategory: "codex-collab-terminal-order",
+          skipReason: "active-turn-mismatch",
+          ...buildThreadStreamCorrelationDimensions(threadId),
+        }, { force: true });
+        return;
+      }
+      if (blockers.length > 0 && !allowBlockedFlush) {
         return;
       }
       diagnostic.deferredCompletion = null;
@@ -2512,27 +2320,32 @@ export function useThreadEventHandlers({
         deferredMs: Math.max(0, now - completion.deferredAt),
         elapsedMs: Math.max(0, now - diagnostic.startedAt),
         source,
-        forcedByAssistantCompletion,
-        remainingBlockers: forcedByAssistantCompletion ? blockers : [],
+        forcedByScopedReconciliation: allowBlockedFlush && blockers.length > 0,
+        remainingBlockers: allowBlockedFlush ? blockers : [],
         diagnosticCategory: "codex-collab-terminal-order",
         ...buildThreadStreamCorrelationDimensions(threadId),
       }, { force: true });
       settleCompletedTurn(completion.workspaceId, completion.threadId, completion.turnId);
     },
-    [emitTurnDiagnostic, settleCompletedTurn],
+    [emitTurnDiagnostic, getThreadLifecycleSnapshot, settleCompletedTurn],
   );
   flushDeferredTurnCompletionRef.current = flushDeferredTurnCompletionIfReady;
 
   const onTurnCompletedTracked = useCallback(
     (workspaceId: string, threadId: string, turnId: string) => {
-      const normalizedTurnId = turnId.trim();
+      const normalizedTurnId = resolveTerminalSettlementTurnId(threadId, turnId);
       flushPendingRealtimeEvents();
       if (deferCodexTurnCompletionIfBlocked(workspaceId, threadId, normalizedTurnId)) {
         return;
       }
-      settleCompletedTurn(workspaceId, threadId, normalizedTurnId);
+      settleCompletedTurn(workspaceId, threadId, normalizedTurnId, turnId);
     },
-    [deferCodexTurnCompletionIfBlocked, flushPendingRealtimeEvents, settleCompletedTurn],
+    [
+      deferCodexTurnCompletionIfBlocked,
+      flushPendingRealtimeEvents,
+      resolveTerminalSettlementTurnId,
+      settleCompletedTurn,
+    ],
   );
 
   const onTurnErrorTracked = useCallback(
@@ -2546,7 +2359,7 @@ export function useThreadEventHandlers({
         engine?: ConversationEngine | null;
       },
     ) => {
-      const normalizedTurnId = turnId.trim();
+      const normalizedTurnId = resolveTerminalSettlementTurnId(threadId, turnId);
       flushPendingRealtimeEvents();
       markRealtimeTurnTerminal(threadId, normalizedTurnId);
       onTurnError(workspaceId, threadId, normalizedTurnId, payload);
@@ -2565,6 +2378,7 @@ export function useThreadEventHandlers({
         workspaceId,
         threadId,
         turnId: normalizedTurnId,
+        rawTurnId: turnId,
         status: "error",
       });
       const diagnostic = turnDiagnosticsRef.current.get(threadId);
@@ -2587,6 +2401,7 @@ export function useThreadEventHandlers({
       onTurnError,
       onTurnTerminalExternal,
       quarantineCodexTurn,
+      resolveTerminalSettlementTurnId,
     ],
   );
 
@@ -2605,7 +2420,7 @@ export function useThreadEventHandlers({
         engine?: ConversationEngine | null;
       },
     ) => {
-      const normalizedTurnId = turnId.trim();
+      const normalizedTurnId = resolveTerminalSettlementTurnId(threadId, turnId);
       flushPendingRealtimeEvents();
       markRealtimeTurnTerminal(threadId, normalizedTurnId);
       onTurnStalled(workspaceId, threadId, normalizedTurnId, payload);
@@ -2621,6 +2436,7 @@ export function useThreadEventHandlers({
         workspaceId,
         threadId,
         turnId: normalizedTurnId,
+        rawTurnId: turnId,
         status: "stalled",
       });
       const diagnostic = turnDiagnosticsRef.current.get(threadId);
@@ -2648,6 +2464,7 @@ export function useThreadEventHandlers({
       onTurnStalled,
       onTurnTerminalExternal,
       quarantineCodexTurn,
+      resolveTerminalSettlementTurnId,
     ],
   );
 

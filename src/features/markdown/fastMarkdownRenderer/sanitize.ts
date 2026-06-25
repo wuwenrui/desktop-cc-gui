@@ -146,7 +146,7 @@ export function sanitizeFastMarkdownHtml(input: string): SanitizeFastMarkdownHtm
     ALLOWED_ATTR,
     FORBID_TAGS,
     FORBID_ATTR: FORBID_ATTR_PREFIXES,
-    ALLOW_DATA_ATTR: false,
+    ALLOW_DATA_ATTR: true,
     USE_PROFILES: { html: true },
     RETURN_DOM_FRAGMENT: false,
     RETURN_DOM: false,

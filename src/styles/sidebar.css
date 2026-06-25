@@ -53,10 +53,45 @@
 }
 
 .sidebar-primary-nav-item-bottom {
+  width: 32px;
+  height: 32px;
   min-height: 32px;
+  padding: 0;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
   font-size: var(--sidebar-content-font-size);
-  font-weight: 350;
+  font-weight: 500;
+  justify-content: center;
+  align-items: center;
+  transition:
+    background-color 0.16s ease,
+    color 0.16s ease;
 }
+
+.sidebar-primary-nav-item-bottom > .sidebar-primary-nav-text,
+.sidebar-primary-nav-item-bottom > .sidebar-settings-chevron {
+  display: none;
+}
+
+.sidebar-primary-nav-item-bottom > .sidebar-primary-nav-icon {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
+.sidebar-primary-nav-item-bottom:hover,
+.sidebar-primary-nav-item-bottom:focus-visible {
+  background: var(--surface-hover);
+  color: var(--text-strong);
+}
+
+.sidebar-primary-nav-item-bottom.is-active {
+  background: var(--surface-hover);
+  color: var(--text-strong);
+}
+
 
 .sidebar-primary-nav-item-collapse {
   margin-top: 2px;
@@ -321,39 +356,30 @@
   margin-right: 0;
 }
 
-.app.layout-desktop.layout-swapped .sidebar-bottom-nav .sidebar-primary-nav-item-bottom {
-  justify-content: flex-end;
-  text-align: right;
-}
-
-.app.layout-desktop.layout-swapped .sidebar-bottom-nav .sidebar-primary-nav-item-bottom .sidebar-primary-nav-icon {
-  order: 2;
-}
-
-.app.layout-desktop.layout-swapped .sidebar-bottom-nav .sidebar-primary-nav-item-bottom .sidebar-primary-nav-text {
-  order: 1;
-}
-
-.app.layout-desktop.layout-swapped .sidebar-bottom-nav .sidebar-primary-nav-item-bottom .sidebar-settings-chevron {
-  order: 0;
-  margin-left: 0;
-  margin-right: auto;
-}
-
 .sidebar-bottom-nav {
   margin-top: auto;
-  padding: 8px 2px 0;
+  padding: 8px 6px 0;
   border-top: none;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: center;
   gap: 4px;
 }
 
 .sidebar-settings-dropdown-wrapper {
   position: relative;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
 }
 
+
 .sidebar-settings-dropdown {
+  width: 200px;
+  max-width: calc(100vw - 24px);
   position: absolute;
   bottom: 100%;
   left: 0;
@@ -1814,6 +1840,26 @@
   gap: 2px;
   margin-left: 0;
   padding: 1px 0 2px;
+}
+
+.thread-list[data-virtualized="true"] {
+  display: block;
+  max-height: 360px;
+  overflow-y: auto;
+  contain: strict;
+}
+
+.thread-list-virtual-spacer {
+  position: relative;
+  width: 100%;
+}
+
+.thread-list-virtual-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  min-height: 36px;
 }
 
 .pinned-thread-list {

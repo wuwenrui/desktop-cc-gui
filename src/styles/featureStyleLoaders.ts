@@ -8,6 +8,12 @@ export function loadFileTreeStyles() {
   ]);
 }
 
+export function loadDetachedFileExplorerStyles() {
+  return loadStyles([
+    () => import("./detached-file-explorer.css"),
+  ]);
+}
+
 export function loadFileViewStyles() {
   return loadStyles([
     () => import("./file-view-panel-shell.css"),
@@ -110,5 +116,25 @@ export function loadAboutStyles() {
 export function loadClientDocumentationStyles() {
   return loadStyles([
     () => import("./client-documentation.css"),
+  ]);
+}
+
+export function loadMermaidFullscreenStyles() {
+  return loadStyles([
+    () => import("viewerjs/dist/viewer.css"),
+    () => import("./mermaid-fullscreen.css"),
+  ]);
+}
+
+export function loadImageFullscreenStyles() {
+  return loadStyles([
+    () => import("viewerjs/dist/viewer.css"),
+    () => import("./image-fullscreen.css"),
+  ]);
+}
+
+export function loadMessagesOutlineFloaterStyles() {
+  return loadStyles([
+    () => import("./messages-outline-floater.css"),
   ]);
 }

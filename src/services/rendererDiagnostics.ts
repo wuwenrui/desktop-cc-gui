@@ -17,6 +17,8 @@ export type RendererDiagnosticEntry = {
 const RENDERER_DIAGNOSTICS_KEY = "diagnostics.rendererLifecycleLog";
 const MAX_RENDERER_DIAGNOSTICS = 200;
 const MAX_PERF_ENTRIES = 1000;
+const MAX_REALTIME_TURN_SUMMARIES = 100;
+const MAX_STREAM_LATENCY_ENTRIES = 600;
 const EARLY_RENDERER_DIAGNOSTICS_STORAGE_KEY = "ccgui.bootstrapRendererDiagnostics";
 const DEFAULT_BLANK_WATCHDOG_INTERVAL_MS = 1_500;
 const DEFAULT_BLANK_WATCHDOG_MIN_CONSECUTIVE_SAMPLES = 2;
@@ -52,8 +54,14 @@ type RendererHeartbeatOptions = {
 function trimDiagnostics(entries: RendererDiagnosticEntry[]) {
   const regularEntries: RendererDiagnosticEntry[] = [];
   const perfEntries: RendererDiagnosticEntry[] = [];
+  const realtimeTurnSummaryEntries: RendererDiagnosticEntry[] = [];
+  const streamLatencyEntries: RendererDiagnosticEntry[] = [];
   for (const entry of entries) {
-    if (entry.label.startsWith("perf.")) {
+    if (entry.label === "realtime.turnTrace.summary") {
+      realtimeTurnSummaryEntries.push(entry);
+    } else if (entry.label.startsWith("stream-latency/")) {
+      streamLatencyEntries.push(entry);
+    } else if (entry.label.startsWith("perf.")) {
       perfEntries.push(entry);
     } else {
       regularEntries.push(entry);
@@ -62,6 +70,12 @@ function trimDiagnostics(entries: RendererDiagnosticEntry[]) {
   return [
     ...regularEntries.slice(Math.max(0, regularEntries.length - MAX_RENDERER_DIAGNOSTICS)),
     ...perfEntries.slice(Math.max(0, perfEntries.length - MAX_PERF_ENTRIES)),
+    ...realtimeTurnSummaryEntries.slice(
+      Math.max(0, realtimeTurnSummaryEntries.length - MAX_REALTIME_TURN_SUMMARIES),
+    ),
+    ...streamLatencyEntries.slice(
+      Math.max(0, streamLatencyEntries.length - MAX_STREAM_LATENCY_ENTRIES),
+    ),
   ].sort((left, right) => left.timestamp - right.timestamp);
 }
 

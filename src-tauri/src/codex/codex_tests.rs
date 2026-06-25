@@ -4,7 +4,8 @@ use super::thread_listing::{
     select_unified_codex_partial_source,
 };
 use super::{
-    create_session_runtime_recovering_error, run_start_thread_with_hook_safe_fallback,
+    codex_provider_binding_lookup_keys, create_session_runtime_recovering_error,
+    run_start_thread_with_hook_safe_fallback,
     run_start_thread_with_hook_safe_fallback_and_recovery_probe, run_start_thread_with_retry,
     run_start_thread_with_retry_and_recovery_probe,
 };
@@ -19,6 +20,42 @@ fn build_thread_list_empty_response_has_expected_shape() {
     let response = build_thread_list_empty_response();
     assert_eq!(response["result"]["data"], json!([]));
     assert!(response["result"]["nextCursor"].is_null());
+}
+
+#[test]
+fn codex_provider_binding_lookup_keys_prefer_canonical_workspace_key() {
+    assert_eq!(
+        codex_provider_binding_lookup_keys("ws-1", "thread-1"),
+        vec![
+            "codex:ws-1:thread-1",
+            "codex::ws-1::thread-1",
+            "thread-1",
+            "codex:thread-1"
+        ]
+    );
+    assert_eq!(
+        codex_provider_binding_lookup_keys("ws-1", "codex:thread-1"),
+        vec![
+            "codex:ws-1:codex:thread-1",
+            "codex::ws-1::codex:thread-1",
+            "codex:thread-1",
+            "thread-1"
+        ]
+    );
+    assert_eq!(
+        codex_provider_binding_lookup_keys(" ws-1 ", " thread-1 "),
+        vec![
+            "codex:ws-1:thread-1",
+            "codex::ws-1::thread-1",
+            "thread-1",
+            "codex:thread-1"
+        ]
+    );
+    assert_eq!(
+        codex_provider_binding_lookup_keys("", "thread-1"),
+        vec!["thread-1", "codex:thread-1"]
+    );
+    assert!(codex_provider_binding_lookup_keys("ws-1", "   ").is_empty());
 }
 
 #[test]

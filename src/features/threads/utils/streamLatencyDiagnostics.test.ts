@@ -93,6 +93,97 @@ describe("streamLatencyDiagnostics", () => {
     expect(summary.milestones["runtime-process-started"]).toBe(1_000);
   });
 
+  it("feeds every received delta into turn trace amplification counters", async () => {
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: (key: string) =>
+          key === "ccgui.debug.turnTrace.enabled" ? "1" : null,
+      },
+    });
+
+    await primeThreadStreamLatencyContext({
+      workspaceId: "ws-1",
+      threadId: "thread-trace-deltas",
+      engine: "claude",
+      model: "claude-sonnet-4.5",
+    });
+    noteThreadTurnStarted({
+      workspaceId: "ws-1",
+      threadId: "thread-trace-deltas",
+      turnId: "turn-trace-deltas",
+      startedAt: 1_000,
+    });
+
+    noteThreadDeltaReceived("thread-trace-deltas", 1_100, {
+      source: "delta",
+      itemId: "assistant-1",
+      textLength: 4,
+    });
+    noteThreadDeltaReceived("thread-trace-deltas", 1_130, {
+      source: "delta",
+      itemId: "assistant-1",
+      textLength: 6,
+    });
+
+    const summary = getTurnTraceSummary(
+      "thread-trace-deltas",
+      "turn-trace-deltas",
+    ) as TurnTraceSummary;
+    expect(summary.counters.deltaCount).toBe(2);
+    expect(summary.counters.reducerCommitCount).toBe(2);
+    expect(summary.counters.reducerAmplification).toBe(1);
+    expect(summary.milestones["first-engine-delta-ingress"]).toBe(1_100);
+  });
+
+  it("updates turn trace visible text growth count on every text growth", async () => {
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: (key: string) =>
+          key === "ccgui.debug.turnTrace.enabled" ? "1" : null,
+      },
+    });
+
+    await primeThreadStreamLatencyContext({
+      workspaceId: "ws-1",
+      threadId: "thread-visible-growth-trace",
+      engine: "codex",
+      model: "MiniMax-M3",
+    });
+    noteThreadTurnStarted({
+      workspaceId: "ws-1",
+      threadId: "thread-visible-growth-trace",
+      turnId: "turn-visible-growth-trace",
+      startedAt: 1_000,
+    });
+    noteThreadDeltaReceived("thread-visible-growth-trace", 1_100, {
+      source: "delta",
+      itemId: "assistant-1",
+      textLength: 12,
+    });
+
+    noteThreadVisibleTextRendered("thread-visible-growth-trace", {
+      itemId: "assistant-1",
+      visibleTextLength: 6,
+      renderAt: 1_130,
+    });
+    noteThreadVisibleTextRendered("thread-visible-growth-trace", {
+      itemId: "assistant-1",
+      visibleTextLength: 12,
+      renderAt: 1_170,
+    });
+
+    const snapshot = getThreadStreamLatencySnapshot("thread-visible-growth-trace");
+    const summary = getTurnTraceSummary(
+      "thread-visible-growth-trace",
+      "turn-visible-growth-trace",
+    ) as TurnTraceSummary;
+
+    expect(snapshot?.visibleTextGrowthCount).toBe(2);
+    expect(summary.milestones["first-visible-text-growth"]).toBe(1_130);
+    expect(summary.deltas.firstDeltaToFirstVisibleTextMs).toBe(30);
+    expect(summary.counters.visibleTextGrowthCount).toBe(2);
+  });
+
   it("activates the Qwen Windows mitigation only after render amplification evidence appears", async () => {
     mocks.isWindowsPlatform.mockReturnValue(true);
     mocks.getCurrentClaudeConfig.mockResolvedValue({
@@ -1389,6 +1480,30 @@ describe("streamLatencyDiagnostics", () => {
           sessionEmittedAtMs: 1_020,
           forwarderReceivedAtMs: 1_030,
           appServerEmittedAtMs: 1_040,
+          turnStartRequestStartedAtMs: 700,
+          turnStartResponseReceivedAtMs: 760,
+          firstRuntimeEventReceivedAtMs: 980,
+          firstStreamEventReceivedAtMs: 1_000,
+          firstReasoningEventReceivedAtMs: 980,
+          firstAssistantItemEventReceivedAtMs: 1_005,
+          firstAgentMessageEventReceivedAtMs: 1_010,
+          firstToolEventReceivedAtMs: 995,
+          firstTextDeltaReceivedAtMs: 1_010,
+          firstRuntimeEventMethod: "item/reasoning/textDelta",
+          firstStreamEventMethod: "turn/started",
+          firstReasoningEventMethod: "item/reasoning/textDelta",
+          firstAssistantItemEventMethod: "item/started",
+          firstAgentMessageEventMethod: "item/agentMessage/delta",
+          firstToolEventMethod: "item/started",
+          firstTextDeltaMethod: "item/agentMessage/delta",
+          eventCountBeforeFirstTextDelta: 3,
+          reasoningEventCountBeforeFirstTextDelta: 1,
+          toolEventCountBeforeFirstTextDelta: 1,
+          methodsBeforeFirstTextDelta: [
+            "item/reasoning/textDelta",
+            "item/started",
+            "",
+          ],
           spawnToStdinClosedMs: 30,
           stdinClosedToFirstStdoutMs: 70,
           firstStdoutToFirstValidEventMs: 5,
@@ -1398,6 +1513,14 @@ describe("streamLatencyDiagnostics", () => {
           sessionEmitToForwarderMs: 10,
           forwarderToAppServerEmitMs: 10,
           stdoutToAppServerEmitMs: 40,
+          turnStartRequestToResponseMs: 60,
+          turnStartResponseToFirstStreamEventMs: 240,
+          turnStartResponseToFirstRuntimeEventMs: 220,
+          turnStartResponseToFirstTextDeltaMs: 250,
+          firstRuntimeEventToFirstTextDeltaMs: 30,
+          firstRuntimeEventToFirstAssistantItemEventMs: 25,
+          firstAssistantItemEventToFirstTextDeltaMs: 5,
+          turnStartResponseToThisEventMs: 250,
         },
       },
       receivedAt: 1_090,
@@ -1436,6 +1559,30 @@ describe("streamLatencyDiagnostics", () => {
           sessionEmittedAtMs: 1_020,
           forwarderReceivedAtMs: 1_030,
           appServerEmittedAtMs: 1_040,
+          turnStartRequestStartedAtMs: 700,
+          turnStartResponseReceivedAtMs: 760,
+          firstRuntimeEventReceivedAtMs: 980,
+          firstStreamEventReceivedAtMs: 1_000,
+          firstReasoningEventReceivedAtMs: 980,
+          firstAssistantItemEventReceivedAtMs: 1_005,
+          firstAgentMessageEventReceivedAtMs: 1_010,
+          firstToolEventReceivedAtMs: 995,
+          firstTextDeltaReceivedAtMs: 1_010,
+          firstRuntimeEventMethod: "item/reasoning/textDelta",
+          firstStreamEventMethod: "turn/started",
+          firstReasoningEventMethod: "item/reasoning/textDelta",
+          firstAssistantItemEventMethod: "item/started",
+          firstAgentMessageEventMethod: "item/agentMessage/delta",
+          firstToolEventMethod: "item/started",
+          firstTextDeltaMethod: "item/agentMessage/delta",
+          eventCountBeforeFirstTextDelta: 3,
+          reasoningEventCountBeforeFirstTextDelta: 1,
+          toolEventCountBeforeFirstTextDelta: 1,
+          methodsBeforeFirstTextDelta: [
+            "item/reasoning/textDelta",
+            "item/started",
+            "",
+          ],
           spawnToStdinClosedMs: 30,
           stdinClosedToFirstStdoutMs: 70,
           firstStdoutToFirstValidEventMs: 5,
@@ -1445,6 +1592,14 @@ describe("streamLatencyDiagnostics", () => {
           sessionEmitToForwarderMs: 10,
           forwarderToAppServerEmitMs: 10,
           stdoutToAppServerEmitMs: 40,
+          turnStartRequestToResponseMs: 60,
+          turnStartResponseToFirstStreamEventMs: 240,
+          turnStartResponseToFirstRuntimeEventMs: 220,
+          turnStartResponseToFirstTextDeltaMs: 250,
+          firstRuntimeEventToFirstTextDeltaMs: 30,
+          firstRuntimeEventToFirstAssistantItemEventMs: 25,
+          firstAssistantItemEventToFirstTextDeltaMs: 5,
+          turnStartResponseToThisEventMs: 250,
         },
       },
       receivedAt: 1_090,
@@ -1462,6 +1617,26 @@ describe("streamLatencyDiagnostics", () => {
         firstStdoutLineAtMs: 1_000,
         firstValidStreamEventAtMs: 1_005,
         firstTextDeltaAtMs: 1_010,
+        turnStartRequestStartedAtMs: 700,
+        turnStartResponseReceivedAtMs: 760,
+        firstRuntimeEventReceivedAtMs: 980,
+        firstStreamEventReceivedAtMs: 1_000,
+        firstReasoningEventReceivedAtMs: 980,
+        firstAssistantItemEventReceivedAtMs: 1_005,
+        firstAgentMessageEventReceivedAtMs: 1_010,
+        firstToolEventReceivedAtMs: 995,
+        firstTextDeltaReceivedAtMs: 1_010,
+        firstRuntimeEventMethod: "item/reasoning/textDelta",
+        firstStreamEventMethod: "turn/started",
+        firstReasoningEventMethod: "item/reasoning/textDelta",
+        firstAssistantItemEventMethod: "item/started",
+        firstAgentMessageEventMethod: "item/agentMessage/delta",
+        firstToolEventMethod: "item/started",
+        firstTextDeltaMethod: "item/agentMessage/delta",
+        eventCountBeforeFirstTextDelta: 3,
+        reasoningEventCountBeforeFirstTextDelta: 1,
+        toolEventCountBeforeFirstTextDelta: 1,
+        methodsBeforeFirstTextDelta: ["item/reasoning/textDelta", "item/started"],
         spawnToStdinClosedMs: 30,
         stdinClosedToFirstStdoutMs: 70,
         firstStdoutToFirstValidEventMs: 5,
@@ -1469,8 +1644,17 @@ describe("streamLatencyDiagnostics", () => {
         stdinClosedToFirstTextDeltaMs: 80,
         stdoutToSessionEmitMs: 20,
         stdoutToAppServerEmitMs: 40,
+        turnStartRequestToResponseMs: 60,
+        turnStartResponseToFirstStreamEventMs: 240,
+        turnStartResponseToFirstRuntimeEventMs: 220,
+        turnStartResponseToFirstTextDeltaMs: 250,
+        firstRuntimeEventToFirstTextDeltaMs: 30,
+        firstRuntimeEventToFirstAssistantItemEventMs: 25,
+        firstAssistantItemEventToFirstTextDeltaMs: 5,
+        turnStartResponseToThisEventMs: 250,
         appServerEmitToRendererMs: 50,
         stdoutToRendererMs: 90,
+        turnStartResponseToRendererMs: 330,
       }),
     );
     const payload = mocks.appendRendererDiagnostic.mock.calls.at(
@@ -1595,6 +1779,12 @@ describe("streamLatencyDiagnostics", () => {
           sessionEmittedAtMs: Number.POSITIVE_INFINITY,
           forwarderReceivedAtMs: Number.NaN,
           appServerEmittedAtMs: 3_000,
+          turnStartRequestStartedAtMs: Number.NaN,
+          turnStartResponseReceivedAtMs: -1,
+          firstStreamEventReceivedAtMs: Number.POSITIVE_INFINITY,
+          firstTextDeltaReceivedAtMs: "bad",
+          firstStreamEventMethod: "",
+          firstTextDeltaMethod: "item/agentMessage/delta",
           spawnToStdinClosedMs: -30,
           stdinClosedToFirstStdoutMs: Number.NaN,
           firstStdoutToFirstValidEventMs: Number.POSITIVE_INFINITY,
@@ -1604,6 +1794,10 @@ describe("streamLatencyDiagnostics", () => {
           sessionEmitToForwarderMs: Number.NaN,
           forwarderToAppServerEmitMs: Number.POSITIVE_INFINITY,
           stdoutToAppServerEmitMs: "40",
+          turnStartRequestToResponseMs: -1,
+          turnStartResponseToFirstStreamEventMs: Number.NaN,
+          turnStartResponseToFirstTextDeltaMs: "bad",
+          turnStartResponseToThisEventMs: Number.POSITIVE_INFINITY,
         },
       },
       receivedAt: "bad-clock",
@@ -1622,6 +1816,12 @@ describe("streamLatencyDiagnostics", () => {
         sessionEmittedAtMs: null,
         forwarderReceivedAtMs: null,
         appServerEmittedAtMs: 3_000,
+        turnStartRequestStartedAtMs: null,
+        turnStartResponseReceivedAtMs: null,
+        firstStreamEventReceivedAtMs: null,
+        firstTextDeltaReceivedAtMs: null,
+        firstStreamEventMethod: null,
+        firstTextDeltaMethod: "item/agentMessage/delta",
         rendererReceivedAtMs: 2_000,
         spawnToStdinClosedMs: null,
         stdinClosedToFirstStdoutMs: null,
@@ -1632,8 +1832,13 @@ describe("streamLatencyDiagnostics", () => {
         sessionEmitToForwarderMs: null,
         forwarderToAppServerEmitMs: null,
         stdoutToAppServerEmitMs: null,
+        turnStartRequestToResponseMs: null,
+        turnStartResponseToFirstStreamEventMs: null,
+        turnStartResponseToFirstTextDeltaMs: null,
+        turnStartResponseToThisEventMs: null,
         appServerEmitToRendererMs: 0,
         stdoutToRendererMs: null,
+        turnStartResponseToRendererMs: null,
       }),
     );
   });

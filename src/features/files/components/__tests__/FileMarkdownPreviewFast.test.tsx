@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { FileMarkdownPreviewFast } from "../FileMarkdownPreviewFast";
 import { clearFastMarkdownRenderCache } from "../../../markdown/fastMarkdownRenderer/cache";
+import type { CodeAnnotationSelection } from "../../../code-annotations/types";
 
 beforeEach(() => {
   clearFastMarkdownRenderCache();
@@ -41,7 +42,7 @@ async function renderUnderAct(element: React.ReactElement) {
 
 describe("FileMarkdownPreviewFast", () => {
   it("renders the fast preview when a fast profile is selected", async () => {
-    await renderUnderAct(
+    render(
       <FileMarkdownPreviewFast
         value="# title\n\nparagraph"
         documentKey="doc-fast"
@@ -70,6 +71,7 @@ describe("FileMarkdownPreviewFast", () => {
     );
     // Rich path uses the existing `data-testid="file-markdown-preview"`.
     expect(screen.queryByTestId("file-markdown-preview")).toBeTruthy();
+    await screen.findByRole("button", { name: "Show outline" });
   });
 
   it("renders parser-derived outline for the default rich preview", async () => {
@@ -112,6 +114,49 @@ describe("FileMarkdownPreviewFast", () => {
     } finally {
       HTMLElement.prototype.scrollIntoView = originalScrollIntoView;
     }
+  });
+
+  it("does not recompile rich outline when only annotation state changes", async () => {
+    const compileModule = await import("../../../markdown/fastMarkdownRenderer/compile");
+    const compileSpy = vi.spyOn(compileModule, "compileFastMarkdown");
+    const annotation: CodeAnnotationSelection = {
+      id: "annotation-rich",
+      path: "docs/report.md",
+      lineRange: { startLine: 3, endLine: 3 },
+      body: "rich annotation body",
+      source: "file-preview-mode",
+    };
+    const { rerender } = render(
+      <FileMarkdownPreviewFast
+        value={"# Title\n\nparagraph"}
+        documentKey="doc-rich-outline-annotation-stable"
+        annotations={[]}
+        renderAnnotationMarker={(item) => (
+          <span data-testid="rich-marker">{item.id}</span>
+        )}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Show outline" })).toBeTruthy();
+    });
+    const compileCallCount = compileSpy.mock.calls.length;
+
+    rerender(
+      <FileMarkdownPreviewFast
+        value={"# Title\n\nparagraph"}
+        documentKey="doc-rich-outline-annotation-stable"
+        annotations={[annotation]}
+        renderAnnotationMarker={(item) => (
+          <span data-testid="rich-marker">{item.id}</span>
+        )}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("rich-marker").textContent).toBe("annotation-rich");
+      expect(compileSpy).toHaveBeenCalledTimes(compileCallCount);
+    });
   });
 
   it("auto-collapses unpinned outline after selection", async () => {
@@ -178,12 +223,17 @@ describe("FileMarkdownPreviewFast", () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Show outline" }));
-    fireEvent.mouseLeave(await screen.findByRole("navigation", { name: "Outline" }));
-
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Show outline" })).toBeTruthy();
+    const expandOutlineButton = await screen.findByRole("button", {
+      name: "Show outline",
     });
+    fireEvent.click(expandOutlineButton);
+
+    const outlineNavigation = await screen.findByRole("navigation", {
+      name: "Outline",
+    });
+    fireEvent.mouseLeave(outlineNavigation);
+
+    expect(await screen.findByRole("button", { name: "Show outline" })).toBeTruthy();
   });
 
   it("keeps pinned outline open when the pointer leaves the outline panel", async () => {
@@ -274,6 +324,30 @@ describe("FileMarkdownPreviewFast", () => {
     expect(compileSpy).toHaveBeenCalled();
   });
 
+  it("falls back to the rich preview for local markdown image references", async () => {
+    const onFallback = vi.fn();
+    await renderUnderAct(
+      <FileMarkdownPreviewFast
+        value="![local](assets/images/local.png)"
+        documentKey="doc-local-image"
+        sourceFilePath="/repo/docs/report.md"
+        rendererProfile="fast-html"
+        featureFlags={{ fastHtmlRendererEnabled: true }}
+        onFastRendererFallback={onFallback}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("file-markdown-preview")).toBeTruthy();
+    });
+    expect(screen.getByRole("img", { name: "local" }).getAttribute("src")).toBe(
+      "asset://localhost//repo/docs/assets/images/local.png",
+    );
+    expect(onFallback).toHaveBeenCalledWith(
+      "fast-renderer-fallback:local-image-rich-fallback",
+    );
+  });
+
   it("stays on the fast path when the compile succeeds", async () => {
     await renderUnderAct(
       <FileMarkdownPreviewFast
@@ -306,4 +380,228 @@ describe("FileMarkdownPreviewFast", () => {
     });
     expect(onFallback).not.toHaveBeenCalled();
   });
+
+  it("keeps the fast body mounted when existing annotation markers are present", async () => {
+    const annotations: CodeAnnotationSelection[] = [
+      {
+        id: "annotation-1",
+        path: "docs/report.md",
+        lineRange: { startLine: 3, endLine: 3 },
+        body: "marker body must not enter diagnostics",
+        source: "file-preview-mode",
+      },
+    ];
+    const onFallback = vi.fn();
+
+    render(
+      <FileMarkdownPreviewFast
+        value={"# heading\n\nparagraph"}
+        documentKey="doc-fast-annotation-marker"
+        rendererProfile="fast-html"
+        featureFlags={{ fastHtmlRendererEnabled: true }}
+        annotations={annotations}
+        renderAnnotationMarker={(annotation) => (
+          <span data-testid="fast-marker">{annotation.id}</span>
+        )}
+        onFastRendererFallback={onFallback}
+      />,
+    );
+    await waitFor(() => {
+      const node = screen.queryByTestId("file-markdown-fast-preview");
+      expect(node?.getAttribute("data-fast-renderer-marker")).toBe("ready");
+      expect(node?.getAttribute("data-markdown-annotation-overlay-count")).toBe("1");
+    });
+    expect((await screen.findByTestId("fast-marker")).textContent).toBe("annotation-1");
+    expect(onFallback).not.toHaveBeenCalledWith(
+      "fast-renderer-fallback:annotation-overlay-rich-fallback",
+    );
+    expect(screen.queryByTestId("file-markdown-preview")).toBeNull();
+  });
+
+  it("places nested annotation markers without whole-document rich fallback", async () => {
+    const annotations: CodeAnnotationSelection[] = [
+      {
+        id: "nested-marker",
+        path: "docs/report.md",
+        lineRange: { startLine: 4, endLine: 4 },
+        body: "nested marker body",
+        source: "file-preview-mode",
+      },
+      {
+        id: "code-marker",
+        path: "docs/report.md",
+        lineRange: { startLine: 9, endLine: 9 },
+        body: "code marker body",
+        source: "file-preview-mode",
+      },
+    ];
+    const onFallback = vi.fn();
+
+    render(
+      <FileMarkdownPreviewFast
+        value={[
+          "# heading",
+          "",
+          "- outer",
+          "  - nested",
+          "",
+          "```ts",
+          "const a = 1;",
+          "const b = 2;",
+          "```",
+        ].join("\n")}
+        documentKey="doc-fast-nested-annotation"
+        rendererProfile="fast-html"
+        featureFlags={{ fastHtmlRendererEnabled: true }}
+        annotations={annotations}
+        renderAnnotationMarker={(annotation) => (
+          <span data-testid="fast-marker">{annotation.id}</span>
+        )}
+        onFastRendererFallback={onFallback}
+      />,
+    );
+
+    await waitFor(() => {
+      const node = screen.getByTestId("file-markdown-fast-preview");
+      expect(node.getAttribute("data-fast-renderer-marker")).toBe("ready");
+      expect(node.getAttribute("data-markdown-annotation-overlay-count")).toBe("2");
+    });
+    expect(screen.getAllByTestId("fast-marker").map((node) => node.textContent)).toEqual([
+      "nested-marker",
+      "code-marker",
+    ]);
+    expect(onFallback).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("file-markdown-preview")).toBeNull();
+  });
+
+  it("omits unplaceable fast annotation markers locally instead of falling back to rich", async () => {
+    const annotations: CodeAnnotationSelection[] = [
+      {
+        id: "outside-marker",
+        path: "docs/report.md",
+        lineRange: { startLine: 200, endLine: 200 },
+        body: "outside body",
+        source: "file-preview-mode",
+      },
+    ];
+    const onFallback = vi.fn();
+
+    render(
+      <FileMarkdownPreviewFast
+        value={"# heading\n\nparagraph"}
+        documentKey="doc-fast-unplaceable-annotation"
+        rendererProfile="fast-html"
+        featureFlags={{ fastHtmlRendererEnabled: true }}
+        annotations={annotations}
+        renderAnnotationMarker={(annotation) => (
+          <span data-testid="fast-marker">{annotation.id}</span>
+        )}
+        onFastRendererFallback={onFallback}
+      />,
+    );
+
+    await waitFor(() => {
+      const node = screen.getByTestId("file-markdown-fast-preview");
+      expect(node.getAttribute("data-fast-renderer-marker")).toBe("ready");
+      expect(node.getAttribute("data-markdown-annotation-overlay-count")).toBe("0");
+    });
+    expect(screen.queryByTestId("fast-marker")).toBeNull();
+    expect(onFallback).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("file-markdown-preview")).toBeNull();
+  });
+
+  it("keeps the fast compile cache key stable while annotation draft text changes", async () => {
+    const { rerender } = render(
+      <FileMarkdownPreviewFast
+        value={"# heading\n\nparagraph"}
+        documentKey="doc-fast-draft-cache"
+        rendererProfile="fast-html"
+        featureFlags={{ fastHtmlRendererEnabled: true }}
+        annotationDraft={{ lineRange: { startLine: 3, endLine: 3 }, body: "" }}
+        renderAnnotationDraft={(draft) => (
+          <span data-testid="fast-draft">{draft.body || "empty"}</span>
+        )}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("file-markdown-fast-preview").getAttribute("data-fast-renderer-marker")).toBe("ready");
+    });
+    expect((await screen.findByTestId("fast-draft")).textContent).toBe("empty");
+    const initialCacheKey = screen
+      .getByTestId("file-markdown-fast-preview")
+      .getAttribute("data-markdown-cache-key");
+
+    await act(async () => {
+      rerender(
+        <FileMarkdownPreviewFast
+          value={"# heading\n\nparagraph"}
+          documentKey="doc-fast-draft-cache"
+          rendererProfile="fast-html"
+          featureFlags={{ fastHtmlRendererEnabled: true }}
+          annotationDraft={{ lineRange: { startLine: 3, endLine: 3 }, body: "typed" }}
+          renderAnnotationDraft={(draft) => (
+            <span data-testid="fast-draft">{draft.body || "empty"}</span>
+          )}
+        />,
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("fast-draft").textContent).toBe("typed");
+    });
+    expect(
+      screen.getByTestId("file-markdown-fast-preview").getAttribute("data-markdown-cache-key"),
+    ).toBe(initialCacheKey);
+  });
+
+  it("reveals bounded fast content before jumping to an outline target outside the current projection", async () => {
+    const scrollIntoView = vi.fn();
+    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    const markdown = [
+      "# Top",
+      "",
+      ...Array.from({ length: 700 }, () => ""),
+      "",
+      "## Tail Heading",
+      "",
+      "tail body",
+    ].join("\n");
+
+    try {
+      render(
+        <FileMarkdownPreviewFast
+          value={markdown}
+          documentKey="doc-bounded-outline-reveal"
+          rendererProfile="bounded-fast-html"
+          featureFlags={{
+            fastHtmlRendererEnabled: true,
+            boundedFastHtmlRendererEnabled: true,
+          }}
+        />,
+      );
+
+      await waitFor(() => {
+        const node = screen.getByTestId("file-markdown-fast-preview");
+        expect(node.getAttribute("data-fast-renderer-marker")).toBe("ready");
+        expect(node.getAttribute("data-markdown-truncated")).toBe("true");
+        expect(node.getAttribute("data-markdown-visible-line-count")).toBe("600");
+      });
+
+      fireEvent.click(await screen.findByRole("button", { name: "Show outline" }));
+      fireEvent.click(await screen.findByRole("button", { name: /Tail Heading/ }));
+
+      await waitFor(() => {
+        const scrollRoot = screen
+          .getByTestId("file-markdown-fast-preview")
+          .closest(".fvp-markdown-preview-scroll");
+        expect(Number(scrollRoot?.getAttribute("data-markdown-bounded-line-limit"))).toBeGreaterThan(700);
+        expect(screen.getByRole("heading", { name: "Tail Heading" })).toBeTruthy();
+        expect(scrollIntoView).toHaveBeenCalled();
+      });
+    } finally {
+      HTMLElement.prototype.scrollIntoView = originalScrollIntoView;
+    }
+  }, 15_000);
 });

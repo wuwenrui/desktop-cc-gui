@@ -185,7 +185,7 @@ export function useModels({
   const [selectedModelId, setSelectedModelIdState] = useState<string | null>(null);
   const [selectedEffort, setSelectedEffortState] = useState<string | null>(null);
   const [modelMappingVersion, setModelMappingVersion] = useState(0);
-  const lastFetchedWorkspaceId = useRef<string | null>(null);
+  const lastCatalogAttemptWorkspaceId = useRef<string | null>(null);
   const inFlightWorkspaceId = useRef<string | null>(null);
   const latestRefreshRequestId = useRef(0);
   const hasUserSelectedModel = useRef(false);
@@ -251,6 +251,7 @@ export function useModels({
     hasUserSelectedModel.current = false;
     hasUserSelectedEffort.current = false;
     lastWorkspaceId.current = workspaceId;
+    lastCatalogAttemptWorkspaceId.current = null;
     setConfigModel(null);
     setRawModels([]);
     setSelectedModelIdState(null);
@@ -462,7 +463,7 @@ export function useModels({
       })();
       const selectableData = mergeCodexSelectableModels(data);
       setRawModels(data);
-      lastFetchedWorkspaceId.current = requestedWorkspaceId;
+      lastCatalogAttemptWorkspaceId.current = requestedWorkspaceId;
       setCatalogReadyForWorkspace(
         modelListResult.status === "fulfilled" && Array.isArray(rawData),
       );
@@ -514,11 +515,11 @@ export function useModels({
     if (!workspaceId || !isConnected) {
       return;
     }
-    if (lastFetchedWorkspaceId.current === workspaceId && rawModels.length > 0) {
+    if (lastCatalogAttemptWorkspaceId.current === workspaceId) {
       return;
     }
     refreshModels("active-workspace");
-  }, [isConnected, rawModels.length, refreshModels, workspaceId]);
+  }, [isConnected, refreshModels, workspaceId]);
 
   useEffect(() => {
     if (!selectedModel) {

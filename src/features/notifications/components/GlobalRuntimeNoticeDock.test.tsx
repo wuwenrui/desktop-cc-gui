@@ -32,10 +32,12 @@ describe("GlobalRuntimeNoticeDock", () => {
     fireEvent.click(screen.getByRole("button", { name: "打开运行时提示" }));
 
     expect(onExpand).toHaveBeenCalledTimes(1);
-    expect(document.querySelector(".global-runtime-notice-dock-indicator-mark")?.textContent).toBe(
-      "!",
-    );
-    expect(document.querySelector(".global-runtime-notice-dock-indicator-dot")).toBeNull();
+    expect(
+      document.querySelector(".global-runtime-notice-dock-bubble.is-has-error"),
+    ).toBeTruthy();
+    const indicator = document.querySelector(".global-runtime-notice-dock-indicator");
+    expect(indicator).toBeTruthy();
+    expect(indicator?.querySelector("svg")).toBeTruthy();
     expect(screen.queryByText("运行中")).toBeNull();
   });
 
@@ -65,8 +67,12 @@ describe("GlobalRuntimeNoticeDock", () => {
       />,
     );
 
-    expect(document.querySelector(".global-runtime-notice-dock-indicator-dot")).toBeTruthy();
-    expect(document.querySelector(".global-runtime-notice-dock-indicator-mark")).toBeNull();
+    const indicator = document.querySelector(".global-runtime-notice-dock-indicator");
+    expect(
+      document.querySelector(".global-runtime-notice-dock-bubble.is-idle"),
+    ).toBeTruthy();
+    expect(indicator).toBeTruthy();
+    expect(indicator?.querySelector("svg")).toBeTruthy();
   });
 
   it("keeps the minimized exclamation when the dock has errors", () => {
@@ -95,10 +101,12 @@ describe("GlobalRuntimeNoticeDock", () => {
       />,
     );
 
-    expect(document.querySelector(".global-runtime-notice-dock-indicator-mark")?.textContent).toBe(
-      "!",
-    );
-    expect(document.querySelector(".global-runtime-notice-dock-indicator-dot")).toBeNull();
+    const indicator = document.querySelector(".global-runtime-notice-dock-indicator");
+    expect(
+      document.querySelector(".global-runtime-notice-dock-bubble.is-has-error"),
+    ).toBeTruthy();
+    expect(indicator).toBeTruthy();
+    expect(indicator?.querySelector("svg")).toBeTruthy();
   });
 
   it("renders the expanded empty state contract", () => {
@@ -117,6 +125,30 @@ describe("GlobalRuntimeNoticeDock", () => {
     expect(screen.getByText("空闲")).toBeTruthy();
     expect(screen.getByText("暂无运行时提示")).toBeTruthy();
     expect(screen.getByText("初始化进度和关键错误会显示在这里")).toBeTruthy();
+  });
+
+  it("portals the expanded sidebar popover above clipped sidebar containers", () => {
+    const { container } = render(
+      <div className="sidebar-bottom-nav">
+        <GlobalRuntimeNoticeDock
+          notices={[]}
+          visibility="expanded"
+          status="idle"
+          onExpand={vi.fn()}
+          onMinimize={vi.fn()}
+          onClear={vi.fn()}
+        />
+      </div>,
+    );
+
+    const sidebarBottomNav = container.querySelector(".sidebar-bottom-nav");
+    const portalPanel = document.querySelector(
+      ".global-runtime-notice-dock-portal-layer .global-runtime-notice-dock.is-sidebar-popover.is-portal",
+    );
+
+    expect(portalPanel).toBeTruthy();
+    expect(sidebarBottomNav?.contains(portalPanel)).toBe(false);
+    expect((portalPanel as HTMLElement).style.width).toBe("560px");
   });
 
   it("renders one-line notice rows with timestamp, repeat count, and actions", () => {

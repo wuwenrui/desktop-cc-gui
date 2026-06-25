@@ -465,3 +465,112 @@ Realtime conversation state changes MUST NOT force file editor typing, line swit
 - **THEN** file rendering MAY defer non-visible or non-urgent preview work
 - **AND** it MUST NOT delay explicit user typing, cursor movement, save, or first useful active file viewport
 
+### Requirement: Realtime Evidence MUST Measure Codex Post-Ack First Delta Wait
+Realtime performance evidence MUST distinguish Codex post-ack first-delta wait from frontend turn-start acknowledgement and renderer visible text latency when timing data is available.
+
+#### Scenario: post-ack first-delta metric is reported
+- **WHEN** a Codex turn has measured `turn/start` response acknowledgement and measured first text delta ingress timing
+- **THEN** runtime performance reports MUST include a measured `codexPostAckFirstDeltaP95`
+- **AND** the report MUST preserve `turnStartAckLatencyP95` and `firstDeltaLatencyP95` as separate metrics
+
+#### Scenario: post-ack residual guides next action
+- **WHEN** post-ack first-delta wait is high while visible lag and reducer amplification are healthy
+- **THEN** the report MUST identify the next investigation area as backend/provider/startup before renderer optimization
+
+#### Scenario: post-ack phase breakdown is reported when available
+- **WHEN** Codex app-server diagnostics include first runtime event and first assistant text delta phase timings
+- **THEN** runtime performance reports MUST include measured `codexPostAckFirstRuntimeEventP95`
+- **AND** runtime performance reports MUST include measured `codexFirstRuntimeEventToFirstTextDeltaP95`
+- **AND** runtime performance reports SHOULD include measured `codexFirstRuntimeEventToFirstAssistantItemP95` and `codexFirstAssistantItemToFirstTextDeltaP95` when assistant item phase fields are available
+- **AND** turn-level diagnostics MUST expose bounded `methodsBeforeFirstTextDelta` and event counters without prompt, assistant text, tool output, terminal output, or file content
+- **AND** missing phase fields from older artifacts MUST remain `unsupported` rather than being approximated
+
+#### Scenario: provider first-response dominance is identified
+- **WHEN** `firstRuntimeEventToFirstAssistantItemEventMs` accounts for most of `firstRuntimeEventToFirstTextDeltaMs`
+- **AND** `firstAssistantItemEventToFirstTextDeltaMs` is small
+- **THEN** runtime performance reports MUST emit a content-safe `providerFirstResponseDominates` note
+- **AND** the note MUST guide investigation toward provider/model first-response phase before renderer optimization
+
+### Requirement: V0511 Realtime Input Render Budget MUST Be Producer Backed
+
+Realtime input render budget evidence MUST be generated from reducer/profile fixtures rather than handwritten report rows.
+
+#### Scenario: reducer burst fixture records fast path evidence
+
+- **WHEN** a 1000-delta streaming burst fixture runs through the thread reducer
+- **THEN** the producer MUST emit `S-IO-RR/prepareThreadItems_calls_per_1000_delta`
+- **AND** the value MUST reflect the reducer profile counter rather than an assumed constant
+
+#### Scenario: realtime route timing remains bounded or unsupported
+
+- **WHEN** reducer flush or realtime route timing cannot be measured by the fixture
+- **THEN** the producer MUST emit an explicit unsupported row
+- **AND** the row MUST include the missing timing source as its reason
+
+### Requirement: Live Assistant Delta Commits MUST Avoid Transition Lag
+The realtime client MUST treat flushed live assistant text deltas as latency-critical reducer work once batching has decided to deliver them.
+
+#### Scenario: cadence-flushed live assistant delta commits urgently
+- **WHEN** `appendAgentMessageDelta` events have been coalesced by the realtime event batcher
+- **AND** the batcher emits a `cadence`, `manual`, or `first-token` flush
+- **THEN** the client MUST dispatch the reducer mutation without wrapping that live delta in transition scheduling
+- **AND** the reducer path MUST preserve existing terminal turn filtering before mutating state
+
+#### Scenario: terminal and heavier normalized events keep guarded scheduling
+- **WHEN** normalized realtime events are terminal completions, tool events, reasoning events, snapshots, or other non-live assistant delta work
+- **THEN** the client MUST preserve the existing ordering and terminal-fence semantics
+- **AND** it MUST NOT broaden urgent scheduling to unrelated heavy event classes without separate evidence and tests
+
+#### Scenario: reducer fast path remains bounded
+- **WHEN** a long Codex, Gemini, or OpenCode assistant message receives many live text deltas
+- **THEN** reducer commits for the live delta path MUST avoid `prepareThreadItems`
+- **AND** batching/coalescing MUST remain available to bound dispatch count under streaming pressure
+
+### Requirement: Lightweight Markdown Visible Text MUST Track Live Assistant Growth
+When a live assistant row uses lightweight Markdown streaming, the client MUST keep visible-text diagnostics aligned with the current assistant item even if Markdown's rendered-value callback is delayed by throttling or progressive reveal.
+
+#### Scenario: Codex recovery row reports current visible text during callback delay
+- **WHEN** `codex-markdown-stream-recovery` is active for a streaming Codex assistant row
+- **AND** the row remains on lightweight Markdown rather than plain text
+- **AND** Markdown does not immediately call `onRenderedValueChange` for the latest `displayText`
+- **THEN** the row MUST still report the current assistant `itemId` and text to `onAssistantVisibleTextRender`
+- **AND** the report MUST NOT force the final completed message to bypass full Markdown rendering
+
+#### Scenario: visible stall classification stays evidence based
+- **WHEN** no `realtime.turnTrace.summary` is emitted after a hot-start validation turn
+- **AND** raw renderer diagnostics emit `visible-output-stall-after-first-delta`
+- **THEN** the next optimization target MUST be selected from the visible render/reporting evidence rather than assuming reducer commit lag persisted
+
+### Requirement: Realtime Evidence MUST Report First Delta Latency Separately
+
+Realtime performance evidence MUST expose first-delta latency as a separate measured metric when correlated turn trace summaries provide `sendToFirstDeltaMs`.
+
+#### Scenario: first-delta latency is reported separately from visible lag
+
+- **WHEN** `realtime.turnTrace.summary` contains measured `deltas.sendToFirstDeltaMs`
+- **THEN** runtime performance evidence MUST include first-delta latency as a distinct metric or summary field
+- **AND** it MUST NOT merge first-delta latency into visible text lag, reducer amplification, batch flush duration, or terminal settlement metrics
+
+#### Scenario: slow first delta with healthy visible path points to upstream investigation
+
+- **WHEN** first-delta latency is high for a Codex, Claude Code, or Gemini turn
+- **AND** visible text latency is within budget
+- **AND** reducer amplification does not show client-side amplification
+- **THEN** the report MUST identify upstream/provider/startup phase investigation as the next action
+- **AND** it MUST NOT recommend client render or row memo optimization as the primary action
+
+### Requirement: Realtime Evidence MUST Distinguish Turn Start Ack Latency
+
+Realtime performance evidence MUST distinguish Codex turn-start acknowledgement latency from first-delta latency when both are available.
+
+#### Scenario: turn-start ack latency is reported separately
+
+- **WHEN** Codex `send_user_message` completes or fails after invoking backend `turn/start`
+- **THEN** diagnostics MUST record bounded turn-start acknowledgement latency
+- **AND** runtime performance reports MUST NOT merge it into first-delta latency or visible text latency
+
+#### Scenario: first-delta residual remains visible after ack
+
+- **WHEN** first-delta latency is high and turn-start ack latency is available
+- **THEN** the report MUST preserve enough data to estimate post-ack first-delta wait
+- **AND** the next action MUST distinguish backend ack delay from provider/startup waiting after ack

@@ -101,6 +101,10 @@ export function useSelectedComposerSession({
           [sessionKey]: selection,
         };
       });
+      const stored = readStoredThreadComposerSelectionEntryBySessionKey(sessionKey);
+      if (stored.exists && selectionsEqual(stored.value, selection)) {
+        return;
+      }
       writeClientStoreValue("composer", sessionKey, selection);
     },
     [],
@@ -233,10 +237,15 @@ export function useSelectedComposerSession({
         writeClientStoreValue("composer", sessionKey, candidate);
       }
       if (hasCandidate) {
-        setSelectedComposerSelectionBySessionKey((prev) => ({
-          ...prev,
-          [sessionKey]: candidate ?? null,
-        }));
+        setSelectedComposerSelectionBySessionKey((prev) => {
+          if (selectionsEqual(prev[sessionKey] ?? null, candidate ?? null)) {
+            return prev;
+          }
+          return {
+            ...prev,
+            [sessionKey]: candidate ?? null,
+          };
+        });
       }
     }
 

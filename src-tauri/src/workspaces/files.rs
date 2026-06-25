@@ -17,8 +17,13 @@ use crate::shared::workspace_listing::{
     workspace_files_response, workspace_scan_budget_reached, WorkspaceScanState,
     WORKSPACE_DIRECTORY_SCAN_BUDGET_MULTIPLIER, WORKSPACE_SCAN_TIME_BUDGET,
 };
+#[cfg(test)]
 pub(crate) use crate::shared::workspace_listing::{
-    list_workspace_directory_children_inner, list_workspace_files_inner, WorkspaceFilesResponse,
+    list_workspace_directory_children_inner, list_workspace_files_inner,
+};
+pub(crate) use crate::shared::workspace_listing::{
+    list_workspace_directory_children_inner_with_refresh, list_workspace_files_inner_with_refresh,
+    WorkspaceFilesResponse,
 };
 use crate::text_encoding::decode_text_bytes;
 use crate::utils::normalize_git_path;
@@ -1378,7 +1383,8 @@ mod tests {
         compile_search_regex, create_workspace_directory_inner, duplicate_workspace_item_inner,
         is_special_directory_path, list_external_absolute_directory_children_inner,
         list_external_spec_tree_inner, list_workspace_directory_children_inner,
-        list_workspace_files_inner, normalize_workspace_relative_directory_path,
+        list_workspace_directory_children_inner_with_refresh, list_workspace_files_inner,
+        list_workspace_files_inner_with_refresh, normalize_workspace_relative_directory_path,
         normalize_workspace_relative_path, paste_workspace_item_inner,
         read_external_absolute_file_inner, read_external_spec_file_inner,
         read_workspace_file_inner, rename_workspace_item_inner,
@@ -1796,6 +1802,37 @@ mod tests {
     }
 
     #[test]
+    fn list_workspace_files_force_refresh_bypasses_cached_signature() {
+        let root = std::env::temp_dir().join(format!("mossx-files-force-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("src")).expect("create src dir");
+        std::fs::write(root.join("src/app.ts"), "app\n").expect("write app");
+
+        let first = list_workspace_files_inner(&root, 20);
+        assert_eq!(
+            first
+                .payload_budget
+                .as_ref()
+                .expect("first payload budget")
+                .cache_state,
+            ScanCacheState::Miss
+        );
+
+        std::fs::write(root.join("src/manual.ts"), "manual\n").expect("write manual");
+        let refreshed = list_workspace_files_inner_with_refresh(&root, 20, true);
+        assert_eq!(
+            refreshed
+                .payload_budget
+                .as_ref()
+                .expect("refreshed payload budget")
+                .cache_state,
+            ScanCacheState::Miss
+        );
+        assert!(refreshed.files.iter().any(|path| path == "src/manual.ts"));
+
+        std::fs::remove_dir_all(&root).expect("cleanup root");
+    }
+
+    #[test]
     fn sort_and_truncate_named_entries_sorts_before_truncating() {
         let mut entries = vec![
             ("z-item".to_string(), 1usize),
@@ -1904,6 +1941,44 @@ mod tests {
             ScanCacheState::Invalidated
         );
         assert!(third.files.iter().any(|path| path == "bucket/b.ts"));
+
+        std::fs::remove_dir_all(&root).expect("cleanup root");
+    }
+
+    #[test]
+    fn list_workspace_directory_children_force_refresh_bypasses_cached_signature() {
+        let root =
+            std::env::temp_dir().join(format!("mossx-dir-children-force-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("bucket")).expect("create bucket dir");
+        std::fs::write(root.join("bucket/a.ts"), "a\n").expect("write a");
+
+        let first =
+            list_workspace_directory_children_inner(&root, "bucket", 10).expect("first children");
+        assert_eq!(
+            first
+                .payload_budget
+                .as_ref()
+                .expect("first payload budget")
+                .cache_state,
+            ScanCacheState::Miss
+        );
+
+        std::fs::write(root.join("bucket/manual.ts"), "manual\n").expect("write manual");
+        let refreshed =
+            list_workspace_directory_children_inner_with_refresh(&root, "bucket", 10, true)
+                .expect("force refreshed children");
+        assert_eq!(
+            refreshed
+                .payload_budget
+                .as_ref()
+                .expect("refreshed payload budget")
+                .cache_state,
+            ScanCacheState::Miss
+        );
+        assert!(refreshed
+            .files
+            .iter()
+            .any(|path| path == "bucket/manual.ts"));
 
         std::fs::remove_dir_all(&root).expect("cleanup root");
     }

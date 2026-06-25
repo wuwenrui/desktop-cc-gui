@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 import type {
   RequestUserInputRequest,
   RequestUserInputResponse,
+  RequestUserInputSettlementResult,
+  RequestUserInputSettlementOptions,
 } from "../../../types";
 import {
   getUserInputOptionKey,
@@ -21,8 +23,12 @@ type RequestUserInputMessageProps = {
   onSubmit: (
     request: RequestUserInputRequest,
     response: RequestUserInputResponse,
-  ) => Promise<void> | void;
-  onDismiss?: (request: RequestUserInputRequest) => Promise<void> | void;
+    options?: RequestUserInputSettlementOptions,
+  ) => Promise<RequestUserInputSettlementResult | void> | RequestUserInputSettlementResult | void;
+  onDismiss?: (
+    request: RequestUserInputRequest,
+    options?: RequestUserInputSettlementOptions,
+  ) => Promise<RequestUserInputSettlementResult | void> | RequestUserInputSettlementResult | void;
 };
 
 type RequestDraftState = {
@@ -215,7 +221,7 @@ export function RequestUserInputMessage({
       return;
     }
     timeoutDismissedRequestKeysRef.current.add(activeRequestKey);
-    void Promise.resolve(onDismiss(activeRequest))
+    void Promise.resolve(onDismiss(activeRequest, { staleSettlementHint: "timeout" }))
       .then(() => {
         setLocallyCollapsedRequestKeys((current) => {
           if (!current.has(activeRequestKey)) {
@@ -340,6 +346,40 @@ export function RequestUserInputMessage({
       .some((question) => hasAnswerForQuestion(answers, question.id));
   };
 
+  const getSettlementOptions = (
+    targetRequestKey: string,
+  ): RequestUserInputSettlementOptions | undefined => {
+    const targetRemainingSeconds =
+      remainingSecondsByRequest[targetRequestKey] ?? REQUEST_STALE_TIMEOUT_SECONDS;
+    return targetRemainingSeconds <= 0 ? { staleSettlementHint: "timeout" } : undefined;
+  };
+
+  const submitRequest = (
+    targetRequest: RequestUserInputRequest,
+    response: RequestUserInputResponse,
+    targetRequestKey: string,
+  ) => {
+    const settlementOptions = getSettlementOptions(targetRequestKey);
+    if (settlementOptions) {
+      return onSubmit(targetRequest, response, settlementOptions);
+    }
+    return onSubmit(targetRequest, response);
+  };
+
+  const dismissRequest = (
+    targetRequest: RequestUserInputRequest,
+    targetRequestKey: string,
+  ) => {
+    if (!onDismiss) {
+      return undefined;
+    }
+    const settlementOptions = getSettlementOptions(targetRequestKey);
+    if (settlementOptions) {
+      return onDismiss(targetRequest, settlementOptions);
+    }
+    return onDismiss(targetRequest);
+  };
+
   const handleOptionToggle = (
     questionId: string,
     optionKey: string,
@@ -433,7 +473,7 @@ export function RequestUserInputMessage({
     setIsSubmitting(true);
     setSubmitError(null);
     try {
-      await onSubmit(activeRequest, { answers: buildAnswers() });
+      await submitRequest(activeRequest, { answers: buildAnswers() }, requestKey);
       setDraftByRequest((current) => {
         const next = { ...current };
         delete next[requestKey];
@@ -529,7 +569,7 @@ export function RequestUserInputMessage({
       settleRequestLocally(targetRequestKey);
       return;
     }
-    await onDismiss(targetRequest);
+    await dismissRequest(targetRequest, targetRequestKey);
     settleRequestLocally(targetRequestKey);
   };
 
@@ -545,10 +585,14 @@ export function RequestUserInputMessage({
         targetRequest === activeRequest &&
         shouldPreservePartialAnswersOnSkip(answers)
       ) {
-        await onSubmit(targetRequest, {
-          answers,
-          skippedQuestionIds: buildSkippedQuestionIds(),
-        });
+        await submitRequest(
+          targetRequest,
+          {
+            answers,
+            skippedQuestionIds: buildSkippedQuestionIds(),
+          },
+          targetRequestKey,
+        );
         settleRequestLocally(targetRequestKey);
         return;
       }

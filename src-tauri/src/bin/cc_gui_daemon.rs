@@ -153,7 +153,7 @@ mod codex {
         use crate::session_management::CodexProviderBinding;
 
         pub(crate) const CODEX_DISK_PROVIDER_PROFILE_ID: &str = "__disk__";
-        pub(crate) const CODEX_DISK_PROVIDER_PROFILE_NAME: &str = "磁盘 .codex 配置";
+        pub(crate) const CODEX_DISK_PROVIDER_PROFILE_NAME: &str = "codex-tui/default-config";
 
         pub(crate) fn codex_provider_binding_for_profile_id(
             provider_profile_id: &str,
@@ -894,14 +894,18 @@ async fn handle_rpc_request(
         }
         "list_workspace_files" => {
             let workspace_id = parse_string(&params, "workspaceId")?;
-            let files = state.list_workspace_files(workspace_id).await?;
+            let force_refresh = parse_optional_bool(&params, "forceRefresh").unwrap_or(false);
+            let files = state
+                .list_workspace_files(workspace_id, force_refresh)
+                .await?;
             serde_json::to_value(files).map_err(|err| err.to_string())
         }
         "list_workspace_directory_children" => {
             let workspace_id = parse_string(&params, "workspaceId")?;
             let path = parse_string(&params, "path")?;
+            let force_refresh = parse_optional_bool(&params, "forceRefresh").unwrap_or(false);
             let files = state
-                .list_workspace_directory_children(workspace_id, path)
+                .list_workspace_directory_children(workspace_id, path, force_refresh)
                 .await?;
             serde_json::to_value(files).map_err(|err| err.to_string())
         }

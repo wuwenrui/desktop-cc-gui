@@ -64,6 +64,12 @@ export type TurnTraceCounters = {
   batchFlushDurationSumMs: number;
   batchFlushDurationCount: number;
   batchFlushDurationAvgMs: number | null;
+  realtimeDeltaRouteDurationSumMs: number;
+  realtimeDeltaRouteDurationCount: number;
+  realtimeDeltaRouteDurationAvgMs: number | null;
+  appServerEventRouteDurationSumMs: number;
+  appServerEventRouteDurationCount: number;
+  appServerEventRouteDurationAvgMs: number | null;
   terminalSettlementLagMs: number | null;
 };
 
@@ -93,6 +99,11 @@ const DEFAULT_MAX_TURNS = 64;
 const DEFAULT_TTL_MS = 30 * 60 * 1000;
 const STREAM_LATENCY_TRACE_FLAG_KEY = "ccgui.debug.streamLatencyTrace";
 const TURN_TRACE_GATE_KEY = "ccgui.debug.turnTrace.enabled";
+const FIRST_OBSERVED_MILESTONES = new Set<TurnTraceMilestoneName>([
+  "first-engine-delta-ingress",
+  "first-visible-row-render",
+  "first-visible-text-growth",
+]);
 
 let traceSink: TurnTraceSummarySink | null = null;
 let cachedTraceEnabled: boolean | null = null;
@@ -121,6 +132,14 @@ function readBooleanFlag(key: string): boolean {
   }
 }
 
+function isDevOrPerfTraceEnabled(): boolean {
+  const env = (import.meta.env ?? {}) as Record<string, string | boolean | undefined>;
+  if (env.MODE === "test") {
+    return false;
+  }
+  return env.DEV === true || env.VITE_ENABLE_PERF_BASELINE === "1";
+}
+
 function isTraceEnabled(): boolean {
   if (forcedOn) {
     return true;
@@ -129,7 +148,8 @@ function isTraceEnabled(): boolean {
     return cachedTraceEnabled;
   }
   cachedTraceEnabled = readBooleanFlag(STREAM_LATENCY_TRACE_FLAG_KEY)
-    || readBooleanFlag(TURN_TRACE_GATE_KEY);
+    || readBooleanFlag(TURN_TRACE_GATE_KEY)
+    || isDevOrPerfTraceEnabled();
   return cachedTraceEnabled;
 }
 
@@ -168,6 +188,15 @@ function sanitizeTimestamp(value: number | null | undefined): number | null {
     return null;
   }
   return value;
+}
+
+function computeStrictDurationMs(startedAt: number | null | undefined, endedAt: number | null | undefined) {
+  const started = sanitizeTimestamp(startedAt);
+  const ended = sanitizeTimestamp(endedAt);
+  if (started === null || ended === null || ended < started) {
+    return null;
+  }
+  return ended - started;
 }
 
 function computeDeltas(milestones: TurnTraceMilestones): TurnTraceSummary["deltas"] {
@@ -319,6 +348,12 @@ function pushSink(summary: TurnTraceSummary) {
         batchFlushDurationSumMs: summary.counters.batchFlushDurationSumMs,
         batchFlushDurationCount: summary.counters.batchFlushDurationCount,
         batchFlushDurationAvgMs: summary.counters.batchFlushDurationAvgMs,
+        realtimeDeltaRouteDurationSumMs: summary.counters.realtimeDeltaRouteDurationSumMs,
+        realtimeDeltaRouteDurationCount: summary.counters.realtimeDeltaRouteDurationCount,
+        realtimeDeltaRouteDurationAvgMs: summary.counters.realtimeDeltaRouteDurationAvgMs,
+        appServerEventRouteDurationSumMs: summary.counters.appServerEventRouteDurationSumMs,
+        appServerEventRouteDurationCount: summary.counters.appServerEventRouteDurationCount,
+        appServerEventRouteDurationAvgMs: summary.counters.appServerEventRouteDurationAvgMs,
         terminalSettlementLagMs: summary.counters.terminalSettlementLagMs,
       },
     });
@@ -360,6 +395,12 @@ function ensureTurn(dimensions: TurnTraceDimensions, startedAtMs: number): TurnT
       batchFlushDurationSumMs: 0,
       batchFlushDurationCount: 0,
       batchFlushDurationAvgMs: null,
+      realtimeDeltaRouteDurationSumMs: 0,
+      realtimeDeltaRouteDurationCount: 0,
+      realtimeDeltaRouteDurationAvgMs: null,
+      appServerEventRouteDurationSumMs: 0,
+      appServerEventRouteDurationCount: 0,
+      appServerEventRouteDurationAvgMs: null,
       terminalSettlementLagMs: null,
     },
     evidenceClass: "unsupported",
@@ -380,12 +421,16 @@ function recordMilestone(
   const traceId = generateTraceId(dimensions);
   const existing = turns.get(traceId);
   const baseSummary = existing?.summary ?? ensureTurn(dimensions, atMs);
+  const milestoneAtMs =
+    FIRST_OBSERVED_MILESTONES.has(name) && baseSummary.milestones[name] !== undefined
+      ? baseSummary.milestones[name]
+      : atMs;
   const summary: TurnTraceSummary = {
     ...baseSummary,
     dimensions: { ...baseSummary.dimensions, ...dimensions },
     milestones: {
       ...baseSummary.milestones,
-      [name]: atMs,
+      [name]: milestoneAtMs,
     },
     counters: { ...baseSummary.counters },
   };
@@ -401,6 +446,22 @@ function recordMilestone(
   if (summary.counters.batchFlushDurationCount > 0) {
     summary.counters.batchFlushDurationAvgMs = Number(
       (summary.counters.batchFlushDurationSumMs / summary.counters.batchFlushDurationCount).toFixed(2),
+    );
+  }
+  if (summary.counters.realtimeDeltaRouteDurationCount > 0) {
+    summary.counters.realtimeDeltaRouteDurationAvgMs = Number(
+      (
+        summary.counters.realtimeDeltaRouteDurationSumMs /
+        summary.counters.realtimeDeltaRouteDurationCount
+      ).toFixed(3),
+    );
+  }
+  if (summary.counters.appServerEventRouteDurationCount > 0) {
+    summary.counters.appServerEventRouteDurationAvgMs = Number(
+      (
+        summary.counters.appServerEventRouteDurationSumMs /
+        summary.counters.appServerEventRouteDurationCount
+      ).toFixed(3),
     );
   }
   const evidence = resolveEvidenceClass(summary.counters, summary.milestones);
@@ -424,6 +485,13 @@ export function noteTurnFirstEngineDeltaIngress(
   dimensions: TurnTraceDimensions,
   atMs: number = nowMs(),
 ) {
+  noteTurnDeltaIngress(dimensions, atMs);
+}
+
+export function noteTurnDeltaIngress(
+  dimensions: TurnTraceDimensions,
+  atMs: number = nowMs(),
+) {
   recordMilestone(dimensions, "first-engine-delta-ingress", atMs, (counters) => {
     counters.deltaCount += 1;
   });
@@ -433,6 +501,8 @@ export function noteTurnBatchFlushBoundary(input: {
   dimensions: TurnTraceDimensions;
   startedAt: number;
   endedAt: number;
+  routeStartedAt?: number;
+  routeEndedAt?: number;
   eventCount: number;
   queueDepthAfter: number;
 }) {
@@ -440,6 +510,11 @@ export function noteTurnBatchFlushBoundary(input: {
     return;
   }
   const flushDurationMs = Math.max(0, input.endedAt - input.startedAt);
+  const routeDurationMs = computeStrictDurationMs(input.routeStartedAt, input.routeEndedAt);
+  const perDeltaRouteDurationMs =
+    routeDurationMs !== null && input.eventCount > 0
+      ? routeDurationMs / input.eventCount
+      : null;
   recordMilestone(
     input.dimensions,
     "batch-flush-start",
@@ -448,6 +523,14 @@ export function noteTurnBatchFlushBoundary(input: {
       counters.batchFlushCount += 1;
       counters.batchFlushDurationSumMs += flushDurationMs;
       counters.batchFlushDurationCount += 1;
+      if (routeDurationMs !== null) {
+        counters.appServerEventRouteDurationSumMs += routeDurationMs;
+        counters.appServerEventRouteDurationCount += 1;
+      }
+      if (perDeltaRouteDurationMs !== null) {
+        counters.realtimeDeltaRouteDurationSumMs += perDeltaRouteDurationMs;
+        counters.realtimeDeltaRouteDurationCount += 1;
+      }
       if (input.queueDepthAfter > counters.maxQueueDepth) {
         counters.maxQueueDepth = input.queueDepthAfter;
       }
@@ -475,9 +558,9 @@ export function noteTurnReducerCommit(input: {
     atMs,
     (counters) => {
       counters.reducerCommitCount += 1;
-      // deltaCount is incremented by noteTurnFirstEngineDeltaIngress (once per
-      // first-delta event) so the amplification ratio = reducerCommitCount / deltaCount
-      // reflects "reducer work per unique delta stream".
+      // deltaCount is incremented by noteTurnDeltaIngress for every content
+      // delta. The amplification ratio therefore reflects reducer work per
+      // actual runtime delta, not per first-token stream.
       if (input.isReasoningDelta) {
         counters.reasoningDeltaCount += 1;
       }

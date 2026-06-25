@@ -4,6 +4,12 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import type { ConversationItem } from "../../../types";
 import { Messages } from "./Messages";
 
+vi.mock("./Markdown", () => ({
+  Markdown: ({ value, className }: { value: string; className?: string }) => (
+    <div className={className}>{value}</div>
+  ),
+}));
+
 describe("Messages reasoning visibility and exit plan handoff", () => {
   afterEach(() => {
     cleanup();

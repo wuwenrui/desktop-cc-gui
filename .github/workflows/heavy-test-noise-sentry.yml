@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: heavy-test-noise-sentry-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   heavy-test-noise-sentry:
     name: Heavy test noise sentry (${{ matrix.os }})
@@ -30,7 +34,7 @@ jobs:
       - name: Heavy test noise gate
         run: npm run check:heavy-test-noise
       - name: Upload heavy test noise log
-        if: always()
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: heavy-test-noise-log-${{ matrix.os }}

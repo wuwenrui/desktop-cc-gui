@@ -89,3 +89,90 @@ describe("messagesStreamingComplexity", () => {
     expect(resolveReasoningStreamingThrottleMs(false, null, null)).toBe(80);
   });
 });
+
+import { analyzeStreamingMarkdownComplexityDelta } from "./messagesStreamingComplexity";
+
+describe("analyzeStreamingMarkdownComplexityDelta", () => {
+  it("returns prev when delta is empty or whitespace-only", () => {
+    const full = analyzeStreamingMarkdownComplexity("hello\n- one");
+    expect(analyzeStreamingMarkdownComplexityDelta(full, "hello\n- one", "")).toBe(full);
+    expect(analyzeStreamingMarkdownComplexityDelta(full, "hello\n- one", "   \n\n")).toBe(full);
+  });
+
+  it("classifies medium size when delta crosses the length threshold (length-jump branch)", () => {
+    const base = analyzeStreamingMarkdownComplexity("Hello world");
+    const next = analyzeStreamingMarkdownComplexityDelta(
+      base,
+      "Hello world",
+      " ".repeat(260) + "this pushes the text past the medium minimum",
+    );
+    expect(next.isMedium).toBe(true);
+    expect(next.isLarge).toBe(false);
+    expect(next.isHuge).toBe(false);
+  });
+
+  it("matches the full scan when delta continues the previous line", () => {
+    const prevText = "hello";
+    const deltaText = " world";
+    const base = analyzeStreamingMarkdownComplexity(prevText);
+    const next = analyzeStreamingMarkdownComplexityDelta(base, prevText, deltaText);
+    expect(next).toEqual(analyzeStreamingMarkdownComplexity(prevText + deltaText));
+  });
+
+  it("matches the full scan when delta starts on a new line", () => {
+    const prevText = "intro";
+    const deltaText = "\n## section\n- item";
+    const base = analyzeStreamingMarkdownComplexity(prevText);
+    const next = analyzeStreamingMarkdownComplexityDelta(base, prevText, deltaText);
+    expect(next).toEqual(analyzeStreamingMarkdownComplexity(prevText + deltaText));
+  });
+
+  it("counts headings appended on top of an existing list-heavy stream", () => {
+    const base = analyzeStreamingMarkdownComplexity([
+      "- one",
+      "- two",
+      "- three",
+      "- four",
+      "- five",
+      "- six",
+    ].join("\n"));
+    const next = analyzeStreamingMarkdownComplexityDelta(
+      base,
+      base.trimmedText,
+      "\n## new section\n### sub a\n### sub b\n",
+    );
+    expect(next.headingCount).toBe(base.headingCount + 3);
+    expect(next.isStructuredHeavy).toBe(true);
+  });
+
+  it("tracks fenced code block entries that span the prev/delta boundary", () => {
+    const base = analyzeStreamingMarkdownComplexity("intro paragraph\n");
+    const next = analyzeStreamingMarkdownComplexityDelta(
+      base,
+      "intro paragraph\n",
+      "```ts\nconst x = 1;\nconst y = 2;\n```\n",
+    );
+    expect(next.fencedCodeBlockCount).toBe(1);
+    expect(next.fencedCodeLineCount).toBe(2);
+    // close of fence toggles insideCodeFence back to false, so the next
+    // appended paragraph should not be classified as a code line
+    const after = analyzeStreamingMarkdownComplexityDelta(
+      next,
+      next.trimmedText,
+      "\nplain text after fence",
+    );
+    expect(after.fencedCodeLineCount).toBe(next.fencedCodeLineCount);
+    expect(after.trimmedText.endsWith("plain text after fence")).toBe(true);
+  });
+
+  it("handles non-ASCII Chinese streaming text without breaking counts", () => {
+    const base = analyzeStreamingMarkdownComplexity("第 1 行\n第 2 行\n");
+    const next = analyzeStreamingMarkdownComplexityDelta(
+      base,
+      "第 1 行\n第 2 行\n",
+      "第 3 行结论\n第 4 行结论\n",
+    );
+    expect(next.lineCount).toBeGreaterThan(base.lineCount);
+    expect(next.trimmedText).toContain("第 3 行结论");
+  });
+});

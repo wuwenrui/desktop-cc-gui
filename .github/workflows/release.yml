@@ -46,6 +46,18 @@ jobs:
         with:
           workspaces: './src-tauri -> target'
           cache-bin: false
+          shared-key: v1-macos-${{ matrix.arch == 'aarch64' && 'arm64' || 'x64' }}-rust
+          cache-on-failure: true
+
+      - name: Configure sccache environment
+        run: |
+          set -euo pipefail
+          echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
+          echo "SCCACHE_GHA_ENABLED=true" >> "$GITHUB_ENV"
+          echo "SCCACHE_DIR=$HOME/.cache/sccache" >> "$GITHUB_ENV"
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.10
 
       - name: Install CMake
         run: brew install cmake
@@ -173,6 +185,18 @@ jobs:
         with:
           workspaces: './src-tauri -> target'
           cache-bin: false
+          shared-key: v1-linux-x64-rust
+          cache-on-failure: true
+
+      - name: Configure sccache environment
+        run: |
+          set -euo pipefail
+          echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
+          echo "SCCACHE_GHA_ENABLED=true" >> "$GITHUB_ENV"
+          echo "SCCACHE_DIR=$HOME/.cache/sccache" >> "$GITHUB_ENV"
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.10
 
       - name: install frontend dependencies
         run: npm ci
@@ -254,6 +278,18 @@ jobs:
         with:
           workspaces: './src-tauri -> target'
           cache-bin: false
+          shared-key: v1-win-x64-rust
+          cache-on-failure: true
+
+      - name: Configure sccache environment
+        shell: pwsh
+        run: |
+          "RUSTC_WRAPPER=sccache" >> $env:GITHUB_ENV
+          "SCCACHE_GHA_ENABLED=true" >> $env:GITHUB_ENV
+          "SCCACHE_DIR=$env:LOCALAPPDATA\sccache" >> $env:GITHUB_ENV
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.10
 
       - name: Install dependencies
         run: npm ci

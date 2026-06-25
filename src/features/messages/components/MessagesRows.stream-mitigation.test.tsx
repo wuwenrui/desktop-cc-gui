@@ -11,6 +11,7 @@ const markdownCalls = vi.hoisted(() => ({
     streamingThrottleMs?: number;
     value: string;
   }>,
+  deferRenderedValueChange: false,
 }));
 
 const rendererDiagnosticMocks = vi.hoisted(() => ({
@@ -37,7 +38,9 @@ vi.mock("./Markdown", () => ({
       streamingThrottleMs,
       value,
     });
-    onRenderedValueChange?.(value);
+    if (!markdownCalls.deferRenderedValueChange) {
+      onRenderedValueChange?.(value);
+    }
     return (
       <div
         data-testid="markdown"
@@ -56,6 +59,7 @@ vi.mock("../../../services/rendererDiagnostics", () => rendererDiagnosticMocks);
 describe("MessagesRows stream mitigation", () => {
   beforeEach(() => {
     markdownCalls.calls = [];
+    markdownCalls.deferRenderedValueChange = false;
     rendererDiagnosticMocks.appendMessageRowRenderBudgetDiagnostic.mockClear();
   });
 
@@ -427,6 +431,53 @@ describe("MessagesRows stream mitigation", () => {
     expect(onAssistantVisibleTextRender).toHaveBeenCalled();
   });
 
+  it("reports lightweight Codex recovery text when Markdown rendered callback is delayed", () => {
+    markdownCalls.deferRenderedValueChange = true;
+    const messageItem = {
+      id: "assistant-codex-recovery-delayed-render",
+      kind: "message" as const,
+      role: "assistant" as const,
+      text: [
+        "## 新证据",
+        "",
+        "- delta 已经进入当前 assistant item",
+        "- Markdown callback 可能晚于 row render",
+        "- diagnostics 不能继续停在旧 item",
+        "- recovery surface 仍保持 lightweight Markdown",
+        "- final output 继续回到完整 Markdown",
+        "- 这条测试覆盖 callback 延迟",
+      ].join("\n"),
+    };
+    const onAssistantVisibleTextRender = vi.fn();
+
+    render(
+      <MessageRow
+        item={messageItem}
+        isStreaming
+        activeEngine="codex"
+        isCopied={false}
+        onCopy={vi.fn()}
+        streamMitigationProfile={{
+          id: "codex-markdown-stream-recovery",
+          messageStreamingThrottleMs: 120,
+          reasoningStreamingThrottleMs: 220,
+        }}
+        onAssistantVisibleTextRender={onAssistantVisibleTextRender}
+      />,
+    );
+
+    expect(screen.getByTestId("markdown").getAttribute("data-live-render-mode")).toBe(
+      "lightweight",
+    );
+    expect(screen.getByTestId("markdown").getAttribute("data-progressive-reveal")).toBe(
+      "true",
+    );
+    expect(onAssistantVisibleTextRender).toHaveBeenCalledWith({
+      itemId: "assistant-codex-recovery-delayed-render",
+      visibleText: messageItem.text,
+    });
+  });
+
   it("uses a staged markdown throttle for large Codex streaming output without an explicit mitigation profile", () => {
     const messageItem = {
       id: "assistant-codex-large",
@@ -719,5 +770,84 @@ describe("MessagesRows stream mitigation", () => {
     );
 
     expect(screen.getByTestId("markdown").getAttribute("data-throttle")).toBe("260");
+  });
+
+  it("does not rerender completed rows when live-only stream props change", () => {
+    const completedItem = {
+      id: "assistant-completed-stable",
+      kind: "message" as const,
+      role: "assistant" as const,
+      text: "completed answer",
+      isFinal: true,
+    };
+    const onCopy = vi.fn();
+    const { rerender } = render(
+      <MessageRow
+        item={completedItem}
+        isCopied={false}
+        onCopy={onCopy}
+        onAssistantVisibleTextRender={vi.fn()}
+        streamMitigationProfile={null}
+      />,
+    );
+
+    expect(rendererDiagnosticMocks.appendMessageRowRenderBudgetDiagnostic)
+      .toHaveBeenCalledTimes(1);
+
+    rerender(
+      <MessageRow
+        item={{ ...completedItem }}
+        isCopied={false}
+        onCopy={onCopy}
+        onAssistantVisibleTextRender={vi.fn()}
+        streamMitigationProfile={{
+          id: "codex-markdown-stream-recovery",
+          messageStreamingThrottleMs: 120,
+          reasoningStreamingThrottleMs: 220,
+        }}
+      />,
+    );
+
+    expect(rendererDiagnosticMocks.appendMessageRowRenderBudgetDiagnostic)
+      .toHaveBeenCalledTimes(1);
+  });
+
+  it("does not rerender completed rows when hidden runtime reconnect callbacks change", () => {
+    const completedItem = {
+      id: "user-completed-stable",
+      kind: "message" as const,
+      role: "user" as const,
+      text: "current prompt",
+    };
+    const onCopy = vi.fn();
+    const { rerender } = render(
+      <MessageRow
+        item={completedItem}
+        isCopied={false}
+        onCopy={onCopy}
+        onRecoverThreadRuntime={vi.fn()}
+        onRecoverThreadRuntimeAndResend={vi.fn()}
+        onThreadRecoveryFork={vi.fn()}
+        retryMessage={{ text: "retry one", images: [] }}
+      />,
+    );
+
+    expect(rendererDiagnosticMocks.appendMessageRowRenderBudgetDiagnostic)
+      .toHaveBeenCalledTimes(1);
+
+    rerender(
+      <MessageRow
+        item={{ ...completedItem }}
+        isCopied={false}
+        onCopy={onCopy}
+        onRecoverThreadRuntime={vi.fn()}
+        onRecoverThreadRuntimeAndResend={vi.fn()}
+        onThreadRecoveryFork={vi.fn()}
+        retryMessage={{ text: "retry two", images: [] }}
+      />,
+    );
+
+    expect(rendererDiagnosticMocks.appendMessageRowRenderBudgetDiagnostic)
+      .toHaveBeenCalledTimes(1);
   });
 });

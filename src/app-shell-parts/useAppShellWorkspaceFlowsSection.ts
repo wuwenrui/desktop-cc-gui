@@ -321,29 +321,34 @@ export function useAppShellWorkspaceFlowsSection(
   });
 
   const runtimeRunState = useWorkspaceRuntimeRun({ activeWorkspace });
+  const {
+    onCloseRuntimeConsole,
+    onOpenRuntimeConsole,
+    runtimeConsoleVisible,
+  } = runtimeRunState;
 
   const handleToggleRuntimeConsole = useCallback(() => {
-    if (runtimeRunState.runtimeConsoleVisible) {
-      runtimeRunState.onCloseRuntimeConsole();
+    if (runtimeConsoleVisible) {
+      onCloseRuntimeConsole();
       return;
     }
     closeTerminalPanel();
-    runtimeRunState.onOpenRuntimeConsole();
-  }, [closeTerminalPanel, runtimeRunState]);
+    onOpenRuntimeConsole();
+  }, [closeTerminalPanel, onCloseRuntimeConsole, onOpenRuntimeConsole, runtimeConsoleVisible]);
 
   const handleToggleTerminalPanel = useCallback(() => {
     if (terminalOpen) {
-      runtimeRunState.onCloseRuntimeConsole();
+      onCloseRuntimeConsole();
     }
     handleToggleTerminal();
-  }, [handleToggleTerminal, runtimeRunState, terminalOpen]);
+  }, [handleToggleTerminal, onCloseRuntimeConsole, terminalOpen]);
 
   useEffect(() => {
-    if (!terminalOpen || !runtimeRunState.runtimeConsoleVisible) {
+    if (!terminalOpen || !runtimeConsoleVisible) {
       return;
     }
     closeTerminalPanel();
-  }, [closeTerminalPanel, runtimeRunState.runtimeConsoleVisible, terminalOpen]);
+  }, [closeTerminalPanel, runtimeConsoleVisible, terminalOpen]);
 
   const launchScriptsState = useWorkspaceLaunchScripts({
     activeWorkspace,

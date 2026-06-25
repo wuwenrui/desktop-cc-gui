@@ -65,8 +65,48 @@ pub struct GeminiSession {
     bin_path: Option<String>,
     home_dir: Option<String>,
     custom_args: Option<String>,
-    active_processes: Mutex<HashMap<String, Child>>,
+    active_processes: Mutex<HashMap<String, ActiveGeminiChildProcess>>,
     interrupted: AtomicBool,
+}
+
+#[allow(dead_code)]
+pub struct GeminiActiveProcessSnapshot {
+    pub pid: u32,
+    pub registered_age_ms: u64,
+}
+
+struct ActiveGeminiChildProcess {
+    child: Child,
+    #[allow(dead_code)]
+    started_at_ms: u64,
+}
+
+impl ActiveGeminiChildProcess {
+    fn new(child: Child) -> Self {
+        Self {
+            child,
+            started_at_ms: unix_timestamp_ms_for_process_diagnostics(),
+        }
+    }
+
+    fn into_child(self) -> Child {
+        self.child
+    }
+
+    #[allow(dead_code)]
+    fn snapshot(&self, sampled_at_ms: u64) -> Option<GeminiActiveProcessSnapshot> {
+        Some(GeminiActiveProcessSnapshot {
+            pid: self.child.id()?,
+            registered_age_ms: sampled_at_ms.saturating_sub(self.started_at_ms),
+        })
+    }
+}
+
+fn unix_timestamp_ms_for_process_diagnostics() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 impl GeminiSession {
@@ -908,7 +948,7 @@ impl GeminiSession {
 
         {
             let mut active = self.active_processes.lock().await;
-            active.insert(turn_id.to_string(), child);
+            active.insert(turn_id.to_string(), ActiveGeminiChildProcess::new(child));
         }
 
         self.emit_turn_event(
@@ -1160,7 +1200,9 @@ impl GeminiSession {
 
         let mut child = {
             let mut active = self.active_processes.lock().await;
-            active.remove(turn_id)
+            active
+                .remove(turn_id)
+                .map(ActiveGeminiChildProcess::into_child)
         };
         let status = if let Some(mut process) = child.take() {
             process.wait().await.ok()
@@ -1277,7 +1319,8 @@ impl GeminiSession {
     pub async fn interrupt(&self) -> Result<(), String> {
         self.interrupted.store(true, Ordering::SeqCst);
         let mut active = self.active_processes.lock().await;
-        for child in active.values_mut() {
+        for process in active.values_mut() {
+            let child = &mut process.child;
             child
                 .kill()
                 .await
@@ -1291,7 +1334,9 @@ impl GeminiSession {
         self.interrupted.store(true, Ordering::SeqCst);
         let mut child = {
             let mut active = self.active_processes.lock().await;
-            active.remove(turn_id)
+            active
+                .remove(turn_id)
+                .map(ActiveGeminiChildProcess::into_child)
         };
         if let Some(child_proc) = child.as_mut() {
             child_proc
@@ -1300,6 +1345,65 @@ impl GeminiSession {
                 .map_err(|e| format!("Failed to kill process: {}", e))?;
         }
         Ok(())
+    }
+
+    #[cfg(test)]
+    pub async fn active_process_ids(&self) -> Vec<u32> {
+        let active = self.active_processes.lock().await;
+        active
+            .values()
+            .filter_map(|process| process.child.id())
+            .collect()
+    }
+
+    #[allow(dead_code)]
+    pub async fn active_process_snapshots(
+        &self,
+        sampled_at_ms: u64,
+    ) -> Vec<GeminiActiveProcessSnapshot> {
+        let active = self.active_processes.lock().await;
+        active
+            .values()
+            .filter_map(|process| process.snapshot(sampled_at_ms))
+            .collect()
+    }
+}
+
+impl Drop for GeminiSession {
+    fn drop(&mut self) {
+        let Ok(mut active) = self.active_processes.try_lock() else {
+            log::warn!(
+                "[gemini] dropping session workspace={} while active_processes is locked; child cleanup fallback skipped",
+                self.workspace_id
+            );
+            return;
+        };
+        if active.is_empty() {
+            return;
+        }
+        for (turn_id, process) in active.drain() {
+            let mut child = process.into_child();
+            let pid = child.id();
+            match child.start_kill() {
+                Ok(()) => {
+                    log::info!(
+                        "[gemini] drop fallback started child kill workspace={} turn={} pid={:?}",
+                        self.workspace_id,
+                        turn_id,
+                        pid
+                    );
+                }
+                Err(error) => {
+                    log::warn!(
+                        "[gemini] drop fallback failed to kill child workspace={} turn={} pid={:?}: {}",
+                        self.workspace_id,
+                        turn_id,
+                        pid,
+                        error
+                    );
+                }
+            }
+        }
     }
 }
 

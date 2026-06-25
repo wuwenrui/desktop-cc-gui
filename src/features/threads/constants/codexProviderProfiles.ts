@@ -1,5 +1,5 @@
 export const CODEX_DISK_PROVIDER_PROFILE_ID = "__disk__";
-export const CODEX_DISK_PROVIDER_PROFILE_NAME = "磁盘 .codex 配置";
+export const CODEX_DISK_PROVIDER_PROFILE_NAME = "codex-tui/default-config";
 
 export type CodexProviderProfileOption = {
   id: string;

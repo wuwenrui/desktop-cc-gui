@@ -2,7 +2,12 @@ import type { PDFDocumentProxy } from "pdfjs-dist";
 
 export type PreviewOutlineTarget =
   | { kind: "pdf-page"; pageNumber: number }
-  | { kind: "html-anchor"; anchorId: string };
+  | {
+      kind: "html-anchor";
+      anchorId: string;
+      sourceStartLine?: number;
+      sourceEndLine?: number;
+    };
 
 export type PreviewOutlineItem = {
   id: string;

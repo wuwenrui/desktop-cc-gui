@@ -119,7 +119,9 @@ describe("useWorkspaceFiles", () => {
 
     await flushAsyncWork();
 
-    expect(getWorkspaceDirectoryChildren).toHaveBeenCalledWith(workspaceA.id, "");
+    expect(getWorkspaceDirectoryChildren).toHaveBeenCalledWith(workspaceA.id, "", {
+      forceRefresh: false,
+    });
     expect(result.current.isLoading).toBe(false);
     expect(result.current.files).toEqual(["README.md"]);
     expect(result.current.directories).toEqual(["src"]);
@@ -127,6 +129,42 @@ describe("useWorkspaceFiles", () => {
       { path: "src", child_state: "unknown" },
     ]);
     expect(getWorkspaceFiles).not.toHaveBeenCalled();
+
+    unmount();
+  });
+
+  it("forces a root directory refresh for manual file tree reloads", async () => {
+    vi.mocked(getWorkspaceDirectoryChildren)
+      .mockResolvedValueOnce(
+        workspaceSnapshot({
+          files: ["README.md"],
+          directories: ["src"],
+        }),
+      )
+      .mockResolvedValueOnce(
+        workspaceSnapshot({
+          files: ["README.md", "src/new.ts"],
+          directories: ["src"],
+        }),
+      );
+
+    const { result, unmount } = renderHook(() =>
+      useWorkspaceFiles({
+        activeWorkspace: workspaceA,
+        pollingEnabled: false,
+      }),
+    );
+
+    await flushAsyncWork();
+
+    await act(async () => {
+      await result.current.refreshFiles();
+    });
+
+    expect(getWorkspaceDirectoryChildren).toHaveBeenLastCalledWith(workspaceA.id, "", {
+      forceRefresh: true,
+    });
+    expect(result.current.files).toEqual(["README.md", "src/new.ts"]);
 
     unmount();
   });
@@ -229,8 +267,12 @@ describe("useWorkspaceFiles", () => {
 
     await flushAsyncWork();
 
-    expect(getWorkspaceDirectoryChildren).toHaveBeenCalledWith(workspaceA.id, "");
-    expect(getWorkspaceFiles).toHaveBeenCalledWith(workspaceA.id);
+    expect(getWorkspaceDirectoryChildren).toHaveBeenCalledWith(workspaceA.id, "", {
+      forceRefresh: false,
+    });
+    expect(getWorkspaceFiles).toHaveBeenCalledWith(workspaceA.id, {
+      forceRefresh: false,
+    });
     expect(result.current.files).toEqual(["README.md"]);
     expect(result.current.directories).toEqual(["src"]);
     expect(result.current.directoryMetadata).toEqual([{ path: "src", child_state: "loaded" }]);
@@ -266,7 +308,9 @@ describe("useWorkspaceFiles", () => {
 
     await flushAsyncWork();
 
-    expect(getWorkspaceFiles).toHaveBeenCalledWith(workspaceA.id);
+    expect(getWorkspaceFiles).toHaveBeenCalledWith(workspaceA.id, {
+      forceRefresh: false,
+    });
     expect(result.current.files).toEqual([]);
     expect(result.current.loadError).toBe("Directory path cannot be empty.");
     expect(result.current.isLoading).toBe(false);
@@ -303,7 +347,9 @@ describe("useWorkspaceFiles", () => {
     rerender({ initialLoadEnabled: true });
     await flushAsyncWork();
 
-    expect(getWorkspaceDirectoryChildren).toHaveBeenCalledWith(workspaceA.id, "");
+    expect(getWorkspaceDirectoryChildren).toHaveBeenCalledWith(workspaceA.id, "", {
+      forceRefresh: false,
+    });
     expect(result.current.files).toEqual(["src/app.tsx"]);
 
     unmount();

@@ -237,6 +237,7 @@ vi.mock("../../browser-agent/components/BrowserDock", () => ({
 | heavy-test-noise gate | no `act` / stderr violations | passing assertions but noisy CI failure |
 | Suspense lazy boundary teardown | drain microtask + host task inside `act(...)` | only add more `Promise.resolve()` rounds |
 | unrelated child warning | isolate or await the actual child effect | blanket `console.error = vi.fn()` |
+| async preview/outline compile | wait for the rendered async state that proves compile settled | exit test after initial render and leak `act(...)` warning |
 
 ### 5. Good / Base / Bad Cases
 

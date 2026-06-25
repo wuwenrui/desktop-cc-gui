@@ -263,7 +263,9 @@ export function useWorkspaceFiles({
       payload: { workspaceId: requestWorkspaceId, reason },
     });
     try {
-      const response = await getWorkspaceDirectoryChildren(requestWorkspaceId, "");
+      const response = await getWorkspaceDirectoryChildren(requestWorkspaceId, "", {
+        forceRefresh: reason === "manual",
+      });
       const elapsedMs = Date.now() - startedAt;
       const snapshot = normalizeWorkspaceFilesSnapshot(response);
       appendWorkspaceFileListingBudgetDiagnostic({
@@ -344,7 +346,9 @@ export function useWorkspaceFiles({
           },
         });
         try {
-          const fallbackResponse = await getWorkspaceFiles(requestWorkspaceId);
+          const fallbackResponse = await getWorkspaceFiles(requestWorkspaceId, {
+            forceRefresh: reason === "manual",
+          });
           const fallbackElapsedMs = Date.now() - fallbackStartedAt;
           const fallbackSnapshot = normalizeWorkspaceFilesSnapshot(fallbackResponse);
           const fallbackRootSnapshot = toRootOnlyWorkspaceFilesSnapshot(fallbackSnapshot);

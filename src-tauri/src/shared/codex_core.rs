@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use tokio::io::AsyncReadExt;
 use tokio::sync::{oneshot, Mutex};
-use tokio::time::timeout;
+use tokio::time::{sleep, timeout};
 
 use crate::backend::app_server::{build_codex_command_with_bin, WorkspaceSession};
 use crate::codex::args::{apply_codex_args, resolve_workspace_codex_args};
@@ -30,6 +30,7 @@ const THREAD_COMPACTION_METHOD_CANDIDATES: [&str; 3] = [
     "thread/compactStart",
     "thread/compact",
 ];
+const TURN_START_THREAD_NOT_FOUND_RETRY_DELAYS_MS: [u64; 2] = [150, 350];
 const FIRST_PACKET_TIMEOUT_ERROR_PREFIX: &str = "FIRST_PACKET_TIMEOUT";
 pub(crate) const INVALID_THREAD_START_RESPONSE_ERROR_PREFIX: &str = "invalid_thread_start_response";
 
@@ -320,7 +321,10 @@ fn is_collaboration_mode_capability_error(value: &Value) -> bool {
 
 fn is_thread_not_found_error_message(message: &str) -> bool {
     let normalized = message.to_ascii_lowercase();
-    normalized.contains("thread not found") || normalized.contains("thread_not_found")
+    normalized.contains("thread not found")
+        || normalized.contains("thread_not_found")
+        || normalized.contains("conversation not found")
+        || normalized.contains("conversation_not_found")
 }
 
 fn is_thread_not_found_response(value: &Value) -> bool {
@@ -350,16 +354,43 @@ async fn retry_turn_start_after_thread_resume(
             timeout_duration,
         )
         .await?;
-    session
-        .note_codex_turn_start_pending(thread_id, timeout_duration)
-        .await;
-    session
-        .send_request_with_timeout(
-            "turn/start",
-            Value::Object(params.clone()),
-            timeout_duration,
-        )
-        .await
+    for (attempt_index, delay_ms) in TURN_START_THREAD_NOT_FOUND_RETRY_DELAYS_MS
+        .iter()
+        .copied()
+        .enumerate()
+    {
+        sleep(Duration::from_millis(delay_ms)).await;
+        session
+            .note_codex_turn_start_pending(thread_id, timeout_duration)
+            .await;
+        session
+            .start_codex_turn_timing(thread_id, crate::backend::app_server::now_millis())
+            .await;
+        let retry_response = session
+            .send_request_with_timeout(
+                "turn/start",
+                Value::Object(params.clone()),
+                timeout_duration,
+            )
+            .await?;
+        session
+            .record_codex_turn_start_response(thread_id, crate::backend::app_server::now_millis())
+            .await;
+        if !is_thread_not_found_response(&retry_response) {
+            return Ok(retry_response);
+        }
+        session
+            .clear_codex_foreground_work(Some(thread_id), None)
+            .await;
+        log::warn!(
+            "[turn/start][thread_resume_retry] workspace_id={} thread_id={} outcome=thread_not_ready attempt={} next_retry={}",
+            workspace_id,
+            thread_id,
+            attempt_index + 1,
+            attempt_index + 1 < TURN_START_THREAD_NOT_FOUND_RETRY_DELAYS_MS.len()
+        );
+    }
+    Err("thread not found after bounded readiness retry".to_string())
 }
 
 const CODE_MODE_FALLBACK_DIRECTIVE: &str = "Execution policy (default mode): do not ask the user follow-up questions. If details are missing, make minimal reasonable assumptions, proceed autonomously, and report assumptions briefly.";
@@ -729,6 +760,10 @@ pub(crate) async fn send_user_message_core(
     session
         .note_codex_turn_start_pending(&thread_id, timeout_duration)
         .await;
+    let turn_start_request_started_at_ms = crate::backend::app_server::now_millis();
+    session
+        .start_codex_turn_timing(&thread_id, turn_start_request_started_at_ms)
+        .await;
     let response = match session
         .send_request_with_timeout(
             "turn/start",
@@ -738,6 +773,12 @@ pub(crate) async fn send_user_message_core(
         .await
     {
         Ok(response) if is_thread_not_found_response(&response) => {
+            session
+                .record_codex_turn_start_response(
+                    &thread_id,
+                    crate::backend::app_server::now_millis(),
+                )
+                .await;
             session
                 .clear_codex_foreground_work(Some(&thread_id), None)
                 .await;
@@ -765,7 +806,15 @@ pub(crate) async fn send_user_message_core(
                 }
             }
         }
-        Ok(response) => response,
+        Ok(response) => {
+            session
+                .record_codex_turn_start_response(
+                    &thread_id,
+                    crate::backend::app_server::now_millis(),
+                )
+                .await;
+            response
+        }
         Err(error) => {
             session
                 .clear_codex_foreground_work(Some(&thread_id), None)
@@ -818,9 +867,15 @@ pub(crate) async fn send_user_message_core(
         if let Some(Value::Array(input_items)) = params.get_mut("input") {
             inject_mode_fallback_prompt(input_items, &policy.effective_mode);
         }
+        session
+            .start_codex_turn_timing(&thread_id, crate::backend::app_server::now_millis())
+            .await;
         let fallback_response = session
             .send_request("turn/start", Value::Object(params))
             .await?;
+        session
+            .record_codex_turn_start_response(&thread_id, crate::backend::app_server::now_millis())
+            .await;
         if fallback_response.get("error").is_some() {
             session
                 .clear_codex_foreground_work(Some(&thread_id), None)
@@ -867,8 +922,17 @@ mod tests {
         assert!(is_thread_not_found_error_message(
             "THREAD_NOT_FOUND: 019eaae1-51d8"
         ));
+        assert!(is_thread_not_found_error_message(
+            "conversation not found: 019eaae1-51d8"
+        ));
+        assert!(is_thread_not_found_error_message(
+            "CONVERSATION_NOT_FOUND: 019eaae1-51d8"
+        ));
         assert!(is_thread_not_found_response(&json!({
             "error": { "message": "thread not found: 019eaae1-51d8" }
+        })));
+        assert!(is_thread_not_found_response(&json!({
+            "error": { "message": "conversation not found: 019eaae1-51d8" }
         })));
         assert!(is_thread_not_found_response(&json!({
             "result": {

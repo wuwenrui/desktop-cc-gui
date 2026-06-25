@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import Construction from "lucide-react/dist/esm/icons/construction";
 import Focus from "lucide-react/dist/esm/icons/focus";
@@ -10,10 +10,10 @@ import PanelLeftOpen from "lucide-react/dist/esm/icons/panel-left-open";
 import PanelRightClose from "lucide-react/dist/esm/icons/panel-right-close";
 import PanelRightOpen from "lucide-react/dist/esm/icons/panel-right-open";
 import TerminalSquare from "lucide-react/dist/esm/icons/terminal-square";
-import { TooltipIconButton } from "../../../components/ui/tooltip-icon-button";
+import type { OpenAppMenuExtraAction } from "./OpenAppMenu";
 import type { SidebarToggleProps } from "../../layout/components/SidebarToggleControls";
 
-type MainHeaderActionsProps = {
+type MainHeaderActionsOptions = {
   isCompact: boolean;
   rightPanelCollapsed: boolean;
   sidebarToggleProps: SidebarToggleProps;
@@ -35,7 +35,7 @@ type MainHeaderActionsProps = {
   onOpenClientDocumentation?: () => void;
 };
 
-export const MainHeaderActions = memo(function MainHeaderActions({
+export function useMainHeaderActionItems({
   isCompact,
   rightPanelCollapsed,
   sidebarToggleProps,
@@ -55,116 +55,143 @@ export const MainHeaderActions = memo(function MainHeaderActions({
   onToggleBrowserDock,
   showClientDocumentationButton = false,
   onOpenClientDocumentation,
-}: MainHeaderActionsProps) {
+}: MainHeaderActionsOptions): OpenAppMenuExtraAction[] {
   const { t } = useTranslation();
   const {
     rightPanelAvailable = true,
     isLayoutSwapped = false,
     onCollapseRightPanel,
     onExpandRightPanel,
-  } =
-    sidebarToggleProps;
+  } = sidebarToggleProps;
 
-  const canToggleRuntimeConsole =
-    showRuntimeConsoleButton && Boolean(onToggleRuntimeConsole);
-  const canToggleTerminal = showTerminalButton && Boolean(onToggleTerminal);
-  const canToggleSoloMode = showSoloButton && Boolean(onToggleSoloMode);
-  const canToggleSpecHub = showSpecHubButton && Boolean(onOpenSpecHub);
-  const canOpenClientDocumentation =
-    showClientDocumentationButton && Boolean(onOpenClientDocumentation);
-  const canToggleBrowserDock = !isCompact && Boolean(onToggleBrowserDock);
+  return useMemo(() => {
+    const canToggleRuntimeConsole =
+      showRuntimeConsoleButton && Boolean(onToggleRuntimeConsole);
+    const canToggleTerminal = showTerminalButton && Boolean(onToggleTerminal);
+    const canToggleSoloMode = showSoloButton && Boolean(onToggleSoloMode);
+    const canToggleSpecHub = showSpecHubButton && Boolean(onOpenSpecHub);
+    const canOpenClientDocumentation =
+      showClientDocumentationButton && Boolean(onOpenClientDocumentation);
+    const canToggleBrowserDock = !isCompact && Boolean(onToggleBrowserDock);
 
-  if (
-    isCompact ||
-    (!rightPanelAvailable &&
-      !canToggleRuntimeConsole &&
-      !canToggleTerminal &&
-      !canToggleSoloMode &&
-      !canToggleBrowserDock &&
-      !canOpenClientDocumentation)
-  ) {
-    return null;
-  }
+    if (
+      isCompact ||
+      (!rightPanelAvailable &&
+        !canToggleRuntimeConsole &&
+        !canToggleTerminal &&
+        !canToggleSoloMode &&
+        !canToggleBrowserDock &&
+        !canOpenClientDocumentation)
+    ) {
+      return [];
+    }
 
-  const isCollapsed = rightPanelCollapsed;
-  const labelKey = isCollapsed ? "sidebar.showGitSidebar" : "sidebar.hideGitSidebar";
+    const isCollapsed = rightPanelCollapsed;
+    const labelKey = isCollapsed ? "sidebar.showGitSidebar" : "sidebar.hideGitSidebar";
+    const actionItems: OpenAppMenuExtraAction[] = [];
 
-  return (
-    <>
-      {canToggleRuntimeConsole && (
-        <TooltipIconButton
-          className={`ghost main-header-action${isRuntimeConsoleVisible ? " is-active" : ""}`}
-          onClick={() => onToggleRuntimeConsole?.()}
-          data-tauri-drag-region="false"
-          label={t("files.openRunConsole")}
-        >
-          <Construction size={14} aria-hidden />
-        </TooltipIconButton>
-      )}
-      {canToggleTerminal && (
-        <TooltipIconButton
-          className={`ghost main-header-action${isTerminalOpen ? " is-active" : ""}`}
-          onClick={() => onToggleTerminal?.()}
-          data-tauri-drag-region="false"
-          label={t("common.toggleTerminalPanel")}
-        >
-          <TerminalSquare size={14} aria-hidden />
-        </TooltipIconButton>
-      )}
-      {canToggleSoloMode && (
-        <TooltipIconButton
-          className={`ghost main-header-action${isSoloMode ? " is-active" : ""}`}
-          onClick={() => onToggleSoloMode?.()}
-          data-tauri-drag-region="false"
-          label={t(isSoloMode ? "sidebar.exitSoloMode" : "sidebar.enterSoloMode")}
-        >
-          <Focus size={14} aria-hidden />
-        </TooltipIconButton>
-      )}
-      {canToggleBrowserDock && (
-        <TooltipIconButton
-          className={`ghost main-header-action${isBrowserDockOpen ? " is-active" : ""}`}
-          onClick={() => onToggleBrowserDock?.()}
-          data-tauri-drag-region="false"
-          label={t("browserAgent.dock.openDock")}
-        >
-          <Globe size={14} aria-hidden />
-        </TooltipIconButton>
-      )}
-      {canToggleSpecHub && (
-        <TooltipIconButton
-          className={`ghost main-header-action${isSpecHubActive ? " is-active" : ""}`}
-          onClick={() => onOpenSpecHub?.()}
-          data-tauri-drag-region="false"
-          label={t("sidebar.specHub")}
-        >
-          <LayoutDashboard size={14} aria-hidden />
-        </TooltipIconButton>
-      )}
-      {canOpenClientDocumentation && (
-        <TooltipIconButton
-          className="ghost main-header-action"
-          onClick={() => onOpenClientDocumentation?.()}
-          data-tauri-drag-region="false"
-          label={t("clientDocumentation.open")}
-        >
-          <BookOpen size={14} aria-hidden />
-        </TooltipIconButton>
-      )}
-      {rightPanelAvailable && !isSoloMode && (
-        <TooltipIconButton
-          className="ghost main-header-action"
-          onClick={isCollapsed ? onExpandRightPanel : onCollapseRightPanel}
-          data-tauri-drag-region="false"
-          label={t(labelKey)}
-        >
-          {isCollapsed ? (
-            isLayoutSwapped ? <PanelLeftOpen size={14} aria-hidden /> : <PanelRightOpen size={14} aria-hidden />
+    if (canToggleRuntimeConsole) {
+      actionItems.push({
+        id: "runtime-console",
+        label: t("files.openRunConsole"),
+        icon: <Construction size={18} aria-hidden />,
+        onSelect: () => onToggleRuntimeConsole?.(),
+        active: isRuntimeConsoleVisible,
+      });
+    }
+
+    if (canToggleTerminal) {
+      actionItems.push({
+        id: "terminal",
+        label: t("common.toggleTerminalPanel"),
+        icon: <TerminalSquare size={18} aria-hidden />,
+        onSelect: () => onToggleTerminal?.(),
+        active: isTerminalOpen,
+      });
+    }
+
+    if (canToggleSoloMode) {
+      actionItems.push({
+        id: "solo-mode",
+        label: t(isSoloMode ? "sidebar.exitSoloMode" : "sidebar.enterSoloMode"),
+        icon: <Focus size={18} aria-hidden />,
+        onSelect: () => onToggleSoloMode?.(),
+        active: isSoloMode,
+      });
+    }
+
+    if (canToggleBrowserDock) {
+      actionItems.push({
+        id: "browser-dock",
+        label: t("browserAgent.dock.openDock"),
+        icon: <Globe size={18} aria-hidden />,
+        onSelect: () => onToggleBrowserDock?.(),
+        active: isBrowserDockOpen,
+      });
+    }
+
+    if (canToggleSpecHub) {
+      actionItems.push({
+        id: "spec-hub",
+        label: t("sidebar.specHub"),
+        icon: <LayoutDashboard size={18} aria-hidden />,
+        onSelect: () => onOpenSpecHub?.(),
+        active: isSpecHubActive,
+      });
+    }
+
+    if (canOpenClientDocumentation) {
+      actionItems.push({
+        id: "client-documentation",
+        label: t("clientDocumentation.open"),
+        icon: <BookOpen size={18} aria-hidden />,
+        onSelect: () => onOpenClientDocumentation?.(),
+      });
+    }
+
+    if (rightPanelAvailable && !isSoloMode) {
+      actionItems.push({
+        id: "right-panel",
+        label: t(labelKey),
+        icon: isCollapsed ? (
+          isLayoutSwapped ? (
+            <PanelLeftOpen size={18} aria-hidden />
           ) : (
-            isLayoutSwapped ? <PanelLeftClose size={14} aria-hidden /> : <PanelRightClose size={14} aria-hidden />
-          )}
-        </TooltipIconButton>
-      )}
-    </>
-  );
-});
+            <PanelRightOpen size={18} aria-hidden />
+          )
+        ) : isLayoutSwapped ? (
+          <PanelLeftClose size={18} aria-hidden />
+        ) : (
+          <PanelRightClose size={18} aria-hidden />
+        ),
+        onSelect: isCollapsed ? onExpandRightPanel : onCollapseRightPanel,
+      });
+    }
+
+    return actionItems;
+  }, [
+    isBrowserDockOpen,
+    isCompact,
+    isLayoutSwapped,
+    isRuntimeConsoleVisible,
+    isSoloMode,
+    isSpecHubActive,
+    isTerminalOpen,
+    onCollapseRightPanel,
+    onExpandRightPanel,
+    onOpenClientDocumentation,
+    onOpenSpecHub,
+    onToggleBrowserDock,
+    onToggleRuntimeConsole,
+    onToggleSoloMode,
+    onToggleTerminal,
+    rightPanelAvailable,
+    rightPanelCollapsed,
+    showClientDocumentationButton,
+    showRuntimeConsoleButton,
+    showSoloButton,
+    showSpecHubButton,
+    showTerminalButton,
+    t,
+  ]);
+}

@@ -1,156 +1,75 @@
 .global-runtime-notice-dock-shell {
   position: fixed;
-  right: 4px;
-  bottom: max(4px, env(safe-area-inset-bottom, 0px) + 4px);
+  left: max(8px, env(safe-area-inset-left, 0px) + 8px);
+  bottom: max(12px, env(safe-area-inset-bottom, 0px) + 12px);
   z-index: 42;
+}
+
+.sidebar-bottom-nav .global-runtime-notice-dock-shell {
+  position: relative;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  z-index: 5;
 }
 
 .global-runtime-notice-dock-bubble {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 32px;
+  height: 32px;
   padding: 0;
-  border: 1px solid rgba(148, 163, 184, 0.28);
+  border: none;
   border-radius: 999px;
-  background:
-    linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(30, 41, 59, 0.86));
-  box-shadow:
-    0 8px 18px rgba(15, 23, 42, 0.22),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  color: #e2e8f0;
+  background: transparent;
+  color: var(--text-muted, #94a3b8);
   cursor: pointer;
-  backdrop-filter: blur(16px);
+  transition:
+    background-color 0.16s ease,
+    color 0.16s ease;
+}
+
+.global-runtime-notice-dock-bubble:hover,
+.global-runtime-notice-dock-bubble:focus-visible {
+  background: var(--surface-hover, rgba(148, 163, 184, 0.16));
+  color: var(--text-strong, #f8fafc);
 }
 
 .global-runtime-notice-dock-bubble.is-has-notice {
-  border-color: rgba(56, 189, 248, 0.42);
-  box-shadow:
-    0 8px 18px rgba(15, 23, 42, 0.22),
-    0 0 0 1px rgba(56, 189, 248, 0.18),
-    0 0 10px rgba(56, 189, 248, 0.16);
+  color: #7dd3fc;
 }
 
 .global-runtime-notice-dock-bubble.is-has-error {
-  border-color: rgba(248, 113, 113, 0.45);
-  box-shadow:
-    0 8px 18px rgba(15, 23, 42, 0.22),
-    0 0 0 1px rgba(248, 113, 113, 0.2),
-    0 0 10px rgba(248, 113, 113, 0.18);
+  color: #fda4af;
 }
 
-.global-runtime-notice-dock-bubble.is-idle {
-  border-color: rgba(74, 222, 128, 0.4);
-  box-shadow:
-    0 8px 18px rgba(15, 23, 42, 0.18),
-    0 0 0 1px rgba(74, 222, 128, 0.14),
-    0 0 8px rgba(74, 222, 128, 0.14);
+.global-runtime-notice-dock-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: inherit;
 }
 
-.global-runtime-notice-dock-indicator-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: #4ade80;
-  box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.16);
+.global-runtime-notice-dock-indicator-icon {
+  width: 16px;
+  height: 16px;
+  display: block;
 }
 
-.global-runtime-notice-dock-indicator-mark {
-  color: #f8fafc;
-  font-size: 11px;
-  font-weight: 800;
-  line-height: 1;
-  transform: translateY(-0.5px);
-}
 
-.global-runtime-notice-dock-bubble.is-has-error .global-runtime-notice-dock-indicator-mark {
-  color: #fecaca;
-}
-
-:root[data-theme="light"] .global-runtime-notice-dock-bubble {
-  border-color: rgba(148, 163, 184, 0.4);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(241, 245, 249, 0.94));
-  box-shadow:
-    0 6px 14px rgba(15, 23, 42, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.88);
-  color: #334155;
-}
-
-:root[data-theme="light"] .global-runtime-notice-dock-bubble.is-has-notice {
-  box-shadow:
-    0 6px 14px rgba(56, 189, 248, 0.12),
-    0 0 0 1px rgba(56, 189, 248, 0.16);
-}
-
-:root[data-theme="light"] .global-runtime-notice-dock-bubble.is-has-error {
-  box-shadow:
-    0 6px 14px rgba(248, 113, 113, 0.12),
-    0 0 0 1px rgba(248, 113, 113, 0.16);
-}
-
-:root[data-theme="light"] .global-runtime-notice-dock-bubble.is-idle {
-  box-shadow:
-    0 6px 14px rgba(74, 222, 128, 0.1),
-    0 0 0 1px rgba(74, 222, 128, 0.14);
-}
-
-:root[data-theme="light"] .global-runtime-notice-dock-indicator-mark {
-  color: #334155;
-}
-
-:root[data-theme="light"] .global-runtime-notice-dock-bubble.is-has-error .global-runtime-notice-dock-indicator-mark {
-  color: #dc2626;
-}
-
-@media (prefers-color-scheme: light) {
-  :root[data-theme="system"] .global-runtime-notice-dock-bubble,
-  :root:not([data-theme]) .global-runtime-notice-dock-bubble {
-    border-color: rgba(148, 163, 184, 0.4);
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(241, 245, 249, 0.94));
-    box-shadow:
-      0 6px 14px rgba(15, 23, 42, 0.12),
-      inset 0 1px 0 rgba(255, 255, 255, 0.88);
-    color: #334155;
-  }
-
-  :root[data-theme="system"] .global-runtime-notice-dock-bubble.is-has-notice,
-  :root:not([data-theme]) .global-runtime-notice-dock-bubble.is-has-notice {
-    box-shadow:
-      0 6px 14px rgba(56, 189, 248, 0.12),
-      0 0 0 1px rgba(56, 189, 248, 0.16);
-  }
-
-  :root[data-theme="system"] .global-runtime-notice-dock-bubble.is-has-error,
-  :root:not([data-theme]) .global-runtime-notice-dock-bubble.is-has-error {
-    box-shadow:
-      0 6px 14px rgba(248, 113, 113, 0.12),
-      0 0 0 1px rgba(248, 113, 113, 0.16);
-  }
-
-  :root[data-theme="system"] .global-runtime-notice-dock-bubble.is-idle,
-  :root:not([data-theme]) .global-runtime-notice-dock-bubble.is-idle {
-    box-shadow:
-      0 6px 14px rgba(74, 222, 128, 0.1),
-      0 0 0 1px rgba(74, 222, 128, 0.14);
-  }
-
-  :root[data-theme="system"] .global-runtime-notice-dock-indicator-mark,
-  :root:not([data-theme]) .global-runtime-notice-dock-indicator-mark {
-    color: #334155;
-  }
-
-  :root[data-theme="system"] .global-runtime-notice-dock-bubble.is-has-error .global-runtime-notice-dock-indicator-mark,
-  :root:not([data-theme]) .global-runtime-notice-dock-bubble.is-has-error .global-runtime-notice-dock-indicator-mark {
-    color: #dc2626;
-  }
-}
 
 .global-runtime-notice-dock {
-  width: min(720px, calc(100vw - 24px));
-  max-height: min(360px, calc(100vh - 120px));
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 4px);
+  width: min(960px, calc(100vw - 24px));
+  max-height: min(70vh, calc(100vh - 96px));
   display: flex;
   flex-direction: column;
   border: 1px solid rgba(148, 163, 184, 0.24);
@@ -163,6 +82,48 @@
   color: #e2e8f0;
   overflow: hidden;
   backdrop-filter: blur(18px);
+}
+
+.global-runtime-notice-dock-portal-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 2200;
+  pointer-events: none;
+}
+
+.global-runtime-notice-dock.is-portal {
+  position: fixed;
+  left: 12px;
+  bottom: 48px;
+  z-index: 2200;
+  pointer-events: auto;
+}
+
+.sidebar-bottom-nav .global-runtime-notice-dock,
+.global-runtime-notice-dock.is-sidebar-popover {
+  width: min(560px, calc(100vw - 24px));
+  max-height: min(360px, calc(100vh - 112px));
+  border-radius: 16px;
+}
+
+.sidebar-bottom-nav .global-runtime-notice-dock-header,
+.global-runtime-notice-dock.is-sidebar-popover .global-runtime-notice-dock-header {
+  padding: 12px 14px;
+}
+
+.sidebar-bottom-nav .global-runtime-notice-dock-title-wrap,
+.global-runtime-notice-dock.is-sidebar-popover .global-runtime-notice-dock-title-wrap {
+  gap: 8px;
+}
+
+.sidebar-bottom-nav .global-runtime-notice-dock-empty,
+.global-runtime-notice-dock.is-sidebar-popover .global-runtime-notice-dock-empty {
+  padding: 18px 14px 20px;
+}
+
+.app.layout-desktop.layout-swapped .sidebar-bottom-nav .global-runtime-notice-dock {
+  left: auto;
+  right: 0;
 }
 
 .global-runtime-notice-dock-header {
@@ -235,15 +196,17 @@
   padding: 10px 12px 12px;
   list-style: none;
   overflow: auto;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .global-runtime-notice-dock-row {
   display: grid;
   grid-template-columns: 8px minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: center;
-  min-height: 34px;
-  padding: 6px 4px;
+  column-gap: 10px;
+  row-gap: 4px;
+  align-items: start;
+  padding: 8px 6px;
   border-radius: 10px;
 }
 
@@ -260,6 +223,7 @@
   height: 8px;
   border-radius: 999px;
   background: #38bdf8;
+  margin-top: 6px;
 }
 
 .global-runtime-notice-dock-severity.is-warning {
@@ -272,15 +236,16 @@
 
 .global-runtime-notice-dock-message {
   min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   color: #e2e8f0;
   font-size: 13px;
-  line-height: 1.4;
+  line-height: 1.5;
 }
 
 .global-runtime-notice-dock-time {
+  align-self: start;
+  white-space: nowrap;
   color: #94a3b8;
   font-size: 11px;
   font-variant-numeric: tabular-nums;
@@ -443,12 +408,19 @@
 
 @media (max-width: 960px) {
   .global-runtime-notice-dock-shell {
+    left: 12px;
     right: 12px;
     bottom: max(78px, env(safe-area-inset-bottom, 0px) + 78px);
   }
 
+  .sidebar-bottom-nav .global-runtime-notice-dock-shell {
+    left: auto;
+    right: auto;
+    bottom: auto;
+  }
+
   .global-runtime-notice-dock {
     width: min(680px, calc(100vw - 16px));
-    max-height: min(320px, calc(100vh - 150px));
+    max-height: min(60vh, calc(100vh - 120px));
   }
 }

@@ -12,8 +12,13 @@ use crate::shared::workspace_listing::{
     workspace_files_response, workspace_scan_budget_reached, WorkspaceScanState,
     WORKSPACE_DIRECTORY_SCAN_BUDGET_MULTIPLIER, WORKSPACE_SCAN_TIME_BUDGET,
 };
+#[cfg(test)]
 pub(crate) use crate::shared::workspace_listing::{
-    list_workspace_directory_children_inner, list_workspace_files_inner, WorkspaceFilesResponse,
+    list_workspace_directory_children_inner, list_workspace_files_inner,
+};
+pub(crate) use crate::shared::workspace_listing::{
+    list_workspace_directory_children_inner_with_refresh, list_workspace_files_inner_with_refresh,
+    WorkspaceFilesResponse,
 };
 #[cfg(test)]
 use crate::shared::workspace_listing::{

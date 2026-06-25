@@ -1,13 +1,13 @@
 {
   "schemaVersion": "1.0",
-  "generatedAt": "2026-06-12T14:39:07.231Z",
+  "generatedAt": "2026-06-18T11:01:32.028Z",
   "source": "realtime-turn-trace",
   "totals": {
     "turns": 3,
     "completedTurns": 3,
     "visibleTextLagP95Ms": 24,
     "batchFlushDurationP95Ms": 13.33,
-    "reducerAmplificationMedian": 4,
+    "reducerAmplificationMedian": 1.33,
     "terminalSettlementP95Ms": 60
   },
   "evidenceClassCounts": {
@@ -34,7 +34,7 @@
         "lastReducerCommitToTerminalSettlementMs": 60
       },
       "counters": {
-        "deltaCount": 1,
+        "deltaCount": 3,
         "reducerCommitCount": 4,
         "reasoningDeltaCount": 1,
         "toolDeltaCount": 0,
@@ -43,7 +43,7 @@
         "batchFlushCount": 3,
         "batchFlushDurationAvgMs": 13.33,
         "maxQueueDepth": 0,
-        "reducerAmplification": 4,
+        "reducerAmplification": 1.333,
         "terminalSettlementLagMs": 60
       }
     },
@@ -64,7 +64,7 @@
         "lastReducerCommitToTerminalSettlementMs": 60
       },
       "counters": {
-        "deltaCount": 1,
+        "deltaCount": 2,
         "reducerCommitCount": 3,
         "reasoningDeltaCount": 0,
         "toolDeltaCount": 0,
@@ -73,7 +73,7 @@
         "batchFlushCount": 1,
         "batchFlushDurationAvgMs": 12,
         "maxQueueDepth": 0,
-        "reducerAmplification": 3,
+        "reducerAmplification": 1.5,
         "terminalSettlementLagMs": 60
       }
     },
@@ -94,7 +94,7 @@
         "lastReducerCommitToTerminalSettlementMs": 60
       },
       "counters": {
-        "deltaCount": 1,
+        "deltaCount": 16,
         "reducerCommitCount": 18,
         "reasoningDeltaCount": 4,
         "toolDeltaCount": 3,
@@ -103,7 +103,7 @@
         "batchFlushCount": 10,
         "batchFlushDurationAvgMs": 8.8,
         "maxQueueDepth": 0,
-        "reducerAmplification": 18,
+        "reducerAmplification": 1.125,
         "terminalSettlementLagMs": 60
       }
     }

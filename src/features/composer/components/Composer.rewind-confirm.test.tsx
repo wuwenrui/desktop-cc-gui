@@ -1206,56 +1206,50 @@ describe("Composer Claude rewind confirmation", () => {
 
   it("reuses the same export directory when storing the same rewind target twice", async () => {
     const invokeMock = vi.mocked(invoke);
-    const initialCallCount = invokeMock.mock.calls.length;
-    invokeMock
-      .mockResolvedValueOnce({
-        outputPath:
-          "/Users/demo/.ccgui/chat-diff/claude/2026-04-13/session-1/user-1",
-        filesPath:
-          "/Users/demo/.ccgui/chat-diff/claude/2026-04-13/session-1/user-1/files",
-        manifestPath:
-          "/Users/demo/.ccgui/chat-diff/claude/2026-04-13/session-1/user-1/manifest.json",
-        exportId: "user-1",
-        fileCount: 2,
-      })
-      .mockResolvedValueOnce({
-        outputPath:
-          "/Users/demo/.ccgui/chat-diff/claude/2026-04-13/session-1/user-1",
-        filesPath:
-          "/Users/demo/.ccgui/chat-diff/claude/2026-04-13/session-1/user-1/files",
-        manifestPath:
-          "/Users/demo/.ccgui/chat-diff/claude/2026-04-13/session-1/user-1/manifest.json",
-        exportId: "user-1",
-        fileCount: 2,
-      });
+    const exportResult = {
+      outputPath:
+        "/Users/demo/.ccgui/chat-diff/claude/2026-04-13/session-1/user-1",
+      filesPath:
+        "/Users/demo/.ccgui/chat-diff/claude/2026-04-13/session-1/user-1/files",
+      manifestPath:
+        "/Users/demo/.ccgui/chat-diff/claude/2026-04-13/session-1/user-1/manifest.json",
+      exportId: "user-1",
+      fileCount: 2,
+    };
+    invokeMock.mockImplementation(async (command) =>
+      command === "export_rewind_files" ? exportResult : null,
+    );
 
     render(<ComposerHarness />);
 
     fireEvent.click(screen.getByTestId("rewind-trigger"));
     fireEvent.click(screen.getByTestId("claude-rewind-store-button"));
+    expect(
+      (await screen.findByTestId("claude-rewind-store-feedback")).textContent,
+    ).toContain("2026-04-13/session-1/user-1");
+
+    fireEvent.click(screen.getByTestId("claude-rewind-store-button"));
+
+    await waitFor(() => {
+      expect(
+        invokeMock.mock.calls.filter(
+          ([command]) => command === "export_rewind_files",
+        ),
+      ).toHaveLength(2);
+    });
+
+    const exportCalls = invokeMock.mock.calls.filter(
+      ([command]) => command === "export_rewind_files",
+    );
+    const firstCall = exportCalls[0]?.[1] as { targetMessageId: string } | undefined;
+    const secondCall = exportCalls[1]?.[1] as { targetMessageId: string } | undefined;
+    expect(firstCall?.targetMessageId).toBe("user-1");
+    expect(secondCall?.targetMessageId).toBe("user-1");
     await waitFor(() => {
       expect(
         screen.getByTestId("claude-rewind-store-feedback").textContent,
       ).toContain("2026-04-13/session-1/user-1");
     });
-
-    fireEvent.click(screen.getByTestId("claude-rewind-store-button"));
-
-    await waitFor(() => {
-      expect(invokeMock.mock.calls.length).toBe(initialCallCount + 2);
-    });
-
-    const firstCall = invokeMock.mock.calls[initialCallCount]?.[1] as
-      | { targetMessageId: string }
-      | undefined;
-    const secondCall = invokeMock.mock.calls[initialCallCount + 1]?.[1] as
-      | { targetMessageId: string }
-      | undefined;
-    expect(firstCall?.targetMessageId).toBe("user-1");
-    expect(secondCall?.targetMessageId).toBe("user-1");
-    expect(
-      screen.getByTestId("claude-rewind-store-feedback").textContent,
-    ).toContain("2026-04-13/session-1/user-1");
   });
 
   it("shows rewind entry for Codex threads without engine prefix", () => {

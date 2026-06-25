@@ -25,6 +25,21 @@ vi.mock("../../threads/utils/streamLatencyDiagnostics", () => ({
   useThreadStreamLatencySnapshot: mocks.useThreadStreamLatencySnapshot,
 }));
 
+vi.mock("./Markdown", () => ({
+  Markdown: ({
+    value,
+    className,
+    onRenderedValueChange,
+  }: {
+    value: string;
+    className?: string;
+    onRenderedValueChange?: (value: string) => void;
+  }) => {
+    onRenderedValueChange?.(value);
+    return <div className={className}>{value}</div>;
+  },
+}));
+
 import { Messages } from "./Messages";
 
 function renderMessages(options?: {

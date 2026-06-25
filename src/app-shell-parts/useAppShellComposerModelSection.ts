@@ -25,6 +25,7 @@ export function useAppShellComposerModelSection({
   collaborationModes,
   composerInputRef,
   composerSelectionResolverRef,
+  engineModelCatalogsAsOptions,
   engineModelsAsOptions,
   globalSelectionReady,
   handleSelectComposerSelection,
@@ -48,6 +49,13 @@ export function useAppShellComposerModelSection({
   const effectiveModels = useMemo(() => {
     return getEffectiveModels(activeEngine, models, engineModelsAsOptions);
   }, [activeEngine, models, engineModelsAsOptions]);
+  const providerModelCatalogs = useMemo(
+    () => ({
+      ...(engineModelCatalogsAsOptions ?? {}),
+      codex: models,
+    }),
+    [engineModelCatalogsAsOptions, models],
+  );
 
   useEffect(() => {
     const nextDefault = getNextEngineSelectedModelId({
@@ -332,6 +340,7 @@ export function useAppShellComposerModelSection({
     engineSelectedModelIdByType,
     handleSelectComposerEffort,
     handleSelectModel,
+    providerModelCatalogs,
     resolvedEffort,
     resolvedModel,
     setEngineSelectedModelIdByType,

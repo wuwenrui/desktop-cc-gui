@@ -44,6 +44,13 @@ describe("resolveThreadStabilityDiagnostic", () => {
       rawMessage:
         "Context compaction failed: thread not found: 019da207-c1ae-7cb3-9cb6-25f281fbfb30",
     });
+    expect(
+      resolveThreadStabilityDiagnostic("会话启动失败：conversation not found: 019da207"),
+    ).toEqual({
+      category: "connectivity_drift",
+      reconnectReason: "thread-not-found",
+      rawMessage: "会话启动失败：conversation not found: 019da207",
+    });
     expect(resolveThreadStabilityDiagnostic("Session failed to start: session not found")).toEqual({
       category: "connectivity_drift",
       reconnectReason: "session-not-found",
@@ -74,6 +81,14 @@ describe("classifyStaleThreadRecovery", () => {
       userAction: "recover-thread",
       recommendedOutcome: "rebound",
       rawMessage: "Thread not found: abc",
+    });
+    expect(classifyStaleThreadRecovery("conversation_not_found: abc")).toEqual({
+      reasonCode: "stale-thread-binding",
+      staleReason: "thread-not-found",
+      retryable: true,
+      userAction: "recover-thread",
+      recommendedOutcome: "rebound",
+      rawMessage: "conversation_not_found: abc",
     });
     expect(classifyStaleThreadRecovery("[SESSION_NOT_FOUND] session file not found")).toEqual({
       reasonCode: "stale-thread-binding",

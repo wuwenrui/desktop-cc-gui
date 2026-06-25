@@ -21,6 +21,9 @@ const clientUiVisibilityMock = vi.hoisted(() => ({
   visiblePanels: new Set<string>(),
   visibleControls: new Set<string>(),
 }));
+const composerMockState = vi.hoisted(() => ({
+  thinkingCallbacks: [] as Array<((enabled: boolean) => void) | undefined>,
+}));
 
 vi.mock("react-i18next", () => ({
   initReactI18next: {
@@ -186,6 +189,7 @@ vi.mock("../../composer/components/Composer", () => ({
     sendLabel,
     onOpenDiffPath,
     showStatusPanelToggleOverride,
+    onResolvedAlwaysThinkingChange,
   }: {
     draftText: string;
     onDraftChange: (next: string) => void;
@@ -193,28 +197,38 @@ vi.mock("../../composer/components/Composer", () => ({
     sendLabel: string;
     onOpenDiffPath?: (path: string) => void;
     showStatusPanelToggleOverride?: boolean;
-  }) => (
-    <form
-      data-testid="composer"
-      data-show-status-panel-toggle-override={String(
-        showStatusPanelToggleOverride,
-      )}
-    >
-      <textarea
-        aria-label="composer input"
-        value={draftText}
-        onChange={(event) => onDraftChange(event.currentTarget.value)}
-      />
-      <button type="button" onClick={() => onSend(draftText, [])}>
-        {sendLabel}
-      </button>
-      {onOpenDiffPath ? (
-        <button type="button" onClick={() => onOpenDiffPath("src/App.tsx")}>
-          open file reference
+    onResolvedAlwaysThinkingChange?: (enabled: boolean) => void;
+  }) => {
+    composerMockState.thinkingCallbacks.push(onResolvedAlwaysThinkingChange);
+    return (
+      <form
+        data-testid="composer"
+        data-show-status-panel-toggle-override={String(
+          showStatusPanelToggleOverride,
+        )}
+      >
+        <textarea
+          aria-label="composer input"
+          value={draftText}
+          onChange={(event) => onDraftChange(event.currentTarget.value)}
+        />
+        <button type="button" onClick={() => onSend(draftText, [])}>
+          {sendLabel}
         </button>
-      ) : null}
-    </form>
-  ),
+        {onOpenDiffPath ? (
+          <button type="button" onClick={() => onOpenDiffPath("src/App.tsx")}>
+            open file reference
+          </button>
+        ) : null}
+        <button
+          type="button"
+          onClick={() => onResolvedAlwaysThinkingChange?.(false)}
+        >
+          report thinking disabled
+        </button>
+      </form>
+    );
+  },
 }));
 
 vi.mock("../../app/components/MainHeader", () => ({
@@ -846,7 +860,7 @@ function createLayoutOptions(
       onNewDraftLabelChange: noop,
       onCreateNew: asyncNoop,
     },
-    mainHeaderActionsNode: null,
+    mainHeaderActions: [],
     browserDockOpen: false,
     onCloseBrowserDock: noop,
     externalChangeMonitoringEnabled: false,
@@ -922,7 +936,12 @@ function LayoutNodesHarness({
   options: Parameters<typeof useLayoutNodes>[0];
 }) {
   const nodes = useLayoutNodes(options);
-  return <>{nodes.messagesNode}</>;
+  return (
+    <>
+      {nodes.messagesNode}
+      {nodes.composerNode}
+    </>
+  );
 }
 
 async function renderUseLayoutNodes(
@@ -939,6 +958,7 @@ describe("useLayoutNodes client UI visibility", () => {
   afterEach(() => {
     clientUiVisibilityMock.visiblePanels.clear();
     clientUiVisibilityMock.visibleControls.clear();
+    composerMockState.thinkingCallbacks.length = 0;
     vi.clearAllMocks();
   });
 
@@ -977,6 +997,52 @@ describe("useLayoutNodes client UI visibility", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "settings" }));
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not forward duplicate resolved Claude thinking visibility", async () => {
+    const onResolvedClaudeThinkingVisibleChange = vi.fn();
+    const { result } = await renderUseLayoutNodes(
+      createLayoutOptions({
+        claudeThinkingVisible: false,
+        onResolvedClaudeThinkingVisibleChange,
+      }),
+    );
+
+    render(
+      <>
+        {result.current.messagesNode}
+        {result.current.composerNode}
+      </>,
+    );
+
+    fireEvent.click(screen.getByText("report thinking disabled"));
+
+    expect(onResolvedClaudeThinkingVisibleChange).not.toHaveBeenCalled();
+  });
+
+  it("keeps the resolved Claude thinking callback stable after local sync", async () => {
+    const onResolvedClaudeThinkingVisibleChange = vi.fn();
+
+    render(
+      <LayoutNodesHarness
+        options={createLayoutOptions({
+          claudeThinkingVisible: undefined,
+          onResolvedClaudeThinkingVisibleChange,
+        })}
+      />,
+    );
+
+    const firstCallback = composerMockState.thinkingCallbacks.at(-1);
+    fireEvent.click(screen.getByText("report thinking disabled"));
+
+    await waitFor(() => {
+      expect(onResolvedClaudeThinkingVisibleChange).toHaveBeenCalledWith(false);
+    });
+
+    expect(composerMockState.thinkingCallbacks.at(-1)).toBe(firstCallback);
+
+    fireEvent.click(screen.getByText("report thinking disabled"));
+    expect(onResolvedClaudeThinkingVisibleChange).toHaveBeenCalledTimes(1);
   });
 
   it("forwards restored history metadata into the runtime conversation state", async () => {
@@ -1021,7 +1087,7 @@ describe("useLayoutNodes client UI visibility", () => {
         providerProfileId: "__disk__",
         providerProfile: {
           id: "__disk__",
-          name: "磁盘 .codex 配置",
+          name: "codex-tui/default-config",
           source: "disk",
         },
       });

@@ -45,7 +45,9 @@ const FilePdfPreview = lazy(() =>
 );
 
 type FileViewBodyProps = {
+  workspaceId: string;
   filePath: string;
+  sourceFilePath: string;
   documentKey: string;
   imageSrc: string | null;
   imageInfo: { width: number; height: number; sizeBytes: number | null } | null;
@@ -542,7 +544,9 @@ function CodePreviewVirtualList({
 }
 
 export function FileViewBody({
+  workspaceId,
   filePath,
+  sourceFilePath,
   documentKey,
   imageSrc,
   imageInfo,
@@ -937,6 +941,8 @@ export function FileViewBody({
       <div className="fvp-markdown-preview-frame">
         <FileMarkdownPreviewFast
           key={filePath}
+          workspaceId={workspaceId}
+          sourceFilePath={sourceFilePath}
           documentKey={documentKey}
           value={markdownPreviewContent}
           renderPressure={fileRenderPressure}

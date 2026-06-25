@@ -1,6 +1,5 @@
 import Brain from "lucide-react/dist/esm/icons/brain";
 import BriefcaseBusiness from "lucide-react/dist/esm/icons/briefcase-business";
-import ChevronUp from "lucide-react/dist/esm/icons/chevron-up";
 import FileText from "lucide-react/dist/esm/icons/file-text";
 import GitBranch from "lucide-react/dist/esm/icons/git-branch";
 import LayoutDashboard from "lucide-react/dist/esm/icons/layout-dashboard";
@@ -164,12 +163,6 @@ export function SidebarSettingsMenu({
         data-tauri-drag-region="false"
       >
         <Settings className="sidebar-primary-nav-icon" aria-hidden />
-        <span className="sidebar-primary-nav-text">{t("settings.title")}</span>
-        <ChevronUp
-          size={14}
-          className={`sidebar-settings-chevron${isOpen ? " is-open" : ""}`}
-          aria-hidden
-        />
       </button>
     </div>
   );

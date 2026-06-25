@@ -172,3 +172,111 @@ export function resolveReasoningStreamingThrottleMs(
     180
   );
 }
+
+/**
+ * Streaming-only incremental analysis for chat-stream-render-isolation-2026-06
+ * task 3.1. `prev` MUST be the StreamingMarkdownComplexity previously computed
+ * for `prevText`. `deltaText` MUST be the new text appended after `prevText`
+ * (typical streaming path) — the helper assumes a suffix-append relationship
+ * and walks the delta lines once, threading the inherited fenced-code state
+ * from the previous pass.
+ *
+ * The helper produces a complexity object consistent with what
+ * `analyzeStreamingMarkdownComplexity(nextText)` would return, but avoids
+ * re-scanning the entire prefix. Empty / whitespace deltas are treated as
+ * "no change" and return `prev` unchanged.
+ */
+export function analyzeStreamingMarkdownComplexityDelta(
+  prev: StreamingMarkdownComplexity,
+  prevText: string,
+  deltaText: string,
+): StreamingMarkdownComplexity {
+  if (typeof deltaText !== "string" || deltaText.length === 0) {
+    return prev;
+  }
+  const trimmedDelta = deltaText.trim();
+  if (!trimmedDelta) {
+    return prev;
+  }
+  const nextText = prevText + deltaText;
+  const trimmedText = nextText.trim();
+  if (!trimmedText) {
+    return EMPTY_STREAMING_MARKDOWN_COMPLEXITY;
+  }
+  const joinsExistingLine =
+    prevText.length > 0 &&
+    !/[\r\n]$/.test(prevText) &&
+    !/^[\r\n]/.test(deltaText);
+  if (joinsExistingLine) {
+    return analyzeStreamingMarkdownComplexity(nextText);
+  }
+  // Inherit fenced-code state by replaying all fence toggles on
+  // prevText and stopping at the final state.
+  let insideCodeFence = false;
+  for (const rawLine of prevText.split(/\r?\n/)) {
+    if (rawLine.trim().startsWith("```")) {
+      insideCodeFence = !insideCodeFence;
+    }
+  }
+  const deltaLines = trimmedDelta.split(/\r?\n/);
+  let headingCount = prev.headingCount;
+  let listItemCount = prev.listItemCount;
+  let fencedCodeBlockCount = prev.fencedCodeBlockCount;
+  let fencedCodeLineCount = prev.fencedCodeLineCount;
+  let newLineCount = 0;
+  for (const line of deltaLines) {
+    if (line.length > 0) {
+      newLineCount += 1;
+    }
+    const normalizedLine = line.trim();
+    if (!normalizedLine) {
+      continue;
+    }
+    if (normalizedLine.startsWith("```")) {
+      fencedCodeBlockCount += insideCodeFence ? 0 : 1;
+      insideCodeFence = !insideCodeFence;
+      continue;
+    }
+    if (insideCodeFence) {
+      fencedCodeLineCount += 1;
+      continue;
+    }
+    if (/^#{1,6}\s+/.test(normalizedLine)) {
+      headingCount += 1;
+      continue;
+    }
+    if (/^(?:[-*+]|\d+[.)])\s+/.test(normalizedLine)) {
+      listItemCount += 1;
+    }
+  }
+  const lineCount = prev.lineCount + newLineCount;
+  const isMedium =
+    trimmedText.length >= CODEX_MEDIUM_STREAMING_MIN_LENGTH ||
+    lineCount >= CODEX_MEDIUM_STREAMING_MIN_LINES;
+  const isLarge =
+    trimmedText.length >= CODEX_LARGE_STREAMING_MIN_LENGTH ||
+    lineCount >= CODEX_LARGE_STREAMING_MIN_LINES;
+  const isHuge =
+    trimmedText.length >= CODEX_HUGE_STREAMING_MIN_LENGTH ||
+    lineCount >= CODEX_HUGE_STREAMING_MIN_LINES;
+  const structuredBlockCount =
+    headingCount + listItemCount + fencedCodeBlockCount + fencedCodeLineCount;
+  const isStructuredHeavy =
+    headingCount >= CODEX_STRUCTURED_STREAMING_MIN_HEADINGS ||
+    listItemCount >= CODEX_STRUCTURED_STREAMING_MIN_LIST_ITEMS ||
+    fencedCodeLineCount >= CODEX_STRUCTURED_STREAMING_MIN_CODE_LINES ||
+    (fencedCodeBlockCount > 0 && structuredBlockCount >= CODEX_MEDIUM_STREAMING_MIN_LINES);
+  return {
+    trimmedText,
+    lineCount,
+    headingCount,
+    listItemCount,
+    fencedCodeBlockCount,
+    fencedCodeLineCount,
+    structuredBlockCount,
+    isMedium,
+    isLarge,
+    isHuge,
+    isStructuredHeavy,
+  };
+}

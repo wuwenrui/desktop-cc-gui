@@ -150,6 +150,78 @@ describe("useSelectedComposerSession", () => {
     });
   });
 
+  it("does not rewrite an equivalent stored thread selection during startup reload", async () => {
+    composerStore["selectedModelByThread.ws-a:codex:session-1"] = {
+      modelId: "gpt-5.5",
+      effort: "medium",
+    };
+
+    const { result, rerender } = renderHook(
+      ({ activeThreadId }: { activeThreadId: string }) =>
+        useSelectedComposerSession({
+          activeWorkspaceId: "ws-a",
+          activeThreadId,
+          resolveCanonicalThreadId: (threadId: string) => threadId,
+        }),
+      {
+        initialProps: { activeThreadId: "codex:session-1" },
+      },
+    );
+
+    await waitFor(() => {
+      expect(result.current.selectedComposerSelection).toEqual({
+        modelId: "gpt-5.5",
+        effort: "medium",
+      });
+    });
+    expect(writeClientStoreValue).not.toHaveBeenCalled();
+
+    rerender({ activeThreadId: "codex:session-1" });
+
+    await waitFor(() => {
+      expect(result.current.selectedComposerSelection).toEqual({
+        modelId: "gpt-5.5",
+        effort: "medium",
+      });
+    });
+    expect(writeClientStoreValue).not.toHaveBeenCalled();
+  });
+
+  it("does not persist an equivalent repaired thread selection twice", async () => {
+    composerStore["selectedModelByThread.ws-a:codex:session-1"] = {
+      modelId: "gpt-5.5",
+      effort: "medium",
+    };
+
+    const { result } = renderHook(() =>
+      useSelectedComposerSession({
+        activeWorkspaceId: "ws-a",
+        activeThreadId: "codex:session-1",
+        resolveCanonicalThreadId: (threadId: string) => threadId,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.selectedComposerSelection).toEqual({
+        modelId: "gpt-5.5",
+        effort: "medium",
+      });
+    });
+
+    act(() => {
+      result.current.persistComposerSelectionForThread(
+        "ws-a",
+        "codex:session-1",
+        {
+          modelId: "gpt-5.5",
+          effort: "medium",
+        },
+      );
+    });
+
+    expect(writeClientStoreValue).not.toHaveBeenCalled();
+  });
+
   it("inherits composer selection from a Claude fork parent thread", async () => {
     composerStore["selectedModelByThread.ws-a:claude:parent-session"] = {
       modelId: "claude-opus-4-1",

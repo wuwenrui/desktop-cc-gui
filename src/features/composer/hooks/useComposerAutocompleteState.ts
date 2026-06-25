@@ -84,6 +84,10 @@ function splitFileQueryScope(query: string) {
   };
 }
 
+function isDirectoryScopedFileQuery(query: string) {
+  return normalizeFileQueryPath(query).includes("/");
+}
+
 function isDirectChildPath(path: string, parentPath: string) {
   if (!parentPath) {
     return !path.includes("/");
@@ -102,6 +106,79 @@ function matchesFileFragment(path: string, fragment: string) {
   const normalizedFragment = fragment.toLowerCase();
   const childName = path.split("/").filter(Boolean).pop()?.toLowerCase() ?? path.toLowerCase();
   return childName.includes(normalizedFragment);
+}
+
+function getFileReferenceLeafName(path: string) {
+  const normalized = path.replace(/\\/g, "/");
+  return normalized.split("/").filter(Boolean).pop() ?? path;
+}
+
+function getFileReferenceStemName(path: string) {
+  const leafName = getFileReferenceLeafName(path);
+  const dotIndex = leafName.lastIndexOf(".");
+  if (dotIndex <= 0 || dotIndex >= leafName.length - 1) {
+    return leafName;
+  }
+  return leafName.slice(0, dotIndex);
+}
+
+function isSubsequenceMatch(query: string, target: string) {
+  let queryIndex = 0;
+  let targetIndex = 0;
+  while (queryIndex < query.length && targetIndex < target.length) {
+    if (query[queryIndex] === target[targetIndex]) {
+      queryIndex += 1;
+    }
+    targetIndex += 1;
+  }
+  return queryIndex === query.length;
+}
+
+function scoreFileReferenceMatch(path: string, query: string) {
+  const normalizedQuery = normalizeFileQueryPath(query).trim().toLowerCase();
+  if (!normalizedQuery) {
+    return 0;
+  }
+  const normalizedPath = path.replace(/\\/g, "/").toLowerCase();
+  const leafName = getFileReferenceLeafName(path).toLowerCase();
+  const stemName = getFileReferenceStemName(path).toLowerCase();
+  if (leafName === normalizedQuery || stemName === normalizedQuery) {
+    return 120;
+  }
+  if (stemName.startsWith(normalizedQuery)) {
+    return 115;
+  }
+  if (leafName.startsWith(normalizedQuery)) {
+    return 110;
+  }
+  if (normalizedPath.startsWith(normalizedQuery)) {
+    return 95;
+  }
+  if (leafName.includes(normalizedQuery)) {
+    return 90;
+  }
+  if (normalizedPath.includes(normalizedQuery)) {
+    return 70;
+  }
+  if (isSubsequenceMatch(normalizedQuery, leafName)) {
+    return 50;
+  }
+  return 0;
+}
+
+function compareFileReferenceMatches(
+  left: { path: string; score: number },
+  right: { path: string; score: number },
+) {
+  if (left.score !== right.score) {
+    return right.score - left.score;
+  }
+  const leafLengthDelta =
+    getFileReferenceLeafName(left.path).length - getFileReferenceLeafName(right.path).length;
+  if (leafLengthDelta !== 0) {
+    return leafLengthDelta;
+  }
+  return left.path.localeCompare(right.path);
 }
 
 function isFileTriggerActive(text: string, cursor: number | null) {
@@ -404,25 +481,55 @@ export function useComposerAutocompleteState({
         ? (() => {
             const query = getFileTriggerQuery(text, selectionStart) ?? "";
             const { parentPath, fragment } = splitFileQueryScope(query);
+            const isDirectoryScoped = isDirectoryScopedFileQuery(query);
             // Combine filter predicates to avoid multiple passes over large arrays
             const matchedDirectories: string[] = [];
             const matchedFiles: string[] = [];
-            for (const path of directories) {
-              if (matchedDirectories.length >= MAX_FILE_SUGGESTIONS) break;
-              if (gitignoredDirectories?.has(path)) continue;
-              if (!isDirectChildPath(path, parentPath)) continue;
-              if (!matchesFileFragment(path, fragment)) continue;
-              matchedDirectories.push(path);
+            if (!query || isDirectoryScoped) {
+              for (const path of directories) {
+                if (matchedDirectories.length >= MAX_FILE_SUGGESTIONS) break;
+                if (gitignoredDirectories?.has(path)) continue;
+                if (!isDirectChildPath(path, parentPath)) continue;
+                if (!matchesFileFragment(path, fragment)) continue;
+                matchedDirectories.push(path);
+              }
+              for (const path of files) {
+                if (matchedFiles.length >= MAX_FILE_SUGGESTIONS) break;
+                if (gitignoredFiles?.has(path)) continue;
+                if (!isDirectChildPath(path, parentPath)) continue;
+                if (!matchesFileFragment(path, fragment)) continue;
+                matchedFiles.push(path);
+              }
+              matchedDirectories.sort((a, b) => a.localeCompare(b));
+              matchedFiles.sort((a, b) => a.localeCompare(b));
+            } else {
+              const rankedDirectories: Array<{ path: string; score: number }> = [];
+              const rankedFiles: Array<{ path: string; score: number }> = [];
+              for (const path of directories) {
+                if (gitignoredDirectories?.has(path)) continue;
+                const score = scoreFileReferenceMatch(path, query);
+                if (score <= 0) continue;
+                rankedDirectories.push({ path, score });
+              }
+              for (const path of files) {
+                if (gitignoredFiles?.has(path)) continue;
+                const score = scoreFileReferenceMatch(path, query);
+                if (score <= 0) continue;
+                rankedFiles.push({ path, score });
+              }
+              rankedDirectories.sort(compareFileReferenceMatches);
+              rankedFiles.sort(compareFileReferenceMatches);
+              matchedDirectories.push(
+                ...rankedDirectories
+                  .slice(0, MAX_FILE_SUGGESTIONS)
+                  .map((entry) => entry.path),
+              );
+              matchedFiles.push(
+                ...rankedFiles
+                  .slice(0, MAX_FILE_SUGGESTIONS)
+                  .map((entry) => entry.path),
+              );
             }
-            for (const path of files) {
-              if (matchedFiles.length >= MAX_FILE_SUGGESTIONS) break;
-              if (gitignoredFiles?.has(path)) continue;
-              if (!isDirectChildPath(path, parentPath)) continue;
-              if (!matchesFileFragment(path, fragment)) continue;
-              matchedFiles.push(path);
-            }
-            matchedDirectories.sort((a, b) => a.localeCompare(b));
-            matchedFiles.sort((a, b) => a.localeCompare(b));
             const directoryItems: AutocompleteItem[] = matchedDirectories.map((path) => ({
               id: `dir:${path}`,
               label: `${path}/`,

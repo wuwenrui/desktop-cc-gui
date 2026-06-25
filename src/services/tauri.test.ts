@@ -1,5 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
+
+const rendererDiagnosticsMocks = vi.hoisted(() => ({
+  appendRendererDiagnostic: vi.fn(),
+}));
+
+vi.mock("./rendererDiagnostics", () => rendererDiagnosticsMocks);
+
 import {
   addWorkspace,
   forkClaudeSession,
@@ -111,6 +118,8 @@ import {
   exportDiagnosticsBundle,
   hydrateClaudeDeferredImage,
   setMainWindowOpacity,
+  fetchClaudeProviderModels,
+  reorderClaudeProviders,
 } from "./tauri";
 import { resetRuntimeModeStateForTests } from "./tauri/runtimeMode";
 import {
@@ -187,6 +196,32 @@ describe("tauri invoke wrappers", () => {
     });
   });
 
+  it("maps Claude provider model fetch requests", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({
+      models: ["claude-sonnet"],
+      endpoint: "https://proxy.example.com/v1/models",
+    });
+
+    await fetchClaudeProviderModels("https://proxy.example.com/anthropic", "sk-test");
+
+    expect(invokeMock).toHaveBeenCalledWith("vendor_fetch_claude_models", {
+      baseUrl: "https://proxy.example.com/anthropic",
+      apiKey: "sk-test",
+    });
+  });
+
+  it("maps Claude provider reorder requests", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce(undefined);
+
+    await reorderClaudeProviders(["provider-b", "provider-a"]);
+
+    expect(invokeMock).toHaveBeenCalledWith("vendor_reorder_claude_providers", {
+      orderedIds: ["provider-b", "provider-a"],
+    });
+  });
+
   it("maps native window opacity requests to the Tauri command", async () => {
     const invokeMock = vi.mocked(invoke);
     invokeMock.mockResolvedValueOnce({
@@ -257,6 +292,7 @@ describe("tauri invoke wrappers", () => {
     });
     expect(invokeMock).toHaveBeenCalledWith("list_workspace_files", {
       workspaceId: "ws-1",
+      forceRefresh: false,
     });
     expect(invokeMock).toHaveBeenCalledWith("list_threads", {
       workspaceId: "ws-1",
@@ -1905,6 +1941,82 @@ describe("tauri invoke wrappers", () => {
     });
   });
 
+  it("records content-safe Codex turn-start ack latency on send success", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({ turnId: "turn-1" });
+    const dateNowSpy = vi.spyOn(Date, "now")
+      .mockReturnValueOnce(1_000)
+      .mockReturnValueOnce(1_125);
+
+    try {
+      await sendUserMessage("ws-4", "thread-1", "secret prompt", {
+        model: "MiniMax-M3",
+      });
+
+      expect(rendererDiagnosticsMocks.appendRendererDiagnostic).toHaveBeenCalledWith(
+        "stream-latency/codex-turn-start-ack",
+        expect.objectContaining({
+          workspaceId: "ws-4",
+          threadId: "thread-1",
+          model: "MiniMax-M3",
+          requestStartedAtMs: 1_000,
+          respondedAtMs: 1_125,
+          durationMs: 125,
+          outcome: "ok",
+        }),
+      );
+      expect(JSON.stringify(rendererDiagnosticsMocks.appendRendererDiagnostic.mock.calls)).not.toContain(
+        "secret prompt",
+      );
+    } finally {
+      dateNowSpy.mockRestore();
+    }
+  });
+
+  it("keeps send success when Codex turn-start ack diagnostic persistence fails", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({ turnId: "turn-1" });
+    rendererDiagnosticsMocks.appendRendererDiagnostic.mockImplementationOnce(() => {
+      throw new Error("diagnostic persistence failed");
+    });
+    const dateNowSpy = vi.spyOn(Date, "now")
+      .mockReturnValueOnce(3_000)
+      .mockReturnValueOnce(3_010);
+
+    try {
+      await expect(sendUserMessage("ws-4", "thread-1", "hello")).resolves.toEqual({
+        turnId: "turn-1",
+      });
+    } finally {
+      dateNowSpy.mockRestore();
+    }
+  });
+
+  it("records Codex turn-start ack latency on send error without swallowing the error", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockRejectedValueOnce(new Error("boom"));
+    const dateNowSpy = vi.spyOn(Date, "now")
+      .mockReturnValueOnce(2_000)
+      .mockReturnValueOnce(2_250);
+
+    try {
+      await expect(sendUserMessage("ws-4", "thread-1", "hidden prompt")).rejects.toThrow("boom");
+
+      expect(rendererDiagnosticsMocks.appendRendererDiagnostic).toHaveBeenCalledWith(
+        "stream-latency/codex-turn-start-ack",
+        expect.objectContaining({
+          workspaceId: "ws-4",
+          threadId: "thread-1",
+          durationMs: 250,
+          outcome: "error",
+          errorName: "Error",
+        }),
+      );
+    } finally {
+      dateNowSpy.mockRestore();
+    }
+  });
+
   it("omits delivery when starting reviews without override", async () => {
     const invokeMock = vi.mocked(invoke);
     invokeMock.mockResolvedValueOnce({});
@@ -2588,15 +2700,34 @@ describe("tauri invoke wrappers", () => {
           workspaceId: "ws-1",
           engine: "claude",
           activeProcessIds: [101, 102],
+          registeredActiveProcesses: [
+            { pid: 101, registeredAgeMs: 0 },
+            { pid: 102, registeredAgeMs: 0 },
+          ],
         },
       ],
       unsupportedReason: null,
+      osChildLiveness: {
+        evidenceClass: "unsupported",
+        sampledAfterCloseMs: 0,
+        sampledOsChildCount: null,
+        sampler: null,
+        rationale:
+          "Runtime does not ship a cross-platform OS child process sampler.",
+      },
+      staleChildCandidates: [],
     });
 
     const diagnostics = await getEngineActiveProcessDiagnostics();
 
     expect(diagnostics.totalActiveProcessCount).toBe(2);
     expect(diagnostics.workspaces[0]?.activeProcessIds).toEqual([101, 102]);
+    expect(diagnostics.workspaces[0]?.registeredActiveProcesses).toEqual([
+      { pid: 101, registeredAgeMs: 0 },
+      { pid: 102, registeredAgeMs: 0 },
+    ]);
+    expect(diagnostics.osChildLiveness.evidenceClass).toBe("unsupported");
+    expect(diagnostics.staleChildCandidates).toEqual([]);
     expect(invokeMock).toHaveBeenCalledWith(
       "get_engine_active_process_diagnostics",
     );

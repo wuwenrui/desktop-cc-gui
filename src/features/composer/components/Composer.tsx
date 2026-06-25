@@ -17,6 +17,7 @@ import type {
   DictationTranscript,
   EngineType,
   MessageSendOptions,
+  ModelOption,
   OpenCodeAgentOption,
   QueuedMessage,
   RateLimitSnapshot,
@@ -196,6 +197,7 @@ type ComposerProps = {
   onSelectEngine?: (engine: EngineType) => void;
   // Model props
   models: { id: string; displayName: string; model: string }[];
+  providerModelCatalogs?: Partial<Record<EngineType, ModelOption[]>>;
   selectedModelId: string | null;
   visionModelId?: string | null;
   onSelectModel: (id: string) => void;
@@ -468,6 +470,7 @@ export const Composer = memo(function Composer({
   providerProfileLabel = null,
   onSelectEngine,
   models,
+  providerModelCatalogs,
   selectedModelId,
   visionModelId = null,
   onSelectModel,
@@ -2434,6 +2437,7 @@ export const Composer = memo(function Composer({
               engines={engines}
               onSelectEngine={onSelectEngine}
               models={models}
+              providerModelCatalogs={providerModelCatalogs}
               onSelectModel={onSelectModel}
               reasoningOptions={reasoningOptions}
               selectedEffort={selectedEffort}

@@ -182,9 +182,10 @@ describe("useAppServerEvents runtime ended routing", () => {
     });
   });
 
-  it("routes manual shutdowns with active leases to turn errors", async () => {
+  it("routes manual shutdowns with active leases to the unique processing Codex fallback", async () => {
     const handlers: Handlers = {
       getActiveCodexThreadId: vi.fn(() => "active-thread"),
+      getSingleProcessingCodexThreadId: vi.fn(() => "processing-thread"),
       onTurnError: vi.fn(),
     };
     const { root } = await mount(handlers);
@@ -206,7 +207,7 @@ describe("useAppServerEvents runtime ended routing", () => {
 
     expect(handlers.onTurnError).toHaveBeenCalledWith(
       "ws-runtime-ended-active-lease",
-      "active-thread",
+      "processing-thread",
       "",
       expect.objectContaining({
         message: "[RUNTIME_ENDED] Managed runtime stopped after manual shutdown.",
@@ -214,6 +215,50 @@ describe("useAppServerEvents runtime ended routing", () => {
         engine: "codex",
       }),
     );
+    expect(handlers.getActiveCodexThreadId).not.toHaveBeenCalled();
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("does not route ambiguous runtime ended events to the active Codex thread", async () => {
+    const handlers: Handlers = {
+      getActiveCodexThreadId: vi.fn(() => "active-thread"),
+      getSingleProcessingCodexThreadId: vi.fn(() => null),
+      onTurnError: vi.fn(),
+      onRuntimeEnded: vi.fn(),
+    };
+    const { root } = await mount(handlers);
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-runtime-ended-ambiguous",
+        message: {
+          method: "runtime/ended",
+          params: {
+            reasonCode: "process_exit",
+            message: "Managed runtime process exited unexpectedly.",
+            pendingRequestCount: 2,
+            hadActiveLease: true,
+          },
+        },
+      });
+    });
+
+    expect(handlers.onRuntimeEnded).toHaveBeenCalledWith(
+      "ws-runtime-ended-ambiguous",
+      expect.objectContaining({
+        reasonCode: "process_exit",
+        pendingRequestCount: 2,
+        hadActiveLease: true,
+      }),
+    );
+    expect(handlers.getSingleProcessingCodexThreadId).toHaveBeenCalledWith(
+      "ws-runtime-ended-ambiguous",
+    );
+    expect(handlers.getActiveCodexThreadId).not.toHaveBeenCalled();
+    expect(handlers.onTurnError).not.toHaveBeenCalled();
 
     await act(async () => {
       root.unmount();

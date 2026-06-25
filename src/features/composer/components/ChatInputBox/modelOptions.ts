@@ -1,4 +1,4 @@
-import type { ModelInfo, ProviderId } from './types';
+import type { ModelInfo, ProviderId, ProviderModelCatalogs } from './types';
 import { AVAILABLE_PROVIDERS, CODEX_MODELS } from './types';
 import { STORAGE_KEYS, validateCodexCustomModels } from '../../types/provider';
 import { readClaudeCustomModelsFromStorage } from '../../../models/claudeCustomModels';
@@ -33,15 +33,27 @@ export const resolveModelConfigProvider = (provider: string) =>
   provider === 'codex' ? 'codex' : provider === 'gemini' ? 'gemini' : 'claude';
 
 export const normalizeModelIdentity = (model: ModelInfo): string => {
-  const runtimeModel = (model as ModelInfo & { model?: string }).model?.trim().toLowerCase();
-  if (runtimeModel && runtimeModel.length > 0) {
-    return `model:${runtimeModel}`;
+  return getModelIdentities(model)[0] ?? '';
+};
+
+const normalizeIdentityValue = (kind: 'model' | 'id' | 'label', value?: string): string | null => {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized) {
+    return null;
   }
-  const id = model.id.trim().toLowerCase();
-  if (id.length > 0) {
-    return `id:${id}`;
+  return `${kind}:${normalized}`;
+};
+
+const getModelIdentities = (model: ModelInfo): string[] => {
+  const structuralIdentities = [
+    normalizeIdentityValue('model', model.model),
+    normalizeIdentityValue('id', model.id),
+  ].filter((identity): identity is string => Boolean(identity));
+  if (structuralIdentities.length > 0) {
+    return Array.from(new Set(structuralIdentities));
   }
-  return `label:${model.label.trim().toLowerCase()}`;
+  const labelIdentity = normalizeIdentityValue('label', model.label);
+  return labelIdentity ? [labelIdentity] : [];
 };
 
 const upsertModel = (
@@ -53,16 +65,20 @@ const upsertModel = (
   if (!model) {
     return;
   }
-  const identity = normalizeModelIdentity(model);
-  if (identity.length === 0) {
+  const identities = getModelIdentities(model);
+  if (identities.length === 0) {
     return;
   }
-  const existingIndex = seenIdentities.get(identity);
+  const existingIndex = identities
+    .map((identity) => seenIdentities.get(identity))
+    .find((index): index is number => index !== undefined);
   if (existingIndex === undefined) {
-    seenIdentities.set(identity, mergedModels.length);
+    const nextIndex = mergedModels.length;
+    identities.forEach((identity) => seenIdentities.set(identity, nextIndex));
     mergedModels.push(model);
     return;
   }
+  identities.forEach((identity) => seenIdentities.set(identity, existingIndex));
   if (replaceExisting) {
     mergedModels[existingIndex] = {
       ...mergedModels[existingIndex],
@@ -75,9 +91,11 @@ export function mergeCodexModels(
   dynamicModels: ModelInfo[],
   customModels: ModelInfo[],
   selectedModel: string,
+  options: { includeBuiltInModels?: boolean } = {},
 ): ModelInfo[] {
   const mergedModels: ModelInfo[] = [];
   const seenIdentities = new Map<string, number>();
+  const includeBuiltInModels = options.includeBuiltInModels ?? true;
 
   dynamicModels.forEach((model) => upsertModel(mergedModels, seenIdentities, model));
   customModels.forEach((model) => upsertModel(mergedModels, seenIdentities, model, true));
@@ -87,7 +105,9 @@ export function mergeCodexModels(
       label: selectedModel,
     });
   }
-  CODEX_MODELS.forEach((model) => upsertModel(mergedModels, seenIdentities, model));
+  if (includeBuiltInModels) {
+    CODEX_MODELS.forEach((model) => upsertModel(mergedModels, seenIdentities, model));
+  }
 
   return mergedModels;
 }
@@ -198,10 +218,12 @@ export function resolveAvailableModels({
   }
   if (currentProvider === 'codex') {
     const dynamicModels = Array.isArray(models) ? models : [];
-    if (dynamicModels.length > 0) {
-      return dynamicModels;
-    }
-    return mergeCodexModels([], modelStorageSnapshot.codexCustomModels, selectedModel);
+    return mergeCodexModels(
+      dynamicModels,
+      modelStorageSnapshot.codexCustomModels,
+      selectedModel,
+      { includeBuiltInModels: dynamicModels.length === 0 },
+    );
   }
 
   const builtInModels = Array.isArray(models) ? models : [];
@@ -220,19 +242,23 @@ function resolveProviderModels({
   models,
   selectedModel,
   modelStorageSnapshot,
+  providerModelCatalogs,
 }: {
   providerId: ProviderId;
   currentProvider: string;
   models?: ModelInfo[];
   selectedModel: string;
   modelStorageSnapshot: ModelStorageSnapshot;
+  providerModelCatalogs?: ProviderModelCatalogs;
 }): ModelInfo[] {
   if (providerId === 'opencode') {
     return [];
   }
 
   const providerSelectedModel = providerId === currentProvider ? selectedModel : '';
-  const providerDynamicModels = providerId === currentProvider ? models : undefined;
+  const providerDynamicModels =
+    providerModelCatalogs?.[providerId] ??
+    (providerId === currentProvider ? models : undefined);
   const resolvedModels = resolveAvailableModels({
     currentProvider: providerId,
     models: providerDynamicModels,
@@ -257,6 +283,7 @@ export function resolveProviderModelGroups({
   models,
   selectedModel,
   modelStorageSnapshot,
+  providerModelCatalogs,
   providerAvailability,
   resolveProviderLabel,
 }: {
@@ -264,6 +291,7 @@ export function resolveProviderModelGroups({
   models?: ModelInfo[];
   selectedModel: string;
   modelStorageSnapshot: ModelStorageSnapshot;
+  providerModelCatalogs?: ProviderModelCatalogs;
   providerAvailability?: Partial<Record<ProviderId, boolean>>;
   resolveProviderLabel?: (providerId: ProviderId, fallbackLabel: string) => string;
 }): ProviderModelGroup[] {
@@ -275,6 +303,7 @@ export function resolveProviderModelGroups({
       models,
       selectedModel,
       modelStorageSnapshot,
+      providerModelCatalogs,
     });
 
     return {

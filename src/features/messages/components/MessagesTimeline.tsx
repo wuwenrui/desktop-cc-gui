@@ -1,6 +1,7 @@
 import {
   Fragment,
   memo,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -43,6 +44,13 @@ import {
   ReviewRow,
   WorkingIndicator,
 } from "./MessagesRows";
+import { MessagesOutlineFloater } from "./MessagesOutlineFloater";
+import type { MarkdownOutlineEntry } from "../../markdown/fastMarkdownRenderer";
+import { useMessageOutlineActive } from "../hooks/useMessageOutlineActive";
+import {
+  resolveNextMessageOutlineSnapshot,
+  type MessageOutlineSnapshot,
+} from "./messagesOutlineState";
 import { appendRendererDiagnostic } from "../../../services/rendererDiagnostics";
 import { parseReasoning } from "./messagesReasoning";
 import type { RuntimeReconnectRecoveryCallbackResult } from "./runtimeReconnect";
@@ -265,6 +273,34 @@ export const MessagesTimeline = memo(function MessagesTimeline({
 }: MessagesTimelineProps) {
   const { t } = useTranslation();
   const [isStickyHeaderCollapsed, setIsStickyHeaderCollapsed] = useState(false);
+  const [currentOutline, setCurrentOutline] = useState<MessageOutlineSnapshot | null>(null);
+  const handleLiveOutlineReady = useCallback(
+    (snapshot: MessageOutlineSnapshot) => {
+      setCurrentOutline((previous) =>
+        resolveNextMessageOutlineSnapshot(previous, snapshot),
+      );
+    },
+    [],
+  );
+  const liveAssistantOutlineReady = useMemo(() => {
+    if (!liveAssistantMessageId) {
+      return undefined;
+    }
+    return (outline: MarkdownOutlineEntry[]) => {
+      handleLiveOutlineReady({
+        messageId: liveAssistantMessageId,
+        outline,
+      });
+    };
+  }, [handleLiveOutlineReady, liveAssistantMessageId]);
+  const floaterContainerRef = useRef<HTMLDivElement | null>(null);
+  const { activeHeadingId } = useMessageOutlineActive(
+    currentOutline?.outline ?? null,
+    floaterContainerRef,
+  );
+  useEffect(() => {
+    setCurrentOutline(null);
+  }, [threadId, workspaceId]);
   const lastTimelineStabilityRemeasureAtRef = useRef(0);
   const lastTimelineStabilityDiagnosticAtRef = useRef(0);
 
@@ -320,7 +356,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     getItemKey: (index) => timelineProjectionRows[index]?.key ?? `missing:${index}`,
     getScrollElement: () => scrollElementRef.current,
     observeElementOffset: observeTimelineElementOffset,
-    overscan: 12,
+    overscan: isThinking || isWorking ? 24 : 12,
   });
   const virtualTimelineRows = timelineVirtualizer.getVirtualItems();
   const activeLiveTimelineRowKeys = useMemo(
@@ -605,6 +641,11 @@ export const MessagesTimeline = memo(function MessagesTimeline({
               onAssistantVisibleTextRender={onAssistantVisibleTextRender}
               suppressMemorySummaryCard={suppressedUserMemoryContextMessageIds.has(renderItem.id)}
               suppressNoteCardSummaryCard={suppressedUserNoteCardContextMessageIds.has(renderItem.id)}
+              onOutlineReady={
+                renderItem.role === "assistant" && renderItem.id === liveAssistantMessageId
+                  ? liveAssistantOutlineReady
+                  : undefined
+              }
             />
           </div>
           {shouldRenderFinalBoundary && (
@@ -907,8 +948,20 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       <Fragment key={row.key}>{renderProjectionRow(row)}</Fragment>
     ));
 
+  const handleJumpToHeading = (headingId: string) => {
+    const target = document.getElementById(headingId);
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
   return (
-    <>
+    <div ref={floaterContainerRef} className="messages-timeline-root">
+      <MessagesOutlineFloater
+        outline={currentOutline?.outline ?? null}
+        activeHeadingId={activeHeadingId}
+        onJumpToHeading={handleJumpToHeading}
+      />
       {activeStickyHeaderCandidate && (
         <div
           className="messages-history-sticky-header"
@@ -980,6 +1033,6 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         {shouldVirtualizeTimeline ? renderVirtualProjectionRows() : renderStaticProjectionRows()}
         <div ref={bottomRef} />
       </div>
-    </>
+    </div>
   );
 });

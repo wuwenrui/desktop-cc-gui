@@ -181,6 +181,7 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
       streamActivityPhase = 'idle',
       selectedModel = '',
       models,
+      providerModelCatalogs,
       permissionMode = 'bypassPermissions',
       currentProvider = 'claude',
       providerProfileLabel = null,
@@ -346,11 +347,20 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
         models,
         selectedModel,
         modelStorageSnapshot,
+        providerModelCatalogs,
         providerAvailability,
         resolveProviderLabel: (providerId, fallbackLabel) =>
           t(`providers.${providerId}.label`, { defaultValue: fallbackLabel }),
       }),
-      [currentProvider, modelStorageSnapshot, models, providerAvailability, selectedModel, t],
+      [
+        currentProvider,
+        modelStorageSnapshot,
+        models,
+        providerAvailability,
+        providerModelCatalogs,
+        selectedModel,
+        t,
+      ],
     );
 
     // Flag to track if we're updating from external value

@@ -62,6 +62,29 @@ describe("Sidebar", () => {
     expect(container.querySelector(".sidebar-section-title-icon-image")).toBeNull();
   });
 
+  it("renders the runtime notice entry in the same bottom action group as settings", () => {
+    const { container } = render(
+      <Sidebar
+        {...baseProps}
+        runtimeNoticeDockNode={
+          <button type="button" className="global-runtime-notice-dock-bubble">
+            Runtime notice
+          </button>
+        }
+      />,
+    );
+
+    const bottomNav = container.querySelector(".sidebar-bottom-nav");
+    expect(bottomNav).toBeTruthy();
+    const settingsButton = bottomNav?.querySelector(".sidebar-primary-nav-item-bottom");
+    const runtimeNoticeButton = bottomNav?.querySelector(".global-runtime-notice-dock-bubble");
+    expect(settingsButton).toBeTruthy();
+    expect(runtimeNoticeButton).toBeTruthy();
+    expect(
+      settingsButton?.compareDocumentPosition(runtimeNoticeButton as Node),
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
   it("marks the macOS sidebar titlebar placeholder as a drag region", () => {
     const { container } = render(<Sidebar {...baseProps} />);
 
@@ -1793,7 +1816,7 @@ describe("Sidebar", () => {
     const codexItem = screen.getByRole("menuitem", { name: /Codex/ });
     fireEvent.mouseEnter(codexItem);
     await act(async () => {
-      fireEvent.click(screen.getByRole("menuitem", { name: /磁盘 \.codex 配置/ }));
+      fireEvent.click(screen.getByRole("menuitem", { name: /codex-tui\/default-config/ }));
     });
 
     await vi.waitFor(() => {
@@ -1802,7 +1825,7 @@ describe("Sidebar", () => {
         providerProfileId: "__disk__",
         providerProfile: {
           id: "__disk__",
-          name: "磁盘 .codex 配置",
+          name: "codex-tui/default-config",
           source: "disk",
         },
       });
@@ -2431,7 +2454,7 @@ describe("Sidebar", () => {
     const codexItem = screen.getByRole("menuitem", { name: "Codex" });
     fireEvent.mouseEnter(codexItem);
     await act(async () => {
-      fireEvent.click(screen.getByRole("menuitem", { name: /磁盘 \.codex 配置/ }));
+      fireEvent.click(screen.getByRole("menuitem", { name: /codex-tui\/default-config/ }));
     });
 
     await vi.waitFor(() => {
@@ -2440,7 +2463,7 @@ describe("Sidebar", () => {
         providerProfileId: "__disk__",
         providerProfile: {
           id: "__disk__",
-          name: "磁盘 .codex 配置",
+          name: "codex-tui/default-config",
           source: "disk",
         },
       });

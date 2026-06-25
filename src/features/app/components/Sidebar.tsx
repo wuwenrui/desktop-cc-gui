@@ -205,6 +205,7 @@ type SidebarProps = {
   showLoadingProgressDialog?: LoadingProgressController["showLoadingProgressDialog"];
   hideLoadingProgressDialog?: LoadingProgressController["hideLoadingProgressDialog"];
   topbarNode?: ReactNode;
+  runtimeNoticeDockNode?: ReactNode;
 };
 
 export function Sidebar({
@@ -295,6 +296,7 @@ export function Sidebar({
   showLoadingProgressDialog,
   hideLoadingProgressDialog,
   topbarNode,
+  runtimeNoticeDockNode = null,
 }: SidebarProps) {
   const { t } = useTranslation();
   const quickSearchLabel = t("sidebar.quickSearch");
@@ -2031,6 +2033,7 @@ export function Sidebar({
               onOpenSettings={onOpenSettings}
               onAppModeChange={onAppModeChange}
             />
+            {runtimeNoticeDockNode}
           </div>
         </div>
       </div>

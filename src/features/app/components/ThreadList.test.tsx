@@ -122,7 +122,6 @@ describe("ThreadList", () => {
       "/tmp/ws-1",
     );
   });
-
   it("marks shared threads as not archivable for the context menu", () => {
     const onShowThreadMenu = vi.fn();
 
@@ -729,3 +728,50 @@ describe("ThreadList", () => {
     expect(container.querySelector(".thread-provider-label")).toBeNull();
   });
 });
+
+  it("marks the list as virtualized when 200 threads are present", () => {
+    const longRows = Array.from({ length: 200 }, (_, index) => ({
+      thread: {
+        id: `thread-long-${index}`,
+        name: `Thread ${index}`,
+        updatedAt: 1_700_000_000_000 + index,
+        engineSource: "codex" as const,
+      },
+      depth: 0,
+    }));
+    const { container } = render(
+      <ThreadList
+        {...baseProps}
+        unpinnedRows={longRows}
+        totalThreadRoots={longRows.length}
+        visibleThreadRootCount={longRows.length}
+        isExpanded={false}
+      />,
+    );
+    const listEl = container.querySelector(".thread-list");
+    expect(listEl).toBeTruthy();
+    expect(listEl?.getAttribute("data-virtualized")).toBe("true");
+    const spacer = container.querySelector(".thread-list-virtual-spacer");
+    expect(spacer).toBeTruthy();
+    // The whole point of virtualization: with 200 rows, the DOM MUST NOT
+    // mount all 200 .thread-row elements at once. With estimateSize=36 and
+    // overscan=8 and no measured scroll element in jsdom, the virtualizer
+    // may report zero items; in that case the bound is "fewer than 200"
+    // rows in the DOM. Either way, the count must stay bounded.
+    const mountedRows = container.querySelectorAll(".thread-row").length;
+    expect(mountedRows).toBeLessThan(200);
+  });
+
+  it("does not virtualize a small thread list", () => {
+    const { container } = render(
+      <ThreadList
+        {...baseProps}
+        totalThreadRoots={2}
+        visibleThreadRootCount={2}
+        isExpanded={false}
+      />,
+    );
+    const listEl = container.querySelector(".thread-list");
+    expect(listEl?.getAttribute("data-virtualized")).toBeNull();
+    expect(container.querySelector(".thread-list-virtual-spacer")).toBeNull();
+  });

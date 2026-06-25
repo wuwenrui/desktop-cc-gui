@@ -4,6 +4,8 @@ import type {
   ApprovalRequest,
   RequestUserInputRequest,
   RequestUserInputResponse,
+  RequestUserInputSettlementResult,
+  RequestUserInputSettlementOptions,
   WorkspaceInfo,
 } from "../../../types";
 
@@ -45,11 +47,15 @@ export function MessagesInlineApproval({
 type MessagesInlineUserInputProps = {
   activeThreadId: string | null;
   activeWorkspaceId: string | null;
-  onDismiss?: (request: RequestUserInputRequest) => void;
+  onDismiss?: (
+    request: RequestUserInputRequest,
+    options?: RequestUserInputSettlementOptions,
+  ) => Promise<RequestUserInputSettlementResult | void> | RequestUserInputSettlementResult | void;
   onSubmit?: (
     request: RequestUserInputRequest,
     response: RequestUserInputResponse,
-  ) => Promise<void> | void;
+    options?: RequestUserInputSettlementOptions,
+  ) => Promise<RequestUserInputSettlementResult | void> | RequestUserInputSettlementResult | void;
   requests: RequestUserInputRequest[];
   shouldRender: boolean;
 };

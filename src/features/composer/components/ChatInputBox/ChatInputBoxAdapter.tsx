@@ -26,7 +26,9 @@ import type {
   ContextSelectionChip,
   DualContextUsageViewModel,
   MemoryReferenceMode,
+  ModelInfo,
   PermissionMode,
+  ProviderModelCatalogs,
   ReasoningEffort,
   SelectedAgent,
   StreamActivityPhase,
@@ -51,6 +53,7 @@ import {
   setClaudeAlwaysThinkingEnabled,
   switchClaudeProvider,
   updateClaudeProvider,
+  getWorkspaceFiles,
   getWorkspaceDirectoryChildren,
   getSkillsList,
   getInstalledSkillIndex,
@@ -83,6 +86,35 @@ type ClaudeProviderLike = {
   };
   [key: string]: unknown;
 };
+
+type AdapterModelOption = {
+  id: string;
+  displayName?: string;
+  model?: string;
+  description?: string;
+  source?: string;
+};
+
+function normalizeAdapterModelOptions(
+  modelOptions: AdapterModelOption[] | undefined,
+): ModelInfo[] | undefined {
+  if (!modelOptions || modelOptions.length === 0) {
+    return undefined;
+  }
+  return modelOptions.map((modelOption) => {
+    const runtimeModel = modelOption.model || modelOption.id;
+    const label = modelOption.displayName || runtimeModel || modelOption.id;
+    return {
+      id: modelOption.id,
+      model: runtimeModel,
+      label,
+      description:
+        modelOption.description ||
+        (runtimeModel && runtimeModel !== label ? runtimeModel : undefined),
+      source: modelOption.source,
+    };
+  });
+}
 
 type ManualMemorySelection = {
   id: string;
@@ -468,7 +500,8 @@ export interface ChatInputBoxAdapterProps {
   isSharedSession?: boolean;
   engines?: AdapterEngineInfo[];
   onSelectEngine?: (engine: EngineType) => void;
-  models?: { id: string; displayName: string; model: string; source?: string }[];
+  models?: AdapterModelOption[];
+  providerModelCatalogs?: Partial<Record<EngineType, AdapterModelOption[]>>;
   onSelectModel?: (id: string) => void;
 
   // Reasoning
@@ -826,12 +859,89 @@ function fileNameFromPath(path: string): string {
   return segments.length > 0 ? (segments[segments.length - 1] ?? path) : path;
 }
 
+function stemNameFromPath(path: string): string {
+  const fileName = fileNameFromPath(path);
+  const idx = fileName.lastIndexOf('.');
+  if (idx <= 0 || idx >= fileName.length - 1) {
+    return fileName;
+  }
+  return fileName.slice(0, idx);
+}
+
 function extensionFromFileName(fileName: string): string {
   const idx = fileName.lastIndexOf('.');
   if (idx <= 0 || idx >= fileName.length - 1) {
     return '';
   }
   return fileName.slice(idx + 1).toLowerCase();
+}
+
+function isSubsequenceMatch(query: string, target: string) {
+  let queryIndex = 0;
+  let targetIndex = 0;
+  while (queryIndex < query.length && targetIndex < target.length) {
+    if (query[queryIndex] === target[targetIndex]) {
+      queryIndex += 1;
+    }
+    targetIndex += 1;
+  }
+  return queryIndex === query.length;
+}
+
+function scoreCompletionPath(path: string, query: string) {
+  const normalizedQuery = normalizePath(query).trim().toLowerCase();
+  if (!normalizedQuery) {
+    return 0;
+  }
+  const normalizedPath = normalizePath(path).toLowerCase();
+  const fileName = fileNameFromPath(path).toLowerCase();
+  const stemName = stemNameFromPath(path).toLowerCase();
+  if (fileName === normalizedQuery || stemName === normalizedQuery) {
+    return 120;
+  }
+  if (stemName.startsWith(normalizedQuery)) {
+    return 115;
+  }
+  if (fileName.startsWith(normalizedQuery)) {
+    return 110;
+  }
+  if (normalizedPath.startsWith(normalizedQuery)) {
+    return 95;
+  }
+  if (fileName.includes(normalizedQuery)) {
+    return 90;
+  }
+  if (normalizedPath.includes(normalizedQuery)) {
+    return 70;
+  }
+  if (isSubsequenceMatch(normalizedQuery, fileName)) {
+    return 50;
+  }
+  return 0;
+}
+
+function rankCompletionPaths(paths: readonly unknown[], query: string) {
+  return paths
+    .map((path) => {
+      const normalizedPath = normalizeCompletionSourcePath(path);
+      if (!normalizedPath) {
+        return null;
+      }
+      const score = scoreCompletionPath(normalizedPath, query);
+      return score > 0 ? { path: normalizedPath, score } : null;
+    })
+    .filter((entry): entry is { path: string; score: number } => entry !== null)
+    .sort((left, right) => {
+      if (left.score !== right.score) {
+        return right.score - left.score;
+      }
+      const leafLengthDelta =
+        fileNameFromPath(left.path).length - fileNameFromPath(right.path).length;
+      if (leafLengthDelta !== 0) {
+        return leafLengthDelta;
+      }
+      return left.path.localeCompare(right.path);
+    });
 }
 
 function normalizeSlashCommandName(name: unknown): string | null {
@@ -965,6 +1075,7 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
       engines,
       onSelectEngine,
       models,
+      providerModelCatalogs,
       onSelectModel,
       reasoningOptions,
       selectedEffort,
@@ -1048,28 +1159,37 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
     renderCountRef.current += 1;
     const [localAlwaysThinkingEnabled, setLocalAlwaysThinkingEnabled] =
       useState(false);
-    const hasResolvedAlwaysThinkingRef = useRef(alwaysThinkingEnabled !== undefined);
+    const hasResolvedAlwaysThinkingRef = useRef<{
+      resolved: boolean;
+      lastReported: boolean | null;
+    }>({
+      resolved: alwaysThinkingEnabled !== undefined,
+      lastReported: null,
+    });
     const [localStreamingEnabled, setLocalStreamingEnabled] = useState(
       () => readStoredStreamingEnabled(),
     );
     const [codexSpeedMode, setCodexSpeedMode] = useState<CodexSpeedMode>('unknown');
     const isCodexEngine = selectedEngine === 'codex';
     const normalizedModels = useMemo(() => {
-      if (!models || models.length === 0) {
+      return normalizeAdapterModelOptions(models);
+    }, [models]);
+    const normalizedProviderModelCatalogs = useMemo(() => {
+      if (!providerModelCatalogs) {
         return undefined;
       }
-      return models.map((modelOption) => ({
-        id: modelOption.id,
-        model: modelOption.model,
-        label: modelOption.displayName || modelOption.model || modelOption.id,
-        description:
-          modelOption.model &&
-          modelOption.model !== modelOption.displayName
-            ? modelOption.model
-            : undefined,
-        source: modelOption.source,
-      }));
-    }, [models]);
+      const catalogs: ProviderModelCatalogs = {};
+      (Object.entries(providerModelCatalogs) as [
+        EngineType,
+        AdapterModelOption[] | undefined,
+      ][]).forEach(([engineType, catalog]) => {
+        const normalizedCatalog = normalizeAdapterModelOptions(catalog);
+        if (normalizedCatalog && normalizedCatalog.length > 0) {
+          catalogs[engineType] = normalizedCatalog;
+        }
+      });
+      return Object.keys(catalogs).length > 0 ? catalogs : undefined;
+    }, [providerModelCatalogs]);
     const resolvedSelectedModelId = useMemo(() => {
       if (selectedModelId) {
         return selectedModelId;
@@ -1098,7 +1218,7 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
         return;
       }
       let cancelled = false;
-      hasResolvedAlwaysThinkingRef.current = false;
+      hasResolvedAlwaysThinkingRef.current.resolved = false;
       const loadActiveThinkingSetting = async () => {
         try {
           const providers = (await getClaudeProviders()) as ClaudeProviderLike[];
@@ -1109,20 +1229,30 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
           const activeProviderThinking =
             activeProvider?.settingsConfig?.alwaysThinkingEnabled;
           if (typeof activeProviderThinking === 'boolean') {
-            hasResolvedAlwaysThinkingRef.current = true;
+            hasResolvedAlwaysThinkingRef.current.resolved = true;
             setLocalAlwaysThinkingEnabled(
               activeProviderThinking,
             );
-            onResolvedAlwaysThinkingChange?.(activeProviderThinking);
+            if (
+              hasResolvedAlwaysThinkingRef.current.lastReported !==
+              activeProviderThinking
+            ) {
+              hasResolvedAlwaysThinkingRef.current.lastReported =
+                activeProviderThinking;
+              onResolvedAlwaysThinkingChange?.(activeProviderThinking);
+            }
             return;
           }
           const enabled = await getClaudeAlwaysThinkingEnabled();
           if (cancelled) {
             return;
           }
-          hasResolvedAlwaysThinkingRef.current = true;
+          hasResolvedAlwaysThinkingRef.current.resolved = true;
           setLocalAlwaysThinkingEnabled(enabled);
-          onResolvedAlwaysThinkingChange?.(enabled);
+          if (hasResolvedAlwaysThinkingRef.current.lastReported !== enabled) {
+            hasResolvedAlwaysThinkingRef.current.lastReported = enabled;
+            onResolvedAlwaysThinkingChange?.(enabled);
+          }
         } catch {
           // Keep the state unresolved on read failure so send-time logic does
           // not accidentally force-disable Claude thinking before settings load.
@@ -1132,7 +1262,11 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
       return () => {
         cancelled = true;
       };
-    }, [alwaysThinkingEnabled, isCodexEngine, onResolvedAlwaysThinkingChange]);
+    }, [
+      alwaysThinkingEnabled,
+      isCodexEngine,
+      onResolvedAlwaysThinkingChange,
+    ]);
 
     useEffect(() => {
       appendComposerRenderBudgetDiagnostic({
@@ -1184,7 +1318,7 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
         if (isCodexEngine) {
           return;
         }
-        hasResolvedAlwaysThinkingRef.current = true;
+        hasResolvedAlwaysThinkingRef.current.resolved = true;
         setLocalAlwaysThinkingEnabled(enabled);
         if (onToggleThinking) {
           onToggleThinking(enabled);
@@ -1267,11 +1401,18 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
       }
       if (
         alwaysThinkingEnabled === undefined &&
-        !hasResolvedAlwaysThinkingRef.current
+        !hasResolvedAlwaysThinkingRef.current.resolved
       ) {
         return;
       }
-      onResolvedAlwaysThinkingChange?.(resolvedAlwaysThinkingEnabled);
+      if (
+        hasResolvedAlwaysThinkingRef.current.lastReported !==
+        resolvedAlwaysThinkingEnabled
+      ) {
+        hasResolvedAlwaysThinkingRef.current.lastReported =
+          resolvedAlwaysThinkingEnabled;
+        onResolvedAlwaysThinkingChange?.(resolvedAlwaysThinkingEnabled);
+      }
     }, [
       alwaysThinkingEnabled,
       isCodexEngine,
@@ -1303,6 +1444,12 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
         isFusing: q.id === fusingQueuedMessageId,
       }));
     }, [fusingQueuedMessageId, queuedMessages]);
+
+    const fullWorkspaceFileCompletionCacheRef = useRef<{
+      workspaceId: string;
+      response: unknown | null;
+      promise: Promise<unknown> | null;
+    } | null>(null);
 
     const fileCompletionProvider = useCallback(
       async (query: string, signal: AbortSignal): Promise<FileItem[]> => {
@@ -1370,6 +1517,40 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
           }
           const filesValue = (response as { files?: unknown }).files;
           return Array.isArray(filesValue) ? filesValue : [];
+        };
+        const getFullWorkspaceSnapshot = async () => {
+          if (!workspaceId) {
+            return null;
+          }
+          const cached = fullWorkspaceFileCompletionCacheRef.current;
+          if (cached?.workspaceId === workspaceId && cached.response) {
+            return cached.response;
+          }
+          if (cached?.workspaceId === workspaceId && cached.promise) {
+            return cached.promise;
+          }
+          const promise = getWorkspaceFiles(workspaceId)
+            .then((response) => {
+              const nextCache = fullWorkspaceFileCompletionCacheRef.current;
+              if (nextCache?.workspaceId === workspaceId) {
+                nextCache.response = response;
+                nextCache.promise = null;
+              }
+              return response;
+            })
+            .catch((error) => {
+              const nextCache = fullWorkspaceFileCompletionCacheRef.current;
+              if (nextCache?.workspaceId === workspaceId) {
+                nextCache.promise = null;
+              }
+              throw error;
+            });
+          fullWorkspaceFileCompletionCacheRef.current = {
+            workspaceId,
+            response: null,
+            promise,
+          };
+          return promise;
         };
         const pushFromResponse = (response: unknown) => {
           for (const dir of getResponseDirectories(response)) {
@@ -1459,26 +1640,32 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
         }
 
         // Search query without directory path: search by name across all entries
-        for (const path of sourceDirectories) {
-          const normalizedPath = normalizeCompletionSourcePath(path);
-          if (!normalizedPath) {
-            continue;
-          }
-          const name = fileNameFromPath(normalizedPath);
-          if (name.toLowerCase().includes(lowerFragment) || normalizedPath.toLowerCase().includes(lowerFragment)) {
-            pushDirectoryFromPath(normalizedPath);
-            if (results.length >= maxSuggestions) return results;
-          }
+        for (const entry of rankCompletionPaths(sourceDirectories, fragment)) {
+          pushDirectoryFromPath(entry.path);
+          if (results.length >= maxSuggestions) return results;
         }
-        for (const path of sourceFiles) {
-          const normalizedPath = normalizeCompletionSourcePath(path);
-          if (!normalizedPath) {
-            continue;
-          }
-          const name = fileNameFromPath(normalizedPath);
-          if (name.toLowerCase().includes(lowerFragment) || normalizedPath.toLowerCase().includes(lowerFragment)) {
-            pushFileFromPath(normalizedPath);
-            if (results.length >= maxSuggestions) return results;
+        for (const entry of rankCompletionPaths(sourceFiles, fragment)) {
+          pushFileFromPath(entry.path);
+          if (results.length >= maxSuggestions) return results;
+        }
+        if (workspaceId && results.length < maxSuggestions) {
+          try {
+            const fullSnapshot = await getFullWorkspaceSnapshot();
+            if (signal.aborted) {
+              throw new DOMException('Aborted', 'AbortError');
+            }
+            for (const entry of rankCompletionPaths(getResponseDirectories(fullSnapshot), fragment)) {
+              pushDirectoryFromPath(entry.path);
+              if (results.length >= maxSuggestions) return results;
+            }
+            for (const entry of rankCompletionPaths(getResponseFiles(fullSnapshot), fragment)) {
+              pushFileFromPath(entry.path);
+              if (results.length >= maxSuggestions) return results;
+            }
+          } catch (error) {
+            if ((error as Error).name === 'AbortError') {
+              throw error;
+            }
           }
         }
         return results;
@@ -1978,6 +2165,7 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
         sendShortcut={sendShortcut}
         selectedModel={resolvedSelectedModelId}
         models={normalizedModels}
+        providerModelCatalogs={normalizedProviderModelCatalogs}
         permissionMode={permissionMode}
         currentProvider={engineToProvider(selectedEngine)}
         providerProfileLabel={providerProfileLabel}

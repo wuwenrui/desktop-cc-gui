@@ -7,6 +7,7 @@ import {
 export type RuntimeReconnectHint = {
   reason: RuntimeRecoveryHintReason;
   rawMessage: string;
+  tone: "blocking" | "transient";
 };
 
 export type RuntimeReconnectRecoveryResult =
@@ -26,9 +27,20 @@ export function resolveRuntimeReconnectHint(text: string): RuntimeReconnectHint 
   if (!diagnostic?.reconnectReason) {
     return null;
   }
+  const loweredRawMessage = diagnostic.rawMessage.toLowerCase();
+  const isTransientManagedCleanup =
+    (
+      diagnostic.reconnectReason === "runtime-ended" ||
+      diagnostic.reconnectReason === "stopping-runtime-race"
+    ) &&
+    (
+      loweredRawMessage.includes("stale_reuse_cleanup") ||
+      loweredRawMessage.includes("internal_replacement")
+    );
   return {
     reason: diagnostic.reconnectReason,
     rawMessage: diagnostic.rawMessage,
+    tone: isTransientManagedCleanup ? "transient" : "blocking",
   };
 }
 

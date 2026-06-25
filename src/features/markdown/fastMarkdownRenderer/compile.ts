@@ -140,7 +140,13 @@ export async function compileFastMarkdown(
   const { cacheKey, contentHash, featureFlagFingerprint, boundedLineLimit } = createCacheKey(args);
   const cached = getCachedFastMarkdownRender(cacheKey);
   if (cached) {
-    return cached;
+    return {
+      ...cached,
+      diagnostics: {
+        ...cached.diagnostics,
+        cacheState: "hit",
+      },
+    };
   }
 
   const compileStart = performance.now();
@@ -160,8 +166,11 @@ export async function compileFastMarkdown(
   try {
     const processor = truncated ? buildBoundedProcessor() : buildProcessor();
     const mdast = processor.parse(projectedMarkdown) as MdastRoot;
+    const outlineMdast = truncated
+      ? (processor.parse(args.rawMarkdown) as MdastRoot)
+      : mdast;
 
-    outline = extractMarkdownOutline(mdast, args.bodyStartLine ?? 1);
+    outline = extractMarkdownOutline(outlineMdast, args.bodyStartLine ?? 1);
     heavyBlocks = extractHeavyBlocks(mdast, args.bodyStartLine ?? 1);
 
     const hast = (await processor.run(mdast)) as HastRoot;
@@ -220,6 +229,7 @@ export async function compileFastMarkdown(
     profile: args.rendererProfile,
     contentHash,
     cacheKey,
+    cacheState: "miss",
     compileDurationMs,
     sanitizeDurationMs,
     totalSourceLines,
@@ -264,6 +274,7 @@ function createFailureResult(failure: FailureArgs): FastMarkdownRenderResult {
     profile: failure.args.rendererProfile,
     contentHash: failure.contentHash,
     cacheKey: failure.cacheKey,
+    cacheState: "miss",
     compileDurationMs: performance.now() - failure.compileStart,
     sanitizeDurationMs: 0,
     totalSourceLines: 0,

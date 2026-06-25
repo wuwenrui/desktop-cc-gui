@@ -10,7 +10,7 @@ use crate::session_management::CodexProviderBinding;
 use crate::types::CodexProviderConfig;
 
 pub(crate) const CODEX_DISK_PROVIDER_PROFILE_ID: &str = "__disk__";
-pub(crate) const CODEX_DISK_PROVIDER_PROFILE_NAME: &str = "磁盘 .codex 配置";
+pub(crate) const CODEX_DISK_PROVIDER_PROFILE_NAME: &str = "codex-tui/default-config";
 
 impl CodexProviderBinding {
     pub(crate) fn disk() -> Self {

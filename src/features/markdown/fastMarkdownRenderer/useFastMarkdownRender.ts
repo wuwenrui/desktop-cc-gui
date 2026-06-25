@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { hookDiagnostics } from "./hookDiagnostics";
 import { compileFastMarkdownWithWorkerFallback } from "./workerAdapter";
 import { resolveFastMarkdownProfileInputs, resolveFastMarkdownRendererProfile } from "./resolveProfile";
 import type {
@@ -92,6 +93,7 @@ export function useFastMarkdownRender(
     })
       .then((result) => {
         if (cancelled || requestOrdinal !== requestOrdinalRef.current) {
+          hookDiagnostics.recordStaleVisibleDrop();
           return;
         }
         if (result.diagnostics.fallbackReason !== "none") {
@@ -116,6 +118,7 @@ export function useFastMarkdownRender(
       })
       .catch((error: unknown) => {
         if (cancelled || requestOrdinal !== requestOrdinalRef.current) {
+          hookDiagnostics.recordStaleVisibleDrop();
           return;
         }
         setState({

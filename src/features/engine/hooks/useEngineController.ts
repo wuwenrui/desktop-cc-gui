@@ -227,6 +227,21 @@ function appendGeminiPresetModels(models: EngineModelInfo[]): EngineModelInfo[] 
   return merged;
 }
 
+function mergeGeminiModels(
+  engineModels: EngineModelInfo[],
+  customModels: EngineModelInfo[],
+): EngineModelInfo[] {
+  const customGeminiIds = new Set(customModels.map((model) => model.id));
+  const mergedModels =
+    customModels.length === 0
+      ? engineModels
+      : [
+          ...customModels,
+          ...engineModels.filter((model) => !customGeminiIds.has(model.id)),
+        ];
+  return enforceGeminiDefaultModel(appendGeminiPresetModels(mergedModels));
+}
+
 function enforceGeminiDefaultModel(models: EngineModelInfo[]): EngineModelInfo[] {
   if (!models.some((model) => model.id === GEMINI_DEFAULT_MODEL_ID)) {
     return models;
@@ -757,21 +772,7 @@ export function useEngineController({
     void storageRevision;
     if (activeEngine === "gemini") {
       const customGeminiModels = readCustomGeminiModels();
-      const customGeminiIds = new Set(
-        customGeminiModels.map((model) => model.id),
-      );
-      const mergedModels =
-        customGeminiModels.length === 0
-          ? engineModels
-          : [
-              ...customGeminiModels,
-              ...engineModels.filter(
-                (model) => !customGeminiIds.has(model.id),
-              ),
-            ];
-      return enforceGeminiDefaultModel(
-        appendGeminiPresetModels(mergedModels),
-      );
+      return mergeGeminiModels(engineModels, customGeminiModels);
     }
     if (activeEngine !== "claude") {
       return engineModels.map((model) => normalizeEngineModelEntry(model));
@@ -790,6 +791,47 @@ export function useEngineController({
   const engineModelsAsOptions = useMemo((): ModelOption[] => {
     return mappedEngineModels.map(engineModelToOption);
   }, [mappedEngineModels]);
+
+  const engineModelCatalogsAsOptions = useMemo(
+    (): Partial<Record<EngineType, ModelOption[]>> => {
+      const storageRevision = customModelsVersion;
+      void storageRevision;
+      const catalogs: Partial<Record<EngineType, ModelOption[]>> = {};
+
+      for (const status of engineStatuses) {
+        if (!status.installed) {
+          continue;
+        }
+        const statusModels = status.models.map((model) =>
+          normalizeEngineModelEntry(model),
+        );
+        const baseModels =
+          status.engineType === activeEngine ? mappedEngineModels : statusModels;
+
+        let catalogModels: EngineModelInfo[];
+        if (status.engineType === "claude") {
+          catalogModels = mergeClaudeModelsPreserveDefault(
+            baseModels.map((model) => normalizeEngineModelEntry(model)),
+            readCustomClaudeModels(),
+          );
+        } else if (status.engineType === "gemini") {
+          catalogModels = mergeGeminiModels(
+            baseModels.map((model) => normalizeEngineModelEntry(model)),
+            readCustomGeminiModels(),
+          );
+        } else {
+          catalogModels = baseModels.map((model) =>
+            normalizeEngineModelEntry(model),
+          );
+        }
+
+        catalogs[status.engineType] = catalogModels.map(engineModelToOption);
+      }
+
+      return catalogs;
+    },
+    [activeEngine, customModelsVersion, engineStatuses, mappedEngineModels],
+  );
 
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
@@ -931,6 +973,7 @@ export function useEngineController({
     engineStatuses,
     engineModels,
     engineModelsAsOptions,
+    engineModelCatalogsAsOptions,
     isDetecting,
     isInitialized,
 

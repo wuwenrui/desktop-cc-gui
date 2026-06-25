@@ -7,9 +7,9 @@
 ## Current Status
 
 <!-- @@@auto:current-status -->
-- **Active File**: `journal-22.md`
-- **Total Sessions**: 841
-- **Last Active**: 2026-06-14
+- **Active File**: `journal-23.md`
+- **Total Sessions**: 911
+- **Last Active**: 2026-06-22
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,8 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-22.md` | ~618 | Active |
+| `journal-23.md` | ~1642 | Active |
+| `journal-22.md` | ~1969 | Archived |
 | `journal-21.md` | ~1970 | Archived |
 | `journal-20.md` | ~1997 | Archived |
 | `journal-19.md` | ~1989 | Archived |
@@ -50,6 +51,76 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 911 | 2026-06-22 | 稳定流式对话目录渲染 | `17ffb6b5` | `feature/v0.5.12` |
+| 910 | 2026-06-22 | 修复 Mermaid 全屏测试竞态 | `4cc6389e` | `feature/v0.5.12` |
+| 909 | 2026-06-22 | 修复供应商模型目录与 Codex 刷新断联 | `657d1351` | `feature/v0.5.12` |
+| 908 | 2026-06-22 | 移除首页最近会话入口 | `118e4eb7` | `feature/v0.5.12` |
+| 907 | 2026-06-22 | 修复 Messages Vitest OOM 与 branding gate | `39bdbb13` | `feature/v0.5.12` |
+| 906 | 2026-06-22 | 修复 Codex provider 恢复绑定 | `db554da4` | `feature/v0.5.12` |
+| 905 | 2026-06-22 | 归档 Mermaid 全屏 viewer OpenSpec | `18e0ae99` | `feature/v0.5.12` |
+| 904 | 2026-06-22 | 收口 Markdown 渲染性能优化提案 | `4f231fbd` | `feature/v0.5.12` |
+| 903 | 2026-06-22 | 修复 CI 品牌检查与文件面板测试抖动 | `ea2e348c` | `feature/v0.5.12` |
+| 902 | 2026-06-22 | Markdown 图片全屏与消息目录 | `12f99419` | `feature/v0.5.12` |
+| 901 | 2026-06-22 | Mermaid 图表全屏查看 | `4c38fa13` | `feature/v0.5.12` |
+| 900 | 2026-06-22 | 优化 release Rust 编译缓存 | `11b64eb5` | `feature/v0.5.12` |
+| 899 | 2026-06-22 | 修复 Codex conversation not found 会话恢复 | `9ed9e648` | `feature/v0.5.12` |
+| 898 | 2026-06-22 | 收紧 runtime 恢复提示展示 | `0dace55e` | `feature/v0.5.12` |
+| 897 | 2026-06-22 | 弱化可恢复 runtime 提示样式 | `b5a9d3a8` | `feature/v0.5.12` |
+| 896 | 2026-06-22 | 降低瞬态 runtime 恢复提示干扰 | `cdd3a483` | `feature/v0.5.12` |
+| 895 | 2026-06-21 | 归档 Claude 供应商与 Codex 并行运行提案 | `351c48b5` | `feature/v0.5.11` |
+| 894 | 2026-06-21 | 修复超时引导卡片失败状态 | `6d69dd8c` | `feature/v0.5.11` |
+| 893 | 2026-06-21 | 合入 Claude 供应商排序与模型拉取 | `31732a32` | `feature/v0.5.11` |
+| 892 | 2026-06-20 | 归档性能证据债务提案 | `53e5e07a` | `feature/v0.5.11` |
+| 891 | 2026-06-20 | 修复门禁脚本失败 | `1646ee5a` | `feature/v0.5.11` |
+| 890 | 2026-06-20 | 修复独立文件窗口首屏样式加载 | `dd4d7caa` | `feature/v0.5.11` |
+| 889 | 2026-06-20 | Codex 并行会话生命周期隔离加固 | `ef834bdb` | `feature/v0.5.11` |
+| 888 | 2026-06-19 | 清理文件树 Hook 依赖告警 | `223e589c` | `feature/v0.5.11` |
+| 887 | 2026-06-19 | 修正运行时提示侧栏入口和弹层 | `b5ddea13` | `feature/v0.5.11` |
+| 886 | 2026-06-19 | 修复性能归档评论权限 | `3a1de15e` | `feature/v0.5.11` |
+| 885 | 2026-06-18 | 修复性能归档门禁 | `e7837d2d` | `feature/v0.5.11` |
+| 884 | 2026-06-18 | 批量归档 v0.5.11 已验证 OpenSpec 提案 | `c486776c` | `feature/v0.5.11` |
+| 883 | 2026-06-18 | 收口 v0.5.11 性能证据边界 | `d6941daa` | `feature/v0.5.11` |
+| 882 | 2026-06-18 | 补充 Codex 恢复 cookbook | `e97d78ff` | `feature/v0.5.11` |
+| 881 | 2026-06-18 | 拆分 FileTreePanel 视图状态 | `8d1c4705` | `feature/v0.5.11` |
+| 880 | 2026-06-18 | 拆分 tauri service facade wrapper | `9c80e25c` | `feature/v0.5.11` |
+| 879 | 2026-06-18 | 收口 v0.5.11 消息恢复与性能证据 | `3f3474c0` | `feature/v0.5.11` |
+| 878 | 2026-06-18 | 修复 tauri wrapper 参数断言 | `1613366c` | `feature/v0.5.11` |
+| 877 | 2026-06-18 | 修复文件树刷新失效 | `c5fe7b17` | `feature/v0.5.11` |
+| 876 | 2026-06-18 | 稳定 Codex 默认配置冷启动首发 | `a84b801e` | `feature/v0.5.11` |
+| 875 | 2026-06-18 | 修复 Codex 默认配置首轮恢复 | `44c31fb4` | `feature/v0.5.11` |
+| 874 | 2026-06-18 | 收口：门禁噪音治理、Tauri 拆分与 AppShell 稳定性 | `1c4b4a39`, `8e68f276`, `31c0e5b3`, `cdc81b8d` | `feature/v0.5.11` |
+| 873 | 2026-06-18 | 修复流式结束窗口并升级 React | `2f1ba6d6` | `feature/v0.5.11` |
+| 872 | 2026-06-18 | 归档 Codex 首响应性能证据变更 | `ae1a41d9` | `feature/v0.5.11` |
+| 871 | 2026-06-18 | 稳定 Codex 首响应证据判定 | `f0711d44` | `feature/v0.5.11` |
+| 870 | 2026-06-18 | 细分 Codex assistant item 首响应阶段 | `9cf672e8` | `feature/v0.5.11` |
+| 869 | 2026-06-18 | 拆分 Codex 首文本前运行阶段 | `8fb58aa1` | `feature/v0.5.11` |
+| 868 | 2026-06-18 | 聚合 Codex 首文本等待证据 | `79b4c8d1` | `feature/v0.5.11` |
+| 867 | 2026-06-18 | 稳定 AppShell Claude thinking 状态上报 | `7bede17e` | `feature/v0.5.11` |
+| 866 | 2026-06-18 | v0.5.11 Codex ack 后首包延迟拆分 | `2ecbc5de` | `feature/v0.5.11` |
+| 865 | 2026-06-18 | v0.5.11 Codex turn start ack 延迟证据 | `769fa83a` | `feature/v0.5.11` |
+| 864 | 2026-06-18 | 增加 Codex first-delta 延迟证据 | `fefe5bfa` | `feature/v0.5.11` |
+| 863 | 2026-06-18 | 校准流式 turn trace 诊断口径 | `e49034be` | `feature/v0.5.11` |
+| 862 | 2026-06-18 | 收口 v0.5.11 消息流渲染优化 | `f623036b` | `feature/v0.5.11` |
+| 861 | 2026-06-18 | 记录流式输出可见延迟优化 | `1412bfcb` | `feature/v0.5.11` |
+| 860 | 2026-06-18 | 校准 v0.5.11 流式路由实测证据 | `8abe2405` | `feature/v0.5.11` |
+| 859 | 2026-06-18 | 锁定 turn completed 写出 trace summary | `364fd177` | `feature/v0.5.11` |
+| 858 | 2026-06-18 | 接通 renderer 诊断导出并校准 turn trace | `1f5c087f` | `feature/v0.5.11` |
+| 857 | 2026-06-17 | 建立 v0.5.11 性能证据门禁 | `5a330dbd` | `feature/v0.5.11` |
+| 856 | 2026-06-17 | 收口 v0.5.10 性能闭环 | `3ca3957a` | `feature/v0.5.10` |
+| 855 | 2026-06-17 | 修复 runtime 重连恢复卡片状态 | `86f3ecb3` | `feature/v0.5.10` |
+| 854 | 2026-06-17 | 合并 PR 696 供应商排序修复 | `c5fe5ea5` | `feature/v0.5.10` |
+| 853 | 2026-06-17 | 补齐稳定性归档文档 | `4e00c1ed` | `feature/v0.5.10` |
+| 852 | 2026-06-17 | 归档聊天流与长运行稳定性提案 | `94562f8a` | `feature/v0.5.10` |
+| 851 | 2026-06-17 | 收口 AppShell 运行态稳定性与 OpenSpec 归档 | `7d8b987d`, `29b835f0` | `feature/v0.5.10` |
+| 850 | 2026-06-17 | 稳定长运行客户端运行时 | `4e981689` | `feature/v0.5.10` |
+| 849 | 2026-06-17 | 修复 Apple event 诊断码快照合并 | `5f618c20` | `feature/v0.5.10` |
+| 848 | 2026-06-17 | 收敛顶栏菜单按钮 | `b1907b3b` | `feature/v0.5.10` |
+| 847 | 2026-06-16 | 补齐聊天流式渲染隔离验证 | `ae5def30` | `feature/v0.5.10` |
+| 846 | 2026-06-16 | 审核聊天流渲染隔离提案 | `536a7b5c` | `feature/v0.5.10` |
+| 845 | 2026-06-16 | 稳定 FileViewPanel 慢 git marker 测试 | `59399914` | `feature/v0.5.10` |
+| 844 | 2026-06-16 | 修复 Composer 文件引用深层路径搜索 | `3f08861b` | `feature/v0.5.10` |
+| 843 | 2026-06-16 | 修复文件树首屏滚动容器布局 | `269088b2` | `feature/v0.5.10` |
+| 842 | 2026-06-15 | 修复 Messages 测试 Suspense act 噪声 | `9f7002bf` | `bump-version-0.5.10` |
 | 841 | 2026-06-14 | 稳定 Suspense host-task teardown | `d4fcbbee5422b68c7c42e4efc9ad6099fe9fcc85` | `feature/v0.5.9` |
 | 840 | 2026-06-14 | 稳定 heavy-test-noise Suspense teardown | `ce59b8118fe1a09adc22289298c9b98c6cec8de7` | `feature/v0.5.9` |
 | 839 | 2026-06-14 | 修复 fork provider 选择测试时序 | `8c3bc5fe` | `feature/v0.5.9` |

@@ -4,6 +4,12 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import type { RequestUserInputRequest } from "../../../types";
 import { Messages } from "./Messages";
 
+vi.mock("./Markdown", () => ({
+  Markdown: ({ value, className }: { value: string; className?: string }) => (
+    <div className={className}>{value}</div>
+  ),
+}));
+
 describe("Messages history loading", () => {
   beforeAll(() => {
     if (!HTMLElement.prototype.scrollIntoView) {

@@ -11,12 +11,88 @@ const COMPOSER_BASELINE_PATH = "docs/perf/composer-baseline.json";
 const BROWSER_SCROLL_PATH = "docs/perf/long-list-browser-scroll.json";
 const REALTIME_TURN_TRACE_PATH = "docs/perf/realtime-turn-trace.json";
 const REALTIME_RUNTIME_EVIDENCE_PATH = "docs/perf/realtime-runtime-evidence.json";
+const V0511_RUNTIME_EVIDENCE_PATH = "docs/perf/v0511-runtime-evidence.json";
 const REALTIME_PROFILE_PATH = "docs/perf/realtime-profile.jsonl";
 const LARGE_FILE_WATCHLIST_PATH = ".artifacts/large-files-near-threshold.json";
+const LONGRUNNING_RUNTIME_EVIDENCE_PATH = "docs/perf/long-running-runtime-evidence.json";
 const OUTPUT_JSON_PATH = "docs/perf/runtime-evidence-gates.json";
 const OUTPUT_PERF_MARKDOWN_PATH = "docs/perf/runtime-evidence-gates.md";
 const OUTPUT_OPENSPEC_MARKDOWN_PATH = "openspec/docs/runtime-evidence-gates-2026-05-24.md";
 const CLOSURE_CHANGE_NAMES = new Set(["close-performance-iteration-2026-06"]);
+const PERF_DEBT_CLEANUP_SOURCE =
+  "openspec/changes/archive/2026-06-20-clean-up-perf-archive-readiness-debt/implementation-notes.md";
+
+const acceptedBudgetResiduals = [
+  ["S-LL-200/commitDurationP50", "release-grade-evidence-collection", "Need owner-approved long-list commit budget by row count."],
+  ["S-LL-200/commitDurationP95", "release-grade-evidence-collection", "Need owner-approved long-list commit budget by row count."],
+  ["S-LL-200/firstPaintAfterMount", "release-grade-evidence-collection", "Browser/runtime first-paint budget must be defined before hard gate."],
+  ["S-LL-500/commitDurationP50", "release-grade-evidence-collection", "Need owner-approved long-list commit budget by row count."],
+  ["S-LL-500/commitDurationP95", "release-grade-evidence-collection", "Need owner-approved long-list commit budget by row count."],
+  ["S-LL-500/firstPaintAfterMount", "release-grade-evidence-collection", "Browser/runtime first-paint budget must be defined before hard gate."],
+  ["S-LL-1000/commitDurationP50", "release-grade-evidence-collection", "Need owner-approved long-list commit budget by row count."],
+  ["S-LL-1000/commitDurationP95", "release-grade-evidence-collection", "Need owner-approved long-list commit budget by row count."],
+  ["S-LL-1000/firstPaintAfterMount", "release-grade-evidence-collection", "Browser/runtime first-paint budget must be defined before hard gate."],
+  ["S-CI-50/compositionToCommit", "input-latency-budget", "Need IME/runtime composition-to-commit budget source."],
+  ["S-CI-100-IME/compositionToCommit", "input-latency-budget", "Need IME/runtime composition-to-commit budget source."],
+  ["S-RS-PE/dedupHitRatio", "realtime-runtime-evidence", "Diagnostic ratio remains release-debt until owner approves a hard budget."],
+  ["S-RS-PE/assemblerLatency", "realtime-runtime-evidence", "Need runtime assembler latency budget source."],
+  ["S-CS-COLD/firstPaintMs", "release-grade-evidence-collection", "Need measured Tauri/webview first-paint timing before setting hard budget."],
+  ["S-CS-COLD/firstInteractiveMs", "release-grade-evidence-collection", "Need measured Tauri/webview first-interactive timing before setting hard budget."],
+].map(([record, owner, reason]) => ({
+  record,
+  owner,
+  source: PERF_DEBT_CLEANUP_SOURCE,
+  reason,
+  releaseDecision: "accepted-normal-mode-deferral",
+  nextAction: "Keep release-mode evidence strict; replace this accepted residual with owner-approved budget metadata when measured runtime evidence exists.",
+}));
+
+const acceptedProxyEvidenceDebt = {
+  status: "accepted-normal-mode-deferral",
+  owner: "runtime-perf-evidence-classification",
+  source: PERF_DEBT_CLEANUP_SOURCE,
+  reason:
+    "The current v0.5.11 evidence mix intentionally retains fixture/jsdom proxy records as regression baselines while runtime producers are added incrementally.",
+  releaseDecision:
+    "Normal-mode archive readiness may pass with this accepted disposition; release mode remains stricter and still reports release-required proxy or unsupported evidence.",
+  nextAction:
+    "Promote release-relevant proxy records to measured Tauri/WebView evidence before release-grade archive.",
+};
+
+const acceptedUnsupportedEvidence = [
+  {
+    record: "S-CS-COLD/firstPaintMs",
+    owner: "release-grade-evidence-collection",
+    platformQualifier: "supported Tauri/WebView startup marker runner unavailable in current CI/local evidence set",
+    reason: "Cold-start startup marker snapshot was not provided; bundle baseline is recorded separately.",
+    nextAction: "Collect real Tauri webview first-paint timing on a supported runner.",
+  },
+  {
+    record: "S-CS-COLD/firstInteractiveMs",
+    owner: "release-grade-evidence-collection",
+    platformQualifier: "supported Tauri/WebView startup marker runner unavailable in current CI/local evidence set",
+    reason: "Cold-start startup marker snapshot was not provided; bundle baseline is recorded separately.",
+    nextAction: "Collect real Tauri webview first-interactive timing on a supported runner.",
+  },
+  {
+    record: "S-LR-101/sampledOsChildLivenessAfterClose",
+    owner: "long-running-runtime-evidence",
+    platformQualifier: "cross-platform OS child process sampler unavailable",
+    reason: "Runtime tracks registered handles, but does not yet ship a portable OS child liveness sampler.",
+    nextAction: "Add or explicitly waive a platform-safe child process sampler before release-grade closure.",
+  },
+  {
+    record: "S-LR-200/moduleSwitchP95Ms",
+    owner: "long-running-runtime-evidence",
+    platformQualifier: "Tauri/WebView module-switch trace unavailable in jsdom evidence",
+    reason: "jsdom cannot produce real module switch latency.",
+    nextAction: "Collect module switch P95 from a supported Tauri/WebView trace.",
+  },
+].map((entry) => ({
+  ...entry,
+  source: PERF_DEBT_CLEANUP_SOURCE,
+  releaseDecision: "accepted-normal-mode-deferral",
+}));
 
 const compatibilityPaths = [
   {
@@ -127,6 +203,12 @@ function metricReason(metric, evidenceClass) {
   if (metric.unsupportedReason) {
     return metric.unsupportedReason;
   }
+  if (evidenceClass === "proxy" && metric.measurementBlocker) {
+    const sourceRequirement = metric.requiredSourceArtifact
+      ? ` Required source artifact: ${metric.requiredSourceArtifact}`
+      : "";
+    return `${metric.notes ?? "Proxy evidence retained."} Measurement blocker: ${metric.measurementBlocker}${sourceRequirement}`;
+  }
   if (metric.notes) {
     return metric.notes;
   }
@@ -147,6 +229,9 @@ function metricNextAction(metric, evidenceClass) {
     return "Correlate replay metrics with runtime visible-lag and terminal-pressure traces.";
   }
   if (evidenceClass === "proxy") {
+    if (metric.requiredSourceArtifact) {
+      return `Keep as regression baseline until available: ${metric.requiredSourceArtifact}`;
+    }
     return "Keep as regression baseline and add runtime/browser evidence before release-grade closure.";
   }
   if (evidenceClass === "unsupported") {
@@ -199,6 +284,10 @@ function buildPerfEvidence(fragments) {
 
 function findMetric(perfEvidence, scenario, metric) {
   return perfEvidence.find((entry) => entry.scenario === scenario && entry.metric === metric);
+}
+
+function hasMetricValue(...metrics) {
+  return metrics.some((metric) => metric?.value !== null && metric?.value !== undefined);
 }
 
 function normalizeEvidenceClass(value, fallback = "proxy") {
@@ -549,6 +638,10 @@ function buildRealtimeInputRenderBudgetSummary(perfEvidence) {
   const prepareThreadItemsCallRate = findMetric(perfEvidence, "S-IO-RR", "prepareThreadItems_calls_per_1000_delta");
   const reducerFlush = findMetric(perfEvidence, "S-IO-RR", "thread_reducer_flush_ms_p95");
   const routeDuration = findMetric(perfEvidence, "S-IO-RR", "realtime_delta_route_ms_p95");
+  const hasProducerValue = hasMetricValue(prepareThreadItemsCallRate, reducerFlush, routeDuration);
+  const hasAllProducerValues = hasMetricValue(prepareThreadItemsCallRate)
+    && hasMetricValue(reducerFlush)
+    && hasMetricValue(routeDuration);
   return {
     diagnosticsLabel: "perf.realtime.input-render-budget",
     scenarios: ["S-IO-RR"],
@@ -572,8 +665,16 @@ function buildRealtimeInputRenderBudgetSummary(perfEvidence) {
       ?? reducerFlush?.evidenceClass
       ?? routeDuration?.evidenceClass
       ?? "unsupported",
-    reason: "Streaming fixture needed to populate reducer fast-path evidence; baseline scenarios are added by this change.",
-    nextAction: "Wire prepareThreadItems call counter and reducer flush timing into the realtime replay fixture.",
+    reason: hasAllProducerValues
+      ? "Producer artifact captures reducer fast-path and realtime route timing proxy evidence."
+      : hasProducerValue
+        ? "Producer artifact is present; unavailable timing sub-metrics remain explicitly unsupported."
+        : "Streaming fixture needed to populate reducer fast-path evidence; baseline scenarios are added by this change.",
+    nextAction: hasAllProducerValues
+      ? "Promote proxy reducer and route timing to measured Tauri/WebView evidence before release-grade closure."
+      : hasProducerValue
+        ? "Promote reducer flush and realtime route timing from unsupported to proxy/measured when timing producers are available."
+        : "Wire prepareThreadItems call counter and reducer flush timing into the realtime replay fixture.",
   };
 }
 
@@ -582,6 +683,7 @@ function buildBackendFileIoIsolationSummary(perfEvidence) {
   const asyncStall = findMetric(perfEvidence, "S-IO-FS", "file_io_async_worker_stall_ms_p95");
   const poolCalls = findMetric(perfEvidence, "S-IO-FS", "file_io_blocking_pool_call_count");
   const tauriDuringStream = findMetric(perfEvidence, "S-IO-FS", "tauri_command_during_stream_ms_p95");
+  const firstReason = wallP95?.reason ?? asyncStall?.reason ?? poolCalls?.reason ?? tauriDuringStream?.reason;
   return {
     diagnosticsLabel: "perf.backend.file-io-isolation",
     scenarios: ["S-IO-FS"],
@@ -609,7 +711,7 @@ function buildBackendFileIoIsolationSummary(perfEvidence) {
       ?? poolCalls?.evidenceClass
       ?? tauriDuringStream?.evidenceClass
       ?? "unsupported",
-    reason: "Blocking pool call counter and async-worker stall probe will be added by the file I/O isolation step.",
+    reason: firstReason ?? "Blocking pool call counter and async-worker stall probe will be added by the file I/O isolation step.",
     nextAction: "Run blocking pool call counter and async-worker stall probe in a 10MB read/write fixture during streaming.",
   };
 }
@@ -619,6 +721,7 @@ function buildFileChangeEventDebounceSummary(perfEvidence) {
   const emit = findMetric(perfEvidence, "S-IO-FC", "fs_event_emitted_per_sec");
   const samePath = findMetric(perfEvidence, "S-IO-FC", "fs_event_same_path_coalesce_ratio");
   const emptyBatch = findMetric(perfEvidence, "S-IO-FC", "fs_event_empty_batch_emit_count");
+  const hasProducerValue = hasMetricValue(raw, emit, samePath, emptyBatch);
   return {
     diagnosticsLabel: "perf.file-change.debounce",
     scenarios: ["S-IO-FC"],
@@ -646,8 +749,12 @@ function buildFileChangeEventDebounceSummary(perfEvidence) {
       ?? samePath?.evidenceClass
       ?? emptyBatch?.evidenceClass
       ?? "unsupported",
-    reason: "Debounce emitter is added by the file watcher debounce step; current fixture does not yet produce same-path burst events.",
-    nextAction: "Generate a 1000-event same-path burst fixture and capture raw vs emitted counts.",
+    reason: hasProducerValue
+      ? "Producer artifact captures same-path burst debounce evidence."
+      : "Debounce emitter is added by the file watcher debounce step; current fixture does not yet produce same-path burst events.",
+    nextAction: hasProducerValue
+      ? "Promote proxy burst evidence to Rust/runtime measured evidence when a native producer is available."
+      : "Generate a 1000-event same-path burst fixture and capture raw vs emitted counts.",
   };
 }
 
@@ -657,6 +764,12 @@ function buildAppServerEventBatchingSummary(perfEvidence) {
   const route = findMetric(perfEvidence, "S-IO-AS", "app_server_event_route_ms_p95");
   const dispatches = findMetric(perfEvidence, "S-IO-AS", "realtime_reducer_dispatches_per_1000_delta");
   const longTasks = findMetric(perfEvidence, "S-IO-AS", "main_thread_long_task_count_during_stream");
+  const hasProducerValue = hasMetricValue(rawRate, ipcRate, route, dispatches, longTasks);
+  const hasAllProducerValues = hasMetricValue(rawRate)
+    && hasMetricValue(ipcRate)
+    && hasMetricValue(route)
+    && hasMetricValue(dispatches)
+    && hasMetricValue(longTasks);
   return {
     diagnosticsLabel: "perf.app-server-event.batching",
     scenarios: ["S-IO-AS"],
@@ -688,8 +801,16 @@ function buildAppServerEventBatchingSummary(perfEvidence) {
       ?? dispatches?.evidenceClass
       ?? longTasks?.evidenceClass
       ?? "unsupported",
-    reason: "App server event batching emitter and batch-aware route are added by the batching step.",
-    nextAction: "Capture raw vs IPC emit divergence and reducer dispatch count in a multi-workspace codex streaming fixture.",
+    reason: hasAllProducerValues
+      ? "Producer artifact captures raw-vs-IPC batching, route timing, reducer dispatch, and long-task proxy evidence."
+      : hasProducerValue
+        ? "Producer artifact captures raw-vs-IPC batching evidence; unavailable route/long-task sub-metrics remain explicit."
+        : "App server event batching emitter and batch-aware route are added by the batching step.",
+    nextAction: hasAllProducerValues
+      ? "Promote proxy route timing and long-task count to measured browser/Tauri evidence before release-grade closure."
+      : hasProducerValue
+        ? "Add route-duration and browser long-task producers before claiming release-grade batching evidence."
+        : "Capture raw vs IPC emit divergence and reducer dispatch count in a multi-workspace codex streaming fixture.",
   };
 }
 
@@ -698,6 +819,7 @@ function buildFrontendPropChainStabilitySummary(perfEvidence) {
   const sidebarRenders = findMetric(perfEvidence, "S-IO-FP", "sidebar_render_count_per_streaming_minute");
   const rowRerender = findMetric(perfEvidence, "S-IO-FP", "thread_row_rerender_count_per_1000_delta");
   const layoutRecompute = findMetric(perfEvidence, "S-IO-FP", "layout_nodes_recompute_count_per_1000_delta");
+  const firstReason = composerRenders?.reason ?? sidebarRenders?.reason ?? rowRerender?.reason ?? layoutRecompute?.reason;
   return {
     diagnosticsLabel: "perf.frontend.prop-chain-stability",
     scenarios: ["S-IO-FP"],
@@ -722,7 +844,7 @@ function buildFrontendPropChainStabilitySummary(perfEvidence) {
       ?? rowRerender?.evidenceClass
       ?? layoutRecompute?.evidenceClass
       ?? "unsupported",
-    reason: "Domain context split and scoped status lookup are added by the prop chain stability step; render counters need source.",
+    reason: firstReason ?? "Domain context split and scoped status lookup are added by the prop chain stability step; render counters need source.",
     nextAction: "Add Profiler-based render counters or React Profiler API capture during the streaming fixture.",
   };
 }
@@ -773,6 +895,9 @@ function buildArchiveReadiness(openSpecState) {
     completed,
     previousArchiveContext,
     inProgress,
+    acceptedBudgetResiduals,
+    acceptedProxyEvidenceDebt,
+    acceptedUnsupportedEvidence,
     error: openSpecState?.error ?? null,
   };
 }
@@ -994,6 +1119,29 @@ function createOpenSpecMarkdown(report) {
       lines.push(`- ${change.name}: ${change.tasks}, ${change.recommendation}. ${change.qualifier}`);
     }
   }
+  if (report.archiveReadiness.acceptedBudgetResiduals?.length > 0) {
+    lines.push("", "## Accepted Budget Residuals", "");
+    lines.push("| Record | Owner | Decision | Next Action |");
+    lines.push("|---|---|---|---|");
+    for (const entry of report.archiveReadiness.acceptedBudgetResiduals) {
+      lines.push(`| ${markdownCell(entry.record)} | ${markdownCell(entry.owner)} | ${markdownCell(entry.releaseDecision)} | ${markdownCell(entry.nextAction)} |`);
+    }
+  }
+  if (report.archiveReadiness.acceptedProxyEvidenceDebt) {
+    lines.push("", "## Accepted Proxy Evidence Debt", "");
+    lines.push(`- Status: ${report.archiveReadiness.acceptedProxyEvidenceDebt.status}`);
+    lines.push(`- Owner: ${report.archiveReadiness.acceptedProxyEvidenceDebt.owner}`);
+    lines.push(`- Decision: ${report.archiveReadiness.acceptedProxyEvidenceDebt.releaseDecision}`);
+    lines.push(`- Next action: ${report.archiveReadiness.acceptedProxyEvidenceDebt.nextAction}`);
+  }
+  if (report.archiveReadiness.acceptedUnsupportedEvidence?.length > 0) {
+    lines.push("", "## Accepted Unsupported Evidence", "");
+    lines.push("| Record | Owner | Platform Qualifier | Next Action |");
+    lines.push("|---|---|---|---|");
+    for (const entry of report.archiveReadiness.acceptedUnsupportedEvidence) {
+      lines.push(`| ${markdownCell(entry.record)} | ${markdownCell(entry.owner)} | ${markdownCell(entry.platformQualifier)} | ${markdownCell(entry.nextAction)} |`);
+    }
+  }
   lines.push("", "## In Progress", "");
   if (report.archiveReadiness.inProgress.length === 0) {
     lines.push("- No in-progress active changes.");
@@ -1026,6 +1174,8 @@ async function main() {
   const browserScroll = await readJsonIfExists(BROWSER_SCROLL_PATH);
   const realtimeTurnTrace = await readJsonIfExists(REALTIME_TURN_TRACE_PATH);
   const realtimeRuntimeEvidence = await readJsonIfExists(REALTIME_RUNTIME_EVIDENCE_PATH);
+  const v0511RuntimeEvidence = await readJsonIfExists(V0511_RUNTIME_EVIDENCE_PATH);
+  const longrunningRuntimeEvidence = await readJsonIfExists(LONGRUNNING_RUNTIME_EVIDENCE_PATH);
   const realtimeProfile = await readJsonlIfExists(REALTIME_PROFILE_PATH);
   const largeFileReport = await readJsonIfExists(LARGE_FILE_WATCHLIST_PATH);
   const openSpecState = runJson("openspec", ["list", "--json"]);
@@ -1034,6 +1184,8 @@ async function main() {
     { path: COMPOSER_BASELINE_PATH, fragment: composerBaseline },
     { path: BROWSER_SCROLL_PATH, fragment: browserScroll },
     { path: REALTIME_RUNTIME_EVIDENCE_PATH, fragment: realtimeRuntimeEvidence },
+    { path: V0511_RUNTIME_EVIDENCE_PATH, fragment: v0511RuntimeEvidence },
+    { path: LONGRUNNING_RUNTIME_EVIDENCE_PATH, fragment: longrunningRuntimeEvidence },
   ]);
   performanceEvidence.push(...buildRealtimeProfileEvidence(realtimeProfile));
   // Enrich baseline rows in place; the function mutates and returns the same array.
@@ -1047,6 +1199,8 @@ async function main() {
       browserScroll: existsSync(repoPath(BROWSER_SCROLL_PATH)) ? BROWSER_SCROLL_PATH : null,
       realtimeTurnTrace: existsSync(repoPath(REALTIME_TURN_TRACE_PATH)) ? REALTIME_TURN_TRACE_PATH : null,
       realtimeRuntimeEvidence: existsSync(repoPath(REALTIME_RUNTIME_EVIDENCE_PATH)) ? REALTIME_RUNTIME_EVIDENCE_PATH : null,
+      v0511RuntimeEvidence: existsSync(repoPath(V0511_RUNTIME_EVIDENCE_PATH)) ? V0511_RUNTIME_EVIDENCE_PATH : null,
+      longrunningRuntimeEvidence: existsSync(repoPath(LONGRUNNING_RUNTIME_EVIDENCE_PATH)) ? LONGRUNNING_RUNTIME_EVIDENCE_PATH : null,
       realtimeProfile: existsSync(repoPath(REALTIME_PROFILE_PATH)) ? REALTIME_PROFILE_PATH : null,
       largeFileWatchlist: existsSync(repoPath(LARGE_FILE_WATCHLIST_PATH)) ? LARGE_FILE_WATCHLIST_PATH : null,
       openSpec: "openspec list --json",
@@ -1086,6 +1240,9 @@ export const runtimeEvidenceReportInternals = {
   buildRendererResourceSummary,
   buildRealtimeSummary,
   buildRealtimeTraceBudgets,
+  buildRealtimeInputRenderBudgetSummary,
+  buildFileChangeEventDebounceSummary,
+  buildBackendFileIoIsolationSummary,
 };
 
 const isDirectExecution =

@@ -36,3 +36,12 @@ None.
 - Affected code: `src/features/files/components/FileTreePanel.tsx`, `src/features/files/components/FileViewPanel.tsx`, `src/features/layout/hooks/useLayoutNodes.tsx`, `src/features/app/hooks/useGitPanelController.ts`, `src/app-shell.tsx`, `src/router.tsx`, 以及新的 detached file explorer window 组件与状态协调层。
 - Affected systems: Tauri multi-window lifecycle、window-scoped route/render、workspace file polling 策略、跨窗口状态同步协议、右侧 panel 与独立窗口并存规则、相关 i18n 和测试。
 - Dependencies: 复用现有 Tauri window API 与现有文件浏览实现，不计划为本次提案引入新的第三方依赖。
+
+## Follow-up Notes
+
+### 2026-06-20: Detached shell style loading regression
+
+- Symptom: 独立文件窗口在未选择文件的首屏退回主窗口 `.app` grid 布局，出现左侧空列、窗口标题与文件树位置异常；正常状态应显示 detached menubar、左侧文件树、resizer 与右侧空态说明。
+- Root cause: `detached-file-explorer.css` 只通过 `FileViewPanel -> loadFileViewStyles()` 间接加载；当 detached window 首屏没有 active file 时，`FileViewPanel` 不会 mount，窗口 shell 专属 CSS 因此缺失。
+- Fix direction: 在 `DetachedFileExplorerWindow` root mount 时直接加载 detached shell styles，并保留 `FileViewPanel` 既有样式加载链路作为兼容，不修改 window label、session payload、polling、file open 或 file tree 行为。
+- Validation: `DetachedFileExplorerWindow.test.tsx` 锁定 root style loader contract，避免 detached shell 再次依赖条件子组件加载 CSS。

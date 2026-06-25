@@ -7,6 +7,7 @@ import {
   completeTurnTrace,
   listTurnTraceSummaries,
   noteTurnBatchFlushBoundary,
+  noteTurnDeltaIngress,
   noteTurnFirstEngineDeltaIngress,
   noteTurnFirstVisibleRowRender,
   noteTurnFirstVisibleTextGrowth,
@@ -233,6 +234,8 @@ export function runTurnTraceReplay(events: RealtimeReplayEvent[]): TurnTraceRepl
           state.firstVisibleRowAt = atMs + TOOL_FIRST_VISIBLE_ROW_AFTER_MS;
           noteTurnFirstVisibleRowRender(state.dimensions, state.firstVisibleRowAt);
         }
+      } else {
+        noteTurnDeltaIngress(state.dimensions, atMs);
       }
       noteTurnReducerCommit({
         dimensions: state.dimensions,

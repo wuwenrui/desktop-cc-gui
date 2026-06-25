@@ -90,6 +90,7 @@ function createRenderResult(contentHash: string, html: string): FastMarkdownRend
       profile: "fast-html",
       contentHash,
       cacheKey,
+      cacheState: "miss",
       compileDurationMs: 1,
       sanitizeDurationMs: 1,
       totalSourceLines: 1,

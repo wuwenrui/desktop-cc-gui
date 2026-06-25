@@ -59,13 +59,17 @@ export function RuntimeReconnectCard({
       retryMessageUnavailable ||
       !threadId ||
       !onRecoverThreadRuntimeAndResend;
+  const retryMessageSignature = retryMessage
+    ? JSON.stringify([retryMessage.text, retryMessage.images ?? []])
+    : "none";
+  const isTransientCleanup = hint.tone === "transient";
 
   useEffect(() => {
     setIsReconnectRunning(false);
     setReconnectStatus("idle");
     setLastAction("reconnect");
     setReconnectErrorDetail(null);
-  }, [hint.rawMessage, retryMessage, threadId, workspaceId]);
+  }, [hint.rawMessage, retryMessageSignature, threadId, workspaceId]);
 
   const handleReconnectRuntime = useCallback(async (mode: "reconnect" | "resend") => {
     if (isReconnectRunning) {
@@ -247,16 +251,22 @@ export function RuntimeReconnectCard({
 
   const description = requiresThreadRecovery
     ? t("messages.threadRecoveryThreadNotFound")
+    : isTransientCleanup
+      ? t("messages.runtimeReconnectTransientCleanup")
     : hint.reason === "recovery-quarantined"
       ? t("messages.runtimeReconnectQuarantined")
     : hint.reason === "runtime-ended"
       ? t("messages.runtimeReconnectEnded")
     : hint.reason === "broken-pipe"
       ? t("messages.runtimeReconnectBrokenPipe")
+    : hint.reason === "stopping-runtime-race"
+      ? t("messages.runtimeReconnectStoppingRace")
       : t("messages.runtimeReconnectWorkspaceNotConnected");
   const title = requiresThreadRecovery
     ? t("messages.threadRecoveryTitle")
-    : t("messages.runtimeReconnectTitle");
+    : isTransientCleanup
+      ? t("messages.runtimeReconnectTransientTitle")
+      : t("messages.runtimeReconnectTitle");
   const recoveryRecommendation = requiresThreadRecovery
     ? t("messages.threadRecoveryRecommendation")
     : null;
@@ -286,9 +296,14 @@ export function RuntimeReconnectCard({
   const failedLabel = requiresThreadRecovery
     ? t("messages.threadRecoveryFailed")
     : t("messages.runtimeReconnectFailed");
+  const showDiagnosticDetail = !isTransientCleanup;
 
   return (
-    <div className="message-runtime-recovery-card" role="group" aria-label={title}>
+    <div
+      className={`message-runtime-recovery-card${isTransientCleanup ? " is-transient" : ""}`}
+      role="group"
+      aria-label={title}
+    >
       <div className="message-runtime-recovery-header">
         <Terminal className="message-runtime-recovery-icon" size={15} aria-hidden />
         <div className="message-runtime-recovery-copy">
@@ -331,14 +346,16 @@ export function RuntimeReconnectCard({
           {recoveryRecommendation}
         </div>
       ) : null}
-      <div className="message-runtime-recovery-detail">
-        {recoveryDetailLabel ? (
-          <span className="message-runtime-recovery-detail-label">
-            {recoveryDetailLabel}
-          </span>
-        ) : null}
-        <span>{hint.rawMessage}</span>
-      </div>
+      {showDiagnosticDetail ? (
+        <div className="message-runtime-recovery-detail">
+          {recoveryDetailLabel ? (
+            <span className="message-runtime-recovery-detail-label">
+              {recoveryDetailLabel}
+            </span>
+          ) : null}
+          <span>{hint.rawMessage}</span>
+        </div>
+      ) : null}
       {showReconnectUnavailable ? (
         <div className="message-runtime-recovery-status is-error" aria-live="polite">
           {unavailableLabel}

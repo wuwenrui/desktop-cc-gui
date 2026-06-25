@@ -21,6 +21,55 @@ describe("threadReducer", () => {
     expect(next.threadStatusById["thread-1"]?.isProcessing).toBe(false);
   });
 
+  it("does not churn state when selecting an already active read thread", () => {
+    const selected = threadReducer(initialState, {
+      type: "setActiveThreadId",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+    });
+
+    const repeated = threadReducer(selected, {
+      type: "setActiveThreadId",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+    });
+
+    expect(repeated).toBe(selected);
+  });
+
+  it("clears unread on active selection once and then becomes idempotent", () => {
+    const selected = threadReducer(initialState, {
+      type: "setActiveThreadId",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+    });
+    const unread: ThreadState = {
+      ...selected,
+      threadStatusById: {
+        ...selected.threadStatusById,
+        "thread-1": {
+          ...selected.threadStatusById["thread-1"]!,
+          hasUnread: true,
+        },
+      },
+    };
+
+    const cleared = threadReducer(unread, {
+      type: "setActiveThreadId",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+    });
+    const clearedAgain = threadReducer(cleared, {
+      type: "setActiveThreadId",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+    });
+
+    expect(cleared).not.toBe(unread);
+    expect(cleared.threadStatusById["thread-1"]?.hasUnread).toBe(false);
+    expect(clearedAgain).toBe(cleared);
+  });
+
   it("preserves codex provider binding when a thread list refresh omits provider metadata", () => {
     const withProvider = threadReducer(initialState, {
       type: "ensureThread",
@@ -57,6 +106,43 @@ describe("threadReducer", () => {
     });
   });
 
+  it("does not churn state for semantically identical thread list refreshes", () => {
+    const thread: ThreadSummary = {
+      id: "thread-provider-a",
+      name: "3+3",
+      updatedAt: 20,
+      engineSource: "codex",
+      threadKind: "native",
+      nativeThreadIds: ["native-thread-a"],
+      autoSession: {
+        sessionPurpose: "pull-request-question",
+        visibility: "system-auto",
+        ownerFeature: "git",
+        autoArchive: false,
+        createdBy: "system",
+      },
+    };
+    const loaded = threadReducer(initialState, {
+      type: "setThreads",
+      workspaceId: "ws-1",
+      threads: [thread],
+    });
+
+    const refreshed = threadReducer(loaded, {
+      type: "setThreads",
+      workspaceId: "ws-1",
+      threads: [
+        {
+          ...thread,
+          nativeThreadIds: [...(thread.nativeThreadIds ?? [])],
+          autoSession: thread.autoSession ? { ...thread.autoSession } : null,
+        },
+      ],
+    });
+
+    expect(refreshed).toBe(loaded);
+  });
+
   it("does not churn state when ensureThread repeats identical provider metadata", () => {
     const withProvider = threadReducer(initialState, {
       type: "ensureThread",
@@ -81,6 +167,47 @@ describe("threadReducer", () => {
     });
 
     expect(repeated).toBe(withProvider);
+  });
+
+  it("does not churn state for repeated thread list status values", () => {
+    const loading = threadReducer(initialState, {
+      type: "setThreadListLoading",
+      workspaceId: "ws-1",
+      isLoading: true,
+    });
+    const loadingAgain = threadReducer(loading, {
+      type: "setThreadListLoading",
+      workspaceId: "ws-1",
+      isLoading: true,
+    });
+
+    expect(loadingAgain).toBe(loading);
+
+    const paging = threadReducer(loading, {
+      type: "setThreadListPaging",
+      workspaceId: "ws-1",
+      isLoading: true,
+    });
+    const pagingAgain = threadReducer(paging, {
+      type: "setThreadListPaging",
+      workspaceId: "ws-1",
+      isLoading: true,
+    });
+
+    expect(pagingAgain).toBe(paging);
+
+    const cursor = threadReducer(paging, {
+      type: "setThreadListCursor",
+      workspaceId: "ws-1",
+      cursor: "cursor-1",
+    });
+    const cursorAgain = threadReducer(cursor, {
+      type: "setThreadListCursor",
+      workspaceId: "ws-1",
+      cursor: "cursor-1",
+    });
+
+    expect(cursorAgain).toBe(cursor);
   });
 
   it("fills missing provider metadata on an existing codex thread", () => {

@@ -125,6 +125,72 @@ describe("useComposerAutocompleteState", () => {
     ]);
   });
 
+  it("searches nested files by basename when @ query has no slash", () => {
+    const text = "看看 @App";
+    const selectionStart = text.length;
+    const textareaRef = createTextareaRef();
+
+    const { result } = renderHook(() =>
+      useComposerAutocompleteState({
+        text,
+        selectionStart,
+        disabled: false,
+        skills: [],
+        prompts: [],
+        files: [
+          "packages/web/src/App.tsx",
+          "src/app-shell.tsx",
+          "src/bootstrap.ts",
+          "docs/application-notes.md",
+        ],
+        directories: ["packages", "packages/web", "src", "docs"],
+        textareaRef,
+        setText: vi.fn(),
+        setSelectionStart: vi.fn(),
+      }),
+    );
+
+    expect(result.current.isAutocompleteOpen).toBe(true);
+    expect(result.current.autocompleteMatches.map((item) => item.label)).toEqual([
+      "packages/web/src/App.tsx",
+      "src/app-shell.tsx",
+      "docs/application-notes.md",
+    ]);
+  });
+
+  it("searches nested directories by folder name when @ query has no slash", () => {
+    const text = "看看 @components";
+    const selectionStart = text.length;
+    const textareaRef = createTextareaRef();
+
+    const { result } = renderHook(() =>
+      useComposerAutocompleteState({
+        text,
+        selectionStart,
+        disabled: false,
+        skills: [],
+        prompts: [],
+        files: ["src/features/composer/components/Composer.tsx"],
+        directories: [
+          "src",
+          "src/features",
+          "src/features/composer",
+          "src/features/composer/components",
+          "src/components",
+        ],
+        textareaRef,
+        setText: vi.fn(),
+        setSelectionStart: vi.fn(),
+      }),
+    );
+
+    expect(result.current.isAutocompleteOpen).toBe(true);
+    expect(result.current.autocompleteMatches.slice(0, 2).map((item) => item.label)).toEqual([
+      "src/components/",
+      "src/features/composer/components/",
+    ]);
+  });
+
   it("shows only direct children inside the queried directory scope", () => {
     const text = "看看 @src/";
     const selectionStart = text.length;

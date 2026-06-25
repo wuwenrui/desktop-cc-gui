@@ -146,6 +146,59 @@ export const IMAGE_FIXTURE = [
   "",
 ].join("\n");
 
+export function createSyntheticLongMarkdownFixture(lineCount = 6_200): string {
+  const lines: string[] = [
+    "# Synthetic Long Markdown",
+    "",
+    "Opening paragraph used by renderer profile tests.",
+    "",
+    "![remote](https://example.com/remote.png)",
+    "",
+    "| Segment | Value | Delta | Owner | Status | Notes |",
+    "| --- | ---: | ---: | --- | --- | --- |",
+  ];
+
+  for (let index = 0; index < 36; index += 1) {
+    lines.push(
+      `| row-${index} | ${index} | ${index % 7} | team-${index % 5} | active | wide table cell ${index} |`,
+    );
+  }
+
+  lines.push(
+    "",
+    "```ts",
+    "export function syntheticFixture(value: number) {",
+    "  return value * 2;",
+    "}",
+    "```",
+    "",
+    "```mermaid",
+    "graph TD",
+    "  A[Start] --> B[Profile]",
+    "  B --> C[Annotation]",
+    "```",
+    "",
+  );
+
+  let sectionIndex = 0;
+  while (lines.length < lineCount) {
+    sectionIndex += 1;
+    lines.push(
+      `## Section ${sectionIndex}`,
+      "",
+      `Paragraph ${sectionIndex} with annotation target text and enough content for source-line anchors.`,
+      "",
+      "- outer item",
+      "  - nested item",
+      "",
+      `Annotation target ${sectionIndex}`,
+      "",
+    );
+  }
+
+  return lines.slice(0, lineCount).join("\n");
+}
+
 /**
  * Combined fixture that exercises the parser, outline, heavy
  * block extraction, sanitizer, and source-line anchor walker in a

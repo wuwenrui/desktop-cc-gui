@@ -213,8 +213,21 @@ export function resolveStreamingPresentationItems(
   deferredItems: ConversationItem[],
   currentItems: ConversationItem[],
   shouldStabilize: boolean,
+  liveOverrideItemIds?: ReadonlySet<string>,
+  scope?: {
+    deferredScopeKey: string | null;
+    currentScopeKey: string | null;
+  },
 ) {
   if (!shouldStabilize) {
+    return currentItems;
+  }
+  if (
+    scope &&
+    scope.deferredScopeKey !== null &&
+    scope.currentScopeKey !== null &&
+    scope.deferredScopeKey !== scope.currentScopeKey
+  ) {
     return currentItems;
   }
   if (deferredItems.length === 0) {
@@ -223,10 +236,43 @@ export function resolveStreamingPresentationItems(
   // Preserve the deferred history snapshot for parent-level timeline work, but
   // append truly new live ids so the active tail can still appear immediately.
   const deferredItemIds = new Set(deferredItems.map((item) => item.id));
+  let resolvedDeferredItems = deferredItems;
+  let hasLiveOverride = false;
+  if (liveOverrideItemIds && liveOverrideItemIds.size > 0) {
+    const currentItemById = new Map(currentItems.map((item) => [item.id, item]));
+    resolvedDeferredItems = deferredItems.map((item) => {
+      if (!liveOverrideItemIds.has(item.id)) {
+        return item;
+      }
+      const currentItem = currentItemById.get(item.id);
+      if (
+        !currentItem ||
+        currentItem === item ||
+        !isSamePresentationItemSlot(item, currentItem)
+      ) {
+        return item;
+      }
+      hasLiveOverride = true;
+      return currentItem;
+    });
+  }
   const appendedCurrentItems = currentItems.filter((item) => !deferredItemIds.has(item.id));
-  return appendedCurrentItems.length > 0
-    ? [...deferredItems, ...appendedCurrentItems]
+  return hasLiveOverride || appendedCurrentItems.length > 0
+    ? [...resolvedDeferredItems, ...appendedCurrentItems]
     : deferredItems;
+}
+
+function isSamePresentationItemSlot(
+  stableItem: ConversationItem,
+  liveItem: ConversationItem,
+) {
+  if (stableItem.kind !== liveItem.kind) {
+    return false;
+  }
+  if (stableItem.kind === "message" && liveItem.kind === "message") {
+    return stableItem.role === liveItem.role;
+  }
+  return true;
 }
 
 export function buildAssistantFinalBoundarySet(items: ConversationItem[]) {

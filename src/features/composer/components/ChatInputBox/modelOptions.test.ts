@@ -79,6 +79,14 @@ describe('ChatInputBox model options', () => {
   });
 
   it('does not duplicate Codex models when the parent already passes a hydrated catalog', () => {
+    window.localStorage.setItem(
+      STORAGE_KEYS.CODEX_CUSTOM_MODELS,
+      JSON.stringify([
+        { id: 'user-custom-codex', label: 'User Custom Codex' },
+        { id: 'demo', label: 'Demo Override' },
+      ]),
+    );
+
     const modelList = serializeModels(resolveAvailableModels({
       currentProvider: 'codex',
       models: [
@@ -107,10 +115,12 @@ describe('ChatInputBox model options', () => {
     const modelEntries = modelList.split(',').filter(Boolean);
 
     expect(modelList).toContain('gpt-5.5:gpt-5.5:settings-override:gpt-5.5 (config)');
-    expect(modelList).toContain('demo:demo:custom:Demo');
+    expect(modelList).toContain('demo:demo:custom:Demo Override');
     expect(modelList).toContain('gpt-5.3-codex-spark:gpt-5.3-codex-spark:catalog:gpt-5.3-codex-spark');
+    expect(modelList).toContain('user-custom-codex:::User Custom Codex');
     expect(modelEntries.filter((entry) => entry.startsWith('gpt-5.5:'))).toHaveLength(1);
     expect(modelEntries.filter((entry) => entry.startsWith('demo:'))).toHaveLength(1);
+    expect(modelEntries.filter((entry) => entry.startsWith('user-custom-codex:'))).toHaveLength(1);
     expect(modelList).not.toContain('gpt-5.4');
   });
 
@@ -212,6 +222,41 @@ describe('ChatInputBox model options', () => {
     expect(geminiGroup?.models.map((model) => model.id)).toEqual([
       'gemini-2.5-pro',
       'gemini-2.5-flash',
+    ]);
+  });
+
+  it('builds non-active provider groups from provider-scoped catalogs', () => {
+    window.localStorage.setItem(
+      STORAGE_KEYS.CLAUDE_CUSTOM_MODELS,
+      JSON.stringify([{ id: 'Claude Custom [1m]', label: 'Claude Custom [1m]' }]),
+    );
+
+    const groups = resolveProviderModelGroups({
+      currentProvider: 'opencode',
+      models: [],
+      selectedModel: '',
+      modelStorageSnapshot: readModelStorageSnapshot(),
+      providerModelCatalogs: {
+        claude: [{ id: 'claude-from-settings', label: 'Claude From Settings' }],
+        codex: [{ id: 'codex-from-config', label: 'Codex From Config' }],
+      },
+      providerAvailability: { claude: true, codex: true, gemini: false, opencode: true },
+      resolveProviderLabel: (_providerId, fallbackLabel) => fallbackLabel,
+    });
+
+    expect(groups.map((group) => group.providerId)).toEqual(['claude', 'codex']);
+    expect(groups.find((group) => group.providerId === 'claude')?.models).toEqual([
+      {
+        id: 'Claude Custom [1m]',
+        model: 'Claude Custom [1m]',
+        label: 'Claude Custom [1m]',
+        description: undefined,
+        source: 'custom',
+      },
+      { id: 'claude-from-settings', label: 'Claude From Settings' },
+    ]);
+    expect(groups.find((group) => group.providerId === 'codex')?.models).toEqual([
+      { id: 'codex-from-config', label: 'Codex From Config' },
     ]);
   });
 });

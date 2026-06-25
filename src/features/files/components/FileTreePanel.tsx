@@ -2,8 +2,6 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
-  useState,
 } from "react";
 import type { MouseEvent } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -49,7 +47,6 @@ import {
   FileTreeNewFilePrompt,
   FileTreeNewFolderPrompt,
   FileTreeRenamePrompt,
-  type RenamePromptState,
 } from "./FileTreePrompts";
 import {
   FileTreeNodeBranch,
@@ -60,10 +57,14 @@ import {
 } from "./FileTreeRows";
 import { FileTreeRootActions } from "./FileTreeRootActions";
 import {
+  useFileTreeViewState,
+  type FileTreeOperationNotice,
+} from "./useFileTreeViewState";
+import { FileTreeRefreshControls } from "./FileTreeRefreshControls";
+import {
   clampRendererContextMenuPosition,
   RendererContextMenu,
   type RendererContextMenuItem,
-  type RendererContextMenuState,
 } from "../../../components/ui/RendererContextMenu";
 import {
   EMPTY_DIRECTORIES,
@@ -85,19 +86,6 @@ import {
   type VisibleFileTreeRow,
   type VisibleTreeNodeEntry,
 } from "./fileTreePanelInternals";
-
-type FileTreeClipboardItem = {
-  workspaceId: string;
-  path: string;
-  kind: "file" | "folder";
-  name: string;
-};
-
-type FileTreeOperationNotice = {
-  id: string;
-  tone: "success" | "error" | "info";
-  message: string;
-};
 
 type FileTreePanelProps = {
   workspaceId: string;
@@ -184,77 +172,91 @@ export function FileTreePanel({
   const ignoredFileEntries = gitignoredFiles ?? EMPTY_SET;
   const ignoredDirectoryEntries = gitignoredDirectories ?? EMPTY_SET;
   const { t } = useTranslation();
-  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
-  const [rootExpanded, setRootExpanded] = useState(true);
-  const [previewPath, setPreviewPath] = useState<string | null>(null);
-  const [previewAnchor, setPreviewAnchor] = useState<{
-    top: number;
-    left: number;
-    arrowTop: number;
-    height: number;
-  } | null>(null);
-  const [previewContent, setPreviewContent] = useState<string>("");
-  const [previewTruncated, setPreviewTruncated] = useState(false);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewError, setPreviewError] = useState<string | null>(null);
-  const [previewSelection, setPreviewSelection] = useState<{
-    start: number;
-    end: number;
-  } | null>(null);
-  const [isDragSelecting, setIsDragSelecting] = useState(false);
-  const dragAnchorLineRef = useRef<number | null>(null);
-  const dragMovedRef = useRef(false);
-  const [selectedNodePath, setSelectedNodePath] = useState<string | null>(null);
-  const [selectedNodeType, setSelectedNodeType] = useState<"file" | "folder" | null>(null);
-  const [selectedNodePaths, setSelectedNodePaths] = useState<Set<string>>(new Set());
-  const [fileTreeContextMenu, setFileTreeContextMenu] =
-    useState<RendererContextMenuState | null>(null);
-  const [fileTreeClipboardItem, setFileTreeClipboardItem] =
-    useState<FileTreeClipboardItem | null>(null);
-  const [operationNotice, setOperationNotice] = useState<FileTreeOperationNotice | null>(null);
-  const [renamePrompt, setRenamePrompt] = useState<RenamePromptState | null>(null);
-  const [renameDraftName, setRenameDraftName] = useState("");
-  const renameInputRef = useRef<HTMLInputElement | null>(null);
-  const selectionAnchorPathRef = useRef<string | null>(null);
-  const activeCrossWindowDragPathsRef = useRef<string[]>([]);
-  const lastCrossWindowDragBroadcastRef = useRef(0);
-  const dragImageCleanupRef = useRef<(() => void) | null>(null);
-  const panelRef = useRef<HTMLElement | null>(null);
-  const fileTreeListRef = useRef<HTMLDivElement | null>(null);
-  const [newFileParent, setNewFileParent] = useState<string | null>(null);
-  const [newFileName, setNewFileName] = useState("");
-  const newFileInputRef = useRef<HTMLInputElement | null>(null);
-  const [newFolderParent, setNewFolderParent] = useState<string | null>(null);
-  const [newFolderName, setNewFolderName] = useState("");
-  const newFolderInputRef = useRef<HTMLInputElement | null>(null);
-  const [lazyFiles, setLazyFiles] = useState<Set<string>>(new Set());
-  const [lazyDirectories, setLazyDirectories] = useState<Set<string>>(new Set());
-  const [lazyGitignoredFiles, setLazyGitignoredFiles] = useState<Set<string>>(new Set());
-  const [lazyGitignoredDirectories, setLazyGitignoredDirectories] = useState<Set<string>>(new Set());
-  const [lazyLoadableDirectories, setLazyLoadableDirectories] = useState<Set<string>>(new Set());
-  const [lazyDirectoryMetadata, setLazyDirectoryMetadata] = useState<Map<string, WorkspaceDirectoryEntry>>(
-    new Map(),
-  );
-  const [loadedLazyDirectories, setLoadedLazyDirectories] = useState<Set<string>>(new Set());
-  const [loadingLazyDirectories, setLoadingLazyDirectories] = useState<Set<string>>(new Set());
-  const [lazyDirectoryLoadErrors, setLazyDirectoryLoadErrors] = useState<Map<string, string>>(
-    new Map(),
-  );
-  const [suppressedDeletedPaths, setSuppressedDeletedPaths] = useState<Set<string>>(new Set());
-  const loadedLazyDirectoriesRef = useRef<Set<string>>(new Set());
-  const loadingLazyDirectoriesRef = useRef<Set<string>>(new Set());
-  const sourceVersionRef = useRef<string | null>(sourceVersion);
-
-  useEffect(() => {
-    sourceVersionRef.current = sourceVersion;
-  }, [sourceVersion]);
-
-  useEffect(() => {
-    return () => {
-      dragImageCleanupRef.current?.();
-      dragImageCleanupRef.current = null;
-    };
-  }, []);
+  const {
+    activeCrossWindowDragPathsRef,
+    closePreview,
+    dragAnchorLineRef,
+    dragImageCleanupRef,
+    dragMovedRef,
+    expandedFolders,
+    fileTreeClipboardItem,
+    fileTreeContextMenu,
+    fileTreeListRef,
+    isDragSelecting,
+    lastCrossWindowDragBroadcastRef,
+    lazyDirectories,
+    lazyDirectoryLoadErrors,
+    lazyDirectoryMetadata,
+    lazyFiles,
+    lazyGitignoredDirectories,
+    lazyGitignoredFiles,
+    lazyLoadableDirectories,
+    loadedLazyDirectoriesRef,
+    loadingLazyDirectories,
+    loadingLazyDirectoriesRef,
+    newFileInputRef,
+    newFileName,
+    newFileParent,
+    newFolderInputRef,
+    newFolderName,
+    newFolderParent,
+    operationNotice,
+    panelRef,
+    previewAnchor,
+    previewContent,
+    previewError,
+    previewLoading,
+    previewPath,
+    previewSelection,
+    previewTruncated,
+    refreshFileTree,
+    renameDraftName,
+    renameInputRef,
+    renamePrompt,
+    rootExpanded,
+    selectedNodePath,
+    selectedNodePaths,
+    selectedNodeType,
+    selectionAnchorPathRef,
+    setExpandedFolders,
+    setFileTreeClipboardItem,
+    setFileTreeContextMenu,
+    setIsDragSelecting,
+    setLazyDirectories,
+    setLazyDirectoryLoadErrors,
+    setLazyDirectoryMetadata,
+    setLazyFiles,
+    setLazyGitignoredDirectories,
+    setLazyGitignoredFiles,
+    setLazyLoadableDirectories,
+    setLoadedLazyDirectories,
+    setLoadingLazyDirectories,
+    setNewFileName,
+    setNewFileParent,
+    setNewFolderName,
+    setNewFolderParent,
+    setOperationNotice,
+    setPreviewAnchor,
+    setPreviewContent,
+    setPreviewError,
+    setPreviewLoading,
+    setPreviewPath,
+    setPreviewSelection,
+    setPreviewTruncated,
+    setRenameDraftName,
+    setRenamePrompt,
+    setRootExpanded,
+    setSelectedNodePath,
+    setSelectedNodePaths,
+    setSelectedNodeType,
+    setSuppressedDeletedPaths,
+    sourceVersionRef,
+    suppressedDeletedPaths,
+  } = useFileTreeViewState({
+    workspaceId,
+    sourceVersion,
+    onRefreshFiles,
+  });
 
   const workspaceRootLabel = useMemo(
     () => resolveWorkspaceRootLabel(workspacePath, workspaceName),
@@ -527,7 +529,12 @@ export function FileTreePanel({
     setSelectedNodePath(path);
     setSelectedNodeType(type === "root" ? "folder" : type);
     selectionAnchorPathRef.current = path;
-  }, []);
+  }, [
+    selectionAnchorPathRef,
+    setSelectedNodePath,
+    setSelectedNodePaths,
+    setSelectedNodeType,
+  ]);
 
   const setRangeSelection = useCallback(
     (targetPath: string, targetType: "file" | "folder" | "root") => {
@@ -545,7 +552,15 @@ export function FileTreePanel({
       setSelectedNodePath(targetPath);
       setSelectedNodeType(targetType === "root" ? "folder" : targetType);
     },
-    [selectedNodePath, setSingleSelection, visibleTreePathOrder],
+    [
+      selectedNodePath,
+      selectionAnchorPathRef,
+      setSelectedNodePath,
+      setSelectedNodePaths,
+      setSelectedNodeType,
+      setSingleSelection,
+      visibleTreePathOrder,
+    ],
   );
 
   const togglePathSelection = useCallback((path: string, type: "file" | "folder" | "root") => {
@@ -566,7 +581,14 @@ export function FileTreePanel({
       selectionAnchorPathRef.current = path;
       return next;
     });
-  }, [visibleTreePathOrder, visibleTreePathTypeMap]);
+  }, [
+    selectionAnchorPathRef,
+    setSelectedNodePath,
+    setSelectedNodePaths,
+    setSelectedNodeType,
+    visibleTreePathOrder,
+    visibleTreePathTypeMap,
+  ]);
 
   useEffect(() => {
     setExpandedFolders((prev) => {
@@ -582,7 +604,7 @@ export function FileTreePanel({
       }
       return next;
     });
-  }, [folderPaths]);
+  }, [folderPaths, setExpandedFolders]);
 
   useEffect(() => {
     if (gitignoredFolderAncestorPaths.size === 0) {
@@ -600,7 +622,7 @@ export function FileTreePanel({
       });
       return changed ? next : prev;
     });
-  }, [folderPaths, gitignoredFolderAncestorPaths]);
+  }, [folderPaths, gitignoredFolderAncestorPaths, setExpandedFolders]);
 
   useEffect(() => {
     setSelectedNodePaths((prev) => {
@@ -634,62 +656,91 @@ export function FileTreePanel({
       }
       return next;
     });
-  }, [allTreeNodePaths, selectedNodePath, visibleTreePathOrder, visibleTreePathTypeMap]);
+  }, [
+    allTreeNodePaths,
+    selectedNodePath,
+    selectionAnchorPathRef,
+    setSelectedNodePath,
+    setSelectedNodePaths,
+    setSelectedNodeType,
+    visibleTreePathOrder,
+    visibleTreePathTypeMap,
+  ]);
 
-  useEffect(() => {
-    loadedLazyDirectoriesRef.current = loadedLazyDirectories;
-  }, [loadedLazyDirectories]);
-
-  useEffect(() => {
-    loadingLazyDirectoriesRef.current = loadingLazyDirectories;
-  }, [loadingLazyDirectories]);
-
-  useEffect(() => {
-    setPreviewPath(null);
-    setPreviewAnchor(null);
-    setPreviewSelection(null);
-    setPreviewContent("");
-    setPreviewTruncated(false);
-    setPreviewError(null);
-    setPreviewLoading(false);
-    setIsDragSelecting(false);
-    dragAnchorLineRef.current = null;
-    dragMovedRef.current = false;
-    setLazyFiles(new Set());
-    setLazyDirectories(new Set());
-    setLazyGitignoredFiles(new Set());
-    setLazyGitignoredDirectories(new Set());
-    setLazyLoadableDirectories(new Set());
-    setLazyDirectoryMetadata(new Map());
-    setLoadedLazyDirectories(new Set());
-    setLoadingLazyDirectories(new Set());
-    setLazyDirectoryLoadErrors(new Map());
-    setNewFileParent(null);
-    setNewFileName("");
-    setNewFolderParent(null);
-    setNewFolderName("");
-    setSuppressedDeletedPaths(new Set());
-    setRootExpanded(true);
-    setSelectedNodePath(null);
-    setSelectedNodeType(null);
-    setSelectedNodePaths(new Set());
-    selectionAnchorPathRef.current = null;
-    loadedLazyDirectoriesRef.current = new Set();
-    loadingLazyDirectoriesRef.current = new Set();
-  }, [workspaceId]);
-
-  const closePreview = useCallback(() => {
-    setPreviewPath(null);
-    setPreviewAnchor(null);
-    setPreviewSelection(null);
-    setPreviewContent("");
-    setPreviewTruncated(false);
-    setPreviewError(null);
-    setPreviewLoading(false);
-    setIsDragSelecting(false);
-    dragAnchorLineRef.current = null;
-    dragMovedRef.current = false;
+  const resolveFileTreeParentPath = useCallback((relativePath: string) => {
+    const normalized = relativePath.trim().replaceAll("\\", "/").replace(/^\/+|\/+$/g, "");
+    const separatorIndex = normalized.lastIndexOf("/");
+    return separatorIndex > 0 ? normalized.slice(0, separatorIndex) : "";
   }, []);
+
+  const revealOptimisticFileTreePath = useCallback(
+    (relativePath: string, kind: "file" | "folder") => {
+      const normalized = relativePath.trim().replaceAll("\\", "/").replace(/^\/+|\/+$/g, "");
+      if (!normalized) {
+        return;
+      }
+      const parentPath = resolveFileTreeParentPath(normalized);
+      if (parentPath) {
+        setExpandedFolders((prev) => {
+          if (prev.has(parentPath)) {
+            return prev;
+          }
+          return new Set(prev).add(parentPath);
+        });
+      }
+      setSuppressedDeletedPaths((prev) => {
+        if (!prev.has(normalized)) {
+          return prev;
+        }
+        const next = new Set(prev);
+        next.delete(normalized);
+        return next;
+      });
+      if (kind === "folder") {
+        setLazyDirectories((prev) => {
+          if (prev.has(normalized)) {
+            return prev;
+          }
+          return new Set(prev).add(normalized);
+        });
+        setLazyDirectoryMetadata((prev) => {
+          const next = new Map(prev);
+          next.set(normalized, { path: normalized, child_state: "empty" });
+          return next;
+        });
+      } else {
+        setLazyFiles((prev) => {
+          if (prev.has(normalized)) {
+            return prev;
+          }
+          return new Set(prev).add(normalized);
+        });
+      }
+      if (parentPath) {
+        setLazyDirectoryMetadata((prev) => {
+          const next = new Map(prev);
+          next.set(parentPath, { path: parentPath, child_state: "loaded" });
+          return next;
+        });
+      }
+      setSelectedNodePath(normalized);
+      setSelectedNodeType(kind);
+      setSelectedNodePaths(new Set([normalized]));
+      selectionAnchorPathRef.current = normalized;
+    },
+    [
+      resolveFileTreeParentPath,
+      selectionAnchorPathRef,
+      setExpandedFolders,
+      setLazyDirectories,
+      setLazyDirectoryMetadata,
+      setLazyFiles,
+      setSelectedNodePath,
+      setSelectedNodePaths,
+      setSelectedNodeType,
+      setSuppressedDeletedPaths,
+    ],
+  );
 
   const loadLazyDirectoryChildren = useCallback(
     async (path: string) => {
@@ -832,8 +883,41 @@ export function FileTreePanel({
         });
       }
     },
-    [workspaceId],
+    [
+      loadedLazyDirectoriesRef,
+      loadingLazyDirectoriesRef,
+      setLazyDirectories,
+      setLazyDirectoryLoadErrors,
+      setLazyDirectoryMetadata,
+      setLazyFiles,
+      setLazyGitignoredDirectories,
+      setLazyGitignoredFiles,
+      setLazyLoadableDirectories,
+      setLoadedLazyDirectories,
+      setLoadingLazyDirectories,
+      sourceVersionRef,
+      workspaceId,
+    ],
   );
+
+  useEffect(() => {
+    effectiveExpandedFolders.forEach((path) => {
+      if (
+        !effectiveLazyLoadableDirectories.has(path) ||
+        loadedLazyDirectoriesRef.current.has(path) ||
+        loadingLazyDirectoriesRef.current.has(path)
+      ) {
+        return;
+      }
+      void loadLazyDirectoryChildren(path);
+    });
+  }, [
+    effectiveExpandedFolders,
+    effectiveLazyLoadableDirectories,
+    loadLazyDirectoryChildren,
+    loadedLazyDirectoriesRef,
+    loadingLazyDirectoriesRef,
+  ]);
 
   useEffect(() => {
     if (!previewPath) {
@@ -849,7 +933,7 @@ export function FileTreePanel({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [previewPath, closePreview]);
 
-  const toggleFolder = (path: string) => {
+  const toggleFolder = useCallback((path: string) => {
     setExpandedFolders((prev) => {
       const next = new Set(prev);
       if (next.has(path)) {
@@ -859,7 +943,7 @@ export function FileTreePanel({
       }
       return next;
     });
-  };
+  }, [setExpandedFolders]);
 
   const toggleFolderExpandedState = useCallback(
     (path: string, isLazyFolder: boolean) => {
@@ -869,7 +953,7 @@ export function FileTreePanel({
         void loadLazyDirectoryChildren(path);
       }
     },
-    [expandedFolders, loadLazyDirectoryChildren],
+    [expandedFolders, loadLazyDirectoryChildren, toggleFolder],
   );
 
   const resolvePath = useCallback(
@@ -920,7 +1004,14 @@ export function FileTreePanel({
     setIsDragSelecting(false);
     dragAnchorLineRef.current = null;
     dragMovedRef.current = false;
-  }, []);
+  }, [
+    dragAnchorLineRef,
+    dragMovedRef,
+    setIsDragSelecting,
+    setPreviewAnchor,
+    setPreviewPath,
+    setPreviewSelection,
+  ]);
 
   useEffect(() => {
     if (!previewPath) {
@@ -960,7 +1051,15 @@ export function FileTreePanel({
     return () => {
       cancelled = true;
     };
-  }, [previewKind, previewPath, workspaceId]);
+  }, [
+    previewKind,
+    previewPath,
+    setPreviewContent,
+    setPreviewError,
+    setPreviewLoading,
+    setPreviewTruncated,
+    workspaceId,
+  ]);
 
   useEffect(() => {
     if (!isDragSelecting) {
@@ -972,13 +1071,13 @@ export function FileTreePanel({
     };
     window.addEventListener("mouseup", handleMouseUp);
     return () => window.removeEventListener("mouseup", handleMouseUp);
-  }, [isDragSelecting]);
+  }, [dragAnchorLineRef, isDragSelecting, setIsDragSelecting]);
 
   const selectRangeFromAnchor = useCallback((anchor: number, index: number) => {
     const start = Math.min(anchor, index);
     const end = Math.max(anchor, index);
     setPreviewSelection({ start, end });
-  }, []);
+  }, [setPreviewSelection]);
 
   const handleSelectLine = useCallback(
     (index: number, event: MouseEvent<HTMLButtonElement>) => {
@@ -993,7 +1092,7 @@ export function FileTreePanel({
       }
       setPreviewSelection({ start: index, end: index });
     },
-    [previewSelection, selectRangeFromAnchor],
+    [dragMovedRef, previewSelection, selectRangeFromAnchor, setPreviewSelection],
   );
 
   const handleLineMouseDown = useCallback(
@@ -1009,7 +1108,14 @@ export function FileTreePanel({
       dragMovedRef.current = false;
       selectRangeFromAnchor(anchor, index);
     },
-    [previewKind, previewSelection, selectRangeFromAnchor],
+    [
+      dragAnchorLineRef,
+      dragMovedRef,
+      previewKind,
+      previewSelection,
+      selectRangeFromAnchor,
+      setIsDragSelecting,
+    ],
   );
 
   const handleLineMouseEnter = useCallback(
@@ -1026,7 +1132,7 @@ export function FileTreePanel({
       }
       selectRangeFromAnchor(anchor, index);
     },
-    [isDragSelecting, selectRangeFromAnchor],
+    [dragAnchorLineRef, dragMovedRef, isDragSelecting, selectRangeFromAnchor],
   );
 
   const handleLineMouseUp = useCallback(() => {
@@ -1035,7 +1141,7 @@ export function FileTreePanel({
     }
     setIsDragSelecting(false);
     dragAnchorLineRef.current = null;
-  }, [isDragSelecting]);
+  }, [dragAnchorLineRef, isDragSelecting, setIsDragSelecting]);
 
   const selectionHints = useMemo(
     () =>
@@ -1095,7 +1201,7 @@ export function FileTreePanel({
       tone,
       message,
     });
-  }, []);
+  }, [setOperationNotice]);
 
   useEffect(() => {
     setSuppressedDeletedPaths((prev) => {
@@ -1119,7 +1225,13 @@ export function FileTreePanel({
       });
       return changed ? next : prev;
     });
-  }, [directoryEntries, files, lazyDirectories, lazyFiles]);
+  }, [
+    directoryEntries,
+    files,
+    lazyDirectories,
+    lazyFiles,
+    setSuppressedDeletedPaths,
+  ]);
 
   const purgeDeletedFileTreePath = useCallback(
     (deletedPath: string) => {
@@ -1188,8 +1300,29 @@ export function FileTreePanel({
     },
     [
       closePreview,
+      loadedLazyDirectoriesRef,
+      loadingLazyDirectoriesRef,
       previewPath,
       selectedNodePath,
+      selectionAnchorPathRef,
+      setExpandedFolders,
+      setFileTreeClipboardItem,
+      setLazyDirectories,
+      setLazyDirectoryLoadErrors,
+      setLazyDirectoryMetadata,
+      setLazyFiles,
+      setLazyGitignoredDirectories,
+      setLazyGitignoredFiles,
+      setLazyLoadableDirectories,
+      setLoadedLazyDirectories,
+      setLoadingLazyDirectories,
+      setNewFileParent,
+      setNewFolderParent,
+      setRenamePrompt,
+      setSelectedNodePath,
+      setSelectedNodePaths,
+      setSelectedNodeType,
+      setSuppressedDeletedPaths,
       visibleTreePathOrder,
       visibleTreePathTypeMap,
     ],
@@ -1217,15 +1350,15 @@ export function FileTreePanel({
         await trashWorkspaceItem(workspaceId, relativePath);
         purgeDeletedFileTreePath(relativePath);
         showOperationNotice("success", t("files.trashComplete"));
-        onRefreshFiles?.();
+        refreshFileTree();
       } catch (error) {
         showOperationNotice("error", t("files.trashFailed", { message: normalizeOperationError(error) }));
       }
     },
     [
       normalizeOperationError,
-      onRefreshFiles,
       purgeDeletedFileTreePath,
+      refreshFileTree,
       showOperationNotice,
       t,
       workspaceId,
@@ -1249,7 +1382,13 @@ export function FileTreePanel({
       });
       showOperationNotice("info", t("files.copyReady"));
     },
-    [getFileTreeItemName, showOperationNotice, t, workspaceId],
+    [
+      getFileTreeItemName,
+      setFileTreeClipboardItem,
+      showOperationNotice,
+      t,
+      workspaceId,
+    ],
   );
 
   const pasteFileTreeItem = useCallback(
@@ -1268,9 +1407,7 @@ export function FileTreePanel({
           fileTreeClipboardItem.path,
           targetDirectory,
         );
-        setSelectedNodePath(result.path);
-        setSelectedNodeType(result.kind === "folder" ? "folder" : "file");
-        setSelectedNodePaths(new Set([result.path]));
+        revealOptimisticFileTreePath(result.path, result.kind);
         showOperationNotice("success", t("files.pasteComplete"));
         onRefreshFiles?.();
       } catch (error) {
@@ -1281,6 +1418,7 @@ export function FileTreePanel({
       fileTreeClipboardItem,
       normalizeOperationError,
       onRefreshFiles,
+      revealOptimisticFileTreePath,
       showOperationNotice,
       t,
       workspaceId,
@@ -1291,16 +1429,21 @@ export function FileTreePanel({
     async (relativePath: string) => {
       try {
         const result = await duplicateWorkspaceItem(workspaceId, relativePath);
-        setSelectedNodePath(result.path);
-        setSelectedNodeType(result.kind === "folder" ? "folder" : "file");
-        setSelectedNodePaths(new Set([result.path]));
+        revealOptimisticFileTreePath(result.path, result.kind);
         showOperationNotice("success", t("files.duplicateComplete"));
         onRefreshFiles?.();
       } catch (error) {
         showOperationNotice("error", t("files.duplicateFailed", { message: normalizeOperationError(error) }));
       }
     },
-    [normalizeOperationError, onRefreshFiles, showOperationNotice, t, workspaceId],
+    [
+      normalizeOperationError,
+      revealOptimisticFileTreePath,
+      onRefreshFiles,
+      showOperationNotice,
+      t,
+      workspaceId,
+    ],
   );
 
   const openRenamePrompt = useCallback(
@@ -1317,13 +1460,18 @@ export function FileTreePanel({
         renameInputRef.current?.select();
       });
     },
-    [getFileTreeItemName],
+    [
+      getFileTreeItemName,
+      renameInputRef,
+      setRenameDraftName,
+      setRenamePrompt,
+    ],
   );
 
   const cancelRename = useCallback(() => {
     setRenamePrompt(null);
     setRenameDraftName("");
-  }, []);
+  }, [setRenameDraftName, setRenamePrompt]);
 
   const confirmRename = useCallback(async () => {
     const prompt = renamePrompt;
@@ -1334,9 +1482,8 @@ export function FileTreePanel({
     }
     try {
       const result = await renameWorkspaceItem(workspaceId, prompt.path, name);
-      setSelectedNodePath(result.path);
-      setSelectedNodeType(result.kind === "folder" ? "folder" : "file");
-      setSelectedNodePaths(new Set([result.path]));
+      purgeDeletedFileTreePath(prompt.path);
+      revealOptimisticFileTreePath(result.path, result.kind);
       setRenamePrompt(null);
       setRenameDraftName("");
       showOperationNotice("success", t("files.renameComplete"));
@@ -1347,8 +1494,12 @@ export function FileTreePanel({
   }, [
     normalizeOperationError,
     onRefreshFiles,
+    purgeDeletedFileTreePath,
+    revealOptimisticFileTreePath,
     renameDraftName,
     renamePrompt,
+    setRenameDraftName,
+    setRenamePrompt,
     showOperationNotice,
     t,
     workspaceId,
@@ -1362,7 +1513,7 @@ export function FileTreePanel({
         newFileInputRef.current?.focus();
       });
     },
-    [],
+    [newFileInputRef, setNewFileName, setNewFileParent],
   );
 
   const confirmNewFile = useCallback(async () => {
@@ -1375,6 +1526,7 @@ export function FileTreePanel({
     const relativePath = newFileParent ? `${newFileParent}/${name}` : name;
     try {
       await writeWorkspaceFile(workspaceId, relativePath, "");
+      revealOptimisticFileTreePath(relativePath, "file");
       showOperationNotice("success", t("files.createFileComplete"));
       onRefreshFiles?.();
     } catch (error) {
@@ -1386,8 +1538,11 @@ export function FileTreePanel({
     newFileName,
     newFileParent,
     workspaceId,
+    revealOptimisticFileTreePath,
     onRefreshFiles,
     showOperationNotice,
+    setNewFileName,
+    setNewFileParent,
     t,
     normalizeOperationError,
   ]);
@@ -1395,7 +1550,7 @@ export function FileTreePanel({
   const cancelNewFile = useCallback(() => {
     setNewFileParent(null);
     setNewFileName("");
-  }, []);
+  }, [setNewFileName, setNewFileParent]);
 
   const openNewFolderPrompt = useCallback(
     (parentFolder: string) => {
@@ -1405,7 +1560,7 @@ export function FileTreePanel({
         newFolderInputRef.current?.focus();
       });
     },
-    [],
+    [newFolderInputRef, setNewFolderName, setNewFolderParent],
   );
 
   const confirmNewFolder = useCallback(async () => {
@@ -1418,6 +1573,7 @@ export function FileTreePanel({
     const relativePath = newFolderParent ? `${newFolderParent}/${name}` : name;
     try {
       await createWorkspaceDirectory(workspaceId, relativePath);
+      revealOptimisticFileTreePath(relativePath, "folder");
       showOperationNotice("success", t("files.createFolderComplete"));
       onRefreshFiles?.();
     } catch (error) {
@@ -1429,8 +1585,11 @@ export function FileTreePanel({
     newFolderName,
     newFolderParent,
     workspaceId,
+    revealOptimisticFileTreePath,
     onRefreshFiles,
     showOperationNotice,
+    setNewFolderName,
+    setNewFolderParent,
     t,
     normalizeOperationError,
   ]);
@@ -1438,7 +1597,7 @@ export function FileTreePanel({
   const cancelNewFolder = useCallback(() => {
     setNewFolderParent(null);
     setNewFolderName("");
-  }, []);
+  }, [setNewFolderName, setNewFolderParent]);
 
   const resolveParentFolderForNode = useCallback(
     (relativePath: string | null, nodeType: "file" | "folder" | null) => {
@@ -1500,7 +1659,12 @@ export function FileTreePanel({
       type: "start",
       paths,
     });
-  }, [broadcastCrossWindowTreeDrag, crossWindowDragTargetLabel]);
+  }, [
+    activeCrossWindowDragPathsRef,
+    broadcastCrossWindowTreeDrag,
+    crossWindowDragTargetLabel,
+    lastCrossWindowDragBroadcastRef,
+  ]);
   const canTrashSelectedNode =
     selectedNodeType !== null && selectedNodePath !== null && selectedNodePath.length > 0;
 
@@ -1641,6 +1805,7 @@ export function FileTreePanel({
       copyFileTreeItem,
       duplicateItem,
       pasteFileTreeItem,
+      setFileTreeContextMenu,
       onInsertText,
       openRenamePrompt,
       openNewFilePrompt,
@@ -1683,7 +1848,7 @@ export function FileTreePanel({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedNodePath, selectedNodeType, trashItem, copyPath]);
+  }, [copyPath, panelRef, selectedNodePath, selectedNodeType, trashItem]);
 
   const fileTreeRowState: FileTreeRowState = {
     expandedFolders,
@@ -1766,7 +1931,7 @@ export function FileTreePanel({
             detachedInitialFilePath={detachedInitialFilePath}
             onOpenNewFile={(parentFolder) => openNewFilePrompt(parentFolder ?? "")}
             onOpenNewFolder={(parentFolder) => openNewFolderPrompt(parentFolder ?? "")}
-            onRefreshFiles={onRefreshFiles}
+            onRefreshFiles={refreshFileTree}
             onTrashSelected={() => {
               if (!canTrashSelectedNode || !selectedNodePath || !selectedNodeType) {
                 return;
@@ -1792,19 +1957,13 @@ export function FileTreePanel({
             <span>{t("files.loadingFiles")}</span>
           </div>
         ) : !isRootVisibleExpanded ? null : normalizedLoadError && !hasTreeEntries ? (
-          <div className="file-tree-empty" title={normalizedLoadError}>
-            <div>{t("files.loadFilesFailed")}</div>
-            {onRefreshFiles ? (
-              <button
-                type="button"
-                className="file-tree-lazy-retry"
-                onClick={() => void onRefreshFiles()}
-                title={normalizedLoadError}
-              >
-                {t("files.retryLoadFiles")}
-              </button>
-            ) : null}
-          </div>
+          <FileTreeRefreshControls
+            loadError={normalizedLoadError}
+            canRefresh={Boolean(onRefreshFiles)}
+            loadFailedLabel={t("files.loadFilesFailed")}
+            retryLabel={t("files.retryLoadFiles")}
+            onRefresh={refreshFileTree}
+          />
         ) : !hasTreeEntries ? (
           <div className="file-tree-empty">
             {t("files.noFilesAvailable")}

@@ -28,6 +28,10 @@ export async function switchClaudeProvider(id: string): Promise<void> {
   return invoke("vendor_switch_claude_provider", { id });
 }
 
+export async function reorderClaudeProviders(orderedIds: string[]): Promise<void> {
+  return invoke("vendor_reorder_claude_providers", { orderedIds });
+}
+
 export async function getCurrentClaudeConfig(): Promise<VendorClaudeCurrentConfig> {
   return invoke<VendorClaudeCurrentConfig>("vendor_get_current_claude_config");
 }
@@ -40,6 +44,21 @@ export async function setClaudeAlwaysThinkingEnabled(
   enabled: boolean,
 ): Promise<void> {
   return invoke("vendor_set_claude_always_thinking_enabled", { enabled });
+}
+
+export interface VendorModelListResult {
+  models: string[];
+  endpoint: string;
+}
+
+export async function fetchClaudeProviderModels(
+  baseUrl: string,
+  apiKey: string,
+): Promise<VendorModelListResult> {
+  return invoke<VendorModelListResult>("vendor_fetch_claude_models", {
+    baseUrl,
+    apiKey,
+  });
 }
 
 export async function getCodexProviders(): Promise<

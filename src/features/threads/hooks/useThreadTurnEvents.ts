@@ -1,5 +1,12 @@
 import { useCallback } from "react";
 import type { Dispatch, MutableRefObject } from "react";
+import {
+  workspaceScopedDelete,
+  workspaceScopedGet,
+  workspaceScopedHas,
+  workspaceScopedSet,
+  type WorkspaceScopedMap,
+} from "./workspaceScopedMap";
 import type { DebugEntry } from "../../../types";
 import { useTranslation } from "react-i18next";
 import {
@@ -144,9 +151,13 @@ type UseThreadTurnEventsOptions = {
   markReviewing: (threadId: string, isReviewing: boolean) => void;
   setActiveTurnId: (threadId: string, turnId: string | null) => void;
   codexCompactionInFlightByThreadRef: MutableRefObject<Record<string, boolean>>;
-  pendingInterruptsRef: MutableRefObject<Set<string>>;
-  interruptedThreadsRef: MutableRefObject<Set<string>>;
-  pushThreadErrorMessage: (threadId: string, message: string) => void;
+  pendingInterruptsRef: MutableRefObject<WorkspaceScopedMap<true>>;
+  interruptedThreadsRef: MutableRefObject<WorkspaceScopedMap<true>>;
+  pushThreadErrorMessage: (
+    workspaceId: string,
+    threadId: string,
+    message: string,
+  ) => void;
   safeMessageActivity: () => void;
   recordThreadActivity: (workspaceId: string, threadId: string, timestamp?: number) => void;
   renameCustomNameKey: (
@@ -256,13 +267,24 @@ export function useThreadTurnEvents({
       if (!oldThreadId || !newThreadId || oldThreadId === newThreadId) {
         return result;
       }
-      if (pendingInterruptsRef.current.delete(oldThreadId)) {
-        pendingInterruptsRef.current.add(newThreadId);
-        result.movedPendingInterrupt = true;
-      }
-      if (interruptedThreadsRef.current.delete(oldThreadId)) {
-        interruptedThreadsRef.current.add(newThreadId);
-        result.movedInterruptedThread = true;
+      // workspace-scope rename: scan every workspace bucket and move
+      // the oldThreadId entry to newThreadId (preserving the workspace
+      // bucket key)
+      for (const store of [pendingInterruptsRef.current, interruptedThreadsRef.current]) {
+        for (const workspaceId of Array.from(store.keys())) {
+          if (workspaceScopedHas(store, workspaceId, oldThreadId)) {
+            const value = workspaceScopedGet(store, workspaceId, oldThreadId);
+            workspaceScopedDelete(store, workspaceId, oldThreadId);
+            if (value !== undefined) {
+              workspaceScopedSet(store, workspaceId, newThreadId, value);
+            }
+            if (store === pendingInterruptsRef.current) {
+              result.movedPendingInterrupt = true;
+            } else {
+              result.movedInterruptedThread = true;
+            }
+          }
+        }
       }
       return result;
     },
@@ -382,8 +404,8 @@ export function useThreadTurnEvents({
         timestamp: null,
       });
       dispatch({ type: "markContextCompacting", threadId, isCompacting: false });
-      if (pendingInterruptsRef.current.has(threadId)) {
-        pendingInterruptsRef.current.delete(threadId);
+      if (workspaceScopedHas(pendingInterruptsRef.current, workspaceId, threadId)) {
+        workspaceScopedDelete(pendingInterruptsRef.current, workspaceId, threadId);
         const engine = inferEngineFromThreadId(threadId);
         if (engine === "codex" && turnId) {
           void interruptTurnService(workspaceId, threadId, turnId).catch(() => {});
@@ -471,8 +493,8 @@ export function useThreadTurnEvents({
         });
         markProcessing(targetThreadId, false);
         setActiveTurnId(targetThreadId, null);
-        pendingInterruptsRef.current.delete(targetThreadId);
-        interruptedThreadsRef.current.delete(targetThreadId);
+        workspaceScopedDelete(pendingInterruptsRef.current, workspaceId, targetThreadId);
+        workspaceScopedDelete(interruptedThreadsRef.current, workspaceId, targetThreadId);
         // 重置分段计数，为下一个 turn 做准备
         dispatch({ type: "resetAgentSegment", threadId: targetThreadId });
         dispatch({ type: "markLatestAssistantMessageFinal", threadId: targetThreadId });
@@ -574,11 +596,15 @@ export function useThreadTurnEvents({
       // (e.g. "Session stopped."). Clean up the interrupted flag and
       // suppress the redundant error message since interruptTurn already
       // displayed "Session stopped." to the user.
-      const wasInterrupted = interruptedThreadsRef.current.has(threadId);
+      const wasInterrupted = workspaceScopedHas(
+        interruptedThreadsRef.current,
+        workspaceId,
+        threadId,
+      );
       const shouldKeepInterruptedGuard =
         wasInterrupted && inferEngineFromThreadId(threadId) === "gemini";
       if (!shouldKeepInterruptedGuard) {
-        interruptedThreadsRef.current.delete(threadId);
+        workspaceScopedDelete(interruptedThreadsRef.current, workspaceId, threadId);
       }
 
       dispatch({ type: "ensureThread", workspaceId, threadId, engine: inferEngineFromThreadId(threadId) });
@@ -634,8 +660,8 @@ export function useThreadTurnEvents({
         markProcessing(aliasThreadId, false);
         markReviewing(aliasThreadId, false);
         setActiveTurnId(aliasThreadId, null);
-        pendingInterruptsRef.current.delete(aliasThreadId);
-        interruptedThreadsRef.current.delete(aliasThreadId);
+        workspaceScopedDelete(pendingInterruptsRef.current, workspaceId, aliasThreadId);
+        workspaceScopedDelete(interruptedThreadsRef.current, workspaceId, aliasThreadId);
       }
 
       if (!wasInterrupted) {
@@ -661,7 +687,7 @@ export function useThreadTurnEvents({
         const message = payload.message
           ? t("threads.turnFailedWithMessage", { message: payload.message })
           : t("threads.turnFailed");
-        pushThreadErrorMessage(threadId, message);
+        pushThreadErrorMessage(workspaceId, threadId, message);
         pushThreadFailureRuntimeNotice({
           workspaceId,
           threadId,
@@ -787,7 +813,7 @@ export function useThreadTurnEvents({
             { message: payload.message },
           )
         : t(isFusionStalled ? "threads.fusionTurnStalled" : "threads.turnStalled");
-      pushThreadErrorMessage(threadId, message);
+      pushThreadErrorMessage(workspaceId, threadId, message);
       pushThreadFailureRuntimeNotice({
         workspaceId,
         threadId,
@@ -984,7 +1010,7 @@ export function useThreadTurnEvents({
         });
       }
       targetThreadIds.forEach((targetThreadId) => {
-        pushThreadErrorMessage(targetThreadId, message);
+        pushThreadErrorMessage(workspaceId, targetThreadId, message);
       });
       pushThreadFailureRuntimeNotice({
         workspaceId,
@@ -1201,7 +1227,7 @@ export function useThreadTurnEvents({
       if (movedPendingInterrupt) {
         const activeTurnId = getActiveTurnIdForThread?.(newThreadId) ?? null;
         if (activeTurnId) {
-          pendingInterruptsRef.current.delete(newThreadId);
+          workspaceScopedDelete(pendingInterruptsRef.current, workspaceId, newThreadId);
           void engineInterruptTurnService(
             workspaceId,
             activeTurnId,

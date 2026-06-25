@@ -1,20 +1,55 @@
 # Runtime Evidence Gate Governance Report
 
-Generated at: 2026-06-13T05:53:58.534Z
+Generated at: 2026-06-19T19:49:13.978Z
 
 ## Archive Readiness
 
 | Change | Tasks | Recommendation | Qualifier |
 |---|---:|---|---|
+| relocate-runtime-notice-dock-sidebar-entry | 8/8 | archive-candidate-after-qualifier-review | Review validation and platform qualifiers before archive. |
 
-## Previous Archive Context
+## Accepted Budget Residuals
 
-- close-performance-iteration-2026-06: 25/25, previous-closure-context. Retained as historical closure context; not a current completed-active archive candidate.
+| Record | Owner | Decision | Next Action |
+|---|---|---|---|
+| S-LL-200/commitDurationP50 | release-grade-evidence-collection | accepted-normal-mode-deferral | Keep release-mode evidence strict; replace this accepted residual with owner-approved budget metadata when measured runtime evidence exists. |
+| S-LL-200/commitDurationP95 | release-grade-evidence-collection | accepted-normal-mode-deferral | Keep release-mode evidence strict; replace this accepted residual with owner-approved budget metadata when measured runtime evidence exists. |
+| S-LL-200/firstPaintAfterMount | release-grade-evidence-collection | accepted-normal-mode-deferral | Keep release-mode evidence strict; replace this accepted residual with owner-approved budget metadata when measured runtime evidence exists. |
+| S-LL-500/commitDurationP50 | release-grade-evidence-collection | accepted-normal-mode-deferral | Keep release-mode evidence strict; replace this accepted residual with owner-approved budget metadata when measured runtime evidence exists. |
+| S-LL-500/commitDurationP95 | release-grade-evidence-collection | accepted-normal-mode-deferral | Keep release-mode evidence strict; replace this accepted residual with owner-approved budget metadata when measured runtime evidence exists. |
+| S-LL-500/firstPaintAfterMount | release-grade-evidence-collection | accepted-normal-mode-deferral | Keep release-mode evidence strict; replace this accepted residual with owner-approved budget metadata when measured runtime evidence exists. |
+| S-LL-1000/commitDurationP50 | release-grade-evidence-collection | accepted-normal-mode-deferral | Keep release-mode evidence strict; replace this accepted residual with owner-approved budget metadata when measured runtime evidence exists. |
+| S-LL-1000/commitDurationP95 | release-grade-evidence-collection | accepted-normal-mode-deferral | Keep release-mode evidence strict; replace this accepted residual with owner-approved budget metadata when measured runtime evidence exists. |
+| S-LL-1000/firstPaintAfterMount | release-grade-evidence-collection | accepted-normal-mode-deferral | Keep release-mode evidence strict; replace this accepted residual with owner-approved budget metadata when measured runtime evidence exists. |
+| S-CI-50/compositionToCommit | input-latency-budget | accepted-normal-mode-deferral | Keep release-mode evidence strict; replace this accepted residual with owner-approved budget metadata when measured runtime evidence exists. |
+| S-CI-100-IME/compositionToCommit | input-latency-budget | accepted-normal-mode-deferral | Keep release-mode evidence strict; replace this accepted residual with owner-approved budget metadata when measured runtime evidence exists. |
+| S-RS-PE/dedupHitRatio | realtime-runtime-evidence | accepted-normal-mode-deferral | Keep release-mode evidence strict; replace this accepted residual with owner-approved budget metadata when measured runtime evidence exists. |
+| S-RS-PE/assemblerLatency | realtime-runtime-evidence | accepted-normal-mode-deferral | Keep release-mode evidence strict; replace this accepted residual with owner-approved budget metadata when measured runtime evidence exists. |
+| S-CS-COLD/firstPaintMs | release-grade-evidence-collection | accepted-normal-mode-deferral | Keep release-mode evidence strict; replace this accepted residual with owner-approved budget metadata when measured runtime evidence exists. |
+| S-CS-COLD/firstInteractiveMs | release-grade-evidence-collection | accepted-normal-mode-deferral | Keep release-mode evidence strict; replace this accepted residual with owner-approved budget metadata when measured runtime evidence exists. |
+
+## Accepted Proxy Evidence Debt
+
+- Status: accepted-normal-mode-deferral
+- Owner: runtime-perf-evidence-classification
+- Decision: Normal-mode archive readiness may pass with this accepted disposition; release mode remains stricter and still reports release-required proxy or unsupported evidence.
+- Next action: Promote release-relevant proxy records to measured Tauri/WebView evidence before release-grade archive.
+
+## Accepted Unsupported Evidence
+
+| Record | Owner | Platform Qualifier | Next Action |
+|---|---|---|---|
+| S-CS-COLD/firstPaintMs | release-grade-evidence-collection | supported Tauri/WebView startup marker runner unavailable in current CI/local evidence set | Collect real Tauri webview first-paint timing on a supported runner. |
+| S-CS-COLD/firstInteractiveMs | release-grade-evidence-collection | supported Tauri/WebView startup marker runner unavailable in current CI/local evidence set | Collect real Tauri webview first-interactive timing on a supported runner. |
+| S-LR-101/sampledOsChildLivenessAfterClose | long-running-runtime-evidence | cross-platform OS child process sampler unavailable | Add or explicitly waive a platform-safe child process sampler before release-grade closure. |
+| S-LR-200/moduleSwitchP95Ms | long-running-runtime-evidence | Tauri/WebView module-switch trace unavailable in jsdom evidence | Collect module switch P95 from a supported Tauri/WebView trace. |
 
 ## In Progress
 
-- close-client-performance-residual-2026-06: 0/30, not-archive-ready
-- collect-release-grade-performance-evidence: 28/32, not-archive-ready
+- fix-codex-parallel-runtime-ended-isolation: 63/66, not-archive-ready
+- 2026-06-18-extend-search-palette-with-commands: 0/0, not-archive-ready
+- 2026-06-18-extend-editor-file-tab-lifecycle: 0/0, not-archive-ready
+- 2026-06-18-add-shortcuts-overview-and-conflict-detection: 0/0, not-archive-ready
 
 ## Compatibility / Cleanup Matrix
 
@@ -31,15 +66,15 @@ Source: .artifacts/large-files-near-threshold.json
 
 | Path | Priority | Lines | Headroom | Facade / Boundary |
 |---|---|---:|---:|---|
-| src/app-shell.tsx | P0 | 2547 | 53 | Declare public facade before splitting. |
-| src/services/tauri.ts | P0 | 2514 | 86 | Preserve service exports, payload mapping, and web/Tauri fallback semantics. |
+| src/app-shell.tsx | P0 | 2593 | 7 | Declare public facade before splitting. |
+| src-tauri/src/engine/commands.rs | P0 | 2528 | 72 | Preserve command registration, Rust module facade, payload shape, and cross-platform paths. |
 | src-tauri/src/engine/claude_history.rs | P0 | 2505 | 95 | Preserve command registration, Rust module facade, payload shape, and cross-platform paths. |
 | src-tauri/src/codex/mod.rs | P0 | 2484 | 116 | Preserve command registration, Rust module facade, payload shape, and cross-platform paths. |
 | src-tauri/src/git/mod.rs | P0 | 2379 | 221 | Preserve command registration, Rust module facade, payload shape, and cross-platform paths. |
 | src-tauri/src/runtime/mod.rs | P0 | 2371 | 229 | Preserve command registration, Rust module facade, payload shape, and cross-platform paths. |
-| src-tauri/src/engine/commands.rs | P0 | 2286 | 314 | Preserve command registration, Rust module facade, payload shape, and cross-platform paths. |
-| src-tauri/src/engine/claude.rs | P0 | 2272 | 328 | Preserve command registration, Rust module facade, payload shape, and cross-platform paths. |
+| src-tauri/src/engine/claude.rs | P0 | 2309 | 291 | Preserve command registration, Rust module facade, payload shape, and cross-platform paths. |
 | src-tauri/src/session_management.rs | P1 | 2976 | 24 | Preserve command registration, Rust module facade, payload shape, and cross-platform paths. |
-| src/features/threads/hooks/useThreadEventHandlers.ts | P1 | 2747 | 53 | Preserve hook input/output shape and async cleanup semantics. |
+| src/features/threads/hooks/useThreads.ts | P1 | 2772 | 28 | Preserve hook input/output shape and async cleanup semantics. |
+| src/features/app/hooks/useAppServerEvents.ts | P1 | 2950 | 50 | Preserve hook input/output shape and async cleanup semantics. |
 
 Next action: Pick one coherent runtime boundary; do not batch unrelated hot paths together.

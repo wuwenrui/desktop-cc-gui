@@ -39,6 +39,7 @@ export {
 } from "./sanitize";
 
 export {
+  FAST_MARKDOWN_RENDERER_LIMITS,
   resolveFastMarkdownRendererProfile,
   resolveFastMarkdownProfileInputs,
 } from "./resolveProfile";
@@ -49,7 +50,19 @@ export {
   compileFastMarkdownInWorker,
   compileFastMarkdownWithWorkerFallback,
   disposeFastMarkdownWorker,
+  getFastMarkdownWorkerDiagnostics,
+  resetFastMarkdownWorkerDiagnostics,
 } from "./workerAdapter";
+
+export {
+  getFastMarkdownHookDiagnostics,
+  resetFastMarkdownHookDiagnostics,
+  type FastMarkdownHookDiagnostics,
+} from "./hookDiagnostics";
+
+export type {
+  FastMarkdownWorkerDiagnostics,
+} from "./types";
 
 export {
   FileMarkdownFastPreview,

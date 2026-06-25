@@ -118,3 +118,22 @@ Root-node file management actions SHALL use the same operation pending, success,
 - **WHEN** a New File, New Folder, or Paste action from the workspace root node succeeds
 - **THEN** the file tree SHALL refresh workspace file data
 - **AND** the resulting item SHOULD be selected or made discoverable in the refreshed tree
+
+### Requirement: Hotfix Closeout — File Tree First-Paint Scroll Shell
+
+The file tree panel SHALL own its scroll shell layout (flex column, `flex: 1`, `min-height: 0`, `padding: 8px 8px 0`, `position: relative`) in `src/styles/file-tree.css`, independent of the lazy-loaded `diff.css`. The `diff-panel` class SHALL remain on the root for selector compatibility, and `.diff-panel.file-tree-panel` override SHALL preserve the file-tree-specific spacing when the Git diff stylesheet is loaded.
+
+#### Scenario: First paint shows a stable vertical scrollbar
+- **WHEN** the file tree panel mounts for the first time in a session
+- **THEN** the vertical scrollbar SHALL be visible without requiring a prior visit to the Git panel
+- **AND** the inner `.file-tree-list` SHALL have a stable scroll container height derived from `.file-tree-panel`'s flex column shell
+
+#### Scenario: Git panel loaded afterward keeps file-tree spacing
+- **WHEN** the Git diff stylesheet becomes available after the file tree has already mounted
+- **THEN** the file tree SHALL NOT lose its `padding` or `gap` to the default `.diff-panel` rules
+- **AND** a CSS contract test SHALL lock this behavior
+
+#### Scenario: Large virtualized workspaces still scroll correctly
+- **WHEN** the file tree renders a virtualized row set over a large workspace
+- **THEN** the inner `.file-tree-list` scroll container SHALL continue to have a stable height
+- **AND** virtual row measurement SHALL NOT depend on `diff.css` being loaded

@@ -12,6 +12,8 @@ import type {
 export type ResolveFastMarkdownProfileInputs = {
   rawMarkdownLength: number;
   totalSourceLines: number;
+  markdownBlockCount: number;
+  heavyBlockCount: number;
   featureFlags: FastMarkdownFeatureFlags;
   boundedLineLimit?: number;
   fastHtmlOnly?: boolean;
@@ -20,6 +22,11 @@ export type ResolveFastMarkdownProfileInputs = {
 const DEFAULT_BOUNDED_LINE_LIMIT = 600;
 
 const FAST_HTML_SIZE_BUDGET = 256 * 1024;
+const LARGE_MARKDOWN_SIZE_BUDGET = 96 * 1024;
+const LARGE_MARKDOWN_LINE_BUDGET = 2_500;
+const LARGE_MARKDOWN_BLOCK_BUDGET = 900;
+const LARGE_MARKDOWN_HEAVY_BLOCK_BUDGET = 20;
+const BOUNDED_MARKDOWN_LINE_BUDGET = 6_000;
 
 function isFastHtmlEnabled(flags: FastMarkdownFeatureFlags): boolean {
   return flags.fastHtmlRendererEnabled === true;
@@ -27,6 +34,10 @@ function isFastHtmlEnabled(flags: FastMarkdownFeatureFlags): boolean {
 
 function isBoundedFastHtmlEnabled(flags: FastMarkdownFeatureFlags): boolean {
   return flags.boundedFastHtmlRendererEnabled === true;
+}
+
+function isLargeDocumentFastRendererDisabled(flags: FastMarkdownFeatureFlags): boolean {
+  return flags.largeDocumentFastRendererDisabled === true;
 }
 
 /**
@@ -41,15 +52,71 @@ export function countMarkdownSourceLines(markdown: string): number {
   return markdown.split(/\r?\n/).length;
 }
 
+export function countFastMarkdownProfileBlocks(markdown: string): {
+  markdownBlockCount: number;
+  heavyBlockCount: number;
+} {
+  if (!markdown) {
+    return { markdownBlockCount: 0, heavyBlockCount: 0 };
+  }
+  const lines = markdown.split(/\r?\n/);
+  let markdownBlockCount = 0;
+  let heavyBlockCount = 0;
+  let insideFence = false;
+  let fenceLanguage = "";
+  let previousWasBlank = true;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const fenceMatch = trimmed.match(/^```+\s*([\w-]+)?/);
+    if (fenceMatch) {
+      if (!insideFence) {
+        markdownBlockCount += 1;
+        fenceLanguage = (fenceMatch[1] ?? "").toLowerCase();
+        if (["mermaid", "math", "latex", "tex"].includes(fenceLanguage)) {
+          heavyBlockCount += 1;
+        }
+      }
+      insideFence = !insideFence;
+      previousWasBlank = false;
+      continue;
+    }
+    if (insideFence) {
+      continue;
+    }
+    if (!trimmed) {
+      previousWasBlank = true;
+      continue;
+    }
+    if (/^#{1,6}\s/.test(trimmed) || /^>\s?/.test(trimmed) || /^[-*+]\s/.test(trimmed) || /^\d+\.\s/.test(trimmed) || /^\|/.test(trimmed)) {
+      markdownBlockCount += 1;
+      if (/^\|/.test(trimmed)) {
+        heavyBlockCount += 1;
+      }
+      previousWasBlank = false;
+      continue;
+    }
+    if (previousWasBlank) {
+      markdownBlockCount += 1;
+    }
+    previousWasBlank = false;
+  }
+
+  return { markdownBlockCount, heavyBlockCount };
+}
+
 export function resolveFastMarkdownProfileInputs(args: {
   rawMarkdown: string;
   featureFlags: FastMarkdownFeatureFlags;
   boundedLineLimit?: number;
   fastHtmlOnly?: boolean;
 }): ResolveFastMarkdownProfileInputs {
+  const blockMetrics = countFastMarkdownProfileBlocks(args.rawMarkdown);
   return {
     rawMarkdownLength: args.rawMarkdown.length,
     totalSourceLines: countMarkdownSourceLines(args.rawMarkdown),
+    markdownBlockCount: blockMetrics.markdownBlockCount,
+    heavyBlockCount: blockMetrics.heavyBlockCount,
     featureFlags: args.featureFlags,
     boundedLineLimit: args.boundedLineLimit ?? DEFAULT_BOUNDED_LINE_LIMIT,
     fastHtmlOnly: args.fastHtmlOnly === true,
@@ -73,11 +140,24 @@ export function resolveFastMarkdownRendererProfile(
   if (inputs.fastHtmlOnly) {
     return "fast-html";
   }
-  if (!isFastHtmlEnabled(inputs.featureFlags)) {
+  const isLargeDocument =
+    inputs.rawMarkdownLength > LARGE_MARKDOWN_SIZE_BUDGET ||
+    inputs.totalSourceLines > LARGE_MARKDOWN_LINE_BUDGET ||
+    inputs.markdownBlockCount > LARGE_MARKDOWN_BLOCK_BUDGET ||
+    inputs.heavyBlockCount > LARGE_MARKDOWN_HEAVY_BLOCK_BUDGET;
+  const shouldDefaultLargeDocumentToFast =
+    isLargeDocument && !isLargeDocumentFastRendererDisabled(inputs.featureFlags);
+
+  if (!isFastHtmlEnabled(inputs.featureFlags) && !shouldDefaultLargeDocumentToFast) {
     return "rich-react";
   }
   const exceedsSizeBudget = inputs.rawMarkdownLength > FAST_HTML_SIZE_BUDGET;
-  if (exceedsSizeBudget && isBoundedFastHtmlEnabled(inputs.featureFlags)) {
+  const exceedsBoundedBudget =
+    exceedsSizeBudget || inputs.totalSourceLines > BOUNDED_MARKDOWN_LINE_BUDGET;
+  if (
+    exceedsBoundedBudget &&
+    (isBoundedFastHtmlEnabled(inputs.featureFlags) || shouldDefaultLargeDocumentToFast)
+  ) {
     return "bounded-fast-html";
   }
   return "fast-html";
@@ -85,5 +165,10 @@ export function resolveFastMarkdownRendererProfile(
 
 export const FAST_MARKDOWN_RENDERER_LIMITS = {
   FAST_HTML_SIZE_BUDGET_BYTES: FAST_HTML_SIZE_BUDGET,
+  LARGE_MARKDOWN_SIZE_BUDGET_BYTES: LARGE_MARKDOWN_SIZE_BUDGET,
+  LARGE_MARKDOWN_LINE_BUDGET,
+  LARGE_MARKDOWN_BLOCK_BUDGET,
+  LARGE_MARKDOWN_HEAVY_BLOCK_BUDGET,
+  BOUNDED_MARKDOWN_LINE_BUDGET,
   DEFAULT_BOUNDED_LINE_LIMIT,
 };

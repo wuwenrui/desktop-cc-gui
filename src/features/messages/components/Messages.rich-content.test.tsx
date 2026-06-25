@@ -8,6 +8,12 @@ import {
 } from "../../../services/tauri";
 import { Messages } from "./Messages";
 
+vi.mock("./Markdown", () => ({
+  Markdown: ({ value, className }: { value: string; className?: string }) => (
+    <div className={className}>{value}</div>
+  ),
+}));
+
 vi.mock("../../../services/tauri", () => ({
   hydrateClaudeDeferredImage: vi.fn(),
   readEngineTaskOutputArtifact: vi.fn(),

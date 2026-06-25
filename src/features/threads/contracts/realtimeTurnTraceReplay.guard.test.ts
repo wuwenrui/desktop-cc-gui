@@ -123,7 +123,7 @@ describe("realtime turn trace correlation guard", () => {
     const summary = result.summaries[0]!;
     expect(summary.counters.reasoningDeltaCount).toBeGreaterThan(0);
     expect(summary.counters.toolDeltaCount).toBe(2);
-    expect(summary.counters.deltaCount).toBe(1);
+    expect(summary.counters.deltaCount).toBe(7);
     expect(summary.counters.reducerCommitCount).toBeGreaterThan(0);
     expect(summary.deltas.firstDeltaToFirstVisibleTextMs).toBeGreaterThan(0);
     expect(summary.deltas.firstDeltaToFirstVisibleTextMs).toBeLessThan(100);

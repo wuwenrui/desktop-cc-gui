@@ -38,6 +38,11 @@ const enPart1Base = {
     name: "Name",
     terminal: "Terminal",
     toggleTerminalPanel: "Toggle terminal panel",
+    moreActions: "More actions",
+    markdownMermaidFullscreen: "Fullscreen",
+    markdownMermaidFullscreenHint: "Open diagram fullscreen",
+    markdownImageFullscreen: "Fullscreen",
+    markdownImageFullscreenHint: "Open image fullscreen",
   },
 
   // App

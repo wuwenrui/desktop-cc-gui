@@ -70,10 +70,15 @@ The system SHALL provide a CI sentry that runs the heavy regression noise checks
 - **WHEN** the heavy test noise gate logic changes
 - **THEN** parser-level automated tests SHALL validate clean-log acceptance and violation detection before the gate is trusted in CI
 
-#### Scenario: stabilization tests remain low-noise
+#### Scenario: heavy-test-noise artifacts are failure-scoped
 
-- **WHEN** this core runtime/realtime stabilization change adds or modifies runtime, realtime, AppShell, or bridge tests
-- **THEN** expected noisy diagnostics MUST be asserted or locally muted inside the owning test
-- **AND** the change MUST keep `node --test scripts/check-heavy-test-noise.test.mjs scripts/test-batched.test.mjs` and `npm run check:heavy-test-noise` passing
-- **AND** the check MUST be compatible with ubuntu-latest, macos-latest, and windows-latest
+- **WHEN** the heavy test noise sentry completes successfully in CI
+- **THEN** the sentry SHOULD NOT upload the heavy test noise log artifact
+- **AND** successful runs MUST still print the concise summary needed to audit pass status
+
+#### Scenario: failing heavy-test-noise runs keep diagnostics
+
+- **WHEN** the heavy test noise sentry fails in CI
+- **THEN** the sentry MUST upload the heavy test noise log artifact for diagnosis
+- **AND** the upload condition MUST NOT mask the original failing exit code
 

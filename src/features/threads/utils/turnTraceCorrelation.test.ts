@@ -16,6 +16,7 @@ import {
   isTurnTraceEnabled,
   listTurnTraceSummaries,
   noteTurnBatchFlushBoundary,
+  noteTurnDeltaIngress,
   noteTurnFirstEngineDeltaIngress,
   noteTurnFirstVisibleRowRender,
   noteTurnFirstVisibleTextGrowth,
@@ -63,6 +64,8 @@ describe("turnTraceCorrelation", () => {
       dimensions: baseDimensions,
       startedAt: t0 + 200,
       endedAt: t0 + 220,
+      routeStartedAt: t0 + 221,
+      routeEndedAt: t0 + 227,
       eventCount: 3,
       queueDepthAfter: 0,
     });
@@ -91,6 +94,12 @@ describe("turnTraceCorrelation", () => {
     expect(s.counters.batchFlushDurationSumMs).toBe(20);
     expect(s.counters.batchFlushDurationCount).toBe(1);
     expect(s.counters.batchFlushDurationAvgMs).toBe(20);
+    expect(s.counters.realtimeDeltaRouteDurationSumMs).toBe(2);
+    expect(s.counters.realtimeDeltaRouteDurationCount).toBe(1);
+    expect(s.counters.realtimeDeltaRouteDurationAvgMs).toBe(2);
+    expect(s.counters.appServerEventRouteDurationSumMs).toBe(6);
+    expect(s.counters.appServerEventRouteDurationCount).toBe(1);
+    expect(s.counters.appServerEventRouteDurationAvgMs).toBe(6);
     expect(s.counters.reducerAmplification).toBe(1);
     expect(s.counters.terminalSettlementLagMs).toBe(270);
 
@@ -126,6 +135,31 @@ describe("turnTraceCorrelation", () => {
     const summary = getTurnTraceSummary("thread-1", "turn-1") as TurnTraceSummary;
     expect(summary.evidenceClass).toBe("proxy");
     expect(summary.evidenceReason).toMatch(/proxy/);
+  });
+
+  it("keeps first visible text milestone while advancing latest growth count", () => {
+    noteTurnSendCommitted(baseDimensions, 0);
+    noteTurnFirstEngineDeltaIngress(baseDimensions, 10);
+    noteTurnReducerCommit({
+      dimensions: baseDimensions,
+      atMs: 20,
+      isAssistantDelta: true,
+    });
+    noteTurnFirstVisibleRowRender(baseDimensions, 30);
+    noteTurnFirstVisibleTextGrowth(baseDimensions, {
+      atMs: 40,
+      visibleTextGrowthCount: 1,
+    });
+    noteTurnFirstVisibleTextGrowth(baseDimensions, {
+      atMs: 80,
+      visibleTextGrowthCount: 4,
+    });
+    completeTurnTrace(baseDimensions, { atMs: 100, reason: "completed" });
+
+    const summary = getTurnTraceSummary("thread-1", "turn-1") as TurnTraceSummary;
+    expect(summary.milestones["first-visible-text-growth"]).toBe(40);
+    expect(summary.deltas.firstDeltaToFirstVisibleTextMs).toBe(30);
+    expect(summary.counters.visibleTextGrowthCount).toBe(4);
   });
 
   it("classifies as manual-only when only send/runtime started but no ingress", () => {
@@ -229,9 +263,11 @@ describe("turnTraceCorrelation", () => {
     expect(listTurnTraceSummaries()).toEqual([]);
   });
 
-  it("accumulates reducer amplification across multiple commits", () => {
+  it("counts every delta ingress without overwriting the first-delta milestone", () => {
     noteTurnSendCommitted(baseDimensions, 0);
     noteTurnFirstEngineDeltaIngress(baseDimensions, 10);
+    noteTurnDeltaIngress(baseDimensions, 20);
+    noteTurnDeltaIngress(baseDimensions, 25);
     noteTurnReducerCommit({ dimensions: baseDimensions, atMs: 15, isAssistantDelta: true });
     noteTurnReducerCommit({ dimensions: baseDimensions, atMs: 20, isAssistantDelta: true });
     noteTurnReducerCommit({ dimensions: baseDimensions, atMs: 25, isAssistantDelta: true });
@@ -240,9 +276,11 @@ describe("turnTraceCorrelation", () => {
     completeTurnTrace(baseDimensions, { atMs: 100, reason: "completed" });
     const summary = getTurnTraceSummary("thread-1", "turn-1") as TurnTraceSummary;
     expect(summary.counters.reducerCommitCount).toBe(3);
-    expect(summary.counters.deltaCount).toBe(1);
-    // 3 commits / 1 delta = 3
-    expect(summary.counters.reducerAmplification).toBe(3);
+    expect(summary.counters.deltaCount).toBe(3);
+    expect(summary.milestones["first-engine-delta-ingress"]).toBe(10);
+    // 3 commits / 3 deltas = 1
+    expect(summary.counters.reducerAmplification).toBe(1);
+    expect(summary.deltas.firstDeltaToFirstVisibleTextMs).toBe(25);
   });
 
   it("emits renderer diagnostic payload that is content-safe and bounded", () => {
@@ -357,5 +395,48 @@ describe("turnTraceCorrelation", () => {
     const summary = getTurnTraceSummary("thread-1", "turn-1") as TurnTraceSummary;
     expect(summary.counters.maxQueueDepth).toBe(7);
     expect(summary.counters.batchFlushCount).toBe(2);
+  });
+
+  it("keeps route work duration separate from the batch wait window", () => {
+    noteTurnSendCommitted(baseDimensions, 0);
+    noteTurnFirstEngineDeltaIngress(baseDimensions, 10);
+    noteTurnBatchFlushBoundary({
+      dimensions: baseDimensions,
+      startedAt: 10,
+      endedAt: 1_010,
+      routeStartedAt: 1_011,
+      routeEndedAt: 1_019,
+      eventCount: 4,
+      queueDepthAfter: 0,
+    });
+    noteTurnReducerCommit({ dimensions: baseDimensions, atMs: 1_020, isAssistantDelta: true });
+    noteTurnFirstVisibleRowRender(baseDimensions, 1_030);
+    noteTurnFirstVisibleTextGrowth(baseDimensions, { atMs: 1_040, visibleTextGrowthCount: 1 });
+    completeTurnTrace(baseDimensions, { atMs: 1_050, reason: "completed" });
+
+    const summary = getTurnTraceSummary("thread-1", "turn-1") as TurnTraceSummary;
+    expect(summary.counters.batchFlushDurationAvgMs).toBe(1_000);
+    expect(summary.counters.appServerEventRouteDurationAvgMs).toBe(8);
+    expect(summary.counters.realtimeDeltaRouteDurationAvgMs).toBe(2);
+  });
+
+  it("ignores invalid precise route timing without dropping legacy batch counters", () => {
+    noteTurnSendCommitted(baseDimensions, 0);
+    noteTurnFirstEngineDeltaIngress(baseDimensions, 10);
+    noteTurnBatchFlushBoundary({
+      dimensions: baseDimensions,
+      startedAt: 10,
+      endedAt: 30,
+      routeStartedAt: 40,
+      routeEndedAt: 35,
+      eventCount: 2,
+      queueDepthAfter: 0,
+    });
+    completeTurnTrace(baseDimensions, { atMs: 50, reason: "completed" });
+
+    const summary = getTurnTraceSummary("thread-1", "turn-1") as TurnTraceSummary;
+    expect(summary.counters.batchFlushDurationAvgMs).toBe(20);
+    expect(summary.counters.appServerEventRouteDurationAvgMs).toBeNull();
+    expect(summary.counters.realtimeDeltaRouteDurationAvgMs).toBeNull();
   });
 });

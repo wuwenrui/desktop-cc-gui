@@ -271,10 +271,12 @@ describe("useAppServerEvents request user input", () => {
     });
   });
 
-  it("falls back to turn.threadId and active codex thread for user input request", async () => {
+  it("falls back to turn.threadId and unique processing Codex thread for user input request", async () => {
     const handlers: Handlers = {
       onRequestUserInput: vi.fn(),
-      getActiveCodexThreadId: vi.fn(() => "codex-active-thread"),
+      getSingleProcessingCodexThreadId: vi.fn(
+        () => "codex-processing-thread",
+      ),
     };
     const { root } = await mount(handlers);
 
@@ -333,7 +335,7 @@ describe("useAppServerEvents request user input", () => {
       workspace_id: "ws-nested",
       request_id: "req-nested-2",
       params: {
-        thread_id: "codex-active-thread",
+        thread_id: "codex-processing-thread",
         turn_id: "turn-no-thread",
         item_id: "",
         questions: [

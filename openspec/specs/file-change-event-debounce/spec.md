@@ -59,3 +59,19 @@ Runtime evidence gates MUST expose raw and emitted file-change event rates plus 
 - **AND** `file_refresh_queue_depth_max` MUST be present
 - **AND** `file_refresh_stale_drop_count` MUST be present.
 
+### Requirement: V0511 File Change Debounce Evidence MUST Use Burst Fixtures
+
+File-change debounce evidence MUST be derived from same-path and cross-path burst fixtures.
+
+#### Scenario: same-path burst reports coalescing
+
+- **WHEN** a same-path burst fixture submits repeated file-change events within the debounce window
+- **THEN** the producer MUST emit raw event count and emitted event count
+- **AND** it MUST emit `S-IO-FC/fs_event_same_path_coalesce_ratio`
+
+#### Scenario: empty batch remains forbidden
+
+- **WHEN** the debounce fixture completes
+- **THEN** the producer MUST emit `S-IO-FC/fs_event_empty_batch_emit_count`
+- **AND** the expected value MUST be zero
+

@@ -1,88 +1,60 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MainHeaderActions } from "./MainHeaderActions";
+import { renderHook } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { useMainHeaderActionItems } from "./MainHeaderActions";
 
-function getLatestTooltipText() {
-  const tooltips = screen.getAllByRole("tooltip");
-  return tooltips[tooltips.length - 1]?.textContent ?? "";
-}
+const translate = (key: string) => key;
 
-describe("MainHeaderActions", () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({ t: translate }),
+}));
 
+describe("useMainHeaderActionItems", () => {
   afterEach(() => {
-    cleanup();
-    vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
-  it("renders SOLO toggle and dispatches explicit enter action", () => {
+  it("returns header actions for the open app command menu", () => {
     const onToggleSoloMode = vi.fn();
+    const onCollapseRightPanel = vi.fn();
 
-    render(
-      <MainHeaderActions
-        isCompact={false}
-        rightPanelCollapsed={false}
-        sidebarToggleProps={{
+    const { result } = renderHook(() =>
+      useMainHeaderActionItems({
+        isCompact: false,
+        rightPanelCollapsed: false,
+        sidebarToggleProps: {
           isCompact: false,
           sidebarCollapsed: false,
           rightPanelCollapsed: false,
           rightPanelAvailable: true,
           onCollapseSidebar: vi.fn(),
           onExpandSidebar: vi.fn(),
-          onCollapseRightPanel: vi.fn(),
+          onCollapseRightPanel,
           onExpandRightPanel: vi.fn(),
-        }}
-        showSoloButton
-        onToggleSoloMode={onToggleSoloMode}
-      />,
+        },
+        showSoloButton: true,
+        onToggleSoloMode,
+      }),
     );
 
-    const button = screen.getByRole("button", { name: "sidebar.enterSoloMode" });
-    expect(button.getAttribute("data-tauri-drag-region")).toBe("false");
+    const labels = result.current.map((item) => item.label);
+    expect(labels).toContain("sidebar.enterSoloMode");
+    expect(labels).toContain("sidebar.hideGitSidebar");
 
-    fireEvent.click(button);
+    result.current.find((item) => item.id === "solo-mode")?.onSelect();
+    result.current.find((item) => item.id === "right-panel")?.onSelect();
+
     expect(onToggleSoloMode).toHaveBeenCalledTimes(1);
+    expect(onCollapseRightPanel).toHaveBeenCalledTimes(1);
   });
 
-  it("renders client documentation action and dispatches open action", () => {
-    const onOpenClientDocumentation = vi.fn();
-
-    render(
-      <MainHeaderActions
-        isCompact={false}
-        rightPanelCollapsed={false}
-        sidebarToggleProps={{
-          isCompact: false,
-          sidebarCollapsed: false,
-          rightPanelCollapsed: false,
-          rightPanelAvailable: false,
-          onCollapseSidebar: vi.fn(),
-          onExpandSidebar: vi.fn(),
-          onCollapseRightPanel: vi.fn(),
-          onExpandRightPanel: vi.fn(),
-        }}
-        showClientDocumentationButton
-        onOpenClientDocumentation={onOpenClientDocumentation}
-      />,
-    );
-
-    const button = screen.getByRole("button", { name: "clientDocumentation.open" });
-    expect(button.getAttribute("data-tauri-drag-region")).toBe("false");
-
-    fireEvent.click(button);
-    expect(onOpenClientDocumentation).toHaveBeenCalledTimes(1);
-  });
-
-  it("shows tooltips for icon-only header actions on hover", async () => {
-    render(
-      <MainHeaderActions
-        isCompact={false}
-        rightPanelCollapsed={false}
-        sidebarToggleProps={{
-          isCompact: false,
+  it("returns no actions in compact mode", () => {
+    const { result } = renderHook(() =>
+      useMainHeaderActionItems({
+        isCompact: true,
+        rightPanelCollapsed: false,
+        sidebarToggleProps: {
+          isCompact: true,
           sidebarCollapsed: false,
           rightPanelCollapsed: false,
           rightPanelAvailable: true,
@@ -90,34 +62,51 @@ describe("MainHeaderActions", () => {
           onExpandSidebar: vi.fn(),
           onCollapseRightPanel: vi.fn(),
           onExpandRightPanel: vi.fn(),
-        }}
-        showRuntimeConsoleButton
-        onToggleRuntimeConsole={vi.fn()}
-        showTerminalButton
-        onToggleTerminal={vi.fn()}
-        showSoloButton
-        onToggleSoloMode={vi.fn()}
-      />,
+        },
+        showSoloButton: true,
+        onToggleSoloMode: vi.fn(),
+      }),
     );
 
-    await act(async () => {
-      fireEvent.mouseEnter(screen.getByRole("button", { name: "files.openRunConsole" }));
-      await vi.advanceTimersByTimeAsync(250);
-    });
-    expect(getLatestTooltipText()).toContain("files.openRunConsole");
+    expect(result.current).toEqual([]);
+  });
 
-    await act(async () => {
-      fireEvent.mouseLeave(screen.getByRole("button", { name: "files.openRunConsole" }));
-      fireEvent.mouseEnter(screen.getByRole("button", { name: "common.toggleTerminalPanel" }));
-      await vi.advanceTimersByTimeAsync(250);
-    });
-    expect(getLatestTooltipText()).toContain("common.toggleTerminalPanel");
+  it("keeps the action array reference stable when logical inputs are unchanged", () => {
+    const onToggleSoloMode = vi.fn();
+    const onCollapseRightPanel = vi.fn();
+    const onExpandRightPanel = vi.fn();
 
-    await act(async () => {
-      fireEvent.mouseLeave(screen.getByRole("button", { name: "common.toggleTerminalPanel" }));
-      fireEvent.mouseEnter(screen.getByRole("button", { name: "sidebar.enterSoloMode" }));
-      await vi.advanceTimersByTimeAsync(250);
-    });
-    expect(getLatestTooltipText()).toContain("sidebar.enterSoloMode");
+    const { result, rerender } = renderHook(
+      ({ isSoloMode }) =>
+        useMainHeaderActionItems({
+          isCompact: false,
+          rightPanelCollapsed: false,
+          sidebarToggleProps: {
+            isCompact: false,
+            sidebarCollapsed: false,
+            rightPanelCollapsed: false,
+            rightPanelAvailable: true,
+            onCollapseSidebar: vi.fn(),
+            onExpandSidebar: vi.fn(),
+            onCollapseRightPanel,
+            onExpandRightPanel,
+          },
+          showSoloButton: true,
+          isSoloMode,
+          onToggleSoloMode,
+        }),
+      { initialProps: { isSoloMode: false } },
+    );
+
+    const previousActions = result.current;
+
+    rerender({ isSoloMode: false });
+
+    expect(result.current).toBe(previousActions);
+
+    rerender({ isSoloMode: true });
+
+    expect(result.current).not.toBe(previousActions);
+    expect(result.current.find((item) => item.id === "solo-mode")?.active).toBe(true);
   });
 });

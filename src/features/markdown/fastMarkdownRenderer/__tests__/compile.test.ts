@@ -16,6 +16,7 @@ import {
   TASK_LIST_FIXTURE,
   XSS_INLINE_EVENT_FIXTURE,
   XSS_LINKS_FIXTURE,
+  createSyntheticLongMarkdownFixture,
 } from "./fixtures";
 
 beforeEach(() => {
@@ -231,6 +232,49 @@ describe("compileFastMarkdown", () => {
     // may or may not survive depending on line distribution; assert that
     // the parsed source lines <= lineLimit + 1.
     expect(result.diagnostics.totalSourceLines).toBeLessThanOrEqual(51);
+  });
+
+  it("keeps synthetic long fixture bounded while preserving parser metadata", async () => {
+    const markdown = createSyntheticLongMarkdownFixture();
+
+    const result = await compileFastMarkdown({
+      documentKey: "doc-synthetic-long",
+      rawMarkdown: markdown,
+      rendererProfile: "bounded-fast-html",
+      options: { lineLimit: 600 },
+    });
+
+    expect(markdown.split(/\r?\n/).length).toBeGreaterThan(6_000);
+    expect(result.diagnostics.truncated).toBe(true);
+    expect(result.diagnostics.totalSourceLines).toBeLessThanOrEqual(600);
+    expect(result.outline.length).toBeGreaterThan(0);
+    expect(result.heavyBlocks.some((block) => block.kind === "table")).toBe(true);
+    expect(result.heavyBlocks.some((block) => block.kind === "code-block")).toBe(true);
+    expect(result.heavyBlocks.some((block) => block.kind === "mermaid")).toBe(true);
+    expect(result.sourceLineAnchors.length).toBeGreaterThan(0);
+  });
+
+  it("extracts bounded profile outline from the full source", async () => {
+    const markdown = [
+      "# Top",
+      "",
+      ...Array.from({ length: 700 }, (_, index) => `paragraph ${index}`),
+      "",
+      "## Tail Heading",
+      "",
+      "tail body",
+    ].join("\n");
+
+    const result = await compileFastMarkdown({
+      documentKey: "doc-bounded-full-outline",
+      rawMarkdown: markdown,
+      rendererProfile: "bounded-fast-html",
+      options: { lineLimit: 50 },
+    });
+
+    expect(result.diagnostics.truncated).toBe(true);
+    expect(result.outline.map((entry) => entry.title)).toContain("Tail Heading");
+    expect(result.html).not.toContain("Tail Heading");
   });
 
   it("returns the same contentHash for identical raw markdown", async () => {

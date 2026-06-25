@@ -1,41 +1,65 @@
 // @vitest-environment jsdom
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { MouseEvent } from "react";
+import type { OpenAppTarget } from "../../../types";
 import { useFileLinkOpener } from "./useFileLinkOpener";
 
-const mockOpenPath = vi.fn();
-const mockRevealItemInDir = vi.fn();
-const mockOpenWorkspaceIn = vi.fn();
-const mockClipboardWriteText = vi.fn();
+const openerMocks = vi.hoisted(() => ({
+  openPath: vi.fn(),
+  revealItemInDir: vi.fn(),
+  openWorkspaceIn: vi.fn(),
+  pushErrorToast: vi.fn(),
+  clipboardWriteText: vi.fn(),
+}));
 
 vi.mock("@tauri-apps/plugin-opener", () => ({
-  openPath: (...args: unknown[]) => mockOpenPath(...args),
-  revealItemInDir: (...args: unknown[]) => mockRevealItemInDir(...args),
+  openPath: openerMocks.openPath,
+  revealItemInDir: openerMocks.revealItemInDir,
 }));
 
 vi.mock("../../../services/tauri", () => ({
-  openWorkspaceIn: (...args: unknown[]) => mockOpenWorkspaceIn(...args),
+  openWorkspaceIn: openerMocks.openWorkspaceIn,
 }));
 
 vi.mock("../../../services/toasts", () => ({
-  pushErrorToast: vi.fn(),
+  pushErrorToast: openerMocks.pushErrorToast,
 }));
+
+function makeOpenTarget(
+  id: string,
+  appName: string,
+  args: string[] = [],
+): OpenAppTarget {
+  return {
+    id,
+    label: appName,
+    kind: "app",
+    appName,
+    args,
+  };
+}
 
 describe("useFileLinkOpener", () => {
   beforeEach(() => {
-    mockOpenPath.mockReset();
-    mockRevealItemInDir.mockReset();
-    mockOpenWorkspaceIn.mockReset();
-    mockClipboardWriteText.mockReset();
+    openerMocks.openPath.mockReset();
+    openerMocks.revealItemInDir.mockReset();
+    openerMocks.openWorkspaceIn.mockReset();
+    openerMocks.pushErrorToast.mockReset();
+    openerMocks.clipboardWriteText.mockReset();
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
       value: {
-        writeText: mockClipboardWriteText,
+        writeText: openerMocks.clipboardWriteText,
       },
     });
   });
 
   it("builds a renderer-owned file link menu with the expected actions", async () => {
+    openerMocks.openPath.mockResolvedValue(undefined);
+    openerMocks.openWorkspaceIn.mockResolvedValue(undefined);
+    openerMocks.revealItemInDir.mockResolvedValue(undefined);
+    openerMocks.clipboardWriteText.mockResolvedValue(undefined);
     const { result } = renderHook(() =>
       useFileLinkOpener(
         "/repo",
@@ -63,7 +87,7 @@ describe("useFileLinkOpener", () => {
 
     act(() => {
       result.current.showFileLinkMenu(
-        event as unknown as React.MouseEvent,
+        event as unknown as MouseEvent,
         "src/main.ts#L7",
       );
     });
@@ -82,40 +106,143 @@ describe("useFileLinkOpener", () => {
     ]);
 
     const [openFile, openConfiguredTarget, reveal, download, copyLink] = items;
-    expect(download.type).toBe("item");
-    if (download.type === "item") {
+    expect(download?.type).toBe("item");
+    if (download?.type === "item") {
       expect(download.disabled).toBe(true);
     }
 
-    if (openFile.type === "item") {
+    if (openFile?.type === "item") {
       await act(async () => {
         await openFile.onSelect();
       });
     }
-    expect(mockOpenPath).toHaveBeenCalledWith("/repo/src/main.ts");
+    expect(openerMocks.openPath).toHaveBeenCalledWith("/repo/src/main.ts");
 
-    if (openConfiguredTarget.type === "item") {
+    if (openConfiguredTarget?.type === "item") {
       await act(async () => {
         await openConfiguredTarget.onSelect();
       });
     }
-    expect(mockOpenWorkspaceIn).toHaveBeenCalledWith("/repo/src/main.ts", {
+    expect(openerMocks.openWorkspaceIn).toHaveBeenCalledWith("/repo/src/main.ts", {
       appName: "Cursor",
       args: ["--reuse-window"],
     });
 
-    if (reveal.type === "item") {
+    if (reveal?.type === "item") {
       await act(async () => {
         await reveal.onSelect();
       });
     }
-    expect(mockRevealItemInDir).toHaveBeenCalledWith("/repo/src/main.ts");
+    expect(openerMocks.revealItemInDir).toHaveBeenCalledWith("/repo/src/main.ts");
 
-    if (copyLink.type === "item") {
+    if (copyLink?.type === "item") {
       await act(async () => {
         await copyLink.onSelect();
       });
     }
-    expect(mockClipboardWriteText).toHaveBeenCalledWith("file:///repo/src/main.ts");
+    expect(openerMocks.clipboardWriteText).toHaveBeenCalledWith("file:///repo/src/main.ts");
+  });
+
+  it("keeps link handlers stable when open target arrays are recreated", async () => {
+    openerMocks.openPath.mockRejectedValue(new Error("native open unavailable"));
+    openerMocks.openWorkspaceIn.mockResolvedValue(undefined);
+    const firstTargets = [makeOpenTarget("vscode", "VS Code")];
+    const nextTargets = [makeOpenTarget("cursor", "Cursor", ["--reuse-window"])];
+
+    const { result, rerender } = renderHook(
+      (props: {
+        workspacePath: string;
+        openTargets: OpenAppTarget[];
+        selectedOpenAppId: string;
+      }) =>
+        useFileLinkOpener(
+          props.workspacePath,
+          props.openTargets,
+          props.selectedOpenAppId,
+          null,
+        ),
+      {
+        initialProps: {
+          workspacePath: "/workspace/old",
+          openTargets: firstTargets,
+          selectedOpenAppId: "vscode",
+        },
+      },
+    );
+
+    const firstOpenFileLink = result.current.openFileLink;
+    const firstShowFileLinkMenu = result.current.showFileLinkMenu;
+
+    rerender({
+      workspacePath: "/workspace/current",
+      openTargets: nextTargets,
+      selectedOpenAppId: "cursor",
+    });
+
+    expect(result.current.openFileLink).toBe(firstOpenFileLink);
+    expect(result.current.showFileLinkMenu).toBe(firstShowFileLinkMenu);
+
+    await act(async () => {
+      await result.current.openFileLink("src/App.tsx");
+    });
+
+    expect(openerMocks.openWorkspaceIn).toHaveBeenCalledWith(
+      "/workspace/current/src/App.tsx",
+      {
+        appName: "Cursor",
+        args: ["--reuse-window"],
+      },
+    );
+  });
+
+  it("builds context menu actions from the latest open target config", () => {
+    const firstTargets = [makeOpenTarget("vscode", "VS Code")];
+    const nextTargets = [makeOpenTarget("cursor", "Cursor")];
+    const { result, rerender } = renderHook(
+      (props: { openTargets: OpenAppTarget[]; selectedOpenAppId: string }) =>
+        useFileLinkOpener(
+          "/workspace/current",
+          props.openTargets,
+          props.selectedOpenAppId,
+          null,
+        ),
+      {
+        initialProps: {
+          openTargets: firstTargets,
+          selectedOpenAppId: "vscode",
+        },
+      },
+    );
+    const firstShowFileLinkMenu = result.current.showFileLinkMenu;
+
+    rerender({
+      openTargets: nextTargets,
+      selectedOpenAppId: "cursor",
+    });
+
+    expect(result.current.showFileLinkMenu).toBe(firstShowFileLinkMenu);
+
+    act(() => {
+      result.current.showFileLinkMenu(
+        {
+          clientX: 12,
+          clientY: 24,
+          preventDefault: vi.fn(),
+          stopPropagation: vi.fn(),
+        } as unknown as MouseEvent,
+        "src/App.tsx",
+      );
+    });
+
+    const configuredTargetAction = result.current.fileLinkMenu?.items.find(
+      (item) =>
+        item.type === "item" &&
+        item.id === "open-configured-target",
+    );
+    expect(
+      configuredTargetAction && "label" in configuredTargetAction
+        ? configuredTargetAction.label
+        : null,
+    ).toBe("Open in Cursor");
   });
 });

@@ -226,7 +226,9 @@ describe("RequestUserInputMessage", () => {
       await Promise.resolve();
     });
 
-    expect(onDismiss).toHaveBeenCalledWith(baseRequest);
+    expect(onDismiss).toHaveBeenCalledWith(baseRequest, {
+      staleSettlementHint: "timeout",
+    });
     expect(onSubmit).not.toHaveBeenCalled();
     expect(screen.queryByText("Provide input")).toBeNull();
   });
@@ -250,7 +252,9 @@ describe("RequestUserInputMessage", () => {
       await Promise.resolve();
     });
 
-    expect(onDismiss).toHaveBeenCalledWith(baseRequest);
+    expect(onDismiss).toHaveBeenCalledWith(baseRequest, {
+      staleSettlementHint: "timeout",
+    });
     expect(onSubmit).not.toHaveBeenCalled();
     expect(screen.getByText("Submit failed. Please retry.")).toBeTruthy();
     expect(screen.getByText("Provide input")).toBeTruthy();
@@ -292,6 +296,70 @@ describe("RequestUserInputMessage", () => {
     });
 
     expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it("submits timed-out active request with stale settlement hint", async () => {
+    vi.useFakeTimers();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    render(
+      <RequestUserInputMessage
+        requests={[baseRequest]}
+        activeThreadId="thread-1"
+        activeWorkspaceId="ws-1"
+        onSubmit={onSubmit}
+      />,
+    );
+
+    await act(async () => {
+      vi.advanceTimersByTime(300_000);
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "approval.submit" }));
+      await Promise.resolve();
+    });
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      baseRequest,
+      { answers: { "q-1": { answers: [] } } },
+      { staleSettlementHint: "timeout" },
+    );
+  });
+
+  it("keeps timeout hint when collapsed stale request is skipped after auto-dismiss failure", async () => {
+    vi.useFakeTimers();
+    const onDismiss = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("fail"))
+      .mockResolvedValueOnce(undefined);
+    render(
+      <RequestUserInputMessage
+        requests={[baseRequest]}
+        activeThreadId="thread-1"
+        activeWorkspaceId="ws-1"
+        onSubmit={vi.fn()}
+        onDismiss={onDismiss}
+      />,
+    );
+
+    await act(async () => {
+      vi.advanceTimersByTime(300_000);
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText("Submit failed. Please retry.")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Collapse this question card without skipping" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Skip this question and continue" }));
+      await Promise.resolve();
+    });
+
+    expect(onDismiss).toHaveBeenNthCalledWith(2, baseRequest, {
+      staleSettlementHint: "timeout",
+    });
+    expect(screen.queryByRole("group", { name: "Collapsed question card" })).toBeNull();
   });
 
   it("does not auto-dismiss while a valid submit is in flight", async () => {

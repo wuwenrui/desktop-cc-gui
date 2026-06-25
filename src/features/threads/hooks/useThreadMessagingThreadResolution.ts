@@ -37,6 +37,7 @@ type UseThreadMessagingThreadResolutionOptions = {
       activate?: boolean;
       engine?: ThreadEngine;
       folderId?: string | null;
+      providerProfileId?: string | null;
     },
   ) => Promise<string | null>;
 };
@@ -163,11 +164,17 @@ export function useThreadMessagingThreadResolution({
   );
 
   const startThreadForMessageSend = useCallback(
-    async (workspace: WorkspaceInfo, engine: ThreadEngine) => {
+    async (
+      workspace: WorkspaceInfo,
+      engine: ThreadEngine,
+      options?: { providerProfileId?: string | null },
+    ) => {
+      const providerProfileId = options?.providerProfileId?.trim() || null;
       const createThread = () =>
         startThreadForWorkspace(workspace.id, {
           activate: true,
           engine,
+          ...(providerProfileId ? { providerProfileId } : {}),
         });
       if (!runWithCreateSessionLoading) {
         return createThread();

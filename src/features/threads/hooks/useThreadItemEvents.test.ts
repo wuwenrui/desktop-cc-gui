@@ -10,6 +10,9 @@ import {
   buildLiveAssistantShadowTranscriptId,
 } from "../utils/liveAssistantShadowTranscript";
 import { useThreadItemEvents } from "./useThreadItemEvents";
+import {
+  workspaceScopedSet,
+} from "./workspaceScopedMap";
 
 vi.mock("../../../utils/threadItems", () => ({
   buildConversationItem: vi.fn(),
@@ -47,8 +50,10 @@ const makeOptions = (overrides: SetupOverrides = {}) => {
   const getCustomName =
     overrides.getCustomName ?? vi.fn(() => undefined);
   const resolveCollaborationUiMode = overrides.resolveCollaborationUiMode ?? undefined;
+  // chat-stream-render-isolation-2026-06 task 8: workspace-scope ref
+  // shape migrated from Set<threadId> to Map<workspaceId, Map<threadId, true>>.
   const interruptedThreadsRef = {
-    current: new Set<string>(),
+    current: new Map<string, Map<string, true>>(),
   };
   const onAgentMessageCompletedExternal =
     overrides.onAgentMessageCompletedExternal ?? undefined;
@@ -368,6 +373,88 @@ describe("useThreadItemEvents", () => {
     );
     expect(generatedImageCalls).toHaveLength(0);
     expect(safeMessageActivity).toHaveBeenCalled();
+  });
+
+  it("dispatches cadence-flushed live assistant deltas without transition lag", () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem("ccgui.perf.realtimeBatching", "1");
+    const queuedTransitions: Array<() => void> = [];
+    const { result, dispatch, markProcessing, safeMessageActivity } = makeOptions({
+      scheduleRealtimeDispatch: (callback) => {
+        queuedTransitions.push(callback);
+      },
+    });
+
+    act(() => {
+      result.current.onNormalizedRealtimeEvent({
+        engine: "codex",
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        turnId: "turn-1",
+        eventId: "evt-live-1",
+        itemKind: "message",
+        timestampMs: 1,
+        operation: "appendAgentMessageDelta",
+        sourceMethod: "item/agentMessage/delta",
+        delta: "第一段",
+        item: {
+          id: "assistant-live-1",
+          kind: "message",
+          role: "assistant",
+          text: "第一段",
+        },
+      });
+      result.current.onNormalizedRealtimeEvent({
+        engine: "codex",
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        turnId: "turn-1",
+        eventId: "evt-live-2",
+        itemKind: "message",
+        timestampMs: 2,
+        operation: "appendAgentMessageDelta",
+        sourceMethod: "item/agentMessage/delta",
+        delta: "第二段",
+        item: {
+          id: "assistant-live-1",
+          kind: "message",
+          role: "assistant",
+          text: "第二段",
+        },
+      });
+    });
+
+    expect(queuedTransitions).toHaveLength(0);
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "applyNormalizedRealtimeEvent",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      event: expect.objectContaining({
+        eventId: "evt-live-1",
+        operation: "appendAgentMessageDelta",
+      }),
+      hasCustomName: false,
+    });
+
+    act(() => {
+      vi.advanceTimersByTime(20);
+    });
+
+    expect(queuedTransitions).toHaveLength(0);
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "applyNormalizedRealtimeEvent",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      event: expect.objectContaining({
+        eventId: "evt-live-2",
+        operation: "appendAgentMessageDelta",
+      }),
+      hasCustomName: false,
+    });
+    expect(markProcessing).toHaveBeenCalledWith("thread-1", true);
+    expect(safeMessageActivity).toHaveBeenCalledTimes(2);
+
+    vi.useRealTimers();
   });
 
   it("batches codex assistant snapshots and flushes only the latest realtime frame", () => {
@@ -802,16 +889,16 @@ describe("useThreadItemEvents", () => {
         threadId: "thread-1",
         turnId: "turn-1",
         eventId: "evt-queued-1",
-        itemKind: "message",
+        itemKind: "reasoning",
         timestampMs: 1,
-        operation: "appendAgentMessageDelta",
-        sourceMethod: "item/agentMessage/delta",
-        delta: "queued body",
+        operation: "appendReasoningSummaryBoundary",
+        sourceMethod: "item/reasoning/summary/boundary",
+        delta: null,
         item: {
-          id: "assistant-queued-1",
-          kind: "message",
-          role: "assistant",
-          text: "queued body",
+          id: "reasoning-queued-1",
+          kind: "reasoning",
+          summary: "queued summary",
+          content: "",
         },
       });
       result.current.markRealtimeTurnTerminal("thread-1", "turn-1");
@@ -819,8 +906,10 @@ describe("useThreadItemEvents", () => {
 
     expect(queuedTransitions).toHaveLength(1);
     expect(dispatch).not.toHaveBeenCalled();
-    expect(markProcessing).not.toHaveBeenCalled();
+    expect(markProcessing).toHaveBeenCalledWith("thread-1", true);
     expect(safeMessageActivity).toHaveBeenCalledTimes(1);
+
+    markProcessing.mockClear();
 
     act(() => {
       queuedTransitions.forEach((callback) => callback());
@@ -830,6 +919,61 @@ describe("useThreadItemEvents", () => {
       expect.objectContaining({ type: "applyNormalizedRealtimeEvent" }),
     );
     expect(markProcessing).not.toHaveBeenCalled();
+  });
+
+  it("keeps processing marks outside transitioned normalized dispatches", () => {
+    const queuedTransitions: Array<() => void> = [];
+    const { result, dispatch, markProcessing } = makeOptions({
+      scheduleRealtimeDispatch: (callback) => {
+        queuedTransitions.push(callback);
+      },
+    });
+
+    act(() => {
+      result.current.noteRealtimeTurnStarted("thread-1", "turn-1");
+      result.current.onNormalizedRealtimeEvent({
+        engine: "codex",
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        turnId: "turn-1",
+        eventId: "evt-transition-1",
+        itemKind: "reasoning",
+        timestampMs: 1,
+        operation: "appendReasoningSummaryBoundary",
+        sourceMethod: "item/reasoning/summary/boundary",
+        delta: null,
+        item: {
+          id: "reasoning-transition-1",
+          kind: "reasoning",
+          summary: "transition summary",
+          content: "",
+        },
+      });
+    });
+
+    expect(queuedTransitions).toHaveLength(1);
+    expect(markProcessing).toHaveBeenCalledWith("thread-1", true);
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "applyNormalizedRealtimeEvent" }),
+    );
+
+    markProcessing.mockClear();
+
+    act(() => {
+      queuedTransitions.forEach((callback) => callback());
+    });
+
+    expect(markProcessing).not.toHaveBeenCalled();
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "applyNormalizedRealtimeEvent",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      event: expect.objectContaining({
+        operation: "appendReasoningSummaryBoundary",
+        turnId: "turn-1",
+      }),
+      hasCustomName: false,
+    });
   });
 
   it("completes agent messages and updates thread activity", () => {
@@ -999,7 +1143,7 @@ describe("useThreadItemEvents", () => {
   it("skips reasoning deltas for interrupted threads", () => {
     const { result, dispatch, markProcessing, safeMessageActivity, interruptedThreadsRef } =
       makeOptions();
-    interruptedThreadsRef.current.add("claude:session-1");
+    workspaceScopedSet(interruptedThreadsRef.current, "ws-1", "claude:session-1", true);
 
     act(() => {
       result.current.onReasoningSummaryDelta(
@@ -1040,7 +1184,7 @@ describe("useThreadItemEvents", () => {
 
   it("skips agent message deltas for interrupted threads", () => {
     const { result, dispatch, markProcessing, interruptedThreadsRef } = makeOptions();
-    interruptedThreadsRef.current.add("thread-1");
+    workspaceScopedSet(interruptedThreadsRef.current, "ws-1", "thread-1", true);
 
     act(() => {
       result.current.onAgentMessageDelta({
@@ -1058,7 +1202,7 @@ describe("useThreadItemEvents", () => {
   it("skips gemini item snapshots for interrupted threads", () => {
     const { result, dispatch, markProcessing, interruptedThreadsRef, safeMessageActivity } =
       makeOptions();
-    interruptedThreadsRef.current.add("gemini:session-1");
+    workspaceScopedSet(interruptedThreadsRef.current, "ws-1", "gemini:session-1", true);
 
     act(() => {
       result.current.onItemStarted("ws-1", "gemini:session-1", {
@@ -1075,7 +1219,7 @@ describe("useThreadItemEvents", () => {
   it("skips claude item snapshots for interrupted threads", () => {
     const { result, dispatch, markProcessing, interruptedThreadsRef, safeMessageActivity } =
       makeOptions();
-    interruptedThreadsRef.current.add("claude:session-1");
+    workspaceScopedSet(interruptedThreadsRef.current, "ws-1", "claude:session-1", true);
 
     act(() => {
       result.current.onItemUpdated("ws-1", "claude:session-1", {
@@ -1099,7 +1243,7 @@ describe("useThreadItemEvents", () => {
     } = makeOptions({
       onAgentMessageCompletedExternal: vi.fn(),
     });
-    interruptedThreadsRef.current.add("gemini:session-1");
+    workspaceScopedSet(interruptedThreadsRef.current, "ws-1", "gemini:session-1", true);
 
     act(() => {
       result.current.onAgentMessageCompleted({
@@ -1123,7 +1267,7 @@ describe("useThreadItemEvents", () => {
     } = makeOptions({
       onAgentMessageCompletedExternal: vi.fn(),
     });
-    interruptedThreadsRef.current.add("claude:session-1");
+    workspaceScopedSet(interruptedThreadsRef.current, "ws-1", "claude:session-1", true);
 
     act(() => {
       result.current.onAgentMessageCompleted({

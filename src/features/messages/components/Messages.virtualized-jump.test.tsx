@@ -32,6 +32,12 @@ vi.mock("@tanstack/react-virtual", () => ({
   },
 }));
 
+vi.mock("./Markdown", () => ({
+  Markdown: ({ value, className }: { value: string; className?: string }) => (
+    <div className={className}>{value}</div>
+  ),
+}));
+
 import { Messages } from "./Messages";
 
 describe("Messages virtualized jump behavior", () => {

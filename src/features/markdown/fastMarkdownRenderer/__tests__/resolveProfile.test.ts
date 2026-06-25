@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  countFastMarkdownProfileBlocks,
   countMarkdownSourceLines,
   resolveFastMarkdownProfileInputs,
   resolveFastMarkdownRendererProfile,
   FAST_MARKDOWN_RENDERER_LIMITS,
 } from "../resolveProfile";
+import { createSyntheticLongMarkdownFixture } from "./fixtures";
 
 describe("countMarkdownSourceLines", () => {
   it("returns 0 for empty input", () => {
@@ -19,6 +21,37 @@ describe("countMarkdownSourceLines", () => {
   it("handles CR/LF line endings", () => {
     const markdown = "a\r\nb\r\nc";
     expect(countMarkdownSourceLines(markdown)).toBe(3);
+  });
+});
+
+describe("countFastMarkdownProfileBlocks", () => {
+  it("counts block and heavy-block pressure for profile selection", () => {
+    const metrics = countFastMarkdownProfileBlocks([
+      "# Title",
+      "",
+      "| a | b |",
+      "| - | - |",
+      "| 1 | 2 |",
+      "",
+      "```mermaid",
+      "graph TD",
+      "A --> B",
+      "```",
+    ].join("\n"));
+
+    expect(metrics.markdownBlockCount).toBeGreaterThanOrEqual(3);
+    expect(metrics.heavyBlockCount).toBeGreaterThanOrEqual(2);
+  });
+
+  it("captures synthetic long markdown fixture pressure", () => {
+    const markdown = createSyntheticLongMarkdownFixture();
+    const metrics = countFastMarkdownProfileBlocks(markdown);
+
+    expect(countMarkdownSourceLines(markdown)).toBeGreaterThan(6_000);
+    expect(metrics.markdownBlockCount).toBeGreaterThan(
+      FAST_MARKDOWN_RENDERER_LIMITS.LARGE_MARKDOWN_BLOCK_BUDGET,
+    );
+    expect(metrics.heavyBlockCount).toBeGreaterThan(0);
   });
 });
 
@@ -69,6 +102,34 @@ describe("resolveFastMarkdownRendererProfile", () => {
     expect(profile).toBe("rich-react");
   });
 
+  it("returns fast-html for large documents by default when the fast flag is off", () => {
+    const large = Array.from(
+      { length: FAST_MARKDOWN_RENDERER_LIMITS.LARGE_MARKDOWN_LINE_BUDGET + 1 },
+      (_, index) => `paragraph ${index}`,
+    ).join("\n");
+    const profile = resolveFastMarkdownRendererProfile(
+      resolveFastMarkdownProfileInputs({
+        rawMarkdown: large,
+        featureFlags: { fastHtmlRendererEnabled: false },
+      }),
+    );
+    expect(profile).toBe("fast-html");
+  });
+
+  it("returns rich-react for large documents when the rollback flag disables default fast rendering", () => {
+    const large = "x".repeat(FAST_MARKDOWN_RENDERER_LIMITS.LARGE_MARKDOWN_SIZE_BUDGET_BYTES + 1);
+    const profile = resolveFastMarkdownRendererProfile(
+      resolveFastMarkdownProfileInputs({
+        rawMarkdown: large,
+        featureFlags: {
+          fastHtmlRendererEnabled: false,
+          largeDocumentFastRendererDisabled: true,
+        },
+      }),
+    );
+    expect(profile).toBe("rich-react");
+  });
+
   it("returns fast-html for small documents when the fast flag is on", () => {
     const profile = resolveFastMarkdownRendererProfile(
       resolveFastMarkdownProfileInputs({
@@ -93,7 +154,7 @@ describe("resolveFastMarkdownRendererProfile", () => {
     expect(profile).toBe("bounded-fast-html");
   });
 
-  it("keeps fast-html for large documents when bounded flag is off", () => {
+  it("keeps fast-html for large documents below the bounded threshold when bounded flag is off", () => {
     const large = "x".repeat(FAST_MARKDOWN_RENDERER_LIMITS.FAST_HTML_SIZE_BUDGET_BYTES + 1);
     const profile = resolveFastMarkdownRendererProfile(
       resolveFastMarkdownProfileInputs({
@@ -101,6 +162,7 @@ describe("resolveFastMarkdownRendererProfile", () => {
         featureFlags: {
           fastHtmlRendererEnabled: true,
           boundedFastHtmlRendererEnabled: false,
+          largeDocumentFastRendererDisabled: true,
         },
       }),
     );

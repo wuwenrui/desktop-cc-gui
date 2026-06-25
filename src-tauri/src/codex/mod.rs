@@ -101,13 +101,39 @@ async fn resolve_thread_provider_profile_id(
         workspace_id,
     )
     .unwrap_or_default();
-    let stable_key = format!("codex::{workspace_id}::{thread_id}");
-    metadata
-        .get(&stable_key)
-        .or_else(|| metadata.get(thread_id))
-        .or_else(|| metadata.get(&format!("codex:{thread_id}")))
+    codex_provider_binding_lookup_keys(workspace_id, thread_id)
+        .into_iter()
+        .find_map(|key| metadata.get(&key).cloned())
         .map(|binding| binding.provider_profile_id.clone())
         .unwrap_or_else(|| CODEX_DISK_PROVIDER_PROFILE_ID.to_string())
+}
+
+fn codex_provider_binding_lookup_keys(workspace_id: &str, thread_id: &str) -> Vec<String> {
+    let workspace_id = workspace_id.trim();
+    let thread_id = thread_id.trim();
+    let mut keys = Vec::new();
+    if thread_id.is_empty() {
+        return keys;
+    }
+    if !workspace_id.is_empty() {
+        keys.push(format!("codex:{workspace_id}:{thread_id}"));
+        keys.push(format!("codex::{workspace_id}::{thread_id}"));
+    }
+    keys.push(thread_id.to_string());
+    if let Some(raw_thread_id) = thread_id.strip_prefix("codex:") {
+        if !raw_thread_id.trim().is_empty() {
+            keys.push(raw_thread_id.trim().to_string());
+        }
+    } else {
+        keys.push(format!("codex:{thread_id}"));
+    }
+    let mut unique_keys = Vec::new();
+    for key in keys {
+        if !unique_keys.contains(&key) {
+            unique_keys.push(key);
+        }
+    }
+    unique_keys
 }
 
 async fn record_codex_provider_binding(

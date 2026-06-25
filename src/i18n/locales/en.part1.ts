@@ -1630,6 +1630,7 @@ const enPart1 = {
       edit: "Edit",
       delete: "Delete",
       enable: "Enable",
+      dragToReorder: "Drag to reorder",
       inUse: "In Use",
       availableForNewCodexSessions: "Available for new sessions",
       currentConfig: "Current Claude Code Config",
@@ -1709,6 +1710,12 @@ const enPart1 = {
         opusModelPlaceholder: "e.g. claude-opus-4-5",
         modelMappingHint:
           "Optional: specify Claude defaults for this provider. Leave blank to use system defaults.",
+        fetchModels: "Fetch models",
+        fetchModelsLoading: "Fetching…",
+        fetchModelsCount: "{{count}} models loaded",
+        fetchModelsEmpty: "No models returned",
+        fetchModelsNeedUrl: "Enter API URL first",
+        fetchModelsError: "Failed to fetch models",
         jsonConfig: "JSON Config",
         jsonConfigDescription:
           "Configure full settings.json content here, including fields like model, alwaysThinkingEnabled, ccSwitchProviderId, codemossProviderId, etc.",
@@ -2505,6 +2512,11 @@ const enPart1 = {
 
   // Messages
   messages: {
+    outlineShow: "Show outline",
+    outlineHide: "Hide outline",
+    outlinePin: "Pin outline",
+    outlineUnpin: "Unpin outline",
+    outlineEmpty: "No headings in this message",
     userMessage: "You",
     assistantMessage: "Assistant",
     thinking: "Thinking…",
@@ -2542,6 +2554,8 @@ const enPart1 = {
     restoringHistory: "Restoring conversation history…",
     restoringHistoryHint: "Loading the local transcript and session state.",
     generatingResponse: "Generating response...",
+    codexWaitingForFirstText:
+      "Codex is running. Waiting for the first text chunk...",
     codexSilentSuspected:
       "No new Codex output for a while. Still listening for runtime activity...",
     nonStreamingHint:
@@ -2576,12 +2590,17 @@ const enPart1 = {
     streamingPlainTextCollapsed:
       "{{omittedChars}} chars omitted to keep live rendering smooth.",
     runtimeReconnectTitle: "Runtime connection lost",
+    runtimeReconnectTransientTitle: "Runtime switching",
     runtimeReconnectBrokenPipe:
       "The runtime pipe for this session message has been closed. Reconnect the runtime, then retry your send.",
     runtimeReconnectWorkspaceNotConnected:
       "This workspace does not currently have an available managed runtime. Reconnect the runtime, then retry your send.",
     runtimeReconnectEnded:
       "The managed runtime ended before this conversation turn settled. Reconnect the runtime, then retry or resend the previous prompt.",
+    runtimeReconnectTransientCleanup:
+      "Switching to an available runtime. Output usually continues automatically.",
+    runtimeReconnectStoppingRace:
+      "The runtime is stopping or being rebuilt. Wait for automatic recovery, or reconnect the runtime manually.",
     runtimeReconnectQuarantined:
       "The runtime is cooling down after repeated recovery failures. Wait a moment, then reconnect or resend the previous prompt.",
     runtimeReconnectAction: "Reconnect runtime",

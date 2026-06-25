@@ -32,6 +32,7 @@ export type MarkdownHeavyBlockKind =
 export type FastMarkdownFeatureFlags = {
   fastHtmlRendererEnabled?: boolean;
   boundedFastHtmlRendererEnabled?: boolean;
+  largeDocumentFastRendererDisabled?: boolean;
 };
 
 export type MarkdownSourceLineAnchor = {
@@ -63,6 +64,7 @@ export type FastMarkdownRenderDiagnostics = {
   profile: FastMarkdownRendererProfileId;
   contentHash: string;
   cacheKey: string;
+  cacheState: "hit" | "miss";
   compileDurationMs: number;
   sanitizeDurationMs: number;
   totalSourceLines: number;
@@ -96,10 +98,30 @@ export type CompileFastMarkdownArgs = {
   };
 };
 
+export type FastMarkdownWorkerRequestMeta = {
+  requestId: string;
+  documentKey: string;
+  contentHash: string;
+  optionsHash: string;
+  schemaVersion: "fast-markdown-worker-v1";
+  createdAtMs: number;
+};
+
 export type FastMarkdownCompileCacheKey = {
   documentKey: string;
   contentHash: string;
   rendererProfile: FastMarkdownRendererProfileId;
   boundedLineLimit: number;
   featureFlagFingerprint: string;
+};
+
+export type FastMarkdownWorkerDiagnostics = {
+  hasWorker: boolean;
+  pendingRequestCount: number;
+  disposedCount: number;
+  fallbackCount: number;
+  unknownResponseCount: number;
+  staleResultDropCount: number;
+  postMessageFailureCount: number;
+  lastFallbackReason: string | null;
 };

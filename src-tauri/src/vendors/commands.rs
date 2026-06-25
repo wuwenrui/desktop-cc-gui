@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -30,6 +30,14 @@ const PROVIDER_MANAGED_FIELDS: &[&str] = &[
     "env",
     "model",
     "alwaysThinkingEnabled",
+    "autoDreamEnabled",
+    "cleanupPeriodDays",
+    "effortLevel",
+    "hasCompletedOnboarding",
+    "language",
+    "skipAutoPermissionPrompt",
+    "teammateMode",
+    "tui",
     "codemossProviderId",
     "ccSwitchProviderId",
     "maxContextLengthTokens",
@@ -158,6 +166,7 @@ fn build_local_provider(is_active: bool) -> ProviderConfig {
         website_url: None,
         category: None,
         created_at: Some(0),
+        sort_order: None,
         is_active,
         source: None,
         is_local_provider: Some(true),
@@ -296,7 +305,92 @@ pub(crate) struct GeminiVendorPreflightResult {
     pub(crate) checks: Vec<GeminiVendorPreflightCheck>,
 }
 
+#[derive(Debug, Serialize)]
+pub(crate) struct VendorModelListResult {
+    models: Vec<String>,
+    endpoint: String,
+}
+
 // ==================== Helpers ====================
+
+fn push_unique_candidate(candidates: &mut Vec<String>, candidate: String) {
+    if !candidate.trim().is_empty() && !candidates.contains(&candidate) {
+        candidates.push(candidate);
+    }
+}
+
+fn derive_model_list_candidates(base_url: &str) -> Vec<String> {
+    let base = base_url.trim().trim_end_matches('/').to_string();
+    if base.is_empty() {
+        return Vec::new();
+    }
+
+    let mut candidates = Vec::new();
+    push_unique_candidate(&mut candidates, format!("{base}/v1/models"));
+
+    if base.ends_with("/v1") {
+        push_unique_candidate(&mut candidates, format!("{base}/models"));
+    }
+
+    if let Some(stripped) = base.strip_suffix("/anthropic") {
+        let stripped = stripped.trim_end_matches('/');
+        if !stripped.is_empty() {
+            push_unique_candidate(&mut candidates, format!("{stripped}/v1/models"));
+        }
+    }
+
+    if let Ok(parsed) = reqwest::Url::parse(&base) {
+        if let Some(host) = parsed.host_str() {
+            let origin = match parsed.port() {
+                Some(port) => format!("{}://{}:{}", parsed.scheme(), host, port),
+                None => format!("{}://{}", parsed.scheme(), host),
+            };
+            push_unique_candidate(&mut candidates, format!("{origin}/v1/models"));
+        }
+    }
+
+    candidates
+}
+
+fn push_model_id(models: &mut Vec<String>, value: &Value) {
+    let candidate = match value {
+        Value::String(value) => Some(value.as_str()),
+        Value::Object(map) => map.get("id").and_then(Value::as_str),
+        _ => None,
+    };
+    let Some(candidate) = candidate.map(str::trim).filter(|value| !value.is_empty()) else {
+        return;
+    };
+    if !models.iter().any(|model| model == candidate) {
+        models.push(candidate.to_string());
+    }
+}
+
+fn extract_vendor_model_ids(value: &Value) -> Vec<String> {
+    let mut models = Vec::new();
+
+    if let Some(data) = value.get("data").and_then(Value::as_array) {
+        for item in data {
+            push_model_id(&mut models, item);
+        }
+        return models;
+    }
+
+    if let Some(data) = value.as_array() {
+        for item in data {
+            push_model_id(&mut models, item);
+        }
+        return models;
+    }
+
+    if let Some(data) = value.get("models").and_then(Value::as_array) {
+        for item in data {
+            push_model_id(&mut models, item);
+        }
+    }
+
+    models
+}
 
 fn config_path() -> PathBuf {
     app_paths::config_file_path().unwrap_or_else(|_| PathBuf::from("config.json"))
@@ -324,6 +418,59 @@ fn write_config(config: &CodemossConfig) -> Result<(), String> {
     let content = serde_json::to_string_pretty(config)
         .map_err(|e| format!("Failed to serialize config: {}", e))?;
     std::fs::write(&path, content).map_err(|e| format!("Failed to write config: {}", e))
+}
+
+fn provider_created_at(value: &Value) -> Option<i64> {
+    value.get("createdAt").and_then(Value::as_i64)
+}
+
+fn next_provider_created_at(providers: &HashMap<String, Value>) -> i64 {
+    let next_from_existing = providers
+        .values()
+        .filter_map(provider_created_at)
+        .max()
+        .unwrap_or(0)
+        .saturating_add(1);
+    let now_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .and_then(|duration| i64::try_from(duration.as_millis()).ok())
+        .unwrap_or(next_from_existing);
+    now_ms.max(next_from_existing)
+}
+
+fn updated_provider_created_at(
+    existing_provider: Option<&Value>,
+    updates_created_at: Option<i64>,
+) -> Option<i64> {
+    existing_provider
+        .and_then(provider_created_at)
+        .or(updates_created_at)
+}
+
+fn set_provider_created_at(value: &mut Value, created_at: i64) {
+    if let Value::Object(map) = value {
+        map.insert("createdAt".into(), Value::Number(created_at.into()));
+    }
+}
+
+fn sort_claude_providers_by_order(providers: &mut [ProviderConfig]) {
+    providers.sort_by(|a, b| {
+        a.sort_order
+            .unwrap_or(i64::MAX)
+            .cmp(&b.sort_order.unwrap_or(i64::MAX))
+            .then_with(|| a.created_at.unwrap_or(0).cmp(&b.created_at.unwrap_or(0)))
+            .then_with(|| a.id.cmp(&b.id))
+    });
+}
+
+fn sort_codex_providers_by_created_at(providers: &mut [CodexProviderConfig]) {
+    providers.sort_by(|a, b| {
+        a.created_at
+            .unwrap_or(0)
+            .cmp(&b.created_at.unwrap_or(0))
+            .then_with(|| a.id.cmp(&b.id))
+    });
 }
 
 fn resolve_provider_name(config: &CodemossConfig, provider_id: &str) -> Option<String> {
@@ -363,6 +510,7 @@ fn value_to_claude_provider(
         .and_then(|v| v.as_str())
         .map(String::from);
     let created_at = value.get("createdAt").and_then(|v| v.as_i64());
+    let sort_order = value.get("sortOrder").and_then(|v| v.as_i64());
     let source = value
         .get("source")
         .and_then(|v| v.as_str())
@@ -377,6 +525,7 @@ fn value_to_claude_provider(
         website_url: website_url,
         category,
         created_at,
+        sort_order,
         is_active,
         source,
         is_local_provider,
@@ -400,6 +549,9 @@ fn claude_provider_to_value(provider: &ProviderConfig) -> Value {
     }
     if let Some(ts) = provider.created_at {
         map.insert("createdAt".into(), Value::Number(ts.into()));
+    }
+    if let Some(order) = provider.sort_order {
+        map.insert("sortOrder".into(), Value::Number(order.into()));
     }
     if let Some(ref src) = provider.source {
         map.insert("source".into(), Value::String(src.clone()));
@@ -608,11 +760,7 @@ pub(crate) async fn vendor_get_claude_providers() -> Result<Vec<ProviderConfig>,
             value_to_claude_provider(id, value, is_active).ok()
         })
         .collect();
-    regular_providers.sort_by(|a, b| {
-        let ta = a.created_at.unwrap_or(0);
-        let tb = b.created_at.unwrap_or(0);
-        ta.cmp(&tb)
-    });
+    sort_claude_providers_by_order(&mut regular_providers);
 
     let mut providers = Vec::with_capacity(regular_providers.len() + 1);
     providers.push(build_local_provider(
@@ -679,10 +827,15 @@ pub(crate) async fn vendor_add_claude_provider(provider: ProviderConfig) -> Resu
     if config.claude.providers.contains_key(&provider.id) {
         return Err(format!("Provider with id {} already exists", provider.id));
     }
+    let created_at = provider
+        .created_at
+        .unwrap_or_else(|| next_provider_created_at(&config.claude.providers));
+    let mut provider_value = claude_provider_to_value(&provider);
+    set_provider_created_at(&mut provider_value, created_at);
     config
         .claude
         .providers
-        .insert(provider.id.clone(), claude_provider_to_value(&provider));
+        .insert(provider.id.clone(), provider_value);
     write_config(&config)
 }
 
@@ -698,10 +851,30 @@ pub(crate) async fn vendor_update_claude_provider(
     if !config.claude.providers.contains_key(&id) {
         return Err(format!("Provider {} not found", id));
     }
-    config
-        .claude
-        .providers
-        .insert(id, claude_provider_to_value(&updates));
+    let existing_created_at =
+        updated_provider_created_at(config.claude.providers.get(&id), updates.created_at);
+    let mut provider_value = claude_provider_to_value(&updates);
+    if let Some(created_at) = existing_created_at {
+        set_provider_created_at(&mut provider_value, created_at);
+    }
+    config.claude.providers.insert(id, provider_value);
+    write_config(&config)
+}
+
+#[tauri::command]
+pub(crate) async fn vendor_reorder_claude_providers(
+    ordered_ids: Vec<String>,
+) -> Result<(), String> {
+    let mut config = read_config()?;
+    for (index, id) in ordered_ids.iter().enumerate() {
+        if id == LOCAL_SETTINGS_PROVIDER_ID {
+            continue;
+        }
+        let Some(Value::Object(provider)) = config.claude.providers.get_mut(id) else {
+            continue;
+        };
+        provider.insert("sortOrder".into(), Value::Number((index as i64).into()));
+    }
     write_config(&config)
 }
 
@@ -760,6 +933,72 @@ pub(crate) async fn vendor_set_claude_always_thinking_enabled(enabled: bool) -> 
     write_claude_settings(&settings)
 }
 
+#[tauri::command]
+pub(crate) async fn vendor_fetch_claude_models(
+    base_url: String,
+    api_key: String,
+) -> Result<VendorModelListResult, String> {
+    if base_url.trim().is_empty() {
+        return Err("API URL is required".to_string());
+    }
+
+    let client = reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(15))
+        .build()
+        .map_err(|error| format!("Failed to build HTTP client: {error}"))?;
+    let api_key = api_key.trim().to_string();
+    let mut last_error: Option<String> = None;
+
+    for endpoint in derive_model_list_candidates(&base_url) {
+        let response = match client
+            .get(&endpoint)
+            .header("Authorization", format!("Bearer {api_key}"))
+            .header("x-api-key", api_key.as_str())
+            .send()
+            .await
+        {
+            Ok(response) => response,
+            Err(error) => {
+                last_error = Some(format!("{endpoint}: {error}"));
+                continue;
+            }
+        };
+
+        let status = response.status();
+        if !status.is_success() {
+            last_error = Some(format!("{endpoint} returned HTTP {status}"));
+            continue;
+        }
+
+        let body = match response.text().await {
+            Ok(body) => body,
+            Err(error) => {
+                last_error = Some(format!("{endpoint}: failed to read response body: {error}"));
+                continue;
+            }
+        };
+
+        let value = match serde_json::from_str::<Value>(&body) {
+            Ok(value) => value,
+            Err(error) => {
+                last_error = Some(format!("{endpoint}: failed to parse JSON response: {error}"));
+                continue;
+            }
+        };
+
+        return Ok(VendorModelListResult {
+            models: extract_vendor_model_ids(&value),
+            endpoint,
+        });
+    }
+
+    Err(format!(
+        "Failed to fetch models: {}",
+        last_error.unwrap_or_else(|| "no candidate endpoint succeeded".to_string())
+    ))
+}
+
 // ==================== Codex Provider Commands ====================
 
 #[tauri::command]
@@ -775,11 +1014,7 @@ pub(crate) async fn vendor_get_codex_providers() -> Result<Vec<CodexProviderConf
             value_to_codex_provider(id, value, is_active).ok()
         })
         .collect();
-    providers.sort_by(|a, b| {
-        let ta = a.created_at.unwrap_or(0);
-        let tb = b.created_at.unwrap_or(0);
-        ta.cmp(&tb)
-    });
+    sort_codex_providers_by_created_at(&mut providers);
     Ok(providers)
 }
 
@@ -792,10 +1027,15 @@ pub(crate) async fn vendor_add_codex_provider(provider: CodexProviderConfig) -> 
             provider.id
         ));
     }
+    let created_at = provider
+        .created_at
+        .unwrap_or_else(|| next_provider_created_at(&config.codex.providers));
+    let mut provider_value = codex_provider_to_value(&provider);
+    set_provider_created_at(&mut provider_value, created_at);
     config
         .codex
         .providers
-        .insert(provider.id.clone(), codex_provider_to_value(&provider));
+        .insert(provider.id.clone(), provider_value);
     write_config(&config)
 }
 
@@ -808,10 +1048,13 @@ pub(crate) async fn vendor_update_codex_provider(
     if !config.codex.providers.contains_key(&id) {
         return Err(format!("Codex provider {} not found", id));
     }
-    config
-        .codex
-        .providers
-        .insert(id, codex_provider_to_value(&updates));
+    let existing_created_at =
+        updated_provider_created_at(config.codex.providers.get(&id), updates.created_at);
+    let mut provider_value = codex_provider_to_value(&updates);
+    if let Some(created_at) = existing_created_at {
+        set_provider_created_at(&mut provider_value, created_at);
+    }
+    config.codex.providers.insert(id, provider_value);
     write_config(&config)
 }
 
@@ -936,4 +1179,212 @@ pub(crate) async fn fetch_site_models(
         .map_err(|e| format!("Failed to parse model list: {e}"))?;
 
     Ok(list.data)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn codex_provider(id: &str, created_at: Option<i64>) -> CodexProviderConfig {
+        CodexProviderConfig {
+            id: id.to_string(),
+            name: id.to_string(),
+            remark: None,
+            created_at,
+            is_active: false,
+            config_toml: None,
+            auth_json: None,
+            custom_models: None,
+        }
+    }
+
+    fn claude_provider(
+        id: &str,
+        created_at: Option<i64>,
+        sort_order: Option<i64>,
+    ) -> ProviderConfig {
+        ProviderConfig {
+            id: id.to_string(),
+            name: id.to_string(),
+            remark: None,
+            website_url: None,
+            category: None,
+            created_at,
+            sort_order,
+            is_active: false,
+            source: None,
+            is_local_provider: None,
+            settings_config: None,
+        }
+    }
+
+    #[test]
+    fn claude_provider_order_uses_sort_order_before_created_at() {
+        let mut providers = vec![
+            claude_provider("provider-created-first", Some(10), Some(2)),
+            claude_provider("provider-sort-first", Some(30), Some(0)),
+            claude_provider("provider-sort-second", Some(20), Some(1)),
+        ];
+
+        sort_claude_providers_by_order(&mut providers);
+
+        let ordered_ids: Vec<&str> = providers
+            .iter()
+            .map(|provider| provider.id.as_str())
+            .collect();
+        assert_eq!(
+            ordered_ids,
+            vec![
+                "provider-sort-first",
+                "provider-sort-second",
+                "provider-created-first",
+            ]
+        );
+    }
+
+    #[test]
+    fn claude_provider_order_falls_back_to_created_at_without_sort_order() {
+        let mut providers = vec![
+            claude_provider("provider-c", Some(30), None),
+            claude_provider("provider-b", Some(10), None),
+            claude_provider("provider-a", Some(10), None),
+        ];
+
+        sort_claude_providers_by_order(&mut providers);
+
+        let ordered_ids: Vec<&str> = providers
+            .iter()
+            .map(|provider| provider.id.as_str())
+            .collect();
+        assert_eq!(ordered_ids, vec!["provider-a", "provider-b", "provider-c"]);
+    }
+
+    #[test]
+    fn claude_provider_order_places_missing_sort_order_after_ordered_entries() {
+        let mut providers = vec![
+            claude_provider("provider-created-first", Some(10), None),
+            claude_provider("provider-sort-first", Some(30), Some(0)),
+            claude_provider("provider-created-second", Some(20), None),
+        ];
+
+        sort_claude_providers_by_order(&mut providers);
+
+        let ordered_ids: Vec<&str> = providers
+            .iter()
+            .map(|provider| provider.id.as_str())
+            .collect();
+        assert_eq!(
+            ordered_ids,
+            vec![
+                "provider-sort-first",
+                "provider-created-first",
+                "provider-created-second",
+            ]
+        );
+    }
+
+    #[test]
+    fn provider_order_uses_stable_tie_breaker_when_created_at_is_missing() {
+        let mut providers = vec![
+            codex_provider("provider-c", None),
+            codex_provider("provider-a", None),
+            codex_provider("provider-b", None),
+        ];
+
+        sort_codex_providers_by_created_at(&mut providers);
+
+        let ordered_ids: Vec<&str> = providers
+            .iter()
+            .map(|provider| provider.id.as_str())
+            .collect();
+        assert_eq!(ordered_ids, vec!["provider-a", "provider-b", "provider-c"]);
+    }
+
+    #[test]
+    fn provider_order_keeps_created_at_before_tie_breaker() {
+        let mut providers = vec![
+            codex_provider("provider-c", Some(30)),
+            codex_provider("provider-b", Some(10)),
+            codex_provider("provider-a", Some(10)),
+        ];
+
+        sort_codex_providers_by_created_at(&mut providers);
+
+        let ordered_ids: Vec<&str> = providers
+            .iter()
+            .map(|provider| provider.id.as_str())
+            .collect();
+        assert_eq!(ordered_ids, vec!["provider-a", "provider-b", "provider-c"]);
+    }
+
+    #[test]
+    fn next_provider_created_at_appends_after_existing_timestamps() {
+        let providers = HashMap::from([
+            ("first".to_string(), json!({ "createdAt": 100 })),
+            ("second".to_string(), json!({ "createdAt": 120 })),
+        ]);
+
+        assert!(next_provider_created_at(&providers) > 120);
+    }
+
+    #[test]
+    fn set_provider_created_at_overwrites_storage_value() {
+        let mut value = json!({ "name": "Provider", "createdAt": 10 });
+
+        set_provider_created_at(&mut value, 42);
+
+        assert_eq!(provider_created_at(&value), Some(42));
+    }
+
+    #[test]
+    fn updated_provider_created_at_keeps_existing_order_timestamp() {
+        let existing = json!({ "name": "Provider", "createdAt": 10 });
+
+        let created_at = updated_provider_created_at(Some(&existing), Some(42));
+
+        assert_eq!(created_at, Some(10));
+    }
+
+    #[test]
+    fn derive_model_list_candidates_supports_origin_base_url() {
+        assert_eq!(
+            derive_model_list_candidates("https://api.example.com"),
+            vec!["https://api.example.com/v1/models"]
+        );
+    }
+
+    #[test]
+    fn derive_model_list_candidates_supports_v1_base_url() {
+        assert_eq!(
+            derive_model_list_candidates("https://api.example.com/v1"),
+            vec![
+                "https://api.example.com/v1/v1/models",
+                "https://api.example.com/v1/models",
+            ]
+        );
+    }
+
+    #[test]
+    fn derive_model_list_candidates_supports_anthropic_base_url() {
+        assert_eq!(
+            derive_model_list_candidates("https://proxy.example.com/anthropic"),
+            vec![
+                "https://proxy.example.com/anthropic/v1/models",
+                "https://proxy.example.com/v1/models",
+            ]
+        );
+    }
+
+    #[test]
+    fn derive_model_list_candidates_trims_trailing_slashes_and_preserves_port() {
+        assert_eq!(
+            derive_model_list_candidates(" https://localhost:8787/api/anthropic/// "),
+            vec![
+                "https://localhost:8787/api/anthropic/v1/models",
+                "https://localhost:8787/api/v1/models",
+                "https://localhost:8787/v1/models",
+            ]
+        );
+    }
 }

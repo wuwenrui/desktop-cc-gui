@@ -2,6 +2,190 @@
 
 ---
 
+##### **2026年6月22日（v0.5.12）**
+
+中文：
+
+✨ Features
+- 新增 Mermaid 图表全屏查看能力，支持消息与文件中的 Mermaid 图表在独立查看器中展开
+- 新增图片全屏与消息目录（message outline）能力，优化 Markdown 图片与消息章节的检视体验
+- 升级应用版本号到 `0.5.12`，同步前端包配置与 Tauri 配置
+
+🔧 Improvements
+- 收口 Markdown 渲染性能优化提案，补齐 file preview 与消息 markdown 流式渲染性能边界
+- 归档 Mermaid 全屏与图片全屏相关 OpenSpec 变更提案，收束提案与实现交付边界
+- 优化 release CI Rust 编译缓存，降低发布流水线构建成本
+- 提取 MermaidBlock 全屏按钮等待逻辑为通用辅助函数，降低重复并提升复用性
+- 收紧 runtime 重连恢复提示展示范围，弱化恢复提示样式，减少瞬态误导干扰
+- 稳定文件面板测试与品牌检查口径，减少 CI 不稳定波动
+- 拆分消息流式测试并清理品牌残留，提升流式消息测试稳定性
+- 修复 Kanban 与 Threads 国际化/元素查找稳定性，提升相关测试可靠性
+
+🐛 Fixes
+- 修复 Codex 会话中 `conversation not found` 时未触发恢复问题
+- 修复供应商模型目录与 Codex 刷新断联，提升模型选择与刷新链路稳定性
+- 修复 Composer 与 Codex 恢复绑定细节，降低并行恢复场景中的会话状态漂移
+- 移除首页最近会话入口，避免首页会话入口行为与主页动线不一致
+
+English:
+
+✨ Features
+- Add Mermaid chart fullscreen viewing so Mermaid diagrams in messages and files can be opened in a dedicated fullscreen viewer
+- Add image fullscreen and message outline support to improve inspection of markdown images and section navigation
+- Bump app version to `0.5.12` across frontend package metadata and Tauri configuration
+
+🔧 Improvements
+- Close the markdown rendering performance proposal to document and align file preview and message markdown streaming performance boundaries
+- Archive OpenSpec change proposals for Mermaid and image fullscreen features to tighten proposal-to-delivery traceability
+- Optimize release CI Rust cache to reduce pipeline build overhead
+- Extract the MermaidBlock fullscreen button await logic into shared helpers to improve reuse and reduce duplication
+- Tighten runtime reconnect prompt conditions, soften recoverable-runtime hint visuals, and reduce transient interruption noise
+- Stabilize file-panel test and brand-check behavior to lower CI flakiness
+- Split streaming-message tests and clean up branding residue to improve streaming test determinism
+- Fix Kanban/Threads internationalization and UI element lookup stability to improve test reliability
+
+🐛 Fixes
+- Fix session recovery when `conversation not found` occurs in Codex flows
+- Fix provider model-catalog and Codex refresh disconnection to improve model selection refresh reliability
+- Fix provider recovery binding details in Composer/Codex to reduce session drift in recovery flows
+- Remove the Home recent-conversations entry to align home entry behavior with current navigation flow
+
+---
+
+##### **2026年6月18日（v0.5.11）**
+
+中文：
+
+✨ Features
+- 新增 v0.5.11 性能证据门禁，覆盖 cold start、Composer、long list、realtime、runtime evidence 与历史基线归档，让发布前性能状态具备可审计的证据闭环
+- 新增 renderer 诊断导出与 turn trace 校准链路，将 renderer 指标、realtime runtime evidence 和 turn trace summary 接入统一性能证据报告
+- 新增 Codex 首响应与首包延迟证据细分，覆盖 turn start ack、首个流式增量、ack 后首包、首文本等待、assistant item 首响应与首文本前运行阶段，帮助定位流式输出慢点
+- 新增 v0.5.11 消息恢复与性能证据收口，串联消息恢复、流式渲染、runtime evidence 与恢复 cookbook，降低长会话恢复和性能排查成本
+- 新增 Claude 供应商拖拽排序，支持固定本地配置与当前启用项、拖动调整其他供应商顺序并持久化
+- 新增 Claude 供应商模型拉取能力，可从当前 API URL 与 API Key 拉取兼容端点模型列表，并作为 Haiku/Sonnet/Opus 映射输入建议
+
+🔧 Improvements
+- 升级应用版本号到 `0.5.11`，同步前端包配置与 Tauri 配置
+- 收口 v0.5.10 性能闭环文档，补齐 runtime evidence gates、验证记录与 OpenSpec 任务状态
+- 锁定 `turn completed` 写出 trace summary 的测试覆盖，减少 realtime trace 回归时的证据缺口
+- 优化消息流渲染与流式路由实测口径，降低流式输出可见延迟，并校准 turn trace 诊断与首响应证据判定
+- 拆分 Tauri Git、工作区文件服务与文件树视图状态，收敛大文件与重测试治理噪音，提升文件相关模块的维护边界
+- 补充恢复 cookbook，并归档 v0.5.11 已验证 OpenSpec 提案，让性能证据、恢复链路和发布门禁具备更完整的审计记录
+- 提升文档树节点查询与文件列表刷新参数断言的测试稳定性，减少 UI 与 Tauri 边界测试误报
+- 校准 Claude 供应商默认 settings 模板，将模型层级、thinking、onboarding、语言与 TUI 等字段写入正确配置层级，降低新供应商配置成本
+- 提取 Git 行标记重置逻辑并清理未使用依赖，降低 Git 视图状态维护复杂度
+
+🐛 Fixes
+- 修复消息流式结束窗口问题，并升级 React 运行时，减少消息结束阶段的状态漂移
+- 修复 Claude thinking 状态上报不稳的问题，让 AppShell 对运行态思考状态的展示更可靠
+- 修复 Codex 默认配置首轮恢复与冷启动首发问题，降低首次启动或默认 provider 场景下的响应丢失风险
+- 修复文件树刷新失效与 hook 依赖告警，恢复文件树刷新链路并清理无效依赖噪音
+- 修复性能归档门禁与评论权限失败处理，避免 CI gate 因归档评论权限或门禁边界阻塞发布验证
+- 修复侧栏提示入口与弹层层级问题，避免 runtime notice 被遮挡或入口不可达
+- 修复 Codex 并行会话生命周期隔离问题，降低并行 session 在启动、恢复和释放过程中的状态串扰
+- 修复 Claude 供应商默认配置中的不安全环境变量默认值，避免新建供应商时自动写入会造成回归的 Claude Code env
+- 修复独立文件窗口与文件树首屏滚动容器样式问题，让文件内容和目录树在首次打开时保持稳定滚动
+- 修复线程门禁失败与大文件债务收口问题，减少发布前治理检查的误报与阻塞
+
+English:
+
+✨ Features
+- Add the v0.5.11 performance evidence gates across cold start, Composer, long lists, realtime, runtime evidence, and historical baseline archiving so release performance has an auditable evidence loop
+- Add renderer diagnostics export and turn-trace calibration, connecting renderer metrics, realtime runtime evidence, and turn trace summaries into the unified performance evidence report
+- Add finer-grained Codex first-response and first-packet latency evidence across turn-start ack, first streaming delta, post-ack first packet, first-text wait, assistant-item first response, and pre-first-text runtime phases to make slow streaming paths easier to locate
+- Add the v0.5.11 message recovery and performance-evidence closure, tying message recovery, streaming rendering, runtime evidence, and the recovery cookbook into one auditable release path
+- Add drag-to-reorder for Claude providers, keeping local settings and the active provider pinned while persisting the order of other providers
+- Add Claude provider model fetching from the current API URL and API key, surfacing compatible endpoint models as suggestions for Haiku/Sonnet/Opus mappings
+
+🔧 Improvements
+- Bump app version to `0.5.11` across frontend package metadata and Tauri configuration
+- Close the v0.5.10 performance loop documentation with updated runtime evidence gates, verification records, and OpenSpec task status
+- Lock test coverage for writing `turn completed` trace summaries to reduce evidence gaps during realtime trace regressions
+- Improve message-stream rendering and measured streaming-route diagnostics, reducing visible streaming latency while calibrating turn-trace diagnostics and first-response evidence checks
+- Split Tauri Git services, workspace file services, and file-tree view state while reducing large-file and heavy-test governance noise, making file-related module boundaries easier to maintain
+- Add the recovery cookbook and archive verified v0.5.11 OpenSpec proposals so performance evidence, recovery flows, and release gates have a stronger audit trail
+- Improve documentation-tree queries and file-list refresh parameter assertions in tests to reduce false positives across UI and Tauri boundaries
+- Calibrate the default Claude provider settings template so model tiers, thinking, onboarding, language, and TUI fields are written to the correct settings layer
+- Extract Git line-marker reset logic and remove unused dependencies to reduce Git view state-maintenance complexity
+
+🐛 Fixes
+- Fix the message streaming completion window and upgrade the React runtime to reduce state drift when streamed messages finish
+- Fix unstable Claude thinking-state reporting so AppShell displays runtime thinking state more reliably
+- Fix Codex default-configuration first-turn recovery and cold-start first dispatch, reducing response-loss risk during first launch or default-provider flows
+- Fix file-tree refresh failures and hook dependency warnings, restoring the refresh path and cleaning up invalid dependency noise
+- Fix performance archive gates and comment-permission failure handling so CI gates do not block release validation on archive-comment permissions or gate boundaries
+- Fix the sidebar runtime-notice entrypoint and popover layering so notices remain reachable and visible
+- Fix Codex parallel-session lifecycle isolation, reducing state cross-talk while parallel sessions launch, recover, and release resources
+- Fix unsafe environment-variable defaults in the Claude provider template so new providers no longer auto-write Claude Code env values that caused regressions
+- Fix standalone file-window and file-tree first-screen scroll-container styling so file content and directory trees scroll reliably on first open
+- Fix thread gate failures and large-file debt closure issues, reducing false positives and release-gate friction
+
+---
+
+##### **2026年6月16日（v0.5.10）**
+
+中文：
+
+🔧 Improvements
+- 升级应用版本号到 `0.5.10`，同步前端包配置与 Tauri 配置
+- 补齐近期测试稳定性批次，覆盖 Composer rewind 确认、慢 git 标记编辑器挂载、聊天流渲染隔离、WebService token 生成、router lazy act 边界、Suspense host-task teardown 与 flush 等场景，降低测试串扰与误报
+- 补齐近期 OpenSpec 稳定性提案优化与归档，覆盖聊天流渲染隔离、AppShell 运行态稳定性、长运行客户端运行时、稳定性归档文档等条目
+
+🐛 Fixes
+- 修复 Composer 文件引用深层路径搜索异常，恢复深层目录文件在 Composer 输入中的可被检索与引用能力
+- 修复文件树首屏滚动容器布局问题，让首屏目录树展示与滚动行为回到稳定状态
+- 修复父组件测试中 Markdown 懒加载隔离问题，降低消息组件 Markdown 懒加载在父级测试上下文中的串扰与不稳定
+- 修复顶栏菜单按钮收敛问题，恢复关键导航入口稳定状态
+- 修复 Apple event 完整诊断码保留问题，避免 threads 链路在跨进程事件中丢失诊断信息
+- 修复长运行客户端运行时稳定性问题，减少长会话、并行对话与高频事件下的 runtime 状态、事件订阅与前台残留漂移
+- 修复 AppShell 运行态上下文隔离稳定性问题，让 layoutContext、fileEditorContext、settingsContext 以及新增的 runtimeContext、modelSelectionContext、collaborationModeContext 在跨模块访问时保持清晰边界
+- 修复供应商排序时间稳定性问题，让供应商列表的展示顺序在多次刷新与会话切换后保持一致
+- 修复 runtime 重连恢复卡片状态问题，避免 messages 在重连或会话恢复后丢失或错乱展示
+- 修复 reasoning 测试 JSX 类型引用问题，让消息组件在测试上下文中恢复稳定渲染
+- 修复 AppShell runtime contract 治理脚本边界处理问题，避免新增 context 名称与 ctx 形参被误判为违规
+
+English:
+
+🔧 Improvements
+- Bump app version to `0.5.10` across frontend package metadata and Tauri configuration
+- Add a recent test-stability batch covering Composer rewind confirmation, slow git marker editor mount, chat-stream render isolation, WebService token generation, router lazy act boundaries, and Suspense host-task teardown and flush to reduce cross-talk and false positives
+- Optimize and archive recent OpenSpec stability proposals covering chat-stream render isolation, AppShell runtime stability, long-running client runtime, and stability archiving documentation
+
+🐛 Fixes
+- Fix Composer deep-path file reference search so files inside deeply nested directories can be searched and referenced again from the Composer input
+- Fix file-tree first-paint scroll container layout to restore stable initial render and scrolling of the directory tree
+- Fix Markdown lazy-loading isolation in parent component tests to reduce cross-talk and flakiness between message components and Markdown lazy boundaries
+- Fix top-bar menu button convergence so key navigation entrypoints stay stable
+- Fix Apple event full diagnostic code retention so the threads path no longer drops diagnostic information across process events
+- Fix long-running client runtime stability to reduce runtime-state, event-subscription, and foreground-residue drift during long sessions, parallel conversations, and high-frequency events
+- Fix AppShell runtime context isolation stability so `layoutContext`, `fileEditorContext`, `settingsContext`, and the newly introduced `runtimeContext`, `modelSelectionContext`, and `collaborationModeContext` keep clear boundaries across module access
+- Fix vendor ordering time stability so the vendor list order remains consistent across refreshes and session switches
+- Fix the runtime reconnect recovery card state so messages no longer lose or mis-render state after reconnect or session recovery
+- Fix reasoning test JSX type references so message components render reliably inside the test context
+- Fix the AppShell runtime contract governance script boundary handling so newly added context names and `ctx` parameters are no longer misclassified as violations
+
+中文：
+
+🔧 Improvements
+- 升级应用版本号到 `0.5.10`，同步前端包配置与 Tauri 配置
+
+🐛 Fixes
+- 修复 Composer 文件引用深层路径搜索异常，恢复深层目录文件在 Composer 输入中的可被检索与引用能力
+- 修复文件树首屏滚动容器布局问题，让首屏目录树展示与滚动行为回到稳定状态
+- 修复父组件测试中 Markdown 懒加载隔离问题，降低消息组件 Markdown 懒加载在父级测试上下文中的串扰与不稳定
+
+English:
+
+🔧 Improvements
+- Bump app version to `0.5.10` across frontend package metadata and Tauri configuration
+
+🐛 Fixes
+- Fix Composer deep-path file reference search so files inside deeply nested directories can be searched and referenced again from the Composer input
+- Fix file-tree first-paint scroll container layout to restore stable initial render and scrolling of the directory tree
+- Fix Markdown lazy-loading isolation in parent component tests to reduce cross-talk and flakiness between message components and Markdown lazy boundaries
+
+---
+
 ##### **2026年6月14日（v0.5.9）**
 
 中文：

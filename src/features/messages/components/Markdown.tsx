@@ -3,6 +3,9 @@ import { useTranslation } from "react-i18next";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { LocalImage } from "./LocalImage";
+import { ImageFullscreenViewer } from "../../markdown/imageFullscreen";
+import type { MarkdownOutlineEntry } from "../../markdown/fastMarkdownRenderer";
+import { extractOutlineFromMarkdown } from "../utils/messageOutlineExtractor";
 import type {
   FullMarkdownComponents,
   FullMarkdownUrlTransform,
@@ -74,6 +77,7 @@ type MarkdownProps = {
   onOpenFileLink?: (path: string) => void;
   onOpenFileLinkMenu?: (event: React.MouseEvent, path: string) => void;
   onRenderedValueChange?: (value: string) => void;
+  onOutlineReady?: (outline: MarkdownOutlineEntry[]) => void;
 };
 
 type CodeBlockProps = {
@@ -147,7 +151,8 @@ function areMarkdownPropsEqual(prev: MarkdownProps, next: MarkdownProps) {
     prev.codexLeadMarkerConfig === next.codexLeadMarkerConfig &&
     prev.onOpenFileLink === next.onOpenFileLink &&
     prev.onOpenFileLinkMenu === next.onOpenFileLinkMenu &&
-    prev.onRenderedValueChange === next.onRenderedValueChange
+    prev.onRenderedValueChange === next.onRenderedValueChange &&
+    prev.onOutlineReady === next.onOutlineReady
   );
 }
 
@@ -1457,6 +1462,7 @@ export const Markdown = memo(function Markdown({
   onOpenFileLink,
   onOpenFileLinkMenu,
   onRenderedValueChange,
+  onOutlineReady,
 }: MarkdownProps) {
   // Throttle rapid value changes during streaming to reduce expensive
   // ReactMarkdown re-parses that block the main thread and cause input lag.
@@ -1469,7 +1475,45 @@ export const Markdown = memo(function Markdown({
   // (on Windows the events can arrive faster than the throttle window,
   // causing the deferred update to never execute).
   const [throttledValue, setThrottledValue] = useState(value);
+  const [imageFullscreen, setImageFullscreen] = useState<{
+    src: string;
+    alt: string;
+  } | null>(null);
   const lastUpdateRef = useRef(Date.now());
+  const outlineCacheRef = useRef<{
+    value: string;
+    outline: MarkdownOutlineEntry[];
+  } | null>(null);
+
+  // Best-effort outline extraction for the floater. We use a lightweight
+  // line-by-line scan over the raw markdown value (NOT the rendered
+  // HAST) because the messages surface does not run the fast pipeline;
+  // the floater only needs heading title + depth + source line, and
+  // extracting from raw markdown keeps the cost bounded. We do NOT
+  // extend `MarkdownOutlineEntry` (its id/startLine/endLine/anchor
+  // fields are sufficient; we just compute them locally). If the
+  // consumer does not pass `onOutlineReady`, the work is a no-op.
+  useEffect(() => {
+    if (!onOutlineReady) {
+      return;
+    }
+    const cachedOutline = outlineCacheRef.current;
+    const outline =
+      cachedOutline?.value === throttledValue
+        ? cachedOutline.outline
+        : extractOutlineFromMarkdown(throttledValue);
+    if (cachedOutline?.value !== throttledValue) {
+      outlineCacheRef.current = {
+        value: throttledValue,
+        outline,
+      };
+    }
+    try {
+      onOutlineReady(outline);
+    } catch {
+      // consumer-side callback must not break the renderer
+    }
+  }, [throttledValue, onOutlineReady]);
   const throttleTimerRef = useRef<number>(0);
   const mountedRef = useRef(true);
   const latestValueRef = useRef(value);
@@ -1809,6 +1853,12 @@ export const Markdown = memo(function Markdown({
             workspaceId={workspaceId}
             alt={alt ?? "image"}
             loading="lazy"
+            onClick={() =>
+              setImageFullscreen({
+                src: normalizedSrc,
+                alt: alt ?? "image",
+              })
+            }
           />
         );
       },
@@ -2058,6 +2108,13 @@ export const Markdown = memo(function Markdown({
 
   return (
     <div className={className}>
+      <ImageFullscreenViewer
+        open={!!imageFullscreen}
+        src={imageFullscreen?.src ?? ""}
+        alt={imageFullscreen?.alt}
+        workspaceId={workspaceId}
+        onClose={() => setImageFullscreen(null)}
+      />
       {shouldRenderToolCallSegments
         ? toolCallBlocks.map((block, index) => {
           if (block.kind === "md") {

@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import { openPath, revealItemInDir } from "@tauri-apps/plugin-opener";
 import { openWorkspaceIn } from "../../../services/tauri";
@@ -27,6 +27,24 @@ const DEFAULT_OPEN_TARGET: OpenTarget = {
   command: null,
   args: [],
 };
+
+type FileLinkOpenerConfig = {
+  workspacePath: string | null;
+  openTargets: OpenAppTarget[];
+  selectedOpenAppId: string;
+  onOpenWorkspaceFile?: ((path: string) => void) | null;
+};
+
+function resolveConfiguredOpenTarget(
+  openTargets: OpenAppTarget[],
+  selectedOpenAppId: string,
+) {
+  return {
+    ...DEFAULT_OPEN_TARGET,
+    ...(openTargets.find((entry) => entry.id === selectedOpenAppId) ??
+      openTargets[0]),
+  };
+}
 
 function resolveFilePath(path: string, workspacePath?: string | null) {
   const trimmed = path.trim();
@@ -66,6 +84,18 @@ export function useFileLinkOpener(
   selectedOpenAppId: string,
   onOpenWorkspaceFile?: ((path: string) => void) | null,
 ) {
+  const configRef = useRef<FileLinkOpenerConfig>({
+    workspacePath,
+    openTargets,
+    selectedOpenAppId,
+    onOpenWorkspaceFile,
+  });
+  configRef.current = {
+    workspacePath,
+    openTargets,
+    selectedOpenAppId,
+    onOpenWorkspaceFile,
+  };
   const [fileLinkMenu, setFileLinkMenu] =
     useState<RendererContextMenuState | null>(null);
 
@@ -87,12 +117,16 @@ export function useFileLinkOpener(
 
   const openFileLinkInConfiguredTarget = useCallback(
     async (rawPath: string) => {
-      const target = {
-        ...DEFAULT_OPEN_TARGET,
-        ...(openTargets.find((entry) => entry.id === selectedOpenAppId) ??
-          openTargets[0]),
-      };
-      const resolvedPath = resolveFilePath(stripLineSuffix(rawPath), workspacePath);
+      const {
+        workspacePath: currentWorkspacePath,
+        openTargets: currentOpenTargets,
+        selectedOpenAppId: currentSelectedOpenAppId,
+      } = configRef.current;
+      const target = resolveConfiguredOpenTarget(
+        currentOpenTargets,
+        currentSelectedOpenAppId,
+      );
+      const resolvedPath = resolveFilePath(stripLineSuffix(rawPath), currentWorkspacePath);
 
       try {
         if (target.kind === "finder") {
@@ -123,7 +157,7 @@ export function useFileLinkOpener(
         reportOpenError(error, {
           rawPath,
           resolvedPath,
-          workspacePath,
+          workspacePath: currentWorkspacePath,
           targetId: target.id,
           targetKind: target.kind,
           targetAppName: target.appName ?? null,
@@ -131,15 +165,19 @@ export function useFileLinkOpener(
         });
       }
     },
-    [openTargets, reportOpenError, selectedOpenAppId, workspacePath],
+    [reportOpenError],
   );
 
   const openFileLink = useCallback(
     async (rawPath: string) => {
+      const {
+        workspacePath: currentWorkspacePath,
+        onOpenWorkspaceFile: currentOnOpenWorkspaceFile,
+      } = configRef.current;
       const strippedPath = stripLineSuffix(rawPath).trim();
-      const resolvedPath = resolveFilePath(strippedPath, workspacePath);
-      const normalizedWorkspacePath = workspacePath
-        ? workspacePath.replace(/\/+$/, "")
+      const resolvedPath = resolveFilePath(strippedPath, currentWorkspacePath);
+      const normalizedWorkspacePath = currentWorkspacePath
+        ? currentWorkspacePath.replace(/\/+$/, "")
         : null;
       const editorRelativePath =
         strippedPath.startsWith("/") || strippedPath.startsWith("~/")
@@ -152,8 +190,8 @@ export function useFileLinkOpener(
             : strippedPath.startsWith("../")
               ? null
               : strippedPath;
-      if (onOpenWorkspaceFile && editorRelativePath) {
-        onOpenWorkspaceFile(editorRelativePath);
+      if (currentOnOpenWorkspaceFile && editorRelativePath) {
+        currentOnOpenWorkspaceFile(editorRelativePath);
         return;
       }
       try {
@@ -162,19 +200,23 @@ export function useFileLinkOpener(
         await openFileLinkInConfiguredTarget(rawPath);
       }
     },
-    [onOpenWorkspaceFile, openFileLinkInConfiguredTarget, workspacePath],
+    [openFileLinkInConfiguredTarget],
   );
 
   const showFileLinkMenu = useCallback(
     (event: MouseEvent, rawPath: string) => {
       event.preventDefault();
       event.stopPropagation();
-      const target = {
-        ...DEFAULT_OPEN_TARGET,
-        ...(openTargets.find((entry) => entry.id === selectedOpenAppId) ??
-          openTargets[0]),
-      };
-      const resolvedPath = resolveFilePath(stripLineSuffix(rawPath), workspacePath);
+      const {
+        workspacePath: currentWorkspacePath,
+        openTargets: currentOpenTargets,
+        selectedOpenAppId: currentSelectedOpenAppId,
+      } = configRef.current;
+      const target = resolveConfiguredOpenTarget(
+        currentOpenTargets,
+        currentSelectedOpenAppId,
+      );
+      const resolvedPath = resolveFilePath(stripLineSuffix(rawPath), currentWorkspacePath);
       const appName = (target.appName || target.label || "").trim();
       const items: RendererContextMenuItem[] = [
         {
@@ -214,7 +256,7 @@ export function useFileLinkOpener(
                     reportOpenError(error, {
                       rawPath,
                       resolvedPath,
-                      workspacePath,
+                      workspacePath: currentWorkspacePath,
                       targetId: target.id,
                       targetKind: "finder",
                       targetAppName: null,
@@ -257,14 +299,7 @@ export function useFileLinkOpener(
         items,
       });
     },
-    [
-      openFileLink,
-      openFileLinkInConfiguredTarget,
-      openTargets,
-      reportOpenError,
-      selectedOpenAppId,
-      workspacePath,
-    ],
+    [openFileLink, openFileLinkInConfiguredTarget, reportOpenError],
   );
 
   return { openFileLink, showFileLinkMenu, fileLinkMenu, closeFileLinkMenu };

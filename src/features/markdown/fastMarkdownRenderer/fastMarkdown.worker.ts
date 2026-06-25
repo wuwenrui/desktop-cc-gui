@@ -4,11 +4,13 @@ import { compileFastMarkdown } from "./compile";
 import type {
   CompileFastMarkdownArgs,
   FastMarkdownRenderResult,
+  FastMarkdownWorkerRequestMeta,
 } from "./types";
 
 type FastMarkdownWorkerCompileRequest = {
   type: "compile-fast-markdown";
   requestId: string;
+  requestMeta: FastMarkdownWorkerRequestMeta;
   args: CompileFastMarkdownArgs;
 };
 
@@ -60,7 +62,25 @@ function isCompileRequest(value: unknown): value is FastMarkdownWorkerCompileReq
   return (
     value.type === "compile-fast-markdown" &&
     typeof value.requestId === "string" &&
+    isWorkerRequestMeta(value.requestMeta, value.requestId) &&
     isRecord(value.args)
+  );
+}
+
+function isWorkerRequestMeta(
+  value: unknown,
+  requestId: string,
+): value is FastMarkdownWorkerRequestMeta {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    value.requestId === requestId &&
+    typeof value.documentKey === "string" &&
+    typeof value.contentHash === "string" &&
+    typeof value.optionsHash === "string" &&
+    value.schemaVersion === "fast-markdown-worker-v1" &&
+    typeof value.createdAtMs === "number"
   );
 }
 

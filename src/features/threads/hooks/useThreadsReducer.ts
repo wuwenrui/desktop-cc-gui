@@ -24,6 +24,7 @@ import {
   isGeminiReasoningThread,
   shouldAcceptReasoningDelta,
 } from "./threadReducerReasoningGuards";
+import { areEquivalentAssistantMessageTexts } from "../assembly/conversationNormalization";
 import {
   addSummaryBoundary,
   findDuplicateReasoningSnapshotIndex,
@@ -90,6 +91,7 @@ import {
 import type {
   CodexCompactionLifecycleState,
   ThreadAction,
+  ThreadActivityStatus,
   ThreadState,
 } from "./threadReducerTypes";
 import {
@@ -147,6 +149,37 @@ type ThreadProviderBindingFields = Pick<
   | "providerAvailability"
 >;
 
+type FastPathReplaceResult = {
+  items: ConversationItem[];
+  changed: boolean;
+};
+
+/**
+ * Build the next item list when a streaming case (`appendAgentDelta` /
+ * `completeAgentMessage` / `upsertItem`) has computed a merged item that
+ * replaces `items[index]`.
+ *
+ * Returns the prior `items` reference unchanged when the merged item is
+ * reference-equal to the existing slot, so callers can short-circuit their
+ * `INCREMENTAL_DERIVATION_ENABLED` fast path without paying for
+ * `prepareThreadItems`. Otherwise returns a new array with the merged item
+ * spliced in. The helper never invokes `prepareThreadItems` itself.
+ */
+export function fastPathForAppendAgentDelta(params: {
+  items: ConversationItem[];
+  index: number;
+  merged: ConversationItem;
+}): FastPathReplaceResult {
+  const { items, index, merged } = params;
+  const existing = items[index];
+  if (!existing || existing === merged) {
+    return { items, changed: false };
+  }
+  const next = items.slice();
+  next[index] = merged;
+  return { items: next, changed: true };
+}
+
 function normalizeProviderBindingValue(value: string | null | undefined) {
   return typeof value === "string" && value.trim().length > 0
     ? value.trim()
@@ -187,6 +220,140 @@ function providerBindingFieldsEqual(
     (left.providerAvailability ?? undefined) ===
       (right.providerAvailability ?? undefined)
   );
+}
+
+function shallowRecordEqual(
+  left: Record<string, unknown>,
+  right: Record<string, unknown>,
+) {
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  if (leftKeys.length !== rightKeys.length) {
+    return false;
+  }
+  return leftKeys.every((key) => Object.is(left[key], right[key]));
+}
+
+function conversationItemsShallowEqual(
+  left: ConversationItem,
+  right: ConversationItem,
+) {
+  return shallowRecordEqual(
+    left as unknown as Record<string, unknown>,
+    right as unknown as Record<string, unknown>,
+  );
+}
+
+function threadActivityStatusEqual(
+  left: ThreadActivityStatus | undefined,
+  right: ThreadActivityStatus,
+) {
+  if (!left) {
+    return false;
+  }
+  return shallowRecordEqual(
+    left as unknown as Record<string, unknown>,
+    right as unknown as Record<string, unknown>,
+  );
+}
+
+function stringArrayEqual(left: string[] | undefined, right: string[] | undefined) {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right || left.length !== right.length) {
+    return false;
+  }
+  return left.every((value, index) => value === right[index]);
+}
+
+function autoSessionEqual(
+  left: ThreadSummary["autoSession"],
+  right: ThreadSummary["autoSession"],
+) {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right) {
+    return (left ?? null) === (right ?? null);
+  }
+  return (
+    left.sessionPurpose === right.sessionPurpose &&
+    left.visibility === right.visibility &&
+    left.ownerFeature === right.ownerFeature &&
+    (left.autoArchive ?? null) === (right.autoArchive ?? null) &&
+    left.createdBy === right.createdBy
+  );
+}
+
+function threadSummaryEqual(left: ThreadSummary, right: ThreadSummary) {
+  return (
+    left.id === right.id &&
+    left.name === right.name &&
+    left.updatedAt === right.updatedAt &&
+    (left.archivedAt ?? null) === (right.archivedAt ?? null) &&
+    (left.threadKind ?? null) === (right.threadKind ?? null) &&
+    (left.sizeBytes ?? null) === (right.sizeBytes ?? null) &&
+    (left.engineSource ?? null) === (right.engineSource ?? null) &&
+    (left.selectedEngine ?? null) === (right.selectedEngine ?? null) &&
+    (left.source ?? null) === (right.source ?? null) &&
+    (left.provider ?? null) === (right.provider ?? null) &&
+    (left.sourceLabel ?? null) === (right.sourceLabel ?? null) &&
+    (left.providerProfileId ?? null) === (right.providerProfileId ?? null) &&
+    (left.providerProfileSource ?? null) ===
+      (right.providerProfileSource ?? null) &&
+    (left.providerProfileName ?? null) === (right.providerProfileName ?? null) &&
+    (left.providerAvailability ?? null) ===
+      (right.providerAvailability ?? null) &&
+    (left.partialSource ?? null) === (right.partialSource ?? null) &&
+    (left.isDegraded ?? false) === (right.isDegraded ?? false) &&
+    (left.degradedReason ?? null) === (right.degradedReason ?? null) &&
+    (left.folderId ?? null) === (right.folderId ?? null) &&
+    autoSessionEqual(left.autoSession ?? null, right.autoSession ?? null) &&
+    stringArrayEqual(left.nativeThreadIds, right.nativeThreadIds) &&
+    (left.parentThreadId ?? null) === (right.parentThreadId ?? null)
+  );
+}
+
+function threadSummaryListEqual(left: ThreadSummary[], right: ThreadSummary[]) {
+  if (left === right) {
+    return true;
+  }
+  if (left.length !== right.length) {
+    return false;
+  }
+  return left.every((thread, index) => {
+    const rightThread = right[index];
+    return rightThread ? threadSummaryEqual(thread, rightThread) : false;
+  });
+}
+
+function findEquivalentAssistantSnapshotIndex(
+  list: ConversationItem[],
+  incomingText: string,
+) {
+  if (!incomingText.trim()) {
+    return -1;
+  }
+  for (let index = list.length - 1; index >= 0; index -= 1) {
+    const item = list[index];
+    if (isUserMessageItem(item)) {
+      return -1;
+    }
+    if (!isAssistantMessageItem(item)) {
+      continue;
+    }
+    if (
+      areEquivalentAssistantMessageTexts(
+        item.text,
+        incomingText,
+        mergeCompletedAgentText,
+      )
+    ) {
+      return index;
+    }
+  }
+  return -1;
 }
 
 function mergeProviderBindingFields<T extends ThreadSummary>(
@@ -245,25 +412,47 @@ export function createInitialThreadState(snapshot?: SidebarSnapshot | null): Thr
 export function threadReducer(state: ThreadState, action: ThreadAction): ThreadState {
   threadsReducerProfileState.reducerDispatchCount += 1;
   switch (action.type) {
-    case "setActiveThreadId":
+    case "setActiveThreadId": {
+      const currentActiveThreadId =
+        state.activeThreadIdByWorkspace[action.workspaceId] ?? null;
+      const activeThreadUnchanged = currentActiveThreadId === action.threadId;
+      const nextActiveThreadIdByWorkspace = activeThreadUnchanged
+        ? state.activeThreadIdByWorkspace
+        : {
+            ...state.activeThreadIdByWorkspace,
+            [action.workspaceId]: action.threadId,
+          };
+      if (!action.threadId) {
+        return activeThreadUnchanged
+          ? state
+          : {
+              ...state,
+              activeThreadIdByWorkspace: nextActiveThreadIdByWorkspace,
+            };
+      }
+      const currentStatus = state.threadStatusById[action.threadId];
+      const nextStatus = {
+        ...withThreadStatusDefaults(currentStatus),
+        hasUnread: false,
+      };
+      const statusUnchanged = threadActivityStatusEqual(
+        currentStatus,
+        nextStatus,
+      );
+      if (activeThreadUnchanged && statusUnchanged) {
+        return state;
+      }
       return {
         ...state,
-        activeThreadIdByWorkspace: {
-          ...state.activeThreadIdByWorkspace,
-          [action.workspaceId]: action.threadId,
-        },
-        threadStatusById: action.threadId
-          ? {
+        activeThreadIdByWorkspace: nextActiveThreadIdByWorkspace,
+        threadStatusById: statusUnchanged
+          ? state.threadStatusById
+          : {
               ...state.threadStatusById,
-              [action.threadId]: {
-                ...withThreadStatusDefaults(
-                  state.threadStatusById[action.threadId],
-                ),
-                hasUnread: false,
-              },
-            }
-          : state.threadStatusById,
+              [action.threadId]: nextStatus,
+            },
       };
+    }
     case "ensureThread": {
       const hidden =
         state.hiddenThreadIdsByWorkspace[action.workspaceId]?.[action.threadId] ??
@@ -1192,6 +1381,7 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
             ? Math.max(0, completedAt - status.processingStartedAt)
             : null;
       const existingItem = index >= 0 ? list[index] : undefined;
+      let computedCompletedItem: ConversationItem | null = null;
       if (isAssistantMessageItem(existingItem)) {
         const isThreadProcessing = Boolean(state.threadStatusById[action.threadId]?.isProcessing);
         const keepFinalMetadata = shouldPreserveAssistantFinalMetadata(
@@ -1201,7 +1391,7 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
         const nextBase = keepFinalMetadata
           ? existingItem
           : clearAssistantFinalMetadata(existingItem);
-        list[index] = {
+        computedCompletedItem = {
           ...nextBase,
           id: targetItemId,
           text: mergeCompletedAgentText(
@@ -1218,7 +1408,7 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
               : {}),
         };
       } else {
-        list.push({
+        computedCompletedItem = {
           id: targetItemId,
           kind: "message",
           role: "assistant",
@@ -1226,7 +1416,31 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
           isFinal: true,
           finalCompletedAt: completedAt,
           ...(derivedDuration !== null ? { finalDurationMs: derivedDuration } : {}),
-        });
+        };
+      }
+      if (
+        INCREMENTAL_DERIVATION_ENABLED &&
+        isAssistantMessageItem(existingItem) &&
+        existingItem !== undefined &&
+        targetItemId === existingItem.id &&
+        existingItem.isFinal === true &&
+        derivedDuration === null
+      ) {
+        const mergedCompletedText = mergeCompletedAgentText(
+          existingItem.text,
+          action.text,
+          true,
+        );
+        if (mergedCompletedText === existingItem.text) {
+          return state;
+        }
+      }
+      if (computedCompletedItem !== null) {
+        if (isAssistantMessageItem(existingItem) && index >= 0) {
+          list[index] = computedCompletedItem;
+        } else {
+          list.push(computedCompletedItem);
+        }
       }
       const updatedItems = prepareThreadItems(list, {
         preserveMessageTextIds: new Set([targetItemId]),
@@ -1250,6 +1464,10 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
     }
     case "upsertItem": {
       let list = state.itemsByThread[action.threadId] ?? [];
+      const rawAssistantSnapshotText =
+        action.item.kind === "message" && action.item.role === "assistant"
+          ? action.item.text
+          : "";
       const item = normalizeItem(action.item);
       const isUserMessage = isUserMessageItem(item);
       const isOptimisticUser = isUserMessage && isOptimisticUserMessageId(item.id);
@@ -1282,6 +1500,7 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
         }
       }
       let nextItem = ensureUniqueReviewId(list, item);
+      let didMergeEquivalentAssistantSnapshot = false;
       if (
         nextItem.kind === "generatedImage" &&
         !isProcessingGeneratedImageItem(nextItem)
@@ -1378,16 +1597,21 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
         }) &&
         findAssistantMessageIndexById(list, nextItem.id) < 0
       ) {
-        const equivalentAssistantIndex = findEquivalentCodexAssistantMessageIndex(
+        const incomingAssistantText = rawAssistantSnapshotText || nextItem.text;
+        const codexEquivalentAssistantIndex = findEquivalentCodexAssistantMessageIndex(
           list,
-          nextItem.text,
+          incomingAssistantText,
         );
+        const equivalentAssistantIndex =
+          codexEquivalentAssistantIndex >= 0
+            ? codexEquivalentAssistantIndex
+            : findEquivalentAssistantSnapshotIndex(list, incomingAssistantText);
         const equivalentAssistant =
           equivalentAssistantIndex >= 0 ? list[equivalentAssistantIndex] : undefined;
         if (isAssistantMessageItem(equivalentAssistant)) {
-          const mergedText = mergeAgentMessageText(
+          const mergedText = mergeCompletedAgentText(
             equivalentAssistant.text,
-            nextItem.text,
+            incomingAssistantText,
           );
           list = [
             ...list.slice(0, equivalentAssistantIndex),
@@ -1400,6 +1624,63 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
             ...list.slice(equivalentAssistantIndex + 1),
           ];
           nextItem = list[equivalentAssistantIndex] ?? nextItem;
+          didMergeEquivalentAssistantSnapshot = true;
+        }
+      }
+      if (
+        INCREMENTAL_DERIVATION_ENABLED &&
+        !didMergeEquivalentAssistantSnapshot &&
+        generatedImagesToReinsertAfterUser.length === 0 &&
+        !isUserMessage
+      ) {
+        const existingIndex = list.findIndex(
+          (entry) => entry.id === nextItem.id && entry.kind === nextItem.kind,
+        );
+        if (existingIndex >= 0) {
+          const existingSlot = list[existingIndex];
+          if (existingSlot !== undefined) {
+            // mirror upsertItem's merge semantics inline so we can compare
+            // the merged slot against the existing reference
+            const mergedSlot = (() => {
+              if (
+                existingSlot.kind === "tool" &&
+                nextItem.kind === "tool"
+              ) {
+                // tool items are handled inside prepareThreadItems via
+                // mergeToolItemPreservingSnapshot; skip the fast path.
+                return null;
+              }
+              if (
+                existingSlot.kind === "generatedImage" &&
+                nextItem.kind === "generatedImage"
+              ) {
+                return {
+                  ...existingSlot,
+                  ...nextItem,
+                  status:
+                    nextItem.status === "completed" ||
+                    nextItem.status === "degraded"
+                      ? nextItem.status
+                      : existingSlot.status,
+                  promptText: nextItem.promptText || existingSlot.promptText,
+                  fallbackText: nextItem.fallbackText || existingSlot.fallbackText,
+                  anchorUserMessageId:
+                    nextItem.anchorUserMessageId ?? existingSlot.anchorUserMessageId,
+                  images:
+                    nextItem.images.length > 0
+                      ? nextItem.images
+                      : existingSlot.images,
+                };
+              }
+              return { ...existingSlot, ...nextItem } as ConversationItem;
+            })();
+            if (
+              mergedSlot !== null &&
+              conversationItemsShallowEqual(existingSlot, mergedSlot)
+            ) {
+              return state;
+            }
+          }
         }
       }
       let nextList = upsertItem(list, nextItem);
@@ -2197,6 +2478,9 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
               ...visibleThreads,
             ]
           : visibleThreads;
+      if (threadSummaryListEqual(existingThreads, mergedVisibleThreads)) {
+        return state;
+      }
       return {
         ...state,
         threadsByWorkspace: {
@@ -2206,6 +2490,12 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
       };
     }
     case "setThreadListLoading":
+      if (
+        (state.threadListLoadingByWorkspace[action.workspaceId] ?? false) ===
+        action.isLoading
+      ) {
+        return state;
+      }
       return {
         ...state,
         threadListLoadingByWorkspace: {
@@ -2214,6 +2504,12 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
         },
       };
     case "setThreadListPaging":
+      if (
+        (state.threadListPagingByWorkspace[action.workspaceId] ?? false) ===
+        action.isLoading
+      ) {
+        return state;
+      }
       return {
         ...state,
         threadListPagingByWorkspace: {
@@ -2222,6 +2518,12 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
         },
       };
     case "setThreadListCursor":
+      if (
+        (state.threadListCursorByWorkspace[action.workspaceId] ?? null) ===
+        action.cursor
+      ) {
+        return state;
+      }
       return {
         ...state,
         threadListCursorByWorkspace: {

@@ -1,4 +1,10 @@
 import { useCallback, useRef } from "react";
+import type { WorkspaceScopedMap } from "./workspaceScopedMap";
+import {
+  workspaceScopedDelete,
+  workspaceScopedHas,
+  workspaceScopedSet,
+} from "./workspaceScopedMap";
 import type { Dispatch, MutableRefObject } from "react";
 import { useTranslation } from "react-i18next";
 import type {
@@ -10,7 +16,6 @@ import type {
   CustomPromptOption,
   DebugEntry,
   ReviewTarget,
-  VisionPreflightOptions,
   WorkspaceInfo,
   BrowserContextSendAttachment,
   IntentCanvasContextSendAttachment,
@@ -78,7 +83,6 @@ import {
   isInvalidReviewThreadIdError,
   isLikelyForeignModelForGemini,
   isRecoverableCodexThreadBindingError,
-  isCodexMissingThreadBindingError,
   isUnknownEngineInterruptTurnMethodError,
   mapNetworkErrorToUserMessage,
   normalizeAccessMode,
@@ -98,8 +102,6 @@ import {
   extractOptimisticGeneratedImagePrompt,
 } from "../utils/generatedImagePlaceholder";
 import {
-  buildCodexLivenessDiagnostic,
-  canUseLocalFirstSendCodexDraftReplacement,
   resolveCodexAcceptedTurnFact,
   shouldDeferCodexActivityUntilTurnAccepted,
 } from "../utils/codexConversationLiveness";
@@ -110,10 +112,7 @@ import {
   normalizeEngineScopedEffort,
   withMemoryScoutTimeout,
 } from "./messageRuntimeController";
-import {
-  injectVisionPreflightContext,
-  runVisionPreflight,
-} from "../../vision/visionPreflight";
+import { useCodexMessageRecovery } from "./useCodexMessageRecovery";
 
 type SendMessageOptions = {
   skipPromptExpansion?: boolean;
@@ -139,7 +138,6 @@ type SendMessageOptions = {
   intentCanvasContextAttachments?: IntentCanvasContextSendAttachment[];
   codexInvalidThreadRetryAttempted?: boolean;
   autoSession?: AutoSessionMetadata | null;
-  visionPreflight?: VisionPreflightOptions | null;
 };
 
 type SendMessageToThreadFn = (
@@ -209,8 +207,8 @@ type UseThreadMessagingOptions = {
   tokenUsageByThread: Record<string, ThreadTokenUsage>;
   rateLimitsByWorkspace: Record<string, RateLimitSnapshot | null>;
   codexCompactionInFlightByThreadRef?: MutableRefObject<Record<string, boolean>>;
-  pendingInterruptsRef: MutableRefObject<Set<string>>;
-  interruptedThreadsRef: MutableRefObject<Set<string>>;
+  pendingInterruptsRef: MutableRefObject<WorkspaceScopedMap<true>>;
+  interruptedThreadsRef: MutableRefObject<WorkspaceScopedMap<true>>;
   dispatch: Dispatch<ThreadAction>;
   getCustomName: (workspaceId: string, threadId: string) => string | undefined;
   getThreadEngine: (
@@ -221,6 +219,10 @@ type UseThreadMessagingOptions = {
     workspaceId: string,
     threadId: string,
   ) => "native" | "shared";
+  getThreadProviderProfileId?: (
+    workspaceId: string,
+    threadId: string,
+  ) => string | null | undefined;
   markProcessing: (threadId: string, isProcessing: boolean) => void;
   markReviewing: (threadId: string, isReviewing: boolean) => void;
   setActiveTurnId: (threadId: string, turnId: string | null) => void;
@@ -231,7 +233,11 @@ type UseThreadMessagingOptions = {
   ) => void;
   safeMessageActivity: () => void;
   onDebug?: (entry: DebugEntry) => void;
-  pushThreadErrorMessage: (threadId: string, message: string) => void;
+  pushThreadErrorMessage: (
+    workspaceId: string,
+    threadId: string,
+    message: string,
+  ) => void;
   ensureThreadForActiveWorkspace: () => Promise<string | null>;
   ensureThreadForWorkspace: (workspaceId: string) => Promise<string | null>;
   refreshThread: (workspaceId: string, threadId: string) => Promise<string | null>;
@@ -248,6 +254,7 @@ type UseThreadMessagingOptions = {
       engine?: "claude" | "codex" | "gemini" | "opencode";
       folderId?: string | null;
       autoSession?: AutoSessionMetadata | null;
+      providerProfileId?: string | null;
     },
   ) => Promise<string | null>;
   resolveOpenCodeAgent?: (threadId: string | null) => string | null;
@@ -293,6 +300,7 @@ export function useThreadMessaging({
   getCustomName,
   getThreadEngine,
   getThreadKind,
+  getThreadProviderProfileId,
   markProcessing,
   markReviewing,
   setActiveTurnId,
@@ -319,6 +327,7 @@ export function useThreadMessaging({
   const lastOpenCodeModelByThreadRef = useRef<Map<string, string>>(new Map());
   const sessionSpecLinkByThreadRef = useRef<Map<string, SessionSpecLinkContext>>(new Map());
   const sendMessageToThreadRef = useRef<SendMessageToThreadFn | null>(null);
+  const { createRecoveryAttempt } = useCodexMessageRecovery();
   const {
     claudeCandidateSessionIdByPendingThreadRef,
     claudePendingThreadAwaitingNativeSessionRef,
@@ -385,7 +394,7 @@ export function useThreadMessaging({
       if (!options?.skipPromptExpansion) {
         const promptExpansion = expandCustomPromptText(messageText, customPrompts);
         if (promptExpansion && "error" in promptExpansion) {
-          pushThreadErrorMessage(threadId, promptExpansion.error);
+          pushThreadErrorMessage(workspace.id, threadId, promptExpansion.error);
           safeMessageActivity();
           return;
         }
@@ -510,7 +519,6 @@ export function useThreadMessaging({
           new Set([...finalImages, ...noteInjectionResult.imagePaths]),
         );
       }
-      const visibleUserImages = [...finalImages];
       const resolvedSelectedAgent =
         resolvedEngine !== "opencode" ? options?.selectedAgent ?? null : null;
       const selectedAgentName =
@@ -578,62 +586,6 @@ export function useThreadMessaging({
           finalText,
           options.browserContextAttachment,
         );
-      }
-      let visionPreflightInjected = false;
-      if (options?.visionPreflight && finalImages.length > 0) {
-        try {
-          const visionPreflightResult = await runVisionPreflight({
-            workspaceId: workspace.id,
-            userText: finalText,
-            images: finalImages,
-            preflight: options.visionPreflight,
-          });
-          if (visionPreflightResult) {
-            finalText = injectVisionPreflightContext(
-              finalText,
-              visionPreflightResult,
-            );
-            finalImages = [];
-            visionPreflightInjected = true;
-            onDebug?.({
-              id: `${Date.now()}-vision-preflight-injected`,
-              timestamp: Date.now(),
-              source: "client",
-              label: "vision/preflight-injected",
-              payload: {
-                workspaceId: workspace.id,
-                threadId,
-                model: visionPreflightResult.model,
-                mode: visionPreflightResult.mode,
-                skillName: visionPreflightResult.skillName,
-                imageCount: visionPreflightResult.imageCount,
-              },
-            });
-          }
-        } catch (error) {
-          const message =
-            error instanceof Error ? error.message : String(error);
-          pushThreadErrorMessage(
-            threadId,
-            t("threads.turnFailedWithMessage", { message }),
-          );
-          safeMessageActivity();
-          onDebug?.({
-            id: `${Date.now()}-vision-preflight-failed`,
-            timestamp: Date.now(),
-            source: "client",
-            label: "vision/preflight-failed",
-            payload: {
-              workspaceId: workspace.id,
-              threadId,
-              model: options.visionPreflight.model,
-              mode: options.visionPreflight.mode,
-              skillName: options.visionPreflight.skillName,
-              message,
-            },
-          });
-          return;
-        }
       }
       if (injectionResult.injectedCount > 0 && injectionResult.previewText) {
         dispatch({
@@ -884,22 +836,14 @@ export function useThreadMessaging({
           options?.browserContextAttachment ||
           options?.intentCanvasContextAttachments?.length
         ) {
-          const optimisticDisplayImages = visionPreflightInjected
-            ? visibleUserImages
-            : optimisticImages;
           optimisticUserItem = {
             id: `optimistic-user-${Date.now()}-${Math.random()
               .toString(36)
               .slice(2, 8)}`,
             kind: "message",
             role: "user",
-            text: visionPreflightInjected
-              ? optimisticDisplayText
-              : optimisticText,
-            images:
-              optimisticDisplayImages.length > 0
-                ? optimisticDisplayImages
-                : undefined,
+            text: optimisticText,
+            images: optimisticImages.length > 0 ? optimisticImages : undefined,
             collaborationMode: userCollaborationMode,
             selectedAgentName,
             selectedAgentIcon,
@@ -955,11 +899,11 @@ export function useThreadMessaging({
           timestamp,
         });
       }
-      if (pendingInterruptsRef.current.has(threadId)) {
-        pendingInterruptsRef.current.delete(threadId);
+      if (workspaceScopedHas(pendingInterruptsRef.current, workspace.id, threadId)) {
+        workspaceScopedDelete(pendingInterruptsRef.current, workspace.id, threadId);
       }
-      if (interruptedThreadsRef.current.has(threadId)) {
-        interruptedThreadsRef.current.delete(threadId);
+      if (workspaceScopedHas(interruptedThreadsRef.current, workspace.id, threadId)) {
+        workspaceScopedDelete(interruptedThreadsRef.current, workspace.id, threadId);
       }
       markProcessing(threadId, true);
       safeMessageActivity();
@@ -1081,105 +1025,37 @@ export function useThreadMessaging({
             codexInvalidThreadRetryAttempted: true,
           });
         };
-        if (!reboundThreadId) {
-          let forkedThreadId: string | null = null;
-          let forkErrorMessage: string | null = null;
-          try {
-            forkedThreadId = await forkThreadForWorkspace(workspace.id, threadId, {
-              activate: true,
-            });
-          } catch (forkError) {
-            forkErrorMessage =
-              forkError instanceof Error ? forkError.message : String(forkError);
-            forkedThreadId = null;
-          }
-          const normalizedForkedThreadId =
-            typeof forkedThreadId === "string" ? forkedThreadId.trim() : "";
-          if (normalizedForkedThreadId) {
-            onDebug?.({
-              id: `${Date.now()}-client-turn-start-stale-fork-continuation`,
-              timestamp: Date.now(),
-              source: "client",
-              label: "turn/start stale fork continuation",
-              payload: {
-                ...buildCodexLivenessDiagnostic({
-                  workspaceId: workspace.id,
-                  threadId,
-                  stage: "fresh-continuation",
-                  outcome: "fresh",
-                  acceptedTurnFact: acceptedTurnResolution.fact,
-                  source: acceptedTurnResolution.source,
-                  reason: refreshErrorMessage
-                    ? `${errorMessage}; refresh failed: ${refreshErrorMessage}`
-                    : errorMessage,
-                }),
-                forkedThreadId: normalizedForkedThreadId,
-                reasonCode: staleRecoveryClassification?.reasonCode ?? null,
-                staleReason: staleRecoveryClassification?.staleReason ?? null,
-                userAction: "start-fresh-thread",
-              },
-            });
-            dispatch({
-              type: "setActiveThreadId",
-              workspaceId: workspace.id,
-              threadId: normalizedForkedThreadId,
-            });
-            moveOptimisticUserIntentToThread(normalizedForkedThreadId);
-            await retrySendOnThread(normalizedForkedThreadId);
+        const recoveryAttempt = createRecoveryAttempt({
+          threadId,
+          workspace,
+          reboundThreadId,
+          acceptedTurnResolution,
+          staleRecoveryClassification,
+          optimisticUserItem,
+          moveOptimisticUserIntentToThread,
+          retrySendOnThread,
+          startThreadForMessageSend,
+          forkThreadForWorkspace,
+          dispatch,
+          onDebug,
+          errorMessage,
+          refreshErrorMessage,
+          providerProfileId:
+            getThreadProviderProfileId?.(workspace.id, threadId) ?? null,
+        });
+        if (!reboundThreadId || recoveryAttempt.isUnverifiedSameThreadMissingRebind) {
+          if (
+            await recoveryAttempt.tryFreshDraftReplacement(
+              recoveryAttempt.isUnverifiedSameThreadMissingRebind
+                ? "refresh returned the same missing thread"
+                : refreshErrorMessage
+                  ? `refresh failed: ${refreshErrorMessage}`
+                  : null,
+            )
+          ) {
             return true;
           }
-          const canUseFirstSendDraftReplacement =
-            canUseLocalFirstSendCodexDraftReplacement({
-              resolution: acceptedTurnResolution,
-              hasLocalUserIntent: Boolean(optimisticUserItem),
-            });
-          const canUseFreshDraftReplacementForMalformedThreadId =
-            isInvalidReviewThreadIdError(errorMessage) && canUseFirstSendDraftReplacement;
-          const canUseFreshDraftReplacementForMissingThread =
-            isCodexMissingThreadBindingError(errorMessage) &&
-            canUseFirstSendDraftReplacement;
-          const canUseFreshDraftReplacement =
-            canUseFreshDraftReplacementForMalformedThreadId ||
-            canUseFreshDraftReplacementForMissingThread;
-          if (!canUseFreshDraftReplacement) {
-            return false;
-          }
-          const freshThreadId = await startThreadForMessageSend(workspace, "codex");
-          if (!freshThreadId) {
-            return false;
-          }
-          onDebug?.({
-            id: `${Date.now()}-client-turn-start-draft-fresh-fallback`,
-            timestamp: Date.now(),
-            source: "client",
-            label: "turn/start draft fresh fallback",
-            payload: {
-              ...buildCodexLivenessDiagnostic({
-                workspaceId: workspace.id,
-                threadId,
-                stage: "fresh-continuation",
-                outcome: "fresh",
-                acceptedTurnFact: acceptedTurnResolution.fact,
-                source: acceptedTurnResolution.source,
-                reason: refreshErrorMessage
-                  ? `${errorMessage}; refresh failed: ${refreshErrorMessage}`
-                  : forkErrorMessage
-                    ? `${errorMessage}; fork failed: ${forkErrorMessage}`
-                  : errorMessage,
-              }),
-              reasonCode: staleRecoveryClassification?.reasonCode ?? null,
-              staleReason: staleRecoveryClassification?.staleReason ?? null,
-              userAction: staleRecoveryClassification?.userAction ?? null,
-            },
-          });
-          dispatch({
-            type: "setActiveThreadId",
-            workspaceId: workspace.id,
-            threadId: freshThreadId,
-          });
-          moveOptimisticUserIntentToThread(freshThreadId);
-          await retrySendOnThread(freshThreadId);
-          return true;
+          return recoveryAttempt.tryForkFromMessage(refreshErrorMessage);
         }
         onDebug?.({
           id: `${Date.now()}-client-turn-start-thread-retry`,
@@ -1399,7 +1275,7 @@ export function useThreadMessaging({
                   "Claude session is still initializing. Wait for the session to finish binding, then send again.",
               },
             );
-            pushThreadErrorMessage(threadId, waitingMessage);
+            pushThreadErrorMessage(workspace.id, threadId, waitingMessage);
             markProcessing(threadId, false);
             setActiveTurnId(threadId, null);
             safeMessageActivity();
@@ -1482,7 +1358,8 @@ export function useThreadMessaging({
             markProcessing(threadId, false);
             setActiveTurnId(threadId, null);
           pushThreadErrorMessage(
-            threadId,
+          workspace.id,
+          threadId,
             normalized.isNetwork
               ? normalized.message
               : `${t("threads.turnFailedWithMessage", { message: normalized.message })}${claudeMcpHint}`,
@@ -1587,7 +1464,7 @@ export function useThreadMessaging({
           if (!turnId) {
             markProcessing(threadId, false);
             setActiveTurnId(threadId, null);
-            pushThreadErrorMessage(threadId, t("threads.turnFailedToStart"));
+            pushThreadErrorMessage(workspace.id, threadId, t("threads.turnFailedToStart"));
             safeMessageActivity();
             return;
           }
@@ -1657,7 +1534,7 @@ export function useThreadMessaging({
               message: warningMessage,
               durationMs: 4800,
             });
-            pushThreadErrorMessage(threadId, warningMessage);
+            pushThreadErrorMessage(workspace.id, threadId, warningMessage);
             markProcessing(threadId, false);
             setActiveTurnId(threadId, null);
             safeMessageActivity();
@@ -1667,7 +1544,8 @@ export function useThreadMessaging({
           markProcessing(threadId, false);
           setActiveTurnId(threadId, null);
           pushThreadErrorMessage(
-            threadId,
+          workspace.id,
+          threadId,
             normalized.isNetwork
               ? normalized.message
               : t("threads.turnFailedToStartWithMessage", { message: normalized.message }),
@@ -1714,7 +1592,7 @@ export function useThreadMessaging({
         if (!turnId) {
           markProcessing(threadId, false);
           setActiveTurnId(threadId, null);
-          pushThreadErrorMessage(threadId, t("threads.turnFailedToStart"));
+          pushThreadErrorMessage(workspace.id, threadId, t("threads.turnFailedToStart"));
           safeMessageActivity();
           return;
         }
@@ -1795,7 +1673,7 @@ export function useThreadMessaging({
             message: warningMessage,
             durationMs: 4800,
           });
-          pushThreadErrorMessage(threadId, warningMessage);
+          pushThreadErrorMessage(workspace.id, threadId, warningMessage);
           markProcessing(threadId, false);
           setActiveTurnId(threadId, null);
           safeMessageActivity();
@@ -1815,7 +1693,7 @@ export function useThreadMessaging({
             recoveryReason: stabilityDiagnostic?.reconnectReason ?? null,
           },
         });
-        pushThreadErrorMessage(threadId, normalized.message);
+        pushThreadErrorMessage(workspace.id, threadId, normalized.message);
         if (normalized.isNetwork || staleRecoveryClassification) {
           pushThreadFailureRuntimeNotice({
             workspaceId: workspace.id,
@@ -1846,6 +1724,7 @@ export function useThreadMessaging({
       claudeThinkingVisible,
       customPrompts,
       codexAcceptedTurnByThread,
+      createRecoveryAttempt,
       dispatch,
       effort,
       geminiSessionIdByPendingThreadRef,
@@ -1862,6 +1741,7 @@ export function useThreadMessaging({
       recordThreadActivity,
       reconcileClaudePendingThreadFromCandidate,
       resolveComposerSelection,
+      getThreadProviderProfileId,
       resolveThreadKind,
       resolveThreadEngine,
       resolveOpenCodeAgent,
@@ -1891,7 +1771,7 @@ export function useThreadMessaging({
       const promptExpansion = expandCustomPromptText(messageText, customPrompts);
       if (promptExpansion && "error" in promptExpansion) {
         if (activeThreadId) {
-          pushThreadErrorMessage(activeThreadId, promptExpansion.error);
+          pushThreadErrorMessage(activeWorkspace.id, activeThreadId, promptExpansion.error);
           safeMessageActivity();
         } else {
           onDebug?.({
@@ -2020,7 +1900,8 @@ export function useThreadMessaging({
       markReviewing(threadId, false);
       setActiveTurnId(threadId, null);
       pushThreadErrorMessage(
-        threadId,
+          activeWorkspace.id,
+          threadId,
         options?.message?.trim() || t("threads.fusionTurnStalled"),
       );
       safeMessageActivity();
@@ -2065,7 +1946,7 @@ export function useThreadMessaging({
     // Queue fusion immediately starts a successor turn on the same curtain; a
     // long-lived interrupted guard would drop that successor's realtime output.
     if (shouldGuardInterruptedThread) {
-      interruptedThreadsRef.current.add(activeThreadId);
+      workspaceScopedSet(interruptedThreadsRef.current, activeWorkspace.id, activeThreadId, true);
     }
     markProcessing(activeThreadId, false);
     setActiveTurnId(activeThreadId, null);
@@ -2083,7 +1964,7 @@ export function useThreadMessaging({
       });
     }
     if (!activeTurnId && shouldGuardInterruptedThread) {
-      pendingInterruptsRef.current.add(activeThreadId);
+      workspaceScopedSet(pendingInterruptsRef.current, activeWorkspace.id, activeThreadId, true);
     }
 
     // Determine whether this thread is backed by a local CLI session.
@@ -2317,7 +2198,7 @@ export function useThreadMessaging({
           markProcessing(reviewThreadId, false);
           markReviewing(reviewThreadId, false);
           setActiveTurnId(reviewThreadId, null);
-          pushThreadErrorMessage(reviewThreadId, `Review failed to start: ${rpcError}`);
+          pushThreadErrorMessage(workspaceId, reviewThreadId, `Review failed to start: ${rpcError}`);
           safeMessageActivity();
           return false;
         }
@@ -2333,6 +2214,7 @@ export function useThreadMessaging({
           payload: error instanceof Error ? error.message : String(error),
         });
         pushThreadErrorMessage(
+          workspaceId,
           reviewThreadId,
           error instanceof Error ? error.message : String(error),
         );
