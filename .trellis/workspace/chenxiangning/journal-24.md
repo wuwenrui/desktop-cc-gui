@@ -459,3 +459,40 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 932: 修复 ProjectMap 冷启动空态循环
+
+**Date**: 2026-06-25
+**Task**: 修复 ProjectMap 冷启动空态循环
+**Branch**: `feature/v0.5.13`
+
+### Summary
+
+修复 fresh install 首次打开时 ProjectMap disabled 空态重复发布新对象导致的 React #185 风险。
+
+### Main Changes
+
+- 在 `useProjectMapDataset` 中增加空 dataset 与 storage location map 的语义等价判断。
+- 将 disabled/no workspace 冷启动 reset 收敛到 `resetToEmptyState`，空态不再创建新引用。
+- 补充 disabled cold-start reload 回归测试，确认不会触发 storage read、memory scan 或 worker。
+- 验证：vitest startup/project-map、typecheck、lint、production build、runtime contracts 均通过。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5dabbcc6` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
