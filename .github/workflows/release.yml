@@ -41,6 +41,12 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: sidecars/weclaw/go.mod
+          cache-dependency-path: sidecars/weclaw/go.sum
+
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
@@ -180,6 +186,12 @@ jobs:
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
+      - name: setup go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: sidecars/weclaw/go.mod
+          cache-dependency-path: sidecars/weclaw/go.sum
+
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
@@ -272,6 +284,12 @@ jobs:
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: sidecars/weclaw/go.mod
+          cache-dependency-path: sidecars/weclaw/go.sum
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2

@@ -22,6 +22,16 @@ test("tauri config bundles all managed helpers as external sidecars", () => {
   assert.match(config.build.beforeBuildCommand, /prepare-tauri-sidecars\.mjs/);
 });
 
+test("release workflow installs Go before building WeClaw sidecars", () => {
+  const workflow = readFileSync(".github/workflows/release.yml", "utf8");
+
+  assert.equal((workflow.match(/actions\/setup-go@v5/g) ?? []).length, 3);
+  assert.equal(
+    (workflow.match(/go-version-file: sidecars\/weclaw\/go\.mod/g) ?? []).length,
+    3,
+  );
+});
+
 test("sidecar preparation names binaries with the active target triple", async () => {
   const { sidecarInternals } = await import("./prepare-tauri-sidecars.mjs");
 
