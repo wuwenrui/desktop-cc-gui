@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-24.md`
-- **Total Sessions**: 925
+- **Total Sessions**: 926
 - **Last Active**: 2026-06-25
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-24.md` | ~256 | Active |
+| `journal-24.md` | ~289 | Active |
 | `journal-23.md` | ~1965 | Archived |
 | `journal-22.md` | ~1969 | Archived |
 | `journal-21.md` | ~1970 | Archived |
@@ -52,6 +52,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 926 | 2026-06-25 | 修正退役 OpenCode/Gemini CLI 提案 | `31ed8796` | `feature/v0.5.13` |
 | 925 | 2026-06-25 | 消除精选技能测试 helper 死代码告警 | `911537d7` | `feature/v0.5.13` |
 | 924 | 2026-06-25 | 完成精选技能收口 | `45c65526` | `feature/v0.5.13` |
 | 923 | 2026-06-24 | 归档 fast-markdown 与 codex-provider 两个 fix 提案 | `7abed3bf` | `feature/v0.5.13` |

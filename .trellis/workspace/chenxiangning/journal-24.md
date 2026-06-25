@@ -254,3 +254,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 926: 修正退役 OpenCode/Gemini CLI 提案
+
+**Date**: 2026-06-25
+**Task**: 修正退役 OpenCode/Gemini CLI 提案
+**Branch**: `feature/v0.5.13`
+
+### Summary
+
+检查并修正 OpenSpec change 2026-06-24-retire-opencode-and-gemini-cli，明确只删除客户端 OpenCode/Gemini CLI 能力，保留共享 Claude/Codex 边界。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `31ed8796` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
