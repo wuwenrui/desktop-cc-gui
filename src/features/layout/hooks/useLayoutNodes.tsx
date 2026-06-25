@@ -5,6 +5,7 @@ import {
   useCallback,
   useDeferredValue,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -24,10 +25,7 @@ import {
 import { UpdateToast } from "../../update/components/UpdateToast";
 import { ErrorToasts } from "../../notifications/components/ErrorToasts";
 import { GlobalRuntimeNoticeDock } from "../../notifications/components/GlobalRuntimeNoticeDock";
-import {
-  Composer,
-  type ComposerRewindDialogRequest,
-} from "../../composer/components/Composer";
+import type { ComposerRewindDialogRequest } from "../../composer/components/Composer";
 import { resolveCodexProviderLabel } from "../../app/utils/codexProviderLabel";
 import { GitDiffViewer } from "../../git/components/GitDiffViewer";
 import { buildCanonicalGitChanges } from "../../git/utils/gitChangeModel";
@@ -77,7 +75,6 @@ import { WorkspaceSessionActivityPanel } from "../../session-activity/components
 import { WorkspaceSessionRadarPanel } from "../../session-activity/components/WorkspaceSessionRadarPanel";
 import { TabBar } from "../../app/components/TabBar";
 import { TabletNav } from "../../app/components/TabletNav";
-import { StatusPanel } from "../../status-panel/components/StatusPanel";
 import { useStatusPanelData } from "../../status-panel/hooks/useStatusPanelData";
 import { useGlobalRuntimeNoticeDock } from "../../notifications/hooks/useGlobalRuntimeNoticeDock";
 import { buildSpecWorkspaceSnapshot } from "../../../lib/spec-core/runtime";
@@ -126,6 +123,14 @@ import { loadCodeSelectionRelationshipGraph } from "./codeSelectionRelationshipG
 import { resolveRuntimeLifecycleForComposer } from "./runtimeLifecycle";
 import { focusUserInputRequestCard } from "./userInputRequestFocus";
 import { dispatchMessageJumpEvent } from "./messageJumpEvent";
+import {
+  EMPTY_ACTIVE_CANVAS_ITEMS,
+  EMPTY_ACTIVE_CANVAS_TASK_RUNS,
+  setActiveCanvasSnapshot,
+  type ActiveCanvasSnapshot,
+} from "./activeCanvasStore";
+import { ActiveCanvasComposer } from "./activeCanvasComposerNode";
+import { ActiveCanvasStatusPanel } from "./activeCanvasStatusPanelNode";
 import { buildShellRuntimeSummary } from "./layoutShellSummary";
 import { buildConversationCanvasNode } from "./conversationCanvasNode";
 import { useLayoutTopbarSessionTabs } from "./useLayoutTopbarSessionTabs";
@@ -424,23 +429,6 @@ export function useLayoutNodes(input: LayoutNodesOptions): LayoutNodesResult {
       ),
     [options.activeItems, options.activeQueuedHandoffBubble],
   );
-  const composerLiveInputs = useMemo(
-    () => ({
-      items: options.activeItems,
-      threadItemsByThread: options.threadItemsByThread,
-      threadStatusById: options.threadStatusById,
-      tokenUsage: options.activeTokenUsage,
-      rateLimits: options.activeRateLimits,
-    }),
-    [
-      options.activeItems,
-      options.threadItemsByThread,
-      options.threadStatusById,
-      options.activeTokenUsage,
-      options.activeRateLimits,
-    ],
-  );
-  const deferredComposerLiveInputs = useDeferredValue(composerLiveInputs);
   const backgroundRenderGatingEnabled = isBackgroundRenderGatingEnabled();
   // 2026-06-24-harden-realtime-interaction-jank-during-tool-call §7.1
   // Accumulate background items across 3 rAF frames before exposing them to
@@ -467,11 +455,6 @@ export function useLayoutNodes(input: LayoutNodesOptions): LayoutNodesResult {
   const deferredThreadStatusById = backgroundRenderGatingEnabled
     ? deferredThreadStatusByIdValue
     : options.threadStatusById;
-  const deferredComposerActiveThreadStatus = options.activeThreadId
-    ? (deferredComposerLiveInputs.threadStatusById[options.activeThreadId] ??
-      activeThreadStatus)
-    : null;
-
   const conversationState = useMemo<ConversationState>(
     () => ({
       items: conversationItems,
@@ -874,21 +857,74 @@ export function useLayoutNodes(input: LayoutNodesOptions): LayoutNodesResult {
 
   const taskRunStore = useTaskRunStore();
 
+  const activeCanvasSnapshot = useMemo<ActiveCanvasSnapshot>(
+    () => ({
+      activeWorkspaceId: options.activeWorkspaceId,
+      activeTurnId: options.activeTurnId ?? null,
+      items: options.activeItems,
+      threadId: options.activeThreadId ?? null,
+      workspaceId: options.activeWorkspace?.id ?? null,
+      workspacePath: options.activeWorkspace?.path ?? null,
+      userInputRequests: options.userInputRequests,
+      approvals: options.approvals,
+      conversationState,
+      plan: options.plan,
+      isThinking: isThreadThinking,
+      isHistoryLoading: activeThreadHistoryLoading,
+      isContextCompacting: activeThreadStatus?.isContextCompacting ?? false,
+      processingStartedAt: activeThreadStatus?.processingStartedAt ?? null,
+      lastDurationMs: activeThreadStatus?.lastDurationMs ?? null,
+      heartbeatPulse: heartbeatPulseRef.current ?? 0,
+      codexSilentSuspectedAt:
+        activeThreadStatus?.codexSilentSuspectedAt ?? null,
+      taskRuns: taskRunStore.runs,
+      threadItemsByThread: options.threadItemsByThread,
+      threadStatusById: options.threadStatusById,
+      activeThreadStatus,
+      activeTokenUsage: options.activeTokenUsage,
+      activeRateLimits: options.activeRateLimits,
+    }),
+    [
+      options.activeWorkspaceId,
+      options.activeTurnId,
+      options.activeItems,
+      options.activeThreadId,
+      options.activeWorkspace?.id,
+      options.activeWorkspace?.path,
+      options.userInputRequests,
+      options.approvals,
+      conversationState,
+      options.plan,
+      isThreadThinking,
+      activeThreadHistoryLoading,
+      activeThreadStatus,
+      taskRunStore.runs,
+      options.threadItemsByThread,
+      options.threadStatusById,
+      options.activeTokenUsage,
+      options.activeRateLimits,
+    ],
+  );
+
+  useLayoutEffect(() => {
+    setActiveCanvasSnapshot(activeCanvasSnapshot);
+  }, [activeCanvasSnapshot]);
+
   const messagesNode = useMemo(
     () =>
       buildConversationCanvasNode({
         messagesProps: {
-          items: options.activeItems,
-          threadId: options.activeThreadId ?? null,
-          workspaceId: options.activeWorkspace?.id ?? null,
-          workspacePath: options.activeWorkspace?.path ?? null,
+          items: EMPTY_ACTIVE_CANVAS_ITEMS,
+          threadId: null,
+          workspaceId: null,
+          workspacePath: null,
           openTargets: options.openAppTargets,
           selectedOpenAppId: options.selectedOpenAppId,
           showMessageAnchors,
           showStickyUserBubble,
           codeBlockCopyUseModifier: options.codeBlockCopyUseModifier,
-          userInputRequests: options.userInputRequests,
-          approvals: options.approvals,
+          userInputRequests: [],
+          approvals: [],
           workspaces: options.workspaces,
           onUserInputSubmit: options.handleUserInputSubmit,
           onUserInputDismiss: options.handleUserInputDismiss,
@@ -905,30 +941,29 @@ export function useLayoutNodes(input: LayoutNodesOptions): LayoutNodesResult {
           onApprovalDecision: options.handleApprovalDecision,
           onApprovalBatchAccept: options.handleApprovalBatchAccept,
           onApprovalRemember: options.handleApprovalRemember,
-          conversationState,
+          conversationState: null,
           presentationProfile,
           activeEngine: conversationEngine,
           claudeThinkingVisible,
           activeCollaborationModeId: options.selectedCollaborationModeId,
-          plan: options.plan,
+          plan: null,
           isPlanMode: options.isPlanMode,
-          isPlanProcessing: options.isProcessing,
+          isPlanProcessing: false,
           onOpenDiffPath: handleOpenDiffPath,
           onOpenPlanPanel: options.onOpenPlanPanel,
           onExitPlanModeExecute: options.handleExitPlanModeExecute,
           onOpenWorkspaceFile: options.onOpenFile,
           agentTaskScrollRequest: options.agentTaskScrollRequest,
-          isThinking: isThreadThinking,
-          isHistoryLoading: activeThreadHistoryLoading,
-          isContextCompacting: activeThreadStatus?.isContextCompacting ?? false,
+          isThinking: false,
+          isHistoryLoading: false,
+          isContextCompacting: false,
           proxyEnabled: options.systemProxyEnabled,
           proxyUrl: options.systemProxyUrl,
-          processingStartedAt: activeThreadStatus?.processingStartedAt ?? null,
-          lastDurationMs: activeThreadStatus?.lastDurationMs ?? null,
-          heartbeatPulse: heartbeatPulseRef.current ?? 0,
-          codexSilentSuspectedAt:
-            activeThreadStatus?.codexSilentSuspectedAt ?? null,
-          taskRuns: taskRunStore.runs,
+          processingStartedAt: null,
+          lastDurationMs: null,
+          heartbeatPulse: 0,
+          codexSilentSuspectedAt: null,
+          taskRuns: EMPTY_ACTIVE_CANVAS_TASK_RUNS,
         },
         forkConfirmDialogProps: {
           userMessageId: forkConfirmUserMessageId,
@@ -942,10 +977,6 @@ export function useLayoutNodes(input: LayoutNodesOptions): LayoutNodesResult {
         },
       }),
     [
-      options.activeItems,
-      options.activeThreadId,
-      options.activeWorkspace?.id,
-      options.activeWorkspace?.path,
       options.systemProxyEnabled,
       options.systemProxyUrl,
       options.openAppTargets,
@@ -953,8 +984,6 @@ export function useLayoutNodes(input: LayoutNodesOptions): LayoutNodesResult {
       showMessageAnchors,
       showStickyUserBubble,
       options.codeBlockCopyUseModifier,
-      options.userInputRequests,
-      options.approvals,
       options.workspaces,
       options.handleUserInputSubmit,
       options.handleUserInputDismiss,
@@ -973,26 +1002,16 @@ export function useLayoutNodes(input: LayoutNodesOptions): LayoutNodesResult {
       options.handleApprovalDecision,
       options.handleApprovalBatchAccept,
       options.handleApprovalRemember,
-      conversationState,
       presentationProfile,
       conversationEngine,
       claudeThinkingVisible,
       options.selectedCollaborationModeId,
-      options.plan,
       options.isPlanMode,
-      options.isProcessing,
       handleOpenDiffPath,
       options.onOpenPlanPanel,
       options.handleExitPlanModeExecute,
       options.onOpenFile,
       options.agentTaskScrollRequest,
-      isThreadThinking,
-      activeThreadHistoryLoading,
-      activeThreadStatus?.isContextCompacting,
-      activeThreadStatus?.processingStartedAt,
-      activeThreadStatus?.lastDurationMs,
-      activeThreadStatus?.codexSilentSuspectedAt,
-      taskRunStore.runs,
       // heartbeatPulse removed from deps — uses ref to avoid
       // recreating messagesNode on every heartbeat tick
     ],
@@ -1073,12 +1092,12 @@ export function useLayoutNodes(input: LayoutNodesOptions): LayoutNodesResult {
   const renderComposerNode = (showStatusPanelToggleOverride?: boolean) =>
     options.showComposer ? (
       <Profiler id="composer" onRender={handleRuntimeProfileRender}>
-        <Composer
-          items={deferredComposerLiveInputs.items}
-          activeThreadId={options.activeThreadId}
-          threadItemsByThread={deferredComposerLiveInputs.threadItemsByThread}
+        <ActiveCanvasComposer
+          items={EMPTY_ACTIVE_CANVAS_ITEMS}
+          activeThreadId={null}
+          threadItemsByThread={{}}
           threadParentById={options.threadParentById}
-          threadStatusById={deferredComposerLiveInputs.threadStatusById}
+          threadStatusById={{}}
           onSend={options.onSend}
           onQueue={options.onQueue}
           onRequestContextCompaction={options.onRequestContextCompaction}
@@ -1091,7 +1110,7 @@ export function useLayoutNodes(input: LayoutNodesOptions): LayoutNodesResult {
           onRewindDialogRequestConsumed={handleRewindDialogRequestConsumed}
           canStop={options.canStop}
           disabled={options.isReviewing}
-          contextUsage={deferredComposerLiveInputs.tokenUsage}
+          contextUsage={null}
           contextDualViewEnabled={options.contextDualViewEnabled}
           codexAutoCompactionEnabled={options.codexAutoCompactionEnabled}
           codexAutoCompactionThresholdPercent={
@@ -1100,36 +1119,16 @@ export function useLayoutNodes(input: LayoutNodesOptions): LayoutNodesResult {
           onCodexAutoCompactionSettingsChange={
             options.onCodexAutoCompactionSettingsChange
           }
-          isContextCompacting={
-            deferredComposerActiveThreadStatus?.isContextCompacting ??
-            activeThreadStatus?.isContextCompacting ??
-            false
-          }
-          codexCompactionLifecycleState={
-            deferredComposerActiveThreadStatus?.codexCompactionLifecycleState ??
-            activeThreadStatus?.codexCompactionLifecycleState ??
-            "idle"
-          }
-          codexCompactionSource={
-            deferredComposerActiveThreadStatus?.codexCompactionSource ??
-            activeThreadStatus?.codexCompactionSource ??
-            null
-          }
-          codexCompactionCompletedAt={
-            deferredComposerActiveThreadStatus?.codexCompactionCompletedAt ??
-            activeThreadStatus?.codexCompactionCompletedAt ??
-            null
-          }
-          lastTokenUsageUpdatedAt={
-            deferredComposerActiveThreadStatus?.lastTokenUsageUpdatedAt ??
-            activeThreadStatus?.lastTokenUsageUpdatedAt ??
-            null
-          }
-          accountRateLimits={deferredComposerLiveInputs.rateLimits}
+          isContextCompacting={false}
+          codexCompactionLifecycleState="idle"
+          codexCompactionSource={null}
+          codexCompactionCompletedAt={null}
+          lastTokenUsageUpdatedAt={null}
+          accountRateLimits={null}
           usageShowRemaining={options.usageShowRemaining}
           onRefreshAccountRateLimits={options.onRefreshAccountRateLimits}
           queuedMessages={options.activeQueue}
-          userInputRequests={options.userInputRequests}
+          userInputRequests={[]}
           onJumpToUserInputRequest={handleJumpToUserInputRequest}
           runtimeLifecycleState={composerRuntimeLifecycleState}
           sendLabel={
@@ -2108,20 +2107,20 @@ export function useLayoutNodes(input: LayoutNodesOptions): LayoutNodesResult {
   ) : null;
 
   const planPanelNode = shouldMountBottomStatusPanel ? (
-    <StatusPanel
+    <ActiveCanvasStatusPanel
       workspaceId={options.activeWorkspace?.id ?? null}
       workspacePath={options.activeWorkspace?.path ?? null}
-      items={statusPanelItems}
-      isProcessing={options.isProcessing}
+      items={EMPTY_ACTIVE_CANVAS_ITEMS}
+      isProcessing={false}
       expanded
-      plan={options.plan}
+      plan={null}
       isPlanMode={options.isPlanMode}
       isCodexEngine={isStatusPanelCodexEngine}
-      activeThreadId={options.activeThreadId}
-      activeTurnId={options.activeTurnId ?? null}
+      activeThreadId={null}
+      activeTurnId={null}
       selectedEngine={options.selectedEngine}
       selectedModelId={options.selectedModelId}
-      activeTokenUsage={options.activeTokenUsage}
+      activeTokenUsage={null}
       workspaceGitFiles={options.gitStatus.files}
       workspaceGitStagedFiles={options.gitStatus.stagedFiles}
       workspaceGitUnstagedFiles={options.gitStatus.unstagedFiles}
@@ -2130,9 +2129,9 @@ export function useLayoutNodes(input: LayoutNodesOptions): LayoutNodesResult {
         deletions: options.gitStatus.totalDeletions,
       }}
       workspaceGitDiffs={options.gitDiffs}
-      itemsByThread={deferredThreadItemsByThread}
+      itemsByThread={{}}
       threadParentById={options.threadParentById}
-      threadStatusById={deferredThreadStatusById}
+      threadStatusById={{}}
       onOpenDiffPath={handleOpenDiffPath}
       onOpenFilePath={handleOpenDiffFromActivity}
       onSelectSubagent={options.onSelectSubagent}

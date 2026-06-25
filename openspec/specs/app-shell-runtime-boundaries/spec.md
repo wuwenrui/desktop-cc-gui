@@ -5,7 +5,7 @@ TBD - created by archiving change split-app-shell-runtime-boundaries. Update Pur
 ## Requirements
 ### Requirement: AppShell Uses Typed Runtime Boundaries
 
-AppShell SHALL assemble application sections and layout while delegating runtime, task/run, navigation, context, and low-frequency feature activation behavior to typed boundaries.
+AppShell SHALL assemble application sections and layout while delegating runtime, task/run, navigation, context, low-frequency feature activation behavior, and lane-specific render pressure to typed boundaries.
 
 #### Scenario: AppShell wires runtime actions
 
@@ -24,6 +24,13 @@ AppShell SHALL assemble application sections and layout while delegating runtime
 - **WHEN** the app first renders
 - **THEN** sidebar shell, active thread shell, composer basic input, and essential runtime notices SHALL remain available without waiting for low-frequency feature chunks
 - **AND** feature-local suspense MUST NOT suspend the whole shell.
+
+#### Scenario: five-zone ownership isolates canvas pressure
+
+- **WHEN** the center conversation canvas receives high-frequency realtime updates
+- **THEN** AppShell MUST keep top, left, right, and bottom interaction lanes behind narrow typed props or pressure signals
+- **AND** AppShell MUST NOT pass full canvas render snapshots, message arrays, or canvas-only hydration state into those interaction lanes
+- **AND** layout recomputation for interaction lanes MUST NOT be triggered solely by canvas-lane render churn
 
 ### Requirement: Thread Runtime Separates Lifecycle From Message Transport
 
@@ -114,4 +121,18 @@ AppShell and layout composition MUST pass file surfaces narrow, typed signals ra
 - **WHEN** Sidebar or WorktreeSection derives running session indicators from realtime status
 - **THEN** those derived values MUST remain sidebar/workspace UI concerns
 - **AND** they MUST NOT be passed through to file view props except as an explicit narrow signal documented by the file render contract
+
+### Requirement: AppShell MUST Compose Shell And Canvas Through Separate Runtime Boundaries
+AppShell runtime boundaries SHALL distinguish Shell control node construction from Conversation Canvas content node construction.
+
+#### Scenario: Active canvas state uses selector boundary
+- **WHEN** active conversation state changes because of stream item, tool event, thread status, token usage, or rate-limit churn
+- **THEN** Conversation Canvas consumers SHALL subscribe to the required active canvas slice through selector-based external-store access
+- **AND** Shell control node construction SHALL NOT require full active canvas arrays or maps solely to preserve canvas rendering
+- **AND** selector equality SHALL suppress updates when the selected slice is unchanged.
+
+#### Scenario: Composer and StatusPanel live slices use the same selector boundary
+- **WHEN** Composer or StatusPanel needs live advisory state from the active conversation
+- **THEN** those surfaces SHALL consume `items`, status maps, token usage, rate limits, and active thread facts through selector-derived props
+- **AND** AppShell layout composition SHALL keep send-critical Composer state such as draft text, attachments, model selection, and callbacks outside the active canvas store.
 
