@@ -238,7 +238,7 @@ The `selectedAgentSession.resolveThreadEngine` function MUST include a legacy fa
 
 ### Requirement: Daemon Engine Bridge MUST Only Dispatch Codex And Claude Sessions
 
-The `src-tauri/src/bin/cc_gui_daemon/engine_bridge.rs` module MUST dispatch engine startup to exactly 2 paths: the Codex `app-server` path and the Claude `--print` path. The module MUST NOT contain a switch arm for `EngineType::OpenCode` or `EngineType::Gemini`. When the daemon receives a request with a legacy `EngineType` value (e.g. an unrecognized engine string from an old IPC call), the bridge MUST fall back to the Codex `app-server` path and emit a `tracing::warn!` log. The bridge MUST be covered by unit tests that exercise both the Codex and Claude dispatch paths and the unknown fallback path.
+The `src-tauri/src/bin/cc_gui_daemon/engine_bridge.rs` module MUST dispatch engine startup to exactly 2 paths: the Codex `app-server` path and the Claude `--print` path. The module MUST NOT contain a switch arm for `EngineType::OpenCode` or `EngineType::Gemini`. Raw daemon request parsing MUST map legacy or unrecognized engine strings to `EngineType::Codex` and emit a `tracing::warn!` log that includes the original string before constructing the typed bridge request. After parsing, the typed bridge dispatch MUST only receive `EngineType::Codex` or `EngineType::Claude`. The bridge and parser MUST be covered by unit tests that exercise both dispatch paths and the raw unknown fallback path.
 
 #### Scenario: codex dispatch
 
@@ -250,11 +250,12 @@ The `src-tauri/src/bin/cc_gui_daemon/engine_bridge.rs` module MUST dispatch engi
 - **WHEN** the daemon receives a session start request for a Claude session
 - **THEN** the engine bridge MUST dispatch the request to the `claude::build_command` path.
 
-#### Scenario: unknown engine fallback
+#### Scenario: raw unknown engine fallback
 
 - **WHEN** the daemon receives a session start request with `engine = "opencode_v1_legacy"` (an unknown engine value)
-- **THEN** the engine bridge MUST fall back to the Codex `app-server` path
+- **THEN** raw request parsing MUST map it to `EngineType::Codex`
 - **AND** MUST emit a `tracing::warn!` line containing the original engine string.
+- **AND** the typed bridge dispatch MUST use the Codex `app-server` path.
 
 ### Requirement: Capability Matrix And Pricing Registry MUST Cover Exactly Codex And Claude
 
