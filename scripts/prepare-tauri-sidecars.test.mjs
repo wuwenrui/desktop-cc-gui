@@ -1,6 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -82,4 +88,42 @@ test("sidecar preparation installs rebuilt binaries by replacing the destination
   sidecarInternals.installFileAtomically(source, destination);
 
   assert.equal(readFileSync(destination, "utf8"), "new-binary");
+});
+
+test("sidecar preparation creates and cleans temporary frontend dist placeholders", async () => {
+  const { sidecarInternals } = await import("./prepare-tauri-sidecars.mjs");
+  const tempDir = mkdtempSync(join(tmpdir(), "lc-sidecar-dist-test-"));
+  const distDir = join(tempDir, "dist");
+
+  const cleanup = sidecarInternals.ensureFrontendDistPlaceholder(distDir);
+
+  assert.equal(
+    readFileSync(join(distDir, "index.html"), "utf8"),
+    "<!doctype html><html><body></body></html>\n",
+  );
+  assert.equal(
+    readFileSync(join(distDir, "assets", "sidecar-placeholder.txt"), "utf8"),
+    "sidecar placeholder\n",
+  );
+
+  cleanup();
+
+  assert.equal(existsSync(distDir), false);
+});
+
+test("sidecar preparation keeps existing frontend dist files intact", async () => {
+  const { sidecarInternals } = await import("./prepare-tauri-sidecars.mjs");
+  const tempDir = mkdtempSync(join(tmpdir(), "lc-sidecar-dist-test-"));
+  const distDir = join(tempDir, "dist");
+  const assetsDir = join(distDir, "assets");
+  mkdirSync(assetsDir, { recursive: true });
+  writeFileSync(join(distDir, "index.html"), "real-index");
+  writeFileSync(join(assetsDir, "app.js"), "real-asset");
+
+  const cleanup = sidecarInternals.ensureFrontendDistPlaceholder(distDir);
+  cleanup();
+
+  assert.equal(readFileSync(join(distDir, "index.html"), "utf8"), "real-index");
+  assert.equal(readFileSync(join(assetsDir, "app.js"), "utf8"), "real-asset");
+  assert.equal(existsSync(join(assetsDir, "sidecar-placeholder.txt")), false);
 });

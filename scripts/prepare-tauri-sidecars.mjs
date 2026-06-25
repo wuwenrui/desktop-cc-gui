@@ -6,8 +6,10 @@ import {
   copyFileSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   renameSync,
   rmSync,
+  rmdirSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -18,6 +20,7 @@ const ROOT_DIR = join(__dirname, "..");
 const TAURI_DIR = join(ROOT_DIR, "src-tauri");
 const SIDECAR_DIR = join(TAURI_DIR, "binaries");
 const WECLAW_SOURCE_DIR = join(ROOT_DIR, "sidecars", "weclaw");
+const FRONTEND_DIST_DIR = join(ROOT_DIR, "dist");
 
 const rustSidecarBinaryNames = ["cc_gui_daemon", "wx_bridge"];
 const sidecarBinaryNames = [...rustSidecarBinaryNames, "weclaw"];
@@ -109,6 +112,53 @@ function run(command, args, env = process.env) {
   if (result.status !== 0) {
     throw new Error(`${command} ${args.join(" ")} failed with status ${result.status}`);
   }
+}
+
+function removeEmptyDir(path) {
+  if (!existsSync(path)) {
+    return;
+  }
+  try {
+    if (readdirSync(path).length === 0) {
+      rmdirSync(path);
+    }
+  } catch {
+    // Best-effort cleanup only; never mask the original build result.
+  }
+}
+
+function ensureFrontendDistPlaceholder(distDir = FRONTEND_DIST_DIR) {
+  const assetsDir = join(distDir, "assets");
+  const indexPath = join(distDir, "index.html");
+  const markerPath = join(assetsDir, "sidecar-placeholder.txt");
+  const createdDistDir = !existsSync(distDir);
+  mkdirSync(distDir, { recursive: true });
+  const createdAssetsDir = !existsSync(assetsDir);
+  mkdirSync(assetsDir, { recursive: true });
+
+  const createdIndex = !existsSync(indexPath);
+  if (createdIndex) {
+    writeFileSync(indexPath, "<!doctype html><html><body></body></html>\n");
+  }
+  const createdMarker = !existsSync(markerPath);
+  if (createdMarker) {
+    writeFileSync(markerPath, "sidecar placeholder\n");
+  }
+
+  return () => {
+    if (createdMarker) {
+      rmSync(markerPath, { force: true });
+    }
+    if (createdIndex) {
+      rmSync(indexPath, { force: true });
+    }
+    if (createdAssetsDir) {
+      removeEmptyDir(assetsDir);
+    }
+    if (createdDistDir) {
+      removeEmptyDir(distDir);
+    }
+  };
 }
 
 function copyBuiltSidecars(targetTriple, profile, env = process.env) {
@@ -219,22 +269,28 @@ function prepareUniversalMacSidecars(profile, env = process.env) {
 }
 
 function prepareSidecars(env = process.env) {
-  const targetTriple = fallbackTargetTriple(env);
-  const profile = profileFromEnv(env);
-  if (targetTriple === "universal-apple-darwin") {
-    prepareUniversalMacSidecars(profile, env);
-    return;
+  const cleanupFrontendDistPlaceholder = ensureFrontendDistPlaceholder();
+  try {
+    const targetTriple = fallbackTargetTriple(env);
+    const profile = profileFromEnv(env);
+    if (targetTriple === "universal-apple-darwin") {
+      prepareUniversalMacSidecars(profile, env);
+      return;
+    }
+    ensurePlaceholderSidecars(targetTriple);
+    run("cargo", cargoArgs(targetTriple, profile), env);
+    copyBuiltSidecars(targetTriple, profile, env);
+    prepareWeClawSidecar(targetTriple, env);
+  } finally {
+    cleanupFrontendDistPlaceholder();
   }
-  ensurePlaceholderSidecars(targetTriple);
-  run("cargo", cargoArgs(targetTriple, profile), env);
-  copyBuiltSidecars(targetTriple, profile, env);
-  prepareWeClawSidecar(targetTriple, env);
 }
 
 export const sidecarInternals = {
   cargoArgs,
   destinationPath,
   fallbackTargetTriple,
+  ensureFrontendDistPlaceholder,
   ensurePlaceholderSidecars,
   goTargetEnv,
   installFileAtomically,
