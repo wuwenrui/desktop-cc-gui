@@ -17,7 +17,7 @@ const enPart7 = {
       "{{rows}} rows, render weight {{renderWeight}}. Details stay deferred until you request them.",
     conversationLightweightUse: "Use lightweight",
     conversationLightweightStayLightweight: "Stay lightweight",
-    conversationLightweightHydrateVisible: "Hydrate visible details",
+    conversationLightweightHydrateVisible: "Render details",
     conversationLightweightRetryFullDetail: "Retry full detail",
     conversationLightweightRowEyebrow: "Deferred detail",
     conversationLightweightRowTitle: "{{kind}} summary",

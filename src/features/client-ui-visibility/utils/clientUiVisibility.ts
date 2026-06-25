@@ -98,6 +98,7 @@ export const DEFAULT_CLIENT_UI_VISIBILITY_PREFERENCE: ClientUiVisibilityPreferen
   panels: {},
   controls: {
     "topTool.clientDocumentation": false,
+    "curtain.stickyUserBubble": false,
   },
 };
 

@@ -194,6 +194,23 @@ describe("layout swapped platform guard", () => {
     );
   });
 
+  it("keeps history sticky header anchored to the shared topbar contract without extra history padding hacks", () => {
+    const stickyRule = getCssRuleBlock(
+      messagesCss,
+      ".main .messages-history-sticky-header",
+    );
+    const compactBannerRule = getCssRuleBlock(messagesCss, ".messages-lightweight-mode-banner");
+    const staticHistoryRule = getCssRuleBlock(
+      messagesCss,
+      '.messages-timeline-root[data-timeline-static-lightweight-history="true"]',
+    );
+
+    expect(stickyRule).toContain("top: var(--main-topbar-height);");
+    expect(compactBannerRule).toContain("min-height: 30px;");
+    expect(compactBannerRule).toContain("padding: 4px 7px 4px 9px;");
+    expect(staticHistoryRule).toBe("");
+  });
+
   it("keeps Claude render-safe mitigation scoped to desktop messages shell", () => {
     expect(messagesCss).toMatch(
       /\.app\.windows-desktop[\s\S]*\.messages-shell\.claude-render-safe[\s\S]*\.working\.is-ingress[\s\S]*\.working-spinner\s*\{/,

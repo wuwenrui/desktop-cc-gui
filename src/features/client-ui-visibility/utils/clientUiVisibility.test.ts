@@ -94,6 +94,7 @@ describe("clientUiVisibility", () => {
 
     expect(preference.controls).toEqual({
       "topTool.clientDocumentation": false,
+      "curtain.stickyUserBubble": false,
       "topTool.terminal": false,
     });
     expect(isClientUiControlVisible(preference, "topTool.clientDocumentation")).toBe(false);
@@ -109,6 +110,7 @@ describe("clientUiVisibility", () => {
 
     expect(preference.controls).toEqual({
       "topTool.clientDocumentation": false,
+      "curtain.stickyUserBubble": false,
       "bottomActivity.checkpoint": false,
     });
     expect(isClientUiControlVisible(preference, "bottomActivity.checkpoint")).toBe(false);

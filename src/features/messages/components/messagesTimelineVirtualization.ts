@@ -9,6 +9,7 @@ export const TIMELINE_CANVAS_STABLE_OVERSCAN = 12;
 export const TIMELINE_CANVAS_STREAMING_OVERSCAN = 8;
 export const TIMELINE_VIRTUAL_ROW_PLACEHOLDER_MIN_HEIGHT = 1;
 export const TIMELINE_VIRTUAL_ROW_PLACEHOLDER_MAX_HEIGHT = 320;
+export const TIMELINE_LIGHTWEIGHT_ROW_PLACEHOLDER_HEIGHT = 44;
 export const TIMELINE_RENDER_WEIGHT_BASELINE_FLAG_KEY =
   "ccgui.perf.timelineRenderWeightBaseline";
 export const TIMELINE_VIRTUALIZER_STABILITY_MAX_REMEASURE_COUNT = 3;
@@ -116,6 +117,21 @@ export function resolveVirtualizedTimelineRowPlaceholderHeight(size: unknown) {
   return Math.min(
     TIMELINE_VIRTUAL_ROW_PLACEHOLDER_MAX_HEIGHT,
     Math.max(TIMELINE_VIRTUAL_ROW_PLACEHOLDER_MIN_HEIGHT, Math.ceil(size)),
+  );
+}
+
+export function resolveVirtualizedTimelineRowVisualHeight(input: {
+  measuredSize: unknown;
+  estimatedSize: number;
+  lightweight: boolean;
+}) {
+  if (input.lightweight) {
+    return TIMELINE_LIGHTWEIGHT_ROW_PLACEHOLDER_HEIGHT;
+  }
+  return resolveVirtualizedTimelineRowPlaceholderHeight(
+    typeof input.measuredSize === "number" && Number.isFinite(input.measuredSize)
+      ? input.measuredSize
+      : input.estimatedSize,
   );
 }
 

@@ -13,10 +13,12 @@ import {
   resolveTimelineCanvasOverscan,
   resolveTimelineVirtualizerStabilityRecovery,
   resolveVirtualizedTimelineRowPlaceholderHeight,
+  resolveVirtualizedTimelineRowVisualHeight,
   resolveVirtualizedTimelineScopeReset,
   shouldVirtualizeTimelineRows,
   TIMELINE_CANVAS_STABLE_OVERSCAN,
   TIMELINE_CANVAS_STREAMING_OVERSCAN,
+  TIMELINE_LIGHTWEIGHT_ROW_PLACEHOLDER_HEIGHT,
   TIMELINE_RENDER_WEIGHT_BASELINE_FLAG_KEY,
   TIMELINE_VIRTUAL_ROW_PLACEHOLDER_MAX_HEIGHT,
   TIMELINE_VIRTUAL_ROW_PLACEHOLDER_MIN_HEIGHT,
@@ -102,6 +104,20 @@ describe("messagesTimelineVirtualization", () => {
     expect(resolveVirtualizedTimelineRowPlaceholderHeight(10_000)).toBe(
       TIMELINE_VIRTUAL_ROW_PLACEHOLDER_MAX_HEIGHT,
     );
+  });
+
+  it("uses compact visual height for lightweight rows instead of stale heavy measurements", () => {
+    expect(resolveVirtualizedTimelineRowVisualHeight({
+      measuredSize: TIMELINE_VIRTUAL_ROW_PLACEHOLDER_MAX_HEIGHT,
+      estimatedSize: 260,
+      lightweight: true,
+    })).toBe(TIMELINE_LIGHTWEIGHT_ROW_PLACEHOLDER_HEIGHT);
+
+    expect(resolveVirtualizedTimelineRowVisualHeight({
+      measuredSize: TIMELINE_VIRTUAL_ROW_PLACEHOLDER_MAX_HEIGHT,
+      estimatedSize: 260,
+      lightweight: false,
+    })).toBe(TIMELINE_VIRTUAL_ROW_PLACEHOLDER_MAX_HEIGHT);
   });
 
   it("can restore the baseline eager behavior below the row-count threshold", () => {

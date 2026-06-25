@@ -73,6 +73,20 @@ describe("Messages live behavior", () => {
     });
   };
 
+  const setElementViewportRect = (
+    element: Element,
+    rect: Pick<DOMRect, "top" | "bottom">,
+  ) => {
+    Object.defineProperty(element, "getBoundingClientRect", {
+      configurable: true,
+      value: () => ({
+        top: rect.top,
+        bottom: rect.bottom,
+        height: rect.bottom - rect.top,
+      }),
+    });
+  };
+
   const scrollMessages = async (scroller: HTMLDivElement, scrollTop: number) => {
     act(() => {
       setScrollerMetrics(scroller, scrollTop);
@@ -1430,6 +1444,56 @@ describe("Messages live behavior", () => {
     });
   });
 
+  it("does not pin a history user card while its transformed row is still visible", async () => {
+    const items: ConversationItem[] = [
+      {
+        id: "user-history-visible-card",
+        kind: "message",
+        role: "user",
+        text: "还在屏幕里的历史问题",
+      },
+      {
+        id: "assistant-history-visible-card",
+        kind: "message",
+        role: "assistant",
+        text: "历史答案",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-history-visible-card"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const scroller = getMessagesScroller(container);
+    const userCard = container.querySelector('[data-message-anchor-id="user-history-visible-card"]');
+    expect(userCard).toBeTruthy();
+    setMessageOffsetTop(container, "user-history-visible-card", 0);
+    setElementViewportRect(scroller, { top: 100, bottom: 820 });
+    setElementViewportRect(userCard!, { top: 118, bottom: 190 });
+
+    await scrollMessages(scroller, 220);
+    await waitFor(() => {
+      expect(container.querySelector(".messages-history-sticky-header")).toBeNull();
+    });
+
+    setElementViewportRect(userCard!, { top: 20, bottom: 96 });
+    await scrollMessages(scroller, 300);
+    await waitFor(() => {
+      expect(
+        container
+          .querySelector(".messages-history-sticky-header")
+          ?.getAttribute("data-history-sticky-message-id"),
+      ).toBe("user-history-visible-card");
+    });
+  });
+
   it("refreshes the active history sticky header text from the latest live snapshot without waiting for timeline convergence", async () => {
     const initialItems: ConversationItem[] = [
       {
@@ -1732,7 +1796,7 @@ describe("Messages live behavior", () => {
     expect(container.querySelector(".messages-collapsed-indicator")).toBeTruthy();
   });
 
-  it("preserves the current viewport position when revealing collapsed history", async () => {
+  it("resets to the revealed history head when expanding collapsed history", async () => {
     const items: ConversationItem[] = Array.from({ length: 32 }, (_, index) => ({
       id: `history-reveal-${index + 1}`,
       kind: "message",
@@ -1769,11 +1833,11 @@ describe("Messages live behavior", () => {
     await waitFor(() => {
       expect(container.querySelector(".messages-collapsed-indicator")).toBeNull();
       expect(screen.getByText("history reveal message 1")).toBeTruthy();
-      expect(scroller.scrollTop).toBe(580);
+      expect(scroller.scrollTop).toBe(0);
     });
   });
 
-  it("skips scroll restoration when scroller metrics are non-finite", async () => {
+  it("keeps manual history expansion stable even when scroller metrics are non-finite", async () => {
     const items: ConversationItem[] = Array.from({ length: 32 }, (_, index) => ({
       id: `history-reveal-invalid-${index + 1}`,
       kind: "message",
@@ -1806,7 +1870,7 @@ describe("Messages live behavior", () => {
     await waitFor(() => {
       expect(container.querySelector(".messages-collapsed-indicator")).toBeNull();
       expect(screen.getByText("history reveal invalid message 1")).toBeTruthy();
-      expect(scroller.scrollTop).toBe(420);
+      expect(scroller.scrollTop).toBe(0);
     });
   });
 

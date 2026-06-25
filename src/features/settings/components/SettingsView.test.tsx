@@ -1528,7 +1528,7 @@ describe("SettingsView Display", () => {
       expect(writeClientStoreValue).toHaveBeenLastCalledWith(
         "app",
         "clientUiVisibility",
-        { panels: {}, controls: { "topTool.clientDocumentation": false } },
+        { panels: {}, controls: { "topTool.clientDocumentation": false, "curtain.stickyUserBubble": false } },
         { immediate: true },
       );
     });

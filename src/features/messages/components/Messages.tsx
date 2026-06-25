@@ -101,13 +101,10 @@ import {
   findLatestAssistantTextLength,
   isMessagesScrollNearBottom,
   mergeReadableRecoveryItems,
-  readHistoryExpansionScrollSnapshot,
   resolveActiveUserInputRequest,
   resolveActiveMessageAnchor,
   resolveCollapsedTimelineItems,
   resolveVisibleMessageItems,
-  restoreHistoryExpansionScrollPosition,
-  type HistoryExpansionScrollSnapshot,
   type PreservedReadableWindow,
 } from "./messagesViewModel";
 import {
@@ -135,6 +132,22 @@ import type {
 } from "./messagesTypes";
 
 const EMPTY_TASK_RUNS: NonNullable<MessagesProps["taskRuns"]> = [];
+
+function hasUsableElementRect(rect: DOMRect) {
+  return rect.top !== 0 || rect.bottom !== 0 || rect.height !== 0;
+}
+
+function hasScrolledPastStickyCandidate(
+  container: HTMLDivElement,
+  node: HTMLDivElement,
+) {
+  const nodeRect = node.getBoundingClientRect();
+  const containerRect = container.getBoundingClientRect();
+  if (hasUsableElementRect(nodeRect) || hasUsableElementRect(containerRect)) {
+    return nodeRect.bottom <= containerRect.top;
+  }
+  return node.offsetTop + node.offsetHeight <= container.scrollTop;
+}
 
 export const Messages = memo(function Messages({
   items: legacyItems,
@@ -293,8 +306,7 @@ export const Messages = memo(function Messages({
     typeof performance === "undefined" ? 0 : performance.now();
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const pendingHistoryExpansionScrollSnapshotRef =
-    useRef<HistoryExpansionScrollSnapshot | null>(null);
+  const pendingHistoryExpansionModeRef = useRef<"manual" | "jump" | null>(null);
   const messageNodeByIdRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const agentTaskNodeByTaskIdRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const agentTaskNodeByToolUseIdRef = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -550,7 +562,7 @@ export const Messages = memo(function Messages({
     setExpandedItems((previous) => (previous.size === 0 ? previous : new Set()));
     setIsSelectionFrozen(false);
     frozenItemsRef.current = null;
-    pendingHistoryExpansionScrollSnapshotRef.current = null;
+    pendingHistoryExpansionModeRef.current = null;
     activeAnchorIdRef.current = null;
     activeStickyMessageIdRef.current = null;
     anchorLoopGuardRef.current = DEFAULT_RENDER_LOOP_GUARD_BUDGET;
@@ -697,7 +709,7 @@ export const Messages = memo(function Messages({
     if (currentFirstId !== firstItemIdRef.current) {
       setShowAllHistoryItems(false);
       setPendingJumpMessageId(null);
-      pendingHistoryExpansionScrollSnapshotRef.current = null;
+      pendingHistoryExpansionModeRef.current = null;
     }
     firstItemIdRef.current = currentFirstId;
   }, [effectiveItems]);
@@ -1568,18 +1580,20 @@ export const Messages = memo(function Messages({
       if (!container || candidates.length === 0) {
         return null;
       }
-      const topBoundaryY = container.scrollTop;
-      let nextStickyId: string | null = null;
-      for (const candidate of candidates) {
+      for (let index = candidates.length - 1; index >= 0; index -= 1) {
+        const candidate = candidates[index];
+        if (!candidate) {
+          continue;
+        }
         const node = messageNodeByIdRef.current.get(candidate.id);
         if (!node) {
           continue;
         }
-        if (node.offsetTop <= topBoundaryY) {
-          nextStickyId = candidate.id;
+        if (hasScrolledPastStickyCandidate(container, node)) {
+          return candidate.id;
         }
       }
-      return nextStickyId;
+      return null;
     },
     [],
   );
@@ -1722,26 +1736,27 @@ export const Messages = memo(function Messages({
       threadId,
     ],
   );
-  const handleShowAllHistoryItems = useCallback(() => {
-    pendingHistoryExpansionScrollSnapshotRef.current =
-      collapsedHistoryItemCount > 0
-        ? readHistoryExpansionScrollSnapshot(containerRef.current)
-        : null;
+  const revealAllHistoryItems = useCallback((mode: "manual" | "jump") => {
+    pendingHistoryExpansionModeRef.current = mode;
     setShowAllHistoryItems(true);
-  }, [collapsedHistoryItemCount]);
+  }, []);
+  const handleShowAllHistoryItems = useCallback(() => {
+    revealAllHistoryItems("manual");
+  }, [revealAllHistoryItems]);
   useLayoutEffect(() => {
     if (!showAllHistoryItems) {
-      pendingHistoryExpansionScrollSnapshotRef.current = null;
+      pendingHistoryExpansionModeRef.current = null;
       return;
     }
-    const pendingSnapshot = pendingHistoryExpansionScrollSnapshotRef.current;
+    const pendingExpansionMode = pendingHistoryExpansionModeRef.current;
     const container = containerRef.current;
-    if (!pendingSnapshot || !container) {
+    if (!pendingExpansionMode || !container) {
       return;
     }
-    pendingHistoryExpansionScrollSnapshotRef.current = null;
-    if (!restoreHistoryExpansionScrollPosition(container, pendingSnapshot)) {
-      return;
+    pendingHistoryExpansionModeRef.current = null;
+    if (pendingExpansionMode === "manual") {
+      autoScrollRef.current = false;
+      container.scrollTop = 0;
     }
     scheduleAnchorUpdate("sync");
     scheduleStickyHeaderUpdate("sync");
@@ -2167,9 +2182,9 @@ export const Messages = memo(function Messages({
     }
     setPendingJumpMessageId((previous) => (previous === messageId ? previous : messageId));
     if (!showAllHistoryItems) {
-      handleShowAllHistoryItems();
+      revealAllHistoryItems("jump");
     }
-  }, [handleShowAllHistoryItems, scrollToAnchor, showAllHistoryItems]);
+  }, [revealAllHistoryItems, scrollToAnchor, showAllHistoryItems]);
 
   const handlePendingJumpTargetReady = useCallback((messageId: string) => {
     if (pendingJumpMessageId !== messageId) {
@@ -2321,6 +2336,7 @@ export const Messages = memo(function Messages({
           suppressedUserNoteCardContextMessageIds={suppressedUserNoteCardContextMessageIds}
           claudeHistoryTranscriptFallbackActive={claudeHistoryTranscriptFallbackActive}
           hasVisibleUserInputRequest={hasVisibleUserInputRequest}
+          historyExpansionActive={showAllHistoryItems}
           userInputNode={userInputNode}
           visibleCollapsedHistoryItemCount={presentationCollapsedHistoryItemCount}
           waitingForFirstChunk={waitingForFirstChunk}

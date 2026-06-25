@@ -17,7 +17,7 @@ const zhPart7 = {
       "{{rows}} 行，渲染权重 {{renderWeight}}。详情会保持延迟，直到你主动请求渲染。",
     conversationLightweightUse: "启用轻量模式",
     conversationLightweightStayLightweight: "保持轻量",
-    conversationLightweightHydrateVisible: "渲染可见详情",
+    conversationLightweightHydrateVisible: "渲染详情",
     conversationLightweightRetryFullDetail: "重试完整详情",
     conversationLightweightRowEyebrow: "详情已延迟",
     conversationLightweightRowTitle: "{{kind}} 摘要",

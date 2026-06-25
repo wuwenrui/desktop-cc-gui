@@ -11,7 +11,7 @@
 }
 
 .messages-history-sticky-header-inner {
-  padding: 4px var(--main-panel-padding) 6px;
+  padding: 3px var(--main-panel-padding) 5px;
   background: transparent;
 }
 
@@ -35,10 +35,10 @@
 .messages-history-sticky-header-bubble {
   position: relative;
   width: 100%;
-  min-height: 36px;
+  min-height: 32px;
   display: flex;
   align-items: center;
-  padding: 6px 36px 6px 12px;
+  padding: 5px 34px 5px 10px;
   overflow: hidden;
   isolation: isolate;
   border-radius: 14px;
@@ -79,7 +79,7 @@
   flex: 0 0 var(--messages-history-sticky-peek-width);
   width: var(--messages-history-sticky-peek-width);
   min-width: var(--messages-history-sticky-peek-width);
-  min-height: 44px;
+  min-height: 40px;
   padding: 0;
   border-radius: 0;
   transform: none;

@@ -233,7 +233,7 @@ vi.mock("react-i18next", () => ({
           "{{rows}} rows, render weight {{renderWeight}}.",
         "messages.conversationLightweightUse": "Use lightweight",
         "messages.conversationLightweightStayLightweight": "Stay lightweight",
-        "messages.conversationLightweightHydrateVisible": "Hydrate visible details",
+        "messages.conversationLightweightHydrateVisible": "Render details",
         "messages.conversationLightweightRetryFullDetail": "Retry full detail",
         "messages.conversationLightweightRowEyebrow": "Deferred detail",
         "messages.conversationLightweightRowTitle": `${String(params?.kind ?? "")} summary`,
