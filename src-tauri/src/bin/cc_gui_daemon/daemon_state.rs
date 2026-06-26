@@ -26,6 +26,61 @@ fn normalize_daemon_disk_provider_profile(
         "Codex provider-scoped runtime is unavailable in daemon mode for provider {provider_profile_id}; use desktop runtime or select disk .codex provider."
     ))
 }
+
+async fn run_daemon_disk_start_thread_with_readiness<
+    FEnsure,
+    FEnsureFuture,
+    FStart,
+    FStartFuture,
+    FConfirm,
+    FConfirmFuture,
+>(
+    workspace_id: &str,
+    mut ensure_runtime: FEnsure,
+    mut start_thread: FStart,
+    mut confirm_thread_ready: FConfirm,
+) -> Result<Value, String>
+where
+    FEnsure: FnMut() -> FEnsureFuture,
+    FEnsureFuture: std::future::Future<Output = Result<(), String>>,
+    FStart: FnMut() -> FStartFuture,
+    FStartFuture: std::future::Future<Output = Result<Value, String>>,
+    FConfirm: FnMut(String) -> FConfirmFuture,
+    FConfirmFuture: std::future::Future<Output = Result<(), String>>,
+{
+    ensure_runtime().await?;
+    let first_attempt = start_thread().await;
+    let response = match first_attempt {
+        Ok(response) => Ok(response),
+        Err(error) if is_stopping_runtime_race_error(&error) => {
+            log::warn!(
+                "[daemon.start_thread] retrying after stopping runtime race for workspace {}: {}",
+                workspace_id,
+                error
+            );
+            ensure_runtime().await?;
+            match start_thread().await {
+                Ok(response) => Ok(response),
+                Err(retry_error) if is_stopping_runtime_race_error(&retry_error) => {
+                    log::warn!(
+                        "[daemon.start_thread] stopping runtime race retry exhausted for workspace {}: {}",
+                        workspace_id,
+                        retry_error
+                    );
+                    Err(create_session_runtime_recovering_error())
+                }
+                Err(retry_error) => Err(retry_error),
+            }
+        }
+        Err(error) => Err(error),
+    }?;
+
+    if let Some(thread_id) = codex_core::extract_thread_id_from_response(&response) {
+        confirm_thread_ready(thread_id).await?;
+    }
+    Ok(response)
+}
+
 mod codex_local_threads;
 use codex_local_threads::{
     build_codex_daemon_empty_thread_response, build_codex_daemon_local_thread_response,
@@ -1898,42 +1953,20 @@ impl DaemonState {
         provider_profile_id: Option<String>,
     ) -> Result<Value, String> {
         let _provider_profile_id = normalize_daemon_disk_provider_profile(provider_profile_id)?;
-        self.ensure_codex_session_for_workspace(&workspace_id)
-            .await?;
-        let first_attempt =
-            codex_core::start_thread_core(&self.sessions, workspace_id.clone(), None, None).await;
-        let response = match first_attempt {
-            Ok(response) => Ok(response),
-            Err(error) if is_stopping_runtime_race_error(&error) => {
-                log::warn!(
-                    "[daemon.start_thread] retrying after stopping runtime race for workspace {}: {}",
-                    workspace_id,
-                    error
-                );
-                self.ensure_codex_session_for_workspace(&workspace_id)
-                    .await?;
-                match codex_core::start_thread_core(
+        let response = run_daemon_disk_start_thread_with_readiness(
+            &workspace_id,
+            || self.ensure_codex_session_for_workspace(&workspace_id),
+            || codex_core::start_thread_core(&self.sessions, workspace_id.clone(), None, None),
+            |thread_id| {
+                codex_core::confirm_thread_ready_after_start_core(
                     &self.sessions,
                     workspace_id.clone(),
                     None,
-                    None,
+                    thread_id,
                 )
-                .await
-                {
-                    Ok(response) => Ok(response),
-                    Err(retry_error) if is_stopping_runtime_race_error(&retry_error) => {
-                        log::warn!(
-                            "[daemon.start_thread] stopping runtime race retry exhausted for workspace {}: {}",
-                            workspace_id,
-                            retry_error
-                        );
-                        Err(create_session_runtime_recovering_error())
-                    }
-                    Err(retry_error) => Err(retry_error),
-                }
-            }
-            Err(error) => Err(error),
-        }?;
+            },
+        )
+        .await?;
         let thread_id = codex_core::extract_thread_id_from_response(&response);
         self.record_auto_session_metadata_if_present(
             &workspace_id,
@@ -2901,6 +2934,7 @@ impl DaemonState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::{cell::RefCell, rc::Rc};
 
     fn codex_summary(session_id: &str, timestamp: i64) -> crate::types::LocalUsageSessionSummary {
         crate::types::LocalUsageSessionSummary {
@@ -2956,6 +2990,150 @@ mod tests {
         assert_eq!(
             result.get("partialSource").and_then(Value::as_str),
             Some(CODEX_DAEMON_LOCAL_THREAD_LIST_PARTIAL_SOURCE)
+        );
+    }
+
+    #[test]
+    fn daemon_provider_profile_rejects_managed_ids() {
+        assert_eq!(normalize_daemon_disk_provider_profile(None).unwrap(), None);
+        assert_eq!(
+            normalize_daemon_disk_provider_profile(Some("  ".to_string())).unwrap(),
+            None
+        );
+        assert_eq!(
+            normalize_daemon_disk_provider_profile(Some(
+                codex::provider_profile::CODEX_DISK_PROVIDER_PROFILE_ID.to_string(),
+            ))
+            .unwrap(),
+            Some(codex::provider_profile::CODEX_DISK_PROVIDER_PROFILE_ID.to_string())
+        );
+        let error = normalize_daemon_disk_provider_profile(Some("managed-provider".to_string()))
+            .unwrap_err();
+        assert!(error.contains("provider-scoped runtime is unavailable in daemon mode"));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn daemon_disk_start_confirms_ready_before_returning() {
+        let events = Rc::new(RefCell::new(Vec::<String>::new()));
+        let result = run_daemon_disk_start_thread_with_readiness(
+            "ws-1",
+            || {
+                let events = Rc::clone(&events);
+                async move {
+                    events.borrow_mut().push("ensure".to_string());
+                    Ok(())
+                }
+            },
+            || {
+                let events = Rc::clone(&events);
+                async move {
+                    events.borrow_mut().push("start".to_string());
+                    Ok(json!({ "result": { "threadId": "thread-1" } }))
+                }
+            },
+            |thread_id| {
+                let events = Rc::clone(&events);
+                async move {
+                    events.borrow_mut().push(format!("confirm:{thread_id}"));
+                    Ok(())
+                }
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            codex_core::extract_thread_id_from_response(&result).as_deref(),
+            Some("thread-1")
+        );
+        assert_eq!(
+            events.borrow().as_slice(),
+            ["ensure", "start", "confirm:thread-1"]
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn daemon_disk_start_propagates_ready_confirmation_failure() {
+        let events = Rc::new(RefCell::new(Vec::<String>::new()));
+        let error = run_daemon_disk_start_thread_with_readiness(
+            "ws-1",
+            || {
+                let events = Rc::clone(&events);
+                async move {
+                    events.borrow_mut().push("ensure".to_string());
+                    Ok(())
+                }
+            },
+            || {
+                let events = Rc::clone(&events);
+                async move {
+                    events.borrow_mut().push("start".to_string());
+                    Ok(json!({ "result": { "threadId": "thread-1" } }))
+                }
+            },
+            |thread_id| {
+                let events = Rc::clone(&events);
+                async move {
+                    events.borrow_mut().push(format!("confirm:{thread_id}"));
+                    Err("thread/resume failed".to_string())
+                }
+            },
+        )
+        .await
+        .unwrap_err();
+
+        assert_eq!(error, "thread/resume failed");
+        assert_eq!(
+            events.borrow().as_slice(),
+            ["ensure", "start", "confirm:thread-1"]
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn daemon_disk_start_retries_stopping_runtime_before_confirming() {
+        let events = Rc::new(RefCell::new(Vec::<String>::new()));
+        let start_count = Rc::new(RefCell::new(0_u8));
+        let result = run_daemon_disk_start_thread_with_readiness(
+            "ws-1",
+            || {
+                let events = Rc::clone(&events);
+                async move {
+                    events.borrow_mut().push("ensure".to_string());
+                    Ok(())
+                }
+            },
+            || {
+                let events = Rc::clone(&events);
+                let start_count = Rc::clone(&start_count);
+                async move {
+                    let mut count = start_count.borrow_mut();
+                    *count += 1;
+                    events.borrow_mut().push(format!("start:{count}"));
+                    if *count == 1 {
+                        Err("[RUNTIME_ENDED] stopped after manual_shutdown".to_string())
+                    } else {
+                        Ok(json!({ "result": { "threadId": "thread-2" } }))
+                    }
+                }
+            },
+            |thread_id| {
+                let events = Rc::clone(&events);
+                async move {
+                    events.borrow_mut().push(format!("confirm:{thread_id}"));
+                    Ok(())
+                }
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            codex_core::extract_thread_id_from_response(&result).as_deref(),
+            Some("thread-2")
+        );
+        assert_eq!(
+            events.borrow().as_slice(),
+            ["ensure", "start:1", "ensure", "start:2", "confirm:thread-2"]
         );
     }
 }

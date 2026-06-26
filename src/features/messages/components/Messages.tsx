@@ -119,6 +119,7 @@ import {
 } from "./messagesRenderLoopGuards";
 import { addBoundedConversationRenderModeKey } from "./messagesConversationLightweightMode";
 import {
+  TRANSIENT_RUNTIME_RECONNECT_AUTO_DISMISS_MS,
   resolveAssistantRuntimeReconnectHint,
   resolveRetryMessageForReconnectItem,
 } from "./runtimeReconnect";
@@ -250,6 +251,23 @@ export const Messages = memo(function Messages({
     threadStreamLatencySnapshot?.latencyCategory === "visible-output-stall-after-first-delta";
   const readableWindowRecoveryActive =
     blankingRecoveryActive || visibleStallRecoveryActive;
+  const transientRuntimeReconnectSeenAtByItemIdRef = useRef<Map<string, number>>(new Map());
+  const [transientRuntimeReconnectClock, setTransientRuntimeReconnectClock] = useState(() =>
+    Date.now(),
+  );
+  useEffect(() => {
+    const currentMessageIds = new Set(
+      items
+        .filter((item) => item.kind === "message")
+        .map((item) => item.id),
+    );
+    const seenAtByItemId = transientRuntimeReconnectSeenAtByItemIdRef.current;
+    for (const itemId of seenAtByItemId.keys()) {
+      if (!currentMessageIds.has(itemId)) {
+        seenAtByItemId.delete(itemId);
+      }
+    }
+  }, [items]);
   const latestRuntimeReconnectItemId = useMemo(() => {
     let sawUserMessageAfterDiagnostic = false;
     for (let index = items.length - 1; index >= 0; index -= 1) {
@@ -274,10 +292,51 @@ export const Messages = memo(function Messages({
       if (runtimeReconnectHint.tone === "transient" && sawUserMessageAfterDiagnostic) {
         continue;
       }
+      if (runtimeReconnectHint.tone === "transient") {
+        const seenAtByItemId = transientRuntimeReconnectSeenAtByItemIdRef.current;
+        const seenAt =
+          seenAtByItemId.get(item.id) ?? transientRuntimeReconnectClock;
+        if (!seenAtByItemId.has(item.id)) {
+          seenAtByItemId.set(item.id, seenAt);
+        }
+        const autoDismissMs =
+          runtimeReconnectHint.autoDismissMs ??
+          TRANSIENT_RUNTIME_RECONNECT_AUTO_DISMISS_MS;
+        if (transientRuntimeReconnectClock - seenAt >= autoDismissMs) {
+          continue;
+        }
+      }
       return item.id;
     }
     return null;
-  }, [items]);
+  }, [items, transientRuntimeReconnectClock]);
+  useEffect(() => {
+    if (!latestRuntimeReconnectItemId) {
+      return;
+    }
+    const item = items.find((candidate) => candidate.id === latestRuntimeReconnectItemId);
+    if (!item || item.kind !== "message" || item.role !== "assistant") {
+      return;
+    }
+    const runtimeReconnectHint = resolveAssistantRuntimeReconnectHint(
+      item,
+      Boolean(parseAgentTaskNotification(item.text)),
+    );
+    if (runtimeReconnectHint?.tone !== "transient") {
+      return;
+    }
+    const seenAt =
+      transientRuntimeReconnectSeenAtByItemIdRef.current.get(item.id) ??
+      transientRuntimeReconnectClock;
+    const autoDismissMs =
+      runtimeReconnectHint.autoDismissMs ??
+      TRANSIENT_RUNTIME_RECONNECT_AUTO_DISMISS_MS;
+    const remainingMs = Math.max(0, seenAt + autoDismissMs - Date.now());
+    const timeoutId = window.setTimeout(() => {
+      setTransientRuntimeReconnectClock(Date.now());
+    }, remainingMs);
+    return () => window.clearTimeout(timeoutId);
+  }, [items, latestRuntimeReconnectItemId, transientRuntimeReconnectClock]);
   const latestRetryMessage = useMemo(
     () => resolveRetryMessageForReconnectItem(items, latestRuntimeReconnectItemId),
     [items, latestRuntimeReconnectItemId],
