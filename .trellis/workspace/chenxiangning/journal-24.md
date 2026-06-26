@@ -818,3 +818,42 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 941: 屏蔽废弃 CLI 验证入口
+
+**Date**: 2026-06-26
+**Task**: 屏蔽废弃 CLI 验证入口
+**Branch**: `v0.5.13`
+
+### Summary
+
+屏蔽运行环境 CLI 验证中的 Gemini/OpenCode 废弃入口，并记录 Codex 启动确认窗口调整。
+
+### Main Changes
+
+- Settings CLI 验证页只保留 Codex 与 Claude Code tab。
+- 在 `CodexSection.tsx` 中新增 `DEPRECATED_CLI_VALIDATION_ENGINES`，显式标记 Gemini/OpenCode CLI validation entries 已废弃并隐藏。
+- 删除 Gemini/OpenCode CLI validation panel 的 Switch 入口，避免用户继续从设置页启用/禁用废弃入口。
+- 更新 `SettingsView.test.tsx`，断言 Gemini/OpenCode tab 与 switch 均不可见。
+- 同次提交包含 `src-tauri/src/shared/codex_core.rs` 的 `THREAD_START_READY_CONFIRM_TIMEOUT_MS` 从 2s 调整到 8s，以减少 Disk Codex cold start 被误判。
+- Verification: `npx vitest run src/features/settings/components/SettingsView.test.tsx`; `npm run typecheck`; `npm run lint`.
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e93305cc` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
