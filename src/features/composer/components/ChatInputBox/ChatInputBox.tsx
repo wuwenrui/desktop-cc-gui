@@ -49,6 +49,7 @@ import {
   useResizableChatInputBox,
   useInlineHistoryCompletion,
   useUndoRedoHistory,
+  useActiveVendorByRuntime,
 } from './hooks/index.js';
 import {
   commandToDropdownItem,
@@ -342,6 +343,8 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
       }),
       [currentProvider, modelStorageSnapshot, models, selectedModel],
     );
+    const { activeVendorByProvider, runtimeVendorOptions, refresh: refreshActiveVendorByRuntime, switchRuntimeVendor } =
+      useActiveVendorByRuntime();
     const providerModelGroups = useMemo(
       () => resolveProviderModelGroups({
         currentProvider,
@@ -352,8 +355,10 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
         providerAvailability,
         resolveProviderLabel: (providerId, fallbackLabel) =>
           t(`providers.${providerId}.label`, { defaultValue: fallbackLabel }),
+        activeVendorByProvider,
       }),
       [
+        activeVendorByProvider,
         currentProvider,
         modelStorageSnapshot,
         models,
@@ -363,6 +368,22 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
         t,
       ],
     );
+    const visibleProviderModelGroups = useMemo(() => {
+      if (hasMessages) {
+        return providerModelGroups.filter((group) => group.providerId === currentProvider);
+      }
+      return providerModelGroups.filter(
+        (group) => group.providerId === 'claude' || group.providerId === 'codex',
+      );
+    }, [currentProvider, hasMessages, providerModelGroups]);
+    const visibleRuntimeVendorOptions = useMemo(() => {
+      if (hasMessages) {
+        return currentProvider === 'claude' || currentProvider === 'codex'
+          ? { [currentProvider]: runtimeVendorOptions[currentProvider] }
+          : {};
+      }
+      return {};
+    }, [currentProvider, hasMessages, runtimeVendorOptions]);
 
     // Flag to track if we're updating from external value
     const isExternalUpdateRef = useRef(false);
@@ -1300,9 +1321,21 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
     const handleOpenCurrentProviderModelSettings = useCallback(() => {
       onOpenModelSettings?.(resolveModelConfigProvider(currentProvider));
     }, [currentProvider, onOpenModelSettings]);
-    const handleRefreshCurrentProviderModelConfig = useCallback(() => {
-      return onRefreshModelConfig?.(resolveModelConfigProvider(currentProvider));
-    }, [currentProvider, onRefreshModelConfig]);
+    const handleRefreshCurrentProviderModelConfig = useCallback(async () => {
+      try {
+        await onRefreshModelConfig?.(resolveModelConfigProvider(currentProvider));
+      } finally {
+        refreshActiveVendorByRuntime();
+      }
+    }, [currentProvider, onRefreshModelConfig, refreshActiveVendorByRuntime]);
+    const handleRuntimeVendorSwitch = useCallback(async (providerId: ProviderId, vendorId: string) => {
+      await switchRuntimeVendor(providerId, vendorId);
+      try {
+        await onRefreshModelConfig?.(resolveModelConfigProvider(providerId));
+      } finally {
+        refreshActiveVendorByRuntime();
+      }
+    }, [onRefreshModelConfig, refreshActiveVendorByRuntime, switchRuntimeVendor]);
     const supportsModelConfigActions = MODEL_CONFIG_PROVIDERS.has(currentProvider);
 
     /**
@@ -1542,11 +1575,13 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
               contextSourcesExpanded={contextSourcesExpanded}
               selectedModel={selectedModel}
               models={availableModels}
-              modelGroups={onProviderSelect ? providerModelGroups : undefined}
+              modelGroups={onProviderSelect ? visibleProviderModelGroups : undefined}
+              runtimeVendorOptions={visibleRuntimeVendorOptions}
               onModelSelect={onModelSelect ? handleModelSelect : undefined}
               onProviderModelSelect={
                 onModelSelect && onProviderSelect ? handleProviderModelSelect : undefined
               }
+              onRuntimeVendorSwitch={handleRuntimeVendorSwitch}
               onAddModel={
                 onOpenModelSettings && supportsModelConfigActions
                   ? handleOpenCurrentProviderModelSettings

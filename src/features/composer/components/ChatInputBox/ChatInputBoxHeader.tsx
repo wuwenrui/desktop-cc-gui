@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import type { ComposerSendReadiness } from '../../utils/composerSendReadiness';
 import type { Attachment, ModelInfo, ProviderId, QueuedMessage } from './types.js';
 import type { ProviderModelGroup } from './modelOptions.js';
+import type { RuntimeVendorOption } from './hooks/useActiveVendorByRuntime.js';
 import { AttachmentList } from './AttachmentList.js';
 import { ComposerReadinessBar } from './ComposerReadinessBar.js';
 import { MessageQueue } from './MessageQueue.js';
@@ -29,6 +30,8 @@ export function ChatInputBoxHeader({
   modelGroups,
   onModelSelect,
   onProviderModelSelect,
+  runtimeVendorOptions,
+  onRuntimeVendorSwitch,
   onAddModel,
   onRefreshModelConfig,
   isModelConfigRefreshing,
@@ -57,6 +60,8 @@ export function ChatInputBoxHeader({
   modelGroups?: ProviderModelGroup[];
   onModelSelect?: (modelId: string) => void;
   onProviderModelSelect?: (providerId: ProviderId, modelId: string) => void;
+  runtimeVendorOptions?: Partial<Record<ProviderId, RuntimeVendorOption[]>>;
+  onRuntimeVendorSwitch?: (providerId: ProviderId, vendorId: string) => Promise<void> | void;
   onAddModel?: () => void;
   onRefreshModelConfig?: () => Promise<void> | void;
   isModelConfigRefreshing?: boolean;
@@ -135,6 +140,8 @@ export function ChatInputBoxHeader({
           currentProvider={currentProvider}
           onModelSelect={onModelSelect}
           onProviderModelSelect={onProviderModelSelect}
+          runtimeVendorOptions={runtimeVendorOptions}
+          onRuntimeVendorSwitch={onRuntimeVendorSwitch}
           onAddModel={onAddModel}
           onRefreshModelConfig={onRefreshModelConfig}
           isModelConfigRefreshing={isModelConfigRefreshing}

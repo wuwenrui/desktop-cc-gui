@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import xuanzhonIcon from '../../../../../assets/xuanzhong.svg';
 import type { ModelInfo, ProviderId } from '../types';
 import type { ProviderModelGroup } from '../modelOptions';
+import type { RuntimeVendorOption } from '../hooks/useActiveVendorByRuntime';
 import { EngineIcon } from '../../../../engine/components/EngineIcon';
 
 interface ModelSelectProps {
@@ -13,8 +14,10 @@ interface ModelSelectProps {
   providerLabel?: string;
   triggerVariant?: 'default' | 'readiness';
   modelGroups?: ProviderModelGroup[];
+  runtimeVendorOptions?: Partial<Record<ProviderId, RuntimeVendorOption[]>>;
   onProviderModelChange?: (providerId: ProviderId, modelId: string) => void;
-  onAddModel?: () => void;  // Navigate to model management
+  onRuntimeVendorSwitch?: (providerId: ProviderId, vendorId: string) => Promise<void> | void;
+  onAddModel?: (providerId?: string) => void;  // Navigate to current provider config
   onRefreshConfig?: () => Promise<void> | void; // Refresh current provider config
   isRefreshingConfig?: boolean;
 }
@@ -67,14 +70,17 @@ export const ModelSelect = ({
   providerLabel,
   triggerVariant = 'default',
   modelGroups,
+  runtimeVendorOptions,
   onProviderModelChange,
-  onAddModel,
+  onRuntimeVendorSwitch,
   onRefreshConfig,
   isRefreshingConfig = false,
 }: ModelSelectProps) => {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [refreshConfigError, setRefreshConfigError] = useState<string | null>(null);
+  const [openRuntimeVendorGroup, setOpenRuntimeVendorGroup] = useState<ProviderId | null>(null);
+  const [switchingRuntimeVendor, setSwitchingRuntimeVendor] = useState<string | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -123,6 +129,9 @@ export const ModelSelect = ({
   const handleToggle = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     setIsOpen(!isOpen);
+    if (isOpen) {
+      setOpenRuntimeVendorGroup(null);
+    }
   }, [isOpen]);
 
   /**
@@ -131,6 +140,7 @@ export const ModelSelect = ({
   const handleSelect = useCallback((modelId: string) => {
     onChange(modelId);
     setIsOpen(false);
+    setOpenRuntimeVendorGroup(null);
   }, [onChange]);
 
   const handleGroupedSelect = useCallback((providerId: ProviderId, modelId: string) => {
@@ -140,13 +150,30 @@ export const ModelSelect = ({
       onChange(modelId);
     }
     setIsOpen(false);
+    setOpenRuntimeVendorGroup(null);
   }, [onChange, onProviderModelChange]);
 
-  const handleAddModelClick = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
-    e.stopPropagation();
-    onAddModel?.();
-    setIsOpen(false);
-  }, [onAddModel]);
+  const handleRuntimeVendorGroupToggle = useCallback((providerId: ProviderId) => {
+    setOpenRuntimeVendorGroup((prev) => prev === providerId ? null : providerId);
+  }, []);
+
+  const handleRuntimeVendorSelect = useCallback(async (providerId: ProviderId, vendorId: string) => {
+    if (!onRuntimeVendorSwitch || switchingRuntimeVendor) {
+      return;
+    }
+    setSwitchingRuntimeVendor(`${providerId}:${vendorId}`);
+    setRefreshConfigError(null);
+    try {
+      await onRuntimeVendorSwitch(providerId, vendorId);
+      setIsOpen(false);
+      setOpenRuntimeVendorGroup(null);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      setRefreshConfigError(message);
+    } finally {
+      setSwitchingRuntimeVendor(null);
+    }
+  }, [onRuntimeVendorSwitch, switchingRuntimeVendor]);
 
   const handleRefreshConfigClick = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
@@ -174,6 +201,7 @@ export const ModelSelect = ({
         !buttonRef.current.contains(e.target as Node)
       ) {
         setIsOpen(false);
+        setOpenRuntimeVendorGroup(null);
       }
     };
 
@@ -241,27 +269,75 @@ export const ModelSelect = ({
               {modelGroups!.map((group, groupIndex) => (
                 <div key={group.providerId} className="selector-model-group">
                   {groupIndex > 0 && <div className="selector-model-group-divider" />}
-                  <div className="selector-model-group-title">
-                    <span>{group.providerLabel}</span>
-                  </div>
-                  {group.models.map((model) => {
-                    const isSelected = group.providerId === currentProvider && model.id === value;
-                    return (
-                      <div
-                        key={`${group.providerId}:${model.id}`}
-                        className={`selector-option selector-option--model-compact ${isSelected ? 'selected' : ''}`}
-                        onClick={() => handleGroupedSelect(group.providerId, model.id)}
-                      >
-                        <ModelIcon provider={group.providerId} size={18} />
-                        <span className="selector-model-label">{getModelLabel(model)}</span>
-                        <div className="selector-model-check-slot">
-                          {isSelected && (
-                            <img src={xuanzhonIcon} aria-hidden />
-                          )}
+                  <button
+                    type="button"
+                    className={`selector-model-group-title selector-model-group-title-button${runtimeVendorOptions?.[group.providerId]?.length ? ' has-vendor-switch' : ''}`}
+                    onClick={() => {
+                      if (runtimeVendorOptions?.[group.providerId]?.length) {
+                        handleRuntimeVendorGroupToggle(group.providerId);
+                      }
+                    }}
+                    disabled={!runtimeVendorOptions?.[group.providerId]?.length}
+                  >
+                    <span>
+                      {group.providerLabel}
+                      {group.activeVendorLabel ? (
+                        <span className="selector-model-group-vendor">
+                          {` (${group.activeVendorLabel})`}
+                        </span>
+                      ) : null}
+                    </span>
+                    {runtimeVendorOptions?.[group.providerId]?.length ? (
+                      <span className={`codicon codicon-chevron-${openRuntimeVendorGroup === group.providerId ? 'down' : 'right'}`} aria-hidden />
+                    ) : null}
+                  </button>
+                  {openRuntimeVendorGroup === group.providerId && runtimeVendorOptions?.[group.providerId]?.length ? (
+                    <div className="selector-runtime-vendor-list">
+                      {runtimeVendorOptions[group.providerId]!.map((vendor) => {
+                        const switchKey = `${group.providerId}:${vendor.id}`;
+                        return (
+                          <button
+                            key={vendor.id}
+                            type="button"
+                            className={`selector-option selector-option-button selector-runtime-vendor-option ${vendor.isActive ? 'selected' : ''}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handleRuntimeVendorSelect(group.providerId, vendor.id);
+                            }}
+                            disabled={switchingRuntimeVendor !== null}
+                            aria-busy={switchingRuntimeVendor === switchKey}
+                          >
+                            <span className="selector-runtime-vendor-label">{vendor.label}</span>
+                            {switchingRuntimeVendor === switchKey ? (
+                              <span className="codicon codicon-loading selector-refresh-icon-spinning" aria-hidden />
+                            ) : vendor.isActive ? (
+                              <span className="codicon codicon-check check-mark" aria-hidden />
+                            ) : null}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                  <div className={`selector-model-group-options${group.providerId === 'codex' && group.models.length > 3 ? ' selector-model-group-options--scrollable' : ''}`}>
+                    {group.models.map((model) => {
+                      const isSelected = group.providerId === currentProvider && model.id === value;
+                      return (
+                        <div
+                          key={`${group.providerId}:${model.id}`}
+                          className={`selector-option selector-option--model-compact ${isSelected ? 'selected' : ''}`}
+                          onClick={() => handleGroupedSelect(group.providerId, model.id)}
+                        >
+                          <ModelIcon provider={group.providerId} size={18} />
+                          <span className="selector-model-label">{getModelLabel(model)}</span>
+                          <div className="selector-model-check-slot">
+                            {isSelected && (
+                              <img src={xuanzhonIcon} aria-hidden />
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
               ))}
             </div>
@@ -290,35 +366,24 @@ export const ModelSelect = ({
               ))}
             </>
           )}
-          {(onAddModel || onRefreshConfig) && (
+          {onRefreshConfig && (
             <>
               <div className="selector-divider" />
               <div className="selector-action-footer">
-                {onAddModel && (
-                  <button
-                    type="button"
-                    className="selector-footer-action selector-footer-action-add"
-                    onClick={handleAddModelClick}
-                  >
-                    {t('models.addModel')}
-                  </button>
-                )}
-                {onRefreshConfig && (
-                  <button
-                    type="button"
-                    className="selector-footer-action selector-footer-action-refresh"
-                    onClick={handleRefreshConfigClick}
-                    disabled={isRefreshingConfig}
-                    aria-busy={isRefreshingConfig}
-                    title={t(isRefreshingConfig ? 'models.refreshingConfig' : 'models.refreshConfig')}
-                  >
-                    <span
-                      className={`codicon codicon-refresh${isRefreshingConfig ? ' selector-refresh-icon-spinning' : ''}`}
-                      aria-hidden
-                    />
-                    <span>{t(isRefreshingConfig ? 'models.refreshingConfig' : 'models.refreshConfig')}</span>
-                  </button>
-                )}
+                <button
+                  type="button"
+                  className="selector-footer-action selector-footer-action-refresh"
+                  onClick={handleRefreshConfigClick}
+                  disabled={isRefreshingConfig}
+                  aria-busy={isRefreshingConfig}
+                  title={t(isRefreshingConfig ? 'models.refreshingConfig' : 'models.refreshConfig')}
+                >
+                  <span
+                    className={`codicon codicon-refresh${isRefreshingConfig ? ' selector-refresh-icon-spinning' : ''}`}
+                    aria-hidden
+                  />
+                  <span>{t(isRefreshingConfig ? 'models.refreshingConfig' : 'models.refreshConfig')}</span>
+                </button>
               </div>
               {refreshConfigError && (
                 <div className="selector-refresh-error" role="status">

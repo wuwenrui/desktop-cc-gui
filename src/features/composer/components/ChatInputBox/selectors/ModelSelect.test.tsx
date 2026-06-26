@@ -95,52 +95,96 @@ describe("ModelSelect", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it("does not display the first model when no model value is selected", () => {
+  it("limits only the Codex group to an inner scroll area", () => {
     render(
       <ModelSelect
-        value=""
+        value="gpt-5.4"
         currentProvider="codex"
         onChange={vi.fn()}
-        models={[
+        modelGroups={[
           {
-            id: "gpt-5.5",
-            label: "gpt-5.5",
+            providerId: "claude",
+            providerLabel: "Claude Code",
+            enabled: true,
+            models: [
+              { id: "claude-sonnet-4-6", label: "Sonnet 4.6" },
+              { id: "claude-opus-4-1", label: "Opus 4.1" },
+              { id: "claude-haiku-4-5", label: "Haiku 4.5" },
+              { id: "custom-claude", label: "Custom Claude" },
+            ],
+          },
+          {
+            providerId: "codex",
+            providerLabel: "Codex CLI",
+            enabled: true,
+            models: [
+              { id: "gpt-5.5", label: "gpt-5.5" },
+              { id: "gpt-5.4", label: "gpt-5.4" },
+              { id: "gpt-5.4-mini", label: "gpt-5.4-mini" },
+              { id: "gpt-5.3-codex", label: "gpt-5.3-codex" },
+            ],
           },
         ]}
       />,
     );
 
-    const buttonText = screen.getByRole("button").textContent ?? "";
+    fireEvent.click(screen.getAllByRole("button")[0]);
 
-    expect(buttonText).toContain("models.selectModel");
-    expect(buttonText).not.toContain("gpt-5.5");
+    const optionsWraps = Array.from(document.querySelectorAll(".selector-model-group-options"));
+    expect(optionsWraps).toHaveLength(2);
+    expect(optionsWraps[0].className).not.toContain("selector-model-group-options--scrollable");
+    expect(optionsWraps[1].className).toContain("selector-model-group-options--scrollable");
   });
 
-  it("renders independent add model and refresh config footer actions", () => {
-    const onAddModel = vi.fn();
+  it("expands runtime vendor options from the group title and switches vendor", async () => {
     const onRefreshConfig = vi.fn();
+    const onRuntimeVendorSwitch = vi.fn().mockResolvedValue(undefined);
 
     render(
       <ModelSelect
         value="gpt-5.5"
         currentProvider="codex"
         onChange={vi.fn()}
-        onAddModel={onAddModel}
         onRefreshConfig={onRefreshConfig}
+        onRuntimeVendorSwitch={onRuntimeVendorSwitch}
+        runtimeVendorOptions={{
+          claude: [
+            { id: "claude-default", label: "Krill-GPT", isActive: true },
+            { id: "claude-alt", label: "Backup Claude", isActive: false },
+          ],
+          codex: [
+            { id: "codex-main", label: "OpenAI", isActive: true },
+            { id: "codex-alt", label: "Azure", isActive: false },
+          ],
+        }}
+        modelGroups={[
+          {
+            providerId: "claude",
+            providerLabel: "Claude Code",
+            enabled: true,
+            models: [{ id: "claude-sonnet-4-6", label: "Sonnet 4.6" }],
+          },
+          {
+            providerId: "codex",
+            providerLabel: "Codex CLI",
+            enabled: true,
+            models: [{ id: "gpt-5.5", label: "gpt-5.5" }],
+          },
+        ]}
         models={[{ id: "gpt-5.5", label: "gpt-5.5" }]}
       />,
     );
 
     fireEvent.click(screen.getAllByRole("button")[0]);
-    fireEvent.click(screen.getByRole("button", { name: "models.refreshConfig" }));
+    fireEvent.click(screen.getByRole("button", { name: /Claude Code/ }));
+    expect(screen.getByRole("button", { name: "Backup Claude" })).toBeTruthy();
 
-    expect(onRefreshConfig).toHaveBeenCalledTimes(1);
-    expect(onAddModel).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Backup Claude" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "models.addModel" }));
-
-    expect(onAddModel).toHaveBeenCalledTimes(1);
-    expect(onRefreshConfig).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(onRuntimeVendorSwitch).toHaveBeenCalledWith("claude", "claude-alt");
+    });
+    expect(onRefreshConfig).not.toHaveBeenCalled();
   });
 
   it("uses refreshed model labels passed by the parent instead of stale localStorage mapping", () => {
