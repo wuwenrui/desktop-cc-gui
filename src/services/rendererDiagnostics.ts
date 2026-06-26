@@ -15,6 +15,8 @@ export type RendererDiagnosticEntry = {
 };
 
 const RENDERER_DIAGNOSTICS_KEY = "diagnostics.rendererLifecycleLog";
+const RENDERER_DIAGNOSTICS_STORE = "diagnostics";
+const LEGACY_RENDERER_DIAGNOSTICS_STORE = "app";
 const MAX_RENDERER_DIAGNOSTICS = 200;
 const MAX_PERF_ENTRIES = 1000;
 const MAX_REALTIME_TURN_SUMMARIES = 100;
@@ -232,7 +234,7 @@ function isBlankRendererSnapshot(snapshot: Record<string, unknown> | null) {
 }
 
 function persistDiagnostics(entries: RendererDiagnosticEntry[]) {
-  writeClientStoreValue("app", RENDERER_DIAGNOSTICS_KEY, entries, { immediate: true });
+  writeClientStoreValue(RENDERER_DIAGNOSTICS_STORE, RENDERER_DIAGNOSTICS_KEY, entries);
 }
 
 function canUseLocalStorage() {
@@ -275,10 +277,18 @@ function persistEarlyDiagnostics(entries: RendererDiagnosticEntry[]) {
 
 function readPersistedDiagnostics() {
   const stored = getClientStoreSync<RendererDiagnosticEntry[] | unknown>(
-    "app",
+    RENDERER_DIAGNOSTICS_STORE,
     RENDERER_DIAGNOSTICS_KEY,
   );
-  return mergeDiagnostics(normalizeDiagnosticEntries(stored), readEarlyPersistedDiagnostics());
+  const legacyStored = getClientStoreSync<RendererDiagnosticEntry[] | unknown>(
+    LEGACY_RENDERER_DIAGNOSTICS_STORE,
+    RENDERER_DIAGNOSTICS_KEY,
+  );
+  return mergeDiagnostics(
+    normalizeDiagnosticEntries(legacyStored),
+    normalizeDiagnosticEntries(stored),
+    readEarlyPersistedDiagnostics(),
+  );
 }
 
 export function appendRendererDiagnostic(

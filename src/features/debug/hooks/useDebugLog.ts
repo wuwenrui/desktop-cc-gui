@@ -12,6 +12,8 @@ import {
 
 const MAX_DEBUG_ENTRIES = 200;
 const THREAD_SESSION_LOG_KEY = "diagnostics.threadSessionLog";
+const THREAD_SESSION_LOG_STORE = "diagnostics";
+const LEGACY_THREAD_SESSION_LOG_STORE = "app";
 const MAX_THREAD_SESSION_LOG_ENTRIES = 400;
 
 type ThreadSessionLogEntry = {
@@ -92,7 +94,15 @@ export function useDebugLog() {
       if (shouldMirrorThreadSessionLog(entry)) {
         const cachedLogs =
           threadSessionLogCacheRef.current ??
-          (getClientStoreSync<ThreadSessionLogEntry[]>("app", THREAD_SESSION_LOG_KEY) ?? []);
+          (getClientStoreSync<ThreadSessionLogEntry[]>(
+            THREAD_SESSION_LOG_STORE,
+            THREAD_SESSION_LOG_KEY,
+          ) ??
+            getClientStoreSync<ThreadSessionLogEntry[]>(
+              LEGACY_THREAD_SESSION_LOG_STORE,
+              THREAD_SESSION_LOG_KEY,
+            ) ??
+            []);
         const nextEntry: ThreadSessionLogEntry = {
           timestamp: entry.timestamp,
           source: entry.source,
@@ -103,7 +113,7 @@ export function useDebugLog() {
           -MAX_THREAD_SESSION_LOG_ENTRIES,
         );
         threadSessionLogCacheRef.current = nextLogs;
-        writeClientStoreValue("app", THREAD_SESSION_LOG_KEY, nextLogs);
+        writeClientStoreValue(THREAD_SESSION_LOG_STORE, THREAD_SESSION_LOG_KEY, nextLogs);
       }
 
       if (shouldPersistClientErrorLogEntry(entry)) {

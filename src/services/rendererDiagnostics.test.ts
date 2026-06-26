@@ -45,7 +45,7 @@ describe("rendererDiagnostics", () => {
     diagnostics.flushRendererDiagnosticsBuffer();
 
     expect(clientStorageMocks.writeClientStoreValue).toHaveBeenCalledWith(
-      "app",
+      "diagnostics",
       "diagnostics.rendererLifecycleLog",
       [
         expect.objectContaining({
@@ -53,7 +53,6 @@ describe("rendererDiagnostics", () => {
           payload: { hasFocus: true },
         }),
       ],
-      { immediate: true },
     );
   });
 
@@ -90,7 +89,7 @@ describe("rendererDiagnostics", () => {
     diagnostics.flushRendererDiagnosticsBuffer();
 
     expect(clientStorageMocks.writeClientStoreValue).toHaveBeenCalledWith(
-      "app",
+      "diagnostics",
       "diagnostics.rendererLifecycleLog",
       [
         expect.objectContaining({
@@ -98,7 +97,6 @@ describe("rendererDiagnostics", () => {
           payload: { error: "Error: preload failed" },
         }),
       ],
-      { immediate: true },
     );
     expect(testLocalStorage.getItem(EARLY_RENDERER_DIAGNOSTICS_STORAGE_KEY)).toBeNull();
   });
@@ -532,14 +530,13 @@ describe("rendererDiagnostics", () => {
     diagnostics.appendRendererDiagnostic("bootstrap/start");
 
     expect(clientStorageMocks.writeClientStoreValue).toHaveBeenCalledWith(
-      "app",
+      "diagnostics",
       "diagnostics.rendererLifecycleLog",
       [
         expect.objectContaining({
           label: "bootstrap/start",
         }),
       ],
-      { immediate: true },
     );
   });
 
@@ -645,7 +642,7 @@ describe("rendererDiagnostics", () => {
     await new Promise((resolve) => setTimeout(resolve, 550));
 
     expect(clientStorageMocks.writeClientStoreValue).toHaveBeenCalledWith(
-      "app",
+      "diagnostics",
       "diagnostics.rendererLifecycleLog",
       [
         expect.objectContaining({
@@ -661,7 +658,6 @@ describe("rendererDiagnostics", () => {
           }),
         }),
       ],
-      { immediate: true },
     );
   });
 
