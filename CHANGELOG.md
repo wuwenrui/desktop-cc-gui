@@ -2,6 +2,94 @@
 
 ---
 
+##### **2026年6月26日（v0.5.13）**
+
+中文：
+
+✨ Features
+- `feat(realtime)`: 阶段性收口工具调用卡顿治理
+- `feat(curated-skills)`: 完成精选技能收口
+- `feat(layout)`: 外置 active canvas selector 状态
+- `feat(messages)`: 去除对话幕布重复复制入口
+- `feat(default1-3)`: 完成对应能力交付
+- 效果: 设置里的内置 `Lazy senior dev` 默认开启，同时保留用户手动关闭语义
+
+🔧 Improvements
+- `refactor(composer)`: 提取 `useCallback` 块解析逻辑为可复用函数
+- `refactor(messages)`: 删除用户气泡吸顶条
+- `perf(canvas)`: 隔离实时幕布与交互控制区
+- `perf(canvas)`: 闭环实时幕布交互隔离
+- `perf(shell)`: 隔离实时幕布与壳层计算
+- `docs(openspec)` 与 `chore(openspec)`: 归档若干已验证提案（fast-markdown、codex-provider、opencode gemini cli、Codex disk、fix-history-canvas-lightweight-spacing）
+
+🐛 Fixes
+- `fix(settings)`: 补充性能诊断说明文案
+- `fix(codex)`: 恢复命令写文件变更回放
+- `fix(codex)`: 稳定 provider 首发会话初始化
+- `fix(perf)`: 修复实时渲染调度续排卡顿
+- `fix(markdown)`: 恢复 fast 预览标注入口
+- `fix(composer)`: 修复输入框打字低优先级卡顿
+- `fix(files)`: 修复 bounded fast outline 异步折叠
+- `fix(messages)`: 修复文件变更幕布误判
+- `fix(frontend)`: 避免会话选择迁移重复写入
+- `fix(curated-skills)`: 消除测试估算函数死代码告警
+- `fix`: 避免将包含点的代码片段误判为文件路径
+- `fix(codex)`: 补齐 daemon 启动确认与诊断清理
+- `fix(runtime)`: 屏蔽废弃 CLI 入口并放宽确认窗口
+- `fix(runtime)`: 降级临时重连提示
+- `fix(project-map)`: 修复冷启动空态循环
+- `fix(perf)`: 稳定实时对话渲染与 Codex 创建
+- `fix(messages)`: 修复历史时间线重测与浮层对比度
+- `fix(messages)`: 收敛历史幕布 lightweight 间距与展开布局
+- `fix(codex)`: 稳定首轮线程启动恢复边界
+- `Fix uat`
+- `处理测试`
+- `止血拆分`
+
+English:
+
+✨ Features
+- `feat(realtime)`: phase-in containment for tool-call jank
+- `feat(curated-skills)`: close curated-skills workstream
+- `feat(layout)`: externalize active canvas selector state
+- `feat(messages)`: remove duplicate copy entry in the canvas timeline
+- `feat(default1-3)`: deliver corresponding capabilities
+- Set built-in `Lazy senior dev` enabled by default in settings while preserving manual opt-out semantics
+
+🔧 Improvements
+- `refactor(composer)`: extract reusable `useCallback` block-parsing helper
+- `refactor(messages)`: remove sticky top bubble in message bubbles
+- `perf(canvas)`: isolate realtime canvas from interaction control area
+- `perf(canvas)`: close loop for real-time canvas interaction isolation
+- `perf(shell)`: isolate real-time canvas from shell-level calculations
+- `docs/chore(openspec)`: archive several validated OpenSpec proposals (fast-markdown, codex-provider, opencode gemini cli, Codex disk, fix-history-canvas-lightweight-spacing)
+
+🐛 Fixes
+- `fix(settings)`: add performance-diagnostic wording
+- `fix(codex)`: restore command-file-change replay
+- `fix(codex)`: stabilize provider first-session initialization
+- `fix(perf)`: fix realtime rendering schedule backpressure
+- `fix(markdown)`: restore fast preview annotation entry
+- `fix(composer)`: fix low-priority typing jank in editor input
+- `fix(files)`: fix async collapse behavior of bounded fast outline
+- `fix(messages)`: fix file-change timeline canvas misclassification
+- `fix(frontend)`: avoid duplicate writes during session-selection migration
+- `fix(curated-skills)`: remove dead-code warning in test estimation helper
+- `fix`: avoid treating code snippets with dots as file paths
+- `fix(codex)`: complete daemon startup confirmation and diagnostic cleanup
+- `fix(runtime)`: hide deprecated CLI entry and relax confirmation window
+- `fix(runtime)`: downgrade temporary reconnect notice
+- `fix(project-map)`: fix cold-start empty state loop
+- `fix(perf)`: stabilize real-time conversation rendering and Codex creation
+- `fix(messages)`: fix historical timeline retest and popover contrast
+- `fix(messages)`: converge history-canvas lightweight spacing and expansion layout
+- `fix(codex)`: stabilize first-thread startup recovery boundary
+- `Fix uat`
+- `Handle test cleanup`
+- `Hot-fix split`
+
+---
+
 ##### **2026年6月22日（v0.5.12）**
 
 中文：
