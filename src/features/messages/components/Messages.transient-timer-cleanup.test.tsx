@@ -21,10 +21,16 @@ const baseItem: ConversationItem = {
   role: "user",
   text: "hello",
 };
+const secondUserItem: ConversationItem = {
+  id: "user-2",
+  kind: "message",
+  role: "user",
+  text: "again",
+};
 
 const baseProps = {
   workspaceId: "ws-1",
-  items: [baseItem],
+  items: [baseItem, secondUserItem],
   plan: null,
   userInputRequests: [],
   heartbeatPulse: 0,
@@ -75,20 +81,13 @@ describe("Messages transient timer cleanup on threadId change", () => {
     const rafSpy = vi.spyOn(window, "requestAnimationFrame");
 
     try {
+      let nextAnimationFrameId = 1;
+      rafSpy.mockImplementation(((_cb: FrameRequestCallback) => {
+        return nextAnimationFrameId++ as unknown as number;
+      }) as typeof window.requestAnimationFrame);
       const { rerender } = render(
         <Messages {...baseProps} threadId="thread-A" isThinking={false} />,
       );
-      act(() => {
-        rafSpy.mockImplementationOnce(((_cb: FrameRequestCallback) => {
-          return 1 as unknown as number;
-        }) as typeof window.requestAnimationFrame);
-        window.requestAnimationFrame(() => {});
-        rafSpy.mockImplementationOnce(((_cb: FrameRequestCallback) => {
-          return 2 as unknown as number;
-        }) as typeof window.requestAnimationFrame);
-        window.requestAnimationFrame(() => {});
-        window.setTimeout(() => {}, 100);
-      });
       rerender(
         <Messages {...baseProps} threadId="thread-B" isThinking={false} />,
       );
