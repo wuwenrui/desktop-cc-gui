@@ -44,10 +44,6 @@ function isStoppingRuntimeCreateSessionError(message: string): boolean {
   );
 }
 
-function isDiskCreateSessionReadinessError(message: string): boolean {
-  return message.toLowerCase().includes("thread/start ready confirmation failed");
-}
-
 function isCliNotFoundError(message: string): boolean {
   const normalized = message.toLowerCase();
   return (
@@ -482,8 +478,7 @@ export function useWorkspaceActions({
         const shouldAttemptDiskRecovery =
           targetEngine === "codex" &&
           isDiskProviderSelection(options) &&
-          (isStoppingRuntimeCreateSessionError(message) ||
-            isDiskCreateSessionReadinessError(message));
+          isStoppingRuntimeCreateSessionError(message);
         if (shouldAttemptDiskRecovery) {
           onDebug({
             id: `${Date.now()}-client-create-session-disk-auto-recovery`,

@@ -38,7 +38,9 @@ bodies from a remote marketplace or URL at runtime.
 The build-time lock validator and runtime curated-skill loader MUST validate
 `skills-lock.json` without relying on OS-specific shell commands or path
 semantics. SHA-256 hash validation MUST use a Rust implementation that works on
-Linux, macOS, and Windows. `assetPath` and `metadataPath` MUST be non-empty
+Linux, macOS, and Windows. Curated `SKILL.md` assets MUST be checked out with
+LF line endings so `computedHash` is stable across Windows, macOS, and Linux.
+`assetPath` and `metadataPath` MUST be non-empty
 repo-relative POSIX paths: absolute paths, parent directory traversal, Windows
 backslash separators, and drive-prefix-like `:` values MUST be rejected before
 any file read is attempted. Cargo MUST watch the repo-root `skills-lock.json`
@@ -384,4 +386,3 @@ launch, not retroactively on in-flight turns.
 - **AND** if replacement fails, the settings write MUST be rolled back and an
   actionable error returned instead of leaving UI state and runtime prompt
   state inconsistent.
-

@@ -384,6 +384,33 @@ describe("useWorkspaceActions", () => {
     );
   });
 
+  it("does not create a second disk codex session after post-start readiness failures", async () => {
+    const options = makeOptions({
+      startThreadForWorkspace: vi.fn(async () => {
+        throw new Error(
+          "thread/start ready confirmation failed for workspace ws-1 thread thread-1: thread/resume failed during readiness check: permission denied",
+        );
+      }),
+    });
+    const { result } = renderHook(() => useWorkspaceActions(options));
+
+    await act(async () => {
+      await result.current.handleAddAgent(baseWorkspace, "codex", {
+        providerProfileId: "__disk__",
+      });
+    });
+
+    expect(ensureRuntimeReady).not.toHaveBeenCalled();
+    expect(options.startThreadForWorkspace).toHaveBeenCalledTimes(1);
+    expect(options.startThreadForWorkspace).toHaveBeenCalledWith("ws-1", {
+      engine: "codex",
+      providerProfileId: "__disk__",
+    });
+    expect(window.alert).toHaveBeenCalledWith(
+      expect.stringContaining("thread/start ready confirmation failed"),
+    );
+  });
+
   it("does not add disk auto-recovery to managed codex provider creation", async () => {
     const options = makeOptions({
       startThreadForWorkspace: vi.fn(async () => {

@@ -125,6 +125,18 @@ pub(crate) async fn ensure_runtime_ready(
 }
 
 #[tauri::command]
+pub(crate) async fn prewarm_codex_disk_runtime(
+    workspace_id: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<(), String> {
+    crate::codex::ensure_codex_session(&workspace_id, &state, &app).await?;
+    let settings = state.app_settings.lock().await.clone();
+    run_reconcile_cycle(&state, &settings).await;
+    Ok(())
+}
+
+#[tauri::command]
 pub(crate) async fn get_runtime_pool_snapshot(
     state: State<'_, AppState>,
 ) -> Result<RuntimePoolSnapshot, String> {

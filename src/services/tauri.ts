@@ -296,6 +296,7 @@ export {
   noteWebServiceReconnected,
   openNewWindow,
   openWorkspaceIn,
+  prewarmCodexDiskRuntime,
   queryTurnReconciliationStatus,
   readPanelLockPasswordFile,
   removeWorkspace,

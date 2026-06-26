@@ -4,11 +4,14 @@
 - [x] 1.2 Add bounded `thread/resume` readiness retry helper for `thread/start` confirmation and stale `turn/start` recovery.
 - [x] 1.3 Keep retry same-runtime and same-provider; do not fallback to disk or start a replacement thread.
 - [x] 1.4 Add Rust coverage for blank thread ids and runtime foreground continuity protection.
+- [x] 1.5 Reject false-ready `thread/resume` responses during create-session readiness when they contain RPC errors or a mismatched thread id.
+- [x] 1.6 Treat `no rollout found for thread id` as rollout-pending readiness and avoid surfacing a duplicate-triggering create failure.
 
 ## 2. Runtime Foreground Continuity
 
 - [x] 2.1 Record `thread-started` foreground work continuity after valid Codex `thread/start`.
 - [x] 2.2 Preserve active-work protection through runtime pool reconcile while startup/first-turn readiness is pending.
+- [x] 2.3 Prewarm only the active workspace disk/default Codex runtime without precreating threads or touching managed providers.
 
 ## 3. Frontend Recovery Boundary
 
@@ -17,6 +20,7 @@
 - [x] 3.3 Prevent fork continuation for unknown/native missing-thread failures without accepted or durable activity.
 - [x] 3.4 Treat refresh returning the same missing thread as unverified and settle conservatively instead of creating a second thread.
 - [x] 3.5 Preserve disk provider metadata fallback for selected disk profile bindings.
+- [x] 3.6 Prevent post-start readiness failures from auto-running create-session again.
 
 ## 4. Message Auto-Follow
 
