@@ -1283,6 +1283,7 @@ export type WeChatBridgeStatus = {
   wechatBound: boolean;
   boundWechatUserId?: string | null;
   boundWechatBotId?: string | null;
+  rebindSecretConfigured: boolean;
   weclawSyncFresh: boolean;
   weclawSyncAgeSecs?: number | null;
 };
@@ -1330,9 +1331,33 @@ export async function stopWechatBridge(): Promise<WeChatBridgeStatus> {
 
 export async function resetWechatBridgeLogin(options: {
   workspaceId?: string | null;
+  rebindSecret?: string | null;
 } = {}): Promise<WeChatBridgeStatus> {
   return invoke<WeChatBridgeStatus>("reset_wechat_bridge_login", {
     workspaceId: options.workspaceId ?? null,
+    rebindSecret: options.rebindSecret ?? null,
+  });
+}
+
+export async function setWechatBridgeRebindSecret(options: {
+  secret: string;
+}): Promise<WeChatBridgeStatus> {
+  return invoke<WeChatBridgeStatus>("set_wechat_bridge_rebind_secret", {
+    secret: options.secret,
+  });
+}
+
+export async function sendWechatBridgeRebindRecoveryCode(): Promise<WeChatBridgeStatus> {
+  return invoke<WeChatBridgeStatus>("send_wechat_bridge_rebind_recovery_code");
+}
+
+export async function resetWechatBridgeRebindSecretWithCode(options: {
+  code: string;
+  newSecret: string;
+}): Promise<WeChatBridgeStatus> {
+  return invoke<WeChatBridgeStatus>("reset_wechat_bridge_rebind_secret_with_code", {
+    code: options.code,
+    newSecret: options.newSecret,
   });
 }
 

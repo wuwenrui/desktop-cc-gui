@@ -64,8 +64,11 @@ pub(crate) fn invoke_handler(
         crate::web_service::stop_daemon,
         crate::wechat_bridge_control::get_wechat_bridge_status,
         crate::wechat_bridge_control::reset_wechat_bridge_login,
+        crate::wechat_bridge_control::reset_wechat_bridge_rebind_secret_with_code,
         crate::wechat_bridge_control::run_wechat_bridge_diagnostics,
+        crate::wechat_bridge_control::send_wechat_bridge_rebind_recovery_code,
         crate::wechat_bridge_control::send_wechat_bridge_verification_prompt,
+        crate::wechat_bridge_control::set_wechat_bridge_rebind_secret,
         crate::wechat_bridge_control::start_wechat_bridge,
         crate::wechat_bridge_control::stop_wechat_bridge,
         // Agents
