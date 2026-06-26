@@ -656,7 +656,8 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
       const thread: ThreadSummary = {
         id: action.threadId,
         name: fallbackName,
-        updatedAt: 0,
+        // 新建会话以当前时间戳排序，使其出现在列表顶部而非底部（updatedAt: 0 会被排到最旧）
+        updatedAt: Date.now(),
         engineSource: action.engine,
         folderId: action.folderId ?? null,
         autoSession: action.autoSession ?? null,

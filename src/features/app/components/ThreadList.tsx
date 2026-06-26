@@ -4,11 +4,6 @@ import {
   PopoverContent,
 } from "@/components/ui/popover";
 import {
-  Tooltip,
-  TooltipPopup,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import {
   memo,
   useCallback,
   useEffect,
@@ -126,12 +121,8 @@ function isPendingSubagentThread(thread: ThreadSummary) {
 
 function filterCollapsedThreadRows(
   rows: ThreadRow[],
-  collapsedParentThreadIds: ReadonlySet<string>,
+  expandedParentThreadIds: ReadonlySet<string>,
 ) {
-  if (collapsedParentThreadIds.size === 0) {
-    return rows;
-  }
-
   const visibleRows: ThreadRow[] = [];
   let collapsedDepth: number | null = null;
 
@@ -144,7 +135,9 @@ function filterCollapsedThreadRows(
     }
 
     visibleRows.push(row);
-    if (row.hasChildren && collapsedParentThreadIds.has(row.thread.id)) {
+    // Subagent parents default to collapsed; only those the user explicitly
+    // expanded (tracked in expandedParentThreadIds) reveal their children.
+    if (row.hasChildren && !expandedParentThreadIds.has(row.thread.id)) {
       collapsedDepth = row.depth;
     }
   });
@@ -237,10 +230,9 @@ const ThreadRowItem = memo(function ThreadRowItem({
         }
       }}
     >
-      <Tooltip>
-        <PopoverAnchor asChild>
-          <TooltipTrigger
-            delay={450}
+      <PopoverAnchor asChild>
+          <button
+            type="button"
             className={`thread-row ${
               isActiveThread ? "active" : ""
             }${isDeleteConfirmOpen ? " has-delete-confirm" : ""}${
@@ -363,19 +355,8 @@ const ThreadRowItem = memo(function ThreadRowItem({
               ) : null}
               {relativeTime ? <span className="thread-time">{relativeTime}</span> : null}
             </div>
-          </TooltipTrigger>
-        </PopoverAnchor>
-        <TooltipPopup
-          side="top"
-          align="start"
-          sideOffset={4}
-          className="max-w-[400px] break-words"
-        >
-          {thread.isDegraded && thread.degradedReason
-            ? `${thread.name} · ${thread.degradedReason}`
-            : thread.name}
-        </TooltipPopup>
-      </Tooltip>
+          </button>
+      </PopoverAnchor>
       {isDeleteConfirmOpen && (
         <PopoverContent
           side="right"
@@ -470,7 +451,7 @@ export function ThreadList({
   const { t } = useTranslation();
   const indentUnit = nested ? 10 : 14;
   const threadListRef = useRef<HTMLDivElement | null>(null);
-  const [collapsedParentThreadIds, setCollapsedParentThreadIds] = useState<Set<string>>(
+  const [expandedParentThreadIds, setExpandedParentThreadIds] = useState<Set<string>>(
     () => new Set(),
   );
   const isExitedThread = useCallback((thread: ThreadSummary) => {
@@ -508,12 +489,12 @@ export function ThreadList({
   const contextMenuMoveFolderTargets =
     moveFolderTargets.length > 0 ? moveFolderTargets : undefined;
   const displayedPinnedRows = useMemo(
-    () => filterCollapsedThreadRows(visiblePinnedRows, collapsedParentThreadIds),
-    [collapsedParentThreadIds, visiblePinnedRows],
+    () => filterCollapsedThreadRows(visiblePinnedRows, expandedParentThreadIds),
+    [expandedParentThreadIds, visiblePinnedRows],
   );
   const displayedUnpinnedRows = useMemo(
-    () => filterCollapsedThreadRows(visibleUnpinnedRows, collapsedParentThreadIds),
-    [collapsedParentThreadIds, visibleUnpinnedRows],
+    () => filterCollapsedThreadRows(visibleUnpinnedRows, expandedParentThreadIds),
+    [expandedParentThreadIds, visibleUnpinnedRows],
   );
   const rowsBySidebarVirtualKey = useMemo(() => {
     const next = new Map<string, ThreadRow>();
@@ -567,7 +548,7 @@ export function ThreadList({
   const toggleSubagentParent = useCallback((event: MouseEvent, threadId: string) => {
     event.preventDefault();
     event.stopPropagation();
-    setCollapsedParentThreadIds((current) => {
+    setExpandedParentThreadIds((current) => {
       const next = new Set(current);
       if (next.has(threadId)) {
         next.delete(threadId);
@@ -584,7 +565,7 @@ export function ThreadList({
       }
       event.preventDefault();
       event.stopPropagation();
-      setCollapsedParentThreadIds((current) => {
+      setExpandedParentThreadIds((current) => {
         const next = new Set(current);
         if (next.has(threadId)) {
           next.delete(threadId);
@@ -617,7 +598,7 @@ export function ThreadList({
       (thread.id === activeThreadId || thread.id === activeThreadParentId);
     const isPendingSubagent = isPendingSubagentThread(thread);
     const isSubagentParentCollapsed =
-      isSubagentParent && collapsedParentThreadIds.has(thread.id);
+      isSubagentParent && !expandedParentThreadIds.has(thread.id);
     const subagentTreeToggleLabel = isSubagentParentCollapsed
       ? t("threads.subagentTreeExpand")
       : t("threads.subagentTreeCollapse");
