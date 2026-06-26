@@ -252,7 +252,7 @@ describe('ConfigSelect usage entry', () => {
     const planModeRow = container.querySelector('.selector-option-plan-mode');
     expect(planModeRow).toBeTruthy();
 
-    const planSwitch = container.querySelector('.selector-option-plan-mode .ant-switch');
+    const planSwitch = container.querySelector('.selector-option-plan-mode [data-slot="switch"]');
     expect(planSwitch).toBeTruthy();
     fireEvent.click(planSwitch as HTMLElement);
     await waitFor(() => {
@@ -270,7 +270,7 @@ describe('ConfigSelect usage entry', () => {
     await waitFor(() => {
       expect(container.querySelector('.selector-option-plan-mode')).toBeTruthy();
       expect(
-        container.querySelector('.selector-option-plan-mode .ant-switch-disabled'),
+        container.querySelector('.selector-option-plan-mode [data-slot="switch"][disabled]'),
       ).toBeTruthy();
     });
 
@@ -296,8 +296,8 @@ describe('ConfigSelect usage entry', () => {
     );
 
     fireEvent.click(container.querySelector('.config-button') as HTMLElement);
-    const planSwitch = container.querySelector('.selector-option-plan-mode .ant-switch');
+    const planSwitch = container.querySelector('.selector-option-plan-mode [data-slot="switch"]');
     expect(planSwitch).toBeTruthy();
-    expect(planSwitch?.classList.contains('ant-switch-checked')).toBe(false);
+    expect(planSwitch?.getAttribute('data-state')).toBe('unchecked');
   });
 });

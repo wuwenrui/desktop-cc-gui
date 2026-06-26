@@ -49,39 +49,54 @@ describe("TooltipIconButton", () => {
     const button = renderTooltipButton({ onClick });
 
     await openTooltip(button);
-    expect(screen.getByRole("tooltip").textContent).toContain("Hide right sidebar");
+    // Query the component's own visible tooltip by its stable data-slot:
+    // Radix renders extra role="tooltip" a11y nodes (visible Content + hidden
+    // copy), so getByRole("tooltip") is ambiguous after the base-ui→radix swap.
+    expect(
+      document.querySelector('[data-slot="tooltip-popup"]')?.textContent,
+    ).toContain("Hide right sidebar");
 
     await act(async () => {
       fireEvent.click(button);
     });
 
     expect(onClick).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole("tooltip")).toBeNull();
+    expect(document.querySelector('[data-slot="tooltip-popup"]')).toBeNull();
   });
 
   it("closes the custom tooltip when the window loses focus", async () => {
     const button = renderTooltipButton();
 
     await openTooltip(button);
-    expect(screen.getByRole("tooltip").textContent).toContain("Hide right sidebar");
+    // Query the component's own visible tooltip by its stable data-slot:
+    // Radix renders extra role="tooltip" a11y nodes (visible Content + hidden
+    // copy), so getByRole("tooltip") is ambiguous after the base-ui→radix swap.
+    expect(
+      document.querySelector('[data-slot="tooltip-popup"]')?.textContent,
+    ).toContain("Hide right sidebar");
 
     await act(async () => {
       window.dispatchEvent(new Event("blur"));
     });
 
-    expect(screen.queryByRole("tooltip")).toBeNull();
+    expect(document.querySelector('[data-slot="tooltip-popup"]')).toBeNull();
   });
 
   it("closes the custom tooltip when the pointer interaction is cancelled", async () => {
     const button = renderTooltipButton();
 
     await openTooltip(button);
-    expect(screen.getByRole("tooltip").textContent).toContain("Hide right sidebar");
+    // Query the component's own visible tooltip by its stable data-slot:
+    // Radix renders extra role="tooltip" a11y nodes (visible Content + hidden
+    // copy), so getByRole("tooltip") is ambiguous after the base-ui→radix swap.
+    expect(
+      document.querySelector('[data-slot="tooltip-popup"]')?.textContent,
+    ).toContain("Hide right sidebar");
 
     await act(async () => {
       fireEvent.pointerCancel(button);
     });
 
-    expect(screen.queryByRole("tooltip")).toBeNull();
+    expect(document.querySelector('[data-slot="tooltip-popup"]')).toBeNull();
   });
 });

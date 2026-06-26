@@ -16,18 +16,11 @@ const packageJson = JSON.parse(
 };
 
 // https://vite.dev/config/
-export default defineConfig(async ({ mode }) => ({
+export default defineConfig(async () => ({
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
-      ...(mode === "test"
-        ? {
-            "@lobehub/fluent-emoji": "/src/test/mocks/fluentEmoji.ts",
-            "@lobehub/fluent-emoji/es": "/src/test/mocks/fluentEmoji.ts",
-            "@lobehub/fluent-emoji/es/index.js": "/src/test/mocks/fluentEmoji.ts",
-          }
-        : {}),
     },
     dedupe: [
       "@codemirror/state",
@@ -63,7 +56,7 @@ export default defineConfig(async ({ mode }) => ({
           if (id.includes("/viewerjs/") || id.includes("/viewerjs-")) return "vendor-mermaid";
           if (id.includes("/pdfjs-dist/") || id.includes("/mammoth/") || id.includes("/xlsx/"))
             return "vendor-docs";
-          if (id.includes("/framer-motion/") || id.includes("/antd/") || id.includes("/lucide-react/"))
+          if (id.includes("/lucide-react/"))
             return "vendor-ui-heavy";
         },
       },
@@ -78,7 +71,7 @@ export default defineConfig(async ({ mode }) => ({
     deps: {
       optimizer: {
         web: {
-          include: ["react-i18next", "@lobehub/fluent-emoji"],
+          include: ["react-i18next"],
         },
       },
     },

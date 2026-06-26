@@ -113,7 +113,6 @@ export function TooltipIconButton({
       </TooltipTrigger>
       {open && (
         <TooltipContent
-          role="tooltip"
           side={tooltipSide}
           align={tooltipAlign}
           sideOffset={tooltipSideOffset}

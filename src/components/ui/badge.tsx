@@ -1,10 +1,8 @@
-"use client";
+import * as React from "react"
+import { Slot } from "radix-ui"
+import { cva, type VariantProps } from "class-variance-authority"
 
-import { mergeProps } from "@base-ui/react/merge-props";
-import { useRender } from "@base-ui/react/use-render";
-import { cva, type VariantProps } from "class-variance-authority";
-
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils"
 
 const badgeVariants = cva(
   "relative inline-flex shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-sm border border-transparent font-medium outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-64 [&_svg:not([class*='opacity-'])]:opacity-80 [&_svg:not([class*='size-'])]:size-3.5 sm:[&_svg:not([class*='size-'])]:size-3 [&_svg]:pointer-events-none [&_svg]:shrink-0 [button&,a&]:cursor-pointer [button&,a&]:pointer-coarse:after:absolute [button&,a&]:pointer-coarse:after:size-full [button&,a&]:pointer-coarse:after:min-h-11 [button&,a&]:pointer-coarse:after:min-w-11",
@@ -37,24 +35,25 @@ const badgeVariants = cva(
       },
     },
   },
-);
+)
 
-interface BadgeProps extends useRender.ComponentProps<"span"> {
-  variant?: VariantProps<typeof badgeVariants>["variant"];
-  size?: VariantProps<typeof badgeVariants>["size"];
+function Badge({
+  className,
+  variant,
+  size,
+  asChild = false,
+  ...props
+}: React.ComponentProps<"span"> &
+  VariantProps<typeof badgeVariants> & { asChild?: boolean }) {
+  const Comp = asChild ? Slot.Root : "span"
+
+  return (
+    <Comp
+      data-slot="badge"
+      className={cn(badgeVariants({ className, size, variant }))}
+      {...props}
+    />
+  )
 }
 
-function Badge({ className, variant, size, render, ...props }: BadgeProps) {
-  const defaultProps = {
-    className: cn(badgeVariants({ className, size, variant })),
-    "data-slot": "badge",
-  };
-
-  return useRender({
-    defaultTagName: "span",
-    props: mergeProps<"span">(defaultProps, props),
-    render,
-  });
-}
-
-export { Badge, badgeVariants };
+export { Badge, badgeVariants }

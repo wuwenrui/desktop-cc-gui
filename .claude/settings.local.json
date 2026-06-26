@@ -19,6 +19,7 @@
     ]
   },
   "enabledMcpjsonServers": [
-    "claude-flow"
+    "claude-flow",
+    "shadcn"
   ]
 }

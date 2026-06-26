@@ -901,6 +901,9 @@ describe("SettingsView Display", () => {
       />,
     );
 
+    // Radix Tabs uses focus-based automatic activation; jsdom fireEvent.click
+    // does not focus the trigger, so focus it to actually switch panels.
+    fireEvent.focus(screen.getByRole("tab", { name: "Claude Code" }));
     fireEvent.click(screen.getByRole("tab", { name: "Claude Code" }));
     fireEvent.click(screen.getByRole("button", { name: "Run Claude Doctor" }));
 
@@ -1061,6 +1064,7 @@ describe("SettingsView Display", () => {
       />,
     );
 
+    fireEvent.focus(screen.getByRole("tab", { name: "Gemini CLI" }));
     fireEvent.click(screen.getByRole("tab", { name: "Gemini CLI" }));
     fireEvent.click(screen.getByRole("switch", { name: "Gemini CLI" }));
 
@@ -1072,6 +1076,7 @@ describe("SettingsView Display", () => {
 
     onUpdateAppSettings.mockClear();
 
+    fireEvent.focus(screen.getByRole("tab", { name: "OpenCode CLI" }));
     fireEvent.click(screen.getByRole("tab", { name: "OpenCode CLI" }));
     fireEvent.click(screen.getByRole("switch", { name: "OpenCode CLI" }));
 

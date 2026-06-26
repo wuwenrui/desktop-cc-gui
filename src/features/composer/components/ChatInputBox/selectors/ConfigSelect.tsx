@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Switch } from 'antd';
+import { Switch } from '@/components/ui/switch';
 import { AgentIcon } from '../../../../../components/AgentIcon';
 import { agentProvider, CREATE_NEW_AGENT_ID, EMPTY_STATE_ID, type AgentItem } from '../providers/agentProvider';
 import type { AccountRateLimitsInfo, CodexSpeedMode, ProviderId, SelectedAgent } from '../types';
@@ -533,12 +533,9 @@ export const ConfigSelect = ({
                   <span>{t('settings.basic.streaming.label')}</span>
                 </div>
                 <Switch
-                  size="small"
                   checked={streamingEnabled ?? true}
-                  onClick={(checked, e) => {
-                     e.stopPropagation();
-                     onStreamingEnabledChange?.(checked);
-                  }}
+                  onCheckedChange={(checked) => onStreamingEnabledChange?.(checked)}
+                  onClick={(e) => e.stopPropagation()}
                 />
               </div>
 
@@ -560,12 +557,9 @@ export const ConfigSelect = ({
                   <span>{t('common.thinking')}</span>
                 </div>
                 <Switch
-                  size="small"
                   checked={alwaysThinkingEnabled ?? false}
-                  onClick={(checked, e) => {
-                     e.stopPropagation();
-                     onToggleThinking?.(checked);
-                  }}
+                  onCheckedChange={(checked) => onToggleThinking?.(checked)}
+                  onClick={(e) => e.stopPropagation()}
                 />
               </div>
             </>
@@ -588,13 +582,10 @@ export const ConfigSelect = ({
                   <span>{t('composer.planModeToggle')}</span>
                 </div>
                 <Switch
-                  size="small"
                   checked={isPlanModeEnabled}
                   disabled={!onSelectCollaborationMode}
-                  onClick={(checked, e) => {
-                     e.stopPropagation();
-                     handlePlanModeToggle(checked);
-                  }}
+                  onCheckedChange={(checked) => handlePlanModeToggle(checked)}
+                  onClick={(e) => e.stopPropagation()}
                 />
               </div>
             </>

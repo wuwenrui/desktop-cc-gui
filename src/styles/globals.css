@@ -13,6 +13,28 @@
 @import "tw-animate-css";
 
 /*
+ * Map shadcn's `dark:` variant to this app's theme mechanism.
+ * The app sets data-theme="dark" | "dim" | "light" on <html>
+ * (see features/layout/hooks/useThemePreference.ts); theme="system"
+ * removes the attribute and follows the OS preference. Tailwind v4
+ * defaults `dark:` to prefers-color-scheme, which is wrong whenever the
+ * user overrides the OS theme — so we key the variant off data-theme.
+ */
+@custom-variant dark {
+  &:where([data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
+  }
+  &:where([data-theme="dim"], [data-theme="dim"] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme]) *) {
+      @slot;
+    }
+  }
+}
+
+/*
  * Theme variables are defined in themes.dark.css / themes.light.css
  * using the @coss/ui standard naming (--background, --foreground, --card, etc.)
  * This file maps those CSS variables to Tailwind theme tokens.

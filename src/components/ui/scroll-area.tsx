@@ -1,7 +1,5 @@
-"use client";
-
-import { ScrollArea as ScrollAreaPrimitive } from "@base-ui/react/scroll-area";
-import type { Ref, UIEventHandler } from "react";
+import * as React from "react";
+import { ScrollArea as ScrollAreaPrimitive } from "radix-ui";
 
 import { cn } from "@/lib/utils";
 
@@ -14,15 +12,16 @@ function ScrollArea({
   onViewportScroll,
   viewportClassName,
   ...props
-}: ScrollAreaPrimitive.Root.Props & {
+}: React.ComponentProps<typeof ScrollAreaPrimitive.Root> & {
   scrollFade?: boolean;
   scrollbarGutter?: boolean;
-  viewportRef?: Ref<HTMLDivElement>;
-  onViewportScroll?: UIEventHandler<HTMLDivElement>;
+  viewportRef?: React.Ref<HTMLDivElement>;
+  onViewportScroll?: React.UIEventHandler<HTMLDivElement>;
   viewportClassName?: string;
 }) {
   return (
     <ScrollAreaPrimitive.Root
+      data-slot="scroll-area"
       className={cn("size-full min-h-0", className)}
       {...props}
     >
@@ -52,9 +51,9 @@ function ScrollBar({
   className,
   orientation = "vertical",
   ...props
-}: ScrollAreaPrimitive.Scrollbar.Props) {
+}: React.ComponentProps<typeof ScrollAreaPrimitive.ScrollAreaScrollbar>) {
   return (
-    <ScrollAreaPrimitive.Scrollbar
+    <ScrollAreaPrimitive.ScrollAreaScrollbar
       className={cn(
         "m-1 flex opacity-0 transition-opacity delay-300 duration-[2000ms] data-[orientation=horizontal]:h-1.5 data-[orientation=vertical]:w-1.5 data-[orientation=horizontal]:flex-col data-hovering:opacity-100 data-scrolling:opacity-100 data-hovering:delay-0 data-scrolling:delay-0 data-hovering:duration-[2000ms] data-scrolling:duration-[2000ms]",
         className,
@@ -63,11 +62,11 @@ function ScrollBar({
       orientation={orientation}
       {...props}
     >
-      <ScrollAreaPrimitive.Thumb
+      <ScrollAreaPrimitive.ScrollAreaThumb
         className="relative flex-1 rounded-full bg-foreground/20"
         data-slot="scroll-area-thumb"
       />
-    </ScrollAreaPrimitive.Scrollbar>
+    </ScrollAreaPrimitive.ScrollAreaScrollbar>
   );
 }
 
