@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkspaceInfo } from "../../../types";
 import { writeClientStoreData, writeClientStoreValue } from "../../../services/clientStorage";
 import {
   addWorkspace,
   ensureRuntimeReady,
   listWorkspaces,
+  prewarmCodexDiskRuntime,
   renameWorktree,
   renameWorktreeUpstream,
   updateWorkspaceSettings,
@@ -23,6 +24,7 @@ vi.mock("../../../services/tauri", () => ({
   ensureRuntimeReady: vi.fn(),
   isWorkspacePathDir: vi.fn(),
   pickWorkspacePath: vi.fn(),
+  prewarmCodexDiskRuntime: vi.fn(),
   removeWorkspace: vi.fn(),
   removeWorktree: vi.fn(),
   updateWorkspaceCodexBin: vi.fn(),
@@ -65,6 +67,10 @@ const workspaceTwo: WorkspaceInfo = {
 beforeEach(() => {
   vi.clearAllMocks();
   writeClientStoreData("threads", {});
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe("useWorkspaces.renameWorktree", () => {
@@ -304,6 +310,40 @@ describe("useWorkspaces.connectWorkspace", () => {
     });
 
     expect(ensureRuntimeReadyMock).toHaveBeenCalledWith(workspaceOne.id);
+  });
+});
+
+describe("useWorkspaces Codex disk runtime prewarm", () => {
+  it("prewarms the active connected workspace once without creating a thread", async () => {
+    vi.useFakeTimers();
+    vi.mocked(listWorkspaces).mockResolvedValue([workspaceOne]);
+    vi.mocked(prewarmCodexDiskRuntime).mockResolvedValue(undefined);
+
+    const { result } = renderHook(() => useWorkspaces());
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      await result.current.addWorkspaceFromPath("/tmp/ws-1");
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(250);
+      await Promise.resolve();
+    });
+
+    expect(prewarmCodexDiskRuntime).toHaveBeenCalledTimes(1);
+    expect(prewarmCodexDiskRuntime).toHaveBeenCalledWith("ws-1");
+
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+      await Promise.resolve();
+    });
+
+    expect(prewarmCodexDiskRuntime).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
   });
 });
 

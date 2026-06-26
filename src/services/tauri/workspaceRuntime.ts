@@ -169,6 +169,12 @@ export async function ensureRuntimeReady(
   return invoke("ensure_runtime_ready", { workspaceId });
 }
 
+export async function prewarmCodexDiskRuntime(
+  workspaceId: string,
+): Promise<void> {
+  return invoke("prewarm_codex_disk_runtime", { workspaceId });
+}
+
 export async function getRuntimePoolSnapshot(): Promise<RuntimePoolSnapshot> {
   return invoke("get_runtime_pool_snapshot");
 }

@@ -910,3 +910,55 @@ Follow-ups:
 ### Next Steps
 
 - None - task complete
+
+
+## Session 943: 修复 Windows 精选技能打包 hash 漂移
+
+**Date**: 2026-06-26
+**Task**: 修复 Windows 精选技能打包 hash 漂移
+**Branch**: `v0.5.13`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+修复 Windows CI 打包时 curated skill lock hash mismatch。
+
+**问题**:
+- Windows checkout 将 `src-tauri/resources/curated-skills/lazy-senior-dev/SKILL.md` 转成 CRLF。
+- `src-tauri/build.rs` 按文件字节计算 SHA-256,导致 Windows 得到 `d0843f58...`,而 `skills-lock.json` 记录的是 LF 文件的 `4e82b494...`。
+
+**变更**:
+- 新增 `.gitattributes`,强制 `src-tauri/resources/curated-skills/**/*.md` 使用 LF。
+- 更新 `docs/curated-skill-onboarding.md` 的 review checklist,记录 LF 约束。
+- 更新 `openspec/specs/curated-skill-bundles/spec.md`,明确 curated `SKILL.md` hash 输入必须跨平台稳定。
+
+**验证**:
+- `git check-attr -a -- src-tauri/resources/curated-skills/lazy-senior-dev/SKILL.md`
+- `shasum -a 256 src-tauri/resources/curated-skills/lazy-senior-dev/SKILL.md`
+- `cargo check --manifest-path src-tauri/Cargo.toml`
+- `git diff --check`
+
+**注意**:
+- 提交前工作区已有 5 个其它任务未提交改动,本次提交未包含这些文件。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `963b45fd` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

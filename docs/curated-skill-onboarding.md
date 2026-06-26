@@ -74,7 +74,7 @@ build.rs 校验。
 
 1. SKILL.md 顶部有 attribution 注释 (R7)
 2. metadata.json 全部 schema 字段非空
-3. sha256 与 `shasum -a 256 SKILL.md` 输出一致 (lock entry 的 `computedHash` 已更新)
+3. sha256 与 `shasum -a 256 SKILL.md` 输出一致 (lock entry 的 `computedHash` 已更新); `SKILL.md` 必须通过 `.gitattributes` 固定为 LF,避免 Windows checkout 转成 CRLF 后 hash 漂移
 4. license 在白名单 (R1) — `MPL-2.0` 单独评审
 5. icon kebab-case ASCII (R2)
 6. category 在 MVP-4 枚举 (R3)
