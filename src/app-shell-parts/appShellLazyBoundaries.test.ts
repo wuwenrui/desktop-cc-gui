@@ -97,7 +97,11 @@ describe("AppShell lazy feature boundaries", () => {
     expect(layoutNodesSource).not.toContain(
       `from "../../messages/components/Messages"`,
     );
-    expect(canvasNodeSource).toContain("<Messages {...messagesProps} />");
+    expect(canvasNodeSource).toContain("function ActiveCanvasMessages");
+    expect(canvasNodeSource).toContain("useActiveCanvasSelector");
+    expect(canvasNodeSource).toContain(
+      "<Messages {...messagesProps} {...activeCanvasMessagesProps} />",
+    );
     expect(canvasNodeSource).toContain(
       "<MessageForkConfirmDialog {...forkConfirmDialogProps} />",
     );
