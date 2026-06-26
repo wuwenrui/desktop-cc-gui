@@ -40,6 +40,7 @@ import {
   reloadCodexRuntimeConfig,
   openWorkspaceIn,
   openNewWindow,
+  prewarmCodexDiskRuntime,
   readAgentMd,
   readClaudeMd,
   setCodexUnifiedExecOfficialOverride,
@@ -1215,6 +1216,17 @@ describe("tauri invoke wrappers", () => {
       targetUserMessageText: null,
       targetUserMessageOccurrence: null,
       localUserMessageCount: null,
+    });
+  });
+
+  it("maps disk Codex runtime prewarm command", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({});
+
+    await prewarmCodexDiskRuntime("ws-9");
+
+    expect(invokeMock).toHaveBeenCalledWith("prewarm_codex_disk_runtime", {
+      workspaceId: "ws-9",
     });
   });
 

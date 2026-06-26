@@ -54,6 +54,7 @@ pub(crate) fn invoke_handler(
         crate::runtime::commands::get_runtime_pool_snapshot,
         crate::runtime::commands::mutate_runtime_pool,
         crate::runtime::commands::ensure_runtime_ready,
+        crate::runtime::commands::prewarm_codex_disk_runtime,
         crate::runtime::commands::note_web_service_reconnected,
         crate::runtime::commands::query_turn_reconciliation_status,
         crate::web_service::start_web_server,

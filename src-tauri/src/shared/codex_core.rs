@@ -333,10 +333,42 @@ fn is_thread_not_found_error_message(message: &str) -> bool {
         || normalized.contains("conversation_not_found")
 }
 
+fn is_thread_resume_rollout_pending_error_message(message: &str) -> bool {
+    let normalized = message.to_ascii_lowercase();
+    normalized.contains("no rollout found for thread id")
+        || (normalized.contains("no rollout found") && normalized.contains("thread"))
+}
+
+fn is_thread_resume_not_ready_error_message(message: &str) -> bool {
+    is_thread_not_found_error_message(message)
+        || is_thread_resume_rollout_pending_error_message(message)
+}
+
 fn is_thread_not_found_response(value: &Value) -> bool {
     extract_error_message_from_response(value)
         .as_deref()
         .is_some_and(is_thread_not_found_error_message)
+}
+
+fn validate_thread_resume_ready_response(value: &Value, thread_id: &str) -> Result<bool, String> {
+    if let Some(error) = extract_error_message_from_response(value) {
+        if is_thread_resume_not_ready_error_message(&error) {
+            return Ok(false);
+        }
+        return Err(format!(
+            "thread/resume failed during readiness check: {error}"
+        ));
+    }
+
+    if let Some(resolved_thread_id) = extract_thread_id_from_response(value) {
+        if resolved_thread_id != thread_id {
+            return Err(format!(
+                "thread/resume returned unexpected thread id {resolved_thread_id}; expected {thread_id}"
+            ));
+        }
+    }
+
+    Ok(true)
 }
 
 async fn wait_for_thread_resume_ready(
@@ -361,22 +393,25 @@ async fn wait_for_thread_resume_ready(
             )
             .await
         {
-            Ok(response) if is_thread_not_found_response(&response) => {
-                let reason = extract_error_message_from_response(&response)
-                    .unwrap_or_else(|| "thread not found".to_string());
-                last_thread_not_ready_reason = Some(reason.clone());
-                log::warn!(
-                    "[thread/resume][ready_retry] workspace_id={} thread_id={} context={} outcome=thread_not_ready attempt={} next_retry={} reason={}",
-                    workspace_id,
-                    thread_id,
-                    context,
-                    attempt_index + 1,
-                    attempt_index < THREAD_RESUME_READY_RETRY_DELAYS_MS.len(),
-                    reason
-                );
-            }
-            Ok(_) => return Ok(()),
-            Err(error) if is_thread_not_found_error_message(&error) => {
+            Ok(response) => match validate_thread_resume_ready_response(&response, thread_id) {
+                Ok(true) => return Ok(()),
+                Ok(false) => {
+                    let reason = extract_error_message_from_response(&response)
+                        .unwrap_or_else(|| "thread not found".to_string());
+                    last_thread_not_ready_reason = Some(reason.clone());
+                    log::warn!(
+                        "[thread/resume][ready_retry] workspace_id={} thread_id={} context={} outcome=thread_not_ready attempt={} next_retry={} reason={}",
+                        workspace_id,
+                        thread_id,
+                        context,
+                        attempt_index + 1,
+                        attempt_index < THREAD_RESUME_READY_RETRY_DELAYS_MS.len(),
+                        reason
+                    );
+                }
+                Err(error) => return Err(error),
+            },
+            Err(error) if is_thread_resume_not_ready_error_message(&error) => {
                 last_thread_not_ready_reason = Some(error.clone());
                 log::warn!(
                     "[thread/resume][ready_retry] workspace_id={} thread_id={} context={} outcome=thread_not_ready attempt={} next_retry={} reason={}",
@@ -391,9 +426,21 @@ async fn wait_for_thread_resume_ready(
             Err(error) => return Err(error),
         }
     }
+    let last_reason =
+        last_thread_not_ready_reason.unwrap_or_else(|| "thread not found".to_string());
+    if is_thread_resume_rollout_pending_error_message(&last_reason) {
+        log::warn!(
+            "[thread/resume][ready_retry] workspace_id={} thread_id={} context={} outcome=rollout_pending_soft_ready reason={}",
+            workspace_id,
+            thread_id,
+            context,
+            last_reason
+        );
+        return Ok(());
+    }
     Err(format!(
         "thread not ready after bounded resume retry: {}",
-        last_thread_not_ready_reason.unwrap_or_else(|| "thread not found".to_string())
+        last_reason
     ))
 }
 
@@ -994,8 +1041,9 @@ mod tests {
         extract_parent_thread_id_from_response, extract_thread_id_from_response,
         inject_code_mode_fallback_prompt, inject_plan_mode_fallback_prompt,
         is_collaboration_mode_capability_error, is_thread_not_found_error_message,
-        is_thread_not_found_response, normalize_custom_spec_root, normalize_preferred_language,
-        resolve_execution_policy, validate_thread_start_response,
+        is_thread_not_found_response, is_thread_resume_rollout_pending_error_message,
+        normalize_custom_spec_root, normalize_preferred_language, resolve_execution_policy,
+        validate_thread_resume_ready_response, validate_thread_start_response,
         INVALID_THREAD_START_RESPONSE_ERROR_PREFIX,
     };
     use serde_json::{json, Value};
@@ -1050,6 +1098,51 @@ mod tests {
         assert!(!is_thread_not_found_response(&json!({
             "error": { "message": "model not found" }
         })));
+    }
+
+    #[test]
+    fn thread_resume_ready_response_rejects_rpc_errors_and_wrong_thread() {
+        assert_eq!(
+            validate_thread_resume_ready_response(
+                &json!({ "error": { "message": "thread not found: thread-1" } }),
+                "thread-1"
+            )
+            .unwrap(),
+            false
+        );
+        assert_eq!(
+            validate_thread_resume_ready_response(
+                &json!({ "error": { "message": "no rollout found for thread id thread-1" } }),
+                "thread-1"
+            )
+            .unwrap(),
+            false
+        );
+        assert!(is_thread_resume_rollout_pending_error_message(
+            "no rollout found for thread id thread-1"
+        ));
+        assert!(validate_thread_resume_ready_response(
+            &json!({ "error": { "message": "permission denied" } }),
+            "thread-1"
+        )
+        .unwrap_err()
+        .contains("thread/resume failed during readiness check"));
+        assert!(validate_thread_resume_ready_response(
+            &json!({ "result": { "threadId": "thread-2" } }),
+            "thread-1"
+        )
+        .unwrap_err()
+        .contains("unexpected thread id"));
+        assert!(validate_thread_resume_ready_response(
+            &json!({ "result": { "threadId": "thread-1" } }),
+            "thread-1"
+        )
+        .unwrap());
+        assert!(validate_thread_resume_ready_response(
+            &json!({ "result": { "ok": true } }),
+            "thread-1"
+        )
+        .unwrap());
     }
 
     #[test]
