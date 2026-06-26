@@ -1,0 +1,6 @@
+{"file": ".trellis/workflow.md", "reason": "Project workflow and conventions"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend development guide"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "state boundary and external-store selector constraints"}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "hook cleanup and state orchestration constraints"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "performance and regression gate constraints"}
+{"file": "openspec/changes/externalize-active-canvas-state-selectors/design.md", "reason": "OpenSpec design for active canvas selectors"}

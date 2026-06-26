@@ -32,6 +32,7 @@ export function isValidCodexCustomModel(model: unknown): model is CodexCustomMod
   if (typeof obj.id !== 'string' || !isValidModelId(obj.id)) return false;
   if (typeof obj.label !== 'string' || obj.label.trim().length === 0) return false;
   if (obj.description !== undefined && typeof obj.description !== 'string') return false;
+  if (obj.providerProfileId !== undefined && typeof obj.providerProfileId !== 'string') return false;
   return true;
 }
 
@@ -92,6 +93,7 @@ export interface CodexCustomModel {
   id: string;
   label: string;
   description?: string;
+  providerProfileId?: string;
   capabilities?: {
     imageInput?: boolean;
   };

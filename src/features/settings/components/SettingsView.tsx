@@ -63,6 +63,7 @@ import { PromptSection } from "./PromptSection";
 import { UsageSection } from "./UsageSection";
 import { McpSection } from "./McpSection";
 import { SkillsSection } from "./SkillsSection";
+import { CuratedSection } from "../../curated-skills";
 import type { SessionRadarEntry } from "../../session-activity/hooks/useSessionRadarFeed";
 import {
   deleteSessionRadarHistoryEntries,
@@ -2227,12 +2228,15 @@ export function SettingsView({
                   embedded
                 />
               ) : (
-                <SkillsSection
-                  activeWorkspace={selectedSettingsWorkspace}
-                  embedded
-                  appSettings={appSettings}
-                  onUpdateAppSettings={onUpdateAppSettings}
-                />
+                <>
+                  <CuratedSection />
+                  <SkillsSection
+                    activeWorkspace={selectedSettingsWorkspace}
+                    embedded
+                    appSettings={appSettings}
+                    onUpdateAppSettings={onUpdateAppSettings}
+                  />
+                </>
               )}
             </section>
           )}
@@ -2297,12 +2301,15 @@ export function SettingsView({
             </section>
           )}
           {activeSection === "skills" && (
-            <SkillsSection
-              activeWorkspace={selectedSettingsWorkspace}
-              embedded
-              appSettings={appSettings}
-              onUpdateAppSettings={onUpdateAppSettings}
-            />
+            <>
+              <CuratedSection />
+              <SkillsSection
+                activeWorkspace={selectedSettingsWorkspace}
+                embedded
+                appSettings={appSettings}
+                onUpdateAppSettings={onUpdateAppSettings}
+              />
+            </>
           )}
           {activeSection === "other" && (
             <OtherSection

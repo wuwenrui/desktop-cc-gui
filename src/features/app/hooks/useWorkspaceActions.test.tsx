@@ -355,6 +355,92 @@ describe("useWorkspaceActions", () => {
     expect(window.alert).not.toHaveBeenCalled();
   });
 
+  it("automatically recovers disk codex create-session once before showing manual recovery", async () => {
+    let startAttempt = 0;
+    const options = makeOptions({
+      startThreadForWorkspace: vi.fn(async () => {
+        startAttempt += 1;
+        if (startAttempt === 1) {
+          throw new Error(
+            "[SESSION_CREATE_RUNTIME_RECOVERING] Managed runtime was restarting while creating this session. The app retried automatically but could not acquire a healthy runtime yet. Reconnect the workspace and try again.",
+          );
+        }
+        return "thread-recovered-inline";
+      }),
+    });
+    const { result } = renderHook(() => useWorkspaceActions(options));
+
+    await act(async () => {
+      const threadId = await result.current.handleAddAgent(baseWorkspace, "codex", {
+        providerProfileId: "__disk__",
+      });
+      expect(threadId).toBe("thread-recovered-inline");
+    });
+
+    expect(ensureRuntimeReady).toHaveBeenCalledWith("ws-1");
+    expect(options.startThreadForWorkspace).toHaveBeenCalledTimes(2);
+    expect(pushErrorToast).not.toHaveBeenCalledWith(
+      expect.objectContaining({ id: "create-session-recovery-ws-1-codex" }),
+    );
+  });
+
+  it("does not create a second disk codex session after post-start readiness failures", async () => {
+    const options = makeOptions({
+      startThreadForWorkspace: vi.fn(async () => {
+        throw new Error(
+          "thread/start ready confirmation failed for workspace ws-1 thread thread-1: thread/resume failed during readiness check: permission denied",
+        );
+      }),
+    });
+    const { result } = renderHook(() => useWorkspaceActions(options));
+
+    await act(async () => {
+      await result.current.handleAddAgent(baseWorkspace, "codex", {
+        providerProfileId: "__disk__",
+      });
+    });
+
+    expect(ensureRuntimeReady).not.toHaveBeenCalled();
+    expect(options.startThreadForWorkspace).toHaveBeenCalledTimes(1);
+    expect(options.startThreadForWorkspace).toHaveBeenCalledWith("ws-1", {
+      engine: "codex",
+      providerProfileId: "__disk__",
+    });
+    expect(window.alert).toHaveBeenCalledWith(
+      expect.stringContaining("thread/start ready confirmation failed"),
+    );
+  });
+
+  it("does not add disk auto-recovery to managed codex provider creation", async () => {
+    const options = makeOptions({
+      startThreadForWorkspace: vi.fn(async () => {
+        throw new Error(
+          "[SESSION_CREATE_RUNTIME_RECOVERING] Managed runtime was restarting while creating this session. The app retried automatically but could not acquire a healthy runtime yet. Reconnect the workspace and try again.",
+        );
+      }),
+    });
+    const { result } = renderHook(() => useWorkspaceActions(options));
+
+    await act(async () => {
+      await result.current.handleAddAgent(baseWorkspace, "codex", {
+        providerProfileId: "provider-a",
+      });
+    });
+
+    expect(ensureRuntimeReady).not.toHaveBeenCalled();
+    expect(options.startThreadForWorkspace).toHaveBeenCalledTimes(1);
+    expect(options.startThreadForWorkspace).toHaveBeenCalledWith("ws-1", {
+      engine: "codex",
+      providerProfileId: "provider-a",
+    });
+    expect(pushErrorToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "create-session-recovery-ws-1-codex",
+        sticky: true,
+      }),
+    );
+  });
+
   it("reuses runtime-ready recovery contract when the create-session toast action runs", async () => {
     let shouldFail = true;
     const recoverableOptions = makeOptions({

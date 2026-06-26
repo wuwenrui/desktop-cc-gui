@@ -288,7 +288,9 @@ export function RuntimeReconnectCard({
       ? t("messages.threadRecoveryForkAction")
       : t("messages.runtimeReconnectResendAction");
   const showReconnectAction =
-    !requiresThreadRecovery || (Boolean(onRecoverThreadRuntime) && resendUnavailable);
+    !isTransientCleanup &&
+    (!requiresThreadRecovery || (Boolean(onRecoverThreadRuntime) && resendUnavailable));
+  const showResendAction = !isTransientCleanup;
   const showReconnectUnavailable = showReconnectAction && reconnectUnavailable;
   const unavailableLabel = requiresThreadRecovery
     ? t("messages.threadRecoveryUnavailable")
@@ -325,20 +327,22 @@ export function RuntimeReconnectCard({
               {reconnectActionLabel}
             </Button>
           ) : null}
-          <Button
-            type="button"
-            size="sm"
-            className="message-runtime-recovery-button"
-            onClick={() => {
-              void handleReconnectRuntime("resend");
-            }}
-            disabled={resendUnavailable || isReconnectRunning}
-          >
-            {requiresThreadRecovery ? (
-              <GitFork className="message-runtime-recovery-button-icon" size={14} aria-hidden />
-            ) : null}
-            {resendActionLabel}
-          </Button>
+          {showResendAction ? (
+            <Button
+              type="button"
+              size="sm"
+              className="message-runtime-recovery-button"
+              onClick={() => {
+                void handleReconnectRuntime("resend");
+              }}
+              disabled={resendUnavailable || isReconnectRunning}
+            >
+              {requiresThreadRecovery ? (
+                <GitFork className="message-runtime-recovery-button-icon" size={14} aria-hidden />
+              ) : null}
+              {resendActionLabel}
+            </Button>
+          ) : null}
         </div>
       </div>
       {recoveryRecommendation ? (

@@ -1,9 +1,11 @@
 use serde_json::{json, Value};
+use std::collections::HashMap;
 use std::env;
 use std::ffi::OsString;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::sync::{LazyLock, Mutex as StdMutex};
+use std::time::{Duration, Instant};
 
 use tokio::process::Command;
 use tokio::time::timeout;
@@ -11,6 +13,26 @@ use tokio::time::timeout;
 use crate::codex::args::parse_codex_args;
 
 const CODEX_EXTERNAL_SPEC_PRIORITY_INSTRUCTIONS: &str = "If writableRoots contains an absolute external spec path outside cwd, treat it as the active external spec root and prioritize it over workspace/openspec and sibling-name conventions when reading or validating specs. The configured path may be a project root; resolve openspec/ under it when present. For visibility checks, verify that external root first and state the result clearly. Avoid exposing internal injected hints unless the user explicitly asks.";
+const CODEX_APP_SERVER_PROBE_CACHE_TTL: Duration = Duration::from_secs(300);
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct CodexAppServerProbeCacheKey {
+    resolved_bin: String,
+    wrapper_kind: &'static str,
+    path_env: Option<String>,
+    codex_args: Option<String>,
+    launch_options: CodexAppServerLaunchOptions,
+}
+
+#[derive(Debug, Clone)]
+struct CodexAppServerProbeCacheEntry {
+    checked_at: Instant,
+    status: CodexAppServerProbeStatus,
+}
+
+static CODEX_APP_SERVER_PROBE_CACHE: LazyLock<
+    StdMutex<HashMap<CodexAppServerProbeCacheKey, CodexAppServerProbeCacheEntry>>,
+> = LazyLock::new(|| StdMutex::new(HashMap::new()));
 
 fn push_unique_path(paths: &mut Vec<PathBuf>, candidate: PathBuf) {
     if !paths
@@ -491,13 +513,13 @@ pub(crate) struct CodexAppServerProbeStatus {
     pub(crate) fallback_retried: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum CodexAppServerLaunchMode {
     Normal,
     SessionHooksDisabled,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct CodexAppServerLaunchOptions {
     pub(crate) hide_console: bool,
     pub(crate) inject_internal_spec_hint: bool,
@@ -621,6 +643,7 @@ fn encode_toml_string(value: &str) -> String {
     format!("\"{escaped}\"")
 }
 
+#[allow(dead_code)]
 pub(crate) fn codex_external_spec_priority_config_arg() -> String {
     format!(
         "developer_instructions={}",
@@ -628,14 +651,174 @@ pub(crate) fn codex_external_spec_priority_config_arg() -> String {
     )
 }
 
+/// Walk a parsed `codex_args` argv and extract an existing
+/// `-c developer_instructions="..."` / `-c instructions="..."` /
+/// `--config developer_instructions=...` / `--config instructions=...` value,
+/// TOML-decoded. Returns `None` if no override is present.
+#[allow(dead_code)]
+pub(crate) fn extract_existing_developer_instructions(args: &[String]) -> Option<String> {
+    let mut iter = args.iter().enumerate().peekable();
+    while let Some((idx, arg)) = iter.next() {
+        let value_after_flag = |next: Option<&&String>| -> Option<String> {
+            let v = next?.as_str();
+            if v.starts_with("developer_instructions=") || v.starts_with("instructions=") {
+                Some(decode_toml_string(&v.splitn(2, '=').nth(1).unwrap_or("")))
+            } else {
+                None
+            }
+        };
+        if let Some(rest) = arg.strip_prefix("--config=") {
+            let key = rest.split('=').next().unwrap_or_default().trim();
+            if matches!(key, "developer_instructions" | "instructions") {
+                let v = rest.splitn(2, '=').nth(1).unwrap_or("");
+                return Some(decode_toml_string(v));
+            }
+        }
+        // Concat forms: "-cinstructions=foo" or "--configinstructions=foo".
+        if let Some(rest) = arg.strip_prefix("-c") {
+            if rest.starts_with("developer_instructions=") || rest.starts_with("instructions=") {
+                let v = rest.splitn(2, '=').nth(1).unwrap_or("");
+                return Some(decode_toml_string(v));
+            }
+        }
+        if let Some(rest) = arg.strip_prefix("--config") {
+            if rest.starts_with("=") {
+                // handled above
+            } else if rest.starts_with("developer_instructions=")
+                || rest.starts_with("instructions=")
+            {
+                let v = rest.splitn(2, '=').nth(1).unwrap_or("");
+                return Some(decode_toml_string(v));
+            }
+        }
+        if let Some(rest) = arg.strip_prefix("developer_instructions=") {
+            return Some(decode_toml_string(rest));
+        }
+        if let Some(rest) = arg.strip_prefix("instructions=") {
+            return Some(decode_toml_string(rest));
+        }
+        if arg == "-c" || arg == "--config" {
+            if let Some((_, next)) = iter.peek() {
+                if let Some(v) = value_after_flag(Some(next)) {
+                    return Some(v);
+                }
+            }
+            let _ = idx;
+        }
+    }
+    None
+}
+
+/// Strip surrounding double quotes from a value produced by
+/// `encode_toml_string`, returning the inner slice unchanged if it is not
+/// double-quoted.
+#[allow(dead_code)]
+fn strip_toml_outer_quotes(value: &str) -> &str {
+    if value.len() >= 2 && value.starts_with('"') && value.ends_with('"') {
+        &value[1..value.len() - 1]
+    } else {
+        value
+    }
+}
+
+/// Inverse of `encode_toml_string` for the basic escapes we use:
+/// backslash, double quote, newline. Outer double quotes (if present) are
+/// stripped first so callers can pass the raw argv value.
+#[allow(dead_code)]
+fn decode_toml_string(value: &str) -> String {
+    let inner = strip_toml_outer_quotes(value);
+    let mut out = String::with_capacity(inner.len());
+    let mut chars = inner.chars();
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            match chars.next() {
+                Some('\\') => out.push('\\'),
+                Some('"') => out.push('"'),
+                Some('n') => out.push('\n'),
+                Some(other) => {
+                    out.push('\\');
+                    out.push(other);
+                }
+                None => out.push('\\'),
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+/// Build the merged curated-skill `developer_instructions` value for the
+/// Codex CLI, applying the same merge policy as
+/// `merge_developer_instructions` (existing text is preserved, curated
+/// directives appended as a `## Curated Skills` block).
+#[allow(dead_code)]
+pub(crate) fn codex_curated_skills_config_arg(
+    app_settings: &crate::types::AppSettings,
+    existing: Option<&str>,
+) -> Option<String> {
+    let block = codex_curated_skills_developer_instructions_block(app_settings)?;
+    crate::codex::collaboration_policy::merge_developer_instructions(existing, &[block])
+}
+
+fn codex_curated_skills_developer_instructions_block(
+    app_settings: &crate::types::AppSettings,
+) -> Option<String> {
+    use crate::curated_skills;
+    let enabled = curated_skills::list_enabled_curated_skill_bodies(app_settings);
+    if enabled.is_empty() {
+        return None;
+    }
+    let body = enabled
+        .into_iter()
+        .map(|(id, body)| format!("<skill id=\"{}\">\n{}\n</skill>", id, body))
+        .collect::<Vec<_>>()
+        .join("\n");
+    Some(format!("## Curated Skills\n\n{body}"))
+}
+
 pub(crate) fn build_codex_app_server_args(
     codex_args: Option<&str>,
     options: CodexAppServerLaunchOptions,
 ) -> Result<Vec<String>, String> {
+    build_codex_app_server_args_with_settings(codex_args, options, None)
+}
+
+/// Same as `build_codex_app_server_args` but additionally injects the
+/// enabled curated skills as a `-c developer_instructions="..."` arg right
+/// before the final `app-server` arg, **only when**:
+///   * `app_settings` is `Some`
+///   * the user-supplied `codex_args` does NOT already contain a
+///     `developer_instructions=` / `instructions=` override
+///   * at least one curated skill is enabled
+/// Existing developer instructions are preserved and the curated block is
+/// appended under a `## Curated Skills` heading via the same merge policy
+/// used by `merge_developer_instructions`.
+pub(crate) fn build_codex_app_server_args_with_settings(
+    codex_args: Option<&str>,
+    options: CodexAppServerLaunchOptions,
+    app_settings: Option<&crate::types::AppSettings>,
+) -> Result<Vec<String>, String> {
     let mut args = parse_codex_args(codex_args)?;
-    if options.inject_internal_spec_hint && !codex_args_contain_instruction_override(&args) {
-        args.push("-c".to_string());
-        args.push(codex_external_spec_priority_config_arg());
+    if !codex_args_contain_instruction_override(&args) {
+        let mut directives = Vec::new();
+        if options.inject_internal_spec_hint {
+            directives.push(CODEX_EXTERNAL_SPEC_PRIORITY_INSTRUCTIONS.to_string());
+        }
+        if let Some(settings) = app_settings {
+            if let Some(block) = codex_curated_skills_developer_instructions_block(settings) {
+                directives.push(block);
+            }
+        }
+        if let Some(merged) =
+            crate::codex::collaboration_policy::merge_developer_instructions(None, &directives)
+        {
+            args.push("-c".to_string());
+            args.push(format!(
+                "developer_instructions={}",
+                encode_toml_string(&merged)
+            ));
+        }
     }
     args.push("app-server".to_string());
     Ok(args)
@@ -647,6 +830,23 @@ pub(crate) fn apply_codex_app_server_args(
     options: CodexAppServerLaunchOptions,
 ) -> Result<(), String> {
     command.args(build_codex_app_server_args(codex_args, options)?);
+    Ok(())
+}
+
+/// Apply codex args **with** the live `AppSettings` so curated skills are
+/// injected as a developer_instructions TOML arg. Spawn-time callers
+/// (real workspace sessions) go through this variant.
+pub(crate) fn apply_codex_app_server_args_with_settings(
+    command: &mut Command,
+    codex_args: Option<&str>,
+    options: CodexAppServerLaunchOptions,
+    app_settings: &crate::types::AppSettings,
+) -> Result<(), String> {
+    command.args(build_codex_app_server_args_with_settings(
+        codex_args,
+        options,
+        Some(app_settings),
+    )?);
     Ok(())
 }
 
@@ -1184,11 +1384,68 @@ async fn run_codex_app_server_probe_once(
     }
 }
 
+fn codex_app_server_probe_cache_key(
+    launch_context: &CodexLaunchContext,
+    codex_args: Option<&str>,
+    launch_options: CodexAppServerLaunchOptions,
+) -> CodexAppServerProbeCacheKey {
+    CodexAppServerProbeCacheKey {
+        resolved_bin: launch_context.resolved_bin.clone(),
+        wrapper_kind: launch_context.wrapper_kind,
+        path_env: launch_context.path_env.clone(),
+        codex_args: codex_args
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToString::to_string),
+        launch_options,
+    }
+}
+
+fn read_codex_app_server_probe_cache(
+    key: &CodexAppServerProbeCacheKey,
+) -> Option<CodexAppServerProbeStatus> {
+    let cache = CODEX_APP_SERVER_PROBE_CACHE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let entry = cache.get(key)?;
+    if entry.checked_at.elapsed() <= CODEX_APP_SERVER_PROBE_CACHE_TTL {
+        return Some(entry.status.clone());
+    }
+    None
+}
+
+fn write_codex_app_server_probe_cache(
+    key: CodexAppServerProbeCacheKey,
+    status: &CodexAppServerProbeStatus,
+) {
+    if !status.ok {
+        return;
+    }
+    let mut cache = CODEX_APP_SERVER_PROBE_CACHE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    cache.insert(
+        key,
+        CodexAppServerProbeCacheEntry {
+            checked_at: Instant::now(),
+            status: status.clone(),
+        },
+    );
+}
+
 pub(crate) async fn probe_codex_app_server(
     codex_bin: Option<String>,
     codex_args: Option<&str>,
 ) -> Result<CodexAppServerProbeStatus, String> {
     let launch_context = resolve_codex_launch_context(codex_bin.as_deref());
+    let primary_cache_key = codex_app_server_probe_cache_key(
+        &launch_context,
+        codex_args,
+        CodexAppServerLaunchOptions::primary(),
+    );
+    if let Some(status) = read_codex_app_server_probe_cache(&primary_cache_key) {
+        return Ok(status);
+    }
     match run_codex_app_server_probe_once(
         &launch_context,
         codex_args,
@@ -1196,12 +1453,16 @@ pub(crate) async fn probe_codex_app_server(
     )
     .await
     {
-        Ok(()) => Ok(CodexAppServerProbeStatus {
-            ok: true,
-            status: "ok".to_string(),
-            details: None,
-            fallback_retried: false,
-        }),
+        Ok(()) => {
+            let status = CodexAppServerProbeStatus {
+                ok: true,
+                status: "ok".to_string(),
+                details: None,
+                fallback_retried: false,
+            };
+            write_codex_app_server_probe_cache(primary_cache_key, &status);
+            Ok(status)
+        }
         Err(primary_error) => {
             if !can_retry_wrapper_compatibility_launch(&launch_context) {
                 return Ok(CodexAppServerProbeStatus {
@@ -1212,19 +1473,30 @@ pub(crate) async fn probe_codex_app_server(
                 });
             }
 
+            let fallback_options = CodexAppServerLaunchOptions::wrapper_compatibility_retry();
+            let fallback_cache_key =
+                codex_app_server_probe_cache_key(&launch_context, codex_args, fallback_options);
+            if let Some(status) = read_codex_app_server_probe_cache(&fallback_cache_key) {
+                return Ok(status);
+            }
+
             match run_codex_app_server_probe_once(
                 &launch_context,
                 codex_args,
-                CodexAppServerLaunchOptions::wrapper_compatibility_retry(),
+                fallback_options,
             )
             .await
             {
-                Ok(()) => Ok(CodexAppServerProbeStatus {
+                Ok(()) => {
+                    let status = CodexAppServerProbeStatus {
                     ok: true,
                     status: "fallback-ok".to_string(),
                     details: Some(primary_error),
                     fallback_retried: true,
-                }),
+                    };
+                    write_codex_app_server_probe_cache(fallback_cache_key, &status);
+                    Ok(status)
+                }
                 Err(retry_error) => Ok(CodexAppServerProbeStatus {
                     ok: false,
                     status: "fallback-failed".to_string(),
@@ -1283,6 +1555,199 @@ pub(crate) async fn check_codex_installation(
         "CODEX_CLI_NOT_FOUND: Codex CLI was not found. Install Codex and make sure `codex app-server --help` works in Terminal."
             .to_string(),
     )
+}
+
+#[cfg(test)]
+mod curated_skill_injection_tests {
+    //! Black-box tests for the Codex curated-skill injection helpers.
+    //!
+    //! Covers:
+    //! - `extract_existing_developer_instructions` parsing all four forms
+    //! - `codex_curated_skills_config_arg` building the merged body
+    //! - `build_codex_app_server_args_with_settings` end-to-end argv
+    //!   (no enabled -> no arg; enabled -> -c developer_instructions=...;
+    //!    user override -> curated skipped)
+    use super::*;
+    use crate::types::AppSettings;
+
+    fn primary_no_hint() -> CodexAppServerLaunchOptions {
+        CodexAppServerLaunchOptions {
+            hide_console: true,
+            inject_internal_spec_hint: false,
+            launch_mode: CodexAppServerLaunchMode::Normal,
+        }
+    }
+
+    fn settings_with(ids: Vec<&str>) -> AppSettings {
+        let mut s = AppSettings::default();
+        s.enabled_curated_skill_ids = ids.into_iter().map(String::from).collect();
+        s
+    }
+
+    #[test]
+    fn extract_existing_finds_dash_c_form() {
+        let args = vec![
+            "-c".to_string(),
+            "developer_instructions=hello world".to_string(),
+        ];
+        let v = extract_existing_developer_instructions(&args).expect("present");
+        assert_eq!(v, "hello world");
+    }
+
+    #[test]
+    fn extract_existing_finds_concat_form() {
+        let args = vec!["-cinstructions=foo bar".to_string()];
+        let v = extract_existing_developer_instructions(&args).expect("present");
+        assert_eq!(v, "foo bar");
+    }
+
+    #[test]
+    fn extract_existing_finds_long_config_form() {
+        let args = vec!["--config=developer_instructions=cfg body".to_string()];
+        let v = extract_existing_developer_instructions(&args).expect("present");
+        assert_eq!(v, "cfg body");
+    }
+
+    #[test]
+    fn extract_existing_returns_none_when_absent() {
+        let args = vec![
+            "app-server".to_string(),
+            "--port".to_string(),
+            "4732".to_string(),
+        ];
+        assert!(extract_existing_developer_instructions(&args).is_none());
+    }
+
+    #[test]
+    fn extract_existing_decodes_toml_escapes() {
+        // Simulate what encode_toml_string would produce: double-quote-wrapped
+        // text with newlines escaped as "\n".
+        let raw_body = "line1\nline2";
+        let mut encoded = String::from("\"");
+        encoded.push_str("line1");
+        encoded.push_str("\\n");
+        encoded.push_str("line2");
+        encoded.push('"');
+        let args = vec![
+            "-c".to_string(),
+            format!("developer_instructions={}", encoded),
+        ];
+        let v = extract_existing_developer_instructions(&args).expect("present");
+        assert_eq!(v, raw_body);
+    }
+
+    #[test]
+    fn codex_curated_skills_config_arg_returns_none_when_empty() {
+        let s = settings_with(vec![]);
+        let out = codex_curated_skills_config_arg(&s, None);
+        assert!(out.is_none());
+    }
+
+    #[test]
+    fn codex_curated_skills_config_arg_includes_curated_section_header_when_no_existing() {
+        // Empty enabled set -> None
+        let s = settings_with(vec![]);
+        assert!(codex_curated_skills_config_arg(&s, None).is_none());
+    }
+
+    #[test]
+    fn build_codex_app_server_args_with_settings_does_not_inject_when_disabled() {
+        let s = settings_with(vec![]);
+        let args =
+            build_codex_app_server_args_with_settings(None, primary_no_hint(), Some(&s)).unwrap();
+        // Should not contain any developer_instructions arg.
+        let any_dev = args.iter().any(|a| a.contains("developer_instructions="));
+        assert!(
+            !any_dev,
+            "no developer_instructions should be injected when no curated is enabled"
+        );
+        // Final arg is "app-server".
+        assert_eq!(args.last().map(String::as_str), Some("app-server"));
+    }
+
+    #[test]
+    fn build_codex_app_server_args_with_settings_injects_when_enabled() {
+        // Enable a curated skill (id matches what's in the lock).
+        let s = settings_with(vec!["lazy-senior-dev"]);
+        let args =
+            build_codex_app_server_args_with_settings(None, primary_no_hint(), Some(&s)).unwrap();
+        let mut found = false;
+        for w in args.windows(2) {
+            if w[0] == "-c" && w[1].starts_with("developer_instructions=") {
+                found = true;
+                let value = &w[1]["developer_instructions=".len()..];
+                // The body should be wrapped in quotes and contain the
+                // section header + skill id.
+                assert!(
+                    value.starts_with('"') && value.ends_with('"'),
+                    "TOML-quoted: {}",
+                    value
+                );
+                let unquoted = decode_toml_string(&value[1..value.len() - 1]);
+                assert!(unquoted.contains("## Curated Skills"));
+                assert!(unquoted.contains("lazy-senior-dev"));
+            }
+        }
+        assert!(
+            found,
+            "expected a -c developer_instructions= arg, got {:?}",
+            args
+        );
+    }
+
+    #[test]
+    fn build_codex_app_server_primary_args_merge_internal_hint_and_curated_skill() {
+        let s = settings_with(vec!["lazy-senior-dev"]);
+        let args = build_codex_app_server_args_with_settings(
+            Some("--profile work"),
+            CodexAppServerLaunchOptions::primary(),
+            Some(&s),
+        )
+        .unwrap();
+
+        assert_eq!(args.iter().filter(|arg| arg.as_str() == "-c").count(), 1);
+        let arg = args
+            .iter()
+            .find(|arg| arg.starts_with("developer_instructions="))
+            .expect("developer instructions arg");
+        let value = &arg["developer_instructions=".len()..];
+        let unquoted = decode_toml_string(value);
+        assert!(unquoted.contains("writableRoots"), "got: {}", unquoted);
+        assert!(unquoted.contains("## Curated Skills"), "got: {}", unquoted);
+        assert!(unquoted.contains("lazy-senior-dev"), "got: {}", unquoted);
+        assert_eq!(args.last().map(String::as_str), Some("app-server"));
+    }
+
+    #[test]
+    fn build_codex_app_server_args_with_settings_skips_injection_on_user_override() {
+        let s = settings_with(vec!["lazy-senior-dev"]);
+        // User-supplied codex_args contain a developer_instructions= override.
+        // After shell-style parsing the override value is "user" and the
+        // trailing word "override" is a separate argv token; the production
+        // parser (parse_codex_args / shell-words) splits on whitespace.
+        let args = build_codex_app_server_args_with_settings(
+            Some("-c developer_instructions=user override"),
+            primary_no_hint(),
+            Some(&s),
+        )
+        .unwrap();
+        // There should be exactly one developer_instructions= arg and it
+        // must contain the user override text (not the curated body).
+        let count = args
+            .iter()
+            .filter(|a| a.starts_with("developer_instructions="))
+            .count();
+        assert_eq!(count, 1, "user override should not be duplicated");
+        let arg = args
+            .iter()
+            .find(|a| a.starts_with("developer_instructions="))
+            .unwrap();
+        assert!(arg.contains("user"), "got arg: {}", arg);
+        assert!(
+            !arg.contains("lazy-senior-dev"),
+            "curated must not be appended when user override exists"
+        );
+    }
 }
 
 #[cfg(test)]

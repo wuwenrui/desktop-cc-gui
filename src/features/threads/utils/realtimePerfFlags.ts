@@ -1,3 +1,10 @@
+import {
+  RENDER_SCHEDULE_TIER_DEFAULT,
+  RENDER_TIER_FLAG_KEY,
+  isRenderScheduleTier,
+  type RenderScheduleTier,
+} from "./renderSchedulingPolicy";
+
 const FLAG_PREFIX = "ccgui.perf.";
 const REALTIME_PERF_FLAG_IDS = [
   "realtimeBatching",
@@ -230,20 +237,66 @@ export function getActiveRealtimePerfFlags(): Record<
   ) as Record<RealtimePerfFlagId, ActiveRealtimePerfFlag>;
 }
 
+export const TOOL_OUTPUT_TAIL_GATE_FLAG_KEY = "ccgui.perf.toolOutputTailGate";
+const TOOL_OUTPUT_TAIL_GATE_DEFAULT = true;
+const TOOL_OUTPUT_TAIL_GATE_TEST_DEFAULT = true;
+
+function readStringFlag(key: string): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+export function readStreamingScheduleTier(): RenderScheduleTier {
+  const raw = readStringFlag(RENDER_TIER_FLAG_KEY);
+  if (raw && isRenderScheduleTier(raw)) {
+    return raw;
+  }
+  return RENDER_SCHEDULE_TIER_DEFAULT;
+}
+
+export function isStreamingScheduleAggressiveEnabled(): boolean {
+  return readStreamingScheduleTier() === "aggressive";
+}
+
+export function isToolOutputTailGateEnabled(): boolean {
+  if (readStreamingScheduleTier() === "baseline") {
+    return false;
+  }
+  const fallback = isTestMode
+    ? TOOL_OUTPUT_TAIL_GATE_TEST_DEFAULT
+    : TOOL_OUTPUT_TAIL_GATE_DEFAULT;
+  const stored = readStringFlag(TOOL_OUTPUT_TAIL_GATE_FLAG_KEY);
+  const parsed = parseBooleanFlag(stored);
+  if (parsed !== null) {
+    return parsed;
+  }
+  return fallback;
+}
+
 export function resetRealtimePerfFlags(): string[] {
   const removedKeys: string[] = [];
   if (typeof window !== "undefined") {
-    for (const definition of PERF_FLAG_DEFINITIONS) {
-      const storageKey = storageKeyForFlag(definition.id);
+    const removeKey = (key: string) => {
       try {
-        if (window.localStorage.getItem(storageKey) !== null) {
-          removedKeys.push(storageKey);
+        if (window.localStorage.getItem(key) !== null) {
+          removedKeys.push(key);
         }
-        window.localStorage.removeItem(storageKey);
+        window.localStorage.removeItem(key);
       } catch {
         // Ignore storage write errors; cache reset still restores defaults in-memory.
       }
+    };
+    for (const definition of PERF_FLAG_DEFINITIONS) {
+      removeKey(storageKeyForFlag(definition.id));
     }
+    removeKey(RENDER_TIER_FLAG_KEY);
+    removeKey(TOOL_OUTPUT_TAIL_GATE_FLAG_KEY);
   }
   __resetRealtimePerfFlagCacheForTests();
   return removedKeys;

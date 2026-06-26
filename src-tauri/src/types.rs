@@ -1273,6 +1273,14 @@ pub(crate) struct AppSettings {
     /// Default engine type: "claude", "codex", or "opencode". If not set, auto-detect.
     #[serde(default, rename = "defaultEngine")]
     pub(crate) default_engine: Option<String>,
+    /// Curated skill ids the user has enabled. Shared across workspaces and
+    /// sessions. Toggling these participates in Codex restart detection because
+    /// app-server developer instructions are captured at launch time.
+    #[serde(
+        default = "default_enabled_curated_skill_ids",
+        rename = "enabledCuratedSkillIds"
+    )]
+    pub(crate) enabled_curated_skill_ids: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -1663,6 +1671,10 @@ fn default_browser_agent_allow_external_provider_fallback() -> bool {
     true
 }
 
+pub(crate) fn default_enabled_curated_skill_ids() -> Vec<String> {
+    vec!["lazy-senior-dev".to_string()]
+}
+
 fn is_allowed_codex_auto_compaction_threshold_percent(value: u16) -> bool {
     value == 92 || ((100..=200).contains(&value) && value % 10 == 0)
 }
@@ -1814,6 +1826,7 @@ impl Default for AppSettings {
             browser_agent_prefer_built_in: default_browser_agent_prefer_built_in(),
             browser_agent_allow_external_provider_fallback:
                 default_browser_agent_allow_external_provider_fallback(),
+            enabled_curated_skill_ids: default_enabled_curated_skill_ids(),
         }
     }
 }
@@ -2114,6 +2127,29 @@ mod tests {
         let settings = AppSettings::default();
         assert!(settings.gemini_enabled);
         assert!(!settings.opencode_enabled);
+    }
+
+    #[test]
+    fn app_settings_defaults_enable_lazy_senior_curated_skill() {
+        let settings = AppSettings::default();
+        assert_eq!(
+            settings.enabled_curated_skill_ids,
+            vec!["lazy-senior-dev".to_string()]
+        );
+
+        let decoded: AppSettings = serde_json::from_str("{}").expect("deserialize settings");
+        assert_eq!(
+            decoded.enabled_curated_skill_ids,
+            vec!["lazy-senior-dev".to_string()]
+        );
+    }
+
+    #[test]
+    fn app_settings_preserves_explicitly_empty_curated_skill_ids() {
+        let decoded: AppSettings =
+            serde_json::from_str(r#"{"enabledCuratedSkillIds":[]}"#).expect("deserialize settings");
+
+        assert!(decoded.enabled_curated_skill_ids.is_empty());
     }
 
     #[test]

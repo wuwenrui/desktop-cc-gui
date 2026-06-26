@@ -43,6 +43,31 @@ const zhPart1 = {
     markdownMermaidFullscreenHint: "放大查看图表",
     markdownImageFullscreen: "全屏",
     markdownImageFullscreenHint: "放大查看图片",
+    // Curated skill UI (V0.5.14+). Bundled = shipped with the desktop
+    // client, version-pinned, no network. Distinct from user-installed
+    // global/project skills rendered by `SkillsSection`.
+    curatedLoading: "正在加载 curated skills…",
+    curatedError: "无法加载 curated skills。",
+    curatedSubtitle: "客户端内置、版本固定,随桌面端一起发布。无需联网。",
+    curatedBundledBadge: "内置",
+    curatedCategoryCodeStyle: "代码风格",
+    curatedCategoryUiDesign: "界面设计",
+    curatedCategoryReview: "代码审查",
+    curatedCategoryDebug: "调试",
+    curatedTokenEstimate: "{{count}} tokens",
+    curatedAddSkill: "添加 curated skill",
+    // Composer-side indicator that surfaces which curated skills are
+    // currently always-on. See CuratedSkillIndicator.tsx.
+    curatedActiveLabel: "已生效",
+    curatedActiveTotal: "{{count}} 个 · {{tokens}}",
+    // Section title for the curated-skills block in Settings > Skills.
+    curatedSectionTitle: "内置精选",
+    // Per-row controls. `viewOnGithub` is the inline GitHub link in
+    // each row that opens the upstream source repository in the
+    // system browser.
+    curatedToggleAria: "开关 {{name}}",
+    curatedViewOnGithub: "在 GitHub 查看",
+    curatedViewOnGithubAria: "在浏览器打开 {{name}} 的上游源码",
   },
 
   // 应用
@@ -877,10 +902,25 @@ const zhPart1 = {
     otherDescription: "历史记录补全、模型映射等其他配置。",
     performanceDiagnosticsTitle: "性能诊断",
     performanceDiagnosticsDescription:
-      "当并行对话表现异常卡顿时，重置本机 realtime performance 覆盖项。",
+      "用于临时调校本机 realtime performance。并行对话、工具调用输出或消息流明显卡顿时，可以先切换调度档位；验证结束后再重置覆盖项回到默认。",
+    streamingScheduleTierTitle: "实时流调度档位",
+    streamingScheduleTierDescription:
+      "控制工具调用密集 turn 的 realtime event dispatch 节奏，影响后台消息、工具输出和会话列表刷新让出主线程的程度。",
+    streamingScheduleTierRestartHint:
+      "新 turn 会使用当前档位。如需验证模块级缓存，请重载窗口。",
+    streamingScheduleTier: {
+      baseline: "基线",
+      guarded: "保护",
+      aggressive: "激进",
+    },
+    streamingScheduleTierDetail: {
+      baseline: "基线：尽量立即渲染，不丢弃后台事件，最接近旧行为；适合排查调度策略是否引入延迟。",
+      guarded: "保护：默认档位，后台事件会让出主线程并允许合并，优先保证输入和当前对话响应。",
+      aggressive: "激进：更强地延后和合并后台事件，适合并行会话或工具输出很密集时降低卡顿。",
+    },
     performanceFlagsResetTitle: "重置性能开关",
     performanceFlagsResetDescription:
-      "清除已知 ccgui.perf.* localStorage 覆盖项。模块级读取缓存需要重载窗口后刷新。",
+      "清除本机已知的 ccgui.perf.* localStorage 覆盖项，包括实时批处理、后台渲染门控、流调度档位和工具输出门控。模块级读取缓存需要重载窗口后刷新。",
     performanceFlagsResetButton: "重置",
     performanceFlagsResetDone:
       "已重置 {{count}} 个性能开关覆盖项。请重载窗口以刷新模块级缓存。",
@@ -1201,7 +1241,7 @@ const zhPart1 = {
         topToolControls: "工作区、runtime、终端、聚焦和右侧面板快捷入口。",
         rightActivityToolbar: "右侧活动、雷达、Git、文件和搜索入口。",
         bottomActivityPanel: "底部任务、Agent、编辑和最新消息状态面板。",
-        cornerStatusIndicator: "对话幕布中的用户气泡吸顶和消息锚点栏。",
+        cornerStatusIndicator: "对话幕布中的上下文来源卡片和消息锚点栏。",
         globalRuntimeNoticeDock: "全局右下角运行时提示入口与可展开提示面板。",
       },
       controls: {
@@ -1224,7 +1264,6 @@ const zhPart1 = {
         bottomActivityAgents: "Agent Tab",
         bottomActivityCheckpoint: "结果 Tab",
         bottomActivityLatestConversation: "最新对话 Tab",
-        curtainStickyUserBubble: "用户气泡吸顶",
         curtainContextLedger: "本轮上下文来源卡片",
         cornerStatusMessageAnchors: "消息锚点",
       },
@@ -1252,7 +1291,6 @@ const zhPart1 = {
         bottomActivityAgents: "隐藏 Agent 状态 Tab。",
         bottomActivityCheckpoint: "隐藏结果检查点 Tab。",
         bottomActivityLatestConversation: "隐藏最新对话 Tab。",
-        curtainStickyUserBubble: "隐藏对话幕布顶部的用户气泡吸顶条。",
         curtainContextLedger:
           "隐藏 Composer 上方的本轮上下文来源卡片，但不影响账本计算和来源治理能力。",
         cornerStatusMessageAnchors: "隐藏对话幕布中的消息锚点。",
@@ -2725,8 +2763,6 @@ const zhPart1 = {
     collapseMiddleStepsEnable: "默认折叠中间输出过程",
     collapseMiddleStepsDisable: "展开中间输出过程",
     middleStepsCollapsedHint: "已折叠 {{count}} 条中间步骤（实时中）",
-    collapseStickyHeader: "隐藏悬浮问题条",
-    expandStickyHeader: "展开悬浮问题条",
   },
 
   // 编辑器

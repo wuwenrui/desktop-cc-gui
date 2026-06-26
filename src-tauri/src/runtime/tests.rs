@@ -463,6 +463,43 @@ async fn reconcile_never_marks_thread_create_pending_runtime_evictable() {
 }
 
 #[tokio::test]
+async fn reconcile_keeps_just_started_codex_thread_runtime_protected() {
+    let manager = RuntimeManager::new(&std::env::temp_dir());
+    let entry = workspace_entry("thread-started-pending");
+    manager.record_starting(&entry, "codex", "test").await;
+    {
+        let mut entries = manager.entries.lock().await;
+        let runtime = entries
+            .get_mut("codex::thread-started-pending")
+            .expect("runtime entry should exist");
+        runtime.session_exists = true;
+        runtime.starting = false;
+        runtime.last_used_at_ms = 0;
+    }
+    manager
+        .note_foreground_thread_started_pending(&entry, "codex", "thread-1", 30_000)
+        .await;
+    let mut settings = AppSettings::default();
+    settings.codex_warm_ttl_seconds = 1;
+    let candidates = manager.reconcile_pool(&settings).await;
+    assert!(candidates.is_empty());
+    let snapshot = manager.snapshot(&settings).await;
+    assert!(matches!(
+        snapshot.rows[0].state,
+        RuntimeState::StartupPending
+    ));
+    assert!(snapshot.rows[0].active_work_protected);
+    assert_eq!(
+        snapshot.rows[0].foreground_work_thread_id.as_deref(),
+        Some("thread-1")
+    );
+    assert_eq!(
+        snapshot.rows[0].foreground_work_source.as_deref(),
+        Some("thread-started")
+    );
+}
+
+#[tokio::test]
 async fn manual_release_waits_for_active_work_protection() {
     let manager = RuntimeManager::new(&std::env::temp_dir());
     let entry = workspace_entry("manual-release");

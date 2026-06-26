@@ -3,7 +3,7 @@
  * Generic Tool Block Component - for displaying various tool calls
  * 使用 task-container 样式 + codicon 图标（匹配参考项目）
  */
-import { memo, useCallback, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import type { ConversationItem } from '../../../../types';
@@ -56,6 +56,9 @@ const FILE_CHANGE_DIFF_KEYS = [
 ];
 
 const FILE_CHANGE_DIFF_PREVIEW_MAX_LINES = 48;
+const HEAVY_TOOL_OUTPUT_MIN_CHARS = 8_000;
+const HEAVY_TOOL_CHANGE_MIN_FILES = 8;
+const HEAVY_TOOL_CHANGE_DIFF_MIN_CHARS = 12_000;
 const IMAGE_FILE_EXTENSION_REGEX =
   /\.(png|jpe?g|gif|webp|bmp|tiff?|svg|ico|avif)(?:[?#].*)?$/i;
 
@@ -1057,6 +1060,10 @@ export const GenericToolBlock = memo(function GenericToolBlock({
   >({});
   const [copiedOutput, setCopiedOutput] = useState(false);
   const [copiedPlanMarkdown, setCopiedPlanMarkdown] = useState(false);
+  const [toolDetailHydrated, setToolDetailHydrated] = useState(false);
+  useEffect(() => {
+    setToolDetailHydrated(false);
+  }, [item.id]);
   const isExpanded = isExitPlanTool
     ? externalExpanded
     : isCollapsible ? internalExpanded : externalExpanded;
@@ -1086,6 +1093,22 @@ export const GenericToolBlock = memo(function GenericToolBlock({
     () => item.output ?? '',
     [item.output],
   );
+  const totalChangeDiffLength = useMemo(
+    () => (item.changes ?? []).reduce((total, change) => total + (change.diff?.length ?? 0), 0),
+    [item.changes],
+  );
+  const shouldDeferToolChangeDetails =
+    hasChanges &&
+    isExpanded &&
+    !toolDetailHydrated &&
+    ((item.changes?.length ?? 0) >= HEAVY_TOOL_CHANGE_MIN_FILES ||
+      totalChangeDiffLength >= HEAVY_TOOL_CHANGE_DIFF_MIN_CHARS);
+  const shouldDeferToolOutput =
+    isExpanded &&
+    Boolean(item.output) &&
+    !hasChanges &&
+    !toolDetailHydrated &&
+    (item.output?.length ?? 0) >= HEAVY_TOOL_OUTPUT_MIN_CHARS;
   const hasExpandedCollapsedChangeRow = useMemo(
     () => Object.values(expandedCollapsedChangeRows).some(Boolean),
     [expandedCollapsedChangeRows],
@@ -1096,7 +1119,7 @@ export const GenericToolBlock = memo(function GenericToolBlock({
       fileChangeCandidateArgs,
       outputStats,
       outputDiffText,
-      isExpanded || hasExpandedCollapsedChangeRow,
+      (isExpanded && !shouldDeferToolChangeDetails) || hasExpandedCollapsedChangeRow,
     ),
     [
       item.changes,
@@ -1105,6 +1128,7 @@ export const GenericToolBlock = memo(function GenericToolBlock({
       outputDiffText,
       isExpanded,
       hasExpandedCollapsedChangeRow,
+      shouldDeferToolChangeDetails,
     ],
   );
   const changeStats = useMemo(
@@ -1200,6 +1224,29 @@ export const GenericToolBlock = memo(function GenericToolBlock({
       onToggle(item.id);
     }
   };
+  const renderToolDetailPlaceholder = (
+    kind: string,
+    metricValue: number,
+  ) => (
+    <div className="tool-heavy-detail-placeholder">
+      <strong>{t("messages.toolHeavyDetailDeferred")}</strong>
+      <span>
+        {t("messages.toolHeavyDetailMeta", {
+          kind,
+          count: metricValue,
+        })}
+      </span>
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          setToolDetailHydrated(true);
+        }}
+      >
+        {t("messages.toolHeavyDetailShow")}
+      </button>
+    </div>
+  );
 
   if (isExitPlanTool && exitPlanContent) {
     return (
@@ -1629,7 +1676,12 @@ export const GenericToolBlock = memo(function GenericToolBlock({
                 {copiedOutput ? t("messages.copied") : t("messages.copy")}
               </button>
             </div>
-            <pre className="tool-output-raw-pre">{item.output}</pre>
+            {shouldDeferToolOutput
+              ? renderToolDetailPlaceholder(
+                t("messages.toolHeavyOutput"),
+                item.output?.length ?? 0,
+              )
+              : <pre className="tool-output-raw-pre">{item.output}</pre>}
           </div>
         </div>
       )}
@@ -1655,6 +1707,12 @@ export const GenericToolBlock = memo(function GenericToolBlock({
       {isExpanded && hasChanges && item.changes && (
         <div className="task-details tool-change-details" style={{ border: 'none' }}>
           <div className="task-content-wrapper">
+            {shouldDeferToolChangeDetails
+              ? renderToolDetailPlaceholder(
+                t("messages.toolHeavyDiff"),
+                item.changes.length,
+              )
+              : null}
             {displayChanges.map((change, index) => (
               <div key={`${change.path}-${index}`} className="tool-change-entry">
                 <div className="tool-change-row">

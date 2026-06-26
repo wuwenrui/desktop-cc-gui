@@ -1,6 +1,6 @@
 {
   "schemaVersion": "1.0",
-  "generatedAt": "2026-06-19T19:49:13.978Z",
+  "generatedAt": "2026-06-23T12:31:55.749Z",
   "sources": {
     "perfBaseline": "docs/perf/baseline.json",
     "composerBaseline": "docs/perf/composer-baseline.json",
@@ -505,9 +505,86 @@
     },
     {
       "source": "docs/perf/realtime-runtime-evidence.json",
+      "scenario": "S-RS-FT",
+      "metric": "firstDeltaLatencyP95",
+      "value": 3146,
+      "unit": "ms",
+      "evidenceClass": "measured",
+      "budget": null,
+      "reason": "measured runtime turn trace sendToFirstDeltaMs from .artifacts/realtime-runtime-diagnostics.json",
+      "nextAction": "Correlate replay metrics with runtime visible-lag and terminal-pressure traces."
+    },
+    {
+      "source": "docs/perf/realtime-runtime-evidence.json",
+      "scenario": "S-RS-TA",
+      "metric": "turnStartAckLatencyP95",
+      "value": null,
+      "unit": "ms",
+      "evidenceClass": "unsupported",
+      "budget": null,
+      "reason": "No stream-latency/codex-turn-start-ack diagnostics were found. Run a build with Codex turn-start ack instrumentation.",
+      "nextAction": "Correlate replay metrics with runtime visible-lag and terminal-pressure traces."
+    },
+    {
+      "source": "docs/perf/realtime-runtime-evidence.json",
+      "scenario": "S-RS-PA",
+      "metric": "codexPostAckFirstDeltaP95",
+      "value": 2371,
+      "unit": "ms",
+      "evidenceClass": "measured",
+      "budget": null,
+      "reason": "measured renderer stream-latency/app-server-event Codex ccguiTiming from .artifacts/realtime-runtime-diagnostics.json",
+      "nextAction": "Correlate replay metrics with runtime visible-lag and terminal-pressure traces."
+    },
+    {
+      "source": "docs/perf/realtime-runtime-evidence.json",
+      "scenario": "S-RS-PR",
+      "metric": "codexPostAckFirstRuntimeEventP95",
+      "value": 1,
+      "unit": "ms",
+      "evidenceClass": "measured",
+      "budget": null,
+      "reason": "measured renderer stream-latency/app-server-event Codex first runtime event from .artifacts/realtime-runtime-diagnostics.json",
+      "nextAction": "Correlate replay metrics with runtime visible-lag and terminal-pressure traces."
+    },
+    {
+      "source": "docs/perf/realtime-runtime-evidence.json",
+      "scenario": "S-RS-RT",
+      "metric": "codexFirstRuntimeEventToFirstTextDeltaP95",
+      "value": 2370,
+      "unit": "ms",
+      "evidenceClass": "measured",
+      "budget": null,
+      "reason": "measured renderer stream-latency/app-server-event Codex runtime-event-to-text phase from .artifacts/realtime-runtime-diagnostics.json",
+      "nextAction": "Correlate replay metrics with runtime visible-lag and terminal-pressure traces."
+    },
+    {
+      "source": "docs/perf/realtime-runtime-evidence.json",
+      "scenario": "S-RS-RI",
+      "metric": "codexFirstRuntimeEventToFirstAssistantItemP95",
+      "value": 2365,
+      "unit": "ms",
+      "evidenceClass": "measured",
+      "budget": null,
+      "reason": "measured renderer stream-latency/app-server-event Codex runtime-event-to-assistant-item phase from .artifacts/realtime-runtime-diagnostics.json",
+      "nextAction": "Correlate replay metrics with runtime visible-lag and terminal-pressure traces."
+    },
+    {
+      "source": "docs/perf/realtime-runtime-evidence.json",
+      "scenario": "S-RS-IT",
+      "metric": "codexFirstAssistantItemToFirstTextDeltaP95",
+      "value": 5,
+      "unit": "ms",
+      "evidenceClass": "measured",
+      "budget": null,
+      "reason": "measured renderer stream-latency/app-server-event Codex assistant-item-to-text phase from .artifacts/realtime-runtime-diagnostics.json",
+      "nextAction": "Correlate replay metrics with runtime visible-lag and terminal-pressure traces."
+    },
+    {
+      "source": "docs/perf/realtime-runtime-evidence.json",
       "scenario": "S-RS-VL",
       "metric": "visibleTextLagP95",
-      "value": 116,
+      "value": 145,
       "unit": "ms",
       "evidenceClass": "measured",
       "budget": {
@@ -564,7 +641,7 @@
       "source": "docs/perf/realtime-runtime-evidence.json",
       "scenario": "S-RS-TS",
       "metric": "terminalSettlementP95",
-      "value": 7,
+      "value": 20,
       "unit": "ms",
       "evidenceClass": "measured",
       "budget": {
@@ -1705,9 +1782,86 @@
     },
     {
       "source": "docs/perf/realtime-runtime-evidence.json",
+      "scenario": "S-RS-FT",
+      "metric": "firstDeltaLatencyP95",
+      "value": 3146,
+      "unit": "ms",
+      "evidenceClass": "measured",
+      "budget": null,
+      "reason": "measured runtime turn trace sendToFirstDeltaMs from .artifacts/realtime-runtime-diagnostics.json",
+      "nextAction": "Correlate replay metrics with runtime visible-lag and terminal-pressure traces."
+    },
+    {
+      "source": "docs/perf/realtime-runtime-evidence.json",
+      "scenario": "S-RS-TA",
+      "metric": "turnStartAckLatencyP95",
+      "value": null,
+      "unit": "ms",
+      "evidenceClass": "unsupported",
+      "budget": null,
+      "reason": "No stream-latency/codex-turn-start-ack diagnostics were found. Run a build with Codex turn-start ack instrumentation.",
+      "nextAction": "Correlate replay metrics with runtime visible-lag and terminal-pressure traces."
+    },
+    {
+      "source": "docs/perf/realtime-runtime-evidence.json",
+      "scenario": "S-RS-PA",
+      "metric": "codexPostAckFirstDeltaP95",
+      "value": 2371,
+      "unit": "ms",
+      "evidenceClass": "measured",
+      "budget": null,
+      "reason": "measured renderer stream-latency/app-server-event Codex ccguiTiming from .artifacts/realtime-runtime-diagnostics.json",
+      "nextAction": "Correlate replay metrics with runtime visible-lag and terminal-pressure traces."
+    },
+    {
+      "source": "docs/perf/realtime-runtime-evidence.json",
+      "scenario": "S-RS-PR",
+      "metric": "codexPostAckFirstRuntimeEventP95",
+      "value": 1,
+      "unit": "ms",
+      "evidenceClass": "measured",
+      "budget": null,
+      "reason": "measured renderer stream-latency/app-server-event Codex first runtime event from .artifacts/realtime-runtime-diagnostics.json",
+      "nextAction": "Correlate replay metrics with runtime visible-lag and terminal-pressure traces."
+    },
+    {
+      "source": "docs/perf/realtime-runtime-evidence.json",
+      "scenario": "S-RS-RT",
+      "metric": "codexFirstRuntimeEventToFirstTextDeltaP95",
+      "value": 2370,
+      "unit": "ms",
+      "evidenceClass": "measured",
+      "budget": null,
+      "reason": "measured renderer stream-latency/app-server-event Codex runtime-event-to-text phase from .artifacts/realtime-runtime-diagnostics.json",
+      "nextAction": "Correlate replay metrics with runtime visible-lag and terminal-pressure traces."
+    },
+    {
+      "source": "docs/perf/realtime-runtime-evidence.json",
+      "scenario": "S-RS-RI",
+      "metric": "codexFirstRuntimeEventToFirstAssistantItemP95",
+      "value": 2365,
+      "unit": "ms",
+      "evidenceClass": "measured",
+      "budget": null,
+      "reason": "measured renderer stream-latency/app-server-event Codex runtime-event-to-assistant-item phase from .artifacts/realtime-runtime-diagnostics.json",
+      "nextAction": "Correlate replay metrics with runtime visible-lag and terminal-pressure traces."
+    },
+    {
+      "source": "docs/perf/realtime-runtime-evidence.json",
+      "scenario": "S-RS-IT",
+      "metric": "codexFirstAssistantItemToFirstTextDeltaP95",
+      "value": 5,
+      "unit": "ms",
+      "evidenceClass": "measured",
+      "budget": null,
+      "reason": "measured renderer stream-latency/app-server-event Codex assistant-item-to-text phase from .artifacts/realtime-runtime-diagnostics.json",
+      "nextAction": "Correlate replay metrics with runtime visible-lag and terminal-pressure traces."
+    },
+    {
+      "source": "docs/perf/realtime-runtime-evidence.json",
       "scenario": "S-RS-VL",
       "metric": "visibleTextLagP95",
-      "value": 116,
+      "value": 145,
       "unit": "ms",
       "evidenceClass": "measured",
       "budget": {
@@ -1764,7 +1918,7 @@
       "source": "docs/perf/realtime-runtime-evidence.json",
       "scenario": "S-RS-TS",
       "metric": "terminalSettlementP95",
-      "value": 7,
+      "value": 20,
       "unit": "ms",
       "evidenceClass": "measured",
       "budget": {
@@ -2096,19 +2250,25 @@
   },
   "archiveReadiness": {
     "source": "openspec list --json",
-    "completed": [
+    "completed": [],
+    "previousArchiveContext": [
       {
-        "name": "relocate-runtime-notice-dock-sidebar-entry",
-        "tasks": "8/8",
-        "recommendation": "archive-candidate-after-qualifier-review",
+        "name": "fix-codex-provider-composer-cold-start-binding",
+        "archivedAs": "openspec/changes/archive/2026-06-24-fix-codex-provider-composer-cold-start-binding",
+        "tasks": "11/11",
+        "recommendation": "archived-after-qualifier-review",
         "qualifier": "Review validation and platform qualifiers before archive."
       }
     ],
-    "previousArchiveContext": [],
     "inProgress": [
       {
-        "name": "fix-codex-parallel-runtime-ended-isolation",
-        "tasks": "63/66",
+        "name": "2026-06-24-harden-realtime-interaction-jank-during-tool-call",
+        "tasks": "32/40",
+        "recommendation": "not-archive-ready"
+      },
+      {
+        "name": "2026-06-22-release-pipeline-cache-sccache",
+        "tasks": "7/13",
         "recommendation": "not-archive-ready"
       },
       {
@@ -2325,7 +2485,7 @@
   ],
   "largeFileSummary": {
     "source": ".artifacts/large-files-near-threshold.json",
-    "generatedAt": "2026-06-19T19:13:17.708Z",
+    "generatedAt": "2026-06-22T04:19:25.961Z",
     "status": "warn",
     "candidates": [
       {

@@ -7,42 +7,20 @@ TBD - created by archiving change refactor-v0511-thread-messaging-recovery-and-s
 
 The hook SHALL export `useCodexMessageRecovery` as a top-level React hook returning `createRecoveryAttempt(deps)`. Each attempt SHALL expose at least `tryFreshDraftReplacement(fallbackReason)`, `tryForkFromMessage(reason)`, `canUseFreshDraftReplacement`, and `isUnverifiedSameThreadMissingRebind`.
 
-#### Scenario: Hook obeys React Rules of Hooks
-- **WHEN** `useThreadMessaging` needs Codex recovery for a single send attempt
-- **THEN** it SHALL call `useCodexMessageRecovery()` at hook top-level
-- **AND** it SHALL call `createRecoveryAttempt(deps)` inside the send path as an ordinary function
-- **AND** it SHALL NOT call `useCodexMessageRecovery(deps)` from inside the async send callback
+#### Scenario: provider-bound fresh continuation
 
-#### Scenario: Fresh continuation with optimistic intent
-- **WHEN** `createRecoveryAttempt(deps).tryFreshDraftReplacement("refresh failed: …")` is called
-- **AND** `staleRecoveryClassification.reasonCode` is `malformed-thread-id` or `missing-thread-binding`
-- **AND** `optimisticUserItem` exists
-- **AND** `workspace` is available in `CodexMessageRecoveryDeps`
-- **THEN** the hook SHALL call `startThreadForMessageSend(workspace, "codex")` to obtain a fresh thread id
-- **AND** dispatch `setActiveThreadId` with the fresh id
-- **AND** call `moveOptimisticUserIntentToThread(freshThreadId)`
-- **AND** call `retrySendOnThread(freshThreadId)`
-- **AND** return `true`
+- **WHEN** `createRecoveryAttempt(deps).tryFreshDraftReplacement(...)` creates a fresh Codex continuation
+- **AND** `deps.providerProfileId` is a non-empty string after trimming
+- **THEN** the hook SHALL call `startThreadForMessageSend(workspace, "codex", { providerProfileId })`
+- **AND** the debug event payload SHOULD include the normalized `providerProfileId`
+- **AND** whitespace-only provider ids SHALL be omitted from the call.
 
-#### Scenario: Fork and retry path
-- **WHEN** fresh continuation is not available
-- **AND** `tryForkFromMessage(reason)` is called
-- **AND** `reboundThreadId` is absent or points to the same missing thread
-- **THEN** the hook SHALL call `forkThreadForWorkspace(workspace.id, threadId, { activate: true })`
-- **AND** dispatch `setActiveThreadId` with the fork id when fork succeeds
-- **AND** call `moveOptimisticUserIntentToThread(forkId)`
-- **AND** call `retrySendOnThread(forkId)`
-- **AND** return `true` on success or `false` on failure
+#### Scenario: provider-bound fork retry path
 
-#### Scenario: No-op when recovery is not applicable
-- **WHEN** `staleRecoveryClassification` is `null`
-- **OR** the error does not match `isInvalidReviewThreadIdError` / `isCodexMissingThreadBindingError`
-- **THEN** `tryFreshDraftReplacement` SHALL return `false` without side effects
-
-#### Scenario: Rebind path remains in useThreadMessaging
-- **WHEN** `reboundThreadId` exists and differs from `threadId`
-- **THEN** `useCodexMessageRecovery` SHALL NOT retry the rebound thread itself
-- **AND** `useThreadMessaging` SHALL keep the existing rebind-and-retry branch responsible for dispatching the rebound id and retrying the send
+- **WHEN** `createRecoveryAttempt(deps).tryForkFromMessage(...)` creates a fork continuation
+- **AND** `deps.providerProfileId` is a non-empty string after trimming
+- **THEN** the hook SHALL call `forkThreadForWorkspace(workspace.id, threadId, { activate: true, providerProfileId })`
+- **AND** whitespace-only provider ids SHALL be omitted from the call.
 
 ### Requirement: Recovery MUST be idempotent within a single send attempt
 

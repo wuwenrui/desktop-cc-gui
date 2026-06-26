@@ -103,7 +103,7 @@ export function resolveCodexAcceptedTurnFact(params: {
 export function canUseDisposableCodexDraftReplacement(
   resolution: CodexAcceptedTurnResolution,
 ): boolean {
-  return resolution.fact === "empty-draft";
+  return resolution.fact === "empty-draft" && resolution.source !== "thread-start";
 }
 
 export function shouldDeferCodexActivityUntilTurnAccepted(

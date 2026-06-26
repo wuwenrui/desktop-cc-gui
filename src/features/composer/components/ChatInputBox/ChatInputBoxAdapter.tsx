@@ -8,7 +8,6 @@
 import {
   forwardRef,
   memo,
-  startTransition,
   useCallback,
   useEffect,
   useImperativeHandle,
@@ -552,6 +551,7 @@ export interface ChatInputBoxAdapterProps {
   sendReadiness?: ComposerSendReadiness | null;
   onJumpToRequest?: () => void;
   onToggleContextSources?: () => void;
+  onOpenSkillsSettings?: () => void;
   contextSourcesExpanded?: boolean;
   onDeleteQueued?: (id: string) => void;
   onFuseQueued?: (id: string) => void | Promise<void>;
@@ -1109,6 +1109,7 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
       sendReadiness,
       onJumpToRequest,
       onToggleContextSources,
+      onOpenSkillsSettings,
       contextSourcesExpanded,
       onDeleteQueued,
       onFuseQueued,
@@ -1283,9 +1284,7 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
 
     // Handle input from ChatInputBox -> Composer text state
     const handleInput = useCallback((content: string) => {
-      startTransition(() => {
-        onTextChange(content, null);
-      });
+      onTextChange(content, null);
     }, [onTextChange]);
 
     // Handle submit from ChatInputBox
@@ -2244,6 +2243,7 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
         sendReadiness={sendReadiness}
         onJumpToRequest={onJumpToRequest}
         onToggleContextSources={onToggleContextSources}
+        onOpenSkillsSettings={onOpenSkillsSettings}
         contextSourcesExpanded={contextSourcesExpanded}
         onRemoveFromQueue={onDeleteQueued}
         onFuseFromQueue={onFuseQueued}

@@ -168,7 +168,10 @@ pub(crate) fn build_policy_directives(
     }
 }
 
-fn merge_developer_instructions(existing: Option<&str>, directives: &[String]) -> Option<String> {
+pub(crate) fn merge_developer_instructions(
+    existing: Option<&str>,
+    directives: &[String],
+) -> Option<String> {
     let policy_block = directives
         .iter()
         .map(|line| line.trim())

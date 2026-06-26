@@ -1328,138 +1328,110 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
       };
     }
     case "completeAgentMessage": {
-      const segmentedItemId = resolveLiveAssistantMessageId(
-        state,
-        action.threadId,
-        action.itemId,
-      );
-      const list = [...(state.itemsByThread[action.threadId] ?? [])];
-      let index = findAssistantMessageIndexById(list, segmentedItemId);
-      if (index < 0) {
-        index = findAssistantMessageIndexById(list, action.itemId);
-      }
-      if (index < 0) {
-        index = findAssistantMessageIndexByPrefix(list, action.itemId);
-      }
-      let shouldCanonicalizeLegacyId = false;
-      if (index < 0 && !isLegacyTextDeltaItemId(action.threadId, segmentedItemId)) {
-        const legacySegmentedItemId = resolveLiveAssistantMessageId(
-          state,
-          action.threadId,
-          buildLegacyTextDeltaItemId(action.threadId),
-        );
-        index = findAssistantMessageIndexById(list, legacySegmentedItemId);
-        if (index < 0) {
-          index = findAssistantMessageIndexByLegacyTextDelta(list, action.threadId);
-        }
-        shouldCanonicalizeLegacyId = index >= 0;
-      }
-      const shouldDeduplicateCodexAssistant = shouldDeduplicateCodexAssistantMessages({
-        threadsByWorkspace: state.threadsByWorkspace,
+      // \u00a76.1: \u4ee3\u7406\u7ed9 applyCompleteAgentMessageToState, \u4fdd\u8bc1\u65e7\u8c03\u7528\u8def\u5f84\u8bed\u4e49\u4e0d\u53d8\u3002
+      const applied = applyCompleteAgentMessageToState(state, {
         workspaceId: action.workspaceId,
         threadId: action.threadId,
-      });
-      if (index < 0 && shouldDeduplicateCodexAssistant) {
-        index = findEquivalentCodexAssistantMessageIndex(list, action.text);
-      }
-      const targetItemId =
-        index >= 0
-          ? shouldCanonicalizeLegacyId
-            ? segmentedItemId
-            : (list[index]?.id ?? segmentedItemId)
-          : segmentedItemId;
-      const completedAt = action.timestamp ?? Date.now();
-      const status = state.threadStatusById[action.threadId];
-      const statusDuration =
-        typeof status?.lastDurationMs === "number"
-          ? Math.max(0, status.lastDurationMs)
-          : null;
-      const derivedDuration =
-        statusDuration !== null
-          ? statusDuration
-          : status?.processingStartedAt
-            ? Math.max(0, completedAt - status.processingStartedAt)
-            : null;
-      const existingItem = index >= 0 ? list[index] : undefined;
-      let computedCompletedItem: ConversationItem | null = null;
-      if (isAssistantMessageItem(existingItem)) {
-        const isThreadProcessing = Boolean(state.threadStatusById[action.threadId]?.isProcessing);
-        const keepFinalMetadata = shouldPreserveAssistantFinalMetadata(
-          existingItem,
-          isThreadProcessing,
-        );
-        const nextBase = keepFinalMetadata
-          ? existingItem
-          : clearAssistantFinalMetadata(existingItem);
-        computedCompletedItem = {
-          ...nextBase,
-          id: targetItemId,
-          text: mergeCompletedAgentText(
-            existingItem.text,
-            action.text,
-            true,
-          ),
-          isFinal: true,
-          finalCompletedAt: nextBase.finalCompletedAt ?? completedAt,
-          ...(typeof nextBase.finalDurationMs === "number"
-            ? { finalDurationMs: nextBase.finalDurationMs }
-            : derivedDuration !== null
-              ? { finalDurationMs: derivedDuration }
-              : {}),
-        };
-      } else {
-        computedCompletedItem = {
-          id: targetItemId,
-          kind: "message",
-          role: "assistant",
-          text: action.text,
-          isFinal: true,
-          finalCompletedAt: completedAt,
-          ...(derivedDuration !== null ? { finalDurationMs: derivedDuration } : {}),
-        };
-      }
-      if (
-        INCREMENTAL_DERIVATION_ENABLED &&
-        isAssistantMessageItem(existingItem) &&
-        existingItem !== undefined &&
-        targetItemId === existingItem.id &&
-        existingItem.isFinal === true &&
-        derivedDuration === null
-      ) {
-        const mergedCompletedText = mergeCompletedAgentText(
-          existingItem.text,
-          action.text,
-          true,
-        );
-        if (mergedCompletedText === existingItem.text) {
-          return state;
-        }
-      }
-      if (computedCompletedItem !== null) {
-        if (isAssistantMessageItem(existingItem) && index >= 0) {
-          list[index] = computedCompletedItem;
-        } else {
-          list.push(computedCompletedItem);
-        }
-      }
-      const updatedItems = prepareThreadItems(list, {
-        preserveMessageTextIds: new Set([targetItemId]),
-      });
-      const nextThreadsByWorkspace = maybeRenameThreadFromAgent({
-        workspaceId: action.workspaceId,
-        threadId: action.threadId,
-        items: updatedItems,
-        itemId: targetItemId,
+        itemId: action.itemId,
+        text: action.text,
         hasCustomName: action.hasCustomName,
-        threadsByWorkspace: state.threadsByWorkspace,
+        timestamp: action.timestamp ?? Date.now(),
       });
+      if (applied.noop) {
+        return state;
+      }
       return {
         ...state,
-        itemsByThread: {
-          ...state.itemsByThread,
-          [action.threadId]: updatedItems,
-        },
+        itemsByThread: applied.itemsByThread,
+        threadsByWorkspace: applied.threadsByWorkspace,
+      };
+    }
+    case "flushAgentCompletedBatch": {
+      // \u00a76: 1 dispatch \u5408\u5e76 completeAgentMessage + setThreadTimestamp +
+      // setLastAgentMessage + (\u6761\u4ef6) markUnread\u3002\u4e0e\u539f\u591a dispatch \u5e8f \u7b49\u4ef7\u3002
+      const applied = applyCompleteAgentMessageToState(state, {
+        workspaceId: action.workspaceId,
+        threadId: action.threadId,
+        itemId: action.itemId,
+        text: action.text,
+        hasCustomName: action.hasCustomName,
+        timestamp: action.timestamp,
+      });
+
+      // 1) setThreadTimestamp
+      const tsList = state.threadsByWorkspace[action.workspaceId] ?? [];
+      let tsChanged = applied.threadsByWorkspace !== state.threadsByWorkspace;
+      let nextThreadsByWorkspace = applied.threadsByWorkspace;
+      if (!applied.noop) {
+        if (tsList.length) {
+          let tsDidChange = false;
+          const tsNext = tsList.map((thread) => {
+            if (thread.id !== action.threadId) {
+              return thread;
+            }
+            const current = thread.updatedAt ?? 0;
+            if (current >= action.timestamp) {
+              return thread;
+            }
+            tsDidChange = true;
+            return { ...thread, updatedAt: action.timestamp };
+          });
+          if (tsDidChange) {
+            tsChanged = true;
+            nextThreadsByWorkspace = {
+              ...nextThreadsByWorkspace,
+              [action.workspaceId]: tsNext,
+            };
+          }
+        }
+      }
+
+      // 2) setLastAgentMessage
+      const existingLast =
+        state.lastAgentMessageByThread[action.threadId];
+      let lastAgentChanged = false;
+      let nextLastAgentMessageByThread = state.lastAgentMessageByThread;
+      if (
+        !existingLast ||
+        existingLast.timestamp < action.timestamp
+      ) {
+        lastAgentChanged = true;
+        nextLastAgentMessageByThread = {
+          ...state.lastAgentMessageByThread,
+          [action.threadId]: { text: action.text, timestamp: action.timestamp },
+        };
+      }
+
+      // 3) \u6761\u4ef6 markUnread
+      let threadStatusChanged = false;
+      let nextThreadStatusById = state.threadStatusById;
+      if (!action.isActiveThread) {
+        const currentStatus = state.threadStatusById[action.threadId];
+        const baseStatus = withThreadStatusDefaults(currentStatus);
+        if (!baseStatus.hasUnread) {
+          threadStatusChanged = true;
+          nextThreadStatusById = {
+            ...state.threadStatusById,
+            [action.threadId]: { ...baseStatus, hasUnread: true },
+          };
+        }
+      }
+
+      if (
+        applied.noop &&
+        !tsChanged &&
+        !lastAgentChanged &&
+        !threadStatusChanged
+      ) {
+        return state;
+      }
+
+      return {
+        ...state,
+        itemsByThread: applied.noop ? state.itemsByThread : applied.itemsByThread,
         threadsByWorkspace: nextThreadsByWorkspace,
+        lastAgentMessageByThread: nextLastAgentMessageByThread,
+        threadStatusById: nextThreadStatusById,
       };
     }
     case "upsertItem": {
@@ -2642,4 +2614,163 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
     default:
       return state;
   }
+}
+
+
+/**
+ * §6.1: 抽出 `completeAgentMessage` 主体的 state 推导，让 `flushAgentCompletedBatch`
+ * 在 1 dispatch 内复用同一段逻辑。返回 `{ itemsByThread, threadsByWorkspace, noop }`：
+ *   - `noop=true` 时调用方应保持原 `state` 不变（与原 case "completeAgentMessage" 早返回一致）
+ *   - `noop=false` 时调用方应把这两个字段写回新 state
+ *
+ * 与原 case 行为完全等价（已通过 §10.3 既有测试套件兜底）。
+ */
+function applyCompleteAgentMessageToState(
+  state: ThreadState,
+  params: {
+    workspaceId: string;
+    threadId: string;
+    itemId: string;
+    text: string;
+    hasCustomName: boolean;
+    timestamp: number;
+  },
+): { itemsByThread: ThreadState["itemsByThread"]; threadsByWorkspace: ThreadState["threadsByWorkspace"]; noop: boolean } {
+  const segmentedItemId = resolveLiveAssistantMessageId(
+    state,
+    params.threadId,
+    params.itemId,
+  );
+  const list = [...(state.itemsByThread[params.threadId] ?? [])];
+  let index = findAssistantMessageIndexById(list, segmentedItemId);
+  if (index < 0) {
+    index = findAssistantMessageIndexById(list, params.itemId);
+  }
+  if (index < 0) {
+    index = findAssistantMessageIndexByPrefix(list, params.itemId);
+  }
+  let shouldCanonicalizeLegacyId = false;
+  if (index < 0 && !isLegacyTextDeltaItemId(params.threadId, segmentedItemId)) {
+    const legacySegmentedItemId = resolveLiveAssistantMessageId(
+      state,
+      params.threadId,
+      buildLegacyTextDeltaItemId(params.threadId),
+    );
+    index = findAssistantMessageIndexById(list, legacySegmentedItemId);
+    if (index < 0) {
+      index = findAssistantMessageIndexByLegacyTextDelta(list, params.threadId);
+    }
+    shouldCanonicalizeLegacyId = index >= 0;
+  }
+  const shouldDeduplicateCodexAssistant = shouldDeduplicateCodexAssistantMessages({
+    threadsByWorkspace: state.threadsByWorkspace,
+    workspaceId: params.workspaceId,
+    threadId: params.threadId,
+  });
+  if (index < 0 && shouldDeduplicateCodexAssistant) {
+    index = findEquivalentCodexAssistantMessageIndex(list, params.text);
+  }
+  const targetItemId =
+    index >= 0
+      ? shouldCanonicalizeLegacyId
+        ? segmentedItemId
+        : (list[index]?.id ?? segmentedItemId)
+      : segmentedItemId;
+  const completedAt = params.timestamp ?? Date.now();
+  const status = state.threadStatusById[params.threadId];
+  const statusDuration =
+    typeof status?.lastDurationMs === "number"
+      ? Math.max(0, status.lastDurationMs)
+      : null;
+  const derivedDuration =
+    statusDuration !== null
+      ? statusDuration
+      : status?.processingStartedAt
+        ? Math.max(0, completedAt - status.processingStartedAt)
+        : null;
+  const existingItem = index >= 0 ? list[index] : undefined;
+  let computedCompletedItem: ConversationItem | null = null;
+  if (isAssistantMessageItem(existingItem)) {
+    const isThreadProcessing = Boolean(state.threadStatusById[params.threadId]?.isProcessing);
+    const keepFinalMetadata = shouldPreserveAssistantFinalMetadata(
+      existingItem,
+      isThreadProcessing,
+    );
+    const nextBase = keepFinalMetadata
+      ? existingItem
+      : clearAssistantFinalMetadata(existingItem);
+    computedCompletedItem = {
+      ...nextBase,
+      id: targetItemId,
+      text: mergeCompletedAgentText(
+        existingItem.text,
+        params.text,
+        true,
+      ),
+      isFinal: true,
+      finalCompletedAt: nextBase.finalCompletedAt ?? completedAt,
+      ...(typeof nextBase.finalDurationMs === "number"
+        ? { finalDurationMs: nextBase.finalDurationMs }
+        : derivedDuration !== null
+          ? { finalDurationMs: derivedDuration }
+          : {}),
+    };
+  } else {
+    computedCompletedItem = {
+      id: targetItemId,
+      kind: "message",
+      role: "assistant",
+      text: params.text,
+      isFinal: true,
+      finalCompletedAt: completedAt,
+      ...(derivedDuration !== null ? { finalDurationMs: derivedDuration } : {}),
+    };
+  }
+  if (
+    INCREMENTAL_DERIVATION_ENABLED &&
+    isAssistantMessageItem(existingItem) &&
+    existingItem !== undefined &&
+    targetItemId === existingItem.id &&
+    existingItem.isFinal === true &&
+    derivedDuration === null
+  ) {
+    const mergedCompletedText = mergeCompletedAgentText(
+      existingItem.text,
+      params.text,
+      true,
+    );
+    if (mergedCompletedText === existingItem.text) {
+      return {
+        itemsByThread: state.itemsByThread,
+        threadsByWorkspace: state.threadsByWorkspace,
+        noop: true,
+      };
+    }
+  }
+  if (computedCompletedItem !== null) {
+    if (isAssistantMessageItem(existingItem) && index >= 0) {
+      list[index] = computedCompletedItem;
+    } else {
+      list.push(computedCompletedItem);
+    }
+  }
+  const updatedItems = prepareThreadItems(list, {
+    preserveMessageTextIds: new Set([targetItemId]),
+  });
+  const nextThreadsByWorkspace = maybeRenameThreadFromAgent({
+    workspaceId: params.workspaceId,
+    threadId: params.threadId,
+    items: updatedItems,
+    itemId: targetItemId,
+    hasCustomName: params.hasCustomName,
+    threadsByWorkspace: state.threadsByWorkspace,
+  });
+  return {
+    itemsByThread: {
+      ...state.itemsByThread,
+      [params.threadId]: updatedItems,
+    },
+    threadsByWorkspace: nextThreadsByWorkspace,
+    noop: false,
+  };
 }

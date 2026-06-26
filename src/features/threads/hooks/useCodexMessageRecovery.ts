@@ -67,6 +67,12 @@ function errorToMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function canUseAuthoritativeDisposableDraftReplacement(
+  resolution: CodexAcceptedTurnResolution,
+) {
+  return resolution.fact === "empty-draft" && resolution.source !== "thread-start";
+}
+
 export function useCodexMessageRecovery(): UseCodexMessageRecoveryResult {
   const createRecoveryAttempt = useCallback(
     (deps: CodexMessageRecoveryAttemptDeps): CodexMessageRecoveryAttempt => {
@@ -80,13 +86,19 @@ export function useCodexMessageRecovery(): UseCodexMessageRecoveryResult {
         canUseFirstSendDraftReplacement;
       const canUseFreshDraftReplacementForMissingThread =
         isCodexMissingThreadBindingError(deps.errorMessage) &&
-        canUseFirstSendDraftReplacement;
+        canUseAuthoritativeDisposableDraftReplacement(
+          deps.acceptedTurnResolution,
+        ) &&
+        Boolean(deps.optimisticUserItem);
       const canUseFreshDraftReplacement =
         canUseFreshDraftReplacementForMalformedThreadId ||
         canUseFreshDraftReplacementForMissingThread;
       const isUnverifiedSameThreadMissingRebind =
         deps.reboundThreadId === deps.threadId &&
         canUseFreshDraftReplacementForMissingThread;
+      const canUseForkContinuation =
+        deps.acceptedTurnResolution.fact === "accepted" ||
+        deps.acceptedTurnResolution.hasDurableActivity;
       let freshDraftReplacementAttempted = false;
       const providerProfileId = normalizeProviderProfileId(deps.providerProfileId);
       const providerSelection = providerProfileId ? { providerProfileId } : undefined;
@@ -144,6 +156,9 @@ export function useCodexMessageRecovery(): UseCodexMessageRecoveryResult {
       const tryForkFromMessage = async (
         reason: string | null,
       ): Promise<boolean> => {
+        if (!canUseForkContinuation) {
+          return false;
+        }
         if (deps.reboundThreadId && !isUnverifiedSameThreadMissingRebind) {
           return false;
         }

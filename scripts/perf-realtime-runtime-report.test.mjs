@@ -7,12 +7,12 @@ import { test } from "node:test";
 
 function runScript(args) {
   return new Promise((resolve, reject) => {
-    execFile("node", ["scripts/perf-realtime-runtime-report.mjs", ...args], { cwd: process.cwd() }, (error) => {
+    execFile("node", ["scripts/perf-realtime-runtime-report.mjs", ...args], { cwd: process.cwd() }, (error, stdout) => {
       if (error) {
         reject(error);
         return;
       }
-      resolve();
+      resolve(stdout);
     });
   });
 }
@@ -469,4 +469,33 @@ test("realtime runtime report keeps missing diagnostics unsupported", async () =
   const fragment = JSON.parse(await readFile(outputPath, "utf-8"));
   assert.equal(fragment.metrics[0]?.evidenceClass, "unsupported");
   assert.match(fragment.metrics[0]?.unsupportedReason, /No measured realtime/);
+});
+
+test("realtime runtime report prints stream pacing JSON with all capability ids", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "ccgui-realtime-runtime-"));
+  const inputPath = join(dir, "diagnostics.json");
+  const outputPath = join(dir, "runtime.json");
+  await writeFile(inputPath, JSON.stringify({ entries: [] }), "utf-8");
+
+  const stdout = await runScript([
+    "--input",
+    inputPath,
+    "--output",
+    outputPath,
+    "--include-stream-pacing",
+    "--json",
+  ]);
+  const fragment = JSON.parse(stdout);
+
+  assert.deepEqual(fragment.streamPacingCapabilityIds, [
+    "app-server-event-stream-pacing",
+    "streaming-schedule-tier-rollback",
+    "tool-output-tail-gate",
+  ]);
+  const capabilityIds = new Set(
+    fragment.streamPacingMetrics.map((metric) => metric.capabilityId),
+  );
+  assert.ok(capabilityIds.has("app-server-event-stream-pacing"));
+  assert.ok(capabilityIds.has("streaming-schedule-tier-rollback"));
+  assert.ok(capabilityIds.has("tool-output-tail-gate"));
 });

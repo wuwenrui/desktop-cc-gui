@@ -4,18 +4,22 @@
 TBD - created by archiving change refine-conversation-message-copy-actions. Update Purpose after archive.
 ## Requirements
 ### Requirement: Assistant Turn Copy Action SHALL Be Final-Row Scoped
-The conversation canvas SHALL expose one assistant turn copy affordance on the final assistant message row for a completed assistant turn. Non-final assistant message segments SHALL NOT render their own assistant tail copy affordance.
+The conversation canvas SHALL expose copy affordances only through the final assistant message tail action group. No standalone copy action SHALL be rendered inside non-final assistant segments, user bubbles, or non-assistant message rows.
 
 #### Scenario: segmented assistant turn renders one assistant tail copy action
 - **WHEN** one user request produces multiple assistant message segments
 - **AND** the last assistant segment is marked final
-- **THEN** the conversation canvas SHALL render the assistant tail copy affordance only on the final assistant segment
+- **THEN** the conversation canvas SHALL render copy/fork/rewind actions only on the final assistant segment
 - **AND** earlier non-final assistant segments SHALL NOT render assistant tail copy affordances
 
-#### Scenario: user message copy remains available
-- **WHEN** a user message is visible in the conversation canvas
-- **THEN** the user message copy affordance SHALL remain available according to the existing user message rules
-- **AND** assistant final-row copy scoping SHALL NOT remove user copy behavior
+#### Scenario: user message copy is not rendered as standalone row action
+- **WHEN** a user message bubble is rendered in the conversation canvas
+- **THEN** the conversation canvas SHALL NOT render a standalone copy affordance inside the message body row
+
+#### Scenario: existing special-copy affordances remain unchanged
+- **WHEN** a message contains fenced code, tool output, mermaid source, or summary card content
+- **THEN** existing local copy affordances for those content types SHALL remain available
+- **AND** their labels and semantics SHALL remain unchanged
 
 ### Requirement: Assistant Turn Copy Payload SHALL Aggregate Assistant Text Segments
 The final assistant copy action SHALL copy the assistant text segments for the current assistant turn in display order. The aggregation boundary SHALL begin after the latest user message and end at the final assistant message row whose copy action was activated.
@@ -50,4 +54,3 @@ Assistant copy action placement SHALL be a render-surface concern and SHALL NOT 
 - **THEN** the Fork operation MUST run as a messages-only session fork
 - **AND** it MUST NOT restore, delete, revert, or overwrite workspace files
 - **AND** Codex provider selection MUST only affect the child conversation provider binding
-

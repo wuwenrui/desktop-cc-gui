@@ -638,10 +638,16 @@ async fn emit_workspace_event<E: EventSink>(
         }
     }
     if !sent_to_background {
-        event_sink.emit_app_server_event(AppServerEvent {
-            workspace_id: workspace_id.to_string(),
-            message: value,
-        });
+        let events = {
+            let mut throttle = session.snapshot_throttle.lock().await;
+            throttle.filter_event(workspace_id, value)
+        };
+        for message in events {
+            event_sink.emit_app_server_event(AppServerEvent {
+                workspace_id: workspace_id.to_string(),
+                message,
+            });
+        }
     }
 }
 

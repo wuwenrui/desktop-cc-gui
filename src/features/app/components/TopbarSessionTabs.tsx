@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type { TopbarSessionTabItem } from "../../layout/hooks/topbarSessionTabs";
 import { EngineIcon } from "../../engine/components/EngineIcon";
 import { SharedSessionIcon } from "../../shared-session/components/SharedSessionIcon";
@@ -35,7 +36,7 @@ function resolveMenuAnchor(target: HTMLDivElement): TopbarTabMenuPosition {
   };
 }
 
-export function TopbarSessionTabs({
+function TopbarSessionTabsImpl({
   tabs,
   ariaLabel,
   onSelectThread,
@@ -126,3 +127,6 @@ export function TopbarSessionTabs({
     </div>
   );
 }
+
+export const TopbarSessionTabs = memo(TopbarSessionTabsImpl);
+TopbarSessionTabs.displayName = "TopbarSessionTabs";

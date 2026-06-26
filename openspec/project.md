@@ -1,9 +1,9 @@
 # Project Context
 
 - Type: OpenSpec Workspace
-- Updated At: 2026-06-18T11:20:00+08:00
+- Updated At: 2026-06-23T10:00:47+08:00
 - Scope: governance snapshot for the current `mossx` repository workspace
-- Product version fact: `ccgui@0.5.11` from `package.json` and `src-tauri/tauri.conf.json`
+- Product version fact: `ccgui@0.5.13` from `package.json` and `src-tauri/tauri.conf.json`
 
 ## Domain
 
@@ -20,7 +20,7 @@ The product in this repository is `ccgui`: a Tauri 2 desktop AI engineering work
 - Change workflow artifacts: `openspec/changes/<change-id>/{proposal,design,tasks,verification}.md`
 - Archive: `openspec/changes/archive/*`
 - Implementation rules: `.trellis/spec/**`
-- Current workspace state: tracked active changes = `0`, archive changes = `506`, main specs = `353`
+- Current workspace state: tracked active changes = `4`, archive changes = `521`, main specs = `357`
 
 ## Entry Surfaces
 
@@ -54,21 +54,53 @@ The product in this repository is `ccgui`: a Tauri 2 desktop AI engineering work
 
 ## Current Inventory
 
-- Active changes: `0`
-- Archive changes: `506`
-- Main specs: `353`
+- Active changes: `4`
+- Archive changes: `521`
+- Main specs: `357`
 - Completed task sets still active: `0`
 - Ready-for-implementation task sets: `0`
+- Demand-pool proposal directories without `proposal.md` / `tasks.md`: `3`
 
 ## Active Changes
 
-No active OpenSpec changes remain after the 2026-06-18 closure batch. New behavior work should start from a fresh `openspec/changes/<change-id>/` directory.
+Active OpenSpec changes after the 2026-06-23 closure batch:
+
+- `2026-06-22-release-pipeline-cache-sccache`
+  - Status: implementation/verification in progress; `tasks.md` shows 7/13 complete.
+  - Archive gate remains blocked by live release run evidence, artifact verification, sccache cache-size monitoring, PR fallback note, and final archive task.
+- `2026-06-18-add-shortcuts-overview-and-conflict-detection`
+  - Status: demand-pool proposal; no `tasks.md` and no spec delta yet.
+  - Next step: add explicit proposal/design/tasks/spec delta before implementation or archive.
+- `2026-06-18-extend-editor-file-tab-lifecycle`
+  - Status: demand-pool proposal; no `tasks.md` and no spec delta yet.
+  - Next step: add explicit proposal/design/tasks/spec delta before implementation or archive.
+- `2026-06-18-extend-search-palette-with-commands`
+  - Status: demand-pool proposal; no `tasks.md` and no spec delta yet.
+  - Next step: add explicit proposal/design/tasks/spec delta before implementation or archive.
 
 ## P1 Performance Execution Order
 
 The previous v0.5.11 performance and recovery follow-up chain has been archived. Future performance work should open a new chain instead of reusing the archived change directories.
 
 ## Recent Archive / Sync Snapshot
+
+### 2026-06-23 v0.5.13 Closure Batch
+
+Archived 9 verified changes and synced their delta specs into main specs:
+
+- `fix-app-shell-startup-react-depth-loop`
+- `fix-codex-exec-command-file-change-replay`
+- `fix-codex-provider-recovery-binding`
+- `fix-message-outline-streaming-jank`
+- `fix-provider-model-catalog-and-codex-refresh-isolation`
+- `fix-user-input-stale-submit-settlement`
+- `refine-home-recent-conversations-ui`
+- `relocate-runtime-notice-dock-sidebar-entry`
+- `soften-transient-runtime-reconnect-card`
+
+Spec sync summary: 14 existing main specs were updated and no new spec directory was created. Updated capabilities include Codex composer startup selection stability, shell-backed command mutation replay, Codex provider recovery binding, message outline streaming performance, provider-scoped model catalog refresh isolation, stale user-input settlement, home recent conversation visibility, runtime notice dock sidebar placement, and transient runtime reconnect card presentation. Counts after archive: active=4, archive=521, specs=357.
+
+Validation: each archived change passed `openspec validate <change> --strict --no-interactive` immediately before archive. The batch archive used `openspec archive <change> -y`, which synced delta specs before moving each change into `openspec/changes/archive/2026-06-23-*`. During archive, `relocate-runtime-notice-dock-sidebar-entry` required a spec-delta header alignment to match the current main spec requirement names before successful sync.
 
 ### 2026-06-18 v0.5.11 Closure Batch
 
@@ -196,6 +228,7 @@ npm run check:large-files
 
 ## Update History
 
+- 2026-06-23: Archived 9 verified v0.5.13 changes and synced their deltas into main specs. Current tracked counts are active=4, archive=521, specs=357. Remaining active set is one in-progress release pipeline cache change plus three demand-pool proposals without `tasks.md` or spec deltas.
 - 2026-06-12: Reconciled active OpenSpec workspace after code rollback. Active changes are the five P1 performance chain changes: `composer-and-message-row-render-budget`, `renderer-resource-backpressure`, `backend-io-cache-and-bridge-payload-budget`, `workspace-tree-and-large-file-listing-budget`, and `markdown-off-main-thread-pipeline`. Current tracked counts are active=5, archive=472, specs=328. Each active change validates individually under strict mode.
 - 2026-06-11: Archived `lazy-markdown-runtime` after moving full Markdown parser dependencies behind `FullMarkdownRuntime`, preserving focused Markdown behavior tests, and syncing message markdown streaming compatibility deltas. Current tracked counts are active=3, archive=469, specs=328. Spec-only strict validation passed.
 - 2026-06-11: Archived `split-app-shell-performance-boundaries` after removing AppShell `@ts-nocheck`, deferring release notes changelog data into a lazy chunk, and syncing app-shell runtime boundary deltas. Current tracked counts are active=4, archive=468, specs=328. Spec-only strict validation passed.

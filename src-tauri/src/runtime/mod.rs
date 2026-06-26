@@ -1783,6 +1783,33 @@ impl RuntimeManager {
         let _ = self.persist_ledger().await;
     }
 
+    pub(crate) async fn note_foreground_thread_started_pending(
+        &self,
+        entry: &WorkspaceEntry,
+        engine: &str,
+        thread_id: &str,
+        timeout_ms: u64,
+    ) {
+        let normalized_thread_id = thread_id.trim();
+        if normalized_thread_id.is_empty() {
+            return;
+        }
+        let pinned_keys = self.pinned_keys.lock().await.clone();
+        let mut entries = self.entries.lock().await;
+        let runtime = Self::upsert_entry(&mut entries, entry, engine, &pinned_keys);
+        runtime.update_workspace(entry, engine);
+        runtime.set_foreground_work_continuity(
+            RuntimeForegroundWorkState::StartupPending,
+            normalized_thread_id,
+            None,
+            "thread-started",
+            timeout_ms,
+        );
+        runtime.last_used_at_ms = now_millis();
+        drop(entries);
+        let _ = self.persist_ledger().await;
+    }
+
     pub(crate) async fn note_foreground_resume_pending(
         &self,
         entry: &WorkspaceEntry,

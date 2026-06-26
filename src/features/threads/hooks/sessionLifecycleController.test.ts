@@ -51,6 +51,17 @@ describe("sessionLifecycleController", () => {
     });
   });
 
+  it("builds disk provider display metadata from disk profile id fallback", () => {
+    expect(
+      providerBindingFromSelectedProfile(null, "__disk__"),
+    ).toMatchObject({
+      providerProfileId: "__disk__",
+      providerProfileName: "codex-tui/default-config",
+      providerProfileSource: "disk",
+      providerAvailability: "available",
+    });
+  });
+
   it("prefixes Claude fork names without duplicating the prefix", () => {
     expect(addForkThreadNamePrefix("Release plan")).toBe("fork-Release plan");
     expect(addForkThreadNamePrefix("fork-Release plan")).toBe("fork-Release plan");

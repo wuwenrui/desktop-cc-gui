@@ -93,12 +93,32 @@ function looksLikeFilePathToken(path: string) {
     normalized.includes("\\") ||
     normalized.startsWith("./") ||
     normalized.startsWith("../") ||
-    /^[A-Za-z]:[\\/]/.test(normalized) ||
-    normalized.includes(".")
+    /^[A-Za-z]:[\\/]/.test(normalized)
   ) {
     return true;
   }
-  return false;
+  return looksLikeRootFileNameToken(normalized);
+}
+
+function looksLikeRootFileNameToken(token: string) {
+  if (!token.includes(".")) {
+    return false;
+  }
+  if (token.startsWith(".") || token.endsWith(".")) {
+    return false;
+  }
+  if (/[\s"'`{}()[\]<>=:;]/.test(token)) {
+    return false;
+  }
+  if (/^\.+$/.test(token)) {
+    return false;
+  }
+  const extension = token.slice(token.lastIndexOf(".") + 1);
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,15}$/.test(extension)) {
+    return false;
+  }
+  const basename = token.slice(0, token.lastIndexOf("."));
+  return /[A-Za-z0-9]/.test(basename);
 }
 
 function isStructuredFieldPathToken(token: string) {
@@ -495,6 +515,7 @@ const DELETE_COMMAND_TOKENS = new Set([
   "ri",
 ]);
 const CREATE_COMMAND_TOKENS = new Set(["touch"]);
+const CONTENT_WRITE_COMMAND_TOKENS = new Set(["cat", "echo", "printf", "tee"]);
 const ADD_REDIRECTION_TOKENS = new Set([">", "1>"]);
 const MODIFY_REDIRECTION_TOKENS = new Set([">>", "1>>"]);
 const IGNORED_REDIRECTION_PATHS = new Set(["/dev/null", "nul"]);
@@ -565,7 +586,42 @@ function parseInlineRedirectionTarget(token: string) {
   if (!operator || !rawPath) {
     return null;
   }
-  return { operator, rawPath };
+  return { operator, rawPath, commandPrefix: match[1]?.trim() ?? "" };
+}
+
+function getCommandTokenForSegment(tokens: string[], redirectionIndex: number) {
+  let segmentStart = redirectionIndex - 1;
+  while (segmentStart >= 0) {
+    const token = normalizeShellToken(tokens[segmentStart] ?? "");
+    if (COMMAND_SEPARATOR_TOKENS.has(token)) {
+      break;
+    }
+    segmentStart -= 1;
+  }
+  for (let index = segmentStart + 1; index < redirectionIndex; index += 1) {
+    const token = normalizeShellToken(tokens[index] ?? "");
+    if (!token || token.includes("=")) {
+      continue;
+    }
+    if (token.toLowerCase() === "sudo") {
+      continue;
+    }
+    return token.toLowerCase();
+  }
+  return "";
+}
+
+function isContentWriteCommandToken(token: string) {
+  const normalized = normalizeShellToken(token).toLowerCase();
+  return CONTENT_WRITE_COMMAND_TOKENS.has(normalized);
+}
+
+function commandPrefixLooksLikeContentWrite(prefix: string) {
+  const tokens = tokenizeShellCommand(prefix);
+  if (tokens.length === 0) {
+    return false;
+  }
+  return tokens.some((token) => isContentWriteCommandToken(token));
 }
 
 function isTemporaryPatchArtifactPath(path: string) {
@@ -622,6 +678,10 @@ function inferWriteChangesFromCommand(command: string): FileChangeEntry[] {
       ADD_REDIRECTION_TOKENS.has(token) ||
       MODIFY_REDIRECTION_TOKENS.has(token)
     ) {
+      if (!isContentWriteCommandToken(getCommandTokenForSegment(tokens, index))) {
+        index += 1;
+        continue;
+      }
       const kind = ADD_REDIRECTION_TOKENS.has(token) ? "add" : "modified";
       let nextIndex = index + 1;
       while (nextIndex < tokens.length) {
@@ -641,6 +701,13 @@ function inferWriteChangesFromCommand(command: string): FileChangeEntry[] {
     }
     const inlineRedirection = parseInlineRedirectionTarget(token);
     if (inlineRedirection) {
+      if (
+        !commandPrefixLooksLikeContentWrite(inlineRedirection.commandPrefix) &&
+        !isContentWriteCommandToken(getCommandTokenForSegment(tokens, index))
+      ) {
+        index += 1;
+        continue;
+      }
       const kind = ADD_REDIRECTION_TOKENS.has(inlineRedirection.operator)
         ? "add"
         : "modified";
@@ -747,6 +814,20 @@ function inferDeleteChangesFromCommand(command: string): FileChangeEntry[] {
   }
 
   return inferred;
+}
+
+export function inferMutatingFileChangesFromCommand(command: string): FileChangeEntry[] {
+  const byPath = new Map<string, FileChangeEntry>();
+  for (const entry of inferWriteChangesFromCommand(command)) {
+    if (isTemporaryPatchArtifactPath(entry.path)) {
+      continue;
+    }
+    mergeInferredEntry(byPath, entry);
+  }
+  for (const entry of inferDeleteChangesFromCommand(command)) {
+    mergeInferredEntry(byPath, entry);
+  }
+  return Array.from(byPath.values()).filter((entry) => entry.path);
 }
 
 function mergeInferredEntry(

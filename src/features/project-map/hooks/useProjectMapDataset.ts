@@ -56,6 +56,24 @@ const activeProjectMapWorkerKeys = new Set<string>();
 
 type ProjectMapDatasetStatus = "loading" | "empty" | "persisted" | "error";
 
+function isEmptyDatasetForStorageKey(dataset: ProjectMapDataset, storageKey: string): boolean {
+  return (
+    dataset.manifest.storageKey === storageKey &&
+    dataset.nodes.length === 0 &&
+    dataset.runs.length === 0 &&
+    (dataset.relations?.length ?? 0) === 0 &&
+    (dataset.candidates?.length ?? 0) === 0 &&
+    (dataset.evidenceRecords?.length ?? 0) === 0 &&
+    (dataset.diagramDocuments?.length ?? 0) === 0
+  );
+}
+
+function isEmptyStorageDirByLocation(
+  storageDirByLocation: Record<ProjectMapStorageLocation, string | null>,
+): boolean {
+  return storageDirByLocation.global === null && storageDirByLocation.project === null;
+}
+
 export type ProjectMapGenerationDefaults = {
   engine?: EngineType | null;
   model?: string | null;
@@ -614,11 +632,13 @@ export function useProjectMapDataset(
   options: {
     generationDefaults?: ProjectMapGenerationDefaults | null;
     preferredLanguage?: ProjectMapPreferredLanguage | null;
+    enabled?: boolean;
   } = {},
 ): ProjectMapDatasetController {
   const workspaceId = workspace?.id ?? null;
   const workspaceName = workspace?.name ?? null;
   const workspacePath = workspace?.path ?? null;
+  const enabled = options.enabled !== false;
   const identity = useMemo(
     () =>
       resolveWorkspaceIdentity(
@@ -635,7 +655,9 @@ export function useProjectMapDataset(
   const [dataset, setDataset] = useState<ProjectMapDataset>(() =>
     createEmptyProjectMapDataset({ identity }),
   );
-  const [status, setStatus] = useState<ProjectMapDatasetStatus>(workspaceId ? "loading" : "empty");
+  const [status, setStatus] = useState<ProjectMapDatasetStatus>(
+    enabled && workspaceId ? "loading" : "empty",
+  );
   const [storageDir, setStorageDir] = useState<string | null>(null);
   const [activeReadLocation, setActiveReadLocation] = useState<ProjectMapStorageLocation>(
     DEFAULT_STORAGE_LOCATION,
@@ -683,6 +705,26 @@ export function useProjectMapDataset(
   const generationDefaults = options.generationDefaults ?? null;
   const preferredLanguage = options.preferredLanguage ?? "zh";
 
+  const resetToEmptyState = useCallback(() => {
+    setDataset((current) =>
+      isEmptyDatasetForStorageKey(current, expectedStorageKey)
+        ? current
+        : createEmptyProjectMapDataset({ identity, storageKey: expectedStorageKey }),
+    );
+    setStatus((current) => (current === "empty" ? current : "empty"));
+    setStorageDir((current) => (current === null ? current : null));
+    setStorageDirByLocation((current) =>
+      isEmptyStorageDirByLocation(current) ? current : { global: null, project: null },
+    );
+    setActiveReadLocation((current) =>
+      current === DEFAULT_STORAGE_LOCATION ? current : DEFAULT_STORAGE_LOCATION,
+    );
+    setError((current) => (current === null ? current : null));
+    setPendingRequest((current) => (current === null ? current : null));
+    setRelationshipContextPack((current) => (current === null ? current : null));
+    setRelationshipStaleSummary((current) => (current === null ? current : null));
+  }, [expectedStorageKey, identity]);
+
   const persistDataset = useCallback(
     async (
       nextDataset: ProjectMapDataset,
@@ -707,9 +749,9 @@ export function useProjectMapDataset(
   );
 
   const loadRelationshipContextFromLocation = useCallback(async (readLocation: ProjectMapStorageLocation) => {
-    if (!workspaceId) {
-      setRelationshipContextPack(null);
-      setRelationshipStaleSummary(null);
+    if (!enabled || !workspaceId) {
+      setRelationshipContextPack((current) => (current === null ? current : null));
+      setRelationshipStaleSummary((current) => (current === null ? current : null));
       return;
     }
     try {
@@ -723,21 +765,13 @@ export function useProjectMapDataset(
       setRelationshipContextPack(null);
       setRelationshipStaleSummary(null);
     }
-  }, [workspaceId]);
+  }, [enabled, workspaceId]);
 
   const loadDatasetFromLocation = useCallback(async (readLocation: ProjectMapStorageLocation) => {
     const loadSequence = loadSequenceRef.current + 1;
     loadSequenceRef.current = loadSequence;
-    if (!workspaceId) {
-      setDataset(createEmptyProjectMapDataset({ identity, storageKey: expectedStorageKey }));
-      setStatus("empty");
-      setStorageDir(null);
-      setStorageDirByLocation({ global: null, project: null });
-      setActiveReadLocation(DEFAULT_STORAGE_LOCATION);
-      setError(null);
-      setPendingRequest(null);
-      setRelationshipContextPack(null);
-      setRelationshipStaleSummary(null);
+    if (!enabled || !workspaceId) {
+      resetToEmptyState();
       return;
     }
 
@@ -800,7 +834,7 @@ export function useProjectMapDataset(
       setRelationshipContextPack(null);
       setRelationshipStaleSummary(null);
     }
-  }, [expectedStorageKey, identity, loadRelationshipContextFromLocation, workspaceId]);
+  }, [enabled, expectedStorageKey, identity, loadRelationshipContextFromLocation, resetToEmptyState, workspaceId]);
 
   const reload = useCallback(async () => {
     await loadDatasetFromLocation(activeReadLocation);
@@ -816,9 +850,11 @@ export function useProjectMapDataset(
         return;
       }
       setActiveReadLocation(location);
-      void loadDatasetFromLocation(location);
+      if (enabled) {
+        void loadDatasetFromLocation(location);
+      }
     },
-    [activeReadLocation, loadDatasetFromLocation],
+    [activeReadLocation, enabled, loadDatasetFromLocation],
   );
 
   useEffect(() => {
@@ -828,6 +864,7 @@ export function useProjectMapDataset(
   useEffect(() => {
     if (
       !workspaceId ||
+      !enabled ||
       status !== "persisted" ||
       dataset.manifest.storageKey !== expectedStorageKey
     ) {
@@ -1021,6 +1058,7 @@ export function useProjectMapDataset(
     activeReadLocation,
     activeRunId,
     dataset.manifest.storageKey,
+    enabled,
     expectedStorageKey,
     status,
     workspaceId,
@@ -1031,6 +1069,7 @@ export function useProjectMapDataset(
     const checkedAt = new Date().toISOString();
     if (
       !workspaceId ||
+      !enabled ||
       status !== "persisted" ||
       !shouldEvaluateProjectMapAutoIngestion({
         settings: dataset.autoIngestionSettings,
@@ -1122,7 +1161,7 @@ export function useProjectMapDataset(
     return () => {
       cancelled = true;
     };
-  }, [dataset, defaultWritePath, persistDataset, preferredLanguage, status, workspaceId, workspacePath]);
+  }, [dataset, defaultWritePath, enabled, persistDataset, preferredLanguage, status, workspaceId, workspacePath]);
 
   const openGlobalCollection = useCallback(() => {
     const defaults = resolveGenerationDefaults(dataset, generationDefaults);

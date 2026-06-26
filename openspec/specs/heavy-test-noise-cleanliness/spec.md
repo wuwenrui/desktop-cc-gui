@@ -41,15 +41,13 @@ Frontend DEV instrumentation SHALL preserve local development diagnostics while 
 
 Expected error-path diagnostics and intentional library warnings SHALL be asserted, muted locally, or otherwise contained within the relevant tests instead of polluting the global heavy regression output.
 
-#### Scenario: Expected stderr is scoped to the owning test
+#### Scenario: Markdown rich preview outline compile does not leak act warning
 
-- **WHEN** a test intentionally exercises an error branch such as runtime bridge failure or detached window rejection
-- **THEN** the resulting diagnostics SHALL be asserted or muted within that test file rather than leaking as repeated heavy suite stderr noise
-
-#### Scenario: Intentional library warnings are locally contained
-
-- **WHEN** a test intentionally exercises malformed markdown math or equivalent library warning paths
-- **THEN** the warning SHALL be contained at the test boundary without altering product behavior
+- **WHEN** the heavy suite runs `FileMarkdownPreviewFast.test.tsx`
+- **AND** a default rich preview schedules asynchronous outline compilation
+- **THEN** the test MUST wait for the relevant async state to settle before exiting
+- **AND** it MUST NOT mute global `console.error` to hide React `act(...)` warnings
+- **AND** the heavy-test-noise parser MUST report zero repo-owned act warnings for that focused log.
 
 ### Requirement: CI SHALL enforce heavy test noise sentry
 
@@ -81,4 +79,3 @@ The system SHALL provide a CI sentry that runs the heavy regression noise checks
 - **WHEN** the heavy test noise sentry fails in CI
 - **THEN** the sentry MUST upload the heavy test noise log artifact for diagnosis
 - **AND** the upload condition MUST NOT mask the original failing exit code
-

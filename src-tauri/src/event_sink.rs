@@ -1,16 +1,29 @@
 use std::collections::VecDeque;
 use std::env;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
+use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 use tokio::time::interval;
 
 use crate::backend::events::{AppServerEvent, EventSink, TerminalOutput};
+use crate::snapshot_throttle::global_snapshot_throttle_count;
 
 pub(crate) const APP_SERVER_EVENT_BATCH: &str = "app-server-event-batch";
+pub(crate) const APP_SERVER_EVENT_BATCH_STATS: &str = "app-server-event-batch-stats";
 const BATCH_FLUSH_INTERVAL_MS: u64 = 40;
+const BATCH_STATS_INTERVAL_MS: u64 = 1_000;
 const APP_SERVER_EVENT_BATCH_ENV: &str = "CCGUI_APP_SERVER_EVENT_BATCH";
+const CRITICAL_METHODS: &[&str] = &[
+    "turn/completed",
+    "turn/error",
+    "runtime/ended",
+    "item/tool/requestUserInput",
+    "approval/request",
+    "collaboration/modeBlocked",
+    "collaboration/modeResolved",
+];
 
 /// Single-event fallback sink. One `app.emit` per call.
 #[derive(Clone)]
@@ -53,6 +66,26 @@ pub(crate) struct BatchedTauriEventSink {
 struct BatchedEventState {
     by_workspace: std::collections::HashMap<String, VecDeque<AppServerEvent>>,
     workspace_order: VecDeque<String>,
+    queued_bytes: usize,
+    flush_count: u64,
+    critical_bypass_count: u64,
+    critical_flush_count: u64,
+    last_flush_duration_ms: u64,
+    last_flush_size_bytes: usize,
+}
+
+#[derive(Clone, Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct BatchStats {
+    queued_bytes: usize,
+    dropped_count: u64,
+    dropped_by_method: std::collections::HashMap<String, u64>,
+    flush_count: u64,
+    critical_bypass_count: u64,
+    critical_flush_count: u64,
+    snapshot_throttle_count: u64,
+    last_flush_duration_ms: u64,
+    last_flush_size_bytes: usize,
 }
 
 impl BatchedTauriEventSink {
@@ -60,6 +93,12 @@ impl BatchedTauriEventSink {
         let inner = Arc::new(Mutex::new(BatchedEventState {
             by_workspace: std::collections::HashMap::new(),
             workspace_order: VecDeque::new(),
+            queued_bytes: 0,
+            flush_count: 0,
+            critical_bypass_count: 0,
+            critical_flush_count: 0,
+            last_flush_duration_ms: 0,
+            last_flush_size_bytes: 0,
         }));
         let app_clone = app.clone();
         let inner_clone = Arc::clone(&inner);
@@ -81,6 +120,21 @@ impl BatchedTauriEventSink {
                 }
             }
         });
+        let stats_app = app.clone();
+        let stats_inner = Arc::clone(&inner);
+        tokio::spawn(async move {
+            let mut ticker = interval(Duration::from_millis(BATCH_STATS_INTERVAL_MS));
+            loop {
+                ticker.tick().await;
+                let stats = {
+                    let guard = stats_inner.lock().expect(
+                        "BatchedTauriEventSink inner mutex poisoned; the stats task panicked",
+                    );
+                    guard.stats()
+                };
+                let _ = stats_app.emit(APP_SERVER_EVENT_BATCH_STATS, stats);
+            }
+        });
         Self { app, inner }
     }
 }
@@ -91,6 +145,9 @@ impl BatchedEventState {
     /// preserved via `workspace_order`. Callers MUST hold the lock.
     fn submit(&mut self, event: AppServerEvent) {
         let workspace_id = event.workspace_id.clone();
+        self.queued_bytes = self
+            .queued_bytes
+            .saturating_add(estimate_event_bytes(&event));
         if !self.by_workspace.contains_key(&workspace_id) {
             self.workspace_order.push_back(workspace_id.clone());
         }
@@ -100,7 +157,9 @@ impl BatchedEventState {
             .push_back(event);
     }
 
+    #[cfg(test)]
     fn drain_workspace_batch(&mut self, workspace_id: &str) -> Option<Vec<AppServerEvent>> {
+        let started_at = Instant::now();
         let queue = self.by_workspace.remove(workspace_id)?;
         self.workspace_order
             .retain(|queued_id| queued_id != workspace_id);
@@ -108,11 +167,13 @@ impl BatchedEventState {
         if batch.is_empty() {
             None
         } else {
+            self.record_flush(&batch, started_at, true);
             Some(batch)
         }
     }
 
     fn drain_all_workspace_batches(&mut self) -> Vec<Vec<AppServerEvent>> {
+        let started_at = Instant::now();
         let order: Vec<String> = self.workspace_order.drain(..).collect();
         let mut batches = Vec::new();
         for workspace_id in order {
@@ -123,18 +184,77 @@ impl BatchedEventState {
                 }
             }
         }
+        if !batches.is_empty() {
+            let total_bytes = batches
+                .iter()
+                .flatten()
+                .map(estimate_event_bytes)
+                .sum::<usize>();
+            self.flush_count = self.flush_count.saturating_add(batches.len() as u64);
+            self.last_flush_duration_ms = started_at.elapsed().as_millis() as u64;
+            self.last_flush_size_bytes = total_bytes;
+            self.queued_bytes = self.queued_bytes.saturating_sub(total_bytes);
+        }
         batches
+    }
+
+    #[cfg(test)]
+    fn record_flush(&mut self, batch: &[AppServerEvent], started_at: Instant, critical: bool) {
+        let bytes = batch.iter().map(estimate_event_bytes).sum::<usize>();
+        self.flush_count = self.flush_count.saturating_add(1);
+        if critical {
+            self.critical_flush_count = self.critical_flush_count.saturating_add(1);
+        }
+        self.last_flush_duration_ms = started_at.elapsed().as_millis() as u64;
+        self.last_flush_size_bytes = bytes;
+        self.queued_bytes = self.queued_bytes.saturating_sub(bytes);
+    }
+
+    fn record_critical_bypass(&mut self) {
+        self.critical_bypass_count = self.critical_bypass_count.saturating_add(1);
+    }
+
+    fn critical_bypass_batch(&mut self, event: AppServerEvent) -> Vec<AppServerEvent> {
+        self.record_critical_bypass();
+        self.flush_count = self.flush_count.saturating_add(1);
+        self.critical_flush_count = self.critical_flush_count.saturating_add(1);
+        self.last_flush_size_bytes = estimate_event_bytes(&event);
+        self.last_flush_duration_ms = 0;
+        vec![event]
+    }
+
+    fn stats(&self) -> BatchStats {
+        BatchStats {
+            queued_bytes: self.queued_bytes,
+            dropped_count: 0,
+            dropped_by_method: std::collections::HashMap::new(),
+            flush_count: self.flush_count,
+            critical_bypass_count: self.critical_bypass_count,
+            critical_flush_count: self.critical_flush_count,
+            snapshot_throttle_count: global_snapshot_throttle_count(),
+            last_flush_duration_ms: self.last_flush_duration_ms,
+            last_flush_size_bytes: self.last_flush_size_bytes,
+        }
     }
 }
 
-fn is_terminal_app_server_event(event: &AppServerEvent) -> bool {
-    matches!(
-        event
-            .message
-            .get("method")
-            .and_then(|method| method.as_str()),
-        Some("turn/completed" | "turn/error" | "runtime/ended")
-    )
+fn app_server_event_method(event: &AppServerEvent) -> Option<&str> {
+    event
+        .message
+        .get("method")
+        .and_then(|method| method.as_str())
+}
+
+fn is_critical_app_server_event(event: &AppServerEvent) -> bool {
+    app_server_event_method(event)
+        .map(|method| CRITICAL_METHODS.contains(&method))
+        .unwrap_or(false)
+}
+
+fn estimate_event_bytes(event: &AppServerEvent) -> usize {
+    serde_json::to_vec(event)
+        .map(|bytes| bytes.len())
+        .unwrap_or(0)
 }
 
 impl EventSink for BatchedTauriEventSink {
@@ -145,20 +265,19 @@ impl EventSink for BatchedTauriEventSink {
         // fallback to the single-event channel: under lock contention we
         // briefly serialize, but the event is always batched, never
         // double-emitted.
-        let terminal_workspace_id =
-            is_terminal_app_server_event(&event).then(|| event.workspace_id.clone());
-        let terminal_batch = {
+        if is_critical_app_server_event(&event) {
             let mut guard = self.inner.lock().expect(
                 "BatchedTauriEventSink inner mutex poisoned; the background flush task panicked",
             );
-            guard.submit(event);
-            terminal_workspace_id
-                .as_deref()
-                .and_then(|workspace_id| guard.drain_workspace_batch(workspace_id))
-        };
-        if let Some(batch) = terminal_batch {
+            let batch = guard.critical_bypass_batch(event);
+            drop(guard);
             let _ = self.app.emit(APP_SERVER_EVENT_BATCH, batch);
+            return;
         }
+        let mut guard = self.inner.lock().expect(
+            "BatchedTauriEventSink inner mutex poisoned; the background flush task panicked",
+        );
+        guard.submit(event);
     }
 
     fn emit_terminal_output(&self, event: TerminalOutput) {
@@ -231,7 +350,7 @@ pub(crate) fn build_event_sink(app: AppHandle) -> AppServerEventSink {
 #[cfg(test)]
 mod tests {
     use super::{
-        is_terminal_app_server_event, parse_app_server_event_batch_enabled, BatchedEventState,
+        is_critical_app_server_event, parse_app_server_event_batch_enabled, BatchedEventState,
         BATCH_FLUSH_INTERVAL_MS,
     };
     use crate::backend::events::AppServerEvent;
@@ -249,16 +368,26 @@ mod tests {
         }
     }
 
+    fn new_state() -> BatchedEventState {
+        BatchedEventState {
+            by_workspace: std::collections::HashMap::new(),
+            workspace_order: VecDeque::new(),
+            queued_bytes: 0,
+            flush_count: 0,
+            critical_bypass_count: 0,
+            critical_flush_count: 0,
+            last_flush_duration_ms: 0,
+            last_flush_size_bytes: 0,
+        }
+    }
+
     /// Per-workspace buffering: events for the same workspace append in
     /// arrival order, and the first-seen workspace order is preserved in
     /// `workspace_order` so the flush emits workspaces in the order they
     /// were first touched.
     #[test]
     fn batched_event_state_per_workspace_arrival_order() {
-        let mut state = BatchedEventState {
-            by_workspace: std::collections::HashMap::new(),
-            workspace_order: VecDeque::new(),
-        };
+        let mut state = new_state();
         state.submit(make_event("ws0", 1));
         state.submit(make_event("ws1", 2));
         state.submit(make_event("ws0", 3));
@@ -292,10 +421,7 @@ mod tests {
     /// than one workspace's events at a time.
     #[test]
     fn batched_event_state_burst_single_workspace() {
-        let mut state = BatchedEventState {
-            by_workspace: std::collections::HashMap::new(),
-            workspace_order: VecDeque::new(),
-        };
+        let mut state = new_state();
         for i in 0..1000 {
             state.submit(make_event("ws0", i));
         }
@@ -312,10 +438,7 @@ mod tests {
 
     #[test]
     fn batched_event_state_drain_all_keeps_workspace_batches_isolated() {
-        let mut state = BatchedEventState {
-            by_workspace: std::collections::HashMap::new(),
-            workspace_order: VecDeque::new(),
-        };
+        let mut state = new_state();
         state.submit(make_event("ws0", 1));
         state.submit(make_event("ws1", 2));
         state.submit(make_event("ws0", 3));
@@ -342,21 +465,48 @@ mod tests {
     }
 
     #[test]
-    fn batched_event_state_terminal_event_flushes_only_its_workspace() {
-        let mut state = BatchedEventState {
-            by_workspace: std::collections::HashMap::new(),
-            workspace_order: VecDeque::new(),
-        };
+    fn critical_event_methods_are_classified_for_bypass() {
         let terminal = make_method_event("ws0", "turn/completed", 3);
-        assert!(is_terminal_app_server_event(&terminal));
+        let approval = make_method_event("ws0", "approval/request", 4);
+        let normal = make_event("ws0", 5);
+        assert!(is_critical_app_server_event(&terminal));
+        assert!(is_critical_app_server_event(&approval));
+        assert!(!is_critical_app_server_event(&normal));
+    }
 
+    #[test]
+    fn critical_bypass_state_preserves_burst_queue_and_emits_one_event_batches() {
+        let mut state = new_state();
+        for seq in 0..1024 {
+            state.submit(make_event("ws0", seq));
+        }
+
+        let critical_batches: Vec<Vec<AppServerEvent>> = (0..50)
+            .map(|seq| state.critical_bypass_batch(make_method_event("ws0", "turn/completed", seq)))
+            .collect();
+
+        assert_eq!(critical_batches.len(), 50);
+        assert!(critical_batches.iter().all(|batch| batch.len() == 1));
+        assert!(critical_batches
+            .iter()
+            .flatten()
+            .all(is_critical_app_server_event));
+        assert_eq!(state.by_workspace.get("ws0").unwrap().len(), 1024);
+        assert_eq!(state.critical_bypass_count, 50);
+        assert_eq!(state.critical_flush_count, 50);
+        assert_eq!(state.flush_count, 50);
+    }
+
+    #[test]
+    fn batched_event_state_drain_workspace_keeps_other_workspaces_queued() {
+        let mut state = new_state();
         state.submit(make_event("ws0", 1));
         state.submit(make_event("ws1", 2));
-        state.submit(terminal);
+        state.submit(make_event("ws0", 3));
 
         let ws0_batch = state
             .drain_workspace_batch("ws0")
-            .expect("terminal workspace should drain immediately");
+            .expect("workspace should drain immediately");
         let ws0_seq: Vec<u32> = ws0_batch
             .iter()
             .map(|event| event.message.get("seq").unwrap().as_u64().unwrap() as u32)

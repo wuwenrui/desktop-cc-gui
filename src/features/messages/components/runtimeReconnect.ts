@@ -8,7 +8,10 @@ export type RuntimeReconnectHint = {
   reason: RuntimeRecoveryHintReason;
   rawMessage: string;
   tone: "blocking" | "transient";
+  autoDismissMs?: number;
 };
+
+export const TRANSIENT_RUNTIME_RECONNECT_AUTO_DISMISS_MS = 2_500;
 
 export type RuntimeReconnectRecoveryResult =
   | { kind: "rebound"; threadId?: string | null }
@@ -41,6 +44,9 @@ export function resolveRuntimeReconnectHint(text: string): RuntimeReconnectHint 
     reason: diagnostic.reconnectReason,
     rawMessage: diagnostic.rawMessage,
     tone: isTransientManagedCleanup ? "transient" : "blocking",
+    ...(isTransientManagedCleanup
+      ? { autoDismissMs: TRANSIENT_RUNTIME_RECONNECT_AUTO_DISMISS_MS }
+      : {}),
   };
 }
 

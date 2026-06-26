@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import type { MutableRefObject } from "react";
 import type {
   AppServerEvent,
@@ -8,8 +8,9 @@ import type {
   RequestUserInputRequest,
 } from "../../../types";
 import {
-  subscribeAppServerEventBatch,
-  subscribeAppServerEvents,
+  getAppServerEventBackpressureForTests,
+  resetAppServerEventBackpressureForTests,
+  subscribeRawAppServerEvents,
 } from "../../../services/events";
 import type {
   ConversationEngine,
@@ -29,11 +30,22 @@ import {
 } from "../../shared-session/runtime/sharedSessionBridge";
 import { updateSharedSessionNativeBinding as updateSharedSessionNativeBindingService } from "../../shared-session/services/sharedSessions";
 import { noteThreadAppServerEventReceived } from "../../threads/utils/streamLatencyDiagnostics";
-import { isAppServerEventBatchConsumerEnabled } from "../../threads/utils/realtimePerfFlags";
+import {
+  isAppServerEventBatchConsumerEnabled,
+  readStreamingScheduleTier,
+} from "../../threads/utils/realtimePerfFlags";
+import { useRenderScheduler } from "../../../hooks/useRenderScheduler";
+import { resolveDispatchSchedule } from "../../threads/utils/renderSchedulingPolicy";
 import {
   classifyCodexEventRisk,
   resolveCodexEventOwnership,
 } from "./codexEventOwnership";
+import { useAppServerEventBatchDispatch } from "./useAppServerEventBatchDispatch";
+
+export {
+  getAppServerEventBackpressureForTests,
+  resetAppServerEventBackpressureForTests,
+};
 
 type AgentDelta = {
   workspaceId: string;
@@ -67,7 +79,7 @@ type AgentCompleted = {
   turnId?: string | null;
 };
 
-type AppServerEventHandlers = {
+export type AppServerEventHandlers = {
   onNormalizedRealtimeEvent?: (event: NormalizedThreadEvent) => void;
   onWorkspaceConnected?: (workspaceId: string) => void;
   onThreadStarted?: (
@@ -255,7 +267,7 @@ type UseAppServerEventsOptions = {
   useNormalizedRealtimeAdapters?: boolean;
 };
 
-type DispatchAppServerEventOptions = {
+export type DispatchAppServerEventOptions = {
   useNormalizedRealtimeAdapters: boolean;
   threadAgentDeltaSeenRef: MutableRefObject<Record<string, true>>;
   threadAgentCompletedSeenRef: MutableRefObject<ThreadAgentCompletedItemTracker>;
@@ -389,7 +401,7 @@ function getAppServerEventParams(
   return (payload.message.params as Record<string, unknown> | undefined) ?? {};
 }
 
-function buildCoalescibleAppServerEventKey(
+export function buildCoalescibleAppServerEventKey(
   payload: AppServerEvent,
 ): string | null {
   const method = getAppServerEventMethod(payload);
@@ -1418,12 +1430,11 @@ function tryRouteNormalizedRealtimeEvent({
 /**
  * Module-level dispatcher for a single `AppServerEvent`.
  *
- * Extracted from the `useAppServerEvents` `useEffect` callback so that
- * both the single-channel subscription (`subscribeAppServerEvents`) and
- * the batched subscription (`subscribeAppServerEventBatch`) can share a
- * single routing path. Sharing matters: a per-event closure copy would
- * double-register handlers and cause duplicate reducer dispatches when
- * both channels are active.
+ * Extracted from the `useAppServerEvents` `useEffect` callback so both the
+ * fallback raw subscription and the v2 scheduled consumer share one routing
+ * path. Sharing matters: a per-event closure copy would double-register
+ * handlers and cause duplicate reducer dispatches when multiple channels are
+ * active.
  *
  * All closure-captured state (handlers, refs, runtime options) is
  * passed explicitly so the dispatcher has no hidden dependencies and is
@@ -2871,80 +2882,75 @@ export function useAppServerEvents(
     threadAgentCompletedSeenRef,
     threadAgentSnapshotSeenRef,
   };
-  useEffect(() => {
-    if (isAppServerEventBatchConsumerEnabled()) {
-      const queuedBatches: Array<readonly AppServerEvent[]> = [];
-      let activeBatchDispatchCancel: (() => void) | null = null;
-      let disposed = false;
-
-      const runNextBatch = () => {
-        if (
-          disposed ||
-          activeBatchDispatchCancel ||
-          queuedBatches.length === 0
-        ) {
-          return;
-        }
-        const nextBatch = queuedBatches.shift();
-        if (!nextBatch) {
-          return;
-        }
-        let cancelBatchDispatch: (() => void) | null = null;
-        let completedSynchronously = false;
-        cancelBatchDispatch = dispatchAppServerEventBatch(
-          handlersRef.current,
-          nextBatch,
-          {
-            ...dispatcherOptionsRef.current,
-            onComplete: () => {
-              if (cancelBatchDispatch) {
-                if (activeBatchDispatchCancel === cancelBatchDispatch) {
-                  activeBatchDispatchCancel = null;
-                }
-                runNextBatch();
-                return;
-              }
-              completedSynchronously = true;
-            },
-          },
-        );
-        if (completedSynchronously) {
-          cancelBatchDispatch = null;
-          activeBatchDispatchCancel = null;
-          runNextBatch();
-          return;
-        }
-        activeBatchDispatchCancel = cancelBatchDispatch;
-      };
-
-      const unsubscribeBatch = subscribeAppServerEventBatch((batch) => {
-        queuedBatches.push(batch);
-        runNextBatch();
-      });
-      const unsubscribeSingle = subscribeAppServerEvents((payload) => {
+  const batchConsumerEnabled = isAppServerEventBatchConsumerEnabled();
+  const rawFallbackQueueRef = useRef<AppServerEvent[]>([]);
+  const rawFallbackSchedule = resolveDispatchSchedule({
+    tier: readStreamingScheduleTier(),
+    isLiveRow: false,
+    isHeavy: false,
+    isCritical: false,
+  });
+  const rawFallbackScheduleRef = useRef(rawFallbackSchedule);
+  rawFallbackScheduleRef.current = rawFallbackSchedule;
+  const rawFallbackScheduler = useRenderScheduler({
+    budgetMs: rawFallbackSchedule.budgetMs,
+    idleTimeoutMs: rawFallbackSchedule.idleTimeoutMs,
+  });
+  const dispatchRawFallbackQueue = useCallback((): boolean => {
+    const startedAt =
+      typeof performance !== "undefined" && typeof performance.now === "function"
+        ? performance.now()
+        : Date.now();
+    let dispatchedInChunk = 0;
+    while (
+      rawFallbackQueueRef.current.length > 0 &&
+      dispatchedInChunk < DEFAULT_APP_SERVER_EVENT_BATCH_CHUNK_SIZE
+    ) {
+      const elapsed =
+        (typeof performance !== "undefined" &&
+        typeof performance.now === "function"
+          ? performance.now()
+          : Date.now()) - startedAt;
+      if (
+        dispatchedInChunk > 0 &&
+        rawFallbackScheduleRef.current.budgetMs > 0 &&
+        elapsed >= rawFallbackScheduleRef.current.budgetMs
+      ) {
+        break;
+      }
+      const next = rawFallbackQueueRef.current.shift()!;
+      dispatchedInChunk += 1;
+      try {
         dispatchAppServerEvent(
           handlersRef.current,
-          payload,
+          next,
           dispatcherOptionsRef.current,
         );
-      });
-      return () => {
-        disposed = true;
-        unsubscribeBatch();
-        unsubscribeSingle();
-        queuedBatches.length = 0;
-        if (activeBatchDispatchCancel) {
-          activeBatchDispatchCancel();
-          activeBatchDispatchCancel = null;
-        }
-      };
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error("[useAppServerEvents] raw fallback dispatch failed", error);
+      }
     }
-    return subscribeAppServerEvents((payload) => {
-      dispatchAppServerEvent(
-        handlersRef.current,
-        payload,
-        dispatcherOptionsRef.current,
-      );
-    });
+    return rawFallbackQueueRef.current.length > 0;
   }, []);
+  useAppServerEventBatchDispatch(handlers, {
+    ...dispatcherOptionsRef.current,
+    enableInternalBatchSubscription: batchConsumerEnabled,
+  });
+
+  useEffect(() => {
+    if (batchConsumerEnabled) {
+      return undefined;
+    }
+    const rawFallbackQueue = rawFallbackQueueRef.current;
+    const unsubscribe = subscribeRawAppServerEvents((payload) => {
+      rawFallbackQueue.push(payload);
+      rawFallbackScheduler.scheduleChunk(dispatchRawFallbackQueue);
+    });
+    return () => {
+      unsubscribe();
+      rawFallbackQueue.length = 0;
+      rawFallbackScheduler.cancel();
+    };
+  }, [batchConsumerEnabled, dispatchRawFallbackQueue, rawFallbackScheduler]);
 }

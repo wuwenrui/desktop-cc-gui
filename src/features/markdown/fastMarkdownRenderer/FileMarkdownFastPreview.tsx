@@ -1,5 +1,6 @@
 import {
   forwardRef,
+  Fragment,
   memo,
   useCallback,
   useEffect,
@@ -25,7 +26,9 @@ const EMPTY_ANNOTATIONS: CodeAnnotationSelection[] = [];
 
 type FastAnnotationOverlayItem = {
   key: string;
-  top: number;
+  actionTop: number | null;
+  actionLineRange: CodeAnnotationLineRange | null;
+  annotationTop: number;
   annotations: CodeAnnotationSelection[];
   draft: { lineRange: CodeAnnotationLineRange; body: string } | null;
 };
@@ -135,6 +138,8 @@ export function FileMarkdownFastPreview({
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const fallbackSignaledRef = useRef(false);
   const [annotationOverlayItems, setAnnotationOverlayItems] = useState<FastAnnotationOverlayItem[]>([]);
+  const [activeAnnotationActionBlockId, setActiveAnnotationActionBlockId] =
+    useState<string | null>(null);
   const { result, status, resolvedProfile, error, shouldFallback } =
     useFastMarkdownRender({
       documentKey: documentKey ?? `inline:${value.length}:${resolvedKey(value)}`,
@@ -213,51 +218,16 @@ export function FileMarkdownFastPreview({
       });
     });
 
-    if (onAnnotationStart) {
-      const blocks = Array.from(
-        surface.querySelectorAll<HTMLElement>("[data-source-line-start][data-source-line-end]"),
-      ).filter((node) => node.parentElement === surface);
-      blocks.forEach((block) => {
-        const startLine = Number(block.dataset.sourceLineStart);
-        const endLine = Number(block.dataset.sourceLineEnd);
-        if (!Number.isFinite(startLine) || !Number.isFinite(endLine)) {
-          return;
-        }
-        const button = surface.ownerDocument.createElement("button");
-        button.type = "button";
-        button.className = "fvp-markdown-annotation-button fvp-fast-markdown-annotation-button";
-        button.textContent = annotationActionLabel;
-        button.setAttribute("aria-label", `${annotationActionLabel} L${startLine}-${endLine}`);
-        const handleClick = (event: MouseEvent) => {
-          event.preventDefault();
-          event.stopPropagation();
-          onAnnotationStart({ startLine, endLine });
-        };
-        button.addEventListener("click", handleClick);
-        block.insertAdjacentElement("afterend", button);
-        cleanupCallbacks.push(() => {
-          button.removeEventListener("click", handleClick);
-          button.remove();
-        });
-      });
-    }
-
     return () => {
       cleanupCallbacks.forEach((cleanup) => cleanup());
     };
-  }, [
-    annotationActionLabel,
-    onAnnotationStart,
-    requiresRichInteractionIsland,
-    result,
-    status,
-  ]);
+  }, [requiresRichInteractionIsland, result, status]);
 
   useEffect(() => {
     if (status !== "ready" || !result || requiresRichInteractionIsland) {
       return;
     }
-    if (!renderAnnotationDraft && !renderAnnotationMarker) {
+    if (!onAnnotationStart && !renderAnnotationDraft && !renderAnnotationMarker) {
       setAnnotationOverlayItems((current) => (current.length === 0 ? current : []));
       return;
     }
@@ -284,6 +254,27 @@ export function FileMarkdownFastPreview({
       annotationBuckets.set(draftAnchor.blockId, existing);
     }
 
+    const overlayItemByBlockId = new Map<string, FastAnnotationOverlayItem>();
+    if (onAnnotationStart) {
+      for (const anchor of result.sourceLineAnchors) {
+        const block = blocksById.get(anchor.blockId);
+        if (!block) {
+          continue;
+        }
+        overlayItemByBlockId.set(anchor.blockId, {
+          key: anchor.blockId,
+          actionTop: block.offsetTop + 2,
+          actionLineRange: {
+            startLine: anchor.startLine,
+            endLine: anchor.endLine,
+          },
+          annotationTop: block.offsetTop + block.offsetHeight,
+          annotations: [],
+          draft: null,
+        });
+      }
+    }
+
     for (const [blockId, blockAnnotations] of annotationBuckets) {
       const block = blocksById.get(blockId);
       if (!block) {
@@ -295,13 +286,17 @@ export function FileMarkdownFastPreview({
       if (!shouldRenderDraft && !shouldRenderMarkers) {
         continue;
       }
-      nextOverlayItems.push({
+      const existingItem = overlayItemByBlockId.get(blockId);
+      overlayItemByBlockId.set(blockId, {
         key: blockId,
-        top: block.offsetTop + block.offsetHeight,
+        actionTop: existingItem?.actionTop ?? null,
+        actionLineRange: existingItem?.actionLineRange ?? null,
+        annotationTop: block.offsetTop + block.offsetHeight,
         annotations: blockAnnotations,
         draft: shouldRenderDraft && annotationDraft ? annotationDraft : null,
       });
     }
+    nextOverlayItems.push(...overlayItemByBlockId.values());
     setAnnotationOverlayItems((current) =>
       areFastAnnotationOverlayItemsEqual(current, nextOverlayItems)
         ? current
@@ -310,6 +305,7 @@ export function FileMarkdownFastPreview({
   }, [
     annotationDraft,
     annotations,
+    onAnnotationStart,
     renderAnnotationDraft,
     renderAnnotationMarker,
     requiresRichInteractionIsland,
@@ -347,6 +343,32 @@ export function FileMarkdownFastPreview({
     [],
   );
 
+  const handleFastSurfaceFrameMouseMove = useCallback(
+    (event: ReactMouseEvent<HTMLDivElement>) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) {
+        setActiveAnnotationActionBlockId((current) => (current === null ? current : null));
+        return;
+      }
+      const actionButton = target.closest<HTMLElement>("[data-fast-annotation-action-block-id]");
+      const sourceBlock = target.closest<HTMLElement>("[data-source-block-id]");
+      const sourceBlockId =
+        sourceBlock && surfaceRef.current?.contains(sourceBlock)
+          ? sourceBlock.dataset.sourceBlockId
+          : null;
+      const blockId =
+        actionButton?.dataset.fastAnnotationActionBlockId ??
+        sourceBlockId ??
+        null;
+      setActiveAnnotationActionBlockId((current) => (current === blockId ? current : blockId));
+    },
+    [],
+  );
+
+  const handleFastSurfaceFrameMouseLeave = useCallback(() => {
+    setActiveAnnotationActionBlockId((current) => (current === null ? current : null));
+  }, []);
+
   if (shouldFallback || requiresRichInteractionIsland) {
     return null;
   }
@@ -355,12 +377,17 @@ export function FileMarkdownFastPreview({
     (count, item) => count + item.annotations.length + (item.draft ? 1 : 0),
     0,
   );
+  const renderedAnnotationActionCount = annotationOverlayItems.reduce(
+    (count, item) => count + (item.actionLineRange ? 1 : 0),
+    0,
+  );
   const dataAttributes: Record<string, string> = {
     "data-markdown-render-strategy": "fast-html",
     "data-markdown-render-profile": resolvedProfile,
     "data-markdown-render-status": status,
     "data-markdown-fallback-reason": error?.message ?? "none",
     "data-markdown-annotation-overlay-count": String(renderedAnnotationOverlayCount),
+    "data-markdown-annotation-action-count": String(renderedAnnotationActionCount),
   };
   if (result) {
     dataAttributes["data-markdown-content-hash"] = result.contentHash;
@@ -386,7 +413,11 @@ export function FileMarkdownFastPreview({
   if (status === "ready" && result) {
     return (
       <>
-        <div className="fvp-fast-markdown-surface-frame">
+        <div
+          className="fvp-fast-markdown-surface-frame"
+          onMouseMove={handleFastSurfaceFrameMouseMove}
+          onMouseLeave={handleFastSurfaceFrameMouseLeave}
+        >
           <FastMarkdownHtmlSurface
             ref={surfaceRef}
             className={className}
@@ -395,26 +426,51 @@ export function FileMarkdownFastPreview({
             marker="ready"
             onClick={handleSurfaceClick}
           />
-          <div className="fvp-fast-markdown-annotation-layer" aria-hidden={annotationOverlayItems.length === 0}>
+          <div
+            className="fvp-fast-markdown-annotation-layer"
+            aria-hidden={annotationOverlayItems.length === 0 ? "true" : undefined}
+          >
             {annotationOverlayItems.map((item) => (
-              <div
-                key={item.key}
-                className="fvp-markdown-annotation-inline fvp-fast-markdown-annotation-inline"
-                style={{ top: item.top }}
-              >
-                {item.annotations.map((annotation) =>
-                renderAnnotationMarker ? (
-                  <div key={annotation.id} className="fvp-fast-markdown-annotation-marker">
-                    {renderAnnotationMarker(annotation)}
+              <Fragment key={item.key}>
+                {item.actionLineRange ? (
+                  <button
+                    type="button"
+                    className="fvp-markdown-annotation-button fvp-fast-markdown-annotation-button"
+                    style={{ top: item.actionTop ?? 0 }}
+                    data-active={activeAnnotationActionBlockId === item.key ? "true" : undefined}
+                    data-fast-annotation-action-block-id={item.key}
+                    aria-label={`${annotationActionLabel} L${item.actionLineRange.startLine}-${item.actionLineRange.endLine}`}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      if (item.actionLineRange) {
+                        onAnnotationStart?.(item.actionLineRange);
+                      }
+                    }}
+                  >
+                    {annotationActionLabel}
+                  </button>
+                ) : null}
+                {item.annotations.length > 0 || item.draft ? (
+                  <div
+                    className="fvp-markdown-annotation-inline fvp-fast-markdown-annotation-inline"
+                    style={{ top: item.annotationTop }}
+                  >
+                    {item.annotations.map((annotation) =>
+                      renderAnnotationMarker ? (
+                        <div key={annotation.id} className="fvp-fast-markdown-annotation-marker">
+                          {renderAnnotationMarker(annotation)}
+                        </div>
+                      ) : null,
+                    )}
+                    {item.draft && renderAnnotationDraft ? (
+                      <div className="fvp-fast-markdown-annotation-draft">
+                        {renderAnnotationDraft(item.draft)}
+                      </div>
+                    ) : null}
                   </div>
-                ) : null,
-              )}
-                {item.draft && renderAnnotationDraft ? (
-                <div className="fvp-fast-markdown-annotation-draft">
-                    {renderAnnotationDraft(item.draft)}
-                </div>
-              ) : null}
-              </div>
+                ) : null}
+              </Fragment>
             ))}
           </div>
         </div>
@@ -465,7 +521,10 @@ function areFastAnnotationOverlayItemsEqual(
     }
     if (
       previousItem.key !== nextItem.key ||
-      previousItem.top !== nextItem.top ||
+      previousItem.actionTop !== nextItem.actionTop ||
+      previousItem.actionLineRange?.startLine !== nextItem.actionLineRange?.startLine ||
+      previousItem.actionLineRange?.endLine !== nextItem.actionLineRange?.endLine ||
+      previousItem.annotationTop !== nextItem.annotationTop ||
       previousItem.draft?.body !== nextItem.draft?.body ||
       previousItem.draft?.lineRange.startLine !== nextItem.draft?.lineRange.startLine ||
       previousItem.draft?.lineRange.endLine !== nextItem.draft?.lineRange.endLine ||

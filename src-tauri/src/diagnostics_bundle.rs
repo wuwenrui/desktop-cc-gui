@@ -20,6 +20,7 @@ const CLIENT_STORE_FILES: &[(&str, &str)] = &[
     ("threads", "threads.json"),
     ("app", "app.json"),
     ("leida", "leida.json"),
+    ("diagnostics", "diagnostics.json"),
 ];
 const MAX_RENDERER_DIAGNOSTICS: usize = 200;
 const MAX_CLIENT_STORE_KEYS: usize = 80;
@@ -723,8 +724,11 @@ fn sanitize_runtime_process_diagnostics(
 }
 
 fn collect_renderer_diagnostics(client_store_summary: &Value) -> Value {
-    let app_store_path = match app_paths::client_storage_dir() {
-        Ok(client_dir) => client_dir.join("app.json"),
+    let (diagnostics_store_path, app_store_path) = match app_paths::client_storage_dir() {
+        Ok(client_dir) => (
+            client_dir.join("diagnostics.json"),
+            client_dir.join("app.json"),
+        ),
         Err(error) => {
             return json!({
                 "entries": [],
@@ -734,9 +738,11 @@ fn collect_renderer_diagnostics(client_store_summary: &Value) -> Value {
             });
         }
     };
+    let diagnostics_store_value = read_json_file_best_effort(&diagnostics_store_path);
     let app_store_value = read_json_file_best_effort(&app_store_path);
-    let entries = app_store_value
+    let entries = diagnostics_store_value
         .get("diagnostics.rendererLifecycleLog")
+        .or_else(|| app_store_value.get("diagnostics.rendererLifecycleLog"))
         .and_then(Value::as_array)
         .map(|items| {
             items
@@ -761,15 +767,18 @@ fn collect_renderer_diagnostics(client_store_summary: &Value) -> Value {
 }
 
 fn renderer_diagnostics_summary_from_store_summary(client_store_summary: &Value) -> Value {
-    let Some(app_store) = client_store_summary.get("app") else {
-        return Value::Null;
-    };
-    let Some(keys) = app_store.get("keys").and_then(Value::as_object) else {
-        return Value::Null;
-    };
-    keys.get("diagnostics.rendererLifecycleLog")
-        .cloned()
-        .unwrap_or(Value::Null)
+    for store_name in ["diagnostics", "app"] {
+        let Some(store) = client_store_summary.get(store_name) else {
+            continue;
+        };
+        let Some(keys) = store.get("keys").and_then(Value::as_object) else {
+            continue;
+        };
+        if let Some(summary) = keys.get("diagnostics.rendererLifecycleLog") {
+            return summary.clone();
+        }
+    }
+    Value::Null
 }
 
 fn sanitize_renderer_diagnostic_entry(entry: &Value) -> Value {

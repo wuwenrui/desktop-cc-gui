@@ -18,6 +18,20 @@ vi.mock('./ResizeHandles.js', () => ({
   ResizeHandles: () => null,
 }));
 
+// Stub the curated-skill indicator. The real one runs a 2s poll via
+// `setInterval`, which trips the smoke test's "infinite timers"
+// watchdog once the test exceeds 10000 scheduled callbacks. The
+// indicator itself is covered by its own unit tests; for the undo /
+// redo + IME smoke tests we only need ChatInputBox's local state
+// machine to run, so the indicator is a no-op here.
+vi.mock('../../../curated-skills', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../curated-skills')>();
+  return {
+    ...actual,
+    CuratedSkillIndicator: () => null,
+  };
+});
+
 import { ChatInputBox } from './ChatInputBox.js';
 import { resolveShortcutPlatform } from './utils/undoRedoShortcut.js';
 

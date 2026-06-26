@@ -8,29 +8,29 @@ const buttonsCss = readFileSync(
 );
 
 describe("chat input button styles", () => {
-  it("keeps the streaming stop button smaller and circular", () => {
+  it("renders the streaming stop button as a solid rounded square with a visible stop icon", () => {
     expect(buttonsCss).toMatch(/\.stop-button\s*\{[^}]*width:\s*24px/s);
     expect(buttonsCss).toMatch(/\.stop-button\s*\{[^}]*height:\s*24px/s);
     expect(buttonsCss).toMatch(/\.stop-button\s*\{[^}]*aspect-ratio:\s*1 \/ 1/s);
-    expect(buttonsCss).toMatch(/\.stop-button\s*\{[^}]*border-radius:\s*999px/s);
-    expect(buttonsCss).not.toMatch(/\.stop-button\s*\{[^}]*clip-path:/s);
-    expect(buttonsCss).not.toMatch(/\.stop-button\s*\{[^}]*overflow:\s*hidden/s);
-    expect(buttonsCss).toMatch(
-      /\.stop-button\s*\{[^}]*url\('\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/assets\/icon\.png'\) center \/ 136% 136% no-repeat/s,
-    );
-    expect(buttonsCss).toMatch(
-      /\.submit-button\.stop-button:hover:not\(:disabled\)\s*\{[^}]*url\([^}]*136% 136% no-repeat/s,
-    );
-    expect(buttonsCss).toMatch(/\.stop-button \.codicon\s*\{[^}]*opacity:\s*0/s);
+    expect(buttonsCss).toMatch(/\.stop-button\s*\{[^}]*border-radius:\s*8px/s);
+    // 用纯色填充 + 显示 codicon 停止图标，不再用旋转的位图背景
+    expect(buttonsCss).not.toMatch(/icon\.png/s);
+    expect(buttonsCss).toMatch(/\.stop-button \.codicon\s*\{[^}]*opacity:\s*1/s);
   });
 
-  it("keeps the ingress halo scaled to the smaller stop button", () => {
+  it("replaces the spinning animation with a calm breathing glow", () => {
+    // 不再有任何旋转/火花/光环动画
+    expect(buttonsCss).not.toMatch(/stop-button-spin/s);
+    expect(buttonsCss).not.toMatch(/stop-button-spark/s);
+    expect(buttonsCss).not.toMatch(/stop-button-halo/s);
+    expect(buttonsCss).not.toMatch(/rotate\(360deg\)/s);
+    // 进行中的两个阶段都使用呼吸动画
+    expect(buttonsCss).toMatch(/@keyframes stop-button-breathe/s);
     expect(buttonsCss).toMatch(
-      /\.stop-button\.is-ingress::before\s*\{[^}]*inset:\s*-5px/s,
+      /\.stop-button\.is-waiting\s*\{[^}]*stop-button-breathe/s,
     );
-    expect(buttonsCss).not.toMatch(
-      /\.stop-button\.is-ingress::before\s*\{[^}]*inset:\s*-3px/s,
+    expect(buttonsCss).toMatch(
+      /\.stop-button\.is-ingress\s*\{[^}]*stop-button-breathe/s,
     );
-    expect(buttonsCss).toContain("0 -12px 0");
   });
 });

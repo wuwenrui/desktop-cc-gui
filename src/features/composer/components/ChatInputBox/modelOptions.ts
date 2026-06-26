@@ -127,6 +127,7 @@ function getCustomCodexModels(): ModelInfo[] {
       id: m.id,
       label: m.label || m.id,
       description: m.description,
+      providerProfileId: m.providerProfileId?.trim() || undefined,
     }));
   } catch {
     return [];

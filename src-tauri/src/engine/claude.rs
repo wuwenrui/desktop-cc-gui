@@ -35,6 +35,8 @@ pub(crate) struct ClaudeAskUserQuestionResumeDiagnostic {
 }
 #[path = "claude/approval.rs"]
 mod approval;
+#[path = "claude/curated_skill_prompt.rs"]
+mod curated_skill_prompt;
 #[path = "claude/event_conversion.rs"]
 mod event_conversion;
 mod lifecycle;
@@ -816,6 +818,7 @@ impl ClaudeSession {
         params: &SendMessageParams,
         use_stream_json_input: bool,
         include_hook_events: bool,
+        app_settings: Option<&crate::types::AppSettings>,
     ) -> Command {
         // Resolve the Claude CLI binary path:
         // 1. Use custom bin_path if configured
@@ -831,6 +834,18 @@ impl ClaudeSession {
 
         // Print mode (non-interactive)
         cmd.arg("-p");
+
+        // Append curated skills (if any) via --append-system-prompt. The
+        // flag is added immediately after `-p` and **before** any other
+        // flag so it does not interfere with subsequent parsing.
+        if let Some(settings) = app_settings {
+            if let Some(append_body) =
+                curated_skill_prompt::build_curated_skill_append_args(settings)
+            {
+                cmd.arg("--append-system-prompt");
+                cmd.arg(append_body);
+            }
+        }
 
         if use_stream_json_input {
             // Use stream-json input format for image payloads and multiline text.
@@ -983,8 +998,22 @@ impl ClaudeSession {
         params: SendMessageParams,
         turn_id: &str,
     ) -> Result<String, String> {
+        self.send_message_with_app_settings(params, turn_id, None)
+            .await
+    }
+
+    /// Variant of `send_message` that takes a snapshot of `AppSettings` so
+    /// the curated-skill injection step (see `curated_skill_prompt::build_curated_skill_append_args`)
+    /// can read the latest `enabled_curated_skill_ids`. Production callers
+    /// use this; the wrapper `send_message` exists for legacy callers.
+    pub async fn send_message_with_app_settings(
+        &self,
+        params: SendMessageParams,
+        turn_id: &str,
+        app_settings: Option<&crate::types::AppSettings>,
+    ) -> Result<String, String> {
         match self
-            .send_message_attempt(params.clone(), turn_id, true)
+            .send_message_attempt(params.clone(), turn_id, true, app_settings)
             .await
         {
             Err(error) if Self::is_unknown_include_hook_events_error(&error) => {
@@ -992,7 +1021,8 @@ impl ClaudeSession {
                     "[claude] --include-hook-events unsupported, retrying without hook events: {}",
                     error
                 );
-                self.send_message_attempt(params, turn_id, false).await
+                self.send_message_attempt(params, turn_id, false, app_settings)
+                    .await
             }
             result => result,
         }
@@ -1003,6 +1033,7 @@ impl ClaudeSession {
         params: SendMessageParams,
         turn_id: &str,
         include_hook_events: bool,
+        app_settings: Option<&crate::types::AppSettings>,
     ) -> Result<String, String> {
         if self.is_disposed() {
             let error_msg = "Claude session disposed; refusing to start new process".to_string();
@@ -1038,7 +1069,12 @@ impl ClaudeSession {
 
         let use_stream_json_input = Self::should_use_stream_json_input(&params);
 
-        let mut cmd = self.build_command(&params, use_stream_json_input, include_hook_events);
+        let mut cmd = self.build_command(
+            &params,
+            use_stream_json_input,
+            include_hook_events,
+            app_settings,
+        );
         Self::configure_spawn_command(&mut cmd);
 
         // Spawn the process

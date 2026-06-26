@@ -367,6 +367,15 @@ export function useThreadTurnEvents({
         engine: inferEngineFromThreadId(threadId),
         ...extractThreadProviderMetadata(thread),
       });
+      if (inferEngineFromThreadId(threadId) === "codex") {
+        dispatch({
+          type: "markCodexAcceptedTurn",
+          threadId,
+          fact: "empty-draft",
+          source: "thread-start",
+          timestamp: Date.now(),
+        });
+      }
       const timestamp = getThreadTimestamp(thread);
       const activityTimestamp = timestamp > 0 ? timestamp : Date.now();
       recordThreadActivity(workspaceId, threadId, activityTimestamp);

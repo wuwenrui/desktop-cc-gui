@@ -21,6 +21,12 @@ const workspace: WorkspaceInfo = {
 
 const emptyDraftResolution: CodexAcceptedTurnResolution = {
   fact: "empty-draft",
+  source: "local-first-send-draft",
+  hasDurableActivity: false,
+};
+
+const threadStartEmptyDraftResolution: CodexAcceptedTurnResolution = {
+  fact: "empty-draft",
   source: "thread-start",
   hasDurableActivity: false,
 };
@@ -187,7 +193,82 @@ describe("useCodexMessageRecovery", () => {
     expect(recovered).toBe(false);
     expect(attempt.canUseFreshDraftReplacement).toBe(false);
     expect(deps.startThreadForMessageSend).not.toHaveBeenCalled();
+    expect(deps.forkThreadForWorkspace).not.toHaveBeenCalled();
     expect(deps.dispatch).not.toHaveBeenCalled();
+  });
+
+  it("does not fresh-replace unknown native thread-not-found failures", async () => {
+    const deps = makeDeps({
+      acceptedTurnResolution: unknownResolution,
+      optimisticUserItem,
+      errorMessage: "thread not found: legacy-thread-id",
+    });
+    const { result } = renderHook(() => useCodexMessageRecovery());
+    const attempt = result.current.createRecoveryAttempt(deps);
+
+    let recovered = true;
+    await act(async () => {
+      recovered = await attempt.tryFreshDraftReplacement("refresh failed");
+    });
+
+    expect(recovered).toBe(false);
+    expect(attempt.canUseFreshDraftReplacement).toBe(false);
+    expect(deps.startThreadForMessageSend).not.toHaveBeenCalled();
+    expect(deps.dispatch).not.toHaveBeenCalled();
+  });
+
+  it("does not fork unknown native thread-not-found failures", async () => {
+    const deps = makeDeps({
+      acceptedTurnResolution: unknownResolution,
+      optimisticUserItem,
+      errorMessage: "thread not found: legacy-thread-id",
+    });
+    const { result } = renderHook(() => useCodexMessageRecovery());
+    const attempt = result.current.createRecoveryAttempt(deps);
+
+    let recovered = true;
+    await act(async () => {
+      recovered = await attempt.tryForkFromMessage("refresh failed");
+    });
+
+    expect(recovered).toBe(false);
+    expect(deps.forkThreadForWorkspace).not.toHaveBeenCalled();
+    expect(deps.startThreadForMessageSend).not.toHaveBeenCalled();
+  });
+
+  it("does not fresh-replace a native thread created by thread/start", async () => {
+    const deps = makeDeps({
+      acceptedTurnResolution: threadStartEmptyDraftResolution,
+    });
+    const { result } = renderHook(() => useCodexMessageRecovery());
+    const attempt = result.current.createRecoveryAttempt(deps);
+
+    let recovered = true;
+    await act(async () => {
+      recovered = await attempt.tryFreshDraftReplacement("thread not found");
+    });
+
+    expect(recovered).toBe(false);
+    expect(attempt.canUseFreshDraftReplacement).toBe(false);
+    expect(deps.startThreadForMessageSend).not.toHaveBeenCalled();
+    expect(deps.dispatch).not.toHaveBeenCalled();
+  });
+
+  it("does not fork a native thread created by thread/start", async () => {
+    const deps = makeDeps({
+      acceptedTurnResolution: threadStartEmptyDraftResolution,
+    });
+    const { result } = renderHook(() => useCodexMessageRecovery());
+    const attempt = result.current.createRecoveryAttempt(deps);
+
+    let recovered = true;
+    await act(async () => {
+      recovered = await attempt.tryForkFromMessage("thread not found");
+    });
+
+    expect(recovered).toBe(false);
+    expect(deps.forkThreadForWorkspace).not.toHaveBeenCalled();
+    expect(deps.startThreadForMessageSend).not.toHaveBeenCalled();
   });
 
   it("forks a stale durable thread and retries on the fork", async () => {

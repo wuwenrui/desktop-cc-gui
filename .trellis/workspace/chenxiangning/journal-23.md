@@ -1640,3 +1640,326 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 912: 恢复 Codex 命令写文件变更回放
+
+**Date**: 2026-06-23
+**Task**: 恢复 Codex 命令写文件变更回放
+**Branch**: `feature/v0.5.13`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+排查 springboot-demo MiniMax Codex 会话中右侧 Git 面板显示 8 个 File Changes、但聊天幕布未显示文件变更卡片的问题。确认根因是该会话没有使用 apply_patch，而是通过 exec_command 的 shell heredoc / sed / python 命令写文件；原 conversation item 转换逻辑只会把 apply_patch commandExecution 升级为 fileChange。
+
+实现内容：
+- 在 src/utils/threadItemsFileChanges.ts 新增 inferMutatingFileChangesFromCommand，复用现有 shell tokenizer，仅从命令文本识别重定向写入、追加、删除和 narrow create token。
+- 在 src/utils/threadItems.ts 中让成功的非 apply_patch mutating commandExecution 还原为 File changes，同时保留 apply_patch 的 richer diff 路径。
+- 过滤 .diff/.patch 临时 patch artifact，避免“只写 patch 文件但未 apply”误报为源码变更。
+- 新增 OpenSpec change fix-codex-exec-command-file-change-replay，记录目标边界、风险 review、spec delta 和验收口径。
+
+验证：
+- openspec validate fix-codex-exec-command-file-change-replay --strict --no-interactive
+- npx vitest run src/utils/threadItems.test.ts src/utils/threadItemsFileChanges.test.ts src/features/threads/loaders/historyLoaders.test.ts
+- npm run typecheck
+- npm run lint
+
+风险边界：不从 command output / git status output 推断文件变更，只在 commandExecution 成功且命令文本本身包含 mutation token 时生成 File changes；复杂脚本内部写文件可能仍少报，这是有意保守取舍。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0eb7cb74` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 913: 归档已验证 OpenSpec 提案
+
+**Date**: 2026-06-23
+**Task**: 归档已验证 OpenSpec 提案
+**Branch**: `feature/v0.5.13`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+完成 OpenSpec active proposal closure batch：归档 9 个已验证 changes，并同步主 specs。
+
+主要内容：
+- 归档 `fix-app-shell-startup-react-depth-loop`、`fix-codex-exec-command-file-change-replay`、`fix-codex-provider-recovery-binding`、`fix-message-outline-streaming-jank`、`fix-provider-model-catalog-and-codex-refresh-isolation`、`fix-user-input-stale-submit-settlement`、`refine-home-recent-conversations-ui`、`relocate-runtime-notice-dock-sidebar-entry`、`soften-transient-runtime-reconnect-card`。
+- 通过 `openspec archive <change> -y` 同步 17 个主 spec 文件，并将 change 移入 `openspec/changes/archive/2026-06-23-*`。
+- 更新 `openspec/project.md`：刷新 active/archive/specs 统计，补充 2026-06-23 v0.5.13 Closure Batch，记录剩余 active changes 和需求池目录结构警告。
+- 修正 `relocate-runtime-notice-dock-sidebar-entry` delta requirement header，使其与当前主 spec header 匹配后成功归档。
+
+验证：
+- `openspec validate --specs --strict --no-interactive`：357 passed, 0 failed。
+- `openspec validate --all --strict --no-interactive`：358 passed, 0 failed。
+- `python3 .claude/skills/osp-openspec-sync/scripts/validate-consistency.py --project-path . --full`：0 errors，360 warnings；warnings 为既有 spec title 格式问题及 3 个 demand-pool active 目录缺 `proposal.md` / `tasks.md`。
+
+后续：
+- `2026-06-22-release-pipeline-cache-sccache` 仍需 live release run / artifact verification 后再归档。
+- `2026-06-18-add-shortcuts-overview-and-conflict-detection`、`2026-06-18-extend-editor-file-tab-lifecycle`、`2026-06-18-extend-search-palette-with-commands` 仍需补齐 proposal/tasks/spec delta 或清理。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `bbbf3f39` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 914: Fix Codex provider composer cold start binding
+
+**Date**: 2026-06-23
+**Task**: Fix Codex provider composer cold start binding
+**Branch**: `feature/v0.5.13`
+
+### Summary
+
+补齐 Codex Composer 首发 managed provider 绑定和 create-session loading timeout。
+
+### Main Changes
+
+- Created OpenSpec change `fix-codex-provider-composer-cold-start-binding` with proposal, design, tasks, and spec deltas for provider-scoped launch, model selector provider origin, and send-readiness loading behavior.
+- Added optional `providerProfileId` propagation across Codex custom model storage, model options, Composer selection resolver, and Codex first-send thread creation.
+- Added safe upgrade enrichment for existing stored custom models only when provider origin is uniquely identifiable; ambiguous model ids remain unbound.
+- Added bounded client-side timeout for create-session loading so initialization stalls close the overlay and surface a diagnostic error.
+- Verified with OpenSpec strict validation, focused Vitest suites, typecheck, and lint.
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ffd18f6b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 915: 阶段性收口工具调用卡顿治理
+
+**Date**: 2026-06-23
+**Task**: 阶段性收口工具调用卡顿治理
+**Branch**: `feature/v0.5.13`
+
+### Summary
+
+阶段性提交 realtime interaction jank 治理：Rust 端增加 SnapshotThrottle 与 critical bypass batch stats，webview 端接入 app-server-event per-event backpressure 与 scheduled dispatch，工具输出增加 tail gate，reducer 合并 agent completed batch，layout 增加 deferred frame accumulator；OpenSpec change 与 perf placeholder/docs 同步落地。验证：typecheck、lint、focused Vitest、Rust snapshot_throttle/event_sink/tool_output_delta、OpenSpec validate、capability matrix 均通过；release evidence / UX acceptance / archive gate 仍未完成。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1b04db4f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 916: 修复实时渲染调度续排卡顿
+
+**Date**: 2026-06-23
+**Task**: 修复实时渲染调度续排卡顿
+**Branch**: `feature/v0.5.13`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| 项目 | 内容 |
+|------|------|
+| 代码提交 | `f9ca354f fix(perf): 修复实时渲染调度续排卡顿` |
+| OpenSpec change | `2026-06-24-harden-realtime-interaction-jank-during-tool-call` |
+| 核心修复 | `useRenderScheduler` 在 budget / input-pending yield 后继续自动 drain，避免剩余队列等待新事件才续排。 |
+| 回滚修复 | `streamingScheduleTier=baseline` 改为 `budgetMs=0` / `idleTimeoutMs=0`，确保 baseline 是真正绕过 idle/budget 的 rollback path。 |
+| 测试补强 | 增加 scheduler input-pending / budget yield 续排测试；更新 baseline policy 测试；增加 baseline 不调用 `requestIdleCallback` 的 batch dispatch 测试。 |
+| 自动验证 | focused tests、realtime/backpressure/layout tests、full `npm run test`、Rust `cargo test`、typecheck、lint、doctor、OpenSpec strict validate、runtime evidence gates 等均已通过。 |
+| 未完事项 | release Tauri run、真实 UX 截图验收、cold-start firstPaint / firstInteractive marker、真实 app.emit critical integration 仍需人工或 release 环境补齐。 |
+
+**Updated Files**:
+- `src/hooks/useRenderScheduler.ts`
+- `src/hooks/useRenderScheduler.test.tsx`
+- `src/features/threads/utils/renderSchedulingPolicy.ts`
+- `src/features/threads/utils/renderSchedulingPolicy.test.ts`
+- `src/features/app/hooks/useAppServerEventBatchDispatch.test.tsx`
+- `openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md`
+- `docs/perf/cold-start-baseline.json`
+- `docs/perf/realtime-runtime-evidence.json`
+- `docs/perf/runtime-evidence-gates.json`
+- `docs/perf/runtime-evidence-gates.md`
+- `openspec/docs/runtime-evidence-gates-2026-05-24.md`
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f9ca354f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 917: 修复 composer 输入框低优先级卡顿
+
+**Date**: 2026-06-23
+**Task**: 修复 composer 输入框低优先级卡顿
+**Branch**: `feature/v0.5.13`
+
+### Summary
+
+修复 composer typing 在 streaming 压力下严重滞后的回归：移除 ChatInputBoxAdapter.handleInput 与 useComposerController.handleDraftChange 中包裹输入事实源的 startTransition，使 text/draft 更新保持 urgent；补 useComposerController 同步更新测试与源码哨兵测试；回写 OpenSpec tasks 11.4 与 frontend state-management 规则，明确 text/draft/selection/IME 不得进入 transition/deferred/scheduler tier。验证：focused vitest 61/61 pass；openspec validate strict pass；git diff --check pass。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7eb791c8` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 918: 修复 fast Markdown 标注入口
+
+**Date**: 2026-06-23
+**Task**: 修复 fast Markdown 标注入口
+**Branch**: `feature/v0.5.13`
+
+### Summary
+
+恢复大 Markdown fast renderer 下的标准“标注给 AI”入口：将 fast path 的 annotation action 从 DOM 旁路插入改为 overlay anchor 渲染，补 hover/focus 样式和 focused regression test，并新增 OpenSpec change fix-fast-markdown-annotation-action。验证已跑 fast renderer 测试、FileViewPanel Markdown annotation focused tests、openspec strict validate、typecheck、large-file guard、lint。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f3ceddc4` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 919: 修复 CI 中的 file preview outline 和 composer guard
+
+**Date**: 2026-06-24
+**Task**: 修复 CI 中的 file preview outline 和 composer guard
+**Branch**: `feature/v0.5.13`
+
+### Summary
+
+修复 bounded fast markdown outline 在异步补全时重新折叠导致 Tail Heading 无法点击的问题；记录 composer responsiveness guard 已改为结构化提取 useCallback 块。验证 lint、typecheck、相关 Vitest batch 通过。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `00ae0873` | (see git log) |
+| `b49e19dc` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

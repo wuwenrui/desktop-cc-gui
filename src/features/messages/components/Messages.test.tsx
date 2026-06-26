@@ -248,7 +248,7 @@ describe("Messages", () => {
     const tailActionRows = container.querySelectorAll(".message-tail-action-row");
     expect(tailActionRows[0].querySelectorAll("button")).toHaveLength(1);
     expect(tailActionRows[1].querySelectorAll("button")).toHaveLength(3);
-    expect(screen.getAllByRole("button", { name: "messages.copyMessage" })).toHaveLength(4);
+    expect(screen.getAllByRole("button", { name: "messages.copyMessage" })).toHaveLength(2);
     const assistantCopyButtons = container.querySelectorAll(
       ".message-tail-action-row .message-copy-button",
     );

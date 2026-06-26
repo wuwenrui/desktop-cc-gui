@@ -4,6 +4,7 @@ import type {
   FastMarkdownRenderResult,
   FastMarkdownRendererProfileId,
 } from "./fastMarkdownRenderer/types";
+import { classifyMessageMarkdownHeavyIslands } from "./messageMarkdownHeavyIslands";
 
 export const MESSAGE_MARKDOWN_PRECOMPUTE_SCHEMA_VERSION = "message-markdown-precompute:v1";
 export const MESSAGE_MARKDOWN_PRECOMPUTE_MIN_LENGTH = 10_000;
@@ -93,9 +94,6 @@ type RunPrecomputeOptions = {
 };
 
 const MAX_MESSAGE_MARKDOWN_PRECOMPUTE_CACHE_ENTRIES = 40;
-const HEAVY_MARKDOWN_COMPLEXITY_PATTERN =
-  /```|~~~|\$\$|<table\b|<details\b|<script\b|<style\b|^\s*\|.+\|\s*$/im;
-
 const precomputeCache = new Map<string, CacheEntry>();
 let nextRequestOrdinal = 1;
 
@@ -116,7 +114,7 @@ export function classifyMessageMarkdownPrecomputeThreshold(
   if (source.length >= MESSAGE_MARKDOWN_PRECOMPUTE_MIN_LENGTH) {
     return "length";
   }
-  return HEAVY_MARKDOWN_COMPLEXITY_PATTERN.test(source)
+  return classifyMessageMarkdownHeavyIslands(source).totalHeavyIslands > 0
     ? "complexity"
     : "below-threshold";
 }

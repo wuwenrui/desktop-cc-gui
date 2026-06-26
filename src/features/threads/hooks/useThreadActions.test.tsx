@@ -210,6 +210,67 @@ describe("useThreadActions", () => {
     );
   });
 
+  it("defers related thread history hydration when opening a selected unified history thread", async () => {
+    const collabLinkItem: ConversationItem = {
+      id: "collab-link-1",
+      kind: "tool",
+      toolType: "collabToolCall",
+      title: "Linked child session",
+      detail: "From thread-selected -> thread-child-heavy",
+      status: "completed",
+    };
+
+    vi.mocked(resumeThread).mockResolvedValue({
+      result: {
+        thread: {
+          id: "thread-selected",
+          turns: [],
+        },
+      },
+    });
+    vi.mocked(loadCodexSession).mockResolvedValue({ entries: [] });
+    vi.mocked(buildItemsFromThread).mockReturnValue([collabLinkItem]);
+
+    const onDebug = vi.fn();
+    const { result, dispatch, loadedThreadsRef, updateThreadParent } = renderActions({
+      useUnifiedHistoryLoader: true,
+      onDebug,
+    });
+
+    await act(async () => {
+      await result.current.resumeThreadForWorkspace("ws-1", "thread-selected");
+    });
+
+    expect(resumeThread).toHaveBeenCalledTimes(1);
+    expect(resumeThread).toHaveBeenCalledWith("ws-1", "thread-selected");
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "ensureThread",
+      workspaceId: "ws-1",
+      threadId: "thread-child-heavy",
+      engine: "codex",
+    });
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "setThreadItems",
+        threadId: "thread-child-heavy",
+      }),
+    );
+    expect(loadedThreadsRef.current["thread-selected"]).toBe(true);
+    expect(loadedThreadsRef.current["thread-child-heavy"]).toBeUndefined();
+    expect(updateThreadParent).toHaveBeenCalledWith("thread-selected", [
+      "thread-child-heavy",
+    ]);
+    expect(onDebug).toHaveBeenCalledWith(
+      expect.objectContaining({
+        label: "thread/history related deferred",
+        payload: expect.objectContaining({
+          threadId: "thread-selected",
+          relatedThreadCount: 1,
+        }),
+      }),
+    );
+  });
+
   it("reports unified history loader fallback warnings through debug channel", async () => {
     vi.mocked(resumeThread).mockResolvedValue(null);
     const onDebug = vi.fn();
@@ -1477,7 +1538,7 @@ describe("useThreadActions", () => {
     ]);
   });
 
-  it("hydrates related child threads from unified collab history snapshot", async () => {
+  it("defers related child thread hydration from unified collab history snapshot", async () => {
     vi.mocked(resumeThread).mockImplementation(
       async (_workspaceId: string, threadId: string) => {
         if (threadId === "thread-root") {
@@ -1553,12 +1614,13 @@ describe("useThreadActions", () => {
       threadId: "child-1",
       engine: "codex",
     });
-    expect(dispatch).toHaveBeenCalledWith(
+    expect(dispatch).not.toHaveBeenCalledWith(
       expect.objectContaining({
         type: "setThreadItems",
         threadId: "child-1",
       }),
     );
+    expect(resumeThread).toHaveBeenCalledTimes(1);
   });
 
   it("lists threads for a workspace and persists activity", async () => {

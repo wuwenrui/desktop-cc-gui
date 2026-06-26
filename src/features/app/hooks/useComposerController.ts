@@ -1,4 +1,4 @@
-import { startTransition, useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type {
   EngineType,
@@ -176,12 +176,10 @@ export function useComposerController({
         setDetachedDraft(next);
         return;
       }
-      startTransition(() => {
-        setComposerDraftsByThread((prev) => ({
-          ...prev,
-          [activeThreadId]: next,
-        }));
-      });
+      setComposerDraftsByThread((prev) => ({
+        ...prev,
+        [activeThreadId]: next,
+      }));
     },
     [activeThreadId],
   );

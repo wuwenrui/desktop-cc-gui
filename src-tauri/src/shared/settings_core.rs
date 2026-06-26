@@ -189,6 +189,13 @@ fn sanitize_custom_skill_directories(settings: &mut AppSettings) {
         .collect();
 }
 
+fn sanitize_enabled_curated_skill_ids(settings: &mut AppSettings) {
+    settings.enabled_curated_skill_ids =
+        crate::curated_skills::normalized_enabled_curated_skill_ids(
+            &settings.enabled_curated_skill_ids,
+        );
+}
+
 pub(crate) fn resolve_window_theme_preference(settings: &AppSettings) -> String {
     if settings.theme == THEME_CUSTOM {
         return resolve_theme_preset_appearance(&settings.custom_theme_preset_id).to_string();
@@ -220,6 +227,7 @@ pub(crate) async fn get_app_settings_core(app_settings: &Mutex<AppSettings>) -> 
     sanitize_terminal_shell_path(&mut settings);
     sanitize_web_service_token(&mut settings);
     sanitize_custom_skill_directories(&mut settings);
+    sanitize_enabled_curated_skill_ids(&mut settings);
     settings.experimental_collab_enabled = false;
     settings.ui_scale = sanitize_ui_scale(settings.ui_scale);
     sanitize_theme_settings(&mut settings);
@@ -239,6 +247,7 @@ pub(crate) async fn update_app_settings_core(
     sanitize_terminal_shell_path(&mut normalized);
     sanitize_web_service_token(&mut normalized);
     sanitize_custom_skill_directories(&mut normalized);
+    sanitize_enabled_curated_skill_ids(&mut normalized);
     sanitize_theme_settings(&mut normalized);
     validate_ui_scale(normalized.ui_scale)?;
     proxy_core::validate_proxy_settings(&normalized)?;
@@ -261,6 +270,7 @@ pub(crate) async fn restore_app_settings_core(
     sanitize_terminal_shell_path(&mut normalized);
     sanitize_web_service_token(&mut normalized);
     sanitize_custom_skill_directories(&mut normalized);
+    sanitize_enabled_curated_skill_ids(&mut normalized);
     normalized.ui_scale = sanitize_ui_scale(normalized.ui_scale);
     sanitize_theme_settings(&mut normalized);
     write_settings(settings_path, &normalized)?;
@@ -308,10 +318,13 @@ pub(crate) fn app_settings_change_requires_codex_restart(
         != updated.codex_auto_compaction_threshold_percent;
     let auto_compaction_enabled_changed =
         previous.codex_auto_compaction_enabled != updated.codex_auto_compaction_enabled;
+    let enabled_curated_skill_ids_changed =
+        previous.enabled_curated_skill_ids != updated.enabled_curated_skill_ids;
     proxy_changed
         || unified_exec_policy_changed
         || auto_compaction_threshold_changed
         || auto_compaction_enabled_changed
+        || enabled_curated_skill_ids_changed
 }
 
 pub(crate) fn get_codex_config_path_core() -> Result<String, String> {
@@ -651,6 +664,65 @@ mod tests {
         assert!(!app_settings_change_requires_codex_restart(
             &previous, &updated
         ));
+    }
+
+    #[test]
+    fn enabled_curated_skill_ids_change_requires_restart_when_adding() {
+        let mut previous = AppSettings::default();
+        previous.enabled_curated_skill_ids.clear();
+        let mut updated = previous.clone();
+        updated.enabled_curated_skill_ids = vec!["lazy-senior-dev".to_string()];
+        assert!(
+            app_settings_change_requires_codex_restart(&previous, &updated),
+            "toggling curated skill on must restart Codex so app-server developer_instructions refresh"
+        );
+    }
+
+    #[test]
+    fn enabled_curated_skill_ids_change_requires_restart_when_growing() {
+        let mut previous = AppSettings::default();
+        previous.enabled_curated_skill_ids = vec!["lazy-senior-dev".to_string()];
+        let mut updated = previous.clone();
+        updated.enabled_curated_skill_ids =
+            vec!["lazy-senior-dev".to_string(), "another-skill".to_string()];
+        assert!(
+            app_settings_change_requires_codex_restart(&previous, &updated),
+            "growing the curated set must restart Codex so app-server developer_instructions refresh"
+        );
+    }
+
+    #[test]
+    fn enabled_curated_skill_ids_change_requires_restart_when_clearing() {
+        let mut previous = AppSettings::default();
+        previous.enabled_curated_skill_ids =
+            vec!["lazy-senior-dev".to_string(), "another-skill".to_string()];
+        let mut updated = previous.clone();
+        updated.enabled_curated_skill_ids.clear();
+        assert!(
+            app_settings_change_requires_codex_restart(&previous, &updated),
+            "clearing the curated set must restart Codex so app-server developer_instructions refresh"
+        );
+    }
+
+    #[tokio::test]
+    async fn get_app_settings_core_sanitizes_enabled_curated_skill_ids() {
+        let mut settings = AppSettings::default();
+        settings.enabled_curated_skill_ids = vec![
+            " lazy-senior-dev ".to_string(),
+            "lazy-senior-dev".to_string(),
+            "".to_string(),
+            "BadId".to_string(),
+            "../escape".to_string(),
+            "review2".to_string(),
+        ];
+        let mutex = Mutex::new(settings);
+
+        let sanitized = get_app_settings_core(&mutex).await;
+
+        assert_eq!(
+            sanitized.enabled_curated_skill_ids,
+            vec!["lazy-senior-dev".to_string(), "review2".to_string()]
+        );
     }
 
     #[tokio::test]

@@ -53,3 +53,84 @@ The system MUST record bounded diagnostics for suspicious live message canvas re
 - **WHEN** a long streaming turn repeatedly enters the same suspicious render state
 - **THEN** diagnostics MUST be rate-limited or otherwise bounded
 - **AND** the diagnostic path MUST NOT become part of the per-delta render hot path
+
+### Requirement: Live Runtime Cleanup Diagnostics MUST Be Low-Interruption
+
+The realtime conversation message canvas MUST distinguish transient managed-runtime cleanup diagnostics from blocking runtime reconnect failures without changing backend lifecycle semantics.
+
+#### Scenario: transient cleanup does not render as blocking failure
+- **WHEN** an assistant diagnostic message contains `[RUNTIME_ENDED]`
+- **AND** the diagnostic identifies expected managed cleanup such as `stale_reuse_cleanup` or `internal_replacement`
+- **THEN** the live message canvas MUST render a lightweight runtime notice rather than the full blocking reconnect failure presentation
+- **AND** the notice copy MUST describe background runtime switching / cleanup rather than connection failure
+- **AND** the notice MUST NOT repeat raw `[RUNTIME_ENDED]` diagnostic text inside the card or as a separate message below it
+- **AND** the notice styling MUST use existing theme tokens instead of OS-specific hardcoded surfaces
+
+#### Scenario: blocking runtime failures keep recovery actions
+- **WHEN** an assistant diagnostic message indicates broken pipe, workspace-not-connected, recovery quarantine, stale thread/session recovery, or runtime-ended without expected cleanup source
+- **THEN** the live message canvas MUST keep the existing recovery actions available
+- **AND** the UI MUST NOT suppress the failure as a transient cleanup status
+- **AND** the UI MAY keep raw diagnostic detail visible for blocking recovery troubleshooting
+
+#### Scenario: stale runtime diagnostics are not kept active after assistant output resumes
+- **WHEN** a runtime reconnect diagnostic exists in the message history
+- **AND** a newer assistant message is not a runtime reconnect diagnostic
+- **THEN** the live message canvas MUST NOT render the reconnect card for the older diagnostic
+- **AND** the older diagnostic's raw `[RUNTIME_ENDED]` / reconnect text MUST NOT remain visible as a normal assistant message
+- **AND** a newer user message alone MUST NOT clear the card while the latest assistant message is still the diagnostic
+
+#### Scenario: UI tone does not change lifecycle authority
+- **WHEN** a runtime diagnostic is rendered with transient visual tone
+- **THEN** frontend lifecycle settlement MUST still rely on existing runtime, backend, user action, or terminal turn authority
+- **AND** the UI MUST NOT infer completion solely from assistant text visibility or historical output quality
+
+#### Scenario: transient notice remains theme-compatible
+- **WHEN** the app is running in light, dark, or system theme
+- **THEN** the transient cleanup notice MUST inherit existing message surface, border, hover, and text tokens
+- **AND** the implementation MUST NOT add platform-specific branches for macOS, Windows, or Linux
+- **AND** Windows light / WebView2 surfaces MUST remain covered by the existing theme variable overrides
+
+### Requirement: History Lightweight Rows MUST Compress Virtualized Layout Height
+
+The message timeline virtualization layer MUST keep lightweight history summary rows visually compact and MUST NOT let stale heavy-row measurements create large blank canvas gaps.
+
+#### Scenario: lightweight summary row does not inherit stale heavy height
+
+- **WHEN** timeline virtualization is enabled for a completed history conversation
+- **AND** a heavy projection row is rendered as a lightweight summary row
+- **THEN** the virtualized row wrapper MUST use a compact lightweight placeholder height
+- **AND** it MUST NOT use a stale heavy measured height as the row's minimum visual height
+
+#### Scenario: expanded history uses document flow instead of virtual canvas
+
+- **WHEN** a completed history conversation expands previously hidden history rows
+- **THEN** the timeline MUST render those projection rows in normal document flow
+- **AND** it MUST NOT use the absolute-positioned virtualized canvas for the expanded lightweight history view
+- **AND** heavy rows MUST remain eligible for lightweight summaries when lightweight mode is active so the document-flow fallback does not hydrate every heavy row unnecessarily
+
+#### Scenario: manual history reveal resets to the revealed history head
+
+- **WHEN** the user clicks the control that reveals previously hidden history rows
+- **THEN** the timeline MUST NOT restore the prior viewport by applying a `scrollHeight delta`
+- **AND** the viewport MUST move to the revealed history head so the newly revealed top operation surfaces are visible
+
+#### Scenario: expanded lightweight history keeps top operation card visible
+
+- **WHEN** a completed history conversation expands previously hidden history rows
+- **AND** the expanded lightweight history view renders in normal document flow
+- **THEN** the lightweight operation card MUST render inside the same padded timeline flow as message rows
+- **AND** the operation card MUST NOT be clipped by the top viewport boundary or application chrome
+- **AND** the sticky history header MUST NOT require a separate extra top offset just because the lightweight operation card exists
+
+#### Scenario: lightweight mode switch remeasures bounded layout
+
+- **WHEN** the conversation enters lightweight mode or returns to hydrated detail mode
+- **AND** timeline virtualization is enabled
+- **THEN** the timeline MUST request a bounded virtualizer remeasure
+- **AND** the system MUST NOT hydrate every heavy history row solely to recover spacing
+
+#### Scenario: render details exits lightweight summary mode
+
+- **WHEN** the user clicks the lightweight mode render-detail action
+- **THEN** the timeline MUST render hydrated detail rows for the conversation
+- **AND** the lightweight mode bar MUST no longer present the conversation as still in lightweight summary mode

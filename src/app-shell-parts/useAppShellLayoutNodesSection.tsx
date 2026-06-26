@@ -717,9 +717,13 @@ export function useAppShellLayoutNodesSection(
       ),
     [effectiveModels, effectiveSelectedModelId],
   );
+  const isProjectMapDatasetEnabled =
+    centerMode === "projectMap" ||
+    (centerMode === "editor" && editorSplitCompanion === "projectMap");
   const projectMapDatasetController = useProjectMapDataset(
     activeWorkspace ?? null,
     {
+      enabled: isProjectMapDatasetEnabled,
       generationDefaults: {
         engine: activeEngine ?? null,
         model: projectMapGenerationModel,
@@ -1167,6 +1171,7 @@ export function useAppShellLayoutNodesSection(
       onRefreshModelConfig: handleRefreshModelConfig,
       isModelConfigRefreshing,
       onOpenDictationSettings: () => openSettings("dictation"),
+      onOpenSkillsSettings: () => openSettings("mcp", "mcp-skills"),
       onOpenDebug: handleDebugClick,
       showDebugButton,
       onAddWorkspace: handleAddWorkspace,

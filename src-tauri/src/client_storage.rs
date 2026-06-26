@@ -8,7 +8,14 @@ use uuid::Uuid;
 
 use crate::app_paths;
 
-const ALLOWED_STORES: &[&str] = &["layout", "composer", "threads", "app", "leida"];
+const ALLOWED_STORES: &[&str] = &[
+    "layout",
+    "composer",
+    "threads",
+    "app",
+    "leida",
+    "diagnostics",
+];
 const PANEL_LOCK_PASSWORD_FILENAME: &str = "pwd.txt";
 const CLIENT_STORE_LOCK_WAIT_TIMEOUT: Duration = Duration::from_secs(5);
 const CLIENT_STORE_LOCK_RETRY_INTERVAL: Duration = Duration::from_millis(25);
@@ -162,22 +169,30 @@ fn write_store(filename: &str, value: &Value) -> Result<(), String> {
     with_client_store_lock(&path, || write_store_unlocked(&path, value))
 }
 
-fn patch_store(filename: &str, patch: &serde_json::Map<String, Value>) -> Result<(), String> {
-    let dir = client_storage_dir()?;
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let path = dir.join(filename);
+fn patch_store_at_path(path: &Path, patch: &serde_json::Map<String, Value>) -> Result<(), String> {
     with_client_store_lock(&path, || {
         let existing = read_store_unlocked(&path)?;
-        let mut merged = match existing {
-            Value::Object(map) => map,
+        let mut merged = match &existing {
+            Value::Object(map) => map.clone(),
             Value::Null => serde_json::Map::new(),
             _ => serde_json::Map::new(),
         };
         for (key, value) in patch {
             merged.insert(key.to_string(), value.clone());
         }
-        write_store_unlocked(&path, &Value::Object(merged))
+        let next = Value::Object(merged);
+        if existing == next {
+            return Ok(());
+        }
+        write_store_unlocked(&path, &next)
     })
+}
+
+fn patch_store(filename: &str, patch: &serde_json::Map<String, Value>) -> Result<(), String> {
+    let dir = client_storage_dir()?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.join(filename);
+    patch_store_at_path(&path, patch)
 }
 
 #[tauri::command]
@@ -221,7 +236,7 @@ pub(crate) fn client_store_patch(store: String, patch: Value) -> Result<(), Stri
 
 #[cfg(test)]
 mod tests {
-    use super::read_store;
+    use super::{patch_store_at_path, read_store};
     use serde_json::json;
     use uuid::Uuid;
 
@@ -250,6 +265,47 @@ mod tests {
         let content = std::fs::read_to_string(&path).unwrap();
         let read_back: serde_json::Value = serde_json::from_str(&content).unwrap();
         assert_eq!(read_back, value);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn patch_store_skips_noop_file_write() {
+        let dir = std::env::temp_dir().join(format!("ccgui-test-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        let path = dir.join("test-noop-patch.json");
+
+        patch_store_at_path(
+            &path,
+            json!({
+                "theme": "dark",
+                "count": 1
+            })
+            .as_object()
+            .unwrap(),
+        )
+        .expect("initial patch");
+        let before_modified = std::fs::metadata(&path)
+            .expect("metadata")
+            .modified()
+            .expect("modified");
+
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        patch_store_at_path(
+            &path,
+            json!({
+                "theme": "dark"
+            })
+            .as_object()
+            .unwrap(),
+        )
+        .expect("noop patch");
+
+        let after_modified = std::fs::metadata(&path)
+            .expect("metadata")
+            .modified()
+            .expect("modified");
+        assert_eq!(after_modified, before_modified);
 
         std::fs::remove_dir_all(&dir).ok();
     }

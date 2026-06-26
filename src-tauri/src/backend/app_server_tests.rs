@@ -179,6 +179,7 @@ async fn make_workspace_session(id: &str) -> Arc<WorkspaceSession> {
         resume_pending_turns: Mutex::new(HashMap::new()),
         codex_turn_timing: Mutex::new(HashMap::new()),
         runtime_manager: StdMutex::new(None),
+        snapshot_throttle: Mutex::new(crate::snapshot_throttle::SnapshotThrottle::default()),
         active_turns: Mutex::new(HashMap::new()),
         manual_shutdown_requested: AtomicBool::new(false),
         shutdown_source: StdMutex::new(None),

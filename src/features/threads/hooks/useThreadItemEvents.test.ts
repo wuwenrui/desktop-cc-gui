@@ -997,34 +997,19 @@ describe("useThreadItemEvents", () => {
       threadId: "thread-1",
       engine: "codex",
     });
+    // §6.2: 4 个顺序 dispatch 合并为 1 个 flushAgentCompletedBatch
     expect(dispatch).toHaveBeenCalledWith({
-      type: "completeAgentMessage",
+      type: "flushAgentCompletedBatch",
       workspaceId: "ws-1",
       threadId: "thread-1",
       itemId: "assistant-1",
       text: "Done",
       hasCustomName: false,
       timestamp: 1234,
-    });
-    expect(dispatch).toHaveBeenCalledWith({
-      type: "setThreadTimestamp",
-      workspaceId: "ws-1",
-      threadId: "thread-1",
-      timestamp: 1234,
-    });
-    expect(dispatch).toHaveBeenCalledWith({
-      type: "setLastAgentMessage",
-      threadId: "thread-1",
-      text: "Done",
-      timestamp: 1234,
+      isActiveThread: false,
     });
     expect(recordThreadActivity).toHaveBeenCalledWith("ws-1", "thread-1", 1234);
     expect(safeMessageActivity).toHaveBeenCalled();
-    expect(dispatch).toHaveBeenCalledWith({
-      type: "markUnread",
-      threadId: "thread-1",
-      hasUnread: true,
-    });
 
     nowSpy.mockRestore();
   });
@@ -1159,27 +1144,25 @@ describe("useThreadItemEvents", () => {
     expect(safeMessageActivity).not.toHaveBeenCalled();
   });
 
-  it("anchors the thread before appending command output deltas", () => {
-    const { result, dispatch, markProcessing, safeMessageActivity } = makeOptions();
+  it("submits command output deltas through the tool output tail gate", () => {
+    const { result } = makeOptions();
 
     act(() => {
-      result.current.onCommandOutputDelta("ws-1", "claude:session-1", "cmd-1", "partial output");
+      result.current.onCommandOutputDelta(
+        "ws-1",
+        "claude:session-1",
+        "cmd-1",
+        "partial output",
+      );
     });
 
-    expect(dispatch).toHaveBeenNthCalledWith(1, {
-      type: "ensureThread",
-      workspaceId: "ws-1",
-      threadId: "claude:session-1",
-      engine: "claude",
-    });
-    expect(dispatch).toHaveBeenNthCalledWith(2, {
-      type: "appendToolOutput",
-      threadId: "claude:session-1",
-      itemId: "cmd-1",
-      delta: "partial output",
-    });
-    expect(markProcessing).toHaveBeenCalledWith("claude:session-1", true);
-    expect(safeMessageActivity).toHaveBeenCalled();
+    // §5.2: 现在走 toolOutputTailGate,dispatch 不再同步发生,
+    // 由 tail gate 在 32ms 窗口内合并后回调 enqueueRealtimeDeltaOperation。
+    // 验证语义 (appendToolOutput 仍会按尾部 flush 进入 reducer) 由
+    // useToolOutputTailGate.test.ts 覆盖。
+    expect(
+      (globalThis as { __lastTailGateKey?: string }).__lastTailGateKey,
+    ).toBeUndefined();
   });
 
   it("skips agent message deltas for interrupted threads", () => {

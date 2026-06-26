@@ -46,8 +46,7 @@ use self::provider_profile::{resolve_codex_provider_profile, CODEX_DISK_PROVIDER
 use self::run_metadata::{extract_json_value, sanitize_run_worktree_name};
 use self::thread_listing::{build_unified_codex_thread_page, resolve_workspace_fallback_model};
 use crate::backend::app_server::{
-    spawn_workspace_session_with_launch_options as spawn_workspace_session_inner_with_options,
-    CodexAppServerLaunchOptions,
+    spawn_workspace_session_inner_with_settings, CodexAppServerLaunchOptions,
 };
 pub(crate) use crate::backend::app_server::{ResumePendingSource, WorkspaceSession};
 use crate::backend::events::AppServerEvent;
@@ -320,16 +319,17 @@ pub(crate) async fn spawn_workspace_session_with_launch_options(
     launch_options: CodexAppServerLaunchOptions,
 ) -> Result<Arc<WorkspaceSession>, String> {
     let client_version = app_handle.package_info().version.to_string();
-    let (auto_compaction_threshold_percent, auto_compaction_enabled) = {
+    let app_settings_snapshot = {
         let state = app_handle.state::<AppState>();
-        let settings = state.app_settings.lock().await;
-        (
-            f64::from(settings.codex_auto_compaction_threshold_percent),
-            settings.codex_auto_compaction_enabled,
-        )
+        let settings = state.app_settings.lock().await.clone();
+        settings
     };
+    let (auto_compaction_threshold_percent, auto_compaction_enabled) = (
+        f64::from(app_settings_snapshot.codex_auto_compaction_threshold_percent),
+        app_settings_snapshot.codex_auto_compaction_enabled,
+    );
     let event_sink = build_event_sink(app_handle);
-    spawn_workspace_session_inner_with_options(
+    spawn_workspace_session_inner_with_settings(
         entry,
         default_codex_bin,
         codex_args,
@@ -339,6 +339,7 @@ pub(crate) async fn spawn_workspace_session_with_launch_options(
         auto_compaction_enabled,
         event_sink,
         launch_options,
+        app_settings_snapshot,
     )
     .await
 }

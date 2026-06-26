@@ -19,8 +19,8 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppServerEvent } from "../../../types";
 import {
-  subscribeAppServerEventBatch,
   subscribeAppServerEvents,
+  subscribeRawAppServerEvents,
 } from "../../../services/events";
 import {
   coalesceAppServerEventBatch,
@@ -30,14 +30,28 @@ import {
 } from "./useAppServerEvents";
 import { isAppServerEventBatchConsumerEnabled } from "../../threads/utils/realtimePerfFlags";
 
-vi.mock("../../../services/events", () => ({
-  subscribeAppServerEvents: vi.fn(),
-  subscribeAppServerEventBatch: vi.fn(),
-}));
+vi.mock("../../../services/events", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../services/events")>();
+  return {
+    ...actual,
+    subscribeAppServerEvents: vi.fn(),
+    subscribeRawAppServerEvents: vi.fn(),
+  };
+});
 
-vi.mock("../../threads/utils/realtimePerfFlags", () => ({
-  isAppServerEventBatchConsumerEnabled: vi.fn(() => true),
-}));
+vi.mock("../../threads/utils/realtimePerfFlags", async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import("../../threads/utils/realtimePerfFlags")
+    >();
+  return {
+    ...actual,
+    isAppServerEventBatchConsumerEnabled: vi.fn(() => true),
+    // Force baseline tier so the v1 setTimeout chunk loop is exercised
+    // (v2 path is covered by useAppServerEvents.idle-yield.test.tsx).
+    readStreamingScheduleTier: vi.fn(() => "baseline"),
+  };
+});
 
 type Handlers = Parameters<typeof useAppServerEvents>[0];
 
@@ -216,23 +230,20 @@ describe("dispatchAppServerEventBatch unit (proposal §1.4 d)", () => {
 
 describe("useAppServerEvents channel subscription (proposal §1.4 e/f)", () => {
   let listener: ((event: AppServerEvent) => void) | null = null;
-  let batchListener: ((events: readonly AppServerEvent[]) => void) | null =
-    null;
   const unlistenSingle = vi.fn();
-  const unlistenBatch = vi.fn();
+  const unlistenRaw = vi.fn();
 
   beforeEach(() => {
     listener = null;
-    batchListener = null;
     unlistenSingle.mockReset();
-    unlistenBatch.mockReset();
+    unlistenRaw.mockReset();
     vi.mocked(subscribeAppServerEvents).mockImplementation((cb) => {
       listener = cb;
       return unlistenSingle;
     });
-    vi.mocked(subscribeAppServerEventBatch).mockImplementation((cb) => {
-      batchListener = cb;
-      return unlistenBatch;
+    vi.mocked(subscribeRawAppServerEvents).mockImplementation((cb) => {
+      listener = cb;
+      return unlistenRaw;
     });
   });
 
@@ -250,21 +261,20 @@ describe("useAppServerEvents channel subscription (proposal §1.4 e/f)", () => {
     return { root };
   }
 
-  it("subscribes to batch and legacy single channels when the runtime flag is on", async () => {
+  it("subscribes to the unified per-event stream when the runtime flag is on", async () => {
     vi.mocked(isAppServerEventBatchConsumerEnabled).mockReturnValue(true);
     const handlers: Handlers = { onAppServerEvent: vi.fn() };
     const { root } = await mount(handlers);
 
-    expect(batchListener).toBeTypeOf("function");
     expect(listener).toBeTypeOf("function");
-    expect(vi.mocked(subscribeAppServerEventBatch)).toHaveBeenCalledTimes(1);
     expect(vi.mocked(subscribeAppServerEvents)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(subscribeRawAppServerEvents)).not.toHaveBeenCalled();
 
     await act(async () => {
       root.unmount();
     });
-    expect(unlistenBatch).toHaveBeenCalledTimes(1);
     expect(unlistenSingle).toHaveBeenCalledTimes(1);
+    expect(unlistenRaw).not.toHaveBeenCalled();
   });
 
   it("subscribes to ONE channel (single) when the runtime flag is off", async () => {
@@ -273,15 +283,36 @@ describe("useAppServerEvents channel subscription (proposal §1.4 e/f)", () => {
     const { root } = await mount(handlers);
 
     expect(listener).toBeTypeOf("function");
-    expect(batchListener).toBeNull();
-    expect(vi.mocked(subscribeAppServerEvents)).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(subscribeAppServerEventBatch)).not.toHaveBeenCalled();
+    expect(vi.mocked(subscribeRawAppServerEvents)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(subscribeAppServerEvents)).not.toHaveBeenCalled();
 
     await act(async () => {
       root.unmount();
     });
-    expect(unlistenSingle).toHaveBeenCalledTimes(1);
-    expect(unlistenBatch).not.toHaveBeenCalled();
+    expect(unlistenRaw).toHaveBeenCalledTimes(1);
+    expect(unlistenSingle).not.toHaveBeenCalled();
+  });
+
+  it("drains the raw fallback channel through the scheduler instead of dispatching synchronously", async () => {
+    vi.useFakeTimers();
+    vi.mocked(isAppServerEventBatchConsumerEnabled).mockReturnValue(false);
+    const handlers: Handlers = { onAppServerEvent: vi.fn() };
+    await mount(handlers);
+
+    const payload: AppServerEvent = {
+      workspace_id: "ws-1",
+      message: { method: "ping" },
+    };
+    await act(async () => {
+      listener?.(payload);
+    });
+
+    expect(handlers.onAppServerEvent).not.toHaveBeenCalled();
+
+    await act(async () => {
+      vi.runOnlyPendingTimers();
+    });
+    expect(handlers.onAppServerEvent).toHaveBeenCalledWith(payload);
   });
 
   it("batch channel preserves non-coalescible delta events (proposal §1.4 d)", async () => {
@@ -304,7 +335,10 @@ describe("useAppServerEvents channel subscription (proposal §1.4 e/f)", () => {
       });
     }
     await act(async () => {
-      batchListener?.(events);
+      for (const event of events) {
+        listener?.(event);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
     });
 
     expect(onAgentMessageDelta).toHaveBeenCalledTimes(5);
@@ -318,8 +352,7 @@ describe("useAppServerEvents channel subscription (proposal §1.4 e/f)", () => {
     }
   });
 
-  it("serializes consecutive batches so later batches cannot interleave with an active chunked batch", async () => {
-    vi.useFakeTimers();
+  it("preserves per-event delivery order after services split the batch", async () => {
     vi.mocked(isAppServerEventBatchConsumerEnabled).mockReturnValue(true);
     const onApprovalRequest = vi.fn();
     const handlers: Handlers = { onApprovalRequest };
@@ -333,33 +366,25 @@ describe("useAppServerEvents channel subscription (proposal §1.4 e/f)", () => {
         params: { requestId },
       },
     });
-    const firstBatch = Array.from({ length: 65 }, (_, index) =>
+    const events = Array.from({ length: 66 }, (_, index) =>
       makeApprovalEvent(index + 1),
     );
-    const secondBatch = [makeApprovalEvent(66)];
 
     await act(async () => {
-      batchListener?.(firstBatch);
-      batchListener?.(secondBatch);
-    });
-
-    expect(onApprovalRequest).toHaveBeenCalledTimes(64);
-    expect(
-      onApprovalRequest.mock.calls.map(([request]) => request.request_id),
-    ).toEqual(Array.from({ length: 64 }, (_, index) => index + 1));
-
-    await act(async () => {
-      vi.runOnlyPendingTimers();
+      for (const event of events) {
+        listener?.(event);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
     });
 
     expect(onApprovalRequest).toHaveBeenCalledTimes(66);
     expect(
       onApprovalRequest.mock.calls.map(([request]) => request.request_id),
     ).toEqual(Array.from({ length: 66 }, (_, index) => index + 1));
-    vi.useRealTimers();
   });
 
   it("single channel still routes events when the flag is off", async () => {
+    vi.useFakeTimers();
     vi.mocked(isAppServerEventBatchConsumerEnabled).mockReturnValue(false);
     const onWorkspaceConnected = vi.fn();
     const handlers: Handlers = {
@@ -373,6 +398,11 @@ describe("useAppServerEvents channel subscription (proposal §1.4 e/f)", () => {
         workspace_id: "ws-1",
         message: { method: "codex/connected" },
       });
+    });
+    expect(onWorkspaceConnected).not.toHaveBeenCalled();
+
+    await act(async () => {
+      vi.runOnlyPendingTimers();
     });
     expect(onWorkspaceConnected).toHaveBeenCalledTimes(1);
   });
@@ -399,6 +429,7 @@ describe("useAppServerEvents channel subscription (proposal §1.4 e/f)", () => {
           },
         },
       });
+      await new Promise((resolve) => setTimeout(resolve, 50));
     });
 
     expect(onAgentMessageDelta).toHaveBeenCalledWith({
@@ -430,6 +461,7 @@ describe("useAppServerEvents channel subscription (proposal §1.4 e/f)", () => {
           },
         },
       });
+      await new Promise((resolve) => setTimeout(resolve, 50));
     });
 
     expect(onTurnCompleted).toHaveBeenCalledWith(

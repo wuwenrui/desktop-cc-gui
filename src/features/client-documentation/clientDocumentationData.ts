@@ -47,7 +47,6 @@ export const CLIENT_DOCUMENTATION_REQUIRED_UI_CONTROL_IDS = [
   "bottomActivity.agents",
   "bottomActivity.checkpoint",
   "bottomActivity.latestConversation",
-  "curtain.stickyUserBubble",
   "curtain.contextLedger",
   "cornerStatus.messageAnchors",
 ] as const;
@@ -232,7 +231,7 @@ const MODULE_USAGE_STEPS: Record<string, string[]> = {
     "顶部工具控制包含打开工作区应用、Runtime console、Terminal、Focus、右侧面板开关和客户端说明文档入口。",
     "右侧活动工具栏包含 Activity、Radar、Git、Files、Search、Notes，点击后会切换右侧 panel 的内容区域。",
     "底部活动面板包含 Tasks、Agents、Result checkpoint、Latest conversation，用于跟踪长任务状态和最近输出。",
-    "幕布状态区包含用户气泡吸顶、上下文来源卡片和消息锚点，主要帮助长对话滚动时保持定位。",
+    "幕布状态区包含上下文来源卡片和消息锚点，主要帮助长对话滚动时保持定位。",
     "隐藏入口只改变 UI 可见性，不清空数据、不关闭 runtime、不删除任务，也不改变 Git、Files、Search 等模块状态。",
   ],
   "workspace-home": [
@@ -776,21 +775,6 @@ export const CLIENT_DOCUMENTATION_TREE: ClientDocumentationNode[] = [
         ["对话与会话", "任务与状态面板"],
       ),
       uiControlFeature(
-        "curtain.stickyUserBubble",
-        "用户气泡吸顶",
-        "长对话滚动时在幕布顶部保留当前用户消息提示。",
-        "对话幕布区域；sticky user bubble。",
-        "让用户在阅读长输出时始终知道当前回答对应哪条输入。",
-        ["sticky user bubble", "长输出定位", "对话上下文提示"],
-        [
-          "发送消息后阅读 assistant 输出。",
-          "当内容滚动较长时观察顶部吸顶用户气泡。",
-          "用它确认当前输出对应的用户请求。",
-        ],
-        ["隐藏后只影响视觉定位，不改变消息内容。"],
-        ["对话与会话", "Composer 输入区"],
-      ),
-      uiControlFeature(
         "curtain.contextLedger",
         "本轮上下文来源卡片",
         "展示当前回答使用过的上下文来源。",
@@ -815,7 +799,7 @@ export const CLIENT_DOCUMENTATION_TREE: ClientDocumentationNode[] = [
         [
           "在长线程中观察角落消息锚点。",
           "点击目标锚点跳到对应消息。",
-          "结合 sticky user bubble 判断当前上下文位置。",
+          "结合当前位置高亮判断当前上下文位置。",
         ],
         ["隐藏锚点不会删除消息，也不会影响线程历史。"],
         ["对话与会话", "搜索与导航"],

@@ -7,9 +7,9 @@
 ## Current Status
 
 <!-- @@@auto:current-status -->
-- **Active File**: `journal-23.md`
-- **Total Sessions**: 911
-- **Last Active**: 2026-06-22
+- **Active File**: `journal-24.md`
+- **Total Sessions**: 943
+- **Last Active**: 2026-06-26
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,8 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-23.md` | ~1642 | Active |
+| `journal-24.md` | ~964 | Active |
+| `journal-23.md` | ~1965 | Archived |
 | `journal-22.md` | ~1969 | Archived |
 | `journal-21.md` | ~1970 | Archived |
 | `journal-20.md` | ~1997 | Archived |
@@ -51,6 +52,38 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 943 | 2026-06-26 | 修复 Windows 精选技能打包 hash 漂移 | `963b45fd` | `v0.5.13` |
+| 942 | 2026-06-26 | Codex 首轮线程启动恢复边界 | `a1f2ad06` | `v0.5.13` |
+| 941 | 2026-06-26 | 屏蔽废弃 CLI 验证入口 | `e93305cc` | `v0.5.13` |
+| 940 | 2026-06-26 | 复刻 Codex daemon 启动确认与 transient 诊断清理 | `931ae769` | `v0.5.13` |
+| 939 | 2026-06-26 | 删除用户气泡吸顶条 | `897b954e` | `feature/v0.5.13` |
+| 938 | 2026-06-26 | 补充设置页性能诊断说明 | `52ca79cc` | `feature/v0.5.13` |
+| 937 | 2026-06-26 | Fix history canvas lightweight spacing & expanded-history layout | `40398107` | `feature/v0.5.13` |
+| 936 | 2026-06-25 | feat(messages): 去除对话幕布重复复制入口 | `34cf3ac6` | `feature/v0.5.13` |
+| 935 | 2026-06-25 | Archive Codex disk session start readiness | `3e485b63` | `feature/v0.5.13` |
+| 934 | 2026-06-25 | Externalize active canvas state selectors | `40c49757`, `774d1354` | `feature/v0.5.13` |
+| 933 | 2026-06-25 | 降级临时 runtime 重连提示 | `809e8234` | `feature/v0.5.13` |
+| 932 | 2026-06-25 | 修复 ProjectMap 冷启动空态循环 | `5dabbcc6` | `feature/v0.5.13` |
+| 931 | 2026-06-25 | Shell-first lazy runtime isolation | `4c8d3191` | `feature/v0.5.13` |
+| 930 | 2026-06-25 | 闭环实时幕布交互隔离 | `b2f00f40` | `feature/v0.5.13` |
+| 929 | 2026-06-25 | 实时幕布与控制区隔离 Phase 1 | `823c657f` | `feature/v0.5.13` |
+| 928 | 2026-06-25 | 稳定实时对话渲染与 Codex 创建 | `982f6ed0` | `feature/v0.5.13` |
+| 927 | 2026-06-25 | 归档实时交互卡顿补强 | `6e2c663d` | `feature/v0.5.13` |
+| 926 | 2026-06-25 | 修正退役 OpenCode/Gemini CLI 提案 | `31ed8796` | `feature/v0.5.13` |
+| 925 | 2026-06-25 | 消除精选技能测试 helper 死代码告警 | `911537d7` | `feature/v0.5.13` |
+| 924 | 2026-06-25 | 完成精选技能收口 | `45c65526` | `feature/v0.5.13` |
+| 923 | 2026-06-24 | 归档 fast-markdown 与 codex-provider 两个 fix 提案 | `7abed3bf` | `feature/v0.5.13` |
+| 922 | 2026-06-24 | 修复会话选择迁移重复写入 | `acb8bc4e` | `feature/v0.5.13` |
+| 921 | 2026-06-24 | 提交幕布 File changes 误判修复 | `3112e90f` | `feature/v0.5.13` |
+| 920 | 2026-06-24 | 修复幕布 File changes 误判输出捕获 | - | `feature/v0.5.13` |
+| 919 | 2026-06-24 | 修复 CI 中的 file preview outline 和 composer guard | `00ae0873`, `b49e19dc` | `feature/v0.5.13` |
+| 918 | 2026-06-23 | 修复 fast Markdown 标注入口 | `f3ceddc4` | `feature/v0.5.13` |
+| 917 | 2026-06-23 | 修复 composer 输入框低优先级卡顿 | `7eb791c8` | `feature/v0.5.13` |
+| 916 | 2026-06-23 | 修复实时渲染调度续排卡顿 | `f9ca354f` | `feature/v0.5.13` |
+| 915 | 2026-06-23 | 阶段性收口工具调用卡顿治理 | `1b04db4f` | `feature/v0.5.13` |
+| 914 | 2026-06-23 | Fix Codex provider composer cold start binding | `ffd18f6b` | `feature/v0.5.13` |
+| 913 | 2026-06-23 | 归档已验证 OpenSpec 提案 | `bbbf3f39` | `feature/v0.5.13` |
+| 912 | 2026-06-23 | 恢复 Codex 命令写文件变更回放 | `0eb7cb74` | `feature/v0.5.13` |
 | 911 | 2026-06-22 | 稳定流式对话目录渲染 | `17ffb6b5` | `feature/v0.5.12` |
 | 910 | 2026-06-22 | 修复 Mermaid 全屏测试竞态 | `4cc6389e` | `feature/v0.5.12` |
 | 909 | 2026-06-22 | 修复供应商模型目录与 Codex 刷新断联 | `657d1351` | `feature/v0.5.12` |

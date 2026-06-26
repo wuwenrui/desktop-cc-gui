@@ -28,7 +28,7 @@ export function useCollapsibleFloater(hoverCollapseMs = 200) {
       window.clearTimeout(leaveTimerRef.current);
       leaveTimerRef.current = null;
     }
-    setState("expanded-hover");
+    setState((prev) => (prev === "expanded-hover" ? prev : "expanded-hover"));
   }, []);
 
   const scheduleCollapse = useCallback(() => {
@@ -54,7 +54,7 @@ export function useCollapsibleFloater(hoverCollapseMs = 200) {
       window.clearTimeout(leaveTimerRef.current);
       leaveTimerRef.current = null;
     }
-    setState("collapsed");
+    setState((prev) => (prev === "collapsed" ? prev : "collapsed"));
   }, []);
 
   const togglePin = useCallback(() => {

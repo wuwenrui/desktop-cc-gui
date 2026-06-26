@@ -3,12 +3,20 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppServerEvent } from "../../../types";
-import { subscribeAppServerEvents } from "../../../services/events";
+import {
+  subscribeAppServerEvents,
+  subscribeRawAppServerEvents,
+} from "../../../services/events";
 import { useAppServerEvents } from "./useAppServerEvents";
 
-vi.mock("../../../services/events", () => ({
-  subscribeAppServerEvents: vi.fn(),
-}));
+vi.mock("../../../services/events", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../services/events")>();
+  return {
+    ...actual,
+    subscribeAppServerEvents: vi.fn(),
+    subscribeRawAppServerEvents: vi.fn(),
+  };
+});
 
 type Handlers = Parameters<typeof useAppServerEvents>[0];
 
@@ -24,6 +32,10 @@ beforeEach(() => {
   listener = null;
   unlisten.mockReset();
   vi.mocked(subscribeAppServerEvents).mockImplementation((cb) => {
+    listener = cb;
+    return unlisten;
+  });
+  vi.mocked(subscribeRawAppServerEvents).mockImplementation((cb) => {
     listener = cb;
     return unlisten;
   });
@@ -69,12 +81,14 @@ describe("useAppServerEvents routing", () => {
 
     expect(listener).toBeTypeOf("function");
 
-    act(() => {
+    await act(async () => {
       listener?.({ workspace_id: "ws-1", message: { method: "codex/connected" } });
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(handlers.onWorkspaceConnected).toHaveBeenCalledWith("ws-1");
 
-    act(() => {
+    await act(async () => {
       listener?.({
         workspace_id: "ws-1",
         message: {
@@ -82,6 +96,8 @@ describe("useAppServerEvents routing", () => {
           params: { threadId: "thread-1", itemId: "item-1", delta: "Hello" },
         },
       });
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(handlers.onAgentMessageDelta).toHaveBeenCalledWith({
       workspaceId: "ws-1",
@@ -90,7 +106,7 @@ describe("useAppServerEvents routing", () => {
       delta: "Hello",
     });
 
-    act(() => {
+    await act(async () => {
       listener?.({
         workspace_id: "ws-1",
         message: {
@@ -98,6 +114,8 @@ describe("useAppServerEvents routing", () => {
           params: { threadId: "thread-1", itemId: "reasoning-1", summaryIndex: 1 },
         },
       });
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(handlers.onReasoningSummaryBoundary).toHaveBeenCalledWith(
       "ws-1",
@@ -105,7 +123,7 @@ describe("useAppServerEvents routing", () => {
       "reasoning-1",
     );
 
-    act(() => {
+    await act(async () => {
       listener?.({
         workspace_id: "ws-1",
         message: {
@@ -117,6 +135,8 @@ describe("useAppServerEvents routing", () => {
           },
         },
       });
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(handlers.onReasoningSummaryDelta).toHaveBeenCalledWith(
       "ws-1",
@@ -125,7 +145,7 @@ describe("useAppServerEvents routing", () => {
       "summary complete",
     );
 
-    act(() => {
+    await act(async () => {
       listener?.({
         workspace_id: "ws-1",
         message: {
@@ -137,6 +157,8 @@ describe("useAppServerEvents routing", () => {
           },
         },
       });
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(handlers.onReasoningSummaryDelta).toHaveBeenCalledWith(
       "ws-1",
@@ -145,7 +167,7 @@ describe("useAppServerEvents routing", () => {
       "summary delta alias",
     );
 
-    act(() => {
+    await act(async () => {
       listener?.({
         workspace_id: "ws-1",
         message: {
@@ -157,6 +179,8 @@ describe("useAppServerEvents routing", () => {
           },
         },
       });
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(handlers.onReasoningSummaryDelta).toHaveBeenCalledWith(
       "ws-1",
@@ -165,7 +189,7 @@ describe("useAppServerEvents routing", () => {
       "summary done alias",
     );
 
-    act(() => {
+    await act(async () => {
       listener?.({
         workspace_id: "ws-1",
         message: {
@@ -173,6 +197,8 @@ describe("useAppServerEvents routing", () => {
           params: { threadId: "thread-1", itemId: "reasoning-1", delta: "checking..." },
         },
       });
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(handlers.onReasoningTextDelta).toHaveBeenCalledWith(
       "ws-1",
@@ -181,7 +207,7 @@ describe("useAppServerEvents routing", () => {
       "checking...",
     );
 
-    act(() => {
+    await act(async () => {
       listener?.({
         workspace_id: "ws-1",
         message: {
@@ -192,6 +218,8 @@ describe("useAppServerEvents routing", () => {
           },
         },
       });
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(handlers.onReasoningSummaryBoundary).toHaveBeenCalledWith(
       "ws-1",
@@ -199,7 +227,7 @@ describe("useAppServerEvents routing", () => {
       "reasoning-2",
     );
 
-    act(() => {
+    await act(async () => {
       listener?.({
         workspace_id: "ws-1",
         message: {
@@ -211,6 +239,8 @@ describe("useAppServerEvents routing", () => {
           },
         },
       });
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(handlers.onReasoningSummaryDelta).toHaveBeenCalledWith(
       "ws-1",
@@ -219,7 +249,7 @@ describe("useAppServerEvents routing", () => {
       "finished part",
     );
 
-    act(() => {
+    await act(async () => {
       listener?.({
         workspace_id: "ws-1",
         message: {
@@ -227,6 +257,8 @@ describe("useAppServerEvents routing", () => {
           params: { threadId: "thread-1", turnId: "turn-7" },
         },
       });
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(handlers.onContextCompacted).toHaveBeenCalledWith(
       "ws-1",
@@ -234,7 +266,7 @@ describe("useAppServerEvents routing", () => {
       "turn-7",
     );
 
-    act(() => {
+    await act(async () => {
       listener?.({
         workspace_id: "ws-1",
         message: {
@@ -247,6 +279,8 @@ describe("useAppServerEvents routing", () => {
           },
         },
       });
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(handlers.onContextCompacting).toHaveBeenCalledWith(
       "ws-1",
@@ -258,7 +292,7 @@ describe("useAppServerEvents routing", () => {
       },
     );
 
-    act(() => {
+    await act(async () => {
       listener?.({
         workspace_id: "ws-1",
         message: {
@@ -266,6 +300,8 @@ describe("useAppServerEvents routing", () => {
           params: { threadId: "thread-1", reason: "rpc failed" },
         },
       });
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(handlers.onContextCompactionFailed).toHaveBeenCalledWith(
       "ws-1",
@@ -273,7 +309,7 @@ describe("useAppServerEvents routing", () => {
       "rpc failed",
     );
 
-    act(() => {
+    await act(async () => {
       listener?.({
         workspace_id: "ws-1",
         message: {
@@ -281,13 +317,15 @@ describe("useAppServerEvents routing", () => {
           params: { thread: { id: "thread-2", preview: "New thread" } },
         },
       });
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(handlers.onThreadStarted).toHaveBeenCalledWith("ws-1", {
       id: "thread-2",
       preview: "New thread",
     });
 
-    act(() => {
+    await act(async () => {
       listener?.({
         workspace_id: "ws-1",
         message: {
@@ -295,6 +333,8 @@ describe("useAppServerEvents routing", () => {
           params: { threadId: "thread-2", item: { id: "item-42", type: "reasoning", text: "..." } },
         },
       });
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(handlers.onItemUpdated).toHaveBeenCalledWith("ws-1", "thread-2", {
       id: "item-42",
@@ -302,7 +342,7 @@ describe("useAppServerEvents routing", () => {
       text: "...",
     });
 
-    act(() => {
+    await act(async () => {
       listener?.({
         workspace_id: "ws-1",
         message: {
@@ -310,6 +350,8 @@ describe("useAppServerEvents routing", () => {
           params: { threadId: "thread-2", turnId: "turn-2", error: "Resume failed" },
         },
       });
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(handlers.onTurnError).toHaveBeenCalledWith(
       "ws-1",
@@ -322,7 +364,7 @@ describe("useAppServerEvents routing", () => {
       }),
     );
 
-    act(() => {
+    await act(async () => {
       listener?.({
         workspace_id: "ws-1",
         message: {
@@ -334,6 +376,8 @@ describe("useAppServerEvents routing", () => {
           },
         },
       });
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(handlers.onTurnError).toHaveBeenCalledWith(
       "ws-1",
@@ -346,7 +390,7 @@ describe("useAppServerEvents routing", () => {
       }),
     );
 
-    act(() => {
+    await act(async () => {
       listener?.({
         workspace_id: "ws-1",
         message: {
@@ -358,6 +402,8 @@ describe("useAppServerEvents routing", () => {
           },
         },
       });
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(handlers.onTurnError).toHaveBeenCalledWith(
       "ws-1",
@@ -371,7 +417,7 @@ describe("useAppServerEvents routing", () => {
       }),
     );
 
-    act(() => {
+    await act(async () => {
       listener?.({
         workspace_id: "ws-1",
         message: {
@@ -379,6 +425,8 @@ describe("useAppServerEvents routing", () => {
           params: { threadId: "thread-2", action: "hide" },
         },
       });
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(handlers.onBackgroundThreadAction).toHaveBeenCalledWith(
       "ws-1",
@@ -386,7 +434,7 @@ describe("useAppServerEvents routing", () => {
       "hide",
     );
 
-    act(() => {
+    await act(async () => {
       listener?.({
         workspace_id: "ws-1",
         message: {
@@ -395,6 +443,8 @@ describe("useAppServerEvents routing", () => {
           params: { mode: "full" },
         },
       });
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(handlers.onApprovalRequest).toHaveBeenCalledWith({
       workspace_id: "ws-1",
@@ -403,7 +453,7 @@ describe("useAppServerEvents routing", () => {
       params: { mode: "full" },
     });
 
-    act(() => {
+    await act(async () => {
       listener?.({
         workspace_id: "ws-1",
         message: {
@@ -414,6 +464,8 @@ describe("useAppServerEvents routing", () => {
           },
         },
       });
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(handlers.onApprovalRequest).toHaveBeenCalledWith({
       workspace_id: "ws-1",
@@ -425,7 +477,7 @@ describe("useAppServerEvents routing", () => {
       },
     });
 
-    act(() => {
+    await act(async () => {
       listener?.({
         workspace_id: "ws-1",
         message: {
@@ -440,6 +492,8 @@ describe("useAppServerEvents routing", () => {
           },
         },
       });
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(handlers.onModeBlocked).toHaveBeenCalledWith({
       workspace_id: "ws-1",
@@ -453,7 +507,7 @@ describe("useAppServerEvents routing", () => {
       },
     });
 
-    act(() => {
+    await act(async () => {
       listener?.({
         workspace_id: "ws-1",
         message: {
@@ -467,6 +521,8 @@ describe("useAppServerEvents routing", () => {
           },
         },
       });
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(handlers.onModeResolved).toHaveBeenCalledWith({
       workspace_id: "ws-1",
@@ -479,7 +535,7 @@ describe("useAppServerEvents routing", () => {
       },
     });
 
-    act(() => {
+    await act(async () => {
       listener?.({
         workspace_id: "ws-1",
         message: {
@@ -503,6 +559,8 @@ describe("useAppServerEvents routing", () => {
           },
         },
       });
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(handlers.onRequestUserInput).toHaveBeenCalledWith({
       workspace_id: "ws-1",
@@ -527,7 +585,7 @@ describe("useAppServerEvents routing", () => {
       },
     });
 
-    act(() => {
+    await act(async () => {
       listener?.({
         workspace_id: "ws-1",
         message: {
@@ -538,6 +596,8 @@ describe("useAppServerEvents routing", () => {
           },
         },
       });
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(handlers.onItemCompleted).toHaveBeenCalledWith("ws-1", "thread-1", {
       type: "agentMessage",

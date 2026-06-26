@@ -3,6 +3,7 @@ import type { ConversationItem } from "../types";
 import {
   inferFileChangesFromCommandExecutionArtifacts,
   inferFileChangesFromPayload,
+  inferMutatingFileChangesFromCommand,
   mergeToolChanges,
   normalizeFileChangeKind,
 } from "./threadItemsFileChanges";
@@ -155,6 +156,19 @@ describe("threadItemsFileChanges.mergeToolChanges", () => {
     ]);
   });
 
+  it("does not infer file changes from command output capture redirection", () => {
+    expect(
+      inferMutatingFileChangesFromCommand(
+        "claude --help > claude_help.txt 2>&1; grep -E \"--append-system-prompt-file\" claude_help.txt",
+      ),
+    ).toEqual([]);
+    expect(
+      inferMutatingFileChangesFromCommand(
+        'rg -n "useAppSettings" src --include="*.rs" 2>&1 | head -10',
+      ),
+    ).toEqual([]);
+  });
+
   it("does not treat structured codex tool field paths as file changes", () => {
     const inferred = inferFileChangesFromPayload([
       {
@@ -170,6 +184,23 @@ describe("threadItemsFileChanges.mergeToolChanges", () => {
         kind: "modified",
       },
     ]);
+
+    expect(inferred).toEqual([]);
+  });
+
+  it("does not treat status-prefixed code fragments as file changes", () => {
+    const inferred = inferFileChangesFromPayload(
+      [
+        "(A) ... }",
+        "(A) { engine::gemini_history::delete_gemini_session }",
+        '(A) { engine::commands::opencode_delete_session }',
+        '(A) "Gemini CLI".to_string',
+        "(A) { ... }",
+        "(A) detect_gemini_status(None).await.inspect",
+        "(A) detect_opencode_status(None).await.inspect",
+        '(A) entry.type === "opencode"',
+      ].join("\n"),
+    );
 
     expect(inferred).toEqual([]);
   });

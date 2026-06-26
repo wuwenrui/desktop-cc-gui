@@ -57,6 +57,7 @@ import {
   isStaleMessageMarkdownPrecomputeResult,
   runMessageMarkdownPrecompute,
 } from "../../markdown/messageMarkdownPrecompute";
+import { classifyMessageMarkdownHeavyIslands } from "../../markdown/messageMarkdownHeavyIslands";
 import { appendMarkdownPrecomputeDiagnostic } from "../../../services/rendererDiagnostics";
 
 type MarkdownProps = {
@@ -111,7 +112,20 @@ type LinkBlockProps = {
   urls: string[];
 };
 
+type DeferredCodeBlockProps = CodeBlockProps & {
+  languageLabel: string;
+  lineCount: number;
+};
+
+type DeferredMarkdownTableProps = {
+  children: ReactNode;
+  rowCount: number;
+};
+
 const MARKDOWN_LANGUAGE_SET = new Set(["markdown", "md", "mdx"]);
+const HEAVY_CODE_BLOCK_MIN_LINES = 40;
+const HEAVY_CODE_BLOCK_MIN_CHARS = 4_000;
+const HEAVY_TABLE_MIN_ROWS = 12;
 const MARKDOWN_ALERT_TONE_SET = new Set([
   "note",
   "tip",
@@ -1087,6 +1101,108 @@ function CodeBlock({ className, value, copyUseModifier }: CodeBlockProps) {
   );
 }
 
+function DeferredCodeBlock({
+  className,
+  value,
+  copyUseModifier,
+  languageLabel,
+  lineCount,
+}: DeferredCodeBlockProps) {
+  const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(false);
+  const [copiedMode, setCopiedMode] = useState<"plain" | "fenced" | null>(null);
+  const copyTimeoutRef = useRef<number | null>(null);
+  const languageTag = extractLanguageTag(className);
+  const fencedValue = `\`\`\`${languageTag ?? ""}\n${value}\n\`\`\``;
+
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        window.clearTimeout(copyTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const commitCopiedMode = (mode: "plain" | "fenced") => {
+    setCopiedMode(mode);
+    if (copyTimeoutRef.current) {
+      window.clearTimeout(copyTimeoutRef.current);
+    }
+    copyTimeoutRef.current = window.setTimeout(() => {
+      setCopiedMode(null);
+    }, 1200);
+  };
+
+  const handleCopy = async (event: MouseEvent<HTMLButtonElement>) => {
+    try {
+      const nextValue = copyUseModifier && event.altKey ? fencedValue : value;
+      await navigator.clipboard.writeText(nextValue);
+      commitCopiedMode(nextValue === fencedValue ? "fenced" : "plain");
+    } catch {
+      // No-op: clipboard errors can occur in restricted contexts.
+    }
+  };
+
+  const handleCopyFenced = async () => {
+    try {
+      await navigator.clipboard.writeText(fencedValue);
+      commitCopiedMode("fenced");
+    } catch {
+      // No-op: clipboard errors can occur in restricted contexts.
+    }
+  };
+
+  if (expanded) {
+    return (
+      <CodeBlock
+        className={className}
+        value={value}
+        copyUseModifier={copyUseModifier}
+      />
+    );
+  }
+
+  return (
+    <div className="markdown-codeblock markdown-heavy-island-placeholder">
+      <div className="markdown-codeblock-header">
+        <span className="markdown-codeblock-language">{languageLabel}</span>
+        <div className="markdown-codeblock-actions">
+          <button
+            type="button"
+            className={`ghost markdown-codeblock-copy${copiedMode === "plain" ? " is-copied" : ""}`}
+            onClick={handleCopy}
+            aria-label={t("messages.copyCodeBlock")}
+            title={copiedMode === "plain" ? t("messages.copied") : t("messages.copy")}
+          >
+            {copiedMode === "plain" ? t("messages.copied") : t("messages.copy")}
+          </button>
+          <button
+            type="button"
+            className={`ghost markdown-codeblock-copy${copiedMode === "fenced" ? " is-copied" : ""}`}
+            onClick={handleCopyFenced}
+            aria-label={t("messages.copyCodeBlockWithFence")}
+            title={copiedMode === "fenced" ? t("messages.copied") : t("messages.copyWithFence")}
+          >
+            {copiedMode === "fenced" ? t("messages.copied") : t("messages.copyWithFence")}
+          </button>
+        </div>
+      </div>
+      <div className="markdown-heavy-island-placeholder-body">
+        <strong>{t("messages.markdownHeavyBlockDeferred")}</strong>
+        <span>
+          {t("messages.markdownHeavyBlockMeta", {
+            kind: languageLabel,
+            lines: lineCount,
+          })}
+        </span>
+        <button type="button" onClick={() => setExpanded(true)}>
+          {t("messages.markdownHeavyBlockShow")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function MarkdownBlock({
   className,
   value,
@@ -1353,6 +1469,48 @@ function flattenNodeText(node: ReactNode): string {
   return "";
 }
 
+function countMarkdownTableRowsFromNode(node: unknown): number {
+  if (!node || typeof node !== "object") {
+    return 0;
+  }
+  const record = node as {
+    tagName?: string;
+    children?: unknown[];
+  };
+  const ownCount = record.tagName === "tr" ? 1 : 0;
+  const childCount = Array.isArray(record.children)
+    ? record.children.reduce<number>(
+      (total, child) => total + countMarkdownTableRowsFromNode(child),
+      0,
+    )
+    : 0;
+  return ownCount + childCount;
+}
+
+function DeferredMarkdownTable({ children, rowCount }: DeferredMarkdownTableProps) {
+  const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(false);
+  if (expanded) {
+    return <table>{children}</table>;
+  }
+  return (
+    <div className="markdown-heavy-island-placeholder markdown-heavy-table-placeholder">
+      <div className="markdown-heavy-island-placeholder-body">
+        <strong>{t("messages.markdownHeavyBlockDeferred")}</strong>
+        <span>
+          {t("messages.markdownHeavyBlockMeta", {
+            kind: t("messages.markdownHeavyBlockTable"),
+            lines: rowCount,
+          })}
+        </span>
+        <button type="button" onClick={() => setExpanded(true)}>
+          {t("messages.markdownHeavyBlockShow")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function extractAlertToneFromNode(node: ReactNode): string | null {
   if (Array.isArray(node)) {
     for (const child of node) {
@@ -1433,6 +1591,21 @@ function PreBlock({
           dangerouslySetInnerHTML={{ __html: highlightedHtml }}
         />
       </pre>
+    );
+  }
+  const codeLineCount = value.split(/\r?\n/).length;
+  if (
+    codeLineCount >= HEAVY_CODE_BLOCK_MIN_LINES ||
+    value.length >= HEAVY_CODE_BLOCK_MIN_CHARS
+  ) {
+    return (
+      <DeferredCodeBlock
+        className={className}
+        value={value}
+        copyUseModifier={copyUseModifier}
+        languageLabel={languageTag ?? "Code"}
+        lineCount={codeLineCount}
+      />
     );
   }
   return (
@@ -1736,6 +1909,14 @@ export const Markdown = memo(function Markdown({
       );
     return normalizeOutsideMarkdownCode(renderValue, normalizeDisplayText);
   }, [renderValue, codeBlock, liveRenderMode, preserveFormatting]);
+  const markdownHeavyIslandSummary = useMemo(
+    () => classifyMessageMarkdownHeavyIslands(content),
+    [content],
+  );
+  const shouldDeferMarkdownHeavyIslands =
+    liveRenderMode !== "lightweight" &&
+    !codeBlock &&
+    markdownHeavyIslandSummary.totalHeavyIslands > 0;
   const toolCallBlocks = useMemo(() => parseToolCallBlocks(content), [content]);
   const shouldRenderToolCallSegments = !(
     toolCallBlocks.length === 1 && toolCallBlocks[0]?.kind === "md"
@@ -1862,6 +2043,17 @@ export const Markdown = memo(function Markdown({
           />
         );
       },
+      table: ({ node, children }) => {
+        const rowCount = countMarkdownTableRowsFromNode(node);
+        if (!shouldDeferMarkdownHeavyIslands || rowCount < HEAVY_TABLE_MIN_ROWS) {
+          return <table>{children}</table>;
+        }
+        return (
+          <DeferredMarkdownTable rowCount={rowCount}>
+            {children}
+          </DeferredMarkdownTable>
+        );
+      },
     };
 
     if (enableCodexLeadEnhancement) {
@@ -1914,6 +2106,7 @@ export const Markdown = memo(function Markdown({
     codeBlockCopyUseModifier,
     onOpenFileLink,
     onOpenFileLinkMenu,
+    shouldDeferMarkdownHeavyIslands,
     workspaceId,
   ]);
 
@@ -1949,6 +2142,20 @@ export const Markdown = memo(function Markdown({
         return;
       }
       if (isStaleMessageMarkdownPrecomputeResult(result, request)) {
+        appendMarkdownPrecomputeDiagnostic({
+          mode: result.mode,
+          durationMs: result.durationMs,
+          contentLength: result.sourceLength,
+          contentHash: result.contentHash,
+          thresholdReason: result.thresholdReason,
+          cacheState: result.cacheState,
+          fallbackReason: "stale-drop",
+          evidenceClass: "proxy",
+          heavyCategoryCounts: markdownHeavyIslandSummary.categoryCounts,
+          totalHeadings: result.precomputeResult?.totalHeadings,
+          totalHeavyBlocks: result.precomputeResult?.totalHeavyBlocks,
+          totalSourceLines: result.precomputeResult?.totalSourceLines,
+        });
         return;
       }
       appendMarkdownPrecomputeDiagnostic({
@@ -1960,6 +2167,7 @@ export const Markdown = memo(function Markdown({
         cacheState: result.cacheState,
         fallbackReason: result.fallbackReason,
         evidenceClass: result.evidenceClass,
+        heavyCategoryCounts: markdownHeavyIslandSummary.categoryCounts,
         totalHeadings: result.precomputeResult?.totalHeadings,
         totalHeavyBlocks: result.precomputeResult?.totalHeavyBlocks,
         totalSourceLines: result.precomputeResult?.totalSourceLines,
@@ -1973,6 +2181,7 @@ export const Markdown = memo(function Markdown({
     content,
     liveRenderMode,
     markdownPrecomputeOptionsHash,
+    markdownHeavyIslandSummary.categoryCounts,
     workspaceId,
   ]);
   const [katexReady, setKatexReady] = useState(

@@ -42,6 +42,8 @@ mod file_policy;
 mod git_utils;
 #[path = "cc_gui_daemon/rpc_params.rs"]
 mod rpc_params;
+#[path = "../snapshot_throttle.rs"]
+mod snapshot_throttle;
 // `local_usage.rs` is shared with the desktop Tauri app and references
 // `crate::state::AppState` in command wrappers. The daemon only reuses the
 // workspace-backed filesystem helpers, so a minimal stub keeps the shared
@@ -64,8 +66,31 @@ mod state {
         pub(crate) app_settings: Mutex<AppSettings>,
         pub(crate) storage_path: PathBuf,
         pub(crate) settings_path: PathBuf,
-        pub(crate) runtime_manager: RuntimeManager,
+        pub(crate) runtime_manager: Arc<RuntimeManager>,
         pub(crate) engine_manager: EngineManager,
+    }
+
+    impl AppState {
+        #[allow(dead_code)]
+        pub(crate) async fn sync_engine_configs_from_settings(&self) {}
+    }
+}
+mod event_sink {
+    use tauri::AppHandle;
+
+    use crate::backend::events::{AppServerEvent, EventSink, TerminalOutput};
+
+    #[derive(Clone)]
+    pub(crate) struct NoopEventSink;
+
+    impl EventSink for NoopEventSink {
+        fn emit_app_server_event(&self, _event: AppServerEvent) {}
+
+        fn emit_terminal_output(&self, _event: TerminalOutput) {}
+    }
+
+    pub(crate) fn build_event_sink(_app: AppHandle) -> NoopEventSink {
+        NoopEventSink
     }
 }
 mod remote_backend {
@@ -87,6 +112,9 @@ mod remote_backend {
         Err("remote backend is not available in daemon".to_string())
     }
 }
+#[allow(dead_code)]
+#[path = "../curated_skills.rs"]
+mod curated_skills;
 #[allow(dead_code)]
 #[path = "../local_usage.rs"]
 mod local_usage;

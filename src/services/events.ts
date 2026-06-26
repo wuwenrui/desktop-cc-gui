@@ -44,6 +44,7 @@ type Listener<T> = (payload: T) => void;
 
 type EventHubOptions<T> = {
   backpressure?: ReturnType<typeof createEventBackpressure<T>>;
+  listenToNative?: boolean;
 };
 
 function deliverEvent<T>(
@@ -69,6 +70,9 @@ function createEventHub<T>(eventName: string, hubOptions: EventHubOptions<T> = {
   });
 
   const start = (options?: SubscriptionOptions) => {
+    if (hubOptions.listenToNative === false) {
+      return;
+    }
     if (unlisten || listenPromise) {
       return;
     }
@@ -119,7 +123,15 @@ function createEventHub<T>(eventName: string, hubOptions: EventHubOptions<T> = {
     };
   };
 
-  return { subscribe, disposeBackpressure: backpressureUnsubscribe };
+  const publish = (payload: T) => {
+    if (hubOptions.backpressure) {
+      hubOptions.backpressure.push(payload);
+      return;
+    }
+    deliverEvent(eventName, listeners, payload);
+  };
+
+  return { subscribe, publish, disposeBackpressure: backpressureUnsubscribe };
 }
 
 function terminalOutputBytes(event: TerminalOutputEvent) {
@@ -165,7 +177,112 @@ const runtimeLogStatusBackpressure =
     onStats: appendEventBackpressureDiagnostic,
   });
 
+const APP_SERVER_EVENT_CRITICAL_METHODS = new Set<string>([
+  "turn/completed",
+  "turn/error",
+  "runtime/ended",
+  "item/tool/requestUserInput",
+  "approval/request",
+  "collaboration/modeBlocked",
+  "collaboration/modeResolved",
+]);
+
+function appServerEventMethod(event: AppServerEvent): string {
+  return String(event.message.method ?? "");
+}
+
+function appServerEventParams(event: AppServerEvent): Record<string, unknown> {
+  return (event.message.params as Record<string, unknown> | undefined) ?? {};
+}
+
+function appServerEventThreadId(params: Record<string, unknown>) {
+  const value = params.threadId ?? params.thread_id;
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function appServerEventCoalesceKey(event: AppServerEvent): string | null {
+  const method = appServerEventMethod(event);
+  const params = appServerEventParams(event);
+  switch (method) {
+    case "processing/heartbeat":
+    case "thread/tokenUsage/updated":
+    case "thread/compacting":
+    case "turn/diff/updated": {
+      const threadId = appServerEventThreadId(params);
+      return threadId
+        ? `${event.workspace_id}\0${method}\0${threadId}`
+        : null;
+    }
+    case "account/rateLimits/updated":
+      return `${event.workspace_id}\0${method}`;
+    default:
+      return null;
+  }
+}
+
+function appServerEventDropPolicy(
+  event: AppServerEvent,
+): "drop-eligible-snapshot" | "protected" {
+  if (appServerEventMethod(event) !== "item/updated") {
+    return "protected";
+  }
+  const params = appServerEventParams(event);
+  const item = (params.item as Record<string, unknown> | undefined) ?? params;
+  const kind = String(item.kind ?? item.type ?? params.kind ?? "");
+  if (
+    kind !== "message" &&
+    kind !== "reasoning" &&
+    kind !== "commandExecution" &&
+    kind !== "fileChange"
+  ) {
+    return "protected";
+  }
+  const hasTextSnapshot =
+    typeof item.text === "string" ||
+    typeof item.content === "string" ||
+    typeof item.output_text === "string" ||
+    typeof params.text === "string" ||
+    typeof params.content === "string" ||
+    typeof params.output_text === "string";
+  return hasTextSnapshot ? "drop-eligible-snapshot" : "protected";
+}
+
+function appServerEventCriticality(event: AppServerEvent) {
+  return APP_SERVER_EVENT_CRITICAL_METHODS.has(appServerEventMethod(event))
+    ? "critical"
+    : "non-critical";
+}
+
+function appServerEventBytes(event: AppServerEvent) {
+  try {
+    return JSON.stringify(event).length;
+  } catch {
+    return 0;
+  }
+}
+
+export const appServerEventBackpressure = createEventBackpressure<AppServerEvent>({
+  surfaceId: "app-server-event",
+  eventKind: "app-server-event",
+  maxEventsPerFlush: 64,
+  maxBytesPerFlush: 128 * 1024,
+  maxQueueDepth: 4_000,
+  rawRetainedLimit: 128,
+  classify: appServerEventCriticality,
+  coalesceKey: appServerEventCoalesceKey,
+  dropPolicy: appServerEventDropPolicy,
+  estimateBytes: appServerEventBytes,
+  onStats: appendEventBackpressureDiagnostic,
+});
+
 const appServerHub = createEventHub<AppServerEvent>("app-server-event");
+const appServerEventDeliverHub = createEventHub<AppServerEvent>(
+  "app-server-event-per-event-deliver",
+  {
+    backpressure: appServerEventBackpressure,
+    listenToNative: false,
+  },
+);
 
 /**
  * Batch channel emitted by `BatchedTauriEventSink` (Rust). The payload is a
@@ -265,7 +382,57 @@ const menuComposerCycleCollaborationHub = createEventHub<void>(
 );
 const openPathsHub = createEventHub<string[]>("open-paths");
 
+let appServerEventBridgeRefCount = 0;
+let appServerEventBridgeUnsubscribe: Unsubscribe | null = null;
+
+function startAppServerEventBridge(options?: SubscriptionOptions) {
+  if (appServerEventBridgeRefCount > 0) {
+    appServerEventBridgeRefCount += 1;
+    return;
+  }
+  appServerEventBridgeRefCount = 1;
+  const unsubscribeSingle = appServerHub.subscribe(
+    (event) => {
+      appServerEventDeliverHub.publish(event);
+    },
+    options,
+  );
+  const unsubscribeBatch = appServerBatchHub.subscribe(
+    (batch) => {
+      for (const event of batch) {
+        appServerEventDeliverHub.publish(event);
+      }
+    },
+    options,
+  );
+  appServerEventBridgeUnsubscribe = () => {
+    unsubscribeBatch();
+    unsubscribeSingle();
+  };
+}
+
+function stopAppServerEventBridge() {
+  appServerEventBridgeRefCount = Math.max(0, appServerEventBridgeRefCount - 1);
+  if (appServerEventBridgeRefCount > 0) {
+    return;
+  }
+  appServerEventBridgeUnsubscribe?.();
+  appServerEventBridgeUnsubscribe = null;
+}
+
 export function subscribeAppServerEvents(
+  onEvent: (event: AppServerEvent) => void,
+  options?: SubscriptionOptions,
+): Unsubscribe {
+  startAppServerEventBridge(options);
+  const unsubscribeDeliver = appServerEventDeliverHub.subscribe(onEvent, options);
+  return () => {
+    unsubscribeDeliver();
+    stopAppServerEventBridge();
+  };
+}
+
+export function subscribeRawAppServerEvents(
   onEvent: (event: AppServerEvent) => void,
   options?: SubscriptionOptions,
 ): Unsubscribe {
@@ -286,6 +453,14 @@ export function subscribeAppServerEventBatch(
   options?: SubscriptionOptions,
 ): Unsubscribe {
   return appServerBatchHub.subscribe(onBatch, options);
+}
+
+export function getAppServerEventBackpressureForTests() {
+  return appServerEventBackpressure;
+}
+
+export function resetAppServerEventBackpressureForTests() {
+  appServerEventBackpressure.__resetAllForTests();
 }
 
 export function subscribeWebServiceReconnect(

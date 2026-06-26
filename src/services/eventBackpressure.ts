@@ -25,6 +25,7 @@ export type EventBackpressureOptions<T> = {
   rawRetainedLimit?: number;
   classify?: (event: T) => EventBackpressureCriticality;
   coalesceKey?: (event: T) => string | null;
+  dropPolicy?: (event: T) => "drop-eligible-snapshot" | "protected";
   estimateBytes?: (event: T) => number;
   schedule?: (callback: () => void) => void;
   now?: () => number;
@@ -39,6 +40,17 @@ const DEFAULT_MAX_QUEUE_DEPTH = 2_000;
 const DEFAULT_RAW_RETAINED_LIMIT = 5_000;
 
 function defaultSchedule(callback: () => void) {
+  const inputPending =
+    typeof navigator !== "undefined" &&
+    (
+      navigator as Navigator & {
+        scheduling?: { isInputPending?: () => boolean };
+      }
+    ).scheduling?.isInputPending?.() === true;
+  if (inputPending) {
+    setTimeout(callback, 32);
+    return;
+  }
   if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
     window.requestAnimationFrame(() => callback());
     return;
@@ -117,6 +129,22 @@ export function createEventBackpressure<T>(options: EventBackpressureOptions<T>)
     options.onStats?.(snapshot());
   };
 
+  const dropOverflowSnapshotIfPossible = () => {
+    const dropIndex = queue.findIndex(
+      (queued) => options.dropPolicy?.(queued) === "drop-eligible-snapshot",
+    );
+    if (dropIndex < 0) {
+      return false;
+    }
+    const [dropped] = queue.splice(dropIndex, 1);
+    const droppedKey = dropped ? options.coalesceKey?.(dropped) : null;
+    if (droppedKey) {
+      coalescedKeys.delete(droppedKey);
+    }
+    droppedCount += 1;
+    return true;
+  };
+
   const retainRawRecent = (event: T) => {
     rawRecent.push(event);
     while (rawRecent.length > rawRetainedLimit) {
@@ -193,12 +221,9 @@ export function createEventBackpressure<T>(options: EventBackpressureOptions<T>)
 
     queue.push(event);
     while (queue.length > maxQueueDepth) {
-      const dropped = queue.shift();
-      const droppedKey = dropped ? options.coalesceKey?.(dropped) : null;
-      if (droppedKey) {
-        coalescedKeys.delete(droppedKey);
+      if (!dropOverflowSnapshotIfPossible()) {
+        break;
       }
-      droppedCount += 1;
     }
     emitStats();
     scheduleFlush();
@@ -218,11 +243,25 @@ export function createEventBackpressure<T>(options: EventBackpressureOptions<T>)
     scheduled = false;
   };
 
+  // §11.2.b: test surface \u2014 reset all cumulative stats + queue. The default
+  // `clear()` only empties queues, so unit tests that assert `criticalBypassCount`
+  // between cases need an explicit reset.
+  const __resetAllForTests = () => {
+    clear();
+    droppedCount = 0;
+    coalescedCount = 0;
+    flushCount = 0;
+    lastFlushDurationMs = 0;
+    criticalBypassCount = 0;
+    deliveredCount = 0;
+  };
+
   return {
     push,
     subscribe,
     flush,
     clear,
+    __resetAllForTests,
     get queueDepth() {
       return queue.length;
     },

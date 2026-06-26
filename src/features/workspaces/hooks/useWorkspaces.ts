@@ -17,6 +17,7 @@ import {
   listGitBranches,
   listWorkspaces,
   pickWorkspacePath,
+  prewarmCodexDiskRuntime as prewarmCodexDiskRuntimeService,
   removeWorkspace as removeWorkspaceService,
   removeWorktree as removeWorktreeService,
   renameWorktree as renameWorktreeService,
@@ -118,6 +119,8 @@ export function useWorkspaces(options: UseWorkspacesOptions = {}) {
     () => new Set(),
   );
   const workspaceSettingsRef = useRef<Map<string, WorkspaceSettings>>(new Map());
+  const codexDiskPrewarmCompletedRef = useRef<Set<string>>(new Set());
+  const codexDiskPrewarmInFlightRef = useRef<Record<string, Promise<void> | undefined>>({});
   const { onDebug, defaultCodexBin, appSettings, onUpdateAppSettings } = options;
 
   const refreshWorkspaces = useCallback(async () => {
@@ -159,6 +162,58 @@ export function useWorkspaces(options: UseWorkspacesOptions = {}) {
     () => workspaces.find((entry) => entry.id === activeWorkspaceId) ?? null,
     [activeWorkspaceId, workspaces],
   );
+
+  useEffect(() => {
+    if (!activeWorkspace?.connected) {
+      return;
+    }
+    const workspaceId = activeWorkspace.id;
+    if (
+      codexDiskPrewarmCompletedRef.current.has(workspaceId) ||
+      codexDiskPrewarmInFlightRef.current[workspaceId]
+    ) {
+      return;
+    }
+    let cancelled = false;
+    const timeoutId = window.setTimeout(() => {
+      if (cancelled) {
+        return;
+      }
+      onDebug?.({
+        id: `${Date.now()}-client-codex-disk-runtime-prewarm`,
+        timestamp: Date.now(),
+        source: "client",
+        label: "codex/disk runtime prewarm",
+        payload: { workspaceId },
+      });
+      const prewarm = prewarmCodexDiskRuntimeService(workspaceId)
+        .then(() => {
+          codexDiskPrewarmCompletedRef.current.add(workspaceId);
+        })
+        .catch((error) => {
+          onDebug?.({
+            id: `${Date.now()}-client-codex-disk-runtime-prewarm-error`,
+            timestamp: Date.now(),
+            source: "error",
+            label: "codex/disk runtime prewarm error",
+            payload: {
+              workspaceId,
+              error: error instanceof Error ? error.message : String(error),
+            },
+          });
+        })
+        .finally(() => {
+          if (codexDiskPrewarmInFlightRef.current[workspaceId] === prewarm) {
+            delete codexDiskPrewarmInFlightRef.current[workspaceId];
+          }
+        });
+      codexDiskPrewarmInFlightRef.current[workspaceId] = prewarm;
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [activeWorkspace?.connected, activeWorkspace?.id, onDebug]);
 
   const workspaceById = useMemo(() => {
     const map = new Map<string, WorkspaceInfo>();

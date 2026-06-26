@@ -15,6 +15,7 @@ import {
 import { pushErrorToast } from "../../../services/toasts";
 import type { DebugEntry, EngineType, WorkspaceInfo } from "../../../types";
 import type { CodexProviderProfileSelection } from "../../threads/constants/codexProviderProfiles";
+import { CODEX_DISK_PROVIDER_PROFILE_ID } from "../../threads/constants/codexProviderProfiles";
 
 type WorkspaceOpenMode = "current-window" | "new-window";
 type SessionCreationOptions = CodexProviderProfileSelection & {
@@ -26,6 +27,12 @@ const CREATE_SESSION_RUNTIME_RECOVERING_ERROR_PREFIX =
 const CREATE_SESSION_RECOVERY_TOAST_ID_PREFIX = "create-session-recovery";
 const CREATE_SESSION_RECOVERY_PROGRESS_TOAST_ID_PREFIX =
   "create-session-recovery-progress";
+
+function isDiskProviderSelection(options?: SessionCreationOptions) {
+  const providerProfileId =
+    options?.providerProfileId?.trim() || options?.providerProfile?.id?.trim() || "";
+  return !providerProfileId || providerProfileId === CODEX_DISK_PROVIDER_PROFILE_ID;
+}
 
 function isStoppingRuntimeCreateSessionError(message: string): boolean {
   const normalized = message.toLowerCase();
@@ -468,6 +475,59 @@ export function useWorkspaceActions({
         return await runCreateSessionFlow(workspace, targetEngine, options);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+        const shouldAttemptDiskRecovery =
+          targetEngine === "codex" &&
+          isDiskProviderSelection(options) &&
+          isStoppingRuntimeCreateSessionError(message);
+        if (shouldAttemptDiskRecovery) {
+          onDebug({
+            id: `${Date.now()}-client-create-session-disk-auto-recovery`,
+            timestamp: Date.now(),
+            source: "client",
+            label: "workspace/create-session disk auto recovery",
+            payload: {
+              workspaceId: workspace.id,
+              engine: targetEngine,
+              error: message,
+            },
+          });
+          try {
+            await ensureRuntimeReady(workspace.id);
+            return await runCreateSessionFlow(workspace, targetEngine, options);
+          } catch (retryError) {
+            const retryMessage =
+              retryError instanceof Error ? retryError.message : String(retryError);
+            if (isStoppingRuntimeCreateSessionError(retryMessage)) {
+              onDebug({
+                id: `${Date.now()}-client-create-session-recovery-toast`,
+                timestamp: Date.now(),
+                source: "client",
+                label: "workspace/create-session recovery toast",
+                payload: {
+                  workspaceId: workspace.id,
+                  engine: targetEngine,
+                  error: retryMessage,
+                },
+              });
+              showRecoverableCreateSessionToast(workspace, targetEngine, retryMessage);
+              return null;
+            }
+            const detail = resolveSessionCreationErrorDetail(retryMessage);
+            onDebug({
+              id: `${Date.now()}-client-create-session-error`,
+              timestamp: Date.now(),
+              source: "error",
+              label: "workspace/create-session error",
+              payload: {
+                workspaceId: workspace.id,
+                engine: targetEngine,
+                error: retryMessage,
+              },
+            });
+            alert(`${t("errors.failedToCreateSession")}\n\n${detail}`);
+            return null;
+          }
+        }
         if (isStoppingRuntimeCreateSessionError(message)) {
           onDebug({
             id: `${Date.now()}-client-create-session-recovery-toast`,

@@ -95,6 +95,34 @@ const markdownOutputItem: Extract<ConversationItem, { kind: "tool" }> = {
   output: "## Summary\n\n| Name | Value |\n| --- | --- |\n| a | b |",
 };
 
+const heavyOutputItem: Extract<ConversationItem, { kind: "tool" }> = {
+  id: "tool-heavy-output",
+  kind: "tool",
+  toolType: "toolCall",
+  title: "Tool: Bash",
+  detail: "{}",
+  status: "completed",
+  output: Array.from({ length: 420 }, (_, index) => `heavy output line ${index}`).join("\n"),
+};
+
+const heavyFileChangeItem: Extract<ConversationItem, { kind: "tool" }> = {
+  id: "tool-heavy-file-change",
+  kind: "tool",
+  toolType: "fileChange",
+  title: "File changes",
+  detail: "{}",
+  status: "completed",
+  changes: Array.from({ length: 8 }, (_, index) => ({
+    path: `src/heavy-${index}.ts`,
+    kind: "modified",
+    diff: [
+      "@@ -1 +1 @@",
+      `-old value ${index}`,
+      `+new value ${index}`,
+    ].join("\n"),
+  })),
+};
+
 const blockedModeItem: Extract<ConversationItem, { kind: "tool" }> = {
   id: "tool-4",
   kind: "tool",
@@ -412,6 +440,28 @@ describe("GenericToolBlock", () => {
     expect(document.querySelector(".tool-change-inline-diff")).toBeTruthy();
   });
 
+  it("defers expanded heavy file-change diff previews while keeping open-diff actions", () => {
+    const onOpenDiffPath = vi.fn();
+    const view = render(
+      <GenericToolBlock
+        item={heavyFileChangeItem}
+        isExpanded
+        onToggle={vi.fn()}
+        onOpenDiffPath={onOpenDiffPath}
+      />,
+    );
+
+    expect(screen.getByText("Tool detail deferred")).toBeTruthy();
+    expect(view.container.querySelector(".tool-change-inline-diff")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "heavy-0.ts" }));
+    expect(onOpenDiffPath).toHaveBeenCalledWith("src/heavy-0.ts");
+
+    fireEvent.click(screen.getByRole("button", { name: "Show detail" }));
+
+    expect(view.container.querySelector(".tool-change-inline-diff")).toBeTruthy();
+  });
+
   it("falls back to output diff stats when change rows omit inline diff", () => {
     render(
       <GenericToolBlock
@@ -488,6 +538,30 @@ describe("GenericToolBlock", () => {
     const rawText = rawPre?.textContent ?? "";
     expect(rawText).toContain("## Summary");
     expect(rawText).toContain("| Name | Value |");
+  });
+
+  it("defers heavy raw tool output but keeps canonical copy", async () => {
+    render(
+      <GenericToolBlock
+        item={heavyOutputItem}
+        isExpanded
+        onToggle={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Tool detail deferred")).toBeTruthy();
+    expect(document.querySelector(".tool-output-raw-pre")).toBeNull();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "messages.copy" }));
+    });
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      expect.stringContaining("heavy output line 419"),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Show detail" }));
+    expect(document.querySelector(".tool-output-raw-pre")?.textContent ?? "")
+      .toContain("heavy output line 419");
   });
 
   it("renders exit plan mode as a dedicated plan-ready card", () => {

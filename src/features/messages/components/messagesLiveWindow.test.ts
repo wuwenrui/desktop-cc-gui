@@ -3,10 +3,8 @@ import type { ConversationItem } from "../../../types";
 import {
   buildAssistantFinalBoundarySet,
   buildAssistantFinalWithVisibleProcessSet,
-  buildHistoryStickyCandidates,
   buildLiveTailWorkingSet,
   buildRenderedItemsWindow,
-  resolveActiveStickyHeaderCandidate,
   resolveStreamingPresentationItems,
 } from "./messagesLiveWindow";
 
@@ -38,7 +36,7 @@ function reasoningItem(id: string, content = id): Extract<ConversationItem, { ki
 }
 
 describe("messages live window", () => {
-  it("builds a bounded live tail working set and preserves the sticky user", () => {
+  it("builds a bounded live tail working set and preserves the latest user row", () => {
     const items: ConversationItem[] = [
       userMessage("user-old", "早期问题"),
       ...Array.from({ length: 68 }, (_, index) =>
@@ -57,7 +55,7 @@ describe("messages live window", () => {
     expect(workingSet.items.length).toBeLessThan(items.length);
     expect(workingSet.items.some((item) => item.id === "user-latest")).toBe(true);
     expect(workingSet.items.at(-1)?.id).toBe("assistant-live");
-    expect(workingSet.stickyUserMessageId).toBe("user-latest");
+    expect(workingSet.preservedUserMessageId).toBe("user-latest");
     expect(workingSet.omittedBeforeWorkingSetCount).toBeGreaterThan(0);
   });
 
@@ -92,7 +90,7 @@ describe("messages live window", () => {
     const renderedWindow = buildRenderedItemsWindow(
       workingSet.items,
       localCollapsedCount,
-      workingSet.stickyUserMessageId,
+      workingSet.preservedUserMessageId,
     );
 
     expect(
@@ -210,25 +208,6 @@ describe("messages live window", () => {
     );
 
     expect(resolvedItems).toBe(deferredItems);
-  });
-
-  it("keeps history sticky ids stable while refreshing the active sticky text from the live snapshot", () => {
-    const stableCandidates = buildHistoryStickyCandidates(
-      [userMessage("user-1", "旧文案")],
-      false,
-    );
-
-    const resolvedCandidate = resolveActiveStickyHeaderCandidate(
-      stableCandidates,
-      "user-1",
-      [userMessage("user-1", "新文案")],
-      false,
-    );
-
-    expect(resolvedCandidate).toEqual({
-      id: "user-1",
-      text: "新文案",
-    });
   });
 
   it("keeps only the latest final assistant in each user turn as a final boundary", () => {

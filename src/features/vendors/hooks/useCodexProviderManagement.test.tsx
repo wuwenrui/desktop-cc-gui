@@ -79,8 +79,16 @@ describe("useCodexProviderManagement", () => {
     );
 
     expect(storedModels).toEqual([
-      { id: "shared-model", label: "Global Label" },
-      { id: "provider-only", label: "Provider Only" },
+      {
+        id: "shared-model",
+        label: "Global Label",
+        providerProfileId: "a",
+      },
+      {
+        id: "provider-only",
+        label: "Provider Only",
+        providerProfileId: "a",
+      },
     ]);
     expect(storageChangeListener).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -88,5 +96,54 @@ describe("useCodexProviderManagement", () => {
       }),
     );
     window.removeEventListener("localStorageChange", storageChangeListener);
+  });
+
+  it("enriches existing provider custom models with a unique provider origin", () => {
+    window.localStorage.setItem(
+      STORAGE_KEYS.CODEX_CUSTOM_MODELS,
+      JSON.stringify([{ id: "provider-only", label: "Existing Provider Label" }]),
+    );
+
+    mergeCodexProviderCustomModelsIntoStore([
+      codexProvider("a", {
+        customModels: [{ id: "provider-only", label: "Provider Only" }],
+      }),
+    ]);
+
+    const storedModels = JSON.parse(
+      window.localStorage.getItem(STORAGE_KEYS.CODEX_CUSTOM_MODELS) ?? "[]",
+    );
+
+    expect(storedModels).toEqual([
+      {
+        id: "provider-only",
+        label: "Existing Provider Label",
+        providerProfileId: "a",
+      },
+    ]);
+  });
+
+  it("does not enrich existing custom models when provider origin is ambiguous", () => {
+    window.localStorage.setItem(
+      STORAGE_KEYS.CODEX_CUSTOM_MODELS,
+      JSON.stringify([{ id: "shared-provider-model", label: "Shared Model" }]),
+    );
+
+    mergeCodexProviderCustomModelsIntoStore([
+      codexProvider("a", {
+        customModels: [{ id: "shared-provider-model", label: "Provider A" }],
+      }),
+      codexProvider("b", {
+        customModels: [{ id: "shared-provider-model", label: "Provider B" }],
+      }),
+    ]);
+
+    const storedModels = JSON.parse(
+      window.localStorage.getItem(STORAGE_KEYS.CODEX_CUSTOM_MODELS) ?? "[]",
+    );
+
+    expect(storedModels).toEqual([
+      { id: "shared-provider-model", label: "Shared Model" },
+    ]);
   });
 });

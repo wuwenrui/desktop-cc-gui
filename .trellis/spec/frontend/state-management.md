@@ -87,6 +87,7 @@ setPanelWidth(safeWidth);
 ### 3. Contracts
 
 - 输入中的 source-of-truth MUST 保持在 input local state / ref / composition state；来自幕布的 live status 只能作为 advisory props，不得反向驱动输入内容本身。
+- `text` / `draftText` / selection / IME composition state MUST NOT be wrapped in `startTransition`, `useDeferredValue`, deferred frame accumulators, or any streaming-scheduler tier. These are user-input facts and must remain urgent even when conversation streaming is saturating the renderer.
 - 当用户正在输入或 IME composing 时，composer 子树 MUST NOT 直接消费最热的 live conversation objects；应优先消费 deferred 或 structurally-stable props。
 - structurally equal 的 context/rate-limit/status payload MUST NOT 仅因对象引用变化就触发 `ChatInputBox` 子树 rerender。
 - 对 live state 的 deferred / throttle 只允许牺牲附属状态的新鲜度，不得改变最终 send payload、draft text、selection、IME state 或 attachment state。

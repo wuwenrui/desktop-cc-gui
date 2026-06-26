@@ -791,10 +791,28 @@ const enPart1 = {
       "History completion, model mapping, and other configurations.",
     performanceDiagnosticsTitle: "Performance diagnostics",
     performanceDiagnosticsDescription:
-      "Reset local realtime performance overrides when parallel conversations behave worse than expected.",
+      "Tune local realtime performance temporarily. If parallel conversations, tool output, or message streaming feel unusually janky, adjust the schedule tier first; reset the overrides after verification.",
+    streamingScheduleTierTitle: "Streaming schedule tier",
+    streamingScheduleTierDescription:
+      "Controls realtime event dispatch pacing for tool-heavy turns, including how background messages, tool output, and session list updates yield to the main thread.",
+    streamingScheduleTierRestartHint:
+      "New turns use the selected tier. Reload the window when verifying module-level caches.",
+    streamingScheduleTier: {
+      baseline: "Baseline",
+      guarded: "Guarded",
+      aggressive: "Aggressive",
+    },
+    streamingScheduleTierDetail: {
+      baseline:
+        "Baseline: renders as immediately as possible and does not drop background events. Use it to check whether scheduling adds latency.",
+      guarded:
+        "Guarded: default tier. Background events yield to the main thread and may be coalesced to keep input and the active conversation responsive.",
+      aggressive:
+        "Aggressive: delays and coalesces background work more heavily. Use it when parallel sessions or dense tool output cause visible jank.",
+    },
     performanceFlagsResetTitle: "Reset performance flags",
     performanceFlagsResetDescription:
-      "Clears known ccgui.perf.* localStorage overrides. A reload is required for module-level readers.",
+      "Clears known local ccgui.perf.* localStorage overrides, including realtime batching, background render gating, streaming schedule tier, and tool-output gating. Reload the window to refresh module-level readers.",
     performanceFlagsResetButton: "Reset",
     performanceFlagsResetDone:
       "Reset {{count}} performance flag override(s). Reload the window to refresh module-level caches.",
@@ -1142,7 +1160,7 @@ const enPart1 = {
         bottomActivityPanel:
           "Docked task, agent, edit, and latest-message status panel.",
         cornerStatusIndicator:
-          "Sticky user bubble and message anchor rail in the conversation canvas.",
+          "Context sources card and message anchor rail in the conversation canvas.",
         globalRuntimeNoticeDock:
           "Global bottom-right runtime notice entry and expandable notice panel.",
       },
@@ -1166,7 +1184,6 @@ const enPart1 = {
         bottomActivityAgents: "Agents tab",
         bottomActivityCheckpoint: "Result tab",
         bottomActivityLatestConversation: "Latest conversation tab",
-        curtainStickyUserBubble: "Sticky user bubble",
         curtainContextLedger: "Context sources card",
         cornerStatusMessageAnchors: "Message anchors",
       },
@@ -1203,8 +1220,6 @@ const enPart1 = {
         bottomActivityAgents: "Hides the agent status tab.",
         bottomActivityCheckpoint: "Hides the result checkpoint tab.",
         bottomActivityLatestConversation: "Hides the latest conversation tab.",
-        curtainStickyUserBubble:
-          "Hides the sticky user bubble at the top of the conversation canvas.",
         curtainContextLedger:
           "Hides the context sources card above the composer without disabling ledger calculations.",
         cornerStatusMessageAnchors:
@@ -2786,8 +2801,6 @@ const enPart1 = {
     collapseMiddleStepsDisable: "Expand intermediate output",
     middleStepsCollapsedHint:
       "{{count}} middle steps are collapsed during live mode",
-    collapseStickyHeader: "Hide sticky question bar",
-    expandStickyHeader: "Show sticky question bar",
   },
   browserAgent: {
     dock: {

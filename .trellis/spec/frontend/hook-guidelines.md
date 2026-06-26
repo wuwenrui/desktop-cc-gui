@@ -115,17 +115,19 @@ useEffect(() => {
 ### 2. Contracts
 
 - `thread not found` / `session not found` 进入 Codex recovery 时，必须先尝试 verified refresh/rebind。
-- 当 accepted-turn / durable-activity facts 证明当前 thread 是 disposable first-turn draft，且本地有当前 optimistic user intent 时，fresh Codex thread replay MUST happen before stale fork fallback。
+- 当 accepted-turn / durable-activity facts 证明当前 thread 是 `local-first-send-draft` disposable first-turn draft，且本地有当前 optimistic user intent 时，fresh Codex thread replay MAY happen before stale fork fallback。
+- Native `thread-start` empty draft 已经是 Codex provider/runtime 返回的 thread identity，MUST NOT 被 silent fresh replay 或 fork continuation 自动替换；必须走 bounded readiness、verified rebind、explicit continuation 或 visible failure。
+- Unknown native `thread not found` failure 在无法证明是当前 local disposable draft 时，MUST NOT silent fresh replace。
 - 对 first-turn missing-thread draft，`refreshThread` 返回原 `threadId` MUST NOT be treated as verified rebind；它表示 same-id recovery 未产生可验证 replacement，必须进入 fresh replay 或继续显式失败语义。
 - durable activity 存在、accepted turn 已成立、或无法证明是当前 first-send empty draft 时，MUST NOT silent fresh replace；继续使用 verified rebind、fork 或显式用户恢复语义。
 - fresh replay MUST be single-shot：retry 请求必须携带 `codexInvalidThreadRetryAttempted`，重复失败后进入可见错误/恢复状态，不能循环创建 fresh thread。
 
 ### 3. Tests Required
 
-- 覆盖 empty-draft `thread not found` 在 refresh 无法 rebind 时直接 fresh replay，且不调用 fork。
-- 覆盖新会话首发 empty-draft `thread not found` 且 refresh 返回 same `threadId` 时直接 fresh replay，不能 retry 同一个 missing thread。
+- 覆盖 local-first-send-draft `thread not found` 在 refresh 无法 rebind 时可 single-shot fresh replay，且不调用 fork。
+- 覆盖新会话 native `thread-start` empty-draft `thread not found` 且 refresh 返回 same `threadId` 时不得创建第二个 fresh thread，不能 retry 同一个 missing thread。
 - 覆盖 durable stale thread 不 silent fresh replacement，仍走 rebind/fork 或错误展示。
-- 覆盖 lost empty-draft marker 但本地无 durable activity 且有当前 optimistic user intent 时可 fresh replay。
+- 覆盖 lost/unknown empty-draft marker 即使本地无 durable activity且有当前 optimistic user intent，也不得 silent fresh replay，除非 accepted-turn source 明确是 local disposable draft。
 
 ## Scenario: One-Shot Composer Command And User-Input Settlement Hooks
 

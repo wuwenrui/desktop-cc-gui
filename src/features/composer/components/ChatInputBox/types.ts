@@ -707,6 +707,8 @@ export interface ChatInputBoxProps {
   onJumpToRequest?: () => void;
   /** Toggle the current context source detail panel from the readiness bar. */
   onToggleContextSources?: () => void;
+  /** Open the Skills section in Settings (forwarded by the curated-skill chip in the readiness bar). */
+  onOpenSkillsSettings?: () => void;
   /** Whether the current context source detail panel is expanded. */
   contextSourcesExpanded?: boolean;
   /** Remove message from queue callback */

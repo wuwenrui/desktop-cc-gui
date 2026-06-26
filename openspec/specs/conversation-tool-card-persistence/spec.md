@@ -3,7 +3,6 @@
 ## Purpose
 
 Defines the conversation-tool-card-persistence behavior contract, covering Restart-Recoverable Tool Card Persistence.
-
 ## Requirements
 ### Requirement: Restart-Recoverable Tool Card Persistence
 The system MUST persist `commandExecution` and `fileChange` tool cards so they are restart-recoverable in conversation history.
@@ -109,13 +108,11 @@ Integrating conversation card entry points MUST NOT alter behavior of reused Git
 
 `Codex` 历史恢复若使用本地 session replay，MUST 继续保持 `commandExecution` 与 `fileChange` 工具卡片的实时语义。
 
-#### Scenario: command execution tool survives codex local replay
-- **WHEN** `Codex` 本地 session 历史包含命令调用与对应输出
-- **THEN** 历史恢复后的 `commandExecution` 卡片 MUST 保留命令身份、状态与可读输出
-- **AND** 右侧 activity panel MUST 复用同一命令事实而不是生成新的并行身份
+#### Scenario: shell-backed file mutations survive codex local replay
 
-#### Scenario: apply-patch style file edits survive codex local replay
-- **WHEN** `Codex` 本地 session 历史包含 `apply_patch` 或等价补丁型文件修改记录
-- **THEN** 历史恢复后的 `fileChange` 卡片 MUST 保留受影响文件路径与修改语义
-- **AND** 右侧 activity panel MUST 能继续展示对应文件修改事实
-
+- **WHEN** `Codex` 本地 session 历史包含成功的 `exec_command` 调用
+- **AND** command text itself contains a recognized file mutation signal such as shell redirection write, append redirection, narrow create token, or delete command
+- **THEN** 历史恢复后的工具卡片 MUST be reconstructed as `fileChange`
+- **AND** the reconstructed file-change facts MUST include the target file paths inferred from the command text
+- **AND** output-only status text, test logs, or `git status` output MUST NOT by itself promote a read-only command to `fileChange`
+- **AND** temporary patch artifact writes such as `.diff` / `.patch` files MUST NOT be treated as source file changes unless the corresponding patch is actually applied.

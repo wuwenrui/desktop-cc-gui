@@ -8,13 +8,6 @@ Defines the workspace-home-shadcn-ux behavior contract, covering 首页信息架
 
 Workspace Home SHALL prioritize the Hero, workspace context, and Composer entry on the first screen.
 
-#### Scenario: 首屏突出创建入口
-
-- **GIVEN** 用户进入任意已加载完成的 Workspace Home
-- **WHEN** 首页完成渲染
-- **THEN** 页面 MUST 展示 Hero、workspace context、Composer 主入口
-- **AND** 新建会话主操作 MUST 在首屏可见且可触达
-
 #### Scenario: 首页不展示未成熟的最近会话入口
 
 - **GIVEN** 首页接收到 recent conversations 数据

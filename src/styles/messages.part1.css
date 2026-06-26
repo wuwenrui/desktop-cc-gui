@@ -2285,10 +2285,14 @@
   border-left: none;
   padding-left: 0;
   margin: 4px 0;
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .explore-inline .tool-inline-content {
   flex: 1;
+  min-width: 0;
   width: 100%;
 }
 
@@ -2337,6 +2341,9 @@
 .explore-inline-title {
   font-weight: 600;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .explore-inline-list {

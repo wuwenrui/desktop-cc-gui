@@ -577,12 +577,14 @@ pub fn engine_event_to_app_server_event_with_turn_context(
                 ToolItemKind::FileChange => "item/fileChange/outputDelta",
                 _ => "item/commandExecution/outputDelta",
             };
+            let tool_tail_marker = delta.len() > 4096;
             json!({
                 "method": method,
                 "params": {
                     "threadId": thread_id,
                     "itemId": tool_id,
                     "delta": delta,
+                    "tool_tail_marker": tool_tail_marker,
                 }
             })
         }
@@ -1267,6 +1269,31 @@ mod tests {
         assert_eq!(
             mapped.message["params"]["delta"],
             Value::String("line 1\n".to_string())
+        );
+        assert_eq!(
+            mapped.message["params"]["tool_tail_marker"],
+            Value::Bool(false)
+        );
+    }
+
+    #[test]
+    fn tool_output_delta_sets_tail_marker_for_large_output() {
+        let event = EngineEvent::ToolOutputDelta {
+            workspace_id: "ws-live".to_string(),
+            tool_id: "tool-tail".to_string(),
+            tool_name: Some("exec_command".to_string()),
+            delta: "x".repeat(4097),
+        };
+
+        let mapped =
+            engine_event_to_app_server_event(&event, "thread-1", "item-1").expect("mapped event");
+        assert_eq!(
+            mapped.message["method"],
+            Value::String("item/commandExecution/outputDelta".to_string())
+        );
+        assert_eq!(
+            mapped.message["params"]["tool_tail_marker"],
+            Value::Bool(true)
         );
     }
 

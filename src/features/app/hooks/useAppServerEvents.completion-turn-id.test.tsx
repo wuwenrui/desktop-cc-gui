@@ -3,12 +3,20 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppServerEvent } from "../../../types";
-import { subscribeAppServerEvents } from "../../../services/events";
+import {
+  subscribeAppServerEvents,
+  subscribeRawAppServerEvents,
+} from "../../../services/events";
 import { useAppServerEvents } from "./useAppServerEvents";
 
-vi.mock("../../../services/events", () => ({
-  subscribeAppServerEvents: vi.fn(),
-}));
+vi.mock("../../../services/events", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../services/events")>();
+  return {
+    ...actual,
+    subscribeAppServerEvents: vi.fn(),
+    subscribeRawAppServerEvents: vi.fn(),
+  };
+});
 
 type Handlers = Parameters<typeof useAppServerEvents>[0];
 
@@ -27,6 +35,10 @@ beforeEach(() => {
     listener = callback;
     return unlisten;
   });
+  vi.mocked(subscribeRawAppServerEvents).mockImplementation((callback) => {
+    listener = callback;
+    return unlisten;
+  });
 });
 
 afterEach(() => {
@@ -42,6 +54,13 @@ async function mount(handlers: Handlers) {
   return { root };
 }
 
+async function deliver(event: AppServerEvent) {
+  await act(async () => {
+    listener?.(event);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
+
 describe("useAppServerEvents completion turn identity", () => {
   it("passes normalized turn id from top-level turn/completed params", async () => {
     const handlers: Handlers = {
@@ -49,19 +68,17 @@ describe("useAppServerEvents completion turn identity", () => {
     };
     const { root } = await mount(handlers);
 
-    act(() => {
-      listener?.({
-        workspace_id: "ws-1",
-        message: {
-          method: "turn/completed",
-          params: {
-            threadId: "claude:session-1",
-            turnId: "claude-turn-1",
-            result: { text: "final response" },
-            assistantFinalBoundary: true,
-          },
+    await deliver({
+      workspace_id: "ws-1",
+      message: {
+        method: "turn/completed",
+        params: {
+          threadId: "claude:session-1",
+          turnId: "claude-turn-1",
+          result: { text: "final response" },
+          assistantFinalBoundary: true,
         },
-      });
+      },
     });
 
     expect(handlers.onTurnCompleted).toHaveBeenCalledWith(
@@ -81,22 +98,20 @@ describe("useAppServerEvents completion turn identity", () => {
     };
     const { root } = await mount(handlers);
 
-    act(() => {
-      listener?.({
-        workspace_id: "ws-1",
-        message: {
-          method: "turn/completed",
-          params: {
-            threadId: "claude:session-1",
-            turnId: "claude-turn-normalized",
-            turn: {
-              id: "raw-engine-turn",
-            },
-            result: { text: "final response" },
-            assistantFinalBoundary: true,
+    await deliver({
+      workspace_id: "ws-1",
+      message: {
+        method: "turn/completed",
+        params: {
+          threadId: "claude:session-1",
+          turnId: "claude-turn-normalized",
+          turn: {
+            id: "raw-engine-turn",
           },
+          result: { text: "final response" },
+          assistantFinalBoundary: true,
         },
-      });
+      },
     });
 
     expect(handlers.onTurnCompleted).toHaveBeenCalledWith(

@@ -261,6 +261,7 @@ export function useSelectedAgentSession({
 
   const previousThreadIdRef = useRef<string | null>(null);
   const previousThreadWorkspaceIdRef = useRef<string | null>(null);
+  const lastAgentSelectionMigrationRef = useRef<string | null>(null);
   useEffect(() => {
     const previousThreadId = previousThreadIdRef.current;
     const previousWorkspaceId = previousThreadWorkspaceIdRef.current;
@@ -318,9 +319,21 @@ export function useSelectedAgentSession({
       && previousSelectedAgentSessionKey
       && activeSelectedAgentSessionKey
     ) {
-      const targetSessionKey = activeSelectedAgentSessionKey;
-      const migratedSelection = previousSelectedAgentValue;
-      writeSelectedAgentForSessionKey(targetSessionKey, migratedSelection);
+      const migrationKey = [
+        previousWorkspaceId ?? "",
+        previousThreadId ?? "",
+        activeWorkspaceId ?? "",
+        activeThreadId ?? "",
+        previousSelectedAgentSessionKey,
+        activeSelectedAgentSessionKey,
+      ].join("\u0000");
+      if (lastAgentSelectionMigrationRef.current !== migrationKey) {
+        lastAgentSelectionMigrationRef.current = migrationKey;
+        writeSelectedAgentForSessionKey(
+          activeSelectedAgentSessionKey,
+          previousSelectedAgentValue,
+        );
+      }
     }
     previousThreadIdRef.current = activeThreadId ?? null;
     previousThreadWorkspaceIdRef.current = activeWorkspaceId ?? null;

@@ -285,7 +285,7 @@ fn build_command_adds_external_spec_root_when_configured() {
     params.text = "hello".to_string();
     params.custom_spec_root = Some(test_external_spec_root());
 
-    let command = session.build_command(&params, false, true);
+    let command = session.build_command(&params, false, true, None);
     let args: Vec<String> = command
         .as_std()
         .get_args()
@@ -304,7 +304,7 @@ fn build_command_sets_disable_thinking_env_when_requested() {
     params.text = "hello".to_string();
     params.disable_thinking = true;
 
-    let command = session.build_command(&params, false, true);
+    let command = session.build_command(&params, false, true, None);
     let disable_thinking_env = command
         .as_std()
         .get_envs()
@@ -336,7 +336,7 @@ fn build_command_uses_stream_json_for_single_line_text() {
     params.text = "single line".to_string();
 
     let use_stream_json_input = ClaudeSession::should_use_stream_json_input(&params);
-    let command = session.build_command(&params, use_stream_json_input, true);
+    let command = session.build_command(&params, use_stream_json_input, true, None);
     let args: Vec<String> = command
         .as_std()
         .get_args()
@@ -356,7 +356,7 @@ fn build_command_keeps_special_character_prompt_out_of_argv() {
     params.text = "run skill /review & echo %PATH% | more > out (test)!".to_string();
 
     let use_stream_json_input = ClaudeSession::should_use_stream_json_input(&params);
-    let command = session.build_command(&params, use_stream_json_input, true);
+    let command = session.build_command(&params, use_stream_json_input, true, None);
     let args: Vec<String> = command
         .as_std()
         .get_args()
@@ -376,7 +376,7 @@ fn build_command_uses_stream_json_for_multiline_text() {
     params.text = "line1\nline2".to_string();
 
     let use_stream_json_input = ClaudeSession::should_use_stream_json_input(&params);
-    let command = session.build_command(&params, use_stream_json_input, true);
+    let command = session.build_command(&params, use_stream_json_input, true, None);
     let args: Vec<String> = command
         .as_std()
         .get_args()
@@ -399,7 +399,7 @@ fn build_resume_command_uses_stream_json_for_multiline_answer() {
     params.images = None;
 
     let use_stream_json_input = ClaudeSession::should_use_stream_json_input(&params);
-    let command = session.build_command(&params, use_stream_json_input, true);
+    let command = session.build_command(&params, use_stream_json_input, true, None);
     let args: Vec<String> = command
         .as_std()
         .get_args()

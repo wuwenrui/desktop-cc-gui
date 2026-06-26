@@ -166,6 +166,13 @@ The file Markdown preview SHALL support rendering the Markdown body through a pa
 - **THEN** it MUST expose stable metadata, source-line anchors, placeholders, or delegated events for those interactions
 - **AND** heavy or interactive blocks MUST be hydrated locally without remounting the full Markdown document body
 
+#### Scenario: fast renderer exposes annotation action through overlay anchors
+- **WHEN** Markdown file preview uses the fast renderer
+- **AND** annotation creation is available for the file preview
+- **THEN** each source-line anchored block MUST expose the standard annotation action affordance
+- **AND** activating that affordance MUST call the same preview annotation start contract as the rich Markdown renderer
+- **AND** the action affordance MUST NOT depend on the rich renderer's `.fvp-markdown-annotatable-block` DOM wrapper
+
 #### Scenario: fast renderer failure falls back inside file preview
 - **WHEN** fast Markdown compilation, sanitization, or interaction island hydration fails
 - **THEN** the failure MUST remain inside the file-preview renderer boundary
@@ -269,4 +276,3 @@ Markdown file preview MUST expose bounded diagnostics for renderer profile selec
 - **WHEN** annotation overlay state is present
 - **THEN** diagnostics MUST include annotation overlay count or equivalent bounded metadata
 - **AND** diagnostics MUST NOT include annotation body text or file content.
-

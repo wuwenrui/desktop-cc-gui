@@ -3,7 +3,8 @@ export type ClientStoreName =
   | "composer"
   | "threads"
   | "app"
-  | "leida";
+  | "leida"
+  | "diagnostics";
 
 export const ALL_CLIENT_STORES: ClientStoreName[] = [
   "layout",
@@ -11,6 +12,7 @@ export const ALL_CLIENT_STORES: ClientStoreName[] = [
   "threads",
   "app",
   "leida",
+  "diagnostics",
 ];
 
 export const CLIENT_STORE_SCHEMA_VERSION = 1;
