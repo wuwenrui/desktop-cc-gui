@@ -306,7 +306,7 @@ fn build_command_adds_external_spec_root_when_configured() {
     params.text = "hello".to_string();
     params.custom_spec_root = Some(test_external_spec_root());
 
-    let command = session.build_command(&params, false, true, None);
+    let command = session.build_command(&params, false, true, None, None);
     let args: Vec<String> = command
         .as_std()
         .get_args()
@@ -325,7 +325,7 @@ fn build_command_sets_disable_thinking_env_when_requested() {
     params.text = "hello".to_string();
     params.disable_thinking = true;
 
-    let command = session.build_command(&params, false, true, None);
+    let command = session.build_command(&params, false, true, None, None);
     let disable_thinking_env = command
         .as_std()
         .get_envs()
@@ -357,7 +357,7 @@ fn build_command_uses_stream_json_for_single_line_text() {
     params.text = "single line".to_string();
 
     let use_stream_json_input = ClaudeSession::should_use_stream_json_input(&params);
-    let command = session.build_command(&params, use_stream_json_input, true, None);
+    let command = session.build_command(&params, use_stream_json_input, true, None, None);
     let args: Vec<String> = command
         .as_std()
         .get_args()
@@ -403,7 +403,7 @@ fn build_command_keeps_curated_append_on_non_wrapper_path() {
     params.text = "single line".to_string();
     let settings = claude_settings_with_curated_skill();
 
-    let command = session.build_command(&params, true, true, Some(&settings));
+    let command = session.build_command(&params, true, true, Some(&settings), None);
     let args: Vec<String> = command
         .as_std()
         .get_args()
@@ -422,7 +422,7 @@ fn build_command_omits_curated_append_on_windows() {
     params.text = "single line".to_string();
     let settings = claude_settings_with_curated_skill();
 
-    let command = session.build_command(&params, true, true, Some(&settings));
+    let command = session.build_command(&params, true, true, Some(&settings), None);
     let args: Vec<String> = command
         .as_std()
         .get_args()
@@ -434,13 +434,37 @@ fn build_command_omits_curated_append_on_windows() {
 }
 
 #[test]
+fn build_command_accepts_curated_activation_hint_file_path() {
+    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+    let mut params = SendMessageParams::default();
+    params.text = "single line".to_string();
+    let hint_path = std::env::temp_dir()
+        .join("ccgui-claude-hints")
+        .join("enabled-curated-skills.md");
+
+    let command = session.build_command(&params, true, true, None, Some(&hint_path));
+    let args: Vec<String> = command
+        .as_std()
+        .get_args()
+        .map(|arg| arg.to_string_lossy().to_string())
+        .collect();
+
+    assert!(args.windows(2).any(|window| {
+        window[0] == "--append-system-prompt-file"
+            && window[1] == hint_path.to_string_lossy().as_ref()
+    }));
+    assert!(!args.iter().any(|arg| arg == "--append-system-prompt"));
+    assert!(!args.iter().any(|arg| arg.contains("Ponytail")));
+}
+
+#[test]
 fn build_command_keeps_special_character_prompt_out_of_argv() {
     let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
     let mut params = SendMessageParams::default();
     params.text = "run skill /review & echo %PATH% | more > out (test)!".to_string();
 
     let use_stream_json_input = ClaudeSession::should_use_stream_json_input(&params);
-    let command = session.build_command(&params, use_stream_json_input, true, None);
+    let command = session.build_command(&params, use_stream_json_input, true, None, None);
     let args: Vec<String> = command
         .as_std()
         .get_args()
@@ -461,7 +485,7 @@ fn build_command_uses_stream_json_for_multiline_text() {
     params.text = "line1\nline2".to_string();
 
     let use_stream_json_input = ClaudeSession::should_use_stream_json_input(&params);
-    let command = session.build_command(&params, use_stream_json_input, true, None);
+    let command = session.build_command(&params, use_stream_json_input, true, None, None);
     let args: Vec<String> = command
         .as_std()
         .get_args()
@@ -485,7 +509,7 @@ fn build_resume_command_uses_stream_json_for_multiline_answer() {
     params.images = None;
 
     let use_stream_json_input = ClaudeSession::should_use_stream_json_input(&params);
-    let command = session.build_command(&params, use_stream_json_input, true, None);
+    let command = session.build_command(&params, use_stream_json_input, true, None, None);
     let args: Vec<String> = command
         .as_std()
         .get_args()

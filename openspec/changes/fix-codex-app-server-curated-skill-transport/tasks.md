@@ -45,6 +45,15 @@
 - [x] 7.6 Re-run focused Rust tests, release check, diff check, and strict OpenSpec validation.
 - [x] 7.7 Make Claude Windows mirror sync content-aware so unchanged managed skill files are not rewritten on every send.
 
+## 8. Claude Windows curated skill activation
+
+- [x] 8.1 Record Windows CLI findings: native skills are visible but not auto-loaded, stdin stream-json cannot carry system/developer instructions, and `--append-system-prompt-file` is the supported activation channel.
+- [x] 8.2 Write a ccgui-managed activation hint file under the effective Claude home when curated skills are enabled.
+- [x] 8.3 Pass `--append-system-prompt-file <hint-file-path>` on Windows Claude sends without putting skill bodies in argv.
+- [x] 8.4 Remove the managed activation hint when no curated skills are enabled.
+- [x] 8.5 Add focused tests for hint file creation/removal and command args.
+- [x] 8.6 Re-run focused Rust tests, release check, diff check, and strict OpenSpec validation.
+
 ## 8. Settings curated toggle UI convergence
 
 - [x] 8.1 Make `CuratedSection` read `enabledCuratedSkillIds` from the caller-owned `SettingsView` `appSettings` snapshot instead of opening a duplicate `useAppSettings()` state slot.

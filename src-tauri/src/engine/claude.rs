@@ -826,6 +826,7 @@ impl ClaudeSession {
         use_stream_json_input: bool,
         include_hook_events: bool,
         app_settings: Option<&crate::types::AppSettings>,
+        activation_hint_file: Option<&Path>,
     ) -> Command {
         // Resolve the Claude CLI binary path:
         // 1. Use custom bin_path if configured
@@ -882,6 +883,11 @@ impl ClaudeSession {
 
         if include_hook_events {
             cmd.arg("--include-hook-events");
+        }
+
+        if let Some(path) = activation_hint_file {
+            cmd.arg("--append-system-prompt-file");
+            cmd.arg(path);
         }
 
         // Access mode / permission handling
@@ -1066,28 +1072,32 @@ impl ClaudeSession {
         }
 
         let use_stream_json_input = Self::should_use_stream_json_input(&params);
-        if let Err(error_msg) = native_skill_mirror::sync_windows_curated_skill_mirror(
+        let activation_hint_file = match native_skill_mirror::sync_windows_curated_skill_mirror(
             self.home_dir.as_deref(),
             app_settings,
             cfg!(windows),
         ) {
-            self.emit_turn_event(
-                turn_id,
-                EngineEvent::TurnError {
-                    workspace_id: self.workspace_id.clone(),
-                    error: error_msg.clone(),
-                    code: Some("claude_curated_skill_mirror_failed".to_string()),
-                },
-            );
-            self.clear_turn_ephemeral_state(turn_id);
-            return Err(error_msg);
-        }
+            Ok(path) => path,
+            Err(error_msg) => {
+                self.emit_turn_event(
+                    turn_id,
+                    EngineEvent::TurnError {
+                        workspace_id: self.workspace_id.clone(),
+                        error: error_msg.clone(),
+                        code: Some("claude_curated_skill_mirror_failed".to_string()),
+                    },
+                );
+                self.clear_turn_ephemeral_state(turn_id);
+                return Err(error_msg);
+            }
+        };
 
         let mut cmd = self.build_command(
             &params,
             use_stream_json_input,
             include_hook_events,
             app_settings,
+            activation_hint_file.as_deref(),
         );
         Self::configure_spawn_command(&mut cmd);
 

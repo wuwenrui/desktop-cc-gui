@@ -9,6 +9,7 @@ Claude has an analogous risk: curated skills are appended through `--append-syst
 Follow-up Windows testing confirmed this split:
 - Codex works when generated instructions move to `turn/start.collaborationMode.settings.developer_instructions`.
 - Claude works when large `--append-system-prompt` argv is removed, but the curated skill is not recognized because it is not present in Claude's native skills inventory.
+- Claude sees native skills after mirror, but native skills are not automatically loaded; an activation policy is still needed.
 
 ## Goals / Non-Goals
 
@@ -17,6 +18,7 @@ Follow-up Windows testing confirmed this split:
 - Make Windows Codex session creation usable when curated skill argv transport blocks startup.
 - Keep Windows Codex built-in skills usable through `turn/start.collaborationMode.settings.developer_instructions`.
 - Keep Windows Claude built-in skills usable through Claude native skill discovery without large argv.
+- Tell Windows Claude to invoke enabled native Skills for matching tasks through a short prompt file, not through inline argv text.
 - Remove the invalid Codex `--profile ... app-server` fallback.
 - Keep old Claude polluted history filtering as compatibility cleanup, not as the primary fix.
 
@@ -64,7 +66,22 @@ The mirror is ccgui-managed:
 
 This keeps the skill usable via Claude's native skill discovery while avoiding the argv boundary that produced stream-json pollution on Windows.
 
-### Decision 6: History filtering remains a compatibility layer
+### Decision 6: Claude Windows uses `--append-system-prompt-file` for activation policy
+
+Windows CLI testing showed:
+- native skill files make the skill visible, but do not auto-load the skill body
+- stdin stream-json rejects `system` roles and cannot carry developer/system instructions
+- `--append-system-prompt-file <path>` is supported with `-p --input-format stream-json --output-format stream-json --verbose`
+
+Therefore Windows Claude launch uses a ccgui-managed short hint file. The hint only names enabled skill ids and instructs Claude to invoke the matching native Skill for coding/debugging/review/refactoring/implementation turns. It MUST NOT contain the full skill body.
+
+The command argv carries only the hint file path:
+
+```text
+--append-system-prompt-file <effective Claude home>/ccgui/curated-skill-hints/enabled-curated-skills.md
+```
+
+### Decision 7: History filtering remains a compatibility layer
 
 Leaked stream-json envelope filtering is still useful for already polluted transcripts. It should not add frontend retry state-machine behavior. Source transport fixes must prevent new pollution.
 
@@ -79,5 +96,6 @@ This keeps the UI aligned with the authoritative backend result after `set_curat
 - [Risk] Windows Codex first-turn settings payload may be unsupported by older app-server builds. → Mitigation: use the existing `collaborationMode.settings.developer_instructions` path already used for execution policy and keep the existing capability fallback behavior.
 - [Risk] Claude Windows native skill mirror collides with a user-owned skill id. → Mitigation: sentinel ownership check; user-owned directories are skipped and never overwritten.
 - [Risk] Different machines use different Claude homes. → Mitigation: resolve configured home, `CLAUDE_HOME`, and platform default at runtime instead of hard-coding a path.
+- [Risk] Reintroducing inline `--append-system-prompt` could revive Windows argv pollution. → Mitigation: use only `--append-system-prompt-file`; argv carries a path, not prompt body.
 - [Risk] Historical polluted sessions remain on disk. → Mitigation: keep high-confidence history filtering for stream-json envelope rows and adjacent polluted assistant echoes.
 - [Risk] Settings UI appears stale even though backend toggle persisted. → Mitigation: remove the duplicate `useAppSettings()` state slot from `CuratedSection` and drive the switch from `SettingsView`'s active settings snapshot.

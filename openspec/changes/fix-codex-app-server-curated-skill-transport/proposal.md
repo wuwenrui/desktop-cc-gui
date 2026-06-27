@@ -9,6 +9,7 @@ This needs a follow-up because the failure is not a skill-content problem. The b
 - Make Windows Codex app-server launch avoid ccgui-generated `developer_instructions` argv on the primary path, not only fallback.
 - Inject Windows Codex curated skills through `turn/start.collaborationMode.settings.developer_instructions` so enabled built-in skills remain usable.
 - Make Windows Claude recognize enabled curated skills through the effective Claude native skills directory instead of process argv.
+- Activate Windows Claude curated skills with a short ccgui-managed `--append-system-prompt-file` hint that points Claude to the native Skill, without putting skill bodies in argv.
 - Preserve enabled curated skills for Codex app-server sessions instead of disabling `lazy-senior-dev` or silently dropping skill bodies.
 - Keep launch-time curated skill injection behavior unchanged for macOS and Linux.
 - Keep diagnostics explicit when primary and fallback both fail, including the original initialize failure and the retry failure.
@@ -34,6 +35,7 @@ This needs a follow-up because the failure is not a skill-content problem. The b
 - Preserve rollback behavior in `set_curated_skill_enabled`: if restarting existing Codex runtimes fails, settings must restore the previous `enabledCuratedSkillIds`.
 - Apply the same Windows transport boundary to Claude curated skill injection by skipping large `--append-system-prompt` argv on Windows while preserving macOS/Linux behavior.
 - On Windows Claude, mirror enabled curated skills into the effective `CLAUDE_HOME/skills/<skill-id>/SKILL.md` location before launch so Claude's native skill discovery can see them without argv transport.
+- On Windows Claude, write a small ccgui-managed activation hint file and pass only its path through `--append-system-prompt-file`.
 - Do not hard-code Claude home paths: use configured Claude home first, then `CLAUDE_HOME`, then the platform default Claude home.
 - Treat the native skill mirror as ccgui-managed storage only; do not overwrite or delete user-owned Claude skill directories.
 - Fix the existing Settings `MCP / Skills` curated-skill switch so it reads from the caller-owned `SettingsView` `appSettings` snapshot and writes back through `onUpdateAppSettings`; the UI must reflect the backend-returned `AppSettings` immediately instead of requiring a tab/module remount.
@@ -48,6 +50,7 @@ This needs a follow-up because the failure is not a skill-content problem. The b
 | Inject Codex generated instructions through `turn/start.collaborationMode.settings` on Windows | Keep launch argv small and use app-server JSON-RPC settings per turn. | Chosen. It keeps built-in skills enabled and usable without relying on fragile Windows argv. |
 | Drop all ccgui-generated instructions only on wrapper retry | Start the retry with no ccgui-generated developer instructions while preserving user-authored args. | Insufficient. It still lets the primary Windows launch fail before retry and does not make the skill usable. |
 | Mirror enabled curated skills into effective Claude native skills directory on Windows | Avoid `--append-system-prompt` while letting Claude discover the bundled skill as a normal native skill. | Chosen. User testing proved argv skipping fixed stream pollution but did not inject the skill. Native skill discovery is the safe non-argv point. |
+| Use `--append-system-prompt-file` for a short activation hint on Windows Claude | Keep skill body out of argv while telling Claude to invoke enabled native Skills for matching tasks. | Chosen. Windows CLI testing confirmed the file form is supported with stream-json, and stdin cannot carry system/developer instructions. |
 
 ## Capabilities
 
@@ -78,6 +81,7 @@ None.
 - With `lazy-senior-dev` enabled, Codex turns on Windows include the curated skill body in `turn/start.collaborationMode.settings.developer_instructions`.
 - With `lazy-senior-dev` enabled, Claude session creation on Windows no longer passes the curated skill body through `--append-system-prompt` argv.
 - With `lazy-senior-dev` enabled, Claude turns on Windows make `lazy-senior-dev` available through the effective Claude native skills directory.
+- With `lazy-senior-dev` enabled, Claude launch on Windows passes `--append-system-prompt-file <ccgui hint file>` and does not pass the skill body through argv.
 - Existing user-owned `CLAUDE_HOME/skills/lazy-senior-dev` content is not overwritten by the built-in mirror.
 - Wrapper retry preserves user-authored Codex args and does not inject a competing `developer_instructions` value when the user already supplied one.
 - Turning the built-in skill off and then on again must either restart Codex runtimes successfully with the new enabled set or roll settings back with a visible error.

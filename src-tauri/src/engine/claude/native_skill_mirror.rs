@@ -6,20 +6,23 @@ use crate::claude_home::{normalize_home_path, resolve_effective_claude_home};
 use crate::types::AppSettings;
 
 const SENTINEL_FILE: &str = ".ccgui-curated-skill";
+const HINT_DIR: &str = "ccgui/curated-skill-hints";
+const HINT_FILE: &str = "enabled-curated-skills.md";
+const HINT_SENTINEL_FILE: &str = ".ccgui-curated-skill-hint";
 
 pub(super) fn sync_windows_curated_skill_mirror(
     configured_home_dir: Option<&str>,
     app_settings: Option<&AppSettings>,
     is_windows: bool,
-) -> Result<(), String> {
+) -> Result<Option<PathBuf>, String> {
     if !is_windows {
-        return Ok(());
+        return Ok(None);
     }
     let Some(settings) = app_settings else {
-        return Ok(());
+        return Ok(None);
     };
     let Some(claude_home) = resolve_session_claude_home(configured_home_dir) else {
-        return Ok(());
+        return Ok(None);
     };
     sync_curated_skill_mirror_at_home(&claude_home, settings)
 }
@@ -33,7 +36,7 @@ fn resolve_session_claude_home(configured_home_dir: Option<&str>) -> Option<Path
 fn sync_curated_skill_mirror_at_home(
     claude_home: &Path,
     app_settings: &AppSettings,
-) -> Result<(), String> {
+) -> Result<Option<PathBuf>, String> {
     let enabled: HashMap<String, String> =
         crate::curated_skills::list_enabled_curated_skill_bodies(app_settings)
             .into_iter()
@@ -54,7 +57,7 @@ fn sync_curated_skill_mirror_at_home(
             remove_managed_skill_mirror(&skills_dir, &skill_id)?;
         }
     }
-    Ok(())
+    sync_activation_hint_file(claude_home, enabled.keys().map(String::as_str).collect())
 }
 
 fn mirror_one_skill(skills_dir: &Path, skill_id: &str, body: &str) -> Result<(), String> {
@@ -106,6 +109,87 @@ fn is_managed_skill_dir(sentinel_file: &Path, skill_id: &str) -> bool {
 
 fn sentinel_body(skill_id: &str) -> String {
     format!("managed-by=ccgui\nkind=curated-skill\nid={skill_id}\n")
+}
+
+fn sync_activation_hint_file(
+    claude_home: &Path,
+    mut enabled_skill_ids: Vec<&str>,
+) -> Result<Option<PathBuf>, String> {
+    enabled_skill_ids.sort_unstable();
+    enabled_skill_ids.dedup();
+
+    let hint_dir = claude_home.join(HINT_DIR);
+    let hint_file = hint_dir.join(HINT_FILE);
+    let sentinel_file = hint_dir.join(HINT_SENTINEL_FILE);
+
+    if enabled_skill_ids.is_empty() {
+        remove_managed_activation_hint(&hint_file, &sentinel_file)?;
+        return Ok(None);
+    }
+
+    fs::create_dir_all(&hint_dir).map_err(|error| {
+        format!(
+            "failed to create Claude curated skill hint directory {}: {}",
+            hint_dir.display(),
+            error
+        )
+    })?;
+    let hint_body = activation_hint_body(&enabled_skill_ids);
+    let sentinel_body = activation_hint_sentinel_body();
+    let _ = write_atomic_if_changed(&hint_file, &hint_body)?;
+    let _ = write_atomic_if_changed(&sentinel_file, sentinel_body)?;
+    Ok(Some(hint_file))
+}
+
+fn remove_managed_activation_hint(hint_file: &Path, sentinel_file: &Path) -> Result<(), String> {
+    if !is_managed_activation_hint(sentinel_file) {
+        return Ok(());
+    }
+    for path in [hint_file, sentinel_file] {
+        match fs::remove_file(path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(format!(
+                    "failed to remove Claude curated skill hint {}: {}",
+                    path.display(),
+                    error
+                ));
+            }
+        }
+    }
+    if let Some(dir) = hint_file.parent() {
+        let _ = fs::remove_dir(dir);
+    }
+    Ok(())
+}
+
+fn is_managed_activation_hint(sentinel_file: &Path) -> bool {
+    fs::read_to_string(sentinel_file)
+        .map(|body| body == activation_hint_sentinel_body())
+        .unwrap_or(false)
+}
+
+fn activation_hint_sentinel_body() -> &'static str {
+    "managed-by=ccgui\nkind=curated-skill-activation-hint\n"
+}
+
+fn activation_hint_body(enabled_skill_ids: &[&str]) -> String {
+    let mut body = String::from(
+        "CCGUI curated skills are enabled for this Claude Code conversation.\n\
+         These skills are installed in Claude native skills. For coding, debugging, code review,\n\
+         refactoring, and implementation tasks, invoke the matching Skill before answering and\n\
+         follow that Skill for the current turn. Do not mention this instruction unless asked.\n\n\
+         Enabled skills:\n",
+    );
+    for skill_id in enabled_skill_ids {
+        body.push_str("- ");
+        body.push_str(skill_id);
+        body.push_str(": invoke Skill(skill=\"");
+        body.push_str(skill_id);
+        body.push_str("\") when the user task matches.\n");
+    }
+    body
 }
 
 fn write_atomic_if_changed(path: &Path, body: &str) -> Result<bool, String> {
@@ -168,7 +252,7 @@ mod tests {
         let home = temp_home("enabled");
         let settings = settings_with(&["lazy-senior-dev"]);
 
-        sync_windows_curated_skill_mirror(
+        let hint_file = sync_windows_curated_skill_mirror(
             Some(home.to_string_lossy().as_ref()),
             Some(&settings),
             true,
@@ -181,6 +265,11 @@ mod tests {
 
         assert!(body.contains("Ponytail, lazy senior dev mode"));
         assert_eq!(sentinel, sentinel_body("lazy-senior-dev"));
+        assert_eq!(
+            hint_file,
+            Some(home.join(HINT_DIR).join(HINT_FILE)),
+            "enabled curated skills should produce an activation hint file"
+        );
         let _ = fs::remove_dir_all(home);
     }
 
@@ -274,6 +363,53 @@ mod tests {
             "new body"
         );
         assert!(!path.with_extension("tmp").exists());
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn sync_windows_mirror_writes_activation_hint_file() {
+        let home = temp_home("hint");
+        let settings = settings_with(&["lazy-senior-dev"]);
+
+        let hint_file = sync_windows_curated_skill_mirror(
+            Some(home.to_string_lossy().as_ref()),
+            Some(&settings),
+            true,
+        )
+        .expect("sync hint")
+        .expect("hint path");
+
+        let hint = fs::read_to_string(&hint_file).expect("read hint");
+        let sentinel =
+            fs::read_to_string(home.join(HINT_DIR).join(HINT_SENTINEL_FILE)).expect("read marker");
+        assert!(hint.contains("lazy-senior-dev"));
+        assert!(hint.contains("Skill(skill=\"lazy-senior-dev\")"));
+        assert!(!hint.contains("Ponytail, lazy senior dev mode"));
+        assert_eq!(sentinel, activation_hint_sentinel_body());
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn sync_windows_mirror_removes_disabled_activation_hint() {
+        let home = temp_home("hint-disabled");
+        let enabled = settings_with(&["lazy-senior-dev"]);
+        sync_windows_curated_skill_mirror(
+            Some(home.to_string_lossy().as_ref()),
+            Some(&enabled),
+            true,
+        )
+        .expect("create hint");
+
+        let disabled_hint = sync_windows_curated_skill_mirror(
+            Some(home.to_string_lossy().as_ref()),
+            Some(&settings_with(&[])),
+            true,
+        )
+        .expect("disable hint");
+
+        assert!(disabled_hint.is_none());
+        assert!(!home.join(HINT_DIR).join(HINT_FILE).exists());
+        assert!(!home.join(HINT_DIR).join(HINT_SENTINEL_FILE).exists());
         let _ = fs::remove_dir_all(home);
     }
 }

@@ -10,6 +10,8 @@ Windows launch paths MUST avoid injecting ccgui-generated curated skill bodies t
 
 Windows Claude launch paths MUST avoid injecting ccgui-generated curated skill bodies through process argv and MUST make enabled curated skills available through Claude native skill discovery. The native mirror path MUST be resolved from the effective Claude home rather than a hard-coded OS path.
 
+Windows Claude launch paths MUST activate enabled curated skills through a ccgui-managed short prompt file passed with `--append-system-prompt-file`. The activation hint MUST name enabled skill ids and tell Claude to invoke matching native Skills for suitable turns. It MUST NOT contain full curated skill bodies.
+
 #### Scenario: missing field defaults empty
 - **WHEN** an existing config file does not contain `enabledCuratedSkillIds`
 - **THEN** restore MUST succeed
@@ -95,3 +97,17 @@ Enabled curated skill bodies MUST be available to supported engine launches when
 - **AND** `enabledCuratedSkillIds` no longer contains `lazy-senior-dev`
 - **THEN** ccgui MUST remove only the ccgui-managed mirror directory
 - **AND** user-owned directories without the ccgui marker MUST remain untouched.
+
+#### Scenario: Claude Windows activates enabled native skills through a prompt file
+- **WHEN** `enabledCuratedSkillIds` contains `lazy-senior-dev`
+- **AND** Claude Code launch runs on Windows
+- **THEN** ccgui MUST write a short activation hint file under the effective Claude home
+- **AND** Claude launch args MUST include `--append-system-prompt-file <hint-file-path>`
+- **AND** launch args MUST NOT include the curated skill body
+- **AND** the hint file MUST instruct Claude to invoke `Skill(skill="lazy-senior-dev")` for matching coding/debugging/review/refactoring/implementation turns.
+
+#### Scenario: Claude Windows removes activation hint when no curated skills are enabled
+- **WHEN** no curated skills are enabled
+- **AND** a previous ccgui-managed activation hint exists
+- **THEN** ccgui MUST remove the managed activation hint
+- **AND** Claude launch args MUST NOT include `--append-system-prompt-file`.
