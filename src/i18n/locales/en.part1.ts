@@ -2582,6 +2582,7 @@ const enPart1 = {
     doneIn: "Done in {{duration}}",
     messageActions: "Message actions",
     copyMessage: "Copy message",
+    copyUserMessage: "Copy user message",
     forkMessage: "Fork from message",
     rewindMessage: "Rewind to this message",
     forkConfirmTitle: "Confirm fork",

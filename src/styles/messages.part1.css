@@ -229,9 +229,12 @@
 .message.user .bubble {
   max-width: var(--message-user-bubble-max-width, 85%);
   margin-left: auto;
+  display: grid;
+  gap: 8px;
+  justify-items: stretch;
   background: var(--color-message-user-bg, var(--surface-bubble-user));
   color: var(--color-message-user-text, #ffffff);
-  border-radius: 12px 12px 2px 12px;
+  border-radius: 12px;
   border: 1px solid color-mix(
     in srgb,
     var(--color-message-user-text, #ffffff) 10%,
@@ -239,10 +242,36 @@
   );
 }
 
+.message-user-bubble-actions {
+  justify-self: end;
+  min-height: 18px;
+  margin-right: -4px;
+  margin-bottom: -5px;
+  z-index: 2;
+}
+
+.message.user .message-action-button {
+  width: 18px;
+  height: 18px;
+  border: 0;
+  box-shadow: none;
+  color: color-mix(in srgb, var(--color-message-user-text, #ffffff) 88%, transparent);
+  background: transparent;
+}
+
+.message.user .message-action-button:hover,
+.message.user .message-action-button:focus-visible {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  color: var(--color-message-user-text, #ffffff);
+}
+
 .message.user.message-agent-task .bubble {
   max-width: 100%;
   width: 100%;
   margin-left: 0;
+  padding: 0;
   background: transparent;
   color: inherit;
   border: none;

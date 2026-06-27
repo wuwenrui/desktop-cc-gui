@@ -2553,6 +2553,7 @@ const zhPart1 = {
     doneIn: "完成，用时 {{duration}}",
     messageActions: "消息操作",
     copyMessage: "复制消息",
+    copyUserMessage: "复制用户信息",
     forkMessage: "Fork 消息",
     rewindMessage: "回溯到此消息",
     forkConfirmTitle: "确认 Fork",

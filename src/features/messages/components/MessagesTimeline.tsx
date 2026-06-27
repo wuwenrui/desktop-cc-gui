@@ -58,6 +58,7 @@ import {
   resolveProvenanceEngineLabel,
   shouldHideCodexCanvasCommandCard,
 } from "./messagesRenderUtils";
+import { resolveUserMessagePresentation } from "./messagesUserPresentation";
 import {
   buildTimelineProjectionRows,
   findTimelineProjectionRowIndexByItemId,
@@ -1192,6 +1193,17 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         renderItem.role === "assistant"
           ? messageCopyTextByAssistantId.get(renderItem.id) ?? renderItem.text
           : renderItem.text;
+      const userCopyText =
+        renderItem.role === "user"
+          ? resolveUserMessagePresentation({
+              text: renderItem.text,
+              selectedAgentName: renderItem.selectedAgentName,
+              selectedAgentIcon: renderItem.selectedAgentIcon,
+              enableCollaborationBadge: activeEngine === "codex",
+            }).displayText
+          : "";
+      const shouldRenderUserActions =
+        renderItem.role === "user" && userCopyText.trim().length > 0;
       const shouldRenderForkAction =
         isLatestFinalAssistant &&
         Boolean(actionTargetUserMessageId) &&
@@ -1243,6 +1255,30 @@ export const MessagesTimeline = memo(function MessagesTimeline({
                 <span className="codicon codicon-history" aria-hidden />
               </button>
             ) : null}
+          </div>
+        );
+      };
+      const renderUserActions = () => {
+        if (!shouldRenderUserActions) {
+          return null;
+        }
+        return (
+          <div
+            className="message-action-bar message-user-bubble-actions"
+            aria-label={t("messages.messageActions")}
+          >
+            <button
+              type="button"
+              className={`ghost message-action-button message-copy-button${isCopied ? " is-copied" : ""}`}
+              onClick={() => handleCopyMessage(renderItem, userCopyText)}
+              aria-label={t("messages.copyUserMessage")}
+              title={t("messages.copyUserMessage")}
+            >
+              <span className="message-copy-icon" aria-hidden>
+                <Copy className="message-copy-icon-copy" size={12} />
+                <Check className="message-copy-icon-check" size={12} />
+              </span>
+            </button>
           </div>
         );
       };
@@ -1314,6 +1350,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
                   ? latestRetryMessage
                   : null
               }
+              userActionNode={renderUserActions()}
               codeBlockCopyUseModifier={codeBlockCopyUseModifier}
               onOpenFileLink={openFileLink}
               onOpenFileLinkMenu={showFileLinkMenu}
