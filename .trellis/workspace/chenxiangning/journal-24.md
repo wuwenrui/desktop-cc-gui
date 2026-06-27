@@ -1271,3 +1271,40 @@ Validation:
 ### Next Steps
 
 - None - task complete
+
+
+## Session 952: 修复 Windows Claude stream-json 空 prompt 占位
+
+**Date**: 2026-06-27
+**Task**: 修复 Windows Claude stream-json 空 prompt 占位
+**Branch**: `feature/v0.6.1`
+
+### Summary
+
+修复 Claude Code 在 Windows .cmd/.bat wrapper 下 stream-json stdin 模式因 -p 后空 prompt 占位导致的原始 JSON 入会话和 stream-json 事件失败问题。
+
+### Main Changes
+
+- 移除 `ClaudeSession::build_command` 在 `--input-format stream-json` 分支中追加的空字符串 prompt 占位，保证用户消息只通过 stdin 发送。
+- 增加命令构造回归测试，覆盖 single-line、multiline、special-character prompt 和 resume path，断言 `-p` 后不再出现空占位。
+- 新增 OpenSpec change `fix-windows-claude-stream-json-stdin-prompt`，记录 Windows wrapper、Unix direct launch 共用的 no-placeholder stdin contract。
+- 验证：`openspec validate fix-windows-claude-stream-json-stdin-prompt --strict --no-interactive`、`cargo test --manifest-path src-tauri/Cargo.toml build_command`、`cargo test --manifest-path src-tauri/Cargo.toml build_resume_command`、`cargo fmt --manifest-path src-tauri/Cargo.toml --check`、`cargo test --manifest-path src-tauri/Cargo.toml engine::claude::tests_stream` 均通过。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9ff79898` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
