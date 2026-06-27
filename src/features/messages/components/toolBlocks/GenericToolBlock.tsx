@@ -28,6 +28,25 @@ import {
   resolveToolStatus,
 } from './toolConstants';
 import { FileIcon } from './FileIcon';
+import { cn } from '@/lib/utils';
+import { Marker, MarkerContent, MarkerIcon } from '../../../../components/ui/marker';
+import { ToolStatusIcon } from './ToolMarkerShell';
+import FileText from 'lucide-react/dist/esm/icons/file-text';
+import FilePen from 'lucide-react/dist/esm/icons/file-pen';
+import FilePlus from 'lucide-react/dist/esm/icons/file-plus';
+import Terminal from 'lucide-react/dist/esm/icons/terminal';
+import Search from 'lucide-react/dist/esm/icons/search';
+import FolderSearch from 'lucide-react/dist/esm/icons/folder-search';
+import Globe from 'lucide-react/dist/esm/icons/globe';
+import FileDiff from 'lucide-react/dist/esm/icons/file-diff';
+import ListChecks from 'lucide-react/dist/esm/icons/list-checks';
+import Zap from 'lucide-react/dist/esm/icons/zap';
+import NotebookPen from 'lucide-react/dist/esm/icons/notebook-pen';
+import Database from 'lucide-react/dist/esm/icons/database';
+import MessagesSquare from 'lucide-react/dist/esm/icons/messages-square';
+import CheckCheck from 'lucide-react/dist/esm/icons/check-check';
+import Trash2 from 'lucide-react/dist/esm/icons/trash-2';
+import Wrench from 'lucide-react/dist/esm/icons/wrench';
 
 type StatusTone = 'completed' | 'processing' | 'failed' | 'pending';
 type NormalizedChangeKind = 'added' | 'modified' | 'deleted' | 'renamed';
@@ -978,6 +997,46 @@ function formatFileCountLabel(count: number): string {
   return count === 1 ? '1 file' : `${count} files`;
 }
 
+/**
+ * 将 codicon 类名映射为灰色 lucide 描边图标（marker 风格前置图标）
+ */
+function resolveToolMarkerIcon(codiconClass: string) {
+  switch (codiconClass) {
+    case 'codicon-eye':
+      return <FileText className="size-3.5" />;
+    case 'codicon-edit':
+      return <FilePen className="size-3.5" />;
+    case 'codicon-pencil':
+      return <FilePlus className="size-3.5" />;
+    case 'codicon-terminal':
+      return <Terminal className="size-3.5" />;
+    case 'codicon-search':
+      return <Search className="size-3.5" />;
+    case 'codicon-folder':
+      return <FolderSearch className="size-3.5" />;
+    case 'codicon-globe':
+      return <Globe className="size-3.5" />;
+    case 'codicon-diff':
+      return <FileDiff className="size-3.5" />;
+    case 'codicon-checklist':
+      return <ListChecks className="size-3.5" />;
+    case 'codicon-zap':
+      return <Zap className="size-3.5" />;
+    case 'codicon-notebook':
+      return <NotebookPen className="size-3.5" />;
+    case 'codicon-database':
+      return <Database className="size-3.5" />;
+    case 'codicon-comment-discussion':
+      return <MessagesSquare className="size-3.5" />;
+    case 'codicon-check-all':
+      return <CheckCheck className="size-3.5" />;
+    case 'codicon-trash':
+      return <Trash2 className="size-3.5" />;
+    default:
+      return <Wrench className="size-3.5" />;
+  }
+}
+
 export const GenericToolBlock = memo(function GenericToolBlock({
   item,
   workspaceId = null,
@@ -1193,25 +1252,13 @@ export const GenericToolBlock = memo(function GenericToolBlock({
     activeCollaborationModeId === "code" &&
     activeEngine !== "claude" &&
     !suppressPlanModeHintForClaude;
-  const hasTaskDetails =
-    shouldShowDetails ||
-    (isExpanded && Boolean(item.output) && !hasChanges) ||
-    (isExpanded && hasChanges && Boolean(item.changes)) ||
-    (isExpanded && !shouldShowDetails && !item.output && !hasChanges && Boolean(item.detail)) ||
-    showPlanModeHint ||
-    (isImageViewTool && Boolean(imageViewPreviewSrc));
   const showCollapsedMultiFileRows =
     isFileChangeTool && !isExpanded && displayChanges.length > 1;
-  const collapsedContainerClassName = `task-container${
-    hasTaskDetails ? '' : ' task-container-collapsed'
-  }${
-    isFileChangeTool && !isExpanded ? ' tool-change-collapsed-card tool-change-stack-entry' : ''
-  }${
-    isFileChangeTool && isExpanded ? ' tool-change-expanded-card' : ''
-  }`;
-  const collapsedHeaderClassName = `task-header${
-    isFileChangeTool ? ' tool-change-stack-header' : ''
-  }`;
+  const markerStatus =
+    status === 'failed' ? 'failed' : status === 'completed' ? 'completed' : 'processing';
+  const isInteractive = Boolean(
+    isCollapsible || otherParams.length > 0 || item.output || hasChanges,
+  );
 
   const handleClick = () => {
     if (isExitPlanTool) {
@@ -1441,45 +1488,38 @@ export const GenericToolBlock = memo(function GenericToolBlock({
             const changeEntryKey = getChangeEntryKey(change.path, index);
             const isChangeExpanded = expandedCollapsedChangeRows[changeEntryKey] ?? false;
             return (
-              <div
-                key={changeEntryKey}
-                className={`task-container tool-change-stack-entry${
-                  isChangeExpanded ? '' : ' task-container-collapsed'
-                }`}
-              >
-            <div
-              className="task-header tool-change-stack-header"
-              onClick={() => {
-                setExpandedCollapsedChangeRows((prev) => ({
-                  ...prev,
-                  [changeEntryKey]: !prev[changeEntryKey],
-                }));
-              }}
-              style={{
-                cursor: 'pointer',
-                borderBottom: isChangeExpanded ? '1px solid var(--border-primary)' : undefined,
-              }}
-            >
-              <div className="task-title-section">
-                <span className="codicon codicon-diff tool-title-icon tool-title-icon-file-change tool-title-icon-file-change-collapsed" />
-                <span className="tool-title-text">{displayName}</span>
-                <span className="tool-change-summary tool-change-summary-single">
-                  <span className="tool-change-summary-count">{formatFileCountLabel(1)}</span>
-                  <span className="diff-stat-add">+{change.diffStats.additions}</span>
-                  <span className="diff-stat-del">-{change.diffStats.deletions}</span>
-                  <span className="tool-change-collapsed-preview" title={change.path}>
-                    <span className={`tool-change-kind-badge ${change.normalizedKind}`}>
-                      {change.kindCode}
+              <div key={changeEntryKey} className="tool-change-stack-entry">
+                <Marker
+                  onClick={() => {
+                    setExpandedCollapsedChangeRows((prev) => ({
+                      ...prev,
+                      [changeEntryKey]: !prev[changeEntryKey],
+                    }));
+                  }}
+                  className="tool-change-stack-header cursor-pointer select-none gap-1.5 rounded-md px-2 py-1 text-xs transition-colors hover:bg-accent/50"
+                >
+                  <MarkerIcon className="size-3.5">
+                    <FileDiff className="size-3.5" />
+                  </MarkerIcon>
+                  <span className="shrink-0">{displayName}</span>
+                  <MarkerContent className="flex min-w-0 items-center gap-1.5">
+                    <span className="tool-change-summary tool-change-summary-single">
+                      <span className="tool-change-summary-count">{formatFileCountLabel(1)}</span>
+                      <span className="diff-stat-add">+{change.diffStats.additions}</span>
+                      <span className="diff-stat-del">-{change.diffStats.deletions}</span>
+                      <span className="tool-change-collapsed-preview" title={change.path}>
+                        <span className={`tool-change-kind-badge ${change.normalizedKind}`}>
+                          {change.kindCode}
+                        </span>
+                        <FileIcon fileName={getFileName(change.path)} size={14} />
+                        <span className="tool-change-collapsed-file-name">
+                          {getFileName(change.path)}
+                        </span>
+                      </span>
                     </span>
-                    <FileIcon fileName={getFileName(change.path)} size={14} />
-                    <span className="tool-change-collapsed-file-name">
-                      {getFileName(change.path)}
-                    </span>
-                  </span>
-                </span>
-              </div>
-              <div className={`tool-status-indicator ${status === 'failed' ? 'error' : status === 'completed' ? 'completed' : 'pending'}`} />
-            </div>
+                  </MarkerContent>
+                  <ToolStatusIcon status={markerStatus} />
+                </Marker>
                 {isChangeExpanded && (
                   <div className="task-details tool-change-details" style={{ border: 'none' }}>
                     <div className="task-content-wrapper">
@@ -1580,29 +1620,20 @@ export const GenericToolBlock = memo(function GenericToolBlock({
   }
 
   return (
-    <div className={collapsedContainerClassName}>
-      <div
-        className={collapsedHeaderClassName}
-        onClick={handleClick}
-        style={{
-          cursor: isCollapsible || otherParams.length > 0 || item.output || hasChanges ? 'pointer' : 'default',
-          borderBottom: isExpanded ? '1px solid var(--border-primary)' : undefined,
-        }}
+    <div>
+      <Marker
+        {...(isInteractive ? { onClick: handleClick } : {})}
+        className={cn(
+          'gap-1.5 rounded-md px-2 py-1 text-xs transition-colors',
+          isInteractive && 'cursor-pointer select-none hover:bg-accent/50',
+        )}
       >
-        <div className="task-title-section">
-          <span
-            className={`codicon ${codiconClass} tool-title-icon${
-              isFileChangeTool ? ' tool-title-icon-file-change' : ''
-            }${
-              isFileChangeTool && !isExpanded
-                ? ' tool-title-icon-file-change-collapsed'
-                : ''
-            }`}
-          />
-          <span className="tool-title-text">{displayName}</span>
+        <MarkerIcon className="size-3.5">{resolveToolMarkerIcon(codiconClass)}</MarkerIcon>
+        <span className="shrink-0">{displayName}</span>
+        <MarkerContent className="flex min-w-0 items-center gap-1.5">
           {summary && (
             <span
-              className="tool-title-summary"
+              className="truncate"
               title={summary}
               style={(isFile || isDirectory) ? { display: 'inline-flex', alignItems: 'center', gap: '4px' } : undefined}
             >
@@ -1613,9 +1644,7 @@ export const GenericToolBlock = memo(function GenericToolBlock({
             </span>
           )}
           {hasChanges && (
-            <span
-              className="tool-change-summary"
-            >
+            <span className="tool-change-summary">
               <span className="tool-change-summary-count">
                 {formatFileCountLabel(item.changes?.length ?? 0)}
               </span>
@@ -1636,9 +1665,9 @@ export const GenericToolBlock = memo(function GenericToolBlock({
               )}
             </span>
           )}
-        </div>
-        <div className={`tool-status-indicator ${status === 'failed' ? 'error' : status === 'completed' ? 'completed' : 'pending'}`} />
-      </div>
+        </MarkerContent>
+        <ToolStatusIcon status={markerStatus} />
+      </Marker>
 
       {shouldShowDetails && (
         <div className="task-details" style={{ border: 'none' }}>

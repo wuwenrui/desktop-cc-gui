@@ -892,7 +892,7 @@ describe("Messages rich content", () => {
       />,
     );
 
-    const header = container.querySelector(".task-header");
+    const header = container.querySelector('[data-slot="marker"]');
     expect(header).toBeTruthy();
     if (header) {
       fireEvent.click(header);

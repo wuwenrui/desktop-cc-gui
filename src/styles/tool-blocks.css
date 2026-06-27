@@ -1877,7 +1877,7 @@
 .edit-group-file-link {
   display: inline-flex;
   align-items: center;
-  color: var(--text-primary);
+  color: var(--muted-foreground);
   font-size: 12px;
   padding: 0;
   margin: 0;

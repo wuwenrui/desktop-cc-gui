@@ -321,7 +321,7 @@ describe("GenericToolBlock", () => {
     );
 
     expect(screen.getByText("This feature requires Plan mode")).toBeTruthy();
-    const header = view.container.querySelector(".task-header");
+    const header = view.container.querySelector('[data-slot="marker"]');
     expect(header).toBeTruthy();
     if (header) {
       fireEvent.click(header);

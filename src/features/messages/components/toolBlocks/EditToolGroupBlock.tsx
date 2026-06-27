@@ -1,9 +1,10 @@
 /**
  * 批量编辑文件分组组件
- * 参考 idea-claude-code-gui 的渲染细节，展示连续编辑工具的文件列表与 diff 统计
+ * 统一 Marker 风格折叠行：灰色描边图标 + 批量标题 + 计数 + 总统计；展开体为文件列表与 diff 统计
  */
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import FilePen from 'lucide-react/dist/esm/icons/file-pen';
 import type { ConversationItem } from '../../../../types';
 import {
   getFileName,
@@ -18,7 +19,7 @@ import {
   EDIT_CONTENT_KEYS,
 } from './toolConstants';
 import { computeDiffStats, computeDiffFromUnifiedPatch, type DiffStats } from '../../utils/diffUtils';
-import { FileIcon } from './FileIcon';
+import { ToolMarkerShell } from './ToolMarkerShell';
 
 type ToolItem = Extract<ConversationItem, { kind: 'tool' }>;
 
@@ -121,36 +122,17 @@ export const EditToolGroupBlock = memo(function EditToolGroupBlock({
   const listHeight = Math.min(parsedItems.length, MAX_VISIBLE_ITEMS) * ITEM_HEIGHT;
 
   return (
-    <div className="task-container edit-group-task-container">
-      <div
-        className="task-header"
-        onClick={() => setIsExpanded((previous) => !previous)}
-        style={{
-          borderBottom: isExpanded ? '1px solid var(--border-primary)' : undefined,
-        }}
-      >
-        <div className="task-title-section" style={{ overflow: 'hidden' }}>
-          <span className="codicon codicon-edit tool-title-icon" />
-          <span className="tool-title-text" style={{ flexShrink: 0 }}>
-            {t('tools.batchEditFile')}
-          </span>
-          <span className="tool-title-summary edit-group-item-count">({parsedItems.length})</span>
-          {(totalDiff.additions > 0 || totalDiff.deletions > 0) && (
-            <span className="edit-group-diff-total">
-              {totalDiff.additions > 0 && <span className="diff-stat-add">+{totalDiff.additions}</span>}
-              {totalDiff.deletions > 0 && <span className="diff-stat-del">-{totalDiff.deletions}</span>}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {isExpanded && (
+    <ToolMarkerShell
+      icon={<FilePen className="size-3.5" />}
+      label={t('tools.batchEditFile')}
+      expanded={isExpanded}
+      onToggle={() => setIsExpanded((previous) => !previous)}
+      body={
         <div
           ref={listRef}
-          className="task-details file-list-container"
+          className="file-list-container mt-1 overflow-hidden rounded-md"
           style={{
             padding: '6px 8px',
-            border: 'none',
             maxHeight: needsScroll ? `${listHeight + 12}px` : undefined,
             overflowY: needsScroll ? 'auto' : 'hidden',
             overflowX: 'hidden',
@@ -158,9 +140,7 @@ export const EditToolGroupBlock = memo(function EditToolGroupBlock({
         >
           {parsedItems.map((item) => (
             <div key={item.id} className="file-list-item edit-group-file-item">
-              <span className="edit-group-file-icon-wrap">
-                <FileIcon fileName={item.fileName} size={16} />
-              </span>
+              <FilePen className="size-4 shrink-0 text-muted-foreground" />
               <button
                 type="button"
                 className={`edit-group-file-link${onOpenDiffPath ? ' is-clickable' : ''}`}
@@ -183,8 +163,20 @@ export const EditToolGroupBlock = memo(function EditToolGroupBlock({
             </div>
           ))}
         </div>
+      }
+    >
+      <span className="shrink-0 text-muted-foreground">({parsedItems.length})</span>
+      {(totalDiff.additions > 0 || totalDiff.deletions > 0) && (
+        <span className="flex shrink-0 items-center gap-1 tabular-nums">
+          {totalDiff.additions > 0 && (
+            <span className="text-emerald-600 dark:text-emerald-400">+{totalDiff.additions}</span>
+          )}
+          {totalDiff.deletions > 0 && (
+            <span className="text-red-500 dark:text-red-400">-{totalDiff.deletions}</span>
+          )}
+        </span>
       )}
-    </div>
+    </ToolMarkerShell>
   );
 });
 
