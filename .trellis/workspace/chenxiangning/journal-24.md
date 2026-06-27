@@ -1308,3 +1308,58 @@ Validation:
 ### Next Steps
 
 - None - task complete
+
+
+## Session 953: 修复 Windows 对话流式输出回归
+
+**Date**: 2026-06-27
+**Task**: 修复 Windows 对话流式输出回归
+**Branch**: `feature/v0.6.1`
+
+### Summary
+
+修复 Windows Claude/Codex 对话流式输出 final-only 回归风险；新增 OpenSpec change、Claude 进程级流式回归测试、Codex first text delta alias timing 识别与 final-only 诊断测试。
+
+### Main Changes
+
+### Main Changes
+
+- 新增 OpenSpec change `fix-windows-chat-stream-final-only-regression`，明确 Claude backend 必须在进程结束前派发有效 text delta，Codex terminal completion 不能伪装成 first text delta。
+- 在 `src-tauri/src/engine/claude/tests_stream.rs` 增加 fake CLI 延迟退出测试，验证 `TextDelta` 在 fake Claude process completion 前进入 subscriber。
+- 在 `src-tauri/src/backend/app_server_runtime_lifecycle.rs` 将 Codex first text timing 的 method 识别从单一 `item/agentMessage/delta` 扩展为 canonical + legacy aliases：`text:delta`、`text/delta`、`item/agentMessage/textDelta`。
+- 在 `src-tauri/src/backend/app_server_tests.rs` 增加 alias 识别与 final-only completion 回归测试，确保 final result text 不会被误判为 streamed first delta。
+
+### Verification
+
+- `cargo test --manifest-path src-tauri/Cargo.toml claude --lib` -> 242 passed。
+- `cargo test --manifest-path src-tauri/Cargo.toml app_server --lib` -> 110 passed。
+- `cargo test --manifest-path src-tauri/Cargo.toml enrich_codex_turn_timing --lib` -> 5 passed。
+- `openspec validate fix-windows-chat-stream-final-only-regression --strict --no-interactive` -> passed。
+- `git diff --check` -> passed。
+- Windows cross-compile simulation attempted:
+  - `x86_64-pc-windows-gnu` blocked by missing `x86_64-w64-mingw32-dlltool` on local macOS host.
+  - `x86_64-pc-windows-msvc` blocked by missing Windows C headers while compiling `ring` (`assert.h` not found) on local macOS host.
+  - Both blocks are local cross-toolchain availability issues; native Rust suites and static review covered the touched backend paths.
+
+### Status
+
+Completed. Commit: `dd77ee26`.
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `dd77ee26` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

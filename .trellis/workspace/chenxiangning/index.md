@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-24.md`
-- **Total Sessions**: 952
+- **Total Sessions**: 953
 - **Last Active**: 2026-06-27
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-24.md` | ~1310 | Active |
+| `journal-24.md` | ~1365 | Active |
 | `journal-23.md` | ~1965 | Archived |
 | `journal-22.md` | ~1969 | Archived |
 | `journal-21.md` | ~1970 | Archived |
@@ -52,6 +52,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 953 | 2026-06-27 | 修复 Windows 对话流式输出回归 | `dd77ee26` | `feature/v0.6.1` |
 | 952 | 2026-06-27 | 修复 Windows Claude stream-json 空 prompt 占位 | `9ff79898` | `feature/v0.6.1` |
 | 951 | 2026-06-27 | 修复 Messages 流式渲染更新深度崩溃 | `11f920a4` | `feature/v0.6.1` |
 | 950 | 2026-06-27 | 收敛 Codex 磁盘会话失效提示 | `5f027bbd` | `feature/v0.6.1` |
