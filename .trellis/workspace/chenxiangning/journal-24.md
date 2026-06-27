@@ -1440,3 +1440,36 @@ Windows Codex app-server wrapper fallback 改为通过 provider/default CODEX_HO
 ### Next Steps
 
 - None - task complete
+
+
+## Session 956: 修复 Sidebar 会话目录分页游标
+
+**Date**: 2026-06-27
+**Task**: 修复 Sidebar 会话目录分页游标
+**Branch**: `feature/v0.6.1`
+
+### Summary
+
+修复 Sidebar 工作区会话 catalog 初始加载丢弃 backend nextCursor 的问题，确保 mossx 这类超过 100 条会话的项目可以通过加载更多继续展示后续会话；补充 hook 和 thread actions 回归测试，并通过 focused Vitest、ESLint、typecheck、diff check。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6d624c5a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

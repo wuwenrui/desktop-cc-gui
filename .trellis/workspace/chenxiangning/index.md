@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-24.md`
-- **Total Sessions**: 955
+- **Total Sessions**: 956
 - **Last Active**: 2026-06-27
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-24.md` | ~1442 | Active |
+| `journal-24.md` | ~1475 | Active |
 | `journal-23.md` | ~1965 | Archived |
 | `journal-22.md` | ~1969 | Archived |
 | `journal-21.md` | ~1970 | Archived |
@@ -52,6 +52,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 956 | 2026-06-27 | 修复 Sidebar 会话目录分页游标 | `6d624c5a` | `feature/v0.6.1` |
 | 955 | 2026-06-27 | 隔离幕布渲染场景作用域 | `5017632f` | `feature/v0.6.1` |
 | 954 | 2026-06-27 | 修复 Windows Codex 内置技能启动回退 | `8a12f560` | `feature/v0.6.1` |
 | 953 | 2026-06-27 | 修复 Windows 对话流式输出回归 | `dd77ee26` | `feature/v0.6.1` |
