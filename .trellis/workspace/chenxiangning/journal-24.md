@@ -1054,3 +1054,43 @@ Validation:
 ### Next Steps
 
 - None - task complete
+
+
+## Session 946: 移除 Gemini CLI 供应商配置入口
+
+**Date**: 2026-06-27
+**Task**: 移除 Gemini CLI 供应商配置入口
+**Branch**: `feature/v0.6`
+
+### Summary
+
+删除供应商管理页的 Gemini CLI 配置 UI，保留 Gemini runtime/session/vendor bridge 兼容代码，并回写 OpenSpec 增量记录。
+
+### Main Changes
+
+| Area | Details |
+|------|---------|
+| Frontend UI | Removed the Gemini CLI tab and `GeminiVendorPanel` from `VendorSettingsPanel`. |
+| Compatibility | Kept `useGeminiVendorManagement`, `services/tauri/vendors.ts`, and backend Gemini vendor commands untouched. |
+| Styles | Removed `vendor-gemini-*` dead CSS from `settings.part1.vendor-panels.css`. |
+| OpenSpec | Updated `openspec/changes/2026-06-24-retire-opencode-and-gemini-cli/{proposal.md,tasks.md}` with the 2026-06-27 provider settings UI slice. |
+| Verification | `openspec validate 2026-06-24-retire-opencode-and-gemini-cli --strict --no-interactive`; `npm run lint`; targeted `VendorSettingsPanel` Vitest; `npm run typecheck`; `npm run check:large-files`; `git diff --check`. |
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b822b810` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
