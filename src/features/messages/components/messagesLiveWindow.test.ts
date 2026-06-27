@@ -4,7 +4,9 @@ import {
   buildAssistantFinalBoundarySet,
   buildAssistantFinalWithVisibleProcessSet,
   buildLiveTailWorkingSet,
+  buildMessagesPresentationScopeKey,
   buildRenderedItemsWindow,
+  resolveMessagesPresentationMode,
   resolveStreamingPresentationItems,
 } from "./messagesLiveWindow";
 
@@ -36,6 +38,73 @@ function reasoningItem(id: string, content = id): Extract<ConversationItem, { ki
 }
 
 describe("messages live window", () => {
+  it("separates realtime/static and collapsed/expanded presentation modes", () => {
+    expect(
+      resolveMessagesPresentationMode({
+        historyExpansionMode: null,
+        isWorking: true,
+        showAllHistoryItems: false,
+        visibleCollapsedHistoryItemCount: 12,
+      }),
+    ).toBe("realtime-collapsed-tail");
+    expect(
+      resolveMessagesPresentationMode({
+        historyExpansionMode: null,
+        isWorking: true,
+        showAllHistoryItems: false,
+        visibleCollapsedHistoryItemCount: 0,
+      }),
+    ).toBe("realtime-full-tail");
+    expect(
+      resolveMessagesPresentationMode({
+        historyExpansionMode: "manual",
+        isWorking: false,
+        showAllHistoryItems: true,
+        visibleCollapsedHistoryItemCount: 0,
+      }),
+    ).toBe("static-expanded-history-manual");
+    expect(
+      resolveMessagesPresentationMode({
+        historyExpansionMode: "jump",
+        isWorking: false,
+        showAllHistoryItems: true,
+        visibleCollapsedHistoryItemCount: 0,
+      }),
+    ).toBe("static-expanded-history-jump");
+  });
+
+  it("includes presentation mode, collapsed count, and visible window identity in the presentation scope", () => {
+    const baseScope = "ws-1\u0000thread-1";
+    const collapsedScope = buildMessagesPresentationScopeKey({
+      scopeKey: baseScope,
+      mode: "static-collapsed-history",
+      collapsedHistoryItemCount: 40,
+      itemCount: 30,
+      firstItemId: "message-41",
+      lastItemId: "message-70",
+    });
+    const expandedScope = buildMessagesPresentationScopeKey({
+      scopeKey: baseScope,
+      mode: "static-expanded-history-manual",
+      collapsedHistoryItemCount: 0,
+      itemCount: 70,
+      firstItemId: "message-1",
+      lastItemId: "message-70",
+    });
+    const liveScope = buildMessagesPresentationScopeKey({
+      scopeKey: baseScope,
+      mode: "realtime-collapsed-tail",
+      collapsedHistoryItemCount: 40,
+      itemCount: 30,
+      firstItemId: "message-41",
+      lastItemId: "message-70",
+    });
+
+    expect(collapsedScope).not.toBe(expandedScope);
+    expect(collapsedScope).not.toBe(liveScope);
+    expect(expandedScope).toContain("static-expanded-history-manual");
+  });
+
   it("builds a bounded live tail working set and preserves the latest user row", () => {
     const items: ConversationItem[] = [
       userMessage("user-old", "早期问题"),

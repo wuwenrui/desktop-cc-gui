@@ -51,11 +51,14 @@ import {
   buildAssistantFinalBoundarySet,
   buildAssistantFinalWithVisibleProcessSet,
   buildLiveTailWorkingSet,
+  buildMessagesPresentationScopeKey,
   buildRenderedItemsWindow,
   collapseExpandedExploreItems,
+  resolveMessagesPresentationMode,
   resolveStreamingPresentationItems,
   resolveLiveAutoExpandedExploreId,
   suppressCompletedExploreItemsBetweenLatestUserTurns,
+  type MessagesHistoryExpansionMode,
 } from "./messagesLiveWindow";
 import {
   isAssistantMessageConversationItem,
@@ -357,7 +360,7 @@ export const Messages = memo(function Messages({
     typeof performance === "undefined" ? 0 : performance.now();
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const pendingHistoryExpansionModeRef = useRef<"manual" | "jump" | null>(null);
+  const pendingHistoryExpansionModeRef = useRef<MessagesHistoryExpansionMode>(null);
   const messageNodeByIdRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const agentTaskNodeByTaskIdRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const agentTaskNodeByToolUseIdRef = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -425,6 +428,8 @@ export const Messages = memo(function Messages({
     DEFAULT_RENDER_LOOP_GUARD_BUDGET,
   );
   const [showAllHistoryItems, setShowAllHistoryItems] = useState(false);
+  const [historyExpansionMode, setHistoryExpansionMode] =
+    useState<MessagesHistoryExpansionMode>(null);
   const [pendingJumpMessageId, setPendingJumpMessageId] = useState<string | null>(null);
   const [liveAutoFollowEnabled, setLiveAutoFollowEnabled] = useState(() =>
     readLocalBooleanFlag(MESSAGES_LIVE_AUTO_FOLLOW_FLAG_KEY, true),
@@ -607,6 +612,7 @@ export const Messages = memo(function Messages({
     setIsSelectionFrozen(false);
     frozenItemsRef.current = null;
     pendingHistoryExpansionModeRef.current = null;
+    setHistoryExpansionMode(null);
     activeAnchorIdRef.current = null;
     anchorLoopGuardRef.current = DEFAULT_RENDER_LOOP_GUARD_BUDGET;
     if (typeof window !== "undefined") {
@@ -745,6 +751,7 @@ export const Messages = memo(function Messages({
     const currentFirstId = effectiveItems[0]?.id ?? null;
     if (currentFirstId !== firstItemIdRef.current) {
       setShowAllHistoryItems(false);
+      setHistoryExpansionMode(null);
       setPendingJumpMessageId(null);
       pendingHistoryExpansionModeRef.current = null;
     }
@@ -1295,6 +1302,12 @@ export const Messages = memo(function Messages({
     ? renderedItemsWindow.visibleCollapsedHistoryItemCount
       + liveTailWorkingSet.omittedBeforeWorkingSetCount
     : 0;
+  const messagesPresentationMode = resolveMessagesPresentationMode({
+    historyExpansionMode,
+    isWorking,
+    showAllHistoryItems,
+    visibleCollapsedHistoryItemCount,
+  });
   const currentLatestAssistantTextLength = useMemo(
     () => findLatestAssistantTextLength(renderedItems),
     [renderedItems],
@@ -1387,6 +1400,14 @@ export const Messages = memo(function Messages({
   const presentationCollapsedHistoryItemCount = shouldUseReadableWindowRecovery
     ? recoveredReadableWindow?.visibleCollapsedHistoryItemCount ?? visibleCollapsedHistoryItemCount
     : visibleCollapsedHistoryItemCount;
+  const presentationScopeKey = buildMessagesPresentationScopeKey({
+    scopeKey: renderScopeKey,
+    mode: messagesPresentationMode,
+    collapsedHistoryItemCount: presentationCollapsedHistoryItemCount,
+    itemCount: presentationRenderedItems.length,
+    firstItemId: presentationRenderedItems[0]?.id ?? null,
+    lastItemId: presentationRenderedItems.at(-1)?.id ?? null,
+  });
   const claudeRenderableEntryCount = useMemo(
     () => countRenderableCollapsedEntries(timelineItems, activeEngine),
     [activeEngine, timelineItems],
@@ -1412,10 +1433,10 @@ export const Messages = memo(function Messages({
   ]);
   const presentationRenderSnapshot = useMemo(
     () => ({
-      scopeKey: renderScopeKey,
+      scopeKey: presentationScopeKey,
       items: presentationRenderedItems,
     }),
-    [presentationRenderedItems, renderScopeKey],
+    [presentationRenderedItems, presentationScopeKey],
   );
   const deferredPresentationRenderSnapshot = useDeferredValue(
     presentationRenderSnapshot,
@@ -1447,7 +1468,7 @@ export const Messages = memo(function Messages({
       livePresentationOverrideItemIds,
       {
         deferredScopeKey: deferredPresentationRenderSnapshot.scopeKey,
-        currentScopeKey: renderScopeKey,
+        currentScopeKey: presentationScopeKey,
       },
     );
   }, [
@@ -1456,7 +1477,7 @@ export const Messages = memo(function Messages({
     deferredPresentationRenderedItems,
     livePresentationOverrideItemIds,
     presentationRenderedItems,
-    renderScopeKey,
+    presentationScopeKey,
     shouldStabilizePresentationItems,
     timelineItems,
   ]);
@@ -1654,6 +1675,7 @@ export const Messages = memo(function Messages({
   );
   const revealAllHistoryItems = useCallback((mode: "manual" | "jump") => {
     pendingHistoryExpansionModeRef.current = mode;
+    setHistoryExpansionMode(mode);
     setShowAllHistoryItems(true);
   }, []);
   const handleShowAllHistoryItems = useCallback(() => {
@@ -2231,6 +2253,8 @@ export const Messages = memo(function Messages({
           claudeHistoryTranscriptFallbackActive={claudeHistoryTranscriptFallbackActive}
           hasVisibleUserInputRequest={hasVisibleUserInputRequest}
           historyExpansionActive={showAllHistoryItems}
+          presentationMode={messagesPresentationMode}
+          presentationScopeKey={presentationScopeKey}
           userInputNode={userInputNode}
           visibleCollapsedHistoryItemCount={presentationCollapsedHistoryItemCount}
           waitingForFirstChunk={waitingForFirstChunk}
