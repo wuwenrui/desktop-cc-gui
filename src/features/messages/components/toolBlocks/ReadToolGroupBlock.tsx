@@ -121,7 +121,7 @@ export const ReadToolGroupBlock = memo(function ReadToolGroupBlock({
 
   return (
     <ToolMarkerShell
-      icon={<FileText className="size-3.5" />}
+      icon={<FileText />}
       label={t("tools.batchReadFile")}
       expanded={isExpanded}
       onToggle={() => setIsExpanded((prev) => !prev)}

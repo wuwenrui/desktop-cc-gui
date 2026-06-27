@@ -116,7 +116,7 @@ export const ReadToolBlock = memo(function ReadToolBlock({
 
   return (
     <ToolMarkerShell
-      icon={isDirectory ? <Folder className="size-3.5" /> : <FileText className="size-3.5" />}
+      icon={isDirectory ? <Folder /> : <FileText />}
       label={actionText}
       labelHidden
       expanded={expanded && hasBody}

@@ -1,7 +1,8 @@
 /**
  * 工具块共享外壳 - 统一 Marker 风格的折叠行
- * Shared shell for tool blocks rendered as compact shadcn Marker rows.
- * 定稿口径：淡、小、无边框、muted —— 灰色 lucide 描边图标 + 内容 + 靠右状态图标 + 折叠体。
+ * Shared shell for tool blocks rendered as shadcn Marker rows.
+ * 定稿口径：对齐 shadcn 官方 Marker 默认尺寸（text-sm + 图标 size-4 + gap-2），
+ * 无边框、muted —— 灰色 lucide 描边图标 + 内容 + 靠右状态图标 + 折叠体。
  */
 import type { ReactNode } from 'react';
 import CircleAlert from 'lucide-react/dist/esm/icons/circle-alert';
@@ -19,18 +20,18 @@ export const TOOL_MARKER_BODY_CLASS = 'mt-1 overflow-hidden rounded-md bg-muted/
  */
 export function ToolStatusIcon({ status }: { status: ToolStatusTone }) {
   if (status === 'failed') {
-    return <CircleAlert className="ml-auto size-3.5 shrink-0 text-destructive" />;
+    return <CircleAlert className="ml-auto size-4 shrink-0 text-destructive" />;
   }
   if (status === 'completed') {
     return null;
   }
   return (
-    <Loader2 className="ml-auto size-3.5 shrink-0 animate-spin text-muted-foreground" />
+    <Loader2 className="ml-auto size-4 shrink-0 animate-spin text-muted-foreground" />
   );
 }
 
 interface ToolMarkerShellProps {
-  /** 前置 lucide 描边图标（调方控制 size-3.5），继承 muted 色 */
+  /** 前置 lucide 描边图标（不写 size 时由 MarkerIcon 容器自动 size-4），继承 muted 色 */
   icon: ReactNode;
   /** 类型标识：sr-only 时仅作无障碍/测试锚点；可见时作分组/工具标题 */
   label: ReactNode;
@@ -80,18 +81,18 @@ export function ToolMarkerShell({
         {...(ariaLabel ? { 'aria-label': ariaLabel } : {})}
         {...(clickable ? { onClick: onToggle } : {})}
         className={cn(
-          'gap-1.5 rounded-md px-2 py-1 text-xs transition-colors',
+          'gap-2 rounded-md px-3 py-1.5 text-sm transition-colors',
           clickable && 'cursor-pointer select-none hover:bg-accent/50',
           className,
         )}
       >
-        <MarkerIcon className="size-3.5">{icon}</MarkerIcon>
+        <MarkerIcon>{icon}</MarkerIcon>
         <span className={labelHidden ? 'sr-only' : 'min-w-0 truncate'}>
           {label}
         </span>
         {children != null && (
           <MarkerContent
-            className={cn('flex min-w-0 items-center gap-1.5', contentClassName)}
+            className={cn('flex min-w-0 items-center gap-2', contentClassName)}
           >
             {children}
           </MarkerContent>

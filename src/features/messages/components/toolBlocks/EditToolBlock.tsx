@@ -93,7 +93,7 @@ export const EditToolBlock = memo(function EditToolBlock({
 
   return (
     <ToolMarkerShell
-      icon={<FilePen className="size-3.5" />}
+      icon={<FilePen />}
       label={t('tools.editFile')}
       labelHidden
       expanded={expanded && hasBody}

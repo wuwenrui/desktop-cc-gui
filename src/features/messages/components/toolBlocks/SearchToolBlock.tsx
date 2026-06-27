@@ -161,7 +161,7 @@ export const SearchToolBlock = memo(function SearchToolBlock({
 
   return (
     <ToolMarkerShell
-      icon={isGlob ? <FolderSearch className="size-3.5" /> : <SearchIcon className="size-3.5" />}
+      icon={isGlob ? <FolderSearch /> : <SearchIcon />}
       label={displayName}
       labelHidden
       ariaLabel={displayName}

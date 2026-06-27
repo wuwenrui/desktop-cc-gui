@@ -123,7 +123,7 @@ export const EditToolGroupBlock = memo(function EditToolGroupBlock({
 
   return (
     <ToolMarkerShell
-      icon={<FilePen className="size-3.5" />}
+      icon={<FilePen />}
       label={t('tools.batchEditFile')}
       expanded={isExpanded}
       onToggle={() => setIsExpanded((previous) => !previous)}

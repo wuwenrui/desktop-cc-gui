@@ -48,19 +48,19 @@ function getMcpIcon(title: string) {
   const lower = title.toLowerCase();
 
   if (lower.includes('search') || lower.includes('context') || lower.includes('query')) {
-    return <SearchIcon className="size-3.5" />;
+    return <SearchIcon />;
   }
   if (lower.includes('database') || lower.includes('sql') || lower.includes('db')) {
-    return <Database className="size-3.5" />;
+    return <Database />;
   }
   if (lower.includes('web') || lower.includes('fetch') || lower.includes('http')) {
-    return <Globe className="size-3.5" />;
+    return <Globe />;
   }
   if (lower.includes('read') || lower.includes('file') || lower.includes('doc')) {
-    return <FileText className="size-3.5" />;
+    return <FileText />;
   }
 
-  return <Wrench className="size-3.5" />;
+  return <Wrench />;
 }
 
 /**

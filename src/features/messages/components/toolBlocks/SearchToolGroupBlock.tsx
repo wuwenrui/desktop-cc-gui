@@ -171,7 +171,7 @@ export const SearchToolGroupBlock = memo(function SearchToolGroupBlock({
 
   return (
     <ToolMarkerShell
-      icon={<SearchIcon className="size-3.5" />}
+      icon={<SearchIcon />}
       label={groupLabel}
       labelHidden
       ariaLabel={groupLabel}

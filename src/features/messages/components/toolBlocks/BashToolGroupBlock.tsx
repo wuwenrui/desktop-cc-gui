@@ -151,7 +151,7 @@ export const BashToolGroupBlock = memo(function BashToolGroupBlock({
 
   return (
     <ToolMarkerShell
-      icon={<Terminal className="size-3.5" />}
+      icon={<Terminal />}
       label={`${t("tools.bashGroupBatchRun")} (${totalCount})`}
       expanded={isExpanded}
       onToggle={() => setIsExpanded((prev) => !prev)}

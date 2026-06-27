@@ -1003,37 +1003,37 @@ function formatFileCountLabel(count: number): string {
 function resolveToolMarkerIcon(codiconClass: string) {
   switch (codiconClass) {
     case 'codicon-eye':
-      return <FileText className="size-3.5" />;
+      return <FileText />;
     case 'codicon-edit':
-      return <FilePen className="size-3.5" />;
+      return <FilePen />;
     case 'codicon-pencil':
-      return <FilePlus className="size-3.5" />;
+      return <FilePlus />;
     case 'codicon-terminal':
-      return <Terminal className="size-3.5" />;
+      return <Terminal />;
     case 'codicon-search':
-      return <Search className="size-3.5" />;
+      return <Search />;
     case 'codicon-folder':
-      return <FolderSearch className="size-3.5" />;
+      return <FolderSearch />;
     case 'codicon-globe':
-      return <Globe className="size-3.5" />;
+      return <Globe />;
     case 'codicon-diff':
-      return <FileDiff className="size-3.5" />;
+      return <FileDiff />;
     case 'codicon-checklist':
-      return <ListChecks className="size-3.5" />;
+      return <ListChecks />;
     case 'codicon-zap':
-      return <Zap className="size-3.5" />;
+      return <Zap />;
     case 'codicon-notebook':
-      return <NotebookPen className="size-3.5" />;
+      return <NotebookPen />;
     case 'codicon-database':
-      return <Database className="size-3.5" />;
+      return <Database />;
     case 'codicon-comment-discussion':
-      return <MessagesSquare className="size-3.5" />;
+      return <MessagesSquare />;
     case 'codicon-check-all':
-      return <CheckCheck className="size-3.5" />;
+      return <CheckCheck />;
     case 'codicon-trash':
-      return <Trash2 className="size-3.5" />;
+      return <Trash2 />;
     default:
-      return <Wrench className="size-3.5" />;
+      return <Wrench />;
   }
 }
 
@@ -1496,13 +1496,13 @@ export const GenericToolBlock = memo(function GenericToolBlock({
                       [changeEntryKey]: !prev[changeEntryKey],
                     }));
                   }}
-                  className="tool-change-stack-header cursor-pointer select-none gap-1.5 rounded-md px-2 py-1 text-xs transition-colors hover:bg-accent/50"
+                  className="tool-change-stack-header cursor-pointer select-none gap-2 rounded-md px-3 py-1.5 text-sm transition-colors hover:bg-accent/50"
                 >
-                  <MarkerIcon className="size-3.5">
-                    <FileDiff className="size-3.5" />
+                  <MarkerIcon>
+                    <FileDiff />
                   </MarkerIcon>
                   <span className="shrink-0">{displayName}</span>
-                  <MarkerContent className="flex min-w-0 items-center gap-1.5">
+                  <MarkerContent className="flex min-w-0 items-center gap-2">
                     <span className="tool-change-summary tool-change-summary-single">
                       <span className="tool-change-summary-count">{formatFileCountLabel(1)}</span>
                       <span className="diff-stat-add">+{change.diffStats.additions}</span>
@@ -1624,13 +1624,13 @@ export const GenericToolBlock = memo(function GenericToolBlock({
       <Marker
         {...(isInteractive ? { onClick: handleClick } : {})}
         className={cn(
-          'gap-1.5 rounded-md px-2 py-1 text-xs transition-colors',
+          'gap-2 rounded-md px-3 py-1.5 text-sm transition-colors',
           isInteractive && 'cursor-pointer select-none hover:bg-accent/50',
         )}
       >
-        <MarkerIcon className="size-3.5">{resolveToolMarkerIcon(codiconClass)}</MarkerIcon>
+        <MarkerIcon>{resolveToolMarkerIcon(codiconClass)}</MarkerIcon>
         <span className="shrink-0">{displayName}</span>
-        <MarkerContent className="flex min-w-0 items-center gap-1.5">
+        <MarkerContent className="flex min-w-0 items-center gap-2">
           {summary && (
             <span
               className="truncate"
