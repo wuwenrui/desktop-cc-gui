@@ -10,6 +10,10 @@ import {
   updateAppSettings,
 } from "../../../services/tauri";
 import { UI_SCALE_DEFAULT, UI_SCALE_MAX } from "../../../utils/uiScale";
+import {
+  DEFAULT_UI_FONT_FAMILY,
+  LEGACY_MONACO_UI_FONT_FAMILY,
+} from "../../../utils/fonts";
 
 vi.mock("../../../services/tauri", () => ({
   getAppSettings: vi.fn(),
@@ -71,7 +75,8 @@ describe("useAppSettings", () => {
     expect(result.current.settings.canvasWidthMode).toBe("narrow");
     expect(result.current.settings.layoutMode).toBe("default");
     expect(result.current.settings.userMsgColor).toBe("");
-    expect(result.current.settings.uiFontFamily).toMatch(/^Monaco,/);
+    expect(result.current.settings.uiFontFamily).toBe(DEFAULT_UI_FONT_FAMILY);
+    expect(result.current.settings.uiFontFamily).not.toMatch(/^Monaco,/);
     expect(result.current.settings.codeFontFamily).toMatch(/^Monaco,/);
     expect(result.current.settings.codeFontSize).toBe(16);
     expect(result.current.settings.codexUnifiedExecPolicy).toBe("inherit");
@@ -116,6 +121,19 @@ describe("useAppSettings", () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     expect(result.current.settings.sessionAttributionMode).toBe("related");
+  });
+
+  it("migrates the legacy Monaco UI default back to the system UI stack", async () => {
+    getAppSettingsMock.mockResolvedValue({
+      uiFontFamily: LEGACY_MONACO_UI_FONT_FAMILY,
+    } as unknown as AppSettings);
+
+    const { result } = renderHook(() => useAppSettings());
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.settings.uiFontFamily).toBe(DEFAULT_UI_FONT_FAMILY);
+    expect(result.current.settings.uiFontFamily).not.toMatch(/^Monaco,/);
   });
 
   it("preserves workspace-only session attribution mode", async () => {
@@ -380,7 +398,8 @@ describe("useAppSettings", () => {
 
     expect(result.current.settings.uiScale).toBe(UI_SCALE_DEFAULT);
     expect(result.current.settings.theme).toBe("system");
-    expect(result.current.settings.uiFontFamily).toMatch(/^Monaco,/);
+    expect(result.current.settings.uiFontFamily).toBe(DEFAULT_UI_FONT_FAMILY);
+    expect(result.current.settings.uiFontFamily).not.toMatch(/^Monaco,/);
     expect(result.current.settings.codeFontFamily).toMatch(/^Monaco,/);
     expect(result.current.settings.backendMode).toBe("local");
     expect(result.current.settings.opencodeEnabled).toBe(false);
@@ -450,7 +469,7 @@ describe("useAppSettings", () => {
         lightThemePresetId: "vscode-light-modern",
         darkThemePresetId: "vscode-dark-modern",
         uiScale: 0.8,
-        uiFontFamily: expect.stringMatching(/^Monaco,/),
+        uiFontFamily: DEFAULT_UI_FONT_FAMILY,
         codeFontFamily: expect.stringMatching(/^Monaco,/),
         codeFontSize: 9,
         notificationSoundsEnabled: false,

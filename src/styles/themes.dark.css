@@ -4,6 +4,9 @@
   background-color: oklch(0.141 0.005 285.823);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+  /* 抗锯齿：Mac 上让系统字体更清爽细腻（不换字体的核心观感优化，全主题继承） */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   color-scheme: dark;
   --ui-font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
   --code-font-family: "SF Mono", "SFMono-Regular", Menlo, Monaco,
