@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 export type RendererContextMenuLeafItem =
   | {
@@ -47,6 +48,11 @@ type RendererContextSubmenuPosition = {
   y: number;
 };
 
+const MENU_MAX_HEIGHT = 420;
+const MENU_VERTICAL_PADDING = 16;
+const MENU_ITEM_HEIGHT = 40;
+const MENU_LABEL_HEIGHT = 32;
+const MENU_SEPARATOR_HEIGHT = 9;
 const SUBMENU_WIDTH = 260;
 const SUBMENU_MAX_HEIGHT = 420;
 const SUBMENU_GAP = 6;
@@ -55,6 +61,21 @@ const SUBMENU_ITEM_HEIGHT = 40;
 const SUBMENU_LABEL_HEIGHT = 32;
 const SUBMENU_SEPARATOR_HEIGHT = 9;
 const VIEWPORT_PADDING = 12;
+
+export function estimateRendererContextMenuHeight(
+  items: readonly RendererContextMenuItem[],
+) {
+  const estimatedContentHeight = items.reduce((height, item) => {
+    if (item.type === "separator") {
+      return height + MENU_SEPARATOR_HEIGHT;
+    }
+    if (item.type === "label") {
+      return height + MENU_LABEL_HEIGHT;
+    }
+    return height + MENU_ITEM_HEIGHT;
+  }, MENU_VERTICAL_PADDING);
+  return Math.min(MENU_MAX_HEIGHT, estimatedContentHeight);
+}
 
 function estimateRendererContextSubmenuHeight(
   items: readonly RendererContextMenuLeafItem[],
@@ -269,7 +290,7 @@ export function RendererContextMenu({
     );
   };
 
-  return (
+  const menuNode = (
     <div
       className="renderer-context-menu-backdrop"
       onClick={onClose}
@@ -307,6 +328,12 @@ export function RendererContextMenu({
       ) : null}
     </div>
   );
+
+  if (typeof document === "undefined") {
+    return menuNode;
+  }
+
+  return createPortal(menuNode, document.body);
 }
 
 export function clampRendererContextMenuPosition(
@@ -326,8 +353,11 @@ export function clampRendererContextMenuPosition(
   }
   const maxX = Math.max(padding, window.innerWidth - width - padding);
   const maxY = Math.max(padding, window.innerHeight - height - padding);
+  const preferredY = y + height + padding > window.innerHeight
+    ? Math.max(padding, y - height)
+    : y;
   return {
     x: Math.min(Math.max(x, padding), maxX),
-    y: Math.min(Math.max(y, padding), maxY),
+    y: Math.min(Math.max(preferredY, padding), maxY),
   };
 }

@@ -35,7 +35,6 @@ pub(crate) struct AppState {
     pub(crate) detached_external_change_runtime: Mutex<DetachedExternalChangeRuntime>,
     pub(crate) runtime_manager: Arc<crate::runtime::RuntimeManager>,
     pub(crate) renderer_heartbeats: Mutex<crate::renderer_stability::RendererHeartbeatStore>,
-    /// Multi-engine manager
     pub(crate) engine_manager: EngineManager,
 }
 

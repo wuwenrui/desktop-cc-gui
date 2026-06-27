@@ -1671,7 +1671,7 @@ const zhPart1 = {
 
     // 供应商管理
     vendorsTitle: "供应商管理",
-    vendorsDescription: "管理 Claude、Codex 和 Gemini CLI 的供应商配置。",
+    vendorsDescription: "管理 Claude 和 Codex 的供应商配置。",
     vendor: {
       allProviders: "所有供应商",
       allCodexProviders: "所有 Codex 供应商",
@@ -2553,6 +2553,7 @@ const zhPart1 = {
     doneIn: "完成，用时 {{duration}}",
     messageActions: "消息操作",
     copyMessage: "复制消息",
+    copyUserMessage: "复制用户信息",
     forkMessage: "Fork 消息",
     rewindMessage: "回溯到此消息",
     forkConfirmTitle: "确认 Fork",

@@ -714,7 +714,7 @@
 .renderer-context-menu-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 1200;
+  z-index: 1600;
   background: transparent;
 }
 
@@ -741,7 +741,7 @@
 }
 
 .renderer-context-menu-flyout {
-  z-index: 1201;
+  z-index: 1601;
   min-width: 220px;
   max-width: min(280px, calc(100vw - 24px));
 }

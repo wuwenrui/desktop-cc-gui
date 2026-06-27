@@ -256,7 +256,12 @@ export function useGitPanelController({
     isLoading: isDiffLoading,
     error: diffError,
     refresh: refreshGitDiffs,
-  } = useGitDiffs(activeWorkspace, gitStatus.files, shouldLoadLocalDiffs);
+  } = useGitDiffs(
+    activeWorkspace,
+    gitStatus.files,
+    shouldLoadLocalDiffs,
+    gitStatus.isGitRepository !== false,
+  );
 
   useEffect(() => {
     if (!activeWorkspace || !shouldPreloadDiffs) {

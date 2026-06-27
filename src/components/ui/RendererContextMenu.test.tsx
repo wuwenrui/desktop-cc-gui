@@ -34,11 +34,11 @@ function createMenu(overrides?: Partial<RendererContextMenuState>): RendererCont
 describe("RendererContextMenu", () => {
   it("closes on backdrop click and Escape", () => {
     const onClose = vi.fn();
-    const { container, rerender } = render(
+    const { rerender } = render(
       <RendererContextMenu menu={createMenu()} onClose={onClose} />,
     );
 
-    fireEvent.click(container.querySelector(".renderer-context-menu-backdrop")!);
+    fireEvent.click(document.body.querySelector(".renderer-context-menu-backdrop")!);
     expect(onClose).toHaveBeenCalledTimes(1);
 
     rerender(<RendererContextMenu menu={createMenu()} onClose={onClose} />);

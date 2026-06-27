@@ -2684,21 +2684,14 @@ impl DaemonState {
             &workspace_id,
             custom_skill_roots.clone(),
             Some(&app_settings_snapshot),
+            None,
         )
         .await
         {
             Ok(entries) => {
                 let skills_json: Vec<Value> = entries
                     .into_iter()
-                    .map(|entry| {
-                        json!({
-                            "name": entry.name,
-                            "path": entry.path,
-                            "source": entry.source,
-                            "description": entry.description,
-                            "enabled": true,
-                        })
-                    })
+                    .map(skills::skill_entry_to_json)
                     .collect();
                 Ok(json!(skills_json))
             }

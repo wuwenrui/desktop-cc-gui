@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-24.md`
-- **Total Sessions**: 943
-- **Last Active**: 2026-06-26
+- **Total Sessions**: 949
+- **Last Active**: 2026-06-27
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-24.md` | ~964 | Active |
+| `journal-24.md` | ~1195 | Active |
 | `journal-23.md` | ~1965 | Archived |
 | `journal-22.md` | ~1969 | Archived |
 | `journal-21.md` | ~1970 | Archived |
@@ -52,6 +52,12 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 949 | 2026-06-27 | 更新 v0.6.0 变更日志 | `30897632` | `feature/v0.6` |
+| 948 | 2026-06-27 | 修复 Git Diff 统计显示漂移 | `d1e8d7db` | `feature/v0.6` |
+| 947 | 2026-06-27 | 修复非 Git 工作区 diff 扫描噪声 | `27831c31` | `feature/v0.6` |
+| 946 | 2026-06-27 | 移除 Gemini CLI 供应商配置入口 | `b822b810` | `feature/v0.6` |
+| 945 | 2026-06-27 | 优化用户气泡复制入口 | `177f403a` | `feature/v0.6` |
+| 944 | 2026-06-27 | 修复打包内置技能加载 | `ace8f62a` | `bump-version-0.5.15` |
 | 943 | 2026-06-26 | 修复 Windows 精选技能打包 hash 漂移 | `963b45fd` | `v0.5.13` |
 | 942 | 2026-06-26 | Codex 首轮线程启动恢复边界 | `a1f2ad06` | `v0.5.13` |
 | 941 | 2026-06-26 | 屏蔽废弃 CLI 验证入口 | `e93305cc` | `v0.5.13` |

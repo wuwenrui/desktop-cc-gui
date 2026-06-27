@@ -830,6 +830,9 @@ pub(crate) async fn get_git_diffs(
         .clone();
 
     let repo_root = resolve_git_root(&entry)?;
+    if !path_has_git_repository_marker(&repo_root) {
+        return Ok(Vec::new());
+    }
     tokio::task::spawn_blocking(move || {
         let repo = open_repository_at_root(&repo_root)?;
         let head_tree = repo.head().ok().and_then(|head| head.peel_to_tree().ok());

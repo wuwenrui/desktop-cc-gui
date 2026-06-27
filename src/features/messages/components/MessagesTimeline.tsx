@@ -58,6 +58,7 @@ import {
   resolveProvenanceEngineLabel,
   shouldHideCodexCanvasCommandCard,
 } from "./messagesRenderUtils";
+import { resolveUserMessagePresentation } from "./messagesUserPresentation";
 import {
   buildTimelineProjectionRows,
   findTimelineProjectionRowIndexByItemId,
@@ -101,6 +102,27 @@ const TIMELINE_RENDER_WEIGHT_DIAGNOSTIC_COOLDOWN_MS = 5_000;
 const TIMELINE_HYDRATION_REMEASURE_DIAGNOSTIC_COOLDOWN_MS = 5_000;
 const CONVERSATION_LIGHTWEIGHT_DIAGNOSTIC_COOLDOWN_MS = 5_000;
 const TIMELINE_LIVE_ROW_BOTTOM_PROXIMITY_PX = 720;
+const TIMELINE_SCROLL_DIAGNOSTIC_MIN_INTERVAL_MS = 250;
+const TIMELINE_SCROLL_DIAGNOSTIC_MIN_DELTA_PX = 24;
+
+type TimelineScrollDiagnosticSnapshot = {
+  clientHeight: number;
+  distanceFromBottom: number;
+  scrollHeight: number;
+  scrollTop: number;
+};
+
+function collectTimelineScrollDiagnosticSnapshot(
+  element: HTMLElement,
+): TimelineScrollDiagnosticSnapshot {
+  const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
+  return {
+    clientHeight: Math.round(element.clientHeight),
+    distanceFromBottom: Math.round(distanceFromBottom),
+    scrollHeight: Math.round(element.scrollHeight),
+    scrollTop: Math.round(element.scrollTop),
+  };
+}
 
 type MessagesTimelineProps = {
   activeCollaborationModeId: string | null;
@@ -348,6 +370,15 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     at: number;
     signature: string;
   }>({ at: 0, signature: "" });
+  const lastTimelineScrollDiagnosticRef = useRef<{
+    at: number;
+    eventKind: string;
+    snapshot: TimelineScrollDiagnosticSnapshot | null;
+  }>({ at: 0, eventKind: "", snapshot: null });
+  const retainedHydratedTimelineRowKeysRef = useRef<{
+    scopeKey: string;
+    rowKeys: Set<string>;
+  }>({ scopeKey: "", rowKeys: new Set() });
   const lastVirtualizedTimelineScopeResetRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -519,6 +550,90 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     () => virtualTimelineRows.map((row) => row.key),
     [virtualTimelineRows],
   );
+
+  useEffect(() => {
+    const scrollElement = scrollElementRef.current;
+    if (!scrollElement) {
+      return undefined;
+    }
+
+    const appendScrollDiagnostic = (
+      eventKind: "scroll" | "scrollend" | "wheel",
+      extra: Record<string, unknown> = {},
+    ) => {
+      const snapshot = collectTimelineScrollDiagnosticSnapshot(scrollElement);
+      const previous = lastTimelineScrollDiagnosticRef.current;
+      const now = Date.now();
+      const previousSnapshot = previous.snapshot;
+      const scrollTopDelta = previousSnapshot
+        ? snapshot.scrollTop - previousSnapshot.scrollTop
+        : 0;
+      const distanceFromBottomDelta = previousSnapshot
+        ? snapshot.distanceFromBottom - previousSnapshot.distanceFromBottom
+        : 0;
+      const isMeaningfulDelta =
+        Math.abs(scrollTopDelta) >= TIMELINE_SCROLL_DIAGNOSTIC_MIN_DELTA_PX ||
+        Math.abs(distanceFromBottomDelta) >= TIMELINE_SCROLL_DIAGNOSTIC_MIN_DELTA_PX ||
+        eventKind === "wheel" ||
+        previous.eventKind !== eventKind;
+      if (
+        !isMeaningfulDelta ||
+        now - previous.at < TIMELINE_SCROLL_DIAGNOSTIC_MIN_INTERVAL_MS
+      ) {
+        return;
+      }
+      lastTimelineScrollDiagnosticRef.current = { at: now, eventKind, snapshot };
+      appendRendererDiagnostic("messages/timeline-scroll-behavior", {
+        component: "MessagesTimeline",
+        eventKind,
+        threadId,
+        workspaceId: workspaceId ?? null,
+        isThinking,
+        isWorking,
+        shouldVirtualizeTimeline,
+        rowCount: timelineProjectionRows.length,
+        renderWeight: timelineRenderWeightSummary.renderWeight,
+        virtualItemCount: virtualTimelineRowKeys.length,
+        activeLiveRowCount: activeLiveTimelineRowKeys.length,
+        scrollTopDelta: Math.round(scrollTopDelta),
+        distanceFromBottomDelta: Math.round(distanceFromBottomDelta),
+        ...snapshot,
+        ...extra,
+      });
+    };
+
+    const handleScroll = () => appendScrollDiagnostic("scroll");
+    const handleScrollEnd = () => appendScrollDiagnostic("scrollend");
+    const handleWheel = (event: WheelEvent) => {
+      appendScrollDiagnostic("wheel", {
+        deltaMode: event.deltaMode,
+        deltaX: Math.round(event.deltaX),
+        deltaY: Math.round(event.deltaY),
+      });
+    };
+
+    scrollElement.addEventListener("scroll", handleScroll, { passive: true });
+    scrollElement.addEventListener("wheel", handleWheel, { passive: true });
+    scrollElement.addEventListener("scrollend", handleScrollEnd, { passive: true });
+    appendScrollDiagnostic("scroll", { reason: "listener-attached" });
+    return () => {
+      scrollElement.removeEventListener("scroll", handleScroll);
+      scrollElement.removeEventListener("wheel", handleWheel);
+      scrollElement.removeEventListener("scrollend", handleScrollEnd);
+    };
+  }, [
+    activeLiveTimelineRowKeys.length,
+    isThinking,
+    isWorking,
+    scrollElementRef,
+    shouldVirtualizeTimeline,
+    threadId,
+    timelineProjectionRows.length,
+    timelineRenderWeightSummary.renderWeight,
+    virtualTimelineRowKeys.length,
+    workspaceId,
+  ]);
+
   const visibleTimelineRowKeySet = useMemo(
     () => new Set(virtualTimelineRowKeys.map(String)),
     [virtualTimelineRowKeys],
@@ -553,6 +668,15 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       presentationProfile?.preferCommandSummary,
     ],
   );
+  const retainedHydratedTimelineRowScopeKey = `${virtualizedTimelineScopeKey} ${timelineRendererOptionsKey}`;
+  const retainedHydratedTimelineRowKeys = useMemo(() => {
+    const retained = retainedHydratedTimelineRowKeysRef.current;
+    if (retained.scopeKey !== retainedHydratedTimelineRowScopeKey) {
+      retained.scopeKey = retainedHydratedTimelineRowScopeKey;
+      retained.rowKeys = new Set();
+    }
+    return retained.rowKeys;
+  }, [retainedHydratedTimelineRowScopeKey]);
   const timelineRowHydrationStates = useMemo(
     () => {
       if (isThinking || isWorking) {
@@ -566,15 +690,22 @@ export const MessagesTimeline = memo(function MessagesTimeline({
           hydrationReason: "not-heavy" as const,
         }));
       }
-      return deriveTimelineRowHydrationStates({
+      const nextStates = deriveTimelineRowHydrationStates({
         rows: timelineProjectionRows,
         shouldVirtualize: shouldDeferHeavyTimelineRows,
         visibleRowKeys: shouldVirtualizeTimeline ? visibleTimelineRowKeySet : new Set<string>(),
         activeRowKeys: activeLiveTimelineRowKeySet,
+        retainedHydratedRowKeys: retainedHydratedTimelineRowKeys,
         anchorTargetRowKey: pendingJumpRowKey,
         detailHydrationRequested: conversationDetailHydrationRequested,
         rendererOptionsKey: timelineRendererOptionsKey,
       });
+      for (const state of nextStates) {
+        if (state.heavy && state.mode === "hydrated") {
+          retainedHydratedTimelineRowKeys.add(state.rowKey);
+        }
+      }
+      return nextStates;
     },
     [
       activeLiveTimelineRowKeySet,
@@ -582,6 +713,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       isThinking,
       isWorking,
       pendingJumpRowKey,
+      retainedHydratedTimelineRowKeys,
       shouldDeferHeavyTimelineRows,
       shouldVirtualizeTimeline,
       timelineRendererOptionsKey,
@@ -1061,6 +1193,17 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         renderItem.role === "assistant"
           ? messageCopyTextByAssistantId.get(renderItem.id) ?? renderItem.text
           : renderItem.text;
+      const userCopyText =
+        renderItem.role === "user"
+          ? resolveUserMessagePresentation({
+              text: renderItem.text,
+              selectedAgentName: renderItem.selectedAgentName,
+              selectedAgentIcon: renderItem.selectedAgentIcon,
+              enableCollaborationBadge: activeEngine === "codex",
+            }).displayText
+          : "";
+      const shouldRenderUserActions =
+        renderItem.role === "user" && userCopyText.trim().length > 0;
       const shouldRenderForkAction =
         isLatestFinalAssistant &&
         Boolean(actionTargetUserMessageId) &&
@@ -1112,6 +1255,30 @@ export const MessagesTimeline = memo(function MessagesTimeline({
                 <span className="codicon codicon-history" aria-hidden />
               </button>
             ) : null}
+          </div>
+        );
+      };
+      const renderUserActions = () => {
+        if (!shouldRenderUserActions) {
+          return null;
+        }
+        return (
+          <div
+            className="message-action-bar message-user-bubble-actions"
+            aria-label={t("messages.messageActions")}
+          >
+            <button
+              type="button"
+              className={`ghost message-action-button message-copy-button${isCopied ? " is-copied" : ""}`}
+              onClick={() => handleCopyMessage(renderItem, userCopyText)}
+              aria-label={t("messages.copyUserMessage")}
+              title={t("messages.copyUserMessage")}
+            >
+              <span className="message-copy-icon" aria-hidden>
+                <Copy className="message-copy-icon-copy" size={12} />
+                <Check className="message-copy-icon-check" size={12} />
+              </span>
+            </button>
           </div>
         );
       };
@@ -1183,6 +1350,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
                   ? latestRetryMessage
                   : null
               }
+              userActionNode={renderUserActions()}
               codeBlockCopyUseModifier={codeBlockCopyUseModifier}
               onOpenFileLink={openFileLink}
               onOpenFileLinkMenu={showFileLinkMenu}
