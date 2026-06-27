@@ -722,6 +722,61 @@ async fn send_message_batches_windows_text_deltas_without_delaying_other_platfor
 }
 
 #[tokio::test]
+async fn send_message_emits_text_delta_before_process_completion() {
+    #[cfg(windows)]
+    let script_body = concat!(
+        "@echo off\r\n",
+        "echo {\"type\":\"assistant_message_delta\",\"delta\":\"live\"}\r\n",
+        "powershell -NoProfile -Command \"Start-Sleep -Milliseconds 3000\"\r\n",
+        "echo {\"type\":\"assistant_message_delta\",\"delta\":\" tail\"}\r\n",
+        "echo {\"type\":\"result\",\"session_id\":\"11111111-1111-4111-8111-111111111111\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"live tail\"}]}}\r\n",
+        "exit /b 0\r\n"
+    );
+    #[cfg(not(windows))]
+    let script_body = concat!(
+        "#!/bin/sh\n",
+        "printf '%s\\n' '{\"type\":\"assistant_message_delta\",\"delta\":\"live\"}'\n",
+        "sleep 3\n",
+        "printf '%s\\n' '{\"type\":\"assistant_message_delta\",\"delta\":\" tail\"}'\n",
+        "printf '%s\\n' '{\"type\":\"result\",\"session_id\":\"11111111-1111-4111-8111-111111111111\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"live tail\"}]}}'\n"
+    );
+    let (root, workspace_path, script_path) = create_fake_claude_script(script_body);
+    let session = test_session_with_bin(workspace_path, script_path);
+    let mut receiver = session.subscribe();
+    let mut params = SendMessageParams::default();
+    params.text = "hello".to_string();
+
+    let send_future = session.send_message(params, "turn-live-before-exit");
+    tokio::pin!(send_future);
+
+    let first_text = loop {
+        tokio::select! {
+            result = &mut send_future => {
+                panic!("send_message completed before a live text delta was observed: {:?}", result);
+            }
+            event = receiver.recv() => {
+                let event = event.expect("receive claude event before completion");
+                if let EngineEvent::TextDelta { text, .. } = event.event {
+                    break text;
+                }
+            }
+            _ = tokio::time::sleep(std::time::Duration::from_millis(1_500)) => {
+                panic!("expected a text delta before the delayed fake Claude process completed");
+            }
+        }
+    };
+
+    assert_eq!(first_text, "live");
+
+    let response = send_future
+        .await
+        .expect("fake claude stream should eventually complete");
+    let _ = std::fs::remove_dir_all(&root);
+
+    assert_eq!(response, "live tail");
+}
+
+#[tokio::test]
 async fn send_message_treats_stream_result_as_raw_and_emits_single_final_completion() {
     let stream_lines = [
         r#"{"type":"result","session_id":"11111111-1111-4111-8111-111111111111","message":{"content":[{"type":"text","text":"final answer"}]}}"#,
