@@ -503,6 +503,22 @@ export function useLayoutNodes(input: LayoutNodesOptions): LayoutNodesResult {
       options.gitStatus.unstagedFiles,
     ],
   );
+  const canonicalGitPanelTotals = useMemo(
+    () => ({
+      additions: [
+        ...canonicalGitPanelChanges.stagedFiles,
+        ...canonicalGitPanelChanges.unstagedFiles,
+      ].reduce((total, file) => total + file.additions, 0),
+      deletions: [
+        ...canonicalGitPanelChanges.stagedFiles,
+        ...canonicalGitPanelChanges.unstagedFiles,
+      ].reduce((total, file) => total + file.deletions, 0),
+    }),
+    [
+      canonicalGitPanelChanges.stagedFiles,
+      canonicalGitPanelChanges.unstagedFiles,
+    ],
+  );
   const onGitDiffListViewChange = options.onGitDiffListViewChange;
   const onSelectDiff = options.onSelectDiff;
   const handleOpenDiffPath = useCallback(
@@ -1630,8 +1646,8 @@ export function useLayoutNodes(input: LayoutNodesOptions): LayoutNodesResult {
           branchName={
             options.gitStatus.branchName || t("workspace.unknownBranch")
           }
-          totalAdditions={options.gitStatus.totalAdditions}
-          totalDeletions={options.gitStatus.totalDeletions}
+          totalAdditions={canonicalGitPanelTotals.additions}
+          totalDeletions={canonicalGitPanelTotals.deletions}
           fileStatus={options.fileStatus}
           diffViewStyle={options.gitDiffViewStyle}
           onDiffViewStyleChange={options.onGitDiffViewStyleChange}

@@ -1563,25 +1563,19 @@ pub(crate) async fn skills_list(
 
     // Local mode: try local file scanning first
     let custom_skill_roots_vec = custom_skill_roots.unwrap_or_default();
+    let resource_dir = app.path().resource_dir().ok();
     match crate::skills::skills_list_local_for_workspace(
         &*state,
         &workspace_id,
         custom_skill_roots_vec.clone(),
+        resource_dir,
     )
     .await
     {
         Ok(entries) => {
             let skills_json: Vec<Value> = entries
                 .into_iter()
-                .map(|entry| {
-                    json!({
-                        "name": entry.name,
-                        "path": entry.path,
-                        "source": entry.source,
-                        "description": entry.description,
-                        "enabled": true,
-                    })
-                })
+                .map(crate::skills::skill_entry_to_json)
                 .collect();
             Ok(json!(skills_json))
         }

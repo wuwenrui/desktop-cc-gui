@@ -75,23 +75,85 @@ struct LockFile {
     skills: HashMap<String, LockEntry>,
 }
 
-/// Find the curated-skills resource directory.
-///
-/// Production: `app.path().resource_dir().join("curated-skills")` (populated by
-/// `tauri build` via `bundle.resources`).
-/// Development: `<repo>/src-tauri/resources/curated-skills/` (since dev builds
-/// don't run the bundler).
-pub(crate) fn resolve_curated_skills_dir(resource_dir: Option<&Path>) -> PathBuf {
+fn curated_resource_roots(resource_dir: Option<&Path>) -> Vec<PathBuf> {
+    let mut roots = Vec::new();
     if let Some(root) = resource_dir {
-        let candidate = root.join("curated-skills");
+        roots.push(root.to_path_buf());
+    }
+    roots.extend(default_packaged_resource_dir_candidates());
+    roots
+}
+
+fn default_packaged_resource_dir_candidates() -> Vec<PathBuf> {
+    let Ok(exe_path) = std::env::current_exe() else {
+        return Vec::new();
+    };
+    let Some(exe_dir) = exe_path.parent() else {
+        return Vec::new();
+    };
+    let mut candidates = Vec::new();
+    if cfg!(target_os = "macos") {
+        if let Some(contents_dir) = exe_dir.parent() {
+            candidates.push(contents_dir.join("Resources"));
+        }
+    }
+    candidates.push(exe_dir.to_path_buf());
+    candidates
+}
+
+fn default_repo_root() -> PathBuf {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    manifest_dir
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| manifest_dir.clone())
+}
+
+fn default_source_asset_base() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+}
+
+fn default_lock_path(resource_dir: Option<&Path>) -> PathBuf {
+    for root in curated_resource_roots(resource_dir) {
+        let candidate = root.join("skills-lock.json");
         if candidate.exists() {
             return candidate;
         }
     }
-    // Dev fallback: walk up from CARGO_MANIFEST_DIR to the repo root, then
-    // back down into src-tauri/resources/curated-skills.
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    manifest_dir.join("resources").join("curated-skills")
+    default_repo_root().join("skills-lock.json")
+}
+
+fn resolve_curated_asset_path(
+    resource_dir: Option<&Path>,
+    asset_base: &Path,
+    relative_path: &str,
+) -> Option<PathBuf> {
+    let relative = Path::new(relative_path);
+    for root in curated_resource_roots(resource_dir) {
+        let direct = root.join(relative);
+        if direct.exists() {
+            return Some(direct);
+        }
+        if let Ok(stripped) = relative.strip_prefix("resources/curated-skills") {
+            let bundled = root.join("curated-skills").join(stripped);
+            if bundled.exists() {
+                return Some(bundled);
+            }
+        }
+        if let Ok(stripped) = relative.strip_prefix("curated-skills") {
+            let bundled = root.join("curated-skills").join(stripped);
+            if bundled.exists() {
+                return Some(bundled);
+            }
+        }
+    }
+
+    let source_path = asset_base.join(relative);
+    if source_path.exists() {
+        return Some(source_path);
+    }
+
+    None
 }
 
 /// Load all curated skills declared as `kind: "curated"` in `skills-lock.json`.
@@ -114,18 +176,13 @@ pub(crate) fn load_curated_skills_with_base(
     lock_path: Option<&Path>,
     asset_base_dir: Option<&Path>,
 ) -> Result<Vec<CuratedSkillEntry>, String> {
-    let root = resolve_curated_skills_dir(resource_dir);
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let lock_path = match lock_path {
         Some(p) => p.to_path_buf(),
-        None => manifest_dir
-            .parent()
-            .map(|p| p.join("skills-lock.json"))
-            .unwrap_or_else(|| manifest_dir.join("skills-lock.json")),
+        None => default_lock_path(resource_dir),
     };
     let asset_base: PathBuf = asset_base_dir
         .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| manifest_dir.clone());
+        .unwrap_or_else(default_source_asset_base);
 
     let raw = fs::read_to_string(&lock_path).map_err(|e| {
         format!(
@@ -164,7 +221,13 @@ pub(crate) fn load_curated_skills_with_base(
             .ok_or_else(|| format!("curated skill `{}` missing `metadataPath`", name))?;
         validate_lock_relative_path(&name, "metadataPath", metadata_path_rel)?;
 
-        let full_meta = asset_base.join(metadata_path_rel);
+        let full_meta = resolve_curated_asset_path(resource_dir, &asset_base, metadata_path_rel)
+            .ok_or_else(|| {
+                format!(
+                    "could not find metadata.json for `{}` at `{}` in bundled resources or source tree",
+                    name, metadata_path_rel
+                )
+            })?;
         let meta_raw = fs::read_to_string(&full_meta).map_err(|e| {
             format!(
                 "could not read metadata.json for `{}` at {}: {}",
@@ -282,14 +345,10 @@ pub(crate) fn load_curated_skills_with_base(
             }
         }
 
-        // The asset might live in the bundled resource dir (production) or in
-        // the source tree (development). Check both.
-        let bundled_path = root.join(asset_path_rel);
-        let source_path = asset_base.join(asset_path_rel);
-        let body_path = if bundled_path.exists() {
-            Some(bundled_path)
-        } else if source_path.exists() {
-            Some(source_path)
+        let body_path = if let Some(path) =
+            resolve_curated_asset_path(resource_dir, &asset_base, asset_path_rel)
+        {
+            Some(path)
         } else {
             log::warn!(
                 "curated skill `{}` assetPath `{}` not found in resource dir or source tree",
@@ -487,11 +546,18 @@ pub(crate) fn get_curated_skill_body(entry: &CuratedSkillEntry) -> Result<String
 pub(crate) fn list_enabled_curated_skill_bodies(
     app_settings: &AppSettings,
 ) -> Vec<(String, String)> {
+    list_enabled_curated_skill_bodies_with_resource_dir(None, app_settings)
+}
+
+pub(crate) fn list_enabled_curated_skill_bodies_with_resource_dir(
+    resource_dir: Option<&Path>,
+    app_settings: &AppSettings,
+) -> Vec<(String, String)> {
     let enabled_ids = normalized_enabled_curated_skill_ids(&app_settings.enabled_curated_skill_ids);
     if enabled_ids.is_empty() {
         return Vec::new();
     }
-    let entries = match load_curated_skills(None, None) {
+    let entries = match load_curated_skills(resource_dir, None) {
         Ok(v) => v,
         Err(err) => {
             log::warn!("failed to load curated skills for body list: {}", err);
@@ -547,16 +613,23 @@ pub(crate) fn validate_icon_name(icon: &str) -> Result<(), String> {
 /// Build the JSON value that `get_curated_skills` returns to the frontend.
 /// Combines the bundled curated entries with each entry's `enabled` flag
 /// computed from `AppSettings.enabled_curated_skill_ids`.
-fn build_curated_skills_json(app_settings: &AppSettings) -> Result<Vec<serde_json::Value>, String> {
+fn build_curated_skills_json(
+    resource_dir: Option<&Path>,
+    app_settings: &AppSettings,
+) -> Result<Vec<serde_json::Value>, String> {
     let enabled_ids_vec =
         normalized_enabled_curated_skill_ids(&app_settings.enabled_curated_skill_ids);
     let enabled_ids: std::collections::HashSet<&str> =
         enabled_ids_vec.iter().map(|s| s.as_str()).collect();
-    let entries = load_curated_skills(None, None)?;
+    let entries = load_curated_skills(resource_dir, None)?;
     Ok(entries
         .into_iter()
         .map(|e| curated_skill_entry_to_json(&e, enabled_ids.contains(e.name.as_str())))
         .collect())
+}
+
+fn app_resource_dir(app: &tauri::AppHandle) -> Option<PathBuf> {
+    app.path().resource_dir().ok()
 }
 
 fn curated_skill_entry_to_json(e: &CuratedSkillEntry, enabled: bool) -> serde_json::Value {
@@ -583,9 +656,11 @@ fn curated_skill_entry_to_json(e: &CuratedSkillEntry, enabled: bool) -> serde_js
 #[tauri::command]
 pub(crate) async fn get_curated_skills(
     state: tauri::State<'_, crate::state::AppState>,
+    app: tauri::AppHandle,
 ) -> Result<Vec<serde_json::Value>, String> {
     let app_settings = state.app_settings.lock().await.clone();
-    build_curated_skills_json(&app_settings)
+    let resource_dir = app_resource_dir(&app);
+    build_curated_skills_json(resource_dir.as_deref(), &app_settings)
 }
 
 #[tauri::command]
@@ -601,9 +676,14 @@ pub(crate) async fn get_enabled_curated_skill_ids(
 #[tauri::command]
 pub(crate) async fn get_curated_skill_bodies(
     state: tauri::State<'_, crate::state::AppState>,
+    app: tauri::AppHandle,
 ) -> Result<Vec<(String, String)>, String> {
     let app_settings = state.app_settings.lock().await.clone();
-    Ok(list_enabled_curated_skill_bodies(&app_settings))
+    let resource_dir = app_resource_dir(&app);
+    Ok(list_enabled_curated_skill_bodies_with_resource_dir(
+        resource_dir.as_deref(),
+        &app_settings,
+    ))
 }
 
 /// Toggle a curated skill on/off. The returned `AppSettings` is the new
@@ -634,7 +714,8 @@ pub(crate) async fn set_curated_skill_enabled(
         return Err("curated skill id is required".to_string());
     }
     validate_curated_skill_id(&skill_id)?;
-    let known_entries = load_curated_skills(None, None)?;
+    let resource_dir = app_resource_dir(window.app_handle());
+    let known_entries = load_curated_skills(resource_dir.as_deref(), None)?;
     if !known_entries.iter().any(|entry| entry.name == skill_id) {
         return Err(format!("unknown curated skill id `{}`", skill_id));
     }
@@ -823,6 +904,29 @@ mod tests {
         fs::write(lock_path, serde_json::to_string_pretty(&lock).unwrap()).expect("write lock");
     }
 
+    fn write_repo_style_lock(lock_path: &Path, entries: &[String]) {
+        let mut skills = serde_json::Map::new();
+        for name in entries {
+            skills.insert(
+                name.clone(),
+                serde_json::json!({
+                    "kind": "curated",
+                    "assetPath": format!("resources/curated-skills/{name}/SKILL.md"),
+                    "metadataPath": format!("resources/curated-skills/{name}/metadata.json"),
+                    "tokenEstimate": 100u32,
+                    "minClientVersion": app_test_version(),
+                    "displayName": name,
+                    "version": "1.0.0",
+                }),
+            );
+        }
+        let lock = serde_json::json!({
+            "version": 2,
+            "skills": serde_json::Value::Object(skills)
+        });
+        fs::write(lock_path, serde_json::to_string_pretty(&lock).unwrap()).expect("write lock");
+    }
+
     /// Test-only: read the product version from the compiled-in tauri.conf.json
     /// so the curated-skill fixtures can match the runtime gate.
     fn app_test_version() -> &'static str {
@@ -937,6 +1041,36 @@ mod tests {
         assert!(names.contains(&"skill-b"));
 
         let _ = fs::remove_dir_all(skills_root);
+    }
+
+    #[test]
+    fn load_curated_skills_reads_packaged_resource_layout() {
+        let resource_root = unique_temp_dir("packaged-layout");
+        let packaged_skills_root = resource_root.join("curated-skills");
+        fs::create_dir_all(&packaged_skills_root).expect("create packaged skills root");
+        write_skill(
+            &packaged_skills_root,
+            "skill-a",
+            "packaged body",
+            "MIT",
+            "code-style",
+        );
+        let lock_path = resource_root.join("skills-lock.json");
+        write_repo_style_lock(&lock_path, &["skill-a".to_string()]);
+
+        let missing_source_base = resource_root.join("missing-source-tree");
+        let entries =
+            load_curated_skills_with_base(Some(&resource_root), None, Some(&missing_source_base))
+                .expect("load packaged resources");
+
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].name, "skill-a");
+        assert_eq!(
+            get_curated_skill_body(&entries[0]).expect("body"),
+            "packaged body",
+        );
+
+        let _ = fs::remove_dir_all(resource_root);
     }
 
     #[test]

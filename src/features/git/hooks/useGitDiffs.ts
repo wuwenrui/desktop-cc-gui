@@ -19,11 +19,13 @@ export function useGitDiffs(
   activeWorkspace: WorkspaceInfo | null,
   files: GitFileStatus[],
   enabled: boolean,
+  isGitRepository = true,
 ) {
   const [state, setState] = useState<GitDiffState>(emptyState);
   const requestIdRef = useRef(0);
   const workspaceIdRef = useRef<string | null>(activeWorkspace?.id ?? null);
   const cachedDiffsRef = useRef<Map<string, GitFileDiff[]>>(new Map());
+  const nonGitWorkspaceIdsRef = useRef<Set<string>>(new Set());
 
   const fileKey = useMemo(
     () =>
@@ -43,6 +45,11 @@ export function useGitDiffs(
       return;
     }
     const workspaceId = activeWorkspace.id;
+    if (!isGitRepository || nonGitWorkspaceIdsRef.current.has(workspaceId)) {
+      cachedDiffsRef.current.set(workspaceId, []);
+      setState(emptyState);
+      return;
+    }
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
     setState((prev) => ({ ...prev, isLoading: true, error: null }));
@@ -56,21 +63,32 @@ export function useGitDiffs(
       }
       setState({ diffs, isLoading: false, error: null });
       cachedDiffsRef.current.set(workspaceId, diffs);
+      nonGitWorkspaceIdsRef.current.delete(workspaceId);
     } catch (error) {
-      console.error("Failed to load git diffs", error);
+      const message = error instanceof Error ? error.message : String(error);
+      const isNonGitRepository = message
+        .toLowerCase()
+        .includes("not a git repository");
       if (
         requestIdRef.current !== requestId ||
         workspaceIdRef.current !== workspaceId
       ) {
         return;
       }
+      if (isNonGitRepository) {
+        nonGitWorkspaceIdsRef.current.add(workspaceId);
+        cachedDiffsRef.current.set(workspaceId, []);
+        setState(emptyState);
+        return;
+      }
+      console.error("Failed to load git diffs", error);
       setState({
         diffs: [],
         isLoading: false,
-        error: error instanceof Error ? error.message : String(error),
+        error: message,
       });
     }
-  }, [activeWorkspace]);
+  }, [activeWorkspace, isGitRepository]);
 
   useEffect(() => {
     const workspaceId = activeWorkspace?.id ?? null;
@@ -96,18 +114,35 @@ export function useGitDiffs(
   }, [activeWorkspace?.id]);
 
   useEffect(() => {
+    if (activeWorkspace && !isGitRepository) {
+      nonGitWorkspaceIdsRef.current.add(activeWorkspace.id);
+      cachedDiffsRef.current.set(activeWorkspace.id, []);
+      setState(emptyState);
+    }
+  }, [activeWorkspace, isGitRepository]);
+
+  useEffect(() => {
     if (!enabled) {
       return;
     }
     void refresh();
   }, [enabled, fileKey, refresh]);
 
+  const isCurrentWorkspaceNonGit =
+    !isGitRepository ||
+    (activeWorkspace
+      ? nonGitWorkspaceIdsRef.current.has(activeWorkspace.id)
+      : false);
+
   const orderedDiffs = useMemo(() => {
+    if (isCurrentWorkspaceNonGit) {
+      return [];
+    }
     return buildCanonicalGitChanges({
       files,
       diffs: state.diffs,
     }).viewerDiffs;
-  }, [files, state.diffs]);
+  }, [files, isCurrentWorkspaceNonGit, state.diffs]);
 
   return {
     diffs: orderedDiffs,

@@ -42,6 +42,16 @@ pub(crate) struct SkillEntry {
     pub(crate) enabled: bool,
 }
 
+pub(crate) fn skill_entry_to_json(entry: SkillEntry) -> serde_json::Value {
+    serde_json::json!({
+        "name": entry.name,
+        "path": entry.path,
+        "source": entry.source,
+        "description": entry.description,
+        "enabled": entry.enabled,
+    })
+}
+
 #[allow(dead_code)]
 fn default_skill_entry_enabled() -> bool {
     // Referenced by the `#[serde(default = "default_skill_entry_enabled")]`
@@ -476,6 +486,7 @@ pub(crate) async fn skills_list_local_core(
         workspace_id,
         custom_skill_roots,
         None,
+        None,
     )
     .await
 }
@@ -486,14 +497,17 @@ pub(crate) async fn skills_list_local_core(
 /// asset is missing are surfaced with `enabled: false` and a stub path so
 /// the UI can still render them (and surface a warning). Network requests
 /// are never issued.
-fn build_curated_skill_entries(app_settings: &crate::types::AppSettings) -> Vec<SkillEntry> {
+fn build_curated_skill_entries(
+    resource_dir: Option<&Path>,
+    app_settings: &crate::types::AppSettings,
+) -> Vec<SkillEntry> {
     use std::collections::HashSet;
     let enabled_ids: HashSet<&str> = app_settings
         .enabled_curated_skill_ids
         .iter()
         .map(|s| s.as_str())
         .collect();
-    let entries = match crate::curated_skills::load_curated_skills(None, None) {
+    let entries = match crate::curated_skills::load_curated_skills(resource_dir, None) {
         Ok(v) => v,
         Err(err) => {
             log::warn!("curated skills load failed: {}", err);
@@ -532,6 +546,7 @@ pub(crate) async fn skills_list_local_core_with_settings(
     workspace_id: &str,
     custom_skill_roots: Vec<String>,
     app_settings: Option<&crate::types::AppSettings>,
+    resource_dir: Option<PathBuf>,
 ) -> Result<Vec<SkillEntry>, SkillScanError> {
     let custom_skill_roots = normalize_custom_skill_roots(custom_skill_roots);
     let (
@@ -644,7 +659,7 @@ pub(crate) async fn skills_list_local_core_with_settings(
         };
 
         let curated_skills = match app_settings_snapshot {
-            Some(settings) => build_curated_skill_entries(&settings),
+            Some(settings) => build_curated_skill_entries(resource_dir.as_deref(), &settings),
             None => Vec::new(),
         };
 
@@ -675,6 +690,7 @@ pub(crate) async fn skills_list_local_for_workspace(
     state: &AppState,
     workspace_id: &str,
     custom_skill_roots: Vec<String>,
+    resource_dir: Option<PathBuf>,
 ) -> Result<Vec<SkillEntry>, SkillScanError> {
     let workspaces = state.workspaces.lock().await;
     let app_settings = state.app_settings.lock().await.clone();
@@ -684,6 +700,7 @@ pub(crate) async fn skills_list_local_for_workspace(
         workspace_id,
         custom_skill_roots,
         Some(&app_settings),
+        resource_dir,
     )
     .await
 }
@@ -962,5 +979,24 @@ mod tests {
         let _ = fs::remove_dir_all(home);
         let _ = fs::remove_dir_all(external_cache);
         let _ = fs::remove_dir_all(external_skills);
+    }
+
+    #[test]
+    fn skill_entry_to_json_preserves_disabled_state() {
+        let entry = SkillEntry {
+            name: "lazy-senior-dev".to_string(),
+            path: "/app/curated-skills/lazy-senior-dev/SKILL.md".to_string(),
+            source: crate::curated_skills::SKILL_SOURCE_CURATED_BUNDLED.to_string(),
+            description: Some("curated".to_string()),
+            enabled: false,
+        };
+
+        let value = skill_entry_to_json(entry);
+
+        assert_eq!(value.get("enabled").and_then(|v| v.as_bool()), Some(false));
+        assert_eq!(
+            value.get("name").and_then(|v| v.as_str()),
+            Some("lazy-senior-dev")
+        );
     }
 }

@@ -151,6 +151,30 @@ function copyStatusFile(file: GitFileStatus): GitFileStatus | null {
   };
 }
 
+function mergeStatusFileWithDiffStats(
+  file: GitFileStatus,
+  diffByPath: Map<string, GitFileDiff>,
+  eligibleDiffStatPaths?: Set<string>,
+): GitFileStatus {
+  const normalizedPath = normalizeGitChangePath(file.path);
+  if (eligibleDiffStatPaths && !eligibleDiffStatPaths.has(normalizedPath)) {
+    return file;
+  }
+  const diff = diffByPath.get(normalizedPath);
+  if (!diff || file.additions + file.deletions > 0) {
+    return file;
+  }
+  const stats = countDiffStats(diff.diff);
+  if (stats.additions + stats.deletions === 0) {
+    return file;
+  }
+  return {
+    ...file,
+    additions: stats.additions,
+    deletions: stats.deletions,
+  };
+}
+
 function createFallbackStatusFile(diff: GitFileDiff): GitFileStatus | null {
   if (!canCreateFallbackFromDiff(diff)) {
     return null;
@@ -208,6 +232,16 @@ function dedupeStatusFiles(files: GitFileStatus[]): GitFileStatus[] {
   return result;
 }
 
+function enrichStatusFilesWithDiffStats(
+  files: GitFileStatus[],
+  diffByPath: Map<string, GitFileDiff>,
+  eligibleDiffStatPaths?: Set<string>,
+): GitFileStatus[] {
+  return files.map((file) =>
+    mergeStatusFileWithDiffStats(file, diffByPath, eligibleDiffStatPaths),
+  );
+}
+
 export function buildCanonicalGitChanges({
   files,
   stagedFiles = [],
@@ -224,9 +258,38 @@ export function buildCanonicalGitChanges({
     }
   }
 
-  const canonicalFiles = dedupeStatusFiles(files);
-  const canonicalStagedFiles = dedupeStatusFiles(stagedFiles);
-  const canonicalUnstagedFiles = dedupeStatusFiles(unstagedFiles);
+  const canonicalFiles = enrichStatusFilesWithDiffStats(
+    dedupeStatusFiles(files),
+    diffByPath,
+  );
+  const rawCanonicalStagedFiles = dedupeStatusFiles(stagedFiles);
+  const rawCanonicalUnstagedFiles = dedupeStatusFiles(unstagedFiles);
+  const sectionPathCounts = new Map<string, number>();
+  for (const file of [...rawCanonicalStagedFiles, ...rawCanonicalUnstagedFiles]) {
+    const normalizedPath = normalizeGitChangePath(file.path);
+    if (!normalizedPath) {
+      continue;
+    }
+    sectionPathCounts.set(
+      normalizedPath,
+      (sectionPathCounts.get(normalizedPath) ?? 0) + 1,
+    );
+  }
+  const sectionDiffStatPaths = new Set(
+    Array.from(sectionPathCounts.entries())
+      .filter(([, count]) => count === 1)
+      .map(([path]) => path),
+  );
+  const canonicalStagedFiles = enrichStatusFilesWithDiffStats(
+    rawCanonicalStagedFiles,
+    diffByPath,
+    sectionDiffStatPaths,
+  );
+  const canonicalUnstagedFiles = enrichStatusFilesWithDiffStats(
+    rawCanonicalUnstagedFiles,
+    diffByPath,
+    sectionDiffStatPaths,
+  );
   const aggregateFilesByPath = new Map<string, GitFileStatus>();
 
   for (const file of [

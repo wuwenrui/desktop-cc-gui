@@ -17,6 +17,16 @@ contain `SKILL.md` and `metadata.json`. The app MUST package those resources via
 are tied to the client release version. The client MUST NOT fetch curated skill
 bodies from a remote marketplace or URL at runtime.
 
+`tauri.conf.json` MUST preserve each `<skill-id>/` directory when packaging
+curated skills. The preferred mapping is the directory mapping
+`"resources/curated-skills": "curated-skills"`; explicit per-skill directory
+mappings such as
+`"resources/curated-skills/<skill-id>": "curated-skills/<skill-id>"` are also
+valid. The app MUST NOT use the map-style glob
+`"resources/curated-skills/**/*": "curated-skills/"`, because Tauri flattens
+that glob and packaged clients lose the `<skill-id>/SKILL.md` and
+`<skill-id>/metadata.json` layout.
+
 #### Scenario: lazy-senior-dev bundled
 
 - **WHEN** the client is built
@@ -25,6 +35,26 @@ bodies from a remote marketplace or URL at runtime.
 - **AND** `metadata.json` MUST declare `name`, `displayName`, `version`,
   `description`, `icon`, `category`, `tokenEstimate`, `source`, `sourceUrl`,
   and `license`.
+
+#### Scenario: packaged resources preserve skill directory layout
+
+- **WHEN** `tauri build` packages curated skills
+- **THEN** `Contents/Resources/curated-skills/lazy-senior-dev/SKILL.md` and
+  `Contents/Resources/curated-skills/lazy-senior-dev/metadata.json` MUST exist
+  on macOS packages
+- **AND** the build MUST fail if `tauri.conf.json` maps
+  `resources/curated-skills/**/*` to `curated-skills/`.
+
+#### Scenario: runtime loader resolves packaged and source layouts
+
+- **WHEN** the client enumerates curated skills in a packaged app
+- **THEN** the loader MUST resolve `skills-lock.json` from the application
+  resource directory when present
+- **AND** repo-style lock paths such as
+  `resources/curated-skills/<skill-id>/SKILL.md` MUST resolve to packaged paths
+  under `curated-skills/<skill-id>/`
+- **AND** development/test runs MAY fall back to the source tree layout under
+  `src-tauri/resources/curated-skills/<skill-id>/`.
 
 #### Scenario: no network fetch at startup
 

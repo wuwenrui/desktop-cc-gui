@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "ccgui",
-  "version": "0.5.14",
+  "version": "0.6.0",
   "identifier": "com.zhukunpenglinyutong.ccgui",
   "build": {
     "beforeDevCommand": "node scripts/tauri-dev-frontend.mjs",
@@ -37,7 +37,7 @@
       "infoplist/**/*": "./",
       "../dist/*": "dist/",
       "../dist/assets/**/*": "dist/assets/",
-      "resources/curated-skills/**/*": "curated-skills/",
+      "resources/curated-skills": "curated-skills",
       "../skills-lock.json": "."
     },
     "macOS": {

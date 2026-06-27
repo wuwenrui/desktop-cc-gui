@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render } from "@testing-library/react";
+import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConversationItem } from "../../../types";
 import { Messages } from "./Messages";
@@ -376,7 +376,7 @@ describe("Messages user input parsing", () => {
     expect(userText?.textContent ?? "").toBe(licenseInput);
   });
 
-  it("does not show a standalone copy button for extracted user input", () => {
+  it("copies extracted user input from the user action row", async () => {
     const writeTextMock = vi.fn(async () => undefined);
     Object.defineProperty(navigator, "clipboard", {
       value: { writeText: writeTextMock },
@@ -403,8 +403,12 @@ describe("Messages user input parsing", () => {
       />,
     );
 
-    expect(container.querySelector(".message-copy-button")).toBeNull();
-    expect(writeTextMock).not.toHaveBeenCalled();
+    const copyButton = container.querySelector(".message.user .bubble .message-copy-button");
+    expect(copyButton).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(copyButton!);
+    });
+    expect(writeTextMock).toHaveBeenCalledWith(multilineInput);
   });
 
   it("hides code fallback prefix and keeps only actual user request", () => {
