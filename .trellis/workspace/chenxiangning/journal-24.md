@@ -1363,3 +1363,36 @@ Completed. Commit: `dd77ee26`.
 ### Next Steps
 
 - None - task complete
+
+
+## Session 954: 修复 Windows Codex 内置技能启动回退
+
+**Date**: 2026-06-27
+**Task**: 修复 Windows Codex 内置技能启动回退
+**Branch**: `feature/v0.6.1`
+
+### Summary
+
+Windows Codex app-server wrapper fallback 改为通过 provider/default CODEX_HOME 下的 generated profile 传递内置技能 developer_instructions，避免 .cmd/.bat wrapper 携带大 argv 导致 initialize 超时；补充 OpenSpec change 和 Rust 回归测试。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8a12f560` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
