@@ -1,5 +1,13 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConversationItem } from "../../../types";
 import {
@@ -1238,15 +1246,18 @@ describe("Messages", () => {
 
     const rail = screen.getByRole("navigation", { name: "messages.anchorNavigation" });
     expect(rail).toBeTruthy();
-    const anchorButtons = screen.getAllByRole("button", {
-      name: "messages.anchorJumpToUser",
-    });
-    expect(anchorButtons.length).toBe(2);
-    const firstAnchorButton = anchorButtons[0];
-    if (!firstAnchorButton) {
-      throw new Error("Anchor button not found");
-    }
-    fireEvent.click(firstAnchorButton);
+    // Collapsed: one dash per user message (assistant message skipped).
+    expect(rail.querySelectorAll(".messages-anchor-dash").length).toBe(2);
+
+    // Hovering the rail expands the full outline panel.
+    fireEvent.mouseEnter(rail);
+    const rows = screen.getAllByTestId("messages-anchor-row");
+    expect(rows.length).toBe(2);
+    // Each row shows the real user-message text.
+    expect(rows[0]?.textContent).toBe("first");
+    expect(rows[1]?.textContent).toBe("third");
+
+    fireEvent.click(rows[0]!);
     expect(scrollToMock).toHaveBeenCalledWith(
       expect.objectContaining({ behavior: "smooth" }),
     );
@@ -1271,9 +1282,13 @@ describe("Messages", () => {
       />,
     );
 
-    expect(screen.queryByText("history message 1")).toBeNull();
-    expect(screen.getByText("history message 3")).toBeTruthy();
-    expect(screen.getByText("history message 17")).toBeTruthy();
+    // Scope text queries to the message body: the anchor rail now also
+    // renders user-message text in its hover labels, which would
+    // otherwise make these queries match multiple elements.
+    const body = container.querySelector(".messages") as HTMLElement;
+    expect(within(body).queryByText("history message 1")).toBeNull();
+    expect(within(body).getByText("history message 3")).toBeTruthy();
+    expect(within(body).getByText("history message 17")).toBeTruthy();
 
     const indicator = container.querySelector(".messages-collapsed-indicator");
     expect(indicator).toBeTruthy();
@@ -1283,7 +1298,7 @@ describe("Messages", () => {
     }
     fireEvent.click(indicator);
 
-    expect(screen.getByText("history message 1")).toBeTruthy();
+    expect(within(body).getByText("history message 1")).toBeTruthy();
     expect(container.querySelector(".messages-collapsed-indicator")).toBeNull();
   });
 
@@ -1312,12 +1327,15 @@ describe("Messages", () => {
       />,
     );
 
+    // Scope text queries to the message body; the anchor rail labels
+    // also contain user-message text (see note above).
+    const body = container.querySelector(".messages") as HTMLElement;
     const firstIndicator = container.querySelector(".messages-collapsed-indicator");
     expect(firstIndicator).toBeTruthy();
     if (firstIndicator) {
       fireEvent.click(firstIndicator);
     }
-    expect(screen.getByText("session A message 1")).toBeTruthy();
+    expect(within(body).getByText("session A message 1")).toBeTruthy();
 
     rerender(
       <Messages
@@ -1330,7 +1348,8 @@ describe("Messages", () => {
       />,
     );
 
-    expect(screen.queryByText("session B message 1")).toBeNull();
+    const bodyAfterRerender = container.querySelector(".messages") as HTMLElement;
+    expect(within(bodyAfterRerender).queryByText("session B message 1")).toBeNull();
     const secondIndicator = container.querySelector(".messages-collapsed-indicator");
     expect(secondIndicator).toBeTruthy();
     expect(secondIndicator?.getAttribute("data-collapsed-count")).toBe("2");

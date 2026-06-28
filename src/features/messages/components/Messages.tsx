@@ -131,6 +131,26 @@ import type {
 
 const EMPTY_TASK_RUNS: NonNullable<MessagesProps["taskRuns"]> = [];
 
+const ANCHOR_TITLE_MAX_LENGTH = 60;
+
+/**
+ * Derive a short, human-readable label for an anchor dot from the raw
+ * user message text: take the first non-empty line, collapse inner
+ * whitespace, and truncate. Used for the hover tooltip + outline label
+ * on the messages anchor rail.
+ */
+function deriveAnchorTitle(text: string): string {
+  const firstLine =
+    text
+      .split("\n")
+      .map((line) => line.trim())
+      .find((line) => line.length > 0) ?? "";
+  const normalized = firstLine.replace(/\s+/g, " ");
+  return normalized.length > ANCHOR_TITLE_MAX_LENGTH
+    ? `${normalized.slice(0, ANCHOR_TITLE_MAX_LENGTH)}…`
+    : normalized;
+}
+
 export const Messages = memo(function Messages({
   items: legacyItems,
   threadId: legacyThreadId,
@@ -1558,15 +1578,11 @@ export const Messages = memo(function Messages({
     if (!messageItems.length) {
       return [];
     }
-    return messageItems.map((item, index) => {
-      const position =
-        messageItems.length === 1 ? 0.5 : 0.04 + (index / (messageItems.length - 1)) * 0.92;
-      return {
-        id: item.id,
-        role: item.role,
-        position,
-      };
-    });
+    return messageItems.map((item) => ({
+      id: item.id,
+      role: item.role,
+      title: deriveAnchorTitle(item.text),
+    }));
   }, [timelinePresentationItems]);
   const suppressedUserNoteCardContextMessageIds = useMemo(
     () => buildSuppressedUserNoteCardContextMessageIdSet(timelinePresentationItems),
@@ -2119,8 +2135,7 @@ export const Messages = memo(function Messages({
         activeAnchorId={activeAnchorId}
         anchors={messageAnchors}
         anchorNavigationLabel={t("messages.anchorNavigation")}
-        getJumpLabel={(index) => t("messages.anchorJumpToUser", { index: index + 1 })}
-        getTitle={(index) => t("messages.anchorUserTitle", { index: index + 1 })}
+        getFallbackTitle={(index) => t("messages.anchorUserTitle", { index: index + 1 })}
         onScrollToAnchor={requestScrollToAnchor}
       />
       <div

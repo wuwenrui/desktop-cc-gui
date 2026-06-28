@@ -339,7 +339,7 @@
  * 中间也清晰）；此处只补间距、字号与 muted 文字，无图标、无彩色。
  */
 .messages-turn-boundary {
-  margin: 14px 0 10px;
+  margin: 25px 0;
   gap: 8px;
   font-size: var(--message-meta-font-size);
   letter-spacing: 0.03em;
@@ -377,7 +377,7 @@
 }
 
 .messages-reasoning-boundary {
-  margin-bottom: 8px;
+  margin-bottom: 25px;
 }
 
 .message-provenance-row {
@@ -413,7 +413,7 @@
 }
 
 .messages-final-boundary {
-  margin-top: 10px;
+  margin-top: 25px;
 }
 
 .main .messages {

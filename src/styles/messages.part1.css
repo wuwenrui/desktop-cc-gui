@@ -253,12 +253,21 @@
   );
 }
 
+/* 复制按钮浮动到气泡右下角，脱离 grid 文档流(不再独占一行)，默认隐藏、悬停气泡时淡入 */
 .message-user-bubble-actions {
-  justify-self: end;
-  min-height: 18px;
-  margin-right: -4px;
-  margin-bottom: -5px;
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
   z-index: 2;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.message.user .bubble:hover .message-user-bubble-actions,
+.message-user-bubble-actions:focus-within {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .message.user .message-action-button {
