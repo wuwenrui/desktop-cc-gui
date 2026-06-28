@@ -369,8 +369,14 @@
 }
 
 :root {
-  --message-codeblock-bg: color-mix(in srgb, var(--surface-command) 92%, var(--surface-card) 8%);
-  --message-codeblock-header-bg: color-mix(in srgb, var(--surface-control) 88%, var(--surface-card) 12%);
+  /* shadcn bg-muted — soft grey card surface, header shares it (seamless). */
+  --message-codeblock-bg: var(--muted);
+  --message-codeblock-header-bg: var(--message-codeblock-bg);
+  /* A faint hairline under the header, matching shadcn's subtle divider. */
+  --message-codeblock-divider: color-mix(in srgb, var(--border) 60%, transparent);
+  /* Dedicated line-height so the global --code-line-height (1.28) does not
+     override the roomier code-block rhythm via fallback. */
+  --message-codeblock-line-height: 1.75;
   --message-code-token-comment: rgba(150, 170, 200, 0.75);
   --message-code-token-punctuation: rgba(200, 210, 220, 0.85);
   --message-code-token-constant: #ff7b72;
@@ -384,8 +390,9 @@
 }
 
 :root[data-theme="light"] {
-  --message-codeblock-bg: color-mix(in srgb, var(--surface-card-strong) 94%, #eef4ff 6%);
-  --message-codeblock-header-bg: color-mix(in srgb, var(--surface-control) 72%, #eef4ff 28%);
+  /* shadcn bg-muted (#f4f4f5) — the soft grey card surface from the docs. */
+  --message-codeblock-bg: var(--muted);
+  --message-codeblock-header-bg: var(--message-codeblock-bg);
   --message-code-token-comment: rgba(87, 96, 110, 0.86);
   --message-code-token-punctuation: rgba(36, 41, 47, 0.88);
   --message-code-token-constant: #cf222e;
@@ -400,7 +407,7 @@
 /* shadcn 化代码块：扁平边框卡（border + var(--radius)，去重阴影） */
 .message .markdown-codeblock {
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   background: var(--message-codeblock-bg);
   overflow: hidden;
   box-shadow: none;
@@ -412,41 +419,71 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 4px 8px;
+  padding: 5px 14px;
   background: var(--message-codeblock-header-bg);
-  border-bottom: 1px solid var(--border);
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-faint);
+  border-bottom: 1px solid var(--message-codeblock-divider);
+  font-size: 13px;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--text-muted);
 }
 
 .message .markdown-codeblock-language {
-  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+
+.message .markdown-codeblock-language-icon {
+  width: 16px;
+  height: 16px;
+  opacity: 0.6;
+  flex: none;
+}
+
+.message .markdown-codeblock-language-text {
+  line-height: 1;
+  font-family: var(--code-font-family);
 }
 
 .message .markdown-codeblock-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
+/*
+ * shadcn icon-button copy control: no border / no background at rest,
+ * a soft hover surface, square 28px hit area with a 16px glyph.
+ */
 .message .markdown-codeblock-copy {
-  border: 1px solid var(--border);
-  border-radius: calc(var(--radius) - 4px);
-  padding: 2px 8px;
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-stronger);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
 .message .markdown-codeblock-copy:hover {
   background: var(--surface-control-hover);
+  color: var(--text-strong);
 }
 
 .message .markdown-codeblock-copy.is-copied {
-  border-color: var(--border-accent);
+  color: var(--text-strong);
+}
+
+.message .markdown-codeblock-copy-icon {
+  width: 14px;
+  height: 14px;
 }
 
 .message .markdown-heavy-island-placeholder {
@@ -523,13 +560,13 @@
 
 .message .markdown-codeblock pre {
   margin: 0;
-  padding: 10px 0 12px;
+  padding: 12px 0 16px;
   white-space: pre;
   overflow-x: auto;
   font-family: var(--code-font-family);
-  font-size: var(--code-font-size, 11px);
+  font-size: var(--message-codeblock-font-size, 13px);
   font-weight: var(--code-font-weight, 400);
-  line-height: var(--code-line-height, 1.28);
+  line-height: var(--message-codeblock-line-height, 1.6);
 }
 
 .message .markdown-codeblock code,
@@ -544,8 +581,60 @@
 
 .message .markdown-codeblock-line {
   display: block;
-  min-height: calc(var(--code-font-size, 11px) * var(--code-line-height, 1.28));
-  padding: 0 12px;
+  min-height: calc(var(--message-codeblock-font-size, 13px) * var(--message-codeblock-line-height, 1.6));
+  padding: 0 16px;
+}
+
+/* Line numbers: CSS counter on each pre-highlighted line. The gutter
+   prefix scrolls with the code (min-width: max-content on <code>), which
+   keeps numbers aligned to their line without a separate fixed column. */
+.message .markdown-codeblock pre[data-line-numbers] {
+  counter-reset: markdown-codeblock-line;
+}
+
+/* Line numbers live in an absolutely-positioned gutter so text selection
+   never includes them — only the code (the "black region") is selectable
+   and copyable. The line still reserves left padding for the gutter. */
+.message .markdown-codeblock pre[data-line-numbers] {
+  position: relative;
+}
+
+.message .markdown-codeblock pre[data-line-numbers] .markdown-codeblock-line {
+  position: relative;
+  padding-left: 3.6em;
+  padding-right: 16px;
+}
+
+.message .markdown-codeblock pre[data-line-numbers] .markdown-codeblock-line::before {
+  counter-increment: markdown-codeblock-line;
+  content: counter(markdown-codeblock-line);
+  position: absolute;
+  left: 0;
+  width: 2.5em;
+  padding-right: 8px;
+  text-align: right;
+  color: var(--text-faint);
+  user-select: none;
+  -webkit-user-select: none;
+  pointer-events: none;
+}
+
+/* A single continuous gutter divider that spans the full code height and
+   scrolls horizontally with the code (drawn on <code>, which is
+   min-width: max-content), so it stays aligned with the line numbers. */
+.message .markdown-codeblock pre[data-line-numbers] code {
+  position: relative;
+}
+
+.message .markdown-codeblock pre[data-line-numbers] code::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3.05em;
+  width: 1px;
+  background: var(--border);
+  pointer-events: none;
 }
 
 .message .markdown-codeblock :is(.token.comment, .token.prolog, .token.doctype, .token.cdata),
@@ -590,27 +679,27 @@
 
 .message .markdown-codeblock-single {
   margin: 1.25em 0;
-  padding: 10px 12px 12px;
+  padding: 14px 16px 16px;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   background: var(--message-codeblock-bg);
   white-space: pre;
   overflow-x: auto;
   font-family: var(--code-font-family);
-  font-size: var(--code-font-size, 11px);
+  font-size: var(--message-codeblock-font-size, 13px);
   font-weight: var(--code-font-weight, 400);
-  line-height: var(--code-line-height, 1.28);
+  line-height: var(--message-codeblock-line-height, 1.6);
   box-shadow: none;
 }
 
 .message .markdown-codeblock-markdown {
   --message-codeblock-bg: color-mix(in srgb, var(--surface-card-strong) 88%, var(--surface-command) 12%);
-  --message-codeblock-header-bg: color-mix(in srgb, #8bb5ff 12%, var(--surface-control) 88%);
+  --message-codeblock-header-bg: var(--message-codeblock-bg);
 }
 
 :root[data-theme="light"] .message .markdown-codeblock-markdown {
   --message-codeblock-bg: color-mix(in srgb, var(--surface-card-strong) 92%, #f3f8ff 8%);
-  --message-codeblock-header-bg: color-mix(in srgb, #dceaff 70%, var(--surface-control) 30%);
+  --message-codeblock-header-bg: var(--message-codeblock-bg);
 }
 
 .message .markdown-codeblock-markdown-content {
@@ -629,7 +718,7 @@
   display: block;
   font-family: var(--code-font-family);
   font-weight: var(--code-font-weight, 400);
-  line-height: var(--code-line-height, 1.28);
+  line-height: var(--message-codeblock-line-height, 1.6);
 }
 
 /* ---- Mermaid Block ---- */

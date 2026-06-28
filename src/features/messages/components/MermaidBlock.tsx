@@ -10,6 +10,7 @@ import {
   MermaidFullscreenViewer,
   preloadViewerjs,
 } from "../../markdown/mermaidFullscreen";
+import { CodeBlockLanguageBadge } from "./codeBlockLanguageIcon";
 
 type MermaidBlockProps = {
   value: string;
@@ -155,7 +156,7 @@ export default function MermaidBlock({
   return (
     <div className="markdown-codeblock markdown-mermaidblock">
       <div className="markdown-codeblock-header">
-        <span className="markdown-codeblock-language">Mermaid</span>
+        <CodeBlockLanguageBadge languageTag="mermaid" label="Mermaid" />
         <div className="markdown-mermaidblock-actions">
           <button
             type="button"
