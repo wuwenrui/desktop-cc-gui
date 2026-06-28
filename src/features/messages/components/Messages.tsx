@@ -59,6 +59,7 @@ import {
   resolveLiveAutoExpandedExploreId,
   suppressCompletedExploreItemsBetweenLatestUserTurns,
 } from "./messagesLiveWindow";
+import { addBoundedConversationRenderModeKey } from "./messagesConversationLightweightMode";
 import {
   isAssistantMessageConversationItem,
   isReasoningConversationItem,
@@ -257,20 +258,68 @@ export const Messages = memo(function Messages({
     threadStreamLatencySnapshot?.latencyCategory === "visible-output-stall-after-first-delta";
   const readableWindowRecoveryActive =
     blankingRecoveryActive || visibleStallRecoveryActive;
-  const latestRuntimeReconnectItemId = useMemo(() => {
+  const [dismissedTransientRuntimeReconnectItemKeys, setDismissedTransientRuntimeReconnectItemKeys] =
+    useState<Set<string>>(() => new Set());
+  const latestRuntimeReconnectCandidate = useMemo(() => {
+    const dismissKeyPrefix = [workspaceId ?? "", threadId ?? ""].join("\u0000");
+    let hasNewerUserMessage = false;
     for (let index = items.length - 1; index >= 0; index -= 1) {
       const item = items[index];
-      if (!item || item.kind !== "message" || item.role !== "assistant") {
+      if (!item || item.kind !== "message") {
+        continue;
+      }
+      if (item.role === "user") {
+        hasNewerUserMessage = true;
+        continue;
+      }
+      if (item.role !== "assistant") {
         continue;
       }
       const runtimeReconnectHint = resolveAssistantRuntimeReconnectHint(
         item,
         Boolean(parseAgentTaskNotification(item.text)),
       );
-      return runtimeReconnectHint ? item.id : null;
+      if (!runtimeReconnectHint) {
+        return null;
+      }
+      const dismissKey = [dismissKeyPrefix, item.id].join("\u0000");
+      if (
+        runtimeReconnectHint.tone === "transient" &&
+        (hasNewerUserMessage || dismissedTransientRuntimeReconnectItemKeys.has(dismissKey))
+      ) {
+        return null;
+      }
+      return {
+        dismissKey,
+        hint: runtimeReconnectHint,
+        itemId: item.id,
+      };
     }
     return null;
-  }, [items]);
+  }, [dismissedTransientRuntimeReconnectItemKeys, items, threadId, workspaceId]);
+  useEffect(() => {
+    if (!latestRuntimeReconnectCandidate?.hint.autoDismissMs) {
+      return undefined;
+    }
+    if (latestRuntimeReconnectCandidate.hint.tone !== "transient") {
+      return undefined;
+    }
+    const dismissKey = latestRuntimeReconnectCandidate.dismissKey;
+    const timer = window.setTimeout(() => {
+      setDismissedTransientRuntimeReconnectItemKeys((previous) => {
+        if (previous.has(dismissKey)) {
+          return previous;
+        }
+        const next = new Set(previous);
+        next.add(dismissKey);
+        return next;
+      });
+    }, latestRuntimeReconnectCandidate.hint.autoDismissMs);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [latestRuntimeReconnectCandidate]);
+  const latestRuntimeReconnectItemId = latestRuntimeReconnectCandidate?.itemId ?? null;
   const latestRetryMessage = useMemo(
     () => resolveRetryMessageForReconnectItem(items, latestRuntimeReconnectItemId),
     [items, latestRuntimeReconnectItemId],
@@ -382,6 +431,28 @@ export const Messages = memo(function Messages({
   const activeUserInputAnchorItemId =
     activeUserInputRequest?.params.item_id?.trim() || null;
   const rawScrollKey = buildMessagesScrollKey(effectiveItems, activeUserInputRequestId);
+  const conversationRenderModeKey = useMemo(
+    () => [workspaceId ?? "", threadId || rawScrollKey].join("\u0000"),
+    [rawScrollKey, threadId, workspaceId],
+  );
+  const [conversationLightweightModeKeys, setConversationLightweightModeKeys] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [conversationDetailHydrationKeys, setConversationDetailHydrationKeys] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const conversationLightweightModeEnabled = conversationLightweightModeKeys.has(conversationRenderModeKey);
+  const conversationDetailHydrationRequested = conversationDetailHydrationKeys.has(conversationRenderModeKey);
+  const handleConversationLightweightModeEnable = useCallback(() => {
+    setConversationLightweightModeKeys((previous) =>
+      addBoundedConversationRenderModeKey(previous, conversationRenderModeKey),
+    );
+  }, [conversationRenderModeKey]);
+  const handleConversationDetailHydrationRequest = useCallback(() => {
+    setConversationDetailHydrationKeys((previous) =>
+      addBoundedConversationRenderModeKey(previous, conversationRenderModeKey),
+    );
+  }, [conversationRenderModeKey]);
   // Throttle scrollKey during streaming to avoid flooding the main thread
   // with smooth-scroll animations that block keyboard input.
   const [scrollKey, setScrollKey] = useState(rawScrollKey);
@@ -495,6 +566,20 @@ export const Messages = memo(function Messages({
   }, []);
 
   useEffect(() => {
+    const previousThreadId = previousAssistantThreadIdRef.current;
+    const threadChanged = previousThreadId !== threadId;
+    const pendingResourceCounts = {
+      anchorUpdateRaf: anchorUpdateRafRef.current === null ? 0 : 1,
+      historyStickyUpdateRaf: historyStickyUpdateRafRef.current === null ? 0 : 1,
+      planPanelFocusRaf: planPanelFocusRafRef.current === null ? 0 : 1,
+      planPanelFocusTimeout: planPanelFocusTimeoutRef.current === null ? 0 : 1,
+      assistantFinalizingTimer: assistantFinalizingTimerRef.current === null ? 0 : 1,
+      copyTimeout: copyTimeoutRef.current === null ? 0 : 1,
+      scrollThrottleTimer: scrollThrottleRef.current ? 1 : 0,
+      messageNodeCount: messageNodeByIdRef.current.size,
+      agentTaskNodeByTaskIdCount: agentTaskNodeByTaskIdRef.current.size,
+      agentTaskNodeByToolUseIdCount: agentTaskNodeByToolUseIdRef.current.size,
+    };
     autoScrollRef.current = true;
     lastObservedScrollTopRef.current = null;
     setExpandedItems(new Set());
@@ -531,10 +616,20 @@ export const Messages = memo(function Messages({
         scrollThrottleRef.current = 0;
       }
     }
+    if (threadChanged) {
+      appendRendererDiagnostic("messages/render-resource-cleanup", {
+        surface: "conversation",
+        component: "Messages",
+        workspaceId,
+        previousThreadId,
+        threadId,
+        pendingResourceCounts,
+      });
+    }
     setFinalizingAssistantMessageId(null);
     previousAssistantThinkingRef.current = false;
     previousAssistantThreadIdRef.current = threadId;
-  }, [threadId]);
+  }, [threadId, workspaceId]);
   useEffect(() => {
     scrollToAgentTaskCard(agentTaskScrollRequest);
   }, [agentTaskScrollRequest, scrollToAgentTaskCard]);
@@ -2173,6 +2268,8 @@ export const Messages = memo(function Messages({
           isWorking={isWorking}
           lastDurationMs={lastDurationMs}
           liveAssistantMessageId={liveAssistantMessageId}
+          conversationDetailHydrationRequested={conversationDetailHydrationRequested}
+          conversationLightweightModeEnabled={conversationLightweightModeEnabled}
           latestReasoningLabel={workingIndicatorReasoningLabel}
           latestReasoningId={latestReasoningId}
           latestRetryMessage={latestRetryMessage}
@@ -2185,6 +2282,8 @@ export const Messages = memo(function Messages({
           onRecoverThreadRuntimeAndResend={onRecoverThreadRuntimeAndResend}
           onThreadRecoveryFork={onThreadRecoveryFork}
           onAssistantVisibleTextRender={handleAssistantVisibleTextRender}
+          onConversationDetailHydrationRequest={handleConversationDetailHydrationRequest}
+          onConversationLightweightModeEnable={handleConversationLightweightModeEnable}
           onShowAllHistoryItems={handleShowAllHistoryItems}
           openFileLink={openFileLink}
           presentationProfile={presentationProfile}
@@ -2205,6 +2304,7 @@ export const Messages = memo(function Messages({
           suppressedUserNoteCardContextMessageIds={suppressedUserNoteCardContextMessageIds}
           claudeHistoryTranscriptFallbackActive={claudeHistoryTranscriptFallbackActive}
           hasVisibleUserInputRequest={hasVisibleUserInputRequest}
+          historyExpansionActive={showAllHistoryItems}
           userInputNode={userInputNode}
           visibleCollapsedHistoryItemCount={presentationCollapsedHistoryItemCount}
           waitingForFirstChunk={waitingForFirstChunk}

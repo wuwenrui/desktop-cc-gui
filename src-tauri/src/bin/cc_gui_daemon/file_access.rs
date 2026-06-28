@@ -10,9 +10,10 @@ use crate::workspace_io::{
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 const MAX_TASK_OUTPUT_TAIL_BYTES: u64 = 16_000;
+const TASK_OUTPUT_TEMP_DIR_PREFIX: &str = "ccgui-task-output-";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -32,20 +33,8 @@ fn empty_task_output_artifact_response() -> EngineTaskOutputArtifactTailResponse
     }
 }
 
-fn candidate_task_output_temp_roots() -> Vec<PathBuf> {
-    let mut roots = vec![std::env::temp_dir()];
-    #[cfg(unix)]
-    {
-        roots.push(PathBuf::from("/tmp"));
-        roots.push(PathBuf::from("/private/tmp"));
-    }
-    roots
-}
-
 fn canonical_task_output_roots(workspace_path: &str) -> Vec<PathBuf> {
-    let mut roots = vec![PathBuf::from(workspace_path)];
-    roots.extend(candidate_task_output_temp_roots());
-    roots
+    vec![PathBuf::from(workspace_path)]
         .into_iter()
         .filter_map(|root| root.canonicalize().ok())
         .fold(Vec::<PathBuf>::new(), |mut acc, root| {
@@ -54,6 +43,14 @@ fn canonical_task_output_roots(workspace_path: &str) -> Vec<PathBuf> {
             }
             acc
         })
+}
+
+fn path_is_allowed_task_output_temp_file(canonical_path: &Path) -> bool {
+    canonical_path
+        .parent()
+        .and_then(|parent| parent.file_name())
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.starts_with(TASK_OUTPUT_TEMP_DIR_PREFIX))
 }
 
 fn read_task_output_artifact_tail(
@@ -81,6 +78,7 @@ fn read_task_output_artifact_tail(
     if !allowed_roots
         .iter()
         .any(|allowed_root| canonical_path.starts_with(allowed_root))
+        && !path_is_allowed_task_output_temp_file(&canonical_path)
     {
         return Err("Task output artifact is outside allowed directories.".to_string());
     }
@@ -284,5 +282,53 @@ impl DaemonState {
             self.allowed_external_skill_roots(&workspaces, &workspace_id, &custom_skill_roots)?
         };
         write_external_absolute_file_inner(&path, &allowed_roots, &content)
+    }
+}
+
+#[cfg(test)]
+mod task_output_tests {
+    use super::read_task_output_artifact_tail;
+    use std::fs;
+    use std::path::PathBuf;
+    use uuid::Uuid;
+
+    fn unique_temp_dir(prefix: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
+        fs::create_dir_all(&dir).expect("create temp dir");
+        dir
+    }
+
+    #[test]
+    fn reads_task_output_tail_from_named_temp_dir() {
+        let workspace = unique_temp_dir("ccgui-daemon-task-output-workspace");
+        let tasks = unique_temp_dir("ccgui-task-output-daemon");
+        let artifact = tasks.join("task.output");
+        fs::write(&artifact, "daemon output").expect("write artifact");
+
+        let response = read_task_output_artifact_tail(
+            workspace.to_str().expect("workspace path"),
+            artifact.to_str().expect("artifact path"),
+        )
+        .expect("read artifact");
+
+        assert!(response.exists);
+        assert_eq!(response.content, "daemon output");
+        assert!(!response.truncated);
+    }
+
+    #[test]
+    fn rejects_task_output_tail_outside_workspace_and_named_temp_dir() {
+        let workspace = unique_temp_dir("ccgui-daemon-task-output-workspace");
+        let disallowed_root = unique_temp_dir("ccgui-daemon-task-output-disallowed");
+        let artifact = disallowed_root.join("task.output");
+        fs::write(&artifact, "secret").expect("write artifact");
+
+        let error = read_task_output_artifact_tail(
+            workspace.to_str().expect("workspace path"),
+            artifact.to_str().expect("artifact path"),
+        )
+        .expect_err("disallowed path should fail");
+
+        assert!(error.contains("outside allowed directories"));
     }
 }
