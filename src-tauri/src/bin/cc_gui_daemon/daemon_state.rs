@@ -10,6 +10,20 @@ const DELETE_ARCHIVE_TIMEOUT_MS: u64 = 2_000;
 const LIST_THREADS_LIVE_TIMEOUT_MS: u64 = 1_500;
 const CLAUDE_POST_COMPLETION_USAGE_GRACE_MS: u64 = 35_000;
 
+#[cfg(windows)]
+fn codex_windows_turn_developer_instructions(
+    settings: &crate::types::AppSettings,
+) -> Option<String> {
+    crate::backend::app_server_cli::codex_generated_developer_instructions_for_turn(settings)
+}
+
+#[cfg(not(windows))]
+fn codex_windows_turn_developer_instructions(
+    _settings: &crate::types::AppSettings,
+) -> Option<String> {
+    None
+}
+
 fn normalize_daemon_disk_provider_profile(
     provider_profile_id: Option<String>,
 ) -> Result<Option<String>, String> {
@@ -1598,11 +1612,8 @@ impl DaemonState {
         let active_engine = self.get_active_engine().await;
         let effective_engine = engine.unwrap_or(active_engine);
         let normalized_custom_spec_root = normalize_custom_spec_root(custom_spec_root);
-        // Snapshot AppSettings so the sync Claude path can build the
-        // --append-system-prompt body for the always-on curated skills
-        // (see `build_curated_skill_append_args`). Without this snapshot
-        // the sync path would silently drop the body even when the user
-        // has enabled a curated skill in Settings.
+        // Snapshot AppSettings so engine send paths can apply the current
+        // curated-skill transport policy without reading settings mid-turn.
         let settings = self.app_settings.lock().await.clone();
 
         match effective_engine {
@@ -2529,9 +2540,12 @@ impl DaemonState {
     ) -> Result<Value, String> {
         self.ensure_codex_session_for_workspace(&workspace_id)
             .await?;
-        let mode_enforcement_enabled = {
+        let (mode_enforcement_enabled, extra_developer_instructions) = {
             let settings = self.app_settings.lock().await;
-            settings.codex_mode_enforcement_enabled
+            (
+                settings.codex_mode_enforcement_enabled,
+                codex_windows_turn_developer_instructions(&settings),
+            )
         };
         codex_core::send_user_message_core(
             &self.sessions,
@@ -2547,6 +2561,7 @@ impl DaemonState {
             preferred_language,
             custom_spec_root,
             mode_enforcement_enabled,
+            extra_developer_instructions,
         )
         .await
     }

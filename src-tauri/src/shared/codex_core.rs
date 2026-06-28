@@ -12,7 +12,10 @@ use tokio::time::{sleep, timeout};
 
 use crate::backend::app_server::{build_codex_command_with_bin, WorkspaceSession};
 use crate::codex::args::{apply_codex_args, resolve_workspace_codex_args};
-use crate::codex::collaboration_policy::{apply_policy_to_collaboration_mode, resolve_policy};
+use crate::codex::collaboration_policy::{
+    apply_policy_to_collaboration_mode, apply_policy_to_collaboration_mode_with_extra_directives,
+    resolve_policy,
+};
 use crate::codex::config as codex_config;
 use crate::codex::home::{resolve_default_codex_home, resolve_workspace_codex_home};
 use crate::codex::provider_profile::{
@@ -803,6 +806,7 @@ pub(crate) async fn send_user_message_core(
     preferred_language: Option<String>,
     custom_spec_root: Option<String>,
     mode_enforcement_enabled: bool,
+    extra_developer_instructions: Option<String>,
 ) -> Result<Value, String> {
     let session_key = session_key_for_provider(&workspace_id, provider_profile_id.as_deref());
     let session = get_session_clone(sessions, &session_key).await?;
@@ -875,7 +879,15 @@ pub(crate) async fn send_user_message_core(
     params.insert("input".to_string(), json!(input));
     if can_send_collaboration_mode {
         let enriched_collaboration_mode =
-            apply_policy_to_collaboration_mode(collaboration_mode, &policy);
+            if let Some(extra_directive) = extra_developer_instructions.as_ref() {
+                apply_policy_to_collaboration_mode_with_extra_directives(
+                    collaboration_mode,
+                    &policy,
+                    std::slice::from_ref(extra_directive),
+                )
+            } else {
+                apply_policy_to_collaboration_mode(collaboration_mode, &policy)
+            };
         let enriched_collaboration_mode = ensure_collaboration_mode_defaults(
             enriched_collaboration_mode,
             model.as_deref(),

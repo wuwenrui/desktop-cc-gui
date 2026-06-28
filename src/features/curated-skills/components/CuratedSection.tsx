@@ -1,10 +1,9 @@
 import { useCallback, useMemo, type ComponentType, type SVGProps } from "react";
 import { useCuratedSkills } from "../hooks/useCuratedSkills";
 import { useCuratedSkillToggle } from "../hooks/useCuratedSkillToggle";
-import { useAppSettings } from "../../settings/hooks/useAppSettings";
 import { Switch } from "../../../components/ui/switch";
 import { useTranslation } from "react-i18next";
-import type { CuratedSkillOption } from "../../../types";
+import type { AppSettings, CuratedSkillOption } from "../../../types";
 import Package from "lucide-react/dist/esm/icons/package";
 import AlertCircle from "lucide-react/dist/esm/icons/alert-circle";
 import ExternalLink from "lucide-react/dist/esm/icons/external-link";
@@ -31,19 +30,21 @@ import { resolveLucideIcon } from "../utils/resolveLucideIcon";
  * empty state still kicks in if the lock file is empty or `build.rs`
  * rejects every entry at compile time.
  */
-export function CuratedSection() {
+interface CuratedSectionProps {
+  appSettings: Pick<AppSettings, "enabledCuratedSkillIds">;
+  onUpdateAppSettings: (next: AppSettings) => Promise<void>;
+}
+
+export function CuratedSection({
+  appSettings,
+  onUpdateAppSettings,
+}: CuratedSectionProps) {
   const { t } = useTranslation();
-  // Lift the AppSettings state slot to this component so the read
-  // (useCuratedSkills) and write (useCuratedSkillToggle) hooks share
-  // one React state slot. Calling useAppSettings() inside each child
-  // hook would create two independent state slots and the switch
-  // would visually appear to do nothing.
-  const { settings, setSettings } = useAppSettings();
   const { skills, loading, error, refresh } = useCuratedSkills({
-    enabledCuratedSkillIds: settings.enabledCuratedSkillIds,
+    enabledCuratedSkillIds: appSettings.enabledCuratedSkillIds,
   });
   const { setEnabled, pendingId, error: toggleError } = useCuratedSkillToggle({
-    setSettings,
+    onSettingsChanged: onUpdateAppSettings,
   });
 
   const builtInLabel = useMemo(

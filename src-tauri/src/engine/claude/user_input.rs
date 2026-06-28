@@ -213,6 +213,7 @@ impl ClaudeSession {
             use_stream_json_input,
             include_hook_events,
             None,
+            None,
         );
         Self::configure_spawn_command(&mut cmd);
         match cmd.spawn() {
@@ -586,6 +587,7 @@ impl ClaudeSession {
             &resume_params,
             use_stream_json_input,
             include_hook_events,
+            None,
             None,
         );
         Self::configure_spawn_command(&mut cmd);

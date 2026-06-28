@@ -71,6 +71,123 @@ describe("parseClaudeHistoryMessages", () => {
     });
   });
 
+  it("filters leaked Claude stream-json stdin payloads from Claude history", () => {
+    const leakedPayload = JSON.stringify({
+      message: {
+        content: [{ text: "你好", type: "text" }],
+        role: "user",
+      },
+      type: "user",
+    });
+    const items = parseClaudeHistoryMessages([
+      {
+        kind: "message",
+        id: "control-stream-json-payload",
+        role: "user",
+        text: leakedPayload,
+      },
+      {
+        kind: "message",
+        id: "real-user",
+        role: "user",
+        text: "真实问题",
+      },
+    ]);
+
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      id: "real-user",
+      kind: "message",
+      role: "user",
+      text: "真实问题",
+    });
+  });
+
+  it("quarantines assistant echo after leaked Claude stream-json stdin payload", () => {
+    const leakedPayload = JSON.stringify({
+      message: {
+        content: [{ text: "你好", type: "text" }],
+        role: "user",
+      },
+      type: "user",
+    });
+    const items = parseClaudeHistoryMessages([
+      {
+        kind: "message",
+        id: "control-stream-json-payload",
+        role: "user",
+        text: leakedPayload,
+      },
+      {
+        kind: "message",
+        id: "polluted-assistant",
+        role: "assistant",
+        text: "用户发了一条“你好”的消息。",
+      },
+      {
+        kind: "message",
+        id: "real-user",
+        role: "user",
+        text: "第二次真实问题",
+      },
+      {
+        kind: "message",
+        id: "real-assistant",
+        role: "assistant",
+        text: "第二次真实回答",
+      },
+    ]);
+
+    expect(items).toHaveLength(2);
+    expect(items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "real-user",
+          kind: "message",
+          role: "user",
+          text: "第二次真实问题",
+        }),
+        expect.objectContaining({
+          id: "real-assistant",
+          kind: "message",
+          role: "assistant",
+          text: "第二次真实回答",
+        }),
+      ]),
+    );
+    expect(items).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "polluted-assistant" }),
+      ]),
+    );
+  });
+
+  it("hides a transcript that only contains leaked stream-json payload echo", () => {
+    const leakedPayload = JSON.stringify({
+      message: {
+        content: [{ text: "你好", type: "text" }],
+        role: "user",
+      },
+      type: "user",
+    });
+    const items = parseClaudeHistoryMessages([
+      {
+        kind: "message",
+        id: "control-stream-json-payload",
+        role: "user",
+        text: leakedPayload,
+      },
+      {
+        kind: "message",
+        id: "polluted-assistant",
+        role: "assistant",
+        text: "你好！有什么可以帮你的？",
+      },
+    ]);
+
+    expect(items).toEqual([]);
+  });
+
   it("does not filter normal user text mentioning app-server", () => {
     const items = parseClaudeHistoryMessages([
       {
@@ -84,6 +201,24 @@ describe("parseClaudeHistoryMessages", () => {
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({
       id: "real-user-app-server",
+      kind: "message",
+      role: "user",
+    });
+  });
+
+  it("does not filter normal user text discussing JSON", () => {
+    const items = parseClaudeHistoryMessages([
+      {
+        kind: "message",
+        id: "real-user-json",
+        role: "user",
+        text: '{"message":"please explain this JSON"}',
+      },
+    ]);
+
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      id: "real-user-json",
       kind: "message",
       role: "user",
     });
@@ -536,8 +671,14 @@ describe("parseClaudeHistoryMessages", () => {
               header: "交互风格",
               question: "你希望我以什么风格和你协作？",
               options: [
-                { label: "直接给方案", description: "少废话，直接上代码和结论" },
-                { label: "先讨论再动手", description: "先聊清楚思路，确认后再写代码" },
+                {
+                  label: "直接给方案",
+                  description: "少废话，直接上代码和结论",
+                },
+                {
+                  label: "先讨论再动手",
+                  description: "先聊清楚思路，确认后再写代码",
+                },
               ],
             },
             {
@@ -601,7 +742,10 @@ describe("parseClaudeHistoryMessages", () => {
               header: "语言偏好",
               question: "你平时主要用什么语言写后端？",
               options: [
-                { label: "Java", description: "Spring Boot / Spring Cloud 生态" },
+                {
+                  label: "Java",
+                  description: "Spring Boot / Spring Cloud 生态",
+                },
                 { label: "Go", description: "Gin / gRPC / 云原生方向" },
               ],
             },
@@ -610,8 +754,14 @@ describe("parseClaudeHistoryMessages", () => {
               header: "协作风格",
               question: "你希望我以什么风格和你协作？",
               options: [
-                { label: "直接给方案", description: "少废话，直接上代码和结论" },
-                { label: "先讨论再动手", description: "先聊清楚思路，确认后再写代码" },
+                {
+                  label: "直接给方案",
+                  description: "少废话，直接上代码和结论",
+                },
+                {
+                  label: "先讨论再动手",
+                  description: "先聊清楚思路，确认后再写代码",
+                },
               ],
             },
             {
@@ -715,7 +865,9 @@ describe("parseClaudeHistoryMessages", () => {
       throw new Error("expected submitted AskUserQuestion history card");
     }
     const parsed = JSON.parse(items[1].detail);
-    expect(parsed.questions[0].selectedOptions).toEqual(["直接给方案; key=value"]);
+    expect(parsed.questions[0].selectedOptions).toEqual([
+      "直接给方案; key=value",
+    ]);
     expect(parsed.questions[1].selectedOptions).toEqual(["Java"]);
     expect(parsed.questions[2].selectedOptions).toEqual([]);
     expect(items[1].output).toBe("直接给方案; key=value; Java");
@@ -1588,7 +1740,9 @@ describe("createClaudeHistoryLoader", () => {
         isMeta: true,
         message: {
           role: "user",
-          content: [{ type: "text", text: "Continue from where you left off." }],
+          content: [
+            { type: "text", text: "Continue from where you left off." },
+          ],
         },
       },
       {
@@ -1610,7 +1764,7 @@ describe("createClaudeHistoryLoader", () => {
         id: "tool-edit-1",
         toolType: "Edit",
         title: "Edit",
-        text: "{\"file_path\":\"Y:\\\\04_lab\\\\testccgui\\\\main.go\"}",
+        text: '{"file_path":"Y:\\\\04_lab\\\\testccgui\\\\main.go"}',
       },
       {
         kind: "message",
@@ -1621,8 +1775,19 @@ describe("createClaudeHistoryLoader", () => {
     ]);
 
     expect(items).toHaveLength(3);
-    expect(items.some((item) => item.kind === "message" && item.text.includes("Continue from"))).toBe(false);
-    expect(items.some((item) => item.kind === "message" && item.text.includes("No response requested"))).toBe(false);
+    expect(
+      items.some(
+        (item) =>
+          item.kind === "message" && item.text.includes("Continue from"),
+      ),
+    ).toBe(false);
+    expect(
+      items.some(
+        (item) =>
+          item.kind === "message" &&
+          item.text.includes("No response requested"),
+      ),
+    ).toBe(false);
     expect(items).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

@@ -51,6 +51,7 @@ import {
 import { appendRendererDiagnostic } from "../../../services/rendererDiagnostics";
 import { parseReasoning } from "./messagesReasoning";
 import type { RuntimeReconnectRecoveryCallbackResult } from "./runtimeReconnect";
+import type { MessagesPresentationMode } from "./messagesLiveWindow";
 import {
   formatCompletedTimeMs,
   type MessagesEngine,
@@ -218,6 +219,8 @@ type MessagesTimelineProps = {
   claudeHistoryTranscriptFallbackActive: boolean;
   hasVisibleUserInputRequest: boolean;
   historyExpansionActive: boolean;
+  presentationMode: MessagesPresentationMode;
+  presentationScopeKey: string;
   userInputNode: ReactNode;
   visibleCollapsedHistoryItemCount: number;
   waitingForFirstChunk: boolean;
@@ -319,6 +322,8 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   claudeHistoryTranscriptFallbackActive,
   hasVisibleUserInputRequest,
   historyExpansionActive,
+  presentationMode,
+  presentationScopeKey,
   userInputNode,
   visibleCollapsedHistoryItemCount,
   waitingForFirstChunk,
@@ -640,18 +645,18 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   );
   const virtualizedTimelineScopeKey = useMemo(
     () => [
-      workspaceId ?? "",
-      threadId ?? "",
+      presentationScopeKey,
+      presentationMode,
       timelineProjectionRows.length,
       timelineRenderWeightSummary.renderWeight,
       shouldVirtualizeTimeline ? "virtualized" : "static",
     ].join("\u0000"),
     [
+      presentationMode,
+      presentationScopeKey,
       shouldVirtualizeTimeline,
-      threadId,
       timelineProjectionRows.length,
       timelineRenderWeightSummary.renderWeight,
-      workspaceId,
     ],
   );
   const timelineRendererOptionsKey = useMemo(
@@ -1889,6 +1894,8 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       data-timeline-static-lightweight-history={
         shouldUseStaticLightweightHistoryFlow ? "true" : undefined
       }
+      data-timeline-presentation-mode={presentationMode}
+      data-timeline-presentation-scope={presentationScopeKey}
     >
       <MessagesOutlineFloater
         outline={currentOutline?.outline ?? null}

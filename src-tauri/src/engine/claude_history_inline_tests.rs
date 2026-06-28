@@ -373,6 +373,211 @@ async fn scan_session_source_file_skips_control_plane_before_title_evidence() {
 }
 
 #[tokio::test]
+async fn stream_json_stdin_payload_does_not_become_title_or_visible_message() {
+    let unique = Uuid::new_v4().to_string();
+    let temp_root =
+        std::env::temp_dir().join(format!("ccgui-claude-stream-json-pollution-{}", unique));
+    let base_dir = temp_root.join("claude-projects");
+    let workspace_path = temp_root.join("workspace");
+    std::fs::create_dir_all(&workspace_path).expect("create workspace path");
+    let project_dir = create_project_dir(&base_dir, &workspace_path);
+    let session_id = format!("stream-json-pollution-{}", unique);
+    let session_path = project_dir.join(format!("{}.jsonl", session_id));
+    let leaked_payload = json!({
+        "message": {
+            "content": [{ "text": "你好", "type": "text" }],
+            "role": "user"
+        },
+        "type": "user"
+    })
+    .to_string();
+    write_jsonl_lines(
+        &session_path,
+        &[
+            json!({
+                "uuid": "polluted-user",
+                "timestamp": "2026-06-27T11:00:00.000Z",
+                "cwd": workspace_path.to_string_lossy(),
+                "message": {
+                    "role": "user",
+                    "content": leaked_payload
+                }
+            }),
+            json!({
+                "uuid": "real-user",
+                "timestamp": "2026-06-27T11:01:00.000Z",
+                "cwd": workspace_path.to_string_lossy(),
+                "message": {
+                    "role": "user",
+                    "content": "真实问题"
+                }
+            }),
+            json!({
+                "uuid": "real-assistant",
+                "timestamp": "2026-06-27T11:02:00.000Z",
+                "message": {
+                    "role": "assistant",
+                    "content": "真实回答"
+                }
+            }),
+        ],
+        "\n",
+    );
+
+    let attribution_scopes = vec![ClaudeSessionAttributionScope::workspace_path(
+        workspace_path.clone(),
+    )];
+    let outcome = scan_session_source_file(&session_path, &attribution_scopes, true).await;
+    let fact = outcome.fact.expect("stream-json pollution filtered fact");
+    assert_eq!(fact.first_real_user_message.as_deref(), Some("真实问题"));
+    assert_eq!(fact.message_count, 2);
+
+    let loaded = load_claude_session_from_base_dir(&base_dir, &workspace_path, &session_id)
+        .await
+        .expect("load polluted session");
+    assert_eq!(loaded.messages.len(), 2);
+    assert!(loaded
+        .messages
+        .iter()
+        .any(|message| message.id == "real-user" && message.text == "真实问题"));
+    assert!(loaded
+        .messages
+        .iter()
+        .all(|message| !message.text.contains("\"type\":\"user\"")));
+
+    let _ = std::fs::remove_dir_all(&temp_root);
+}
+
+#[tokio::test]
+async fn stream_json_stdin_payload_quarantines_following_polluted_assistant_echo() {
+    let unique = Uuid::new_v4().to_string();
+    let temp_root = std::env::temp_dir().join(format!("ccgui-claude-stream-json-echo-{}", unique));
+    let base_dir = temp_root.join("claude-projects");
+    let workspace_path = temp_root.join("workspace");
+    std::fs::create_dir_all(&workspace_path).expect("create workspace path");
+    let project_dir = create_project_dir(&base_dir, &workspace_path);
+    let session_id = format!("stream-json-echo-{}", unique);
+    let session_path = project_dir.join(format!("{}.jsonl", session_id));
+    let leaked_payload = json!({
+        "message": {
+            "content": [{ "text": "你好", "type": "text" }],
+            "role": "user"
+        },
+        "type": "user"
+    })
+    .to_string();
+    write_jsonl_lines(
+        &session_path,
+        &[
+            json!({
+                "uuid": "polluted-user",
+                "timestamp": "2026-06-27T11:00:00.000Z",
+                "cwd": workspace_path.to_string_lossy(),
+                "message": { "role": "user", "content": leaked_payload }
+            }),
+            json!({
+                "uuid": "polluted-assistant",
+                "timestamp": "2026-06-27T11:00:30.000Z",
+                "message": {
+                    "role": "assistant",
+                    "content": "用户发了一条\"你好\"的消息。"
+                }
+            }),
+            json!({
+                "uuid": "real-user",
+                "timestamp": "2026-06-27T11:01:00.000Z",
+                "cwd": workspace_path.to_string_lossy(),
+                "message": { "role": "user", "content": "第二次真实问题" }
+            }),
+            json!({
+                "uuid": "real-assistant",
+                "timestamp": "2026-06-27T11:02:00.000Z",
+                "message": { "role": "assistant", "content": "第二次真实回答" }
+            }),
+        ],
+        "\n",
+    );
+
+    let attribution_scopes = vec![ClaudeSessionAttributionScope::workspace_path(
+        workspace_path.clone(),
+    )];
+    let outcome = scan_session_source_file(&session_path, &attribution_scopes, true).await;
+    let fact = outcome.fact.expect("quarantined stream-json fact");
+    assert_eq!(
+        fact.first_real_user_message.as_deref(),
+        Some("第二次真实问题")
+    );
+    assert_eq!(fact.message_count, 2);
+
+    let loaded = load_claude_session_from_base_dir(&base_dir, &workspace_path, &session_id)
+        .await
+        .expect("load quarantined session");
+    assert_eq!(loaded.messages.len(), 2);
+    assert!(loaded
+        .messages
+        .iter()
+        .all(|message| !message.text.contains("用户发了一条")));
+    assert!(loaded.messages.iter().any(|message| {
+        message.id == "real-user" && message.role == "user" && message.text == "第二次真实问题"
+    }));
+
+    let _ = std::fs::remove_dir_all(&temp_root);
+}
+
+#[tokio::test]
+async fn stream_json_stdin_payload_with_only_polluted_assistant_echo_stays_hidden() {
+    let unique = Uuid::new_v4().to_string();
+    let temp_root = std::env::temp_dir().join(format!("ccgui-claude-stream-json-empty-{}", unique));
+    let base_dir = temp_root.join("claude-projects");
+    let workspace_path = temp_root.join("workspace");
+    std::fs::create_dir_all(&workspace_path).expect("create workspace path");
+    let project_dir = create_project_dir(&base_dir, &workspace_path);
+    let session_id = format!("stream-json-empty-{}", unique);
+    let session_path = project_dir.join(format!("{}.jsonl", session_id));
+    let leaked_payload = json!({
+        "message": {
+            "content": [{ "text": "你好", "type": "text" }],
+            "role": "user"
+        },
+        "type": "user"
+    })
+    .to_string();
+    write_jsonl_lines(
+        &session_path,
+        &[
+            json!({
+                "uuid": "polluted-user",
+                "timestamp": "2026-06-27T11:00:00.000Z",
+                "cwd": workspace_path.to_string_lossy(),
+                "message": { "role": "user", "content": leaked_payload }
+            }),
+            json!({
+                "uuid": "polluted-assistant",
+                "timestamp": "2026-06-27T11:00:30.000Z",
+                "message": {
+                    "role": "assistant",
+                    "content": "你好！有什么可以帮你的？"
+                }
+            }),
+        ],
+        "\n",
+    );
+
+    let attribution_scopes = vec![ClaudeSessionAttributionScope::workspace_path(
+        workspace_path.clone(),
+    )];
+    let outcome = scan_session_source_file(&session_path, &attribution_scopes, true).await;
+    assert!(outcome.fact.is_none());
+
+    let loaded = load_claude_session_from_base_dir(&base_dir, &workspace_path, &session_id)
+        .await
+        .expect("load hidden polluted session");
+    assert!(loaded.messages.is_empty());
+
+    let _ = std::fs::remove_dir_all(&temp_root);
+}
+
+#[tokio::test]
 async fn source_fact_cache_hits_and_invalidates_by_fingerprint() {
     let unique = Uuid::new_v4().to_string();
     let temp_root = std::env::temp_dir().join(format!("ccgui-claude-cache-{}", unique));
@@ -769,6 +974,27 @@ fn control_plane_predicate_detects_codex_app_server_command_text() {
 }
 
 #[test]
+fn control_plane_predicate_detects_leaked_stream_json_stdin_payload() {
+    let leaked_payload = json!({
+        "message": {
+            "content": [{ "text": "你好", "type": "text" }],
+            "role": "user"
+        },
+        "type": "user"
+    })
+    .to_string();
+    let entry = json!({
+        "uuid": "control-stream-json-payload",
+        "message": {
+            "role": "user",
+            "content": leaked_payload
+        }
+    });
+
+    assert!(is_claude_control_plane_entry(&entry));
+}
+
+#[test]
 fn control_plane_predicate_does_not_filter_normal_app_server_text() {
     let entry = json!({
         "uuid": "user-normal",
@@ -788,6 +1014,19 @@ fn control_plane_predicate_does_not_filter_normal_codex_app_server_text() {
         "message": {
             "role": "user",
             "content": "Please inspect why codex app-server appears in logs."
+        }
+    });
+
+    assert!(!is_claude_control_plane_entry(&entry));
+}
+
+#[test]
+fn control_plane_predicate_does_not_filter_normal_json_discussion() {
+    let entry = json!({
+        "uuid": "user-json-discussion",
+        "message": {
+            "role": "user",
+            "content": "{\"message\":\"please explain this JSON\"}"
         }
     });
 

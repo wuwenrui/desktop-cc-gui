@@ -689,8 +689,8 @@ pub(crate) async fn get_curated_skill_bodies(
 /// Toggle a curated skill on/off. The returned `AppSettings` is the new
 /// authoritative state; frontend must update its `useAppSettings` state from
 /// it. If the curated set changes, connected Codex app-server runtimes are
-/// restarted so their launch-time `developer_instructions` snapshot matches
-/// the new setting.
+/// restarted so their generated instruction transport state matches the new
+/// setting.
 #[tauri::command]
 pub(crate) async fn set_curated_skill_enabled(
     skill_id: String,

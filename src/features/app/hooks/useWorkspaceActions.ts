@@ -44,6 +44,22 @@ function isStoppingRuntimeCreateSessionError(message: string): boolean {
   );
 }
 
+function isDiskCodexReadinessRecoveryError(message: string): boolean {
+  const normalized = message.toLowerCase();
+  if (!normalized.includes("thread/start ready confirmation failed")) {
+    return false;
+  }
+  return (
+    normalized.includes("thread not found") ||
+    normalized.includes("session not found") ||
+    normalized.includes("thread not ready") ||
+    normalized.includes("no rollout found for thread id") ||
+    normalized.includes("[runtime_ended]") ||
+    normalized.includes("stale_reuse_cleanup") ||
+    normalized.includes("internal_replacement")
+  );
+}
+
 function isCliNotFoundError(message: string): boolean {
   const normalized = message.toLowerCase();
   return (
@@ -274,8 +290,13 @@ export function useWorkspaceActions({
   );
 
   const showRecoverableCreateSessionToast = useCallback(
-    (workspace: WorkspaceInfo, targetEngine: EngineType, message: string) => {
-      const detail = localizeSessionCreationErrorMessage(message);
+    (
+      workspace: WorkspaceInfo,
+      targetEngine: EngineType,
+      message: string,
+      detailOverride?: string,
+    ) => {
+      const detail = detailOverride ?? localizeSessionCreationErrorMessage(message);
       pushGlobalRuntimeNotice({
         severity: "error",
         category: "workspace",
@@ -479,6 +500,10 @@ export function useWorkspaceActions({
           targetEngine === "codex" &&
           isDiskProviderSelection(options) &&
           isStoppingRuntimeCreateSessionError(message);
+        const shouldShowDiskReadinessRecovery =
+          targetEngine === "codex" &&
+          isDiskProviderSelection(options) &&
+          isDiskCodexReadinessRecoveryError(message);
         if (shouldAttemptDiskRecovery) {
           onDebug({
             id: `${Date.now()}-client-create-session-disk-auto-recovery`,
@@ -527,6 +552,26 @@ export function useWorkspaceActions({
             alert(`${t("errors.failedToCreateSession")}\n\n${detail}`);
             return null;
           }
+        }
+        if (shouldShowDiskReadinessRecovery) {
+          onDebug({
+            id: `${Date.now()}-client-create-session-disk-readiness-recovery-toast`,
+            timestamp: Date.now(),
+            source: "client",
+            label: "workspace/create-session disk readiness recovery toast",
+            payload: {
+              workspaceId: workspace.id,
+              engine: targetEngine,
+              error: message,
+            },
+          });
+          showRecoverableCreateSessionToast(
+            workspace,
+            targetEngine,
+            message,
+            t("errors.failedToCreateSessionRuntimeRecovering"),
+          );
+          return null;
         }
         if (isStoppingRuntimeCreateSessionError(message)) {
           onDebug({

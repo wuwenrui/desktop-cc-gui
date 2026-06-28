@@ -32,6 +32,7 @@ The follow-up comment on #721 turns this into a concrete acceptance target: star
 - Add oversized/complex history degrade prompt so extreme cases open into a recoverable lightweight surface with user-visible options instead of freezing or crashing.
 - Add anchor/popover/measurement loop guards and long-running resource cleanup for observers, timers, hydration queues, and bounded caches.
 - Add conversation-local error containment for React #185 / update-loop-style row failures with content-safe diagnostics and recovery affordance, preventing full app crash where possible.
+- Add explicit conversation presentation scopes so complete restored histories, realtime live tails, collapsed tail windows, and manual/jump-expanded history windows cannot reuse stale deferred snapshots or virtualizer measurement caches.
 - Add focused performance evidence gates for a #721-class fixture: long restored conversation, many tool/read/diff cards, tables, anchors, and scroll interaction.
 
 ## 技术方案对比
@@ -80,6 +81,7 @@ The follow-up comment on #721 turns this into a concrete acceptance target: star
 
 - A synthetic #721-class restored conversation fixture opens without full-app `Application Error`, even if one heavy row throws during render.
 - Long restored conversation scroll keeps mounted row count and hydrated heavy block count bounded by viewport + documented overscan.
+- Switching the same conversation between collapsed tail, manual expanded history, jump expanded history, and realtime live tail uses distinct presentation scopes, preventing stale row measurement, row overlap, or scroll tug-of-war between history reveal and live auto-follow.
 - A heavy conversation can be opened in lightweight mode, with heavy cards/diffs/Markdown islands summarized by default and canonical actions still reading source payloads.
 - Opening a selected history conversation does not synchronously render all historical conversations or hydrate all heavy details before first interaction.
 - An oversized or complex history shows a bounded prompt/degraded surface with explicit recovery choices instead of freezing, blanking, or crashing.
