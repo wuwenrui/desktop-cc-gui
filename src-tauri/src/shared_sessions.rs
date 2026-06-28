@@ -23,6 +23,20 @@ const SHARED_STORE_LOCK_STALE_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_DELTA_SYNC_TURNS: usize = 8;
 const MAX_DELTA_SYNC_CHARS: usize = 4_000;
 
+#[cfg(windows)]
+fn codex_windows_turn_developer_instructions(
+    settings: &crate::types::AppSettings,
+) -> Option<String> {
+    crate::backend::app_server_cli::codex_generated_developer_instructions_for_turn(settings)
+}
+
+#[cfg(not(windows))]
+fn codex_windows_turn_developer_instructions(
+    _settings: &crate::types::AppSettings,
+) -> Option<String> {
+    None
+}
+
 fn is_supported_shared_session_engine(engine: EngineType) -> bool {
     matches!(engine, EngineType::Claude | EngineType::Codex)
 }
@@ -910,9 +924,12 @@ pub async fn send_shared_session_message(
             // Persist binding materialization before sending so failures don't
             // repeatedly create new native threads.
             write_shared_session_meta(&meta)?;
-            let mode_enforcement_enabled = {
+            let (mode_enforcement_enabled, extra_developer_instructions) = {
                 let settings = state.app_settings.lock().await;
-                settings.codex_mode_enforcement_enabled
+                (
+                    settings.codex_mode_enforcement_enabled,
+                    codex_windows_turn_developer_instructions(&settings),
+                )
             };
             let response = codex_core::send_user_message_core(
                 &state.sessions,
@@ -928,6 +945,7 @@ pub async fn send_shared_session_message(
                 preferred_language,
                 custom_spec_root,
                 mode_enforcement_enabled,
+                extra_developer_instructions,
             )
             .await?;
             if let Some(binding) = meta.bindings_by_engine.get_mut(&engine) {

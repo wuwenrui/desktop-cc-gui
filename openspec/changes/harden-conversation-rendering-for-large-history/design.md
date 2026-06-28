@@ -95,6 +95,12 @@ Decision: wrap repeated measurement/popover/anchor update paths with idempotent 
 
 Alternative considered: only catch React #185 in ErrorBoundary. Rejected because containment without loop prevention still leaves jank and memory pressure.
 
+### 10. Presentation scope includes conversation window semantics
+
+Decision: conversation render scopes MUST include more than `workspaceId + threadId`. The render layer now distinguishes static complete history, static collapsed history, static manual-expanded history, static jump-expanded history, realtime full tail, realtime collapsed tail, and realtime expanded history. Deferred presentation snapshots and timeline virtualizer cache keys include this presentation mode plus visible window identity, so the same thread cannot reuse stale row measurements when the user reveals earlier messages or when realtime streaming switches back to a bounded tail.
+
+Alternative considered: keep the existing thread-only scope and patch individual scroll effects. Rejected because the reported overlap/jump symptom is caused by cross-scenario cache reuse: full-history restore, manual "show earlier", jump-to-message reveal, and live auto-follow have different scroll ownership and row-height semantics. A shared scope lets a stale deferred snapshot or measurement cache masquerade as valid data.
+
 ## Risks / Trade-offs
 
 - [Risk] Placeholder hydration can break scroll height if estimates are poor. -> Mitigation: use stable estimated sizes, `measureElement`, and one bounded remeasure after hydration.
@@ -115,8 +121,9 @@ Alternative considered: only catch React #185 in ErrorBoundary. Rejected because
 5. Add Markdown heavy-block island placeholders and hydration guards.
 6. Add heavy tool/read/diff summary hydration rules.
 7. Add row/local error boundary and diagnostics.
-8. Add #721-class fixtures and focused tests.
-9. Run focused Vitest, `npm run typecheck`, `npm run lint`, and manual/browser evidence for heavy history open + scroll + typing.
+8. Add explicit presentation scope keys for realtime/static and collapsed/expanded history windows.
+9. Add #721-class fixtures and focused tests.
+10. Run focused Vitest, `npm run typecheck`, `npm run lint`, and manual/browser evidence for heavy history open + scroll + typing.
 
 Rollback strategy:
 

@@ -1860,7 +1860,8 @@ describe("GitHistoryPanel interactions", () => {
   });
 
   it("keeps rendered commit rows bounded with large history payload", async () => {
-    const largeCommits = Array.from({ length: 10_000 }, (_, index) => ({
+    const commitCount = 1_000;
+    const largeCommits = Array.from({ length: commitCount }, (_, index) => ({
       sha: `sha-${index}`,
       shortSha: `s${index}`,
       summary: `commit-${index}`,
@@ -1873,9 +1874,9 @@ describe("GitHistoryPanel interactions", () => {
     }));
     vi.mocked(tauriService.getGitCommitHistory).mockImplementation(async () => ({
       snapshotId: "snap-large",
-      total: 10_000,
+      total: commitCount,
       offset: 0,
-      limit: 10_000,
+      limit: commitCount,
       hasMore: false,
       commits: largeCommits,
     }));

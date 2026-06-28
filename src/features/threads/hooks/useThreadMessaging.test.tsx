@@ -2140,10 +2140,11 @@ describe("useThreadMessaging", () => {
         expect.objectContaining({
           severity: "error",
           category: "user-action-error",
-          messageKey: "runtimeNotice.error.threadTurnFailed",
+          messageKey: "runtimeNotice.error.codexSessionRecoverableFailure",
           messageParams: {
             engine: "Codex",
-            message: "[RUNTIME_ENDED] Managed runtime ended before this conversation turn settled.",
+            rawMessage:
+              "[RUNTIME_ENDED] Managed runtime ended before this conversation turn settled.",
             reasonCode: "runtime-ended",
             userAction: "reconnect",
             actionHint: "Reconnect the runtime and retry.",

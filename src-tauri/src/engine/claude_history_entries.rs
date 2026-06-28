@@ -53,6 +53,7 @@ pub(crate) enum ClaudeHistoryEntryClassification {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ClaudeHistoryHiddenReason {
     ControlPlane,
+    StreamJsonStdinPayload,
     SyntheticRuntime,
     InternalRecord,
     Quarantine,
@@ -330,8 +331,8 @@ fn classify_claude_local_control_text(
 }
 
 pub(crate) fn classify_claude_history_entry(entry: &Value) -> ClaudeHistoryEntryClassification {
-    if is_claude_control_plane_entry(entry) {
-        return ClaudeHistoryEntryClassification::Hidden(ClaudeHistoryHiddenReason::ControlPlane);
+    if let Some(reason) = classify_claude_control_plane_entry(entry) {
+        return ClaudeHistoryEntryClassification::Hidden(reason);
     }
     if is_internal_only_claude_entry(entry) {
         return ClaudeHistoryEntryClassification::Hidden(ClaudeHistoryHiddenReason::InternalRecord);
@@ -424,18 +425,82 @@ fn is_codex_command_token(token: &str) -> bool {
     matches!(command, "codex" | "codex.exe" | "codex.cmd" | "codex.bat")
 }
 
-fn content_contains_codex_app_server_control_plane(content: &Value) -> bool {
+fn is_claude_stream_json_stdin_payload_text(text: &str) -> bool {
+    let trimmed = text.trim();
+    if !trimmed.starts_with('{') || !trimmed.ends_with('}') {
+        return false;
+    }
+    let Ok(payload) = serde_json::from_str::<Value>(trimmed) else {
+        return false;
+    };
+    if payload.get("type").and_then(Value::as_str) != Some("user") {
+        return false;
+    }
+    let Some(message) = payload.get("message") else {
+        return false;
+    };
+    if message.get("role").and_then(Value::as_str) != Some("user") {
+        return false;
+    }
+    let Some(content) = message.get("content").and_then(Value::as_array) else {
+        return false;
+    };
+    content.iter().any(|block| {
+        matches!(
+            block.get("type").and_then(Value::as_str),
+            Some("text" | "image" | "image_url" | "input_text" | "input_image")
+        )
+    })
+}
+
+fn content_contains_claude_control_plane_text(content: &Value) -> bool {
     match content {
-        Value::String(text) => is_codex_app_server_text(text),
+        Value::String(text) => {
+            is_codex_app_server_text(text) || is_claude_stream_json_stdin_payload_text(text)
+        }
         Value::Array(blocks) => blocks.iter().any(|block| {
             block
                 .get("text")
                 .and_then(Value::as_str)
-                .map(is_codex_app_server_text)
+                .map(|text| {
+                    is_codex_app_server_text(text) || is_claude_stream_json_stdin_payload_text(text)
+                })
                 .unwrap_or(false)
         }),
         _ => false,
     }
+}
+
+fn content_contains_claude_stream_json_stdin_payload_text(content: &Value) -> bool {
+    match content {
+        Value::String(text) => is_claude_stream_json_stdin_payload_text(text),
+        Value::Array(blocks) => blocks.iter().any(|block| {
+            block
+                .get("text")
+                .and_then(Value::as_str)
+                .map(is_claude_stream_json_stdin_payload_text)
+                .unwrap_or(false)
+        }),
+        _ => false,
+    }
+}
+
+fn classify_claude_control_plane_entry(entry: &Value) -> Option<ClaudeHistoryHiddenReason> {
+    let content = entry
+        .get("message")
+        .and_then(|message| message.get("content"));
+    if content
+        .map(content_contains_claude_stream_json_stdin_payload_text)
+        .unwrap_or(false)
+    {
+        return Some(ClaudeHistoryHiddenReason::StreamJsonStdinPayload);
+    }
+
+    if is_claude_control_plane_entry(entry) {
+        return Some(ClaudeHistoryHiddenReason::ControlPlane);
+    }
+
+    None
 }
 
 pub(crate) fn is_claude_control_plane_entry(entry: &Value) -> bool {
@@ -472,6 +537,6 @@ pub(crate) fn is_claude_control_plane_entry(entry: &Value) -> bool {
     entry
         .get("message")
         .and_then(|message| message.get("content"))
-        .map(content_contains_codex_app_server_control_plane)
+        .map(content_contains_claude_control_plane_text)
         .unwrap_or(false)
 }

@@ -58,7 +58,17 @@ use crate::session_management::CodexProviderBinding;
 use crate::shared::workspaces_core::disconnect_workspace_session_core;
 use crate::shared::{codex_core, thread_titles_core};
 use crate::state::AppState;
-use crate::types::WorkspaceEntry;
+use crate::types::{AppSettings, WorkspaceEntry};
+
+#[cfg(windows)]
+fn codex_windows_turn_developer_instructions(settings: &AppSettings) -> Option<String> {
+    crate::backend::app_server_cli::codex_generated_developer_instructions_for_turn(settings)
+}
+
+#[cfg(not(windows))]
+fn codex_windows_turn_developer_instructions(_settings: &AppSettings) -> Option<String> {
+    None
+}
 
 fn hidden_auto_session_metadata(
     session_purpose: &str,
@@ -1127,9 +1137,12 @@ pub(crate) async fn send_user_message(
     } else {
         resolve_workspace_fallback_model(&state, &workspace_id).await
     };
-    let mode_enforcement_enabled = {
+    let (mode_enforcement_enabled, extra_developer_instructions) = {
         let settings = state.app_settings.lock().await;
-        settings.codex_mode_enforcement_enabled
+        (
+            settings.codex_mode_enforcement_enabled,
+            codex_windows_turn_developer_instructions(&settings),
+        )
     };
 
     let response = codex_core::send_user_message_core(
@@ -1146,6 +1159,7 @@ pub(crate) async fn send_user_message(
         preferred_language,
         custom_spec_root,
         mode_enforcement_enabled,
+        extra_developer_instructions,
     )
     .await?;
 

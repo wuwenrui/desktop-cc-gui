@@ -411,6 +411,35 @@ describe("useWorkspaceActions", () => {
     );
   });
 
+  it("shows recoverable copy for disk codex post-start stale readiness failures without auto-creating another session", async () => {
+    const options = makeOptions({
+      startThreadForWorkspace: vi.fn(async () => {
+        throw new Error(
+          "thread/start ready confirmation failed for workspace ws-1 thread thread-1: thread not found: thread-1",
+        );
+      }),
+    });
+    const { result } = renderHook(() => useWorkspaceActions(options));
+
+    await act(async () => {
+      await result.current.handleAddAgent(baseWorkspace, "codex", {
+        providerProfileId: "__disk__",
+      });
+    });
+
+    expect(ensureRuntimeReady).not.toHaveBeenCalled();
+    expect(options.startThreadForWorkspace).toHaveBeenCalledTimes(1);
+    expect(pushErrorToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "create-session-recovery-ws-1-codex",
+        title: "errors.failedToCreateSession",
+        message: "errors.failedToCreateSessionRuntimeRecovering",
+        sticky: true,
+      }),
+    );
+    expect(window.alert).not.toHaveBeenCalled();
+  });
+
   it("does not add disk auto-recovery to managed codex provider creation", async () => {
     const options = makeOptions({
       startThreadForWorkspace: vi.fn(async () => {
@@ -438,6 +467,30 @@ describe("useWorkspaceActions", () => {
         id: "create-session-recovery-ws-1-codex",
         sticky: true,
       }),
+    );
+  });
+
+  it("does not apply disk readiness recovery copy to managed codex provider creation", async () => {
+    const options = makeOptions({
+      startThreadForWorkspace: vi.fn(async () => {
+        throw new Error(
+          "thread/start ready confirmation failed for workspace ws-1 thread thread-1: thread not found: thread-1",
+        );
+      }),
+    });
+    const { result } = renderHook(() => useWorkspaceActions(options));
+
+    await act(async () => {
+      await result.current.handleAddAgent(baseWorkspace, "codex", {
+        providerProfileId: "provider-a",
+      });
+    });
+
+    expect(ensureRuntimeReady).not.toHaveBeenCalled();
+    expect(options.startThreadForWorkspace).toHaveBeenCalledTimes(1);
+    expect(pushErrorToast).not.toHaveBeenCalled();
+    expect(window.alert).toHaveBeenCalledWith(
+      expect.stringContaining("thread/start ready confirmation failed"),
     );
   });
 

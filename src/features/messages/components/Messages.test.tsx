@@ -87,6 +87,65 @@ describe("Messages", () => {
     expect(screen.queryByText("messages.thinkingProcess")).toBeNull();
   });
 
+  it("does not submit repeated expansion state for equivalent streaming reasoning renders", () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const createItems = (): ConversationItem[] => [
+      ...Array.from({ length: 64 }, (_, index): ConversationItem => ({
+        id: `history-${index}`,
+        kind: "message",
+        role: index % 2 === 0 ? "user" : "assistant",
+        text: `history ${index}`,
+      })),
+      {
+        id: "streaming-user",
+        kind: "message",
+        role: "user",
+        text: "继续分析",
+      },
+      {
+        id: "streaming-reasoning",
+        kind: "reasoning",
+        summary: "检查渲染状态",
+        content: "保持同一个 reasoning id，但每次父级传入新数组引用。",
+      },
+    ];
+
+    try {
+      const view = render(
+        <Messages
+          items={createItems()}
+          threadId="thread-streaming-depth-guard"
+          workspaceId="ws-1"
+          isThinking
+          activeEngine="codex"
+          openTargets={[]}
+          selectedOpenAppId=""
+        />,
+      );
+
+      for (let index = 0; index < 12; index += 1) {
+        view.rerender(
+          <Messages
+            items={createItems()}
+            threadId="thread-streaming-depth-guard"
+            workspaceId="ws-1"
+            isThinking
+            activeEngine="codex"
+            openTargets={[]}
+            selectedOpenAppId=""
+          />,
+        );
+      }
+
+      const updateDepthErrors = consoleErrorSpy.mock.calls.filter((call) =>
+        call.some((entry) => String(entry).includes("Maximum update depth exceeded")),
+      );
+      expect(updateDepthErrors).toHaveLength(0);
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
+  });
+
   it("renders the linked TaskRun indicator for the active thread and opens run detail", () => {
     const openedRunIds: string[] = [];
     const handleOpenTaskRun = (event: Event) => {

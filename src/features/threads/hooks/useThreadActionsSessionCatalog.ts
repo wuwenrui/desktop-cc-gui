@@ -200,7 +200,7 @@ export function useThreadActionsSessionCatalog({
       return {
         sessions,
         partialSource,
-        nextCursor: null,
+        nextCursor: response.nextCursor ?? null,
         sourceStatuses,
       };
     },

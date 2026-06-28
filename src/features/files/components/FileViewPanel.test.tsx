@@ -507,6 +507,7 @@ describe("FileViewPanel navigation", () => {
     );
 
     await screen.findByTestId("mock-codemirror");
+    mockCodeMirrorDispatch.mockClear();
 
     rerender(
       <FileViewPanel
@@ -525,6 +526,9 @@ describe("FileViewPanel navigation", () => {
 
     await waitFor(() => {
       expect(readWorkspaceFile).toHaveBeenCalledWith("ws-stale-git-marker", "src/B.ts");
+    });
+    await waitFor(() => {
+      expect(mockCodeMirrorDispatch.mock.calls.length).toBeGreaterThanOrEqual(2);
     });
     mockCodeMirrorDispatch.mockClear();
 

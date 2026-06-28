@@ -1271,7 +1271,7 @@ pub(crate) struct AppSettings {
     pub(crate) default_engine: Option<String>,
     /// Curated skill ids the user has enabled. Shared across workspaces and
     /// sessions. Toggling these participates in Codex restart detection because
-    /// app-server developer instructions are captured at launch time.
+    /// long-lived app-server runtimes cache generated instruction transport state.
     #[serde(
         default = "default_enabled_curated_skill_ids",
         rename = "enabledCuratedSkillIds"

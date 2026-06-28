@@ -51,11 +51,11 @@ describe("useThreadActionsSessionCatalog", () => {
       "claude:first",
       "claude:second",
     ]);
-    expect(catalog?.nextCursor).toBeNull();
+    expect(catalog?.nextCursor).toBe("offset:9999");
     expect(catalog?.partialSource).toBeNull();
   });
 
-  it("ignores backend pagination cursors for the no-pagination sidebar catalog path", async () => {
+  it("preserves backend pagination cursors for large sidebar catalogs", async () => {
     const listWorkspaceSessionsService = vi.fn(
       async (_workspaceId, options) => ({
         data: [
@@ -85,7 +85,7 @@ describe("useThreadActionsSessionCatalog", () => {
       await result.current.loadActiveProjectCatalogSessions("ws-1");
 
     expect(listWorkspaceSessionsService).toHaveBeenCalledTimes(1);
-    expect(catalog?.nextCursor).toBeNull();
+    expect(catalog?.nextCursor).toBe("cursor-1");
     expect(catalog?.partialSource).toBeNull();
   });
 

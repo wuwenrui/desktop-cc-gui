@@ -1,25 +1,19 @@
-import { useCallback, useState, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useState } from "react";
 import { setCuratedSkillEnabled } from "../../../services/tauri";
 import type { AppSettings } from "../../../types";
 
 /**
  * Toggle handler for curated skills. The IPC returns the new
- * `AppSettings`, which we write back to the **caller-supplied** setter
- * so every consumer (CuratedSection, readiness indicator, etc.) re-renders
- * synchronously.
+ * `AppSettings`, which we hand back to the caller-owned settings updater.
  *
- * We deliberately do NOT call `useAppSettings()` ourselves: each call
- * would create a brand-new local state slot in React's hook list, so a
- * `setSettings` here would update a *different* instance from the one
- * the rendering hook reads. To guarantee they stay in lockstep the
- * caller passes its own `setSettings` down, which means the same
- * React state slot is shared between the read path and the write
- * path.
+ * This hook deliberately does not own AppSettings state. SettingsView already
+ * owns the active settings snapshot, so writing through that parent updater
+ * keeps the row switch and every sibling settings consumer in lockstep.
  */
 export function useCuratedSkillToggle(options: {
-  setSettings: Dispatch<SetStateAction<AppSettings>>;
+  onSettingsChanged: (next: AppSettings) => Promise<void> | void;
 }) {
-  const { setSettings } = options;
+  const { onSettingsChanged } = options;
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,7 +23,7 @@ export function useCuratedSkillToggle(options: {
       setError(null);
       try {
         const next = (await setCuratedSkillEnabled(skillId, enabled)) as AppSettings;
-        setSettings(next);
+        await onSettingsChanged(next);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
         throw err;
@@ -37,7 +31,7 @@ export function useCuratedSkillToggle(options: {
         setPendingId(null);
       }
     },
-    [setSettings],
+    [onSettingsChanged],
   );
 
   return {

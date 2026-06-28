@@ -166,6 +166,8 @@ vi.mock("react-i18next", () => ({
         "runtimeNotice.startup.activeWorkspaceReady": "当前工作区首屏数据已就绪",
         "runtimeNotice.error.threadTurnFailed":
           `${String(params?.engine ?? "Runtime")} 会话失败：${String(params?.message ?? "")}`,
+        "runtimeNotice.error.codexSessionRecoverableFailure":
+          "Codex 连接中断：旧会话绑定或运行时连接已失效，请重试或重新连接。",
         "runtimeNotice.engine.checking":
           `正在检测 ${String(params?.engine ?? "")} 状态...`,
         "runtimeNotice.engine.ready":

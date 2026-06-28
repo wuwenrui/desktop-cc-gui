@@ -1094,7 +1094,7 @@ async fn spawn_workspace_session_with_wrapper_fallback<E: EventSink>(
         Err(primary_error) => {
             primary_sink.discard();
             log::warn!(
-                "[codex-wrapper-fallback] retrying workspace={} bin={} wrapper={} without internal spec hint after primary failure: {}",
+                "[codex-wrapper-fallback] retrying workspace={} bin={} wrapper={} without ccgui-generated instructions argv after primary failure: {}",
                 entry.id,
                 launch_context.resolved_bin,
                 launch_context.wrapper_kind,
@@ -1140,11 +1140,15 @@ async fn spawn_workspace_session_once<E: EventSink>(
         build_codex_command_from_launch_context(launch_context, launch_options.hide_console);
     apply_codex_tui_compatible_terminal_env(&mut command);
     WorkspaceSession::configure_spawn_command(&mut command);
+    let effective_codex_home = codex_home
+        .clone()
+        .or_else(crate::codex::home::resolve_default_codex_home);
     apply_codex_app_server_args_with_settings(
         &mut command,
         codex_args.as_deref(),
         launch_options,
         &app_settings,
+        effective_codex_home.as_deref(),
     )?;
     command.current_dir(&entry.path);
     if let Some(codex_home) = codex_home {
