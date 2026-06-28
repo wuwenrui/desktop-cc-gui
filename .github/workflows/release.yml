@@ -18,8 +18,6 @@ jobs:
         include:
           - platform: macos-latest
             arch: aarch64
-          - platform: macos-15-intel
-            arch: x86_64
     env:
       MACOSX_DEPLOYMENT_TARGET: "10.13"
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
@@ -459,10 +457,6 @@ jobs:
             "darwin-aarch64": {
               "url": artifact_url("LawyerCopilot_aarch64.app.tar.gz"),
               "signature": (artifacts_dir / "LawyerCopilot_aarch64.app.tar.gz.sig").read_text().strip(),
-            },
-            "darwin-x86_64": {
-              "url": artifact_url("LawyerCopilot_x86_64.app.tar.gz"),
-              "signature": (artifacts_dir / "LawyerCopilot_x86_64.app.tar.gz.sig").read_text().strip(),
             }
           }
 
