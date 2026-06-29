@@ -266,3 +266,51 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 6: 工具表面收纳进“+”菜单并打磨样式
+
+**Date**: 2026-06-29
+**Task**: 工具表面收纳进“+”菜单并打磨样式
+**Branch**: `feat/ui-refactoring`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| 改动 | 说明 |
+|------|------|
+| 表面迁移 | token 用量环、状态面板开关、技能指示器、附件等从常驻工具栏移入“+”下拉菜单顶部快捷操作行 |
+| 菜单定位 | 动态测量输入框宽度与触发器偏移，使菜单贴合输入框上沿呈现，含上滑入场动画 |
+| 菜单项布局 | 标题与当前值改为单行内联布局 |
+| 样式修复 | 禁用态发送按钮配色、readiness 文案字重恢复常规 |
+
+**Updated Files**:
+- `src/features/composer/components/ChatInputBox/ButtonArea.tsx`
+- `src/features/composer/components/ChatInputBox/ButtonArea.test.tsx`
+- `src/features/composer/components/ChatInputBox/ChatInputBox.tsx`
+- `src/features/composer/components/ChatInputBox/ChatInputBoxFooter.tsx`
+- `src/features/composer/components/ChatInputBox/types.ts`
+- `src/features/composer/components/ChatInputBox/styles/{selectors,buttons,banners}.css`
+- `src/styles/home-chat.css`
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `524bcf9a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

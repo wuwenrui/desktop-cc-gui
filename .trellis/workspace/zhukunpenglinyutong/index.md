@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 5
+- **Total Sessions**: 6
 - **Last Active**: 2026-06-29
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~268 | Active |
+| `journal-1.md` | ~316 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 6 | 2026-06-29 | 工具表面收纳进“+”菜单并打磨样式 | `524bcf9a` | `feat/ui-refactoring` |
 | 5 | 2026-06-29 | 工具菜单下拉化与时间线空行修复 | `bd00e490` | `feat/ui-refactoring` |
 | 4 | 2026-06-27 | 工具块尺寸对齐 shadcn 官方 Marker 默认规格 | `144563c2` | `feat/ui-refactoring` |
 | 3 | 2026-06-27 | 新增 devtools 菜单项 + Geist 字体与文档观感优化 | `7a1d11e5`, `9d480e77` | `feat/ui-refactoring` |
