@@ -5,14 +5,12 @@ import { cn } from "@/lib/utils";
 type InputProps = Omit<React.ComponentProps<"input">, "size"> & {
   size?: "sm" | "default" | "lg" | number;
   unstyled?: boolean;
-  nativeInput?: boolean;
 };
 
 function Input({
   className,
   size = "default",
   unstyled = false,
-  nativeInput = false,
   ...props
 }: InputProps) {
   const inputClassName = cn(
