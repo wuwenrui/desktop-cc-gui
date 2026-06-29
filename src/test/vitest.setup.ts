@@ -227,10 +227,9 @@ vi.mock("react-i18next", () => ({
         "messages.conversationLightweightModeTitle": "Lightweight mode is on",
         "messages.conversationLightweightModeDescription":
           "Heavy rows are shown as summaries first.",
-        "messages.conversationOversizedHistoryTitle":
-          "Oversized conversation opened in lightweight mode",
+        "messages.conversationOversizedHistoryTitle": "Oversized conversation detected",
         "messages.conversationOversizedHistoryDescription":
-          "{{rows}} rows, render weight {{renderWeight}}.",
+          "{{rows}} rows, render weight {{renderWeight}}. Full details remain visible.",
         "messages.conversationLightweightUse": "Use lightweight",
         "messages.conversationLightweightStayLightweight": "Stay lightweight",
         "messages.conversationLightweightHydrateVisible": "Render details",

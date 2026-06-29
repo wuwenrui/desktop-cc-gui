@@ -12,9 +12,9 @@ const enPart7 = {
     conversationLightweightModeTitle: "Lightweight mode is on",
     conversationLightweightModeDescription:
       "Heavy rows are shown as summaries first. Canonical message actions still use the original conversation data.",
-    conversationOversizedHistoryTitle: "Oversized conversation opened in lightweight mode",
+    conversationOversizedHistoryTitle: "Oversized conversation detected",
     conversationOversizedHistoryDescription:
-      "{{rows}} rows, render weight {{renderWeight}}. Details stay deferred until you request them.",
+      "{{rows}} rows, render weight {{renderWeight}}. Full details remain visible; use lightweight mode only if the conversation feels slow.",
     conversationLightweightUse: "Use lightweight",
     conversationLightweightStayLightweight: "Stay lightweight",
     conversationLightweightHydrateVisible: "Render details",

@@ -47,7 +47,7 @@ describe("messagesConversationLightweightMode", () => {
     ).toEqual({ suggested: true, oversized: true });
   });
 
-  it("keeps oversized histories lightweight until the user requests detail hydration", () => {
+  it("keeps oversized histories in full detail until the user explicitly enables lightweight mode", () => {
     const policy = { suggested: true, oversized: true };
 
     expect(
@@ -56,7 +56,7 @@ describe("messagesConversationLightweightMode", () => {
         manualEnabled: false,
         detailHydrationRequested: false,
       }),
-    ).toEqual({ active: true, reason: "oversized" });
+    ).toEqual({ active: false, reason: "inactive" });
     expect(
       resolveConversationLightweightModeState({
         policy,

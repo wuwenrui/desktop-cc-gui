@@ -45,6 +45,7 @@ vi.mock("./Markdown", () => ({
 import { Messages } from "./Messages";
 import {
   TIMELINE_LIGHTWEIGHT_ROW_PLACEHOLDER_HEIGHT,
+  TIMELINE_RENDER_WEIGHT_VIRTUALIZATION_FLAG_KEY,
   TIMELINE_VIRTUAL_ROW_PLACEHOLDER_MAX_HEIGHT,
 } from "./messagesTimelineVirtualization";
 
@@ -67,6 +68,7 @@ describe("Messages virtualized jump behavior", () => {
     window.localStorage.setItem("ccgui.claude.hideReasoningModule", "0");
     window.localStorage.removeItem("ccgui.messages.live.autoFollow");
     window.localStorage.removeItem("ccgui.messages.live.collapseMiddleSteps");
+    window.localStorage.removeItem(TIMELINE_RENDER_WEIGHT_VIRTUALIZATION_FLAG_KEY);
   });
 
   afterEach(() => {
@@ -114,6 +116,7 @@ describe("Messages virtualized jump behavior", () => {
   });
 
   it("scrolls to an offscreen heavy anchor when render weight triggers virtualization", async () => {
+    window.localStorage.setItem(TIMELINE_RENDER_WEIGHT_VIRTUALIZATION_FLAG_KEY, "1");
     const heavyMarkdown = [
       "# Heavy section",
       "| A | B | C |",
@@ -221,6 +224,7 @@ describe("Messages virtualized jump behavior", () => {
   });
 
   it("compresses virtual row height when heavy rows render as lightweight summaries", async () => {
+    window.localStorage.setItem(TIMELINE_RENDER_WEIGHT_VIRTUALIZATION_FLAG_KEY, "1");
     virtualRowSizeOverride.value = TIMELINE_VIRTUAL_ROW_PLACEHOLDER_MAX_HEIGHT;
     const heavyMarkdown = [
       "# Heavy assistant answer",
@@ -411,7 +415,7 @@ describe("Messages virtualized jump behavior", () => {
     expect(screen.getAllByText(/Streaming heavy answer/).length).toBeGreaterThan(0);
   });
 
-  it("shows an oversized history prompt before full detail hydration", () => {
+  it("shows an oversized history prompt without replacing full details", () => {
     const oversizedMarkdown = [
       "# Oversized section",
       "| A | B | C |",
@@ -441,10 +445,11 @@ describe("Messages virtualized jump behavior", () => {
       />,
     );
 
-    expect(screen.getByText("Oversized conversation opened in lightweight mode")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Stay lightweight" })).toBeNull();
-    expect(screen.getAllByRole("button", { name: "Render details" }).length)
-      .toBeGreaterThan(0);
+    expect(screen.getByText("Oversized conversation detected")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Use lightweight" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Render details" })).toBeNull();
+    expect(screen.getAllByText(/Oversized section/).length).toBeGreaterThan(0);
+    expect(screen.queryByText("Deferred detail")).toBeNull();
     expect(screen.queryByRole("button", { name: "Retry full detail" })).toBeNull();
   });
 });

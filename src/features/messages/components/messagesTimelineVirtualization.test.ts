@@ -20,6 +20,7 @@ import {
   TIMELINE_CANVAS_STREAMING_OVERSCAN,
   TIMELINE_LIGHTWEIGHT_ROW_PLACEHOLDER_HEIGHT,
   TIMELINE_RENDER_WEIGHT_BASELINE_FLAG_KEY,
+  TIMELINE_RENDER_WEIGHT_VIRTUALIZATION_FLAG_KEY,
   TIMELINE_VIRTUAL_ROW_PLACEHOLDER_MAX_HEIGHT,
   TIMELINE_VIRTUAL_ROW_PLACEHOLDER_MIN_HEIGHT,
   TIMELINE_VIRTUALIZER_STABILITY_MAX_REMEASURE_COUNT,
@@ -32,6 +33,7 @@ import type { TimelineProjectionRow } from "./messagesTimelineProjection";
 describe("messagesTimelineVirtualization", () => {
   afterEach(() => {
     globalThis.localStorage.removeItem(TIMELINE_RENDER_WEIGHT_BASELINE_FLAG_KEY);
+    globalThis.localStorage.removeItem(TIMELINE_RENDER_WEIGHT_VIRTUALIZATION_FLAG_KEY);
   });
 
   it("enables virtualization only for long stable timelines", () => {
@@ -130,7 +132,23 @@ describe("messagesTimelineVirtualization", () => {
     })).toBe(false);
   });
 
-  it("keeps the render-weight gate enabled when storage is unavailable", () => {
+  it("keeps short high-render legal transcripts in normal flow by default", () => {
+    expect(shouldVirtualizeTimelineRows({
+      isThinking: false,
+      rowCount: 18,
+      renderWeight: TIMELINE_VIRTUALIZATION_MIN_RENDER_WEIGHT * 4,
+    })).toBe(false);
+  });
+
+  it("keeps long high-render legal transcripts in normal flow by default", () => {
+    expect(shouldVirtualizeTimelineRows({
+      isThinking: false,
+      rowCount: TIMELINE_VIRTUALIZATION_MIN_ROWS + 40,
+      renderWeight: (TIMELINE_VIRTUALIZATION_MIN_ROWS + 40) * 3,
+    })).toBe(false);
+  });
+
+  it("keeps the render-weight gate disabled when storage is unavailable", () => {
     const descriptor = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
     Object.defineProperty(globalThis, "localStorage", {
       configurable: true,
@@ -140,12 +158,12 @@ describe("messagesTimelineVirtualization", () => {
     });
 
     try {
-      expect(isTimelineRenderWeightGateEnabled()).toBe(true);
+      expect(isTimelineRenderWeightGateEnabled()).toBe(false);
       expect(shouldVirtualizeTimelineRows({
         isThinking: false,
         rowCount: 12,
         renderWeight: TIMELINE_VIRTUALIZATION_MIN_RENDER_WEIGHT * 4,
-      })).toBe(true);
+      })).toBe(false);
     } finally {
       if (descriptor) {
         Object.defineProperty(globalThis, "localStorage", descriptor);
@@ -220,7 +238,7 @@ describe("messagesTimelineVirtualization", () => {
     expect(estimateTimelineProjectionRenderWeight(imageRow)).toBeGreaterThan(40);
   });
 
-  it("virtualizes #721-class heavy history even when row count is below the threshold", () => {
+  it("keeps #721-class heavy history in normal flow by default below the row-count threshold", () => {
     const { rows } = createHeavyHistoryFixture("heavy");
     const summary = summarizeTimelineProjectionRenderWeight(rows);
 
@@ -235,6 +253,16 @@ describe("messagesTimelineVirtualization", () => {
       isThinking: false,
       rowCount: summary.rowCount,
       renderWeight: summary.renderWeight,
+    })).toBe(false);
+  });
+
+  it("allows render-weight virtualization only through an explicit local opt-in", () => {
+    globalThis.localStorage.setItem(TIMELINE_RENDER_WEIGHT_VIRTUALIZATION_FLAG_KEY, "1");
+
+    expect(shouldVirtualizeTimelineRows({
+      isThinking: false,
+      rowCount: 12,
+      renderWeight: TIMELINE_VIRTUALIZATION_MIN_RENDER_WEIGHT * 4,
     })).toBe(true);
   });
 

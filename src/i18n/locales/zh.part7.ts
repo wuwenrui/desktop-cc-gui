@@ -12,9 +12,9 @@ const zhPart7 = {
     conversationLightweightModeTitle: "轻量模式已开启",
     conversationLightweightModeDescription:
       "重型行会先显示摘要。消息复制、Fork、回溯等操作仍读取原始对话数据。",
-    conversationOversizedHistoryTitle: "超大对话已用轻量模式打开",
+    conversationOversizedHistoryTitle: "检测到超大对话",
     conversationOversizedHistoryDescription:
-      "{{rows}} 行，渲染权重 {{renderWeight}}。详情会保持延迟，直到你主动请求渲染。",
+      "{{rows}} 行，渲染权重 {{renderWeight}}。完整内容已保持显示；只有在对话变慢时再启用轻量模式。",
     conversationLightweightUse: "启用轻量模式",
     conversationLightweightStayLightweight: "保持轻量",
     conversationLightweightHydrateVisible: "渲染详情",

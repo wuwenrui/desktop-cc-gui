@@ -13,7 +13,7 @@ export type ConversationLightweightPolicy = {
 
 export type ConversationLightweightModeState = {
   active: boolean;
-  reason: "manual" | "oversized" | "inactive";
+  reason: "manual" | "inactive";
 };
 
 export function resolveConversationLightweightPolicy(
@@ -36,9 +36,6 @@ export function resolveConversationLightweightModeState(input: {
 }): ConversationLightweightModeState {
   if (input.manualEnabled) {
     return { active: true, reason: "manual" };
-  }
-  if (input.policy.oversized && !input.detailHydrationRequested) {
-    return { active: true, reason: "oversized" };
   }
   return { active: false, reason: "inactive" };
 }

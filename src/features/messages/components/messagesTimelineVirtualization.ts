@@ -12,6 +12,8 @@ export const TIMELINE_VIRTUAL_ROW_PLACEHOLDER_MAX_HEIGHT = 320;
 export const TIMELINE_LIGHTWEIGHT_ROW_PLACEHOLDER_HEIGHT = 44;
 export const TIMELINE_RENDER_WEIGHT_BASELINE_FLAG_KEY =
   "ccgui.perf.timelineRenderWeightBaseline";
+export const TIMELINE_RENDER_WEIGHT_VIRTUALIZATION_FLAG_KEY =
+  "ccgui.perf.timelineRenderWeightVirtualization";
 export const TIMELINE_VIRTUALIZER_STABILITY_MAX_REMEASURE_COUNT = 3;
 
 export type TimelineRenderWeightCategory =
@@ -63,13 +65,17 @@ function canReadBaselineFlag() {
 
 export function isTimelineRenderWeightGateEnabled() {
   if (!canReadBaselineFlag()) {
-    return true;
+    return false;
   }
   try {
-    const value = globalThis.localStorage.getItem(TIMELINE_RENDER_WEIGHT_BASELINE_FLAG_KEY);
-    return value !== "1" && value !== "true" && value !== "on";
+    const baselineValue = globalThis.localStorage.getItem(TIMELINE_RENDER_WEIGHT_BASELINE_FLAG_KEY);
+    if (baselineValue === "1" || baselineValue === "true" || baselineValue === "on") {
+      return false;
+    }
+    const optInValue = globalThis.localStorage.getItem(TIMELINE_RENDER_WEIGHT_VIRTUALIZATION_FLAG_KEY);
+    return optInValue === "1" || optInValue === "true" || optInValue === "on";
   } catch {
-    return true;
+    return false;
   }
 }
 
@@ -81,13 +87,12 @@ export function shouldVirtualizeTimelineRows(input: {
   if (input.isThinking) {
     return input.rowCount >= TIMELINE_VIRTUALIZATION_MIN_ROWS;
   }
-  const renderWeightGateEnabled = isTimelineRenderWeightGateEnabled();
-  const hasHighRenderDensity = renderWeightGateEnabled &&
+  const hasHighRenderDensity =
     typeof input.renderWeight === "number" &&
     input.renderWeight >= TIMELINE_VIRTUALIZATION_MIN_RENDER_WEIGHT &&
     input.renderWeight > input.rowCount * 2;
   if (hasHighRenderDensity) {
-    return true;
+    return isTimelineRenderWeightGateEnabled();
   }
   return input.rowCount >= TIMELINE_VIRTUALIZATION_MIN_ROWS;
 }
