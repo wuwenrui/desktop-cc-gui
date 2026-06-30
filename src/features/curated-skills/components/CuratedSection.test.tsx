@@ -1,17 +1,9 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { useState } from "react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { CuratedSection } from "./CuratedSection";
-import type { CuratedSkillOption } from "../../../types";
-
-vi.mock("../../settings/hooks/useAppSettings", () => ({
-  useAppSettings: () => ({
-    settings: { enabledCuratedSkillIds: [] },
-    setSettings: () => undefined,
-    saveSettings: () => Promise.resolve({}),
-    isLoading: false,
-  }),
-}));
+import type { AppSettings, CuratedSkillOption } from "../../../types";
 
 const { sampleSkills, useCuratedSkillsState } = vi.hoisted(() => {
   const skills = [
@@ -35,25 +27,75 @@ const { sampleSkills, useCuratedSkillsState } = vi.hoisted(() => {
 });
 
 vi.mock("../hooks/useCuratedSkills", () => ({
-  useCuratedSkills: (_options: { enabledCuratedSkillIds: string[] | undefined }) => ({
-    skills: useCuratedSkillsState.skills,
-    loading: false,
-    error: null,
-    refresh: () => Promise.resolve(),
-  }),
+  useCuratedSkills: (options: { enabledCuratedSkillIds: string[] | undefined }) => {
+    const enabledIds = new Set(options.enabledCuratedSkillIds ?? []);
+    return {
+      skills: useCuratedSkillsState.skills.map((skill) => ({
+        ...skill,
+        enabled: enabledIds.has(skill.name),
+      })),
+      loading: false,
+      error: null,
+      refresh: () => Promise.resolve(),
+    };
+  },
 }));
 
-vi.mock("../hooks/useCuratedSkillToggle", () => ({
-  useCuratedSkillToggle: (_options: { setSettings: unknown }) => ({
-    setEnabled: vi.fn().mockResolvedValue(undefined),
-    pendingId: null,
-    error: null,
-  }),
+const { setCuratedSkillEnabledMock } = vi.hoisted(() => ({
+  setCuratedSkillEnabledMock: vi.fn(),
 }));
+
+vi.mock("../../../services/tauri", () => ({
+  setCuratedSkillEnabled: setCuratedSkillEnabledMock,
+}));
+
+const baseAppSettings: Pick<AppSettings, "enabledCuratedSkillIds"> = {
+  enabledCuratedSkillIds: [],
+};
+
+function renderCuratedSection(options: {
+  initialEnabledCuratedSkillIds?: string[];
+  onUpdateAppSettings?: (next: AppSettings) => Promise<void>;
+} = {}) {
+  function Harness() {
+    const [appSettings, setAppSettings] = useState<
+      Pick<AppSettings, "enabledCuratedSkillIds">
+    >({
+      ...baseAppSettings,
+      enabledCuratedSkillIds: options.initialEnabledCuratedSkillIds ?? [],
+    });
+    const onUpdateAppSettings =
+      options.onUpdateAppSettings ??
+      vi.fn(async (next: AppSettings) => {
+        setAppSettings({
+          enabledCuratedSkillIds: next.enabledCuratedSkillIds,
+        });
+      });
+
+    return (
+      <CuratedSection
+        appSettings={appSettings}
+        onUpdateAppSettings={onUpdateAppSettings}
+      />
+    );
+  }
+
+  return render(<Harness />);
+}
 
 describe("CuratedSection", () => {
+  beforeEach(() => {
+    setCuratedSkillEnabledMock.mockReset();
+    setCuratedSkillEnabledMock.mockImplementation(
+      async (skillId: string, enabled: boolean) => ({
+        ...baseAppSettings,
+        enabledCuratedSkillIds: enabled ? [skillId] : [],
+      }),
+    );
+  });
+
   it("renders the Built-in badge, display name, category, license and version", () => {
-    render(<CuratedSection />);
+    renderCuratedSection();
     // The section heading
     expect(screen.getByText("Curated")).toBeTruthy();
     // Row content (no toBeInTheDocument matcher in this repo's vitest setup).
@@ -64,7 +106,7 @@ describe("CuratedSection", () => {
   });
 
   it("renders a lucide icon, not a bare text node, for the icon field", () => {
-    const { container } = render(<CuratedSection />);
+    const { container } = renderCuratedSection();
     // The icon slot has data-icon="sparkles" and should contain an
     // actual <svg> child (lucide icons render as SVG). Previously this
     // was just the bare text "sparkles" which is what the user reported.
@@ -74,12 +116,12 @@ describe("CuratedSection", () => {
   });
 
   it("uses kebab-case ASCII data-icon attribute (preserved for testability)", () => {
-    const { container } = render(<CuratedSection />);
+    const { container } = renderCuratedSection();
     expect(container.querySelector('[data-icon="sparkles"]')).toBeTruthy();
   });
 
   it("renders a 'View on GitHub' link that points at the upstream source URL", () => {
-    const { container } = render(<CuratedSection />);
+    const { container } = renderCuratedSection();
     const link = container.querySelector(
       '[data-testid="curated-row-source-lazy-senior-dev"]',
     ) as HTMLAnchorElement | null;
@@ -105,7 +147,7 @@ describe("CuratedSection", () => {
     void _omit;
     useCuratedSkillsState.skills = [rest as CuratedSkillOption];
     try {
-      const { container } = render(<CuratedSection />);
+      const { container } = renderCuratedSection();
       expect(
         container.querySelector(
           '[data-testid="curated-row-source-lazy-senior-dev"]',
@@ -121,7 +163,7 @@ describe("CuratedSection", () => {
     // The test is intentionally permissive: it checks the structure but
     // does not pin a string match. Update this when intentional DOM
     // changes are made.
-    const { container } = render(<CuratedSection />);
+    const { container } = renderCuratedSection();
     const section = container.querySelector('[data-testid="curated-section"]');
     expect(section).toBeTruthy();
     expect(section?.getAttribute("data-count")).toBe("1");
@@ -176,5 +218,48 @@ describe("CuratedSection", () => {
     const meta = row?.querySelector(".curated-section-row-meta");
     expect(meta?.textContent ?? "").toContain("MIT");
     expect(meta?.textContent ?? "").toContain("v4.8.1");
+  });
+
+  it("updates the switch from the caller-owned settings snapshot after toggle success", async () => {
+    const { container } = renderCuratedSection();
+    const row = container.querySelector(
+      '[data-testid="curated-row-lazy-senior-dev"]',
+    );
+    const toggle = container.querySelector('[role="switch"]');
+
+    expect(row?.getAttribute("data-enabled")).toBe("false");
+    expect(toggle).toBeTruthy();
+
+    fireEvent.click(toggle as Element);
+
+    await waitFor(() => {
+      expect(setCuratedSkillEnabledMock).toHaveBeenCalledWith(
+        "lazy-senior-dev",
+        true,
+      );
+      expect(row?.getAttribute("data-enabled")).toBe("true");
+    });
+  });
+
+  it("keeps the current settings snapshot when the toggle write fails", async () => {
+    setCuratedSkillEnabledMock.mockRejectedValueOnce(new Error("write failed"));
+    const { container } = renderCuratedSection();
+    const row = container.querySelector(
+      '[data-testid="curated-row-lazy-senior-dev"]',
+    );
+    const toggle = container.querySelector('[role="switch"]');
+
+    fireEvent.click(toggle as Element);
+
+    await waitFor(() => {
+      expect(setCuratedSkillEnabledMock).toHaveBeenCalledWith(
+        "lazy-senior-dev",
+        true,
+      );
+      expect(row?.getAttribute("data-enabled")).toBe("false");
+      expect(screen.getByRole("alert").textContent ?? "").toContain(
+        "write failed",
+      );
+    });
   });
 });

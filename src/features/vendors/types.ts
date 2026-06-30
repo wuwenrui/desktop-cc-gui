@@ -142,7 +142,7 @@ export interface GeminiVendorDraft {
   model: string;
 }
 
-export type VendorTab = "claude" | "codex" | "gemini";
+export type VendorTab = "claude" | "codex";
 
 export interface ClaudeProviderPreset {
   id: string;

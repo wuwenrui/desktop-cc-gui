@@ -187,6 +187,44 @@ describe("GlobalRuntimeNoticeDock", () => {
     expect(onMinimize).toHaveBeenCalledTimes(1);
   });
 
+  it("renders Codex recoverable notices without raw runtime diagnostics", () => {
+    render(
+      <GlobalRuntimeNoticeDock
+        notices={[
+          {
+            id: "notice-codex-recoverable",
+            severity: "error",
+            category: "user-action-error",
+            messageKey: "runtimeNotice.error.codexSessionRecoverableFailure",
+            messageParams: {
+              engine: "Codex",
+              rawMessage:
+                "[RUNTIME_ENDED] Managed runtime stopped after manual shutdown (source: stale_reuse_cleanup).",
+              reasonCode: "runtime-ended",
+              actionHint: "Reconnect the runtime and retry.",
+            },
+            timestampMs: new Date("2026-04-22T09:09:07").getTime(),
+            repeatCount: 1,
+            dedupeKey: "codex:recoverable",
+          },
+        ]}
+        visibility="expanded"
+        status="has-error"
+        onExpand={vi.fn()}
+        onMinimize={vi.fn()}
+        onClear={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByText("Codex 连接中断：旧会话绑定或运行时连接已失效，请重试或重新连接。"),
+    ).toBeTruthy();
+    expect(screen.queryByText(/manual shutdown/)).toBeNull();
+    expect(screen.queryByText(/stale_reuse_cleanup/)).toBeNull();
+    expect(screen.queryByText(/{{reasonCode}}/)).toBeNull();
+    expect(screen.queryByText(/{{actionHint}}/)).toBeNull();
+  });
+
   it("filters non-error startup loading notices from the expanded dock surface", () => {
     render(
       <GlobalRuntimeNoticeDock

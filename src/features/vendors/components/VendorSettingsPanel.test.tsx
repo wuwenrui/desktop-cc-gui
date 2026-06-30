@@ -62,10 +62,6 @@ const mockState = vi.hoisted(() => ({
     models: [] as Array<{ id: string; label: string; description?: string }>,
     updateModels: vi.fn(),
   },
-  geminiModels: {
-    models: [] as Array<{ id: string; label: string; description?: string }>,
-    updateModels: vi.fn(),
-  },
 }));
 
 vi.mock("../hooks/useProviderManagement", () => ({
@@ -80,9 +76,6 @@ vi.mock("../hooks/usePluginModels", () => ({
   usePluginModels: vi.fn((key: string) => {
     if (key === "codex-custom-models") {
       return mockState.codexModels;
-    }
-    if (key === "gemini-custom-models") {
-      return mockState.geminiModels;
     }
     return mockState.claudeModels;
   }),
@@ -133,10 +126,6 @@ vi.mock("./CurrentCodexGlobalConfigCard", () => ({
   CurrentCodexGlobalConfigCard: () => (
     <div data-testid="current-codex-config-stub" />
   ),
-}));
-
-vi.mock("./GeminiVendorPanel", () => ({
-  GeminiVendorPanel: () => <div data-testid="gemini-vendor-panel-stub" />,
 }));
 
 vi.mock("../../../services/tauri", async () => {
@@ -251,6 +240,18 @@ afterEach(() => {
 });
 
 describe("VendorSettingsPanel", () => {
+  it("does not expose the Gemini CLI vendor tab", async () => {
+    renderPanel();
+
+    await waitFor(() => {
+      expect(readGlobalCodexConfigTomlMock).toHaveBeenCalled();
+      expect(readGlobalCodexAuthJsonMock).toHaveBeenCalled();
+    });
+    expect(screen.getByText("Claude Code")).toBeTruthy();
+    expect(screen.getByText("Codex")).toBeTruthy();
+    expect(screen.queryByText("Gemini CLI")).toBeNull();
+  });
+
   it("shows background terminal official actions in the Codex tab", async () => {
     renderPanel();
 

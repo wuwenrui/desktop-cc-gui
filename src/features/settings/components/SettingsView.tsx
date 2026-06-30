@@ -2229,7 +2229,10 @@ export function SettingsView({
                 />
               ) : (
                 <>
-                  <CuratedSection />
+                  <CuratedSection
+                    appSettings={appSettings}
+                    onUpdateAppSettings={onUpdateAppSettings}
+                  />
                   <SkillsSection
                     activeWorkspace={selectedSettingsWorkspace}
                     embedded
@@ -2302,7 +2305,10 @@ export function SettingsView({
           )}
           {activeSection === "skills" && (
             <>
-              <CuratedSection />
+              <CuratedSection
+                appSettings={appSettings}
+                onUpdateAppSettings={onUpdateAppSettings}
+              />
               <SkillsSection
                 activeWorkspace={selectedSettingsWorkspace}
                 embedded

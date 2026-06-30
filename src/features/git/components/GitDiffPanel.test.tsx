@@ -486,6 +486,28 @@ describe("GitDiffPanel", () => {
     expect(badge).toBeTruthy();
   });
 
+  it("renders large file stats compactly without losing exact counts", () => {
+    render(
+      <GitDiffPanel
+        {...baseProps}
+        unstagedFiles={[
+          {
+            path: "src/large.ts",
+            status: "M",
+            additions: 12_345,
+            deletions: 10_001,
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("+12.3k")).toBeTruthy();
+    expect(screen.getByText("-10k")).toBeTruthy();
+    const badge = document.querySelector(".diff-counts-inline.git-filetree-badge");
+    expect(badge?.getAttribute("aria-label")).toBe("+12345 -10001");
+    expect(badge?.getAttribute("title")).toBe("+12345 -10001");
+  });
+
   it("renders single-path diff package folders in a.b.c style", () => {
     render(
       <GitDiffPanel

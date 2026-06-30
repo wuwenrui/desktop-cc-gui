@@ -50,6 +50,34 @@ LLM context 窗口预算 8000 tokens,单个 curated skill 不应超 3000 tokens,
 
 build.rs 校验。
 
+### R5.5. Tauri 资源映射必须保留 skill 目录
+
+`src-tauri/tauri.conf.json` 的 `bundle.resources` 必须让打包产物保留
+`curated-skills/<name>/SKILL.md` 和 `curated-skills/<name>/metadata.json`
+这层目录结构。
+
+推荐写法:
+
+```json
+"resources/curated-skills": "curated-skills"
+```
+
+也可以使用显式单 skill 目录映射:
+
+```json
+"resources/curated-skills/<name>": "curated-skills/<name>"
+```
+
+禁止写法:
+
+```json
+"resources/curated-skills/**/*": "curated-skills/"
+```
+
+原因: Tauri map-style glob 会把 `**/*` 匹配到的文件拍平成目标目录,导致
+packaged client 里只剩 `curated-skills/SKILL.md` / `metadata.json`,运行时无法
+按 lock 里的 `<name>/SKILL.md` 加载。
+
 ### R6. 命名冲突
 
 新 curated skill 的 `name` (metadata + lock entry id) **不能**与 `skills-lock.json` 里任何已有 entry 冲突 (bundled 或 curated)。同一 client install 不能有两个同名 skill。
@@ -70,7 +98,7 @@ build.rs 校验。
 
 `SKILL.md` 末尾必须含 `## 何时不启用 / When NOT to enable` section,说明该 skill 的 anti-patterns 与不适合场景。ponytail 案例: 不适用于 brainstorm、架构重写、未知领域探索、safety-critical 任务。
 
-### R9. PR review checklist (9 项)
+### R9. PR review checklist (10 项)
 
 1. SKILL.md 顶部有 attribution 注释 (R7)
 2. metadata.json 全部 schema 字段非空
@@ -81,6 +109,7 @@ build.rs 校验。
 7. tokenEstimate <= 3000 (R4)
 8. 命名不与已有 curated / bundled entry 冲突,且满足 kebab-case ASCII id 规则 (R6)
 9. SKILL.md 末尾有 "何时不启用 / When NOT to enable" section (R8)
+10. `tauri.conf.json` 使用目录映射保留 `<name>/` 目录结构,不得使用 `resources/curated-skills/**/*` glob 映射 (R5.5)
 
 ## 回退路径 (Rollback Paths)
 
@@ -95,7 +124,7 @@ build.rs 校验。
 两步:
 
 1. `src-tauri/tauri.conf.json` 的 `bundle.resources` 移除两条:
-   - `"resources/curated-skills/**/*": "curated-skills/",`
+   - `"resources/curated-skills": "curated-skills"` (或所有显式 `resources/curated-skills/<name>` 映射)
    - `"../skills-lock.json": "."`
 2. `skills-lock.json` 删除所有 `kind: "curated"` entry (当前仅 `lazy-senior-dev`)
 

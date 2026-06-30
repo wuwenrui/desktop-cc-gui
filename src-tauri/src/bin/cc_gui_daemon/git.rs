@@ -1,5 +1,8 @@
 use super::*;
 
+const GIT_STATUS_DIFF_STATS_FILE_LIMIT: usize = 120;
+const GIT_STATUS_DIFF_STATS_MAX_FILE_BYTES: u64 = 256 * 1024;
+
 fn open_repository_at_root(repo_root: &Path) -> Result<git2::Repository, String> {
     git2::Repository::open_ext(
         repo_root,
@@ -7,6 +10,67 @@ fn open_repository_at_root(repo_root: &Path) -> Result<git2::Repository, String>
         std::iter::empty::<&Path>(),
     )
     .map_err(|error| error.to_string())
+}
+
+fn normalize_guard_path(path: &str) -> String {
+    path.replace('\\', "/").to_ascii_lowercase()
+}
+
+fn is_heavy_diff_path(path: &str) -> bool {
+    let normalized = normalize_guard_path(path);
+    let segments: Vec<&str> = normalized
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .collect();
+    let file_name = segments.last().copied().unwrap_or(normalized.as_str());
+
+    if matches!(
+        file_name,
+        "pnpm-lock.yaml"
+            | "package-lock.json"
+            | "yarn.lock"
+            | "bun.lockb"
+            | "cargo.lock"
+            | "pipfile.lock"
+            | "poetry.lock"
+            | "composer.lock"
+    ) {
+        return true;
+    }
+
+    if file_name.ends_with(".lock")
+        || file_name.ends_with(".min.js")
+        || file_name.ends_with(".bundle.js")
+    {
+        return true;
+    }
+
+    segments.iter().any(|segment| {
+        matches!(
+            *segment,
+            "node_modules"
+                | ".pnpm"
+                | ".pnpm-store"
+                | ".next"
+                | "dist"
+                | "build"
+                | "coverage"
+                | "release-artifacts"
+        )
+    })
+}
+
+fn is_large_worktree_file(repo_root: &Path, path: &str, limit_bytes: u64) -> bool {
+    let candidate = repo_root.join(path);
+    match std::fs::metadata(candidate) {
+        Ok(metadata) => metadata.is_file() && metadata.len() > limit_bytes,
+        Err(_) => false,
+    }
+}
+
+fn should_skip_diff_stats(repo_root: &Path, path: &str) -> bool {
+    is_heavy_diff_path(path)
+        || is_large_worktree_file(repo_root, path, GIT_STATUS_DIFF_STATS_MAX_FILE_BYTES)
 }
 
 fn status_for_index(status: git2::Status) -> Option<&'static str> {
@@ -658,6 +722,17 @@ impl DaemonState {
 
     pub(crate) async fn get_git_status(&self, workspace_id: String) -> Result<Value, String> {
         let repo_root = self.git_repo_root(&workspace_id).await?;
+        if !crate::git_utils::path_has_git_repository_marker(&repo_root) {
+            return Ok(serde_json::json!({
+                "isGitRepository": false,
+                "branchName": "",
+                "files": [],
+                "stagedFiles": [],
+                "unstagedFiles": [],
+                "totalAdditions": 0,
+                "totalDeletions": 0,
+            }));
+        }
         let repo = open_repository_at_root(&repo_root)?;
         let branch_name = repo
             .head()
@@ -676,10 +751,14 @@ impl DaemonState {
         let statuses = repo
             .statuses(Some(&mut options))
             .map_err(|error| error.to_string())?;
+        let should_compute_diff_stats = statuses.len() <= GIT_STATUS_DIFF_STATS_FILE_LIMIT;
+        let head_tree = repo.head().ok().and_then(|head| head.peel_to_tree().ok());
 
         let mut files = Vec::<GitFileStatus>::new();
         let mut staged_files = Vec::<GitFileStatus>::new();
         let mut unstaged_files = Vec::<GitFileStatus>::new();
+        let mut total_additions = 0i64;
+        let mut total_deletions = 0i64;
 
         for status_entry in statuses.iter() {
             let Some(path) = status_entry.path() else {
@@ -693,39 +772,76 @@ impl DaemonState {
 
             let index_status = status_for_index(status);
             let workdir_status = status_for_workdir(status);
+            let should_compute_path_diff_stats =
+                should_compute_diff_stats && !should_skip_diff_stats(&repo_root, path);
+            let mut combined_additions = 0i64;
+            let mut combined_deletions = 0i64;
             if let Some(stage) = index_status {
+                let (additions, deletions) = if should_compute_path_diff_stats {
+                    crate::git_utils::diff_stats_for_path(
+                        &repo,
+                        head_tree.as_ref(),
+                        path,
+                        true,
+                        false,
+                    )
+                    .unwrap_or((0, 0))
+                } else {
+                    (0, 0)
+                };
                 staged_files.push(GitFileStatus {
                     path: normalized_path.clone(),
                     status: stage.to_string(),
-                    additions: 0,
-                    deletions: 0,
+                    additions,
+                    deletions,
                 });
+                combined_additions += additions;
+                combined_deletions += deletions;
+                total_additions += additions;
+                total_deletions += deletions;
             }
             if let Some(stage) = workdir_status {
+                let (additions, deletions) = if should_compute_path_diff_stats {
+                    crate::git_utils::diff_stats_for_path(
+                        &repo,
+                        head_tree.as_ref(),
+                        path,
+                        false,
+                        true,
+                    )
+                    .unwrap_or((0, 0))
+                } else {
+                    (0, 0)
+                };
                 unstaged_files.push(GitFileStatus {
                     path: normalized_path.clone(),
                     status: stage.to_string(),
-                    additions: 0,
-                    deletions: 0,
+                    additions,
+                    deletions,
                 });
+                combined_additions += additions;
+                combined_deletions += deletions;
+                total_additions += additions;
+                total_deletions += deletions;
             }
             if index_status.is_some() || workdir_status.is_some() {
                 files.push(GitFileStatus {
                     path: normalized_path,
                     status: workdir_status.or(index_status).unwrap_or("--").to_string(),
-                    additions: 0,
-                    deletions: 0,
+                    additions: combined_additions,
+                    deletions: combined_deletions,
                 });
             }
         }
 
         Ok(json!({
+            "isGitRepository": true,
             "branchName": branch_name,
             "files": files,
             "stagedFiles": staged_files,
             "unstagedFiles": unstaged_files,
-            "totalAdditions": 0,
-            "totalDeletions": 0,
+            "totalAdditions": total_additions,
+            "totalDeletions": total_deletions,
         }))
     }
 
@@ -734,6 +850,9 @@ impl DaemonState {
         workspace_id: String,
     ) -> Result<Vec<GitFileDiff>, String> {
         let repo_root = self.git_repo_root(&workspace_id).await?;
+        if !crate::git_utils::path_has_git_repository_marker(&repo_root) {
+            return Ok(Vec::new());
+        }
         tokio::task::spawn_blocking(move || {
             let repo = open_repository_at_root(&repo_root)?;
             let head_tree = repo.head().ok().and_then(|head| head.peel_to_tree().ok());

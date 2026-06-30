@@ -53,11 +53,14 @@ import {
   buildHistoryStickyCandidates,
   resolveActiveStickyHeaderCandidate,
   buildLiveTailWorkingSet,
+  buildMessagesPresentationScopeKey,
   buildRenderedItemsWindow,
   collapseExpandedExploreItems,
+  resolveMessagesPresentationMode,
   resolveStreamingPresentationItems,
   resolveLiveAutoExpandedExploreId,
   suppressCompletedExploreItemsBetweenLatestUserTurns,
+  type MessagesHistoryExpansionMode,
 } from "./messagesLiveWindow";
 import { addBoundedConversationRenderModeKey } from "./messagesConversationLightweightMode";
 import {
@@ -122,6 +125,11 @@ import {
   VISIBLE_TEXT_REPORT_MIN_INTERVAL_MS,
 } from "./messagesConstants";
 import {
+  DEFAULT_RENDER_LOOP_GUARD_BUDGET,
+  resolveIdempotentRenderLoopGuard,
+  type RenderLoopGuardBudget,
+} from "./messagesRenderLoopGuards";
+import {
   resolveAssistantRuntimeReconnectHint,
   resolveRetryMessageForReconnectItem,
 } from "./runtimeReconnect";
@@ -137,6 +145,18 @@ function pinMessagesHorizontalScroll(container: HTMLDivElement | null) {
   if (container && container.scrollLeft !== 0) {
     container.scrollLeft = 0;
   }
+}
+
+function areStringSetsEqual(left: ReadonlySet<string>, right: ReadonlySet<string>) {
+  if (left.size !== right.size) {
+    return false;
+  }
+  for (const value of left) {
+    if (!right.has(value)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 export const Messages = memo(function Messages({
@@ -330,6 +350,7 @@ export const Messages = memo(function Messages({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const pendingHistoryExpansionScrollSnapshotRef =
     useRef<HistoryExpansionScrollSnapshot | null>(null);
+  const pendingHistoryExpansionModeRef = useRef<MessagesHistoryExpansionMode>(null);
   const messageNodeByIdRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const agentTaskNodeByTaskIdRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const agentTaskNodeByToolUseIdRef = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -350,8 +371,14 @@ export const Messages = memo(function Messages({
   >({});
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [activeAnchorId, setActiveAnchorId] = useState<string | null>(null);
+  const activeAnchorIdRef = useRef<string | null>(null);
+  const anchorLoopGuardRef = useRef<RenderLoopGuardBudget>(
+    DEFAULT_RENDER_LOOP_GUARD_BUDGET,
+  );
   const [activeStickyMessageId, setActiveStickyMessageId] = useState<string | null>(null);
   const [showAllHistoryItems, setShowAllHistoryItems] = useState(false);
+  const [historyExpansionMode, setHistoryExpansionMode] =
+    useState<MessagesHistoryExpansionMode>(null);
   const [pendingJumpMessageId, setPendingJumpMessageId] = useState<string | null>(null);
   const [liveAutoFollowEnabled, setLiveAutoFollowEnabled] = useState(() =>
     readLocalBooleanFlag(MESSAGES_LIVE_AUTO_FOLLOW_FLAG_KEY, true),
@@ -474,7 +501,7 @@ export const Messages = memo(function Messages({
         return;
       }
       startScrollKeyTransition(() => {
-        setScrollKey(rawScrollKey);
+        setScrollKey((current) => (current === rawScrollKey ? current : rawScrollKey));
       });
     }, isThinking ? 120 : 0);
     return () => {
@@ -586,6 +613,10 @@ export const Messages = memo(function Messages({
     setIsSelectionFrozen(false);
     frozenItemsRef.current = null;
     pendingHistoryExpansionScrollSnapshotRef.current = null;
+    pendingHistoryExpansionModeRef.current = null;
+    setHistoryExpansionMode(null);
+    activeAnchorIdRef.current = null;
+    anchorLoopGuardRef.current = DEFAULT_RENDER_LOOP_GUARD_BUDGET;
     if (typeof window !== "undefined") {
       if (anchorUpdateRafRef.current !== null) {
         window.cancelAnimationFrame(anchorUpdateRafRef.current);
@@ -724,8 +755,10 @@ export const Messages = memo(function Messages({
     const currentFirstId = effectiveItems[0]?.id ?? null;
     if (currentFirstId !== firstItemIdRef.current) {
       setShowAllHistoryItems(false);
+      setHistoryExpansionMode(null);
       setPendingJumpMessageId(null);
       pendingHistoryExpansionScrollSnapshotRef.current = null;
+      pendingHistoryExpansionModeRef.current = null;
     }
     firstItemIdRef.current = currentFirstId;
   }, [effectiveItems]);
@@ -799,7 +832,7 @@ export const Messages = memo(function Messages({
             next.add(id);
           }
         }
-        return next;
+        return areStringSetsEqual(prev, next) ? prev : next;
       });
       lastAutoExpandedIdRef.current = lastReasoningId;
     }
@@ -1274,6 +1307,12 @@ export const Messages = memo(function Messages({
     ? renderedItemsWindow.visibleCollapsedHistoryItemCount
       + liveTailWorkingSet.omittedBeforeWorkingSetCount
     : 0;
+  const messagesPresentationMode = resolveMessagesPresentationMode({
+    historyExpansionMode,
+    isWorking,
+    showAllHistoryItems,
+    visibleCollapsedHistoryItemCount,
+  });
   const currentLatestAssistantTextLength = useMemo(
     () => findLatestAssistantTextLength(renderedItems),
     [renderedItems],
@@ -1366,6 +1405,14 @@ export const Messages = memo(function Messages({
   const presentationCollapsedHistoryItemCount = shouldUseReadableWindowRecovery
     ? recoveredReadableWindow?.visibleCollapsedHistoryItemCount ?? visibleCollapsedHistoryItemCount
     : visibleCollapsedHistoryItemCount;
+  const presentationScopeKey = buildMessagesPresentationScopeKey({
+    scopeKey: renderScopeKey,
+    mode: messagesPresentationMode,
+    collapsedHistoryItemCount: presentationCollapsedHistoryItemCount,
+    itemCount: presentationRenderedItems.length,
+    firstItemId: presentationRenderedItems[0]?.id ?? null,
+    lastItemId: presentationRenderedItems.at(-1)?.id ?? null,
+  });
   const claudeRenderableEntryCount = useMemo(
     () => countRenderableCollapsedEntries(timelineItems, activeEngine),
     [activeEngine, timelineItems],
@@ -1391,10 +1438,10 @@ export const Messages = memo(function Messages({
   ]);
   const presentationRenderSnapshot = useMemo(
     () => ({
-      scopeKey: renderScopeKey,
+      scopeKey: presentationScopeKey,
       items: presentationRenderedItems,
     }),
-    [presentationRenderedItems, renderScopeKey],
+    [presentationRenderedItems, presentationScopeKey],
   );
   const deferredPresentationRenderSnapshot = useDeferredValue(
     presentationRenderSnapshot,
@@ -1426,7 +1473,7 @@ export const Messages = memo(function Messages({
       livePresentationOverrideItemIds,
       {
         deferredScopeKey: deferredPresentationRenderSnapshot.scopeKey,
-        currentScopeKey: renderScopeKey,
+        currentScopeKey: presentationScopeKey,
       },
     );
   }, [
@@ -1435,7 +1482,7 @@ export const Messages = memo(function Messages({
     deferredPresentationRenderedItems,
     livePresentationOverrideItemIds,
     presentationRenderedItems,
-    renderScopeKey,
+    presentationScopeKey,
     shouldStabilizePresentationItems,
     timelineItems,
   ]);
@@ -1590,6 +1637,42 @@ export const Messages = memo(function Messages({
     [timelinePresentationItems],
   );
   const hasAnchorRail = showMessageAnchors && messageAnchors.length > 1;
+  const commitActiveAnchorId = useCallback(
+    (nextActiveAnchor: string | null, reason: "scroll" | "sync") => {
+      const signature = [
+        "anchor",
+        reason,
+        nextActiveAnchor ?? "none",
+        messageAnchors.length,
+      ].join(":");
+      const guard = resolveIdempotentRenderLoopGuard({
+        previous: anchorLoopGuardRef.current,
+        signature,
+        changed: activeAnchorIdRef.current !== nextActiveAnchor,
+        now: Date.now(),
+      });
+      anchorLoopGuardRef.current = guard.nextBudget;
+      if (!guard.shouldCommit) {
+        if (guard.shouldDiagnose) {
+          appendRendererDiagnostic("messages/overlay-loop-guard", {
+            surface: "anchor-rail",
+            component: "Messages",
+            reason,
+            threadId,
+            workspaceId: workspaceId ?? null,
+            rowKind: "message-anchor",
+            counter: guard.suppressedCount,
+            threshold: "idempotent-state-write",
+            anchorCount: messageAnchors.length,
+          });
+        }
+        return;
+      }
+      activeAnchorIdRef.current = nextActiveAnchor;
+      setActiveAnchorId(nextActiveAnchor);
+    },
+    [messageAnchors.length, threadId, workspaceId],
+  );
   const computeActiveStickyMessageId = useCallback(
     (candidates: HistoryStickyCandidate[]) => {
       const container = containerRef.current;
@@ -1637,12 +1720,10 @@ export const Messages = memo(function Messages({
             threadId,
           });
         }
-        setActiveAnchorId((previous) =>
-          previous === nextActiveAnchor ? previous : nextActiveAnchor,
-        );
+        commitActiveAnchorId(nextActiveAnchor, reason);
       });
     },
-    [computeActiveAnchor, hasAnchorRail, messageAnchors, threadId],
+    [commitActiveAnchorId, computeActiveAnchor, hasAnchorRail, messageAnchors, threadId],
   );
   const scheduleStickyHeaderUpdate = useCallback(
     (reason: "scroll" | "sync") => {
@@ -1681,25 +1762,37 @@ export const Messages = memo(function Messages({
       threadId,
     ],
   );
-  const handleShowAllHistoryItems = useCallback(() => {
+  const revealAllHistoryItems = useCallback((mode: "manual" | "jump") => {
+    pendingHistoryExpansionModeRef.current = mode;
+    setHistoryExpansionMode(mode);
     pendingHistoryExpansionScrollSnapshotRef.current =
-      collapsedHistoryItemCount > 0
+      mode === "manual" && collapsedHistoryItemCount > 0
         ? readHistoryExpansionScrollSnapshot(containerRef.current)
         : null;
     setShowAllHistoryItems(true);
   }, [collapsedHistoryItemCount]);
+  const handleShowAllHistoryItems = useCallback(() => {
+    revealAllHistoryItems("manual");
+  }, [revealAllHistoryItems]);
   useLayoutEffect(() => {
     if (!showAllHistoryItems) {
       pendingHistoryExpansionScrollSnapshotRef.current = null;
+      pendingHistoryExpansionModeRef.current = null;
       return;
     }
+    const pendingExpansionMode = pendingHistoryExpansionModeRef.current;
     const pendingSnapshot = pendingHistoryExpansionScrollSnapshotRef.current;
     const container = containerRef.current;
-    if (!pendingSnapshot || !container) {
+    if (!pendingExpansionMode || !container) {
       return;
     }
+    pendingHistoryExpansionModeRef.current = null;
     pendingHistoryExpansionScrollSnapshotRef.current = null;
-    if (!restoreHistoryExpansionScrollPosition(container, pendingSnapshot)) {
+    if (
+      pendingExpansionMode === "manual" &&
+      pendingSnapshot &&
+      !restoreHistoryExpansionScrollPosition(container, pendingSnapshot)
+    ) {
       return;
     }
     scheduleAnchorUpdate("sync");
@@ -1938,7 +2031,9 @@ export const Messages = memo(function Messages({
         window.cancelAnimationFrame(anchorUpdateRafRef.current);
         anchorUpdateRafRef.current = null;
       }
-      setActiveAnchorId(null);
+      activeAnchorIdRef.current = null;
+      anchorLoopGuardRef.current = DEFAULT_RENDER_LOOP_GUARD_BUDGET;
+      setActiveAnchorId((current) => (current === null ? current : null));
       return;
     }
     scheduleAnchorUpdate("sync");
@@ -2139,9 +2234,9 @@ export const Messages = memo(function Messages({
       top: Math.max(0, targetTop),
       behavior: "smooth",
     });
-    setActiveAnchorId((previous) => (previous === messageId ? previous : messageId));
+    commitActiveAnchorId(messageId, "sync");
     return true;
-  }, []);
+  }, [commitActiveAnchorId]);
 
   const requestScrollToAnchor = useCallback((messageId: string) => {
     if (scrollToAnchor(messageId)) {
@@ -2150,9 +2245,9 @@ export const Messages = memo(function Messages({
     }
     setPendingJumpMessageId((previous) => (previous === messageId ? previous : messageId));
     if (!showAllHistoryItems) {
-      handleShowAllHistoryItems();
+      revealAllHistoryItems("jump");
     }
-  }, [handleShowAllHistoryItems, scrollToAnchor, showAllHistoryItems]);
+  }, [revealAllHistoryItems, scrollToAnchor, showAllHistoryItems]);
 
   const handlePendingJumpTargetReady = useCallback((messageId: string) => {
     if (pendingJumpMessageId !== messageId) {
@@ -2305,6 +2400,8 @@ export const Messages = memo(function Messages({
           claudeHistoryTranscriptFallbackActive={claudeHistoryTranscriptFallbackActive}
           hasVisibleUserInputRequest={hasVisibleUserInputRequest}
           historyExpansionActive={showAllHistoryItems}
+          presentationMode={messagesPresentationMode}
+          presentationScopeKey={presentationScopeKey}
           userInputNode={userInputNode}
           visibleCollapsedHistoryItemCount={presentationCollapsedHistoryItemCount}
           waitingForFirstChunk={waitingForFirstChunk}

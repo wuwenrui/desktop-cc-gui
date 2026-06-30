@@ -15,6 +15,26 @@
 - daemon 的 unknown-engine fallback 必须发生在 raw string → engine 解析边界;
   一旦已经反序列化为 `EngineType::Codex`,bridge 层不能再要求记录原始未知字符串。
 
+## R4 增量记录 (2026-06-27 provider settings UI slice)
+
+本段记录 `remove Gemini CLI provider settings UI` 这次独立提交的实际边界:
+
+- 本次只删除 **前端供应商管理页** 中的 Gemini CLI provider configuration UI:
+  `VendorSettingsPanel` 不再展示 `Gemini CLI` tab,不再 mount
+  `GeminiVendorPanel`,并删除 `vendor-gemini-*` dead CSS。
+- 本次保留 Gemini runtime/session/history 兼容代码,包括
+  `useGeminiVendorManagement`, `services/tauri/vendors.ts` 中的 Gemini vendor
+  bridge,以及 Rust backend 的 `vendor_*_gemini_*` command。原因是本次需求明确
+  "其他不动,耦合性代码可以兼容保留",且完整 engine retirement 仍由本 change
+  后续 stages 承接。
+- `VendorTab` 在供应商页收敛到 `claude | codex`; 若 legacy model-manager request
+  仍传入 `target: "gemini"`,当前 UI 会兼容折回 Claude,避免进入不存在的 tab。
+- 验证证据:
+  - `node node_modules/vitest/vitest.mjs run --maxWorkers 1 --minWorkers 1 src/features/vendors/components/VendorSettingsPanel.test.tsx`
+  - `npm run typecheck`
+  - `npm run check:large-files`
+  - `git diff --check`
+
 ## R1 修订说明 (2026-06-24 二次 review)
 
 第一版 proposal 用 `rg "opencode|gemini_cli|..."` 关键字扫源码,漏列了

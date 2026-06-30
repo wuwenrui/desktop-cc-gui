@@ -80,7 +80,7 @@ describe("useGitStatus", () => {
     expect(result.current.status.totalAdditions).toBe(2);
 
     await act(async () => {
-      vi.advanceTimersByTime(30000);
+      vi.advanceTimersByTime(15000);
     });
     await act(async () => {
       await Promise.resolve();
@@ -111,7 +111,7 @@ describe("useGitStatus", () => {
     expect(getGitStatusMock).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      vi.advanceTimersByTime(29999);
+      vi.advanceTimersByTime(14999);
       await Promise.resolve();
     });
     expect(getGitStatusMock).toHaveBeenCalledTimes(1);
@@ -141,7 +141,7 @@ describe("useGitStatus", () => {
     expect(getGitStatusMock).toHaveBeenCalledTimes(0);
 
     await act(async () => {
-      vi.advanceTimersByTime(29999);
+      vi.advanceTimersByTime(14999);
       await Promise.resolve();
     });
     expect(getGitStatusMock).toHaveBeenCalledTimes(0);
@@ -171,7 +171,7 @@ describe("useGitStatus", () => {
     expect(getGitStatusMock).toHaveBeenCalledTimes(0);
 
     await act(async () => {
-      vi.advanceTimersByTime(60000);
+      vi.advanceTimersByTime(15000);
       await Promise.resolve();
     });
     expect(getGitStatusMock).toHaveBeenCalledTimes(0);
@@ -203,7 +203,7 @@ describe("useGitStatus", () => {
     expect(result.current.status.error).toBe("not a git repository");
 
     await act(async () => {
-      vi.advanceTimersByTime(60000);
+      vi.advanceTimersByTime(15000);
       await Promise.resolve();
     });
 
@@ -272,7 +272,7 @@ describe("useGitStatus", () => {
     });
 
     await act(async () => {
-      vi.advanceTimersByTime(30000);
+      vi.advanceTimersByTime(15000);
       await Promise.resolve();
     });
     expect(getGitStatusMock).toHaveBeenCalledTimes(2);

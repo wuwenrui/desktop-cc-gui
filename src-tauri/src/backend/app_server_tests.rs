@@ -668,6 +668,59 @@ async fn enrich_codex_turn_timing_attaches_content_safe_first_delta_fields() {
 }
 
 #[tokio::test]
+async fn enrich_codex_turn_timing_accepts_supported_text_delta_aliases() {
+    for method in [
+        "item/agentMessage/delta",
+        "text:delta",
+        "text/delta",
+        "item/agentMessage/textDelta",
+    ] {
+        let session = make_workspace_session(&format!("codex-timing-alias-{method}")).await;
+        session.start_codex_turn_timing("thread-1", 1_000).await;
+        session
+            .record_codex_turn_start_response("thread-1", 1_100)
+            .await;
+
+        let mut reasoning_event = json!({
+            "method": "item/reasoning/textDelta",
+            "params": {
+                "threadId": "thread-1",
+                "delta": "secret reasoning text"
+            }
+        });
+        session
+            .enrich_codex_turn_timing(&mut reasoning_event, 1_200)
+            .await;
+
+        let mut event = json!({
+            "method": method,
+            "params": {
+                "threadId": "thread-1",
+                "itemId": "assistant-item-1",
+                "delta": "secret assistant text"
+            }
+        });
+        session.enrich_codex_turn_timing(&mut event, 1_350).await;
+
+        let timing = &event["params"]["ccguiTiming"];
+        assert_eq!(timing["firstAgentMessageEventReceivedAtMs"], 1_350);
+        assert_eq!(timing["firstTextDeltaReceivedAtMs"], 1_350);
+        assert_eq!(timing["firstAgentMessageEventMethod"], method);
+        assert_eq!(timing["firstTextDeltaMethod"], method);
+        assert_eq!(timing["eventCountBeforeFirstTextDelta"], 1);
+        assert_eq!(
+            timing["methodsBeforeFirstTextDelta"],
+            json!(["item/reasoning/textDelta"])
+        );
+        assert!(!serde_json::to_string(timing)
+            .expect("serialize timing")
+            .contains("secret assistant text"));
+
+        dispose_workspace_session(&session).await;
+    }
+}
+
+#[tokio::test]
 async fn enrich_codex_turn_timing_keeps_reasoning_and_tool_events_before_first_text_separate() {
     let session = make_workspace_session("codex-timing-pre-text").await;
     session.start_codex_turn_timing("thread-1", 1_000).await;
@@ -804,6 +857,58 @@ async fn enrich_codex_turn_timing_clears_state_on_terminal_event() {
         event["params"]["ccguiTiming"]["turnStartResponseToThisEventMs"],
         750
     );
+    assert!(session.codex_turn_timing.lock().await.is_empty());
+
+    dispose_workspace_session(&session).await;
+}
+
+#[tokio::test]
+async fn enrich_codex_turn_timing_does_not_treat_terminal_completion_as_first_text_delta() {
+    let session = make_workspace_session("codex-timing-final-only").await;
+    session.start_codex_turn_timing("thread-1", 2_000).await;
+    session
+        .record_codex_turn_start_response("thread-1", 2_050)
+        .await;
+
+    let mut reasoning_event = json!({
+        "method": "item/reasoning/textDelta",
+        "params": {
+            "threadId": "thread-1",
+            "itemId": "reasoning-item-1",
+            "delta": "secret reasoning text"
+        }
+    });
+    session
+        .enrich_codex_turn_timing(&mut reasoning_event, 2_200)
+        .await;
+
+    let mut event = json!({
+        "method": "turn/completed",
+        "params": {
+            "threadId": "thread-1",
+            "turnId": "turn-1",
+            "result": {
+                "text": "secret final assistant text"
+            }
+        }
+    });
+
+    session.enrich_codex_turn_timing(&mut event, 2_800).await;
+
+    let timing = &event["params"]["ccguiTiming"];
+    assert_eq!(timing["firstRuntimeEventReceivedAtMs"], 2_200);
+    assert_eq!(timing["firstReasoningEventReceivedAtMs"], 2_200);
+    assert_eq!(timing["firstTextDeltaReceivedAtMs"], Value::Null);
+    assert_eq!(timing["firstTextDeltaMethod"], Value::Null);
+    assert_eq!(timing["eventCountBeforeFirstTextDelta"], 2);
+    assert_eq!(timing["reasoningEventCountBeforeFirstTextDelta"], 1);
+    assert_eq!(
+        timing["methodsBeforeFirstTextDelta"],
+        json!(["item/reasoning/textDelta", "turn/completed"])
+    );
+    let serialized = serde_json::to_string(timing).expect("serialize timing");
+    assert!(!serialized.contains("secret reasoning text"));
+    assert!(!serialized.contains("secret final assistant text"));
     assert!(session.codex_turn_timing.lock().await.is_empty());
 
     dispose_workspace_session(&session).await;

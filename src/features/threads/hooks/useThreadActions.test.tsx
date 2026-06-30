@@ -2002,7 +2002,7 @@ describe("useThreadActions", () => {
     expect(dispatch).toHaveBeenCalledWith({
       type: "setThreadListCursor",
       workspaceId: "ws-1",
-      cursor: null,
+      cursor: "catalog::offset:9999",
     });
   });
 

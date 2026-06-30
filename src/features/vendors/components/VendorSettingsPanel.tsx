@@ -29,7 +29,6 @@ import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
 import { CustomModelDialog } from "./CustomModelDialog";
 import { CurrentClaudeConfigCard } from "./CurrentClaudeConfigCard";
 import { CurrentCodexGlobalConfigCard } from "./CurrentCodexGlobalConfigCard";
-import { GeminiVendorPanel } from "./GeminiVendorPanel";
 import {
   consumeVendorModelManagerRequest,
   VENDOR_MODEL_MANAGER_REQUEST_EVENT,
@@ -54,7 +53,7 @@ const LEGACY_CLAUDE_MAPPING_KEYS = [
 ];
 const CODEX_PLUGIN_MODELS_MIGRATION_MARKER =
   "codemoss-codex-plugin-models-migrated-v1";
-type ModelDialogTarget = "claude" | "codex" | "gemini";
+type ModelDialogTarget = VendorTab;
 type InlineNoticeState =
   | { kind: "success" | "error"; message: string }
   | null;
@@ -139,7 +138,6 @@ export function VendorSettingsPanel({
   const codex = useCodexProviderManagement();
   const claudeModels = usePluginModels(STORAGE_KEYS.CLAUDE_CUSTOM_MODELS);
   const codexModels = usePluginModels(STORAGE_KEYS.CODEX_CUSTOM_MODELS);
-  const geminiModels = usePluginModels(STORAGE_KEYS.GEMINI_CUSTOM_MODELS);
   const claudeProviders = claude.providers;
   const handleAddClaudeProvider = claude.handleAddProvider;
   const handleEditClaudeProvider = claude.handleEditProvider;
@@ -351,9 +349,7 @@ export function VendorSettingsPanel({
     const target: ModelDialogTarget =
       request.target === "codex"
         ? "codex"
-        : request.target === "gemini"
-          ? "gemini"
-          : "claude";
+        : "claude";
     setActiveTab(target);
     openModelDialog(target, Boolean(request.addMode));
   }, [openModelDialog]);
@@ -554,9 +550,7 @@ export function VendorSettingsPanel({
   const currentDialogModels =
     dialogTarget === "codex"
       ? codexModels.models
-      : dialogTarget === "gemini"
-        ? geminiModels.models
-        : claudeModels.models;
+      : claudeModels.models;
 
   const handleDialogModelsChange = useCallback(
     (models: CodexCustomModel[]) => {
@@ -564,13 +558,9 @@ export function VendorSettingsPanel({
         codexModels.updateModels(models);
         return;
       }
-      if (dialogTarget === "gemini") {
-        geminiModels.updateModels(models);
-        return;
-      }
       claudeModels.updateModels(models);
     },
-    [claudeModels, codexModels, dialogTarget, geminiModels],
+    [claudeModels, codexModels, dialogTarget],
   );
 
   return (
@@ -593,12 +583,6 @@ export function VendorSettingsPanel({
             <span className="vendor-tab-label">
               <EngineIcon engine="codex" size={14} />
               <span>Codex</span>
-            </span>
-          </TabsTab>
-          <TabsTab className="vendor-tab" value="gemini">
-            <span className="vendor-tab-label">
-              <EngineIcon engine="gemini" size={14} />
-              <span>Gemini CLI</span>
             </span>
           </TabsTab>
         </TabsList>
@@ -905,47 +889,6 @@ export function VendorSettingsPanel({
               onConfirm={codex.confirmDeleteCodexProvider}
               onCancel={codex.cancelDeleteCodexProvider}
             />
-          </div>
-        </TabsPanel>
-
-        <TabsPanel value="gemini">
-          <div className="vendor-tab-content">
-            <div
-              className="vendor-plugin-model-entry"
-              role="button"
-              tabIndex={0}
-              onClick={() => openModelDialog("gemini")}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  openModelDialog("gemini");
-                }
-              }}
-            >
-              <div className="vendor-plugin-model-entry-main">
-                <PackagePlus size={16} />
-                <span className="vendor-plugin-model-entry-title">
-                  {t("settings.vendor.pluginModels")}
-                </span>
-                {geminiModels.models.length > 0 && (
-                  <span className="vendor-plugin-model-entry-count">
-                    {geminiModels.models.length}
-                  </span>
-                )}
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  openModelDialog("gemini");
-                }}
-              >
-                <PackagePlus size={14} />
-                {t("settings.vendor.manageModels")}
-              </Button>
-            </div>
-            <GeminiVendorPanel />
           </div>
         </TabsPanel>
 

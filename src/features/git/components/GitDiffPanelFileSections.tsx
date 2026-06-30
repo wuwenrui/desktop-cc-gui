@@ -92,6 +92,20 @@ function getStatusClass(status: string) {
   }
 }
 
+export function formatGitChangeCount(value: number): string {
+  if (!Number.isFinite(value)) {
+    return "0";
+  }
+  const normalized = Math.max(0, Math.trunc(value));
+  if (normalized < 10_000) {
+    return String(normalized);
+  }
+  if (normalized < 100_000) {
+    return `${(normalized / 1_000).toFixed(1).replace(/\.0$/, "")}k`;
+  }
+  return `${Math.round(normalized / 1_000)}k`;
+}
+
 type DiffFileRowProps = {
   file: DiffFile;
   isSelected: boolean;
@@ -142,6 +156,9 @@ export function DiffFileRow({
   const { base, extension } = splitNameAndExtension(name ?? "");
   const statusSymbol = getStatusSymbol(file.status);
   const statusClass = getStatusClass(file.status);
+  const additionsLabel = formatGitChangeCount(file.additions);
+  const deletionsLabel = formatGitChangeCount(file.deletions);
+  const exactStatsLabel = `+${file.additions} -${file.deletions}`;
   const mutationDisabled = Boolean(file.mutationDisabled || file.isDiffOnlyFallback);
   const showStage = section === "unstaged" && Boolean(onStageFile) && !mutationDisabled;
   const showUnstage = section === "staged" && Boolean(onUnstageFile) && !mutationDisabled;
@@ -209,11 +226,12 @@ export function DiffFileRow({
       <div className="diff-row-meta">
         <span
           className="diff-counts-inline git-filetree-badge"
-          aria-label={`+${file.additions} -${file.deletions}`}
+          aria-label={exactStatsLabel}
+          title={exactStatsLabel}
         >
-          <span className="diff-add">+{file.additions}</span>
+          <span className="diff-add">+{additionsLabel}</span>
           <span className="diff-sep">/</span>
-          <span className="diff-del">-{file.deletions}</span>
+          <span className="diff-del">-{deletionsLabel}</span>
         </span>
         <div className="diff-row-actions" role="group" aria-label={t("git.fileActions")}>
           {onOpenInlinePreview ? (

@@ -79,6 +79,16 @@ describe("Markdown file links", () => {
     expect(container.textContent ?? "").not.toContain("pnpmrunlint");
   });
 
+  it("renders ordinary inline code without copy controls", () => {
+    const { container } = render(
+      <Markdown value={"版本记录包含 `feat(messages)` 和 `useCallback`。"} />,
+    );
+
+    expect(container.querySelectorAll("code")).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: /copy inline code/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: "复制行内代码" })).toBeNull();
+  });
+
   it("flushes the latest content immediately when streaming throttle changes", () => {
     vi.useFakeTimers();
     const { rerender, container } = render(

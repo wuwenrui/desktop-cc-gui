@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
@@ -122,6 +122,7 @@ type MessageRowProps = {
     item: Extract<ConversationItem, { kind: "message" }>,
     copyText?: string,
   ) => void;
+  userActionNode?: ReactNode;
   codeBlockCopyUseModifier?: boolean;
   onOpenFileLink?: (path: string) => void;
   onOpenFileLinkMenu?: (event: React.MouseEvent, path: string) => void;
@@ -331,6 +332,7 @@ function areMessageRowPropsEqual(
     previous.enableCollaborationBadge === next.enableCollaborationBadge &&
     previous.presentationProfile === next.presentationProfile &&
     previous.showRuntimeReconnectCard === next.showRuntimeReconnectCard &&
+    previous.userActionNode === next.userActionNode &&
     (
       !compareRuntimeReconnectProps ||
       (
@@ -681,6 +683,7 @@ export const MessageRow = memo(function MessageRow({
   onRecoverThreadRuntimeAndResend,
   onThreadRecoveryFork,
   retryMessage = null,
+  userActionNode = null,
   codeBlockCopyUseModifier,
   onOpenFileLink,
   onOpenFileLinkMenu,
@@ -1349,6 +1352,7 @@ export const MessageRow = memo(function MessageRow({
       {/* FanBox 来源摘要块：仅 assistant；无 tool-call 信号时组件自身返回 null
           （OpenSpec: add-fanbox-dialogue-cockpit）。流式中的不完整块由 derive 跳过。 */}
       {item.role === "assistant" ? <TurnSourceSummary text={item.text} /> : null}
+      {item.role === "user" && !agentTaskNotification ? userActionNode : null}
       {lightboxIndex !== null && imageItems.length > 0 && (
         <ImageLightbox
           images={imageItems}

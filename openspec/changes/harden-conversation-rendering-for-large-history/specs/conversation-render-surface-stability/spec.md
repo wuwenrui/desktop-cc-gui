@@ -37,3 +37,23 @@ The conversation surface MUST provide an explicit lightweight render policy for 
 - **WHEN** a conversation is below the documented heavy-history thresholds
 - **THEN** the renderer SHOULD keep the normal eager-rich behavior where current budgets allow
 - **AND** lightweight-mode summaries MUST NOT become the global default for ordinary histories
+
+### Requirement: Conversation Presentation Scopes MUST Separate History And Realtime Windows
+
+The conversation surface MUST scope deferred snapshots, virtualizer measurement caches, and timeline recovery keys by the active presentation window semantics, not only by conversation identity.
+
+#### Scenario: collapsed and expanded history windows do not reuse stale presentation state
+- **WHEN** the same `workspaceId + threadId` switches from a collapsed tail window to a manually expanded history window
+- **THEN** the presentation scope MUST change
+- **AND** deferred timeline snapshots, row measurement caches, and lightweight hydration retention MUST NOT treat the collapsed tail layout as valid for the expanded history layout
+
+#### Scenario: jump-expanded history has a distinct scroll owner
+- **WHEN** a jump-to-message action expands earlier history to reveal an offscreen target
+- **THEN** the presentation scope MUST distinguish jump expansion from manual expansion
+- **AND** anchor target readiness MUST be driven by the jump target rather than by bottom auto-follow or manual history-head reset
+
+#### Scenario: realtime live tails stay separate from static history restore
+- **WHEN** a conversation is actively streaming
+- **AND** the renderer is showing a full or collapsed live tail window
+- **THEN** the presentation scope MUST be distinct from static restored-history scopes for the same conversation
+- **AND** live auto-follow MUST NOT reuse stale full-history or expanded-history measurement state that can cause row overlap or up/down scroll tug-of-war

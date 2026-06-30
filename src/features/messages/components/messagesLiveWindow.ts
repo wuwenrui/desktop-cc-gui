@@ -4,6 +4,18 @@ import { parseAgentTaskNotification } from "../utils/agentTaskNotification";
 import type { MessageConversationItem } from "./messageItemPredicates";
 import { resolveUserMessagePresentation } from "./messagesUserPresentation";
 
+export type MessagesHistoryExpansionMode = "manual" | "jump" | null;
+
+export type MessagesPresentationMode =
+  | "realtime-collapsed-tail"
+  | "realtime-expanded-history-jump"
+  | "realtime-expanded-history-manual"
+  | "realtime-full-tail"
+  | "static-collapsed-history"
+  | "static-expanded-history-jump"
+  | "static-expanded-history-manual"
+  | "static-full-history";
+
 function resolveOrdinaryUserQuestionText(
   item: MessageConversationItem,
   enableCollaborationBadge: boolean,
@@ -193,6 +205,41 @@ export function buildRenderedItemsWindow(
     renderedItems: [preservedUserMessage, ...windowedItems],
     visibleCollapsedHistoryItemCount: Math.max(0, collapsedHistoryItemCount - 1),
   };
+}
+
+export function resolveMessagesPresentationMode(input: {
+  historyExpansionMode: MessagesHistoryExpansionMode;
+  isWorking: boolean;
+  showAllHistoryItems: boolean;
+  visibleCollapsedHistoryItemCount: number;
+}): MessagesPresentationMode {
+  const runtimePrefix = input.isWorking ? "realtime" : "static";
+  if (input.showAllHistoryItems) {
+    const expansionMode = input.historyExpansionMode === "jump" ? "jump" : "manual";
+    return `${runtimePrefix}-expanded-history-${expansionMode}` as MessagesPresentationMode;
+  }
+  if (input.visibleCollapsedHistoryItemCount > 0) {
+    return input.isWorking ? "realtime-collapsed-tail" : "static-collapsed-history";
+  }
+  return input.isWorking ? "realtime-full-tail" : "static-full-history";
+}
+
+export function buildMessagesPresentationScopeKey(input: {
+  collapsedHistoryItemCount: number;
+  itemCount: number;
+  firstItemId: string | null;
+  lastItemId: string | null;
+  mode: MessagesPresentationMode;
+  scopeKey: string;
+}) {
+  return [
+    input.scopeKey,
+    input.mode,
+    input.collapsedHistoryItemCount,
+    input.itemCount,
+    input.firstItemId ?? "",
+    input.lastItemId ?? "",
+  ].join("\u0000");
 }
 
 export function resolveStreamingPresentationItems(

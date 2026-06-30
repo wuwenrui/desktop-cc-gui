@@ -6,6 +6,7 @@ import { pushErrorToast } from "../../../services/toasts";
 import type { OpenAppTarget } from "../../../types";
 import {
   clampRendererContextMenuPosition,
+  estimateRendererContextMenuHeight,
   type RendererContextMenuItem,
   type RendererContextMenuState,
 } from "../../../components/ui/RendererContextMenu";
@@ -291,7 +292,7 @@ export function useFileLinkOpener(
 
       const position = clampRendererContextMenuPosition(event.clientX, event.clientY, {
         width: 260,
-        height: 260,
+        height: estimateRendererContextMenuHeight(items),
       });
       setFileLinkMenu({
         ...position,

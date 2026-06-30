@@ -137,7 +137,7 @@ describe("globalRuntimeNotices", () => {
     ]);
   });
 
-  it("adds classified recovery action context to thread failure notices", () => {
+  it("maps classified Codex runtime failures to recoverable user copy", () => {
     pushThreadFailureRuntimeNotice({
       workspaceId: "ws-1",
       threadId: "codex-thread-1",
@@ -150,10 +150,60 @@ describe("globalRuntimeNotices", () => {
 
     expect(getGlobalRuntimeNoticesSnapshot()).toEqual([
       expect.objectContaining({
-        messageKey: "runtimeNotice.error.threadTurnFailed",
+        messageKey: "runtimeNotice.error.codexSessionRecoverableFailure",
         messageParams: {
           engine: "Codex",
-          message: "[RUNTIME_ENDED] Managed runtime ended.",
+          rawMessage: "[RUNTIME_ENDED] Managed runtime ended.",
+          reasonCode: "runtime-ended",
+          userAction: "reconnect",
+          actionHint: "Reconnect the runtime and retry.",
+        },
+      }),
+    ]);
+  });
+
+  it("maps Codex stale thread failures without leaking raw text into the summary field", () => {
+    pushThreadFailureRuntimeNotice({
+      workspaceId: "ws-1",
+      threadId: "codex-thread-1",
+      engine: "codex",
+      message: "thread not found: legacy-thread-id",
+      reasonCode: "stale-thread-binding",
+      userAction: "recover-thread",
+      timestampMs: 500,
+    });
+
+    expect(getGlobalRuntimeNoticesSnapshot()).toEqual([
+      expect.objectContaining({
+        messageKey: "runtimeNotice.error.codexSessionRecoverableFailure",
+        messageParams: {
+          engine: "Codex",
+          rawMessage: "thread not found: legacy-thread-id",
+          reasonCode: "stale-thread-binding",
+          userAction: "recover-thread",
+          actionHint: "Recover this thread binding and retry.",
+        },
+      }),
+    ]);
+  });
+
+  it("keeps non-Codex thread failures on the generic copy path", () => {
+    pushThreadFailureRuntimeNotice({
+      workspaceId: "ws-1",
+      threadId: "claude-thread-1",
+      engine: "claude",
+      message: "[RUNTIME_ENDED] Claude runtime ended.",
+      reasonCode: "runtime-ended",
+      userAction: "reconnect",
+      timestampMs: 600,
+    });
+
+    expect(getGlobalRuntimeNoticesSnapshot()).toEqual([
+      expect.objectContaining({
+        messageKey: "runtimeNotice.error.threadTurnFailed",
+        messageParams: {
+          engine: "Claude Code",
+          message: "[RUNTIME_ENDED] Claude runtime ended.",
           reasonCode: "runtime-ended",
           userAction: "reconnect",
           actionHint: "Reconnect the runtime and retry.",

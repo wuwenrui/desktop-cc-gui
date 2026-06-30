@@ -379,6 +379,83 @@ describe("Messages virtualized jump behavior", () => {
     expect(screen.getByText("plain expanded history message 1")).toBeTruthy();
   });
 
+  it("changes presentation scope when a collapsed history window is manually expanded", async () => {
+    const items: ConversationItem[] = Array.from({ length: 80 }, (_, index) => ({
+      id: `presentation-history-${index + 1}`,
+      kind: "message" as const,
+      role: index % 2 === 0 ? "user" as const : "assistant" as const,
+      text: `presentation history message ${index + 1}`,
+      isFinal: true,
+    }));
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-presentation-scope"
+        workspaceId="ws-heavy"
+        isThinking={false}
+        activeEngine="claude"
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const timelineRoot = container.querySelector(".messages-timeline-root");
+    expect(timelineRoot?.getAttribute("data-timeline-presentation-mode"))
+      .toBe("static-collapsed-history");
+    const collapsedScope = timelineRoot?.getAttribute("data-timeline-presentation-scope");
+
+    const showEarlierButton = container.querySelector<HTMLButtonElement>(
+      ".messages-collapsed-indicator",
+    );
+    expect(showEarlierButton).toBeTruthy();
+    fireEvent.click(showEarlierButton!);
+
+    await waitFor(() => {
+      expect(
+        container
+          .querySelector(".messages-timeline-root")
+          ?.getAttribute("data-timeline-presentation-mode"),
+      ).toBe("static-expanded-history-manual");
+    });
+    const expandedScope = container
+      .querySelector(".messages-timeline-root")
+      ?.getAttribute("data-timeline-presentation-scope");
+
+    expect(expandedScope).toBeTruthy();
+    expect(expandedScope).not.toBe(collapsedScope);
+    expect(container.querySelector(".messages-virtualized-canvas")).toBeNull();
+  });
+
+  it("uses a separate presentation scope for realtime tail windows", () => {
+    const items: ConversationItem[] = Array.from({ length: 80 }, (_, index) => ({
+      id: `presentation-live-${index + 1}`,
+      kind: "message" as const,
+      role: index % 2 === 0 ? "user" as const : "assistant" as const,
+      text: `presentation live message ${index + 1}`,
+      isFinal: index < 79,
+    }));
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-presentation-live-scope"
+        workspaceId="ws-heavy"
+        isThinking={true}
+        activeEngine="claude"
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const timelineRoot = container.querySelector(".messages-timeline-root");
+    expect(timelineRoot?.getAttribute("data-timeline-presentation-mode"))
+      .toBe("realtime-collapsed-tail");
+    expect(timelineRoot?.getAttribute("data-timeline-presentation-scope"))
+      .toContain("realtime-collapsed-tail");
+    expect(container.querySelector("[data-timeline-virtualized='true']")).toBeNull();
+  });
+
   it("does not inject lightweight summary cards while a heavy conversation is streaming", () => {
     const heavyMarkdown = [
       "# Streaming heavy answer",

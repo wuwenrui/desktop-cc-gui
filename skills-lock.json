@@ -60,10 +60,10 @@
     "lazy-senior-dev": {
       "kind": "curated",
       "displayName": "Lazy senior dev",
-      "version": "4.8.1",
+      "version": "4.8.3",
       "assetPath": "resources/curated-skills/lazy-senior-dev/SKILL.md",
       "metadataPath": "resources/curated-skills/lazy-senior-dev/metadata.json",
-      "computedHash": "4e82b494d89f958af65b972a1a4f8d4822acfb2324179945878c361f267bf32b",
+      "computedHash": "5bf2cef79dcc91d95892060330eabd8555a0dc580499a881eb6621f31370044c",
       "tokenEstimate": 1100,
       "minClientVersion": "0.5.14"
     }

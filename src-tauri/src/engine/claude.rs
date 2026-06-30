@@ -42,6 +42,8 @@ mod event_conversion;
 mod lifecycle;
 #[path = "claude/manager.rs"]
 mod manager;
+#[path = "claude/native_skill_mirror.rs"]
+mod native_skill_mirror;
 #[path = "claude_stream_helpers.rs"]
 mod stream_helpers;
 mod user_input;
@@ -806,6 +808,11 @@ impl ClaudeSession {
             .unwrap_or_else(|| "claude".to_string())
     }
 
+    fn should_skip_curated_skill_append_for_binary(bin: &str, is_windows: bool) -> bool {
+        let _ = bin;
+        is_windows
+    }
+
     fn cli_binary_diagnostics(&self) -> (String, &'static str) {
         let bin = self.resolve_cli_binary();
         let wrapper_kind = crate::backend::app_server::wrapper_kind_for_binary(&bin);
@@ -819,12 +826,15 @@ impl ClaudeSession {
         use_stream_json_input: bool,
         include_hook_events: bool,
         app_settings: Option<&crate::types::AppSettings>,
+        activation_hint_file: Option<&Path>,
     ) -> Command {
         // Resolve the Claude CLI binary path:
         // 1. Use custom bin_path if configured
         // 2. Otherwise use find_cli_binary() to search npm global, cargo, etc.
         // 3. Fall back to bare "claude" as last resort
         let bin = self.resolve_cli_binary();
+        let skip_curated_skill_append =
+            Self::should_skip_curated_skill_append_for_binary(&bin, cfg!(windows));
 
         // Use build_command_for_binary to properly handle .cmd/.bat files on Windows
         let mut cmd = crate::backend::app_server::build_command_for_binary(&bin);
@@ -838,19 +848,21 @@ impl ClaudeSession {
         // Append curated skills (if any) via --append-system-prompt. The
         // flag is added immediately after `-p` and **before** any other
         // flag so it does not interfere with subsequent parsing.
-        if let Some(settings) = app_settings {
-            if let Some(append_body) =
-                curated_skill_prompt::build_curated_skill_append_args(settings)
-            {
-                cmd.arg("--append-system-prompt");
-                cmd.arg(append_body);
+        if !skip_curated_skill_append {
+            if let Some(settings) = app_settings {
+                if let Some(append_body) =
+                    curated_skill_prompt::build_curated_skill_append_args(settings)
+                {
+                    cmd.arg("--append-system-prompt");
+                    cmd.arg(append_body);
+                }
             }
         }
 
         if use_stream_json_input {
-            // Use stream-json input format for image payloads and multiline text.
-            // The actual content will be sent via stdin.
-            cmd.arg(""); // Empty string as placeholder, real content via stdin
+            // Use stream-json input format for prompt content and images. The
+            // actual user message is sent via stdin; adding an empty prompt
+            // placeholder after `-p` breaks Windows .cmd wrapper parsing.
             cmd.arg("--input-format");
             cmd.arg("stream-json");
         } else {
@@ -874,6 +886,11 @@ impl ClaudeSession {
         }
         if params.safe_mode {
             cmd.arg("--safe-mode");
+        }
+
+        if let Some(path) = activation_hint_file {
+            cmd.arg("--append-system-prompt-file");
+            cmd.arg(path);
         }
 
         // Access mode / permission handling
@@ -1003,9 +1020,9 @@ impl ClaudeSession {
     }
 
     /// Variant of `send_message` that takes a snapshot of `AppSettings` so
-    /// the curated-skill injection step (see `curated_skill_prompt::build_curated_skill_append_args`)
-    /// can read the latest `enabled_curated_skill_ids`. Production callers
-    /// use this; the wrapper `send_message` exists for legacy callers.
+    /// curated-skill transport can read the latest `enabled_curated_skill_ids`.
+    /// Production callers use this; the wrapper `send_message` exists for
+    /// legacy callers.
     pub async fn send_message_with_app_settings(
         &self,
         params: SendMessageParams,
@@ -1068,12 +1085,32 @@ impl ClaudeSession {
         }
 
         let use_stream_json_input = Self::should_use_stream_json_input(&params);
+        let activation_hint_file = match native_skill_mirror::sync_windows_curated_skill_mirror(
+            self.home_dir.as_deref(),
+            app_settings,
+            cfg!(windows),
+        ) {
+            Ok(path) => path,
+            Err(error_msg) => {
+                self.emit_turn_event(
+                    turn_id,
+                    EngineEvent::TurnError {
+                        workspace_id: self.workspace_id.clone(),
+                        error: error_msg.clone(),
+                        code: Some("claude_curated_skill_mirror_failed".to_string()),
+                    },
+                );
+                self.clear_turn_ephemeral_state(turn_id);
+                return Err(error_msg);
+            }
+        };
 
         let mut cmd = self.build_command(
             &params,
             use_stream_json_input,
             include_hook_events,
             app_settings,
+            activation_hint_file.as_deref(),
         );
         Self::configure_spawn_command(&mut cmd);
 

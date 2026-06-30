@@ -37,7 +37,9 @@
       "infoplist/**/*": "./",
       "../dist/*": "dist/",
       "../dist/assets/**/*": "dist/assets/",
-      "../skills/**/*": "skills/"
+      "../skills/**/*": "skills/",
+      "resources/curated-skills": "curated-skills",
+      "../skills-lock.json": "."
     },
     "externalBin": [
       "binaries/cc_gui_daemon",

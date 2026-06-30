@@ -47,15 +47,15 @@ describe("messagesTimelineVirtualization", () => {
     })).toBe(false);
   });
 
-  it("keeps active streaming timelines virtualized when rowCount is above the minimum (chat-stream-render-isolation-2026-06 task 2.1)", () => {
+  it("keeps active streaming timelines in static flow to avoid bottom-follow jumps", () => {
     expect(shouldVirtualizeTimelineRows({
       isThinking: true,
       rowCount: 1_000,
-    })).toBe(true);
+    })).toBe(false);
     expect(shouldVirtualizeTimelineRows({
       isThinking: true,
       rowCount: 200,
-    })).toBe(true);
+    })).toBe(false);
     expect(shouldVirtualizeTimelineRows({
       isThinking: true,
       rowCount: 50,
@@ -413,6 +413,21 @@ describe("messagesTimelineVirtualization", () => {
     expect(exhaustedRecovery.shouldRemeasure).toBe(true);
     expect(exhaustedRecovery.nextBudget.remeasureCount).toBe(1);
     expect(exhaustedRecovery.remeasureSuppressed).toBe(false);
+  });
+
+  it("measures first stable virtualized history mount without jumping to top", () => {
+    expect(resolveVirtualizedTimelineScopeReset({
+      previousScopeKey: null,
+      nextScopeKey: "ws-1\u0000thread-new\u0000200",
+      shouldVirtualize: true,
+      stableHistoryView: true,
+      hasPendingJump: false,
+      hasScrollElement: true,
+    })).toEqual({
+      nextScopeKey: "ws-1\u0000thread-new\u0000200",
+      shouldResetScroll: false,
+      shouldMeasure: true,
+    });
   });
 
   it("resets stale scroll scope only for a new stable virtualized history thread", () => {

@@ -21,6 +21,103 @@ const ALLOWED_LICENSES: &[&str] = &["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-
 fn main() {
     tauri_build::build();
     validate_curated_skills_lock();
+    validate_curated_skills_bundled_in_conf();
+}
+
+/// Enforce that curated skills listed in `skills-lock.json` are bundled
+/// without flattening their `<skill-id>/` directories. Tauri 2 flattens
+/// `**/*` globs in map-style resources, so use either the generic directory
+/// mapping (`"resources/curated-skills": "curated-skills"`) or explicit
+/// per-skill directory mappings.
+fn validate_curated_skills_bundled_in_conf() {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let lock_path = manifest_dir
+        .parent()
+        .map(|p| p.join("skills-lock.json"))
+        .unwrap_or_else(|| manifest_dir.join("skills-lock.json"));
+    let conf_path = manifest_dir.join("tauri.conf.json");
+    println!("cargo:rerun-if-changed={}", conf_path.display());
+
+    let lock_raw = fs::read_to_string(&lock_path).unwrap_or_else(|e| {
+        panic!(
+            "could not read skills-lock.json at {}: {}",
+            lock_path.display(),
+            e
+        )
+    });
+    let lock: serde_json::Value = match serde_json::from_str(&lock_raw) {
+        Ok(v) => v,
+        Err(e) => panic!("skills-lock.json is not valid JSON: {}", e),
+    };
+    let skills = match lock.get("skills").and_then(|v| v.as_object()) {
+        Some(m) => m,
+        None => return,
+    };
+    let mut curated_ids: Vec<String> = Vec::new();
+    for (name, entry) in skills {
+        let kind = entry
+            .get("kind")
+            .and_then(|v| v.as_str())
+            .unwrap_or("bundled");
+        if kind == "curated" {
+            curated_ids.push(name.clone());
+        }
+    }
+    if curated_ids.is_empty() {
+        return;
+    }
+
+    let conf_raw = fs::read_to_string(&conf_path).unwrap_or_else(|e| {
+        panic!(
+            "could not read tauri.conf.json at {}: {}",
+            conf_path.display(),
+            e
+        )
+    });
+    let conf: serde_json::Value = match serde_json::from_str(&conf_raw) {
+        Ok(v) => v,
+        Err(e) => panic!("tauri.conf.json is not valid JSON: {}", e),
+    };
+    let resources = match conf
+        .get("bundle")
+        .and_then(|b| b.get("resources"))
+        .and_then(|r| r.as_object())
+    {
+        Some(m) => m,
+        None => panic!("tauri.conf.json bundle.resources must be an object"),
+    };
+
+    let has_flattening_glob = resources.contains_key("resources/curated-skills/**/*");
+    if has_flattening_glob {
+        panic!(
+            "tauri.conf.json must not map `resources/curated-skills/**/*`; Tauri flattens glob \
+             map resources and packaged clients lose `curated-skills/<skill-id>/` directories"
+        );
+    }
+
+    let has_directory_key = resources
+        .get("resources/curated-skills")
+        .and_then(|v| v.as_str())
+        .map(|t| t == "curated-skills")
+        .unwrap_or(false);
+
+    for name in &curated_ids {
+        let want_key = format!("resources/curated-skills/{name}");
+        let want_target = format!("curated-skills/{name}");
+        let has_explicit_key = resources
+            .get(&want_key)
+            .and_then(|v| v.as_str())
+            .map(|target| target == want_target)
+            .unwrap_or(false);
+        if !has_directory_key && !has_explicit_key {
+            panic!(
+                "curated skill `{}` is missing from tauri.conf.json bundle.resources; expected \
+                 `\"resources/curated-skills\": \"curated-skills\"` or \
+                 `\"resources/curated-skills/{}\": \"curated-skills/{}\"`",
+                name, name, name
+            );
+        }
+    }
 }
 
 fn validate_curated_skills_lock() {

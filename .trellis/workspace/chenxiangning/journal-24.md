@@ -962,3 +962,514 @@ Follow-ups:
 ### Next Steps
 
 - None - task complete
+
+
+## Session 944: 修复打包内置技能加载
+
+**Date**: 2026-06-27
+**Task**: 修复打包内置技能加载
+**Branch**: `bump-version-0.5.15`
+
+### Summary
+
+修复 Tauri 打包后 curated skills 目录被 glob 映射拍平导致 Settings 无法加载的问题；更新 lazy-senior-dev 到 ponytail 4.8.3；让 GUI/daemon skills_list 正确透传 enabled 状态；回写 curated skill bundle spec 与 onboarding 打包规则。
+
+### Main Changes
+
+- 将 `tauri.conf.json` curated skills 资源映射改为目录映射，保留 `curated-skills/<skill-id>/` 打包布局。
+- `curated_skills` loader 支持 packaged resource dir、current_exe fallback 和 source tree fallback，覆盖 GUI、daemon、Codex/Claude 注入路径。
+- 新增 build-time guard 和 `tauri_config` 测试，阻止 `resources/curated-skills/**/*` glob map 回归。
+- 更新 bundled `lazy-senior-dev` skill 到 ponytail 4.8.3，并补回 onboarding 要求的 `When NOT to enable` 段与 lock hash。
+- 修复 `skills_list` GUI/daemon JSON serializer，确保 curated skill 的 disabled 状态不会被硬编码成 enabled。
+- 回写 `openspec/specs/curated-skill-bundles/spec.md` 与 `docs/curated-skill-onboarding.md`，沉淀打包资源目录契约。
+
+Validation:
+- cargo fmt --manifest-path src-tauri/Cargo.toml
+- cargo test --manifest-path src-tauri/Cargo.toml skill_entry_to_json_preserves_disabled_state
+- cargo test --manifest-path src-tauri/Cargo.toml curated_skills
+- cargo test --manifest-path src-tauri/Cargo.toml --test tauri_config
+- cargo check --manifest-path src-tauri/Cargo.toml
+- git diff --check
+- openspec validate --all --strict --no-interactive
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ace8f62a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 945: 优化用户气泡复制入口
+
+**Date**: 2026-06-27
+**Task**: 优化用户气泡复制入口
+**Branch**: `feature/v0.6`
+
+### Summary
+
+用户消息气泡内新增复制入口并调整为贴近右下角的无背景 icon；保持四角对称圆角，复制内容使用用户可见文本。
+
+### Main Changes
+
+- 在 `MessagesTimeline` 中生成用户消息复制 action，并通过 `userActionNode` 明确传入 `MessageRow` 的气泡 slot，避免内部条件分裂导致按钮不渲染。
+- 在 `MessagesRows` 中保留兼容 props，同时将用户 action slot 渲染到 user bubble 内部。
+- 调整 `messages.part1.css`：用户气泡四角统一 `12px`，copy icon 去背景/边框/阴影并右下对齐。
+- 新增 `messages.copyUserMessage` 中英文文案。
+- 更新 `Messages.test.tsx` 与 `Messages.user-input.test.tsx` 覆盖用户 copy button 和 `[User Input]` 可见文本复制。
+
+Validation:
+- `npx vitest run src/features/messages/components/Messages.test.tsx src/features/messages/components/Messages.user-input.test.tsx`
+- `npm run typecheck`
+- `npm run lint`
+- `npm run check:large-files`
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `177f403a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 946: 移除 Gemini CLI 供应商配置入口
+
+**Date**: 2026-06-27
+**Task**: 移除 Gemini CLI 供应商配置入口
+**Branch**: `feature/v0.6`
+
+### Summary
+
+删除供应商管理页的 Gemini CLI 配置 UI，保留 Gemini runtime/session/vendor bridge 兼容代码，并回写 OpenSpec 增量记录。
+
+### Main Changes
+
+| Area | Details |
+|------|---------|
+| Frontend UI | Removed the Gemini CLI tab and `GeminiVendorPanel` from `VendorSettingsPanel`. |
+| Compatibility | Kept `useGeminiVendorManagement`, `services/tauri/vendors.ts`, and backend Gemini vendor commands untouched. |
+| Styles | Removed `vendor-gemini-*` dead CSS from `settings.part1.vendor-panels.css`. |
+| OpenSpec | Updated `openspec/changes/2026-06-24-retire-opencode-and-gemini-cli/{proposal.md,tasks.md}` with the 2026-06-27 provider settings UI slice. |
+| Verification | `openspec validate 2026-06-24-retire-opencode-and-gemini-cli --strict --no-interactive`; `npm run lint`; targeted `VendorSettingsPanel` Vitest; `npm run typecheck`; `npm run check:large-files`; `git diff --check`. |
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b822b810` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 947: 修复非 Git 工作区 diff 扫描噪声
+
+**Date**: 2026-06-27
+**Task**: 修复非 Git 工作区 diff 扫描噪声
+**Branch**: `feature/v0.6`
+
+### Summary
+
+非 Git workspace 不再触发 get_git_diffs 错误提示；local Tauri/daemon diff 读取返回空列表；Git status active/background polling cadence 统一为 15s。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `27831c31` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 948: 修复 Git Diff 统计显示漂移
+
+**Date**: 2026-06-27
+**Task**: 修复 Git Diff 统计显示漂移
+**Branch**: `feature/v0.6`
+
+### Summary
+
+右侧 Git Diff 面板现在会从 daemon status 与 canonical diff fallback 获取正确 additions/deletions；过万 diff 统计使用 compact badge 显示并保留精确 accessible count。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d1e8d7db` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 949: 更新 v0.6.0 变更日志
+
+**Date**: 2026-06-27
+**Task**: 更新 v0.6.0 变更日志
+**Branch**: `feature/v0.6`
+
+### Summary
+
+补齐 v0.6.0 changelog 中最近的消息复制入口、供应商配置、Git Diff 非 Git 扫描和统计显示修复条目，并同步中英文描述。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `30897632` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 950: 收敛 Codex 磁盘会话失效提示
+
+**Date**: 2026-06-27
+**Task**: 收敛 Codex 磁盘会话失效提示
+**Branch**: `feature/v0.6.1`
+
+### Summary
+
+修复 Codex disk provider 在旧 thread binding/runtime 失效时的误导性运行时提示；限定 disk provider readiness failure 的 recoverable toast，不影响 Claude Code 和 managed Codex providers；补充 OpenSpec change 与目标测试，并通过 typecheck、lint、large-file gate、heavy-test-noise gate。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5f027bbd` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 951: 修复 Messages 流式渲染更新深度崩溃
+
+**Date**: 2026-06-27
+**Task**: 修复 Messages 流式渲染更新深度崩溃
+**Branch**: `feature/v0.6.1`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| Item | Detail |
+|------|--------|
+| Bug | React production error #185 / Maximum update depth exceeded during client usage |
+| Root Cause | Messages streaming render path had several semantically idempotent state writes that still submitted new state during repeated equivalent renders |
+| Fix | Added guards for equivalent Set expansion state, unchanged scroll key updates, and null anchor reset |
+| Tests | Added regression coverage for repeated equivalent streaming reasoning renders |
+| Verification | npx vitest run Messages.test.tsx Messages.live-behavior.test.tsx messagesRenderLoopGuards.test.ts; npm run typecheck; openspec validate fix-messages-react-update-depth-loop --strict --no-interactive |
+
+**Updated Files**:
+- `src/features/messages/components/Messages.tsx`
+- `src/features/messages/components/Messages.test.tsx`
+- `openspec/changes/fix-messages-react-update-depth-loop/`
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `11f920a4` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 952: 修复 Windows Claude stream-json 空 prompt 占位
+
+**Date**: 2026-06-27
+**Task**: 修复 Windows Claude stream-json 空 prompt 占位
+**Branch**: `feature/v0.6.1`
+
+### Summary
+
+修复 Claude Code 在 Windows .cmd/.bat wrapper 下 stream-json stdin 模式因 -p 后空 prompt 占位导致的原始 JSON 入会话和 stream-json 事件失败问题。
+
+### Main Changes
+
+- 移除 `ClaudeSession::build_command` 在 `--input-format stream-json` 分支中追加的空字符串 prompt 占位，保证用户消息只通过 stdin 发送。
+- 增加命令构造回归测试，覆盖 single-line、multiline、special-character prompt 和 resume path，断言 `-p` 后不再出现空占位。
+- 新增 OpenSpec change `fix-windows-claude-stream-json-stdin-prompt`，记录 Windows wrapper、Unix direct launch 共用的 no-placeholder stdin contract。
+- 验证：`openspec validate fix-windows-claude-stream-json-stdin-prompt --strict --no-interactive`、`cargo test --manifest-path src-tauri/Cargo.toml build_command`、`cargo test --manifest-path src-tauri/Cargo.toml build_resume_command`、`cargo fmt --manifest-path src-tauri/Cargo.toml --check`、`cargo test --manifest-path src-tauri/Cargo.toml engine::claude::tests_stream` 均通过。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9ff79898` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 953: 修复 Windows 对话流式输出回归
+
+**Date**: 2026-06-27
+**Task**: 修复 Windows 对话流式输出回归
+**Branch**: `feature/v0.6.1`
+
+### Summary
+
+修复 Windows Claude/Codex 对话流式输出 final-only 回归风险；新增 OpenSpec change、Claude 进程级流式回归测试、Codex first text delta alias timing 识别与 final-only 诊断测试。
+
+### Main Changes
+
+### Main Changes
+
+- 新增 OpenSpec change `fix-windows-chat-stream-final-only-regression`，明确 Claude backend 必须在进程结束前派发有效 text delta，Codex terminal completion 不能伪装成 first text delta。
+- 在 `src-tauri/src/engine/claude/tests_stream.rs` 增加 fake CLI 延迟退出测试，验证 `TextDelta` 在 fake Claude process completion 前进入 subscriber。
+- 在 `src-tauri/src/backend/app_server_runtime_lifecycle.rs` 将 Codex first text timing 的 method 识别从单一 `item/agentMessage/delta` 扩展为 canonical + legacy aliases：`text:delta`、`text/delta`、`item/agentMessage/textDelta`。
+- 在 `src-tauri/src/backend/app_server_tests.rs` 增加 alias 识别与 final-only completion 回归测试，确保 final result text 不会被误判为 streamed first delta。
+
+### Verification
+
+- `cargo test --manifest-path src-tauri/Cargo.toml claude --lib` -> 242 passed。
+- `cargo test --manifest-path src-tauri/Cargo.toml app_server --lib` -> 110 passed。
+- `cargo test --manifest-path src-tauri/Cargo.toml enrich_codex_turn_timing --lib` -> 5 passed。
+- `openspec validate fix-windows-chat-stream-final-only-regression --strict --no-interactive` -> passed。
+- `git diff --check` -> passed。
+- Windows cross-compile simulation attempted:
+  - `x86_64-pc-windows-gnu` blocked by missing `x86_64-w64-mingw32-dlltool` on local macOS host.
+  - `x86_64-pc-windows-msvc` blocked by missing Windows C headers while compiling `ring` (`assert.h` not found) on local macOS host.
+  - Both blocks are local cross-toolchain availability issues; native Rust suites and static review covered the touched backend paths.
+
+### Status
+
+Completed. Commit: `dd77ee26`.
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `dd77ee26` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 954: 修复 Windows Codex 内置技能启动回退
+
+**Date**: 2026-06-27
+**Task**: 修复 Windows Codex 内置技能启动回退
+**Branch**: `feature/v0.6.1`
+
+### Summary
+
+Windows Codex app-server wrapper fallback 改为通过 provider/default CODEX_HOME 下的 generated profile 传递内置技能 developer_instructions，避免 .cmd/.bat wrapper 携带大 argv 导致 initialize 超时；补充 OpenSpec change 和 Rust 回归测试。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8a12f560` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 955: 隔离幕布渲染场景作用域
+
+**Date**: 2026-06-27
+**Task**: 隔离幕布渲染场景作用域
+**Branch**: `feature/v0.6.1`
+
+### Summary
+
+修复幕布在完整历史、实时尾窗、加载更早历史和默认折叠尾窗之间复用旧 deferred snapshot / virtualizer measurement 的问题；回写 OpenSpec 并补 focused tests。
+
+### Main Changes
+
+- 新增 `MessagesPresentationMode` 与 `buildMessagesPresentationScopeKey`，把 runtime/static、collapsed/expanded、manual/jump 展开和 visible window identity 纳入幕布 presentation scope。
+- `Messages` 的 deferred presentation snapshot 改用 presentation scope，避免同一 `workspaceId + threadId` 下跨场景复用旧快照。
+- `MessagesTimeline` 的 virtualizer scope / hydration retention scope 改用 presentation scope，避免加载更早历史或实时尾窗时复用旧 row measurement。
+- 新增 focused tests 覆盖 static collapsed history、static manual expanded history、realtime collapsed tail 三类 scope 分离。
+- 回写 `harden-conversation-rendering-for-large-history` OpenSpec proposal/design/spec/tasks。
+
+验证：
+- `npx vitest run src/features/messages/components/messagesLiveWindow.test.ts src/features/messages/components/Messages.virtualized-jump.test.tsx`：22 tests passed。
+- `npm run typecheck`：passed。
+- `npm run lint`：passed。
+- `openspec validate harden-conversation-rendering-for-large-history --strict --no-interactive`：passed。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5017632f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 956: 修复 Sidebar 会话目录分页游标
+
+**Date**: 2026-06-27
+**Task**: 修复 Sidebar 会话目录分页游标
+**Branch**: `feature/v0.6.1`
+
+### Summary
+
+修复 Sidebar 工作区会话 catalog 初始加载丢弃 backend nextCursor 的问题，确保 mossx 这类超过 100 条会话的项目可以通过加载更多继续展示后续会话；补充 hook 和 thread actions 回归测试，并通过 focused Vitest、ESLint、typecheck、diff check。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6d624c5a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

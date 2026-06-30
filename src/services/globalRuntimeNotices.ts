@@ -114,6 +114,32 @@ function normalizeThreadFailureMessage(message: string) {
   return message.trim().replace(/\s+/g, " ");
 }
 
+function isCodexEngine(engine: ThreadFailureRuntimeNoticeInput["engine"]) {
+  return engine?.trim().toLowerCase() === "codex";
+}
+
+function isCodexRecoverableRuntimeOrBindingFailure(
+  input: ThreadFailureRuntimeNoticeInput,
+  message: string,
+) {
+  if (!isCodexEngine(input.engine)) {
+    return false;
+  }
+  const normalizedMessage = message.toLowerCase();
+  const normalizedReasonCode = input.reasonCode?.trim().toLowerCase() ?? "";
+  return (
+    normalizedReasonCode === "stale-thread-binding" ||
+    normalizedReasonCode === "runtime-ended" ||
+    normalizedReasonCode === "stopping-runtime-race" ||
+    normalizedReasonCode === "broken-pipe" ||
+    normalizedMessage.includes("thread not found") ||
+    normalizedMessage.includes("session not found") ||
+    normalizedMessage.includes("[runtime_ended]") ||
+    normalizedMessage.includes("stale_reuse_cleanup") ||
+    normalizedMessage.includes("internal_replacement")
+  );
+}
+
 function resolveRuntimeNoticeActionLabel(userAction: string | null | undefined) {
   switch (userAction?.trim()) {
     case "reconnect":
@@ -245,13 +271,19 @@ export function pushThreadFailureRuntimeNotice(
   if (!message) {
     return null;
   }
+  const isCodexRecoverableFailure = isCodexRecoverableRuntimeOrBindingFailure(
+    input,
+    message,
+  );
   return pushGlobalRuntimeNotice({
     severity: "error",
     category: "user-action-error",
-    messageKey: "runtimeNotice.error.threadTurnFailed",
+    messageKey: isCodexRecoverableFailure
+      ? "runtimeNotice.error.codexSessionRecoverableFailure"
+      : "runtimeNotice.error.threadTurnFailed",
     messageParams: {
       engine: resolveRuntimeNoticeEngineLabel(input.engine),
-      message,
+      ...(isCodexRecoverableFailure ? { rawMessage: message } : { message }),
       reasonCode: input.reasonCode?.trim() || undefined,
       userAction: resolveRuntimeNoticeActionLabel(input.userAction) ?? undefined,
       actionHint: resolveRuntimeNoticeActionHint(input.userAction) ?? undefined,

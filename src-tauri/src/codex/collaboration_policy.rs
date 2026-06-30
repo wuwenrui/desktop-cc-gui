@@ -205,6 +205,14 @@ pub(crate) fn apply_policy_to_collaboration_mode(
     payload: Option<Value>,
     policy: &CodexCollaborationPolicy,
 ) -> Value {
+    apply_policy_to_collaboration_mode_with_extra_directives(payload, policy, &[])
+}
+
+pub(crate) fn apply_policy_to_collaboration_mode_with_extra_directives(
+    payload: Option<Value>,
+    policy: &CodexCollaborationPolicy,
+    extra_directives: &[String],
+) -> Value {
     let mut root = payload
         .and_then(|value| value.as_object().cloned())
         .unwrap_or_default();
@@ -216,7 +224,9 @@ pub(crate) fn apply_policy_to_collaboration_mode(
     let existing_instructions = settings
         .get("developer_instructions")
         .and_then(Value::as_str);
-    if let Some(merged) = merge_developer_instructions(existing_instructions, &policy.directives) {
+    let mut directives = policy.directives.clone();
+    directives.extend(extra_directives.iter().cloned());
+    if let Some(merged) = merge_developer_instructions(existing_instructions, &directives) {
         settings.insert("developer_instructions".to_string(), Value::String(merged));
     }
     settings.insert(
@@ -269,9 +279,10 @@ pub(crate) fn apply_policy_to_collaboration_mode(
 #[cfg(test)]
 mod tests {
     use super::{
-        apply_policy_to_collaboration_mode, build_policy_directives, normalize_mode,
-        resolve_collaboration_profile_from_raw, CodexCollaborationPolicy, CollaborationProfile,
-        RequestUserInputPolicy, COLLABORATION_POLICY_VERSION,
+        apply_policy_to_collaboration_mode,
+        apply_policy_to_collaboration_mode_with_extra_directives, build_policy_directives,
+        normalize_mode, resolve_collaboration_profile_from_raw, CodexCollaborationPolicy,
+        CollaborationProfile, RequestUserInputPolicy, COLLABORATION_POLICY_VERSION,
     };
     use serde_json::json;
 
@@ -395,6 +406,28 @@ mod tests {
             .unwrap_or("");
         assert!(merged_instructions.contains("Keep answers concise."));
         assert!(merged_instructions.contains("Execution policy (default mode)"));
+    }
+
+    #[test]
+    fn apply_policy_to_collaboration_mode_merges_extra_developer_directives() {
+        let policy = resolve_policy_with_profile(
+            CollaborationProfile::OfficialCompatible,
+            Some(&json!({ "mode": "code" })),
+            None,
+        );
+        let enriched = apply_policy_to_collaboration_mode_with_extra_directives(
+            Some(json!({ "settings": { "developer_instructions": "Keep answers concise." } })),
+            &policy,
+            &["## Curated Skills\n\n<skill id=\"lazy-senior-dev\">body</skill>".to_string()],
+        );
+        let merged_instructions = enriched["settings"]["developer_instructions"]
+            .as_str()
+            .unwrap_or("");
+
+        assert!(merged_instructions.contains("Keep answers concise."));
+        assert!(merged_instructions.contains("Execution policy (default mode)"));
+        assert!(merged_instructions.contains("## Curated Skills"));
+        assert!(merged_instructions.contains("lazy-senior-dev"));
     }
 
     #[test]
