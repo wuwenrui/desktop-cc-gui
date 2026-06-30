@@ -9,9 +9,12 @@ import {
   getWechatBridgeStatus,
   getWechatBridgeSubscriptionPlans,
   resetWechatBridgeLogin,
+  resetWechatBridgeRebindSecretWithCode,
   runWechatBridgeDiagnostics,
   saveNewapiEntitlementAccount,
+  sendWechatBridgeRebindRecoveryCode,
   sendWechatBridgeVerificationPrompt,
+  setWechatBridgeRebindSecret,
   startWechatBridge,
   stopWechatBridge,
   type NewapiEntitlementAccount,
@@ -38,6 +41,9 @@ type WeChatBridgeAction =
   | "refresh"
   | "diagnostics"
   | "reset"
+  | "rebindRecovery"
+  | "resetRebindSecret"
+  | "saveRebindSecret"
   | "probe"
   | "subscribe"
   | "confirmPayment"
@@ -239,6 +245,12 @@ export function WeChatBridgeSettings({
   const [accountFormOpen, setAccountFormOpen] = useState(false);
   const [accountBaseUrlDraft, setAccountBaseUrlDraft] = useState(MODEL_SITE_URL);
   const [accountApiKeyDraft, setAccountApiKeyDraft] = useState("");
+  const [rebindPanelOpen, setRebindPanelOpen] = useState(false);
+  const [rebindSecretDraft, setRebindSecretDraft] = useState("");
+  const [rebindSecretConfirmDraft, setRebindSecretConfirmDraft] = useState("");
+  const [rebindRecoveryOpen, setRebindRecoveryOpen] = useState(false);
+  const [rebindRecoveryCodeDraft, setRebindRecoveryCodeDraft] = useState("");
+  const [rebindRecoveryNewSecretDraft, setRebindRecoveryNewSecretDraft] = useState("");
 
   const refreshStatus = useCallback(async () => {
     setAction("refresh");
@@ -448,10 +460,39 @@ export function WeChatBridgeSettings({
     }
   }, []);
 
-  const handleResetLogin = useCallback(async () => {
-    if (!window.confirm(t("settings.wechatBridgeRebindConfirm"))) {
+  const handleOpenRebindPanel = useCallback(() => {
+    setRebindPanelOpen(true);
+    setRebindRecoveryOpen(false);
+    setCopied(null);
+    setError(null);
+  }, []);
+
+  const handleSaveRebindSecret = useCallback(async () => {
+    const secret = rebindSecretDraft.trim();
+    if (secret !== rebindSecretConfirmDraft.trim()) {
+      setError(t("settings.wechatBridgeRebindSecretMismatch"));
       return;
     }
+    setAction("saveRebindSecret");
+    setError(null);
+    setCopied(null);
+    try {
+      const next = await setWechatBridgeRebindSecret({ secret });
+      setStatus(next);
+      setDiagnostics(null);
+      setCopied(t("settings.wechatBridgeRebindSecretSaved"));
+      setRebindSecretDraft("");
+      setRebindSecretConfirmDraft("");
+      setError(next.lastError ?? null);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : String(saveError));
+    } finally {
+      setAction(null);
+    }
+  }, [rebindSecretConfirmDraft, rebindSecretDraft, t]);
+
+  const handleResetLogin = useCallback(async () => {
+    const secret = rebindSecretDraft.trim();
     setAction("reset");
     setError(null);
     setCopied(null);
@@ -459,15 +500,58 @@ export function WeChatBridgeSettings({
     try {
       const next = await resetWechatBridgeLogin({
         workspaceId: activeWorkspace?.id ?? null,
+        rebindSecret: secret,
       });
       setStatus(next);
+      setRebindPanelOpen(false);
+      setRebindRecoveryOpen(false);
+      setRebindSecretDraft("");
       setError(next.lastError ?? null);
     } catch (resetError) {
       setError(resetError instanceof Error ? resetError.message : String(resetError));
     } finally {
       setAction(null);
     }
-  }, [activeWorkspace?.id, t]);
+  }, [activeWorkspace?.id, rebindSecretDraft]);
+
+  const handleSendRebindRecoveryCode = useCallback(async () => {
+    setAction("rebindRecovery");
+    setError(null);
+    setCopied(null);
+    try {
+      const next = await sendWechatBridgeRebindRecoveryCode();
+      setStatus(next);
+      setRebindRecoveryOpen(true);
+      setCopied(t("settings.wechatBridgeRebindRecoverySent"));
+      setError(next.lastError ?? null);
+    } catch (recoveryError) {
+      setError(recoveryError instanceof Error ? recoveryError.message : String(recoveryError));
+    } finally {
+      setAction(null);
+    }
+  }, [t]);
+
+  const handleResetRebindSecretWithCode = useCallback(async () => {
+    setAction("resetRebindSecret");
+    setError(null);
+    setCopied(null);
+    try {
+      const next = await resetWechatBridgeRebindSecretWithCode({
+        code: rebindRecoveryCodeDraft.trim(),
+        newSecret: rebindRecoveryNewSecretDraft.trim(),
+      });
+      setStatus(next);
+      setCopied(t("settings.wechatBridgeRebindRecoveryResetDone"));
+      setRebindRecoveryCodeDraft("");
+      setRebindRecoveryNewSecretDraft("");
+      setRebindRecoveryOpen(false);
+      setError(next.lastError ?? null);
+    } catch (resetError) {
+      setError(resetError instanceof Error ? resetError.message : String(resetError));
+    } finally {
+      setAction(null);
+    }
+  }, [rebindRecoveryCodeDraft, rebindRecoveryNewSecretDraft, t]);
 
   const handleSendProbe = useCallback(async () => {
     if (!window.confirm(t("settings.wechatBridgeSendProbeConfirm"))) {
@@ -534,14 +618,28 @@ export function WeChatBridgeSettings({
   const phase = status?.phase ?? "stopped";
   const tone = phaseTone(phase);
   const isBusy = action != null;
+  const rebindSecretConfigured = status?.rebindSecretConfigured === true;
+  const rebindSecretDraftReady = rebindSecretDraft.trim().length >= 6;
+  const rebindSecretSetupReady =
+    rebindSecretDraftReady && rebindSecretConfirmDraft.trim().length >= 6;
+  const rebindRecoveryReady =
+    rebindRecoveryCodeDraft.trim().length > 0
+    && rebindRecoveryNewSecretDraft.trim().length >= 6;
+  const hasBoundWechatAccount =
+    status?.wechatBound === true ||
+    Boolean(status?.boundWechatUserId || status?.boundWechatBotId);
   const showStop = status?.bridgeRunning || status?.weclawRunning;
   const showResetLogin =
     phase === "running" &&
     status?.weclawRunning === true &&
-    status?.wechatBound === true;
+    hasBoundWechatAccount;
   const showSendProbe = showResetLogin && !hasVerifiedTextReply(status);
   const showInstallGuide = status?.weclawAvailable === false;
-  const qrContent = status?.qrText ?? status?.loginUrl ?? null;
+  const shouldShowQr =
+    phase === "waiting_scan" &&
+    !hasBoundWechatAccount &&
+    rebindSecretConfigured;
+  const qrContent = shouldShowQr ? status?.qrText ?? status?.loginUrl ?? null : null;
   const loginUrl = status?.loginUrl ?? null;
   const syncKey = status?.weclawSyncFresh ? null : syncStatusKey(status);
   const boundValue = boundAccountValue(t, status);
@@ -556,7 +654,10 @@ export function WeChatBridgeSettings({
   const shouldConfigureAccount = newapiMissing || accountMissing;
   const entitlementLoading = entitlements == null && entitlementError == null;
   const canStartBridge =
-    !shouldConfigureAccount && !entitlementRequestFailed && !entitlementLoading;
+    rebindSecretConfigured
+    && !shouldConfigureAccount
+    && !entitlementRequestFailed
+    && !entitlementLoading;
   const subscriptionHelp = currentEntitlement?.plan_title
     ? `${currentEntitlement.plan_title} · ${t("settings.wechatBridgeEntitlementExpiresAt")} ${new Date(currentEntitlement.expires_at * 1000).toLocaleString()}`
     : shouldConfigureAccount
@@ -758,6 +859,60 @@ export function WeChatBridgeSettings({
         </div>
       ) : null}
 
+      {!rebindSecretConfigured ? (
+        <div className="wechat-bridge-account is-warn">
+          <div>
+            <div className="wechat-bridge-subscription-title">
+              {t("settings.wechatBridgeRebindSecretTitle")}
+            </div>
+            <div className="settings-help">
+              {t("settings.wechatBridgeRebindSecretDescription")}
+            </div>
+            <div className="settings-help">
+              {t("settings.wechatBridgeRebindSecretRequired")}
+            </div>
+          </div>
+          <div className="wechat-bridge-account-form">
+            <label className="settings-field">
+              <span className="settings-field-label">
+                {t("settings.wechatBridgeRebindSecretInput")}
+              </span>
+              <input
+                aria-label={t("settings.wechatBridgeRebindSecretInput")}
+                className="settings-input"
+                type="password"
+                value={rebindSecretDraft}
+                onChange={(event) => setRebindSecretDraft(event.target.value)}
+              />
+            </label>
+            <label className="settings-field">
+              <span className="settings-field-label">
+                {t("settings.wechatBridgeRebindSecretConfirmInput")}
+              </span>
+              <input
+                aria-label={t("settings.wechatBridgeRebindSecretConfirmInput")}
+                className="settings-input"
+                type="password"
+                value={rebindSecretConfirmDraft}
+                onChange={(event) => setRebindSecretConfirmDraft(event.target.value)}
+              />
+            </label>
+            <button
+              type="button"
+              className="primary settings-button-compact"
+              onClick={() => {
+                void handleSaveRebindSecret();
+              }}
+              disabled={isBusy || !rebindSecretSetupReady}
+            >
+              {action === "saveRebindSecret"
+                ? t("settings.running")
+                : t("settings.wechatBridgeRebindSecretSave")}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <div className={`wechat-bridge-status is-${tone}`}>
         <span className="wechat-bridge-status-dot" aria-hidden />
         <div>
@@ -860,9 +1015,7 @@ export function WeChatBridgeSettings({
           <button
             type="button"
             className="ghost settings-button-compact"
-            onClick={() => {
-              void handleResetLogin();
-            }}
+            onClick={handleOpenRebindPanel}
             disabled={isBusy}
           >
             {action === "reset"
@@ -897,6 +1050,101 @@ export function WeChatBridgeSettings({
             : t("settings.wechatBridgeDiagnostics")}
         </button>
       </div>
+
+      {rebindPanelOpen ? (
+        <div className="wechat-bridge-recovery">
+          <label className="settings-field">
+            <span className="settings-field-label">
+              {t("settings.wechatBridgeRebindSecretInput")}
+            </span>
+            <input
+              aria-label={t("settings.wechatBridgeRebindSecretInput")}
+              className="settings-input"
+              type="password"
+              value={rebindSecretDraft}
+              onChange={(event) => setRebindSecretDraft(event.target.value)}
+            />
+          </label>
+          <div className="settings-field-row">
+            <button
+              type="button"
+              className="primary settings-button-compact"
+              onClick={() => {
+                void handleResetLogin();
+              }}
+              disabled={isBusy || !rebindSecretDraftReady}
+            >
+              {action === "reset"
+                ? t("settings.running")
+                : t("settings.wechatBridgeRebindSecretContinue")}
+            </button>
+            <button
+              type="button"
+              className="ghost settings-button-compact"
+              onClick={() => {
+                setRebindPanelOpen(false);
+                setRebindRecoveryOpen(false);
+                setRebindSecretDraft("");
+              }}
+              disabled={isBusy}
+            >
+              {t("settings.wechatBridgeRebindSecretCancel")}
+            </button>
+            <button
+              type="button"
+              className="ghost settings-button-compact"
+              onClick={() => {
+                void handleSendRebindRecoveryCode();
+              }}
+              disabled={isBusy}
+            >
+              {action === "rebindRecovery"
+                ? t("settings.running")
+                : t("settings.wechatBridgeRebindForgotSecret")}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {rebindRecoveryOpen ? (
+        <div className="wechat-bridge-account-form">
+          <label className="settings-field">
+            <span className="settings-field-label">
+              {t("settings.wechatBridgeRebindRecoveryCode")}
+            </span>
+            <input
+              aria-label={t("settings.wechatBridgeRebindRecoveryCode")}
+              className="settings-input"
+              value={rebindRecoveryCodeDraft}
+              onChange={(event) => setRebindRecoveryCodeDraft(event.target.value)}
+            />
+          </label>
+          <label className="settings-field">
+            <span className="settings-field-label">
+              {t("settings.wechatBridgeRebindRecoveryNewSecret")}
+            </span>
+            <input
+              aria-label={t("settings.wechatBridgeRebindRecoveryNewSecret")}
+              className="settings-input"
+              type="password"
+              value={rebindRecoveryNewSecretDraft}
+              onChange={(event) => setRebindRecoveryNewSecretDraft(event.target.value)}
+            />
+          </label>
+          <button
+            type="button"
+            className="primary settings-button-compact"
+            onClick={() => {
+              void handleResetRebindSecretWithCode();
+            }}
+            disabled={isBusy || !rebindRecoveryReady}
+          >
+            {action === "resetRebindSecret"
+              ? t("settings.running")
+              : t("settings.wechatBridgeRebindRecoveryReset")}
+          </button>
+        </div>
+      ) : null}
 
       {qrContent ? (
         <div className="wechat-bridge-qr-panel">

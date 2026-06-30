@@ -481,9 +481,17 @@ describe("useGlobalRuntimeNoticeDock", () => {
             durationMs: 0,
           },
         }),
+        expect.objectContaining({
+          messageKey: "runtimeNotice.startup.commandFailed",
+          messageParams: {
+            command: "list_threads",
+            workspace: "Moss X",
+            durationMs: 0,
+          },
+        }),
       ]),
     );
-    expect(result.current.notices).toHaveLength(2);
+    expect(result.current.notices).toHaveLength(1);
     expect(result.current.notices).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -495,15 +503,6 @@ describe("useGlobalRuntimeNoticeDock", () => {
             workspace: "Moss X",
             durationMs: 46,
             reason: "failure",
-          },
-        }),
-        expect.objectContaining({
-          severity: "error",
-          messageKey: "runtimeNotice.startup.commandFailed",
-          messageParams: {
-            command: "list_threads",
-            workspace: "Moss X",
-            durationMs: 0,
           },
         }),
       ]),
@@ -700,7 +699,7 @@ describe("useGlobalRuntimeNoticeDock", () => {
     const successfulNotices = getGlobalRuntimeNoticesSnapshot().filter(
       (notice) => notice.messageKey === "runtimeNotice.startup.commandCompleted",
     );
-    const failedNotices = result.current.notices.filter(
+    const failedNotices = getGlobalRuntimeNoticesSnapshot().filter(
       (notice) => notice.messageKey === "runtimeNotice.startup.commandFailed",
     );
     expect(successfulNotices).toHaveLength(1);
@@ -725,5 +724,10 @@ describe("useGlobalRuntimeNoticeDock", () => {
         },
       }),
     );
+    expect(
+      result.current.notices.some(
+        (notice) => notice.messageKey === "runtimeNotice.startup.commandFailed",
+      ),
+    ).toBe(false);
   });
 });

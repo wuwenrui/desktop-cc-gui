@@ -182,10 +182,21 @@ export function getGlobalRuntimeNoticesSnapshot(): readonly GlobalRuntimeNotice[
   return cloneSnapshot();
 }
 
+function isBackgroundStartupCommandFailureNotice(notice: GlobalRuntimeNotice) {
+  return (
+    notice.category === "diagnostic" &&
+    notice.messageKey === "runtimeNotice.startup.commandFailed"
+  );
+}
+
 export function filterVisibleGlobalRuntimeNoticeDockItems(
   inputNotices: readonly GlobalRuntimeNotice[],
 ): GlobalRuntimeNotice[] {
-  return inputNotices.filter((notice) => notice.severity === "error");
+  return inputNotices.filter(
+    (notice) =>
+      notice.severity === "error" &&
+      !isBackgroundStartupCommandFailureNotice(notice),
+  );
 }
 
 export function pushGlobalRuntimeNotice(

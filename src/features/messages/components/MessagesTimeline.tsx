@@ -359,6 +359,13 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     overscan: isThinking || isWorking ? 24 : 12,
   });
   const virtualTimelineRows = timelineVirtualizer.getVirtualItems();
+  const requestVirtualizedTimelineMeasure = useCallback(() => {
+    if (!shouldVirtualizeTimeline) {
+      return;
+    }
+    timelineVirtualizer.measure();
+  }, [shouldVirtualizeTimeline, timelineVirtualizer]);
+
   const activeLiveTimelineRowKeys = useMemo(
     () =>
       getActiveLiveTimelineRowKeys({
@@ -639,6 +646,9 @@ export const MessagesTimeline = memo(function MessagesTimeline({
               onOpenFileLinkMenu={showFileLinkMenu}
               streamMitigationProfile={streamMitigationProfile}
               onAssistantVisibleTextRender={onAssistantVisibleTextRender}
+              onContentLayoutChange={
+                shouldVirtualizeTimeline ? requestVirtualizedTimelineMeasure : undefined
+              }
               suppressMemorySummaryCard={suppressedUserMemoryContextMessageIds.has(renderItem.id)}
               suppressNoteCardSummaryCard={suppressedUserNoteCardContextMessageIds.has(renderItem.id)}
               onOutlineReady={

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   clearGlobalRuntimeNotices,
+  filterVisibleGlobalRuntimeNoticeDockItems,
   getGlobalRuntimeNoticesSnapshot,
   pushGlobalRuntimeNotice,
   pushThreadFailureRuntimeNotice,
@@ -109,6 +110,32 @@ describe("globalRuntimeNotices", () => {
     ]);
 
     unsubscribe();
+  });
+
+  it("keeps background startup command failures out of the user-facing dock", () => {
+    pushGlobalRuntimeNotice({
+      severity: "error",
+      category: "diagnostic",
+      messageKey: "runtimeNotice.startup.commandFailed",
+      messageParams: {
+        command: "get_git_diffs",
+        workspace: "workspace",
+        durationMs: 12,
+      },
+    });
+    pushThreadFailureRuntimeNotice({
+      workspaceId: "ws-1",
+      threadId: "codex-thread-1",
+      engine: "codex",
+      message: "The agent turn failed.",
+    });
+
+    const snapshot = getGlobalRuntimeNoticesSnapshot();
+
+    expect(snapshot).toHaveLength(2);
+    expect(filterVisibleGlobalRuntimeNoticeDockItems(snapshot).map((notice) => notice.messageKey)).toEqual([
+      "runtimeNotice.error.threadTurnFailed",
+    ]);
   });
 
   it("normalizes thread failure notices for the runtime notice dock", () => {

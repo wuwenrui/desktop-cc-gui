@@ -11,7 +11,10 @@ import (
 )
 
 func newTestHandler() *Handler {
-	return &Handler{agents: make(map[string]agent.Agent)}
+	return &Handler{
+		agents:        make(map[string]agent.Agent),
+		agentWorkDirs: make(map[string]string),
+	}
 }
 
 func TestParseCommand_NoPrefix(t *testing.T) {
@@ -142,6 +145,38 @@ func TestBuildHelpText(t *testing.T) {
 	}
 }
 
+func TestBuildCapabilityIntroMentionsCurrentWorkdir(t *testing.T) {
+	h := newTestHandler()
+	h.defaultName = "claude"
+	h.agentWorkDirs["claude"] = "/tmp/wechat-workspace"
+
+	text := h.buildCapabilityIntro()
+
+	if !strings.Contains(text, "当前目录：/tmp/wechat-workspace") {
+		t.Fatalf("capability intro should mention current workdir, got %q", text)
+	}
+	if !strings.Contains(text, "读写文件") {
+		t.Fatalf("capability intro should mention file operations, got %q", text)
+	}
+	if !strings.Contains(text, "发回微信") {
+		t.Fatalf("capability intro should mention sending files back to WeChat, got %q", text)
+	}
+}
+
+func TestIsCapabilityIntroRequest(t *testing.T) {
+	cases := []string{"你好", "你能做什么？", "怎么用", "你是谁"}
+	for _, text := range cases {
+		t.Run(text, func(t *testing.T) {
+			if !isCapabilityIntroRequest(text) {
+				t.Fatalf("isCapabilityIntroRequest(%q) = false, want true", text)
+			}
+		})
+	}
+	if isCapabilityIntroRequest("OK") {
+		t.Fatal("isCapabilityIntroRequest(OK) = true, want false")
+	}
+}
+
 func TestProgressAckTextForUserRequestUsesScenarioSpecificCopy(t *testing.T) {
 	cases := []struct {
 		name string
@@ -175,6 +210,24 @@ func TestProgressAckTextForUserRequestUsesScenarioSpecificCopy(t *testing.T) {
 			got := progressAckTextForUserRequest(tc.text)
 			if !strings.Contains(got, tc.want) {
 				t.Fatalf("progressAckTextForUserRequest(%q) = %q, want to contain %q", tc.text, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestShouldSuppressProgressAckForHandshakeMessages(t *testing.T) {
+	cases := []string{
+		"连接测试：请回复 OK",
+		"连接测试：请只回复 OK。",
+		"OK",
+		"ok",
+		"好的",
+	}
+
+	for _, text := range cases {
+		t.Run(text, func(t *testing.T) {
+			if !shouldSuppressProgressAckForUserRequest(text) {
+				t.Fatalf("shouldSuppressProgressAckForUserRequest(%q) = false, want true", text)
 			}
 		})
 	}

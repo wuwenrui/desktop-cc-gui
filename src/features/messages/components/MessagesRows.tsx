@@ -132,6 +132,7 @@ type MessageRowProps = {
     itemId: string;
     visibleText: string;
   }) => void;
+  onContentLayoutChange?: () => void;
   suppressMemorySummaryCard?: boolean;
   suppressNoteCardSummaryCard?: boolean;
   onOutlineReady?: (outline: import("../../markdown/fastMarkdownRenderer").MarkdownOutlineEntry[]) => void;
@@ -349,6 +350,7 @@ function areMessageRowPropsEqual(
     previous.onOpenFileLink === next.onOpenFileLink &&
     previous.onOpenFileLinkMenu === next.onOpenFileLinkMenu &&
     previous.onOutlineReady === next.onOutlineReady &&
+    previous.onContentLayoutChange === next.onContentLayoutChange &&
     (
       !compareStreamingOnlyProps ||
       (
@@ -692,6 +694,7 @@ export const MessageRow = memo(function MessageRow({
   onOpenFileLinkMenu,
   streamMitigationProfile = null,
   onAssistantVisibleTextRender,
+  onContentLayoutChange,
   suppressMemorySummaryCard = false,
   suppressNoteCardSummaryCard = false,
   onOutlineReady,
@@ -1136,20 +1139,28 @@ export const MessageRow = memo(function MessageRow({
   );
   const handleMarkdownRenderedAssistantValue = useCallback(
     (visibleText: string) => {
+      onContentLayoutChange?.();
       handleRenderedAssistantValue(
         useLongFoldedMarkdownStreamingSurface ? displayText : visibleText,
       );
     },
-    [displayText, handleRenderedAssistantValue, useLongFoldedMarkdownStreamingSurface],
+    [
+      displayText,
+      handleRenderedAssistantValue,
+      onContentLayoutChange,
+      useLongFoldedMarkdownStreamingSurface,
+    ],
   );
   useEffect(() => {
     if (!usePlainTextStreamingSurface) {
       return;
     }
+    onContentLayoutChange?.();
     handleRenderedAssistantValue(displayText);
   }, [
     displayText,
     handleRenderedAssistantValue,
+    onContentLayoutChange,
     usePlainTextStreamingSurface,
   ]);
   useEffect(() => {

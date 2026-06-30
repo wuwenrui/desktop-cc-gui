@@ -3,10 +3,13 @@ use std::env;
 use std::fs::{File, OpenOptions};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::time::SystemTime;
+use std::time::{SystemTime, UNIX_EPOCH};
 
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
+use sha2::Sha256;
 use tauri::{AppHandle, Manager, State};
 use tokio::time::{sleep, Duration};
 
@@ -25,6 +28,13 @@ const MIN_REPLY_INTERVAL_MS: u64 = 1500;
 const MAX_REPLIES_PER_MINUTE: u32 = 20;
 const WECLAW_SYNC_FRESH_SECS: u64 = 180;
 const KEEP_ONLINE_CHECK_INTERVAL_SECS: u64 = 30;
+const REBIND_SECRET_ITERATIONS: u32 = 80_000;
+const REBIND_SECRET_MIN_LEN: usize = 6;
+const REBIND_SECRET_MAX_LEN: usize = 128;
+const REBIND_RECOVERY_TTL_SECS: i64 = 10 * 60;
+const REBIND_RECOVERY_MAX_ATTEMPTS: u8 = 5;
+
+type HmacSha256 = Hmac<Sha256>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -125,6 +135,7 @@ pub(crate) struct WeChatBridgeStatus {
     bound_wechat_user_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     bound_wechat_bot_id: Option<String>,
+    rebind_secret_configured: bool,
     weclaw_sync_fresh: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     weclaw_sync_age_secs: Option<u64>,
@@ -178,6 +189,28 @@ struct BinaryAvailability {
     weclaw: Option<PathBuf>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WeChatRebindSecretRecord {
+    version: u8,
+    salt: String,
+    iterations: u32,
+    hash: String,
+    updated_at_secs: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WeChatRebindRecoveryChallenge {
+    version: u8,
+    bound_wechat_user_id: String,
+    salt: String,
+    code_hash: String,
+    created_at_secs: i64,
+    expires_at_secs: i64,
+    attempts: u8,
+}
+
 #[tauri::command]
 pub(crate) async fn get_wechat_bridge_status(
     state: State<'_, AppState>,
@@ -203,10 +236,38 @@ pub(crate) async fn stop_wechat_bridge(app: AppHandle) -> Result<WeChatBridgeSta
 #[tauri::command]
 pub(crate) async fn reset_wechat_bridge_login(
     workspace_id: Option<String>,
+    rebind_secret: Option<String>,
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<WeChatBridgeStatus, String> {
-    reset_wechat_bridge_login_inner(&state, &app, workspace_id).await
+    reset_wechat_bridge_login_inner(&state, &app, workspace_id, rebind_secret).await
+}
+
+#[tauri::command]
+pub(crate) async fn set_wechat_bridge_rebind_secret(
+    secret: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<WeChatBridgeStatus, String> {
+    set_wechat_bridge_rebind_secret_inner(&state, &app, secret).await
+}
+
+#[tauri::command]
+pub(crate) async fn send_wechat_bridge_rebind_recovery_code(
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<WeChatBridgeStatus, String> {
+    send_wechat_bridge_rebind_recovery_code_inner(&state, &app).await
+}
+
+#[tauri::command]
+pub(crate) async fn reset_wechat_bridge_rebind_secret_with_code(
+    code: String,
+    new_secret: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<WeChatBridgeStatus, String> {
+    reset_wechat_bridge_rebind_secret_with_code_inner(&state, &app, code, new_secret).await
 }
 
 #[tauri::command]
@@ -285,6 +346,9 @@ async fn start_wechat_bridge_inner(
         crate::newapi_entitlements::read_newapi_entitlement_credentials()?;
     let paths = control_paths(app)?;
     prepare_control_paths(&paths)?;
+    if !rebind_secret_configured(&rebind_secret_path(&paths)) && !existing_wechat_bound() {
+        return Err("请先设置微信换绑秘钥，再启动扫码绑定。".to_string());
+    }
     let binaries = resolve_binaries(app, true).await;
     if binaries.bridge.is_none() || binaries.weclaw.is_none() {
         return Ok(status_from_parts(
@@ -378,10 +442,12 @@ async fn reset_wechat_bridge_login_inner(
     state: &AppState,
     app: &AppHandle,
     workspace_id: Option<String>,
+    rebind_secret: Option<String>,
 ) -> Result<WeChatBridgeStatus, String> {
     crate::newapi_entitlements::require_wechat_bridge_entitlement().await?;
     let paths = control_paths(app)?;
     prepare_control_paths(&paths)?;
+    require_rebind_secret_for_login_reset(&rebind_secret_path(&paths), rebind_secret.as_deref())?;
     let binaries = resolve_binaries(app, false).await;
     if let Some(weclaw) = binaries.weclaw.as_ref() {
         let _ = crate::utils::async_command(weclaw)
@@ -396,6 +462,65 @@ async fn reset_wechat_bridge_login_inner(
     start_wechat_bridge_inner(state, app, workspace_id).await
 }
 
+async fn set_wechat_bridge_rebind_secret_inner(
+    state: &AppState,
+    app: &AppHandle,
+    secret: String,
+) -> Result<WeChatBridgeStatus, String> {
+    let paths = control_paths(app)?;
+    prepare_control_paths(&paths)?;
+    store_rebind_secret(&rebind_secret_path(&paths), &secret)?;
+    get_status(state, app, None).await
+}
+
+async fn send_wechat_bridge_rebind_recovery_code_inner(
+    state: &AppState,
+    app: &AppHandle,
+) -> Result<WeChatBridgeStatus, String> {
+    crate::newapi_entitlements::require_wechat_bridge_entitlement().await?;
+    let paths = control_paths(app)?;
+    prepare_control_paths(&paths)?;
+    let accounts_dir = weclaw_accounts_dir()
+        .ok_or_else(|| "failed to resolve WeClaw accounts directory".to_string())?;
+    let bound_user = find_weclaw_bound_user_id(&accounts_dir)
+        .ok_or_else(|| "未找到已绑定的微信账号，无法发送找回验证码。".to_string())?;
+    let code = verification_code();
+    let prompt = build_wechat_bridge_rebind_recovery_prompt(&code);
+    send_wechat_text(&bound_user, &prompt).await?;
+    store_rebind_recovery_challenge(
+        &rebind_recovery_path(&paths),
+        &bound_user,
+        &code,
+        now_unix_secs(),
+    )?;
+    get_status(state, app, None).await
+}
+
+async fn reset_wechat_bridge_rebind_secret_with_code_inner(
+    state: &AppState,
+    app: &AppHandle,
+    code: String,
+    new_secret: String,
+) -> Result<WeChatBridgeStatus, String> {
+    crate::newapi_entitlements::require_wechat_bridge_entitlement().await?;
+    let paths = control_paths(app)?;
+    prepare_control_paths(&paths)?;
+    let accounts_dir = weclaw_accounts_dir()
+        .ok_or_else(|| "failed to resolve WeClaw accounts directory".to_string())?;
+    let bound_user = find_weclaw_bound_user_id(&accounts_dir)
+        .ok_or_else(|| "未找到已绑定的微信账号，无法重置换绑秘钥。".to_string())?;
+    if !consume_rebind_recovery_code(
+        &rebind_recovery_path(&paths),
+        &bound_user,
+        &code,
+        now_unix_secs(),
+    )? {
+        return Err("验证码不正确或已过期。".to_string());
+    }
+    store_rebind_secret(&rebind_secret_path(&paths), &new_secret)?;
+    get_status(state, app, None).await
+}
+
 async fn send_wechat_bridge_verification_prompt_inner(
     state: &AppState,
     app: &AppHandle,
@@ -407,25 +532,30 @@ async fn send_wechat_bridge_verification_prompt_inner(
     let bound_user = find_weclaw_bound_user_id(&accounts_dir)
         .ok_or_else(|| "未找到已绑定的微信账号，请重新绑定微信后再试。".to_string())?;
     let prompt = build_wechat_bridge_verification_prompt(&verification_code());
+    send_wechat_text(&bound_user, &prompt).await?;
+    get_status(state, app, None).await
+}
+
+async fn send_wechat_text(bound_user: &str, text: &str) -> Result<(), String> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(8))
         .build()
-        .map_err(|error| format!("failed to create WeChat verification client: {error}"))?;
+        .map_err(|error| format!("failed to create WeChat send client: {error}"))?;
     let response = client
         .post(format!("http://{WECLAW_API_ADDR}/api/send"))
-        .json(&json!({ "to": bound_user, "text": prompt }))
+        .json(&json!({ "to": bound_user, "text": text }))
         .send()
         .await
-        .map_err(|error| format!("发送微信验证消息失败：{error}"))?;
+        .map_err(|error| format!("发送微信消息失败：{error}"))?;
     if !response.status().is_success() {
         let status = response.status();
         let body = response.text().await.unwrap_or_default();
         return Err(format!(
-            "发送微信验证消息失败：HTTP {status} {}",
+            "发送微信消息失败：HTTP {status} {}",
             redact_sensitive(&body)
         ));
     }
-    get_status(state, app, None).await
+    Ok(())
 }
 
 async fn get_status(
@@ -480,6 +610,7 @@ async fn status_from_parts(
         daemon_status.running,
         bridge_running,
         weclaw_running,
+        wechat_bound,
         qr.qr_text.is_some() || qr.login_url.is_some(),
         last_error.as_deref(),
         default_phase,
@@ -506,6 +637,7 @@ async fn status_from_parts(
             .as_ref()
             .map(|account| account.user_id.clone()),
         bound_wechat_bot_id: bound_account.and_then(|account| account.bot_id),
+        rebind_secret_configured: rebind_secret_configured(&rebind_secret_path(paths)),
         weclaw_sync_fresh: weclaw_sync_fresh(weclaw_sync_age_secs),
         weclaw_sync_age_secs,
     }
@@ -516,6 +648,7 @@ fn phase_from_status(
     daemon_running: bool,
     bridge_running: bool,
     weclaw_running: bool,
+    wechat_bound: bool,
     has_qr: bool,
     last_error: Option<&str>,
     default_phase: WeChatBridgePhase,
@@ -527,6 +660,9 @@ fn phase_from_status(
         return WeChatBridgePhase::NotReady;
     }
     if bridge_running && weclaw_running {
+        if wechat_bound {
+            return WeChatBridgePhase::Running;
+        }
         return if has_qr {
             WeChatBridgePhase::WaitingScan
         } else {
@@ -675,6 +811,14 @@ fn control_paths(app: &AppHandle) -> Result<ControlPaths, String> {
         audit_log: root.join("data").join("audit.log"),
         root,
     })
+}
+
+fn rebind_secret_path(paths: &ControlPaths) -> PathBuf {
+    paths.data_dir.join("rebind-secret.json")
+}
+
+fn rebind_recovery_path(paths: &ControlPaths) -> PathBuf {
+    paths.data_dir.join("rebind-recovery.json")
 }
 
 fn prepare_control_paths(paths: &ControlPaths) -> Result<(), String> {
@@ -862,6 +1006,13 @@ fn weclaw_accounts_dir() -> Option<PathBuf> {
     dirs::home_dir().map(|home| home.join(".weclaw").join("accounts"))
 }
 
+fn existing_wechat_bound() -> bool {
+    weclaw_accounts_dir()
+        .as_deref()
+        .and_then(find_weclaw_bound_account)
+        .is_some()
+}
+
 fn latest_weclaw_sync_age_secs(accounts_dir: &Path) -> Option<u64> {
     let modified = latest_weclaw_sync_modified(accounts_dir)?;
     SystemTime::now()
@@ -975,6 +1126,164 @@ fn build_wechat_bridge_verification_prompt(code: &str) -> String {
          请回复这条消息：连接测试 {code}\n\
          然后再发送一张图片，并引用本消息追问一句，用于完成文字、图片和引用消息验收。"
     )
+}
+
+fn build_wechat_bridge_rebind_recovery_prompt(code: &str) -> String {
+    format!(
+        "LawyerCopilot 微信换绑验证码\n\
+         本机正在重置微信换绑秘钥。如非本人操作，请忽略。\n\
+         验证码：{code}\n\
+         10 分钟内有效。"
+    )
+}
+
+fn now_unix_secs() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|value| value.as_secs() as i64)
+        .unwrap_or_default()
+}
+
+fn validate_rebind_secret_input(secret: &str) -> Result<String, String> {
+    let trimmed = secret.trim().to_string();
+    if trimmed.len() < REBIND_SECRET_MIN_LEN {
+        return Err("微信换绑秘钥至少需要 6 个字符。".to_string());
+    }
+    if trimmed.len() > REBIND_SECRET_MAX_LEN {
+        return Err("微信换绑秘钥不能超过 128 个字符。".to_string());
+    }
+    Ok(trimmed)
+}
+
+fn random_secret_salt() -> String {
+    uuid::Uuid::new_v4().simple().to_string()
+}
+
+fn hmac_sha256(key: &[u8], input: &[u8]) -> [u8; 32] {
+    let mut mac = HmacSha256::new_from_slice(key).expect("HMAC accepts any key length");
+    mac.update(input);
+    let bytes = mac.finalize().into_bytes();
+    let mut output = [0_u8; 32];
+    output.copy_from_slice(&bytes);
+    output
+}
+
+fn pbkdf2_hmac_sha256(value: &str, salt: &str, iterations: u32) -> String {
+    let iterations = iterations.max(1);
+    let mut block_input = Vec::with_capacity(salt.len() + 4);
+    block_input.extend_from_slice(salt.as_bytes());
+    block_input.extend_from_slice(&1_u32.to_be_bytes());
+    let mut u = hmac_sha256(value.as_bytes(), &block_input);
+    let mut output = u;
+    for _ in 1..iterations {
+        u = hmac_sha256(value.as_bytes(), &u);
+        for index in 0..output.len() {
+            output[index] ^= u[index];
+        }
+    }
+    URL_SAFE_NO_PAD.encode(output)
+}
+
+fn store_rebind_secret(path: &Path, secret: &str) -> Result<(), String> {
+    let secret = validate_rebind_secret_input(secret)?;
+    let salt = random_secret_salt();
+    let record = WeChatRebindSecretRecord {
+        version: 1,
+        salt: salt.clone(),
+        iterations: REBIND_SECRET_ITERATIONS,
+        hash: pbkdf2_hmac_sha256(&secret, &salt, REBIND_SECRET_ITERATIONS),
+        updated_at_secs: now_unix_secs(),
+    };
+    write_json_file(path, &record)
+}
+
+fn rebind_secret_configured(path: &Path) -> bool {
+    read_json_file::<WeChatRebindSecretRecord>(path)
+        .ok()
+        .flatten()
+        .is_some()
+}
+
+fn verify_rebind_secret(path: &Path, secret: &str) -> Result<bool, String> {
+    let record = match read_json_file::<WeChatRebindSecretRecord>(path)? {
+        Some(record) => record,
+        None => return Ok(false),
+    };
+    let secret = validate_rebind_secret_input(secret)?;
+    let candidate = pbkdf2_hmac_sha256(&secret, &record.salt, record.iterations);
+    Ok(candidate == record.hash)
+}
+
+fn require_rebind_secret_for_login_reset(
+    path: &Path,
+    rebind_secret: Option<&str>,
+) -> Result<(), String> {
+    if !rebind_secret_configured(path) {
+        return Err("请先设置微信换绑秘钥。".to_string());
+    }
+    let provided = rebind_secret.ok_or_else(|| "请输入微信换绑秘钥。".to_string())?;
+    if !verify_rebind_secret(path, provided)? {
+        return Err("微信换绑秘钥不正确。".to_string());
+    }
+    Ok(())
+}
+
+fn hash_recovery_code(code: &str, salt: &str) -> String {
+    pbkdf2_hmac_sha256(
+        &code.trim().to_ascii_uppercase(),
+        salt,
+        REBIND_SECRET_ITERATIONS,
+    )
+}
+
+fn store_rebind_recovery_challenge(
+    path: &Path,
+    bound_wechat_user_id: &str,
+    code: &str,
+    now_secs: i64,
+) -> Result<(), String> {
+    let salt = random_secret_salt();
+    let challenge = WeChatRebindRecoveryChallenge {
+        version: 1,
+        bound_wechat_user_id: bound_wechat_user_id.to_string(),
+        salt: salt.clone(),
+        code_hash: hash_recovery_code(code, &salt),
+        created_at_secs: now_secs,
+        expires_at_secs: now_secs + REBIND_RECOVERY_TTL_SECS,
+        attempts: 0,
+    };
+    write_json_file(path, &challenge)
+}
+
+fn consume_rebind_recovery_code(
+    path: &Path,
+    bound_wechat_user_id: &str,
+    code: &str,
+    now_secs: i64,
+) -> Result<bool, String> {
+    let mut challenge = match read_json_file::<WeChatRebindRecoveryChallenge>(path)? {
+        Some(challenge) => challenge,
+        None => return Ok(false),
+    };
+    if challenge.bound_wechat_user_id != bound_wechat_user_id {
+        return Ok(false);
+    }
+    if now_secs > challenge.expires_at_secs {
+        let _ = std::fs::remove_file(path);
+        return Ok(false);
+    }
+    let candidate = hash_recovery_code(code, &challenge.salt);
+    if candidate == challenge.code_hash {
+        let _ = std::fs::remove_file(path);
+        return Ok(true);
+    }
+    challenge.attempts = challenge.attempts.saturating_add(1);
+    if challenge.attempts >= REBIND_RECOVERY_MAX_ATTEMPTS {
+        let _ = std::fs::remove_file(path);
+    } else {
+        write_json_file(path, &challenge)?;
+    }
+    Ok(false)
 }
 
 fn weclaw_sync_fresh(age_secs: Option<u64>) -> bool {
@@ -1787,6 +2096,7 @@ mod tests {
                 false,
                 false,
                 false,
+                false,
                 None,
                 WeChatBridgePhase::Stopped
             ),
@@ -1802,11 +2112,29 @@ mod tests {
                 true,
                 true,
                 true,
+                false,
                 true,
                 None,
                 WeChatBridgePhase::Starting
             ),
             WeChatBridgePhase::WaitingScan
+        );
+    }
+
+    #[test]
+    fn phase_from_status_reports_running_when_bound_even_with_stale_qr() {
+        assert_eq!(
+            phase_from_status(
+                false,
+                true,
+                true,
+                true,
+                true,
+                true,
+                None,
+                WeChatBridgePhase::Starting
+            ),
+            WeChatBridgePhase::Running
         );
     }
 
@@ -1818,6 +2146,7 @@ mod tests {
                 true,
                 true,
                 true,
+                false,
                 false,
                 None,
                 WeChatBridgePhase::Starting
@@ -2110,6 +2439,109 @@ mod tests {
     }
 
     #[test]
+    fn rebind_secret_store_hashes_and_verifies_without_plaintext() {
+        let root = std::env::temp_dir().join(format!("weclaw-secret-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).expect("create secret dir");
+        let secret_path = root.join("rebind-secret.json");
+
+        store_rebind_secret(&secret_path, "hunter-246").expect("store secret");
+
+        let raw = std::fs::read_to_string(&secret_path).expect("read secret file");
+        assert!(!raw.contains("hunter-246"));
+        assert!(verify_rebind_secret(&secret_path, "hunter-246").expect("verify correct"));
+        assert!(!verify_rebind_secret(&secret_path, "wrong-secret").expect("verify wrong"));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn rebind_reset_requires_secret_even_after_account_state_is_cleared() {
+        let root = std::env::temp_dir().join(format!("weclaw-secret-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).expect("create secret dir");
+        let secret_path = root.join("rebind-secret.json");
+        store_rebind_secret(&secret_path, "hunter-246").expect("store secret");
+
+        assert_eq!(
+            require_rebind_secret_for_login_reset(&secret_path, None).unwrap_err(),
+            "请输入微信换绑秘钥。"
+        );
+        assert_eq!(
+            require_rebind_secret_for_login_reset(&secret_path, Some("wrong-secret")).unwrap_err(),
+            "微信换绑秘钥不正确。"
+        );
+        assert!(require_rebind_secret_for_login_reset(&secret_path, Some("hunter-246")).is_ok());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn rebind_reset_requires_secret_setup_before_showing_qr() {
+        let root = std::env::temp_dir().join(format!("weclaw-secret-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).expect("create secret dir");
+        let secret_path = root.join("rebind-secret.json");
+
+        assert_eq!(
+            require_rebind_secret_for_login_reset(&secret_path, Some("hunter-246")).unwrap_err(),
+            "请先设置微信换绑秘钥。"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn rebind_recovery_challenge_accepts_once_for_bound_wechat() {
+        let root = std::env::temp_dir().join(format!("weclaw-recovery-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).expect("create recovery dir");
+        let challenge_path = root.join("rebind-recovery.json");
+
+        store_rebind_recovery_challenge(
+            &challenge_path,
+            "wx-user@im.wechat",
+            "A1B2C3",
+            1_781_000_000,
+        )
+        .expect("store challenge");
+
+        assert!(consume_rebind_recovery_code(
+            &challenge_path,
+            "wx-user@im.wechat",
+            "A1B2C3",
+            1_781_000_120,
+        )
+        .expect("consume recovery code"));
+        assert!(!challenge_path.exists());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn rebind_recovery_challenge_rejects_expired_or_wrong_account() {
+        let root = std::env::temp_dir().join(format!("weclaw-recovery-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).expect("create recovery dir");
+        let challenge_path = root.join("rebind-recovery.json");
+
+        store_rebind_recovery_challenge(
+            &challenge_path,
+            "wx-user@im.wechat",
+            "A1B2C3",
+            1_781_000_000,
+        )
+        .expect("store challenge");
+
+        assert!(!consume_rebind_recovery_code(
+            &challenge_path,
+            "other@im.wechat",
+            "A1B2C3",
+            1_781_000_120,
+        )
+        .expect("wrong account"));
+        assert!(!consume_rebind_recovery_code(
+            &challenge_path,
+            "wx-user@im.wechat",
+            "A1B2C3",
+            1_781_001_000,
+        )
+        .expect("expired"));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
     fn diagnostics_fail_when_running_bridge_chat_probe_fails() {
         let status = WeChatBridgeStatus {
             phase: WeChatBridgePhase::Running,
@@ -2131,6 +2563,7 @@ mod tests {
             wechat_bound: false,
             bound_wechat_user_id: None,
             bound_wechat_bot_id: None,
+            rebind_secret_configured: true,
             weclaw_sync_fresh: true,
             weclaw_sync_age_secs: Some(12),
         };
@@ -2171,6 +2604,7 @@ mod tests {
             wechat_bound: false,
             bound_wechat_user_id: None,
             bound_wechat_bot_id: None,
+            rebind_secret_configured: true,
             weclaw_sync_fresh: true,
             weclaw_sync_age_secs: Some(12),
         };
@@ -2208,6 +2642,7 @@ mod tests {
             wechat_bound: true,
             bound_wechat_user_id: Some("wx-user@im.wechat".to_string()),
             bound_wechat_bot_id: Some("bot@im.bot".to_string()),
+            rebind_secret_configured: true,
             weclaw_sync_fresh: true,
             weclaw_sync_age_secs: Some(12),
         };
@@ -2281,6 +2716,7 @@ mod tests {
             wechat_bound: bridge_running && weclaw_running,
             bound_wechat_user_id: None,
             bound_wechat_bot_id: None,
+            rebind_secret_configured: true,
             weclaw_sync_fresh: bridge_running && weclaw_running,
             weclaw_sync_age_secs: None,
         }

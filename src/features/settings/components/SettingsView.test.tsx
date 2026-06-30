@@ -208,6 +208,7 @@ beforeEach(() => {
     logPath: null,
     hasLocalSmokeActivity: false,
     wechatBound: false,
+    rebindSecretConfigured: true,
     weclawSyncFresh: false,
     weclawSyncAgeSecs: null,
     lastError: null,

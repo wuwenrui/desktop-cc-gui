@@ -376,6 +376,12 @@ func (h *Handler) HandleMessage(ctx context.Context, client *ilink.Client, msg i
 			log.Printf("[handler] failed to send reply to %s: %v", msg.FromUserID, err)
 		}
 		return
+	} else if !hasRichPayload && isCapabilityIntroRequest(trimmed) {
+		reply := h.buildCapabilityIntro()
+		if err := SendTextReply(ctx, client, msg.FromUserID, reply, msg.ContextToken, clientID); err != nil {
+			log.Printf("[handler] failed to send reply to %s: %v", msg.FromUserID, err)
+		}
+		return
 	}
 
 	// Route: "/agentname message" or "@agent1 @agent2 message" -> specific agent(s)
@@ -611,11 +617,26 @@ func (h *Handler) startProgressAckForText(ctx context.Context, client *ilink.Cli
 }
 
 func shouldSuppressProgressAckForUserRequest(text string) bool {
-	normalized := strings.ToLower(strings.TrimSpace(text))
-	if normalized == "" {
+	compact := compactUserRequestText(text)
+	if compact == "" {
 		return false
 	}
-	compact := strings.NewReplacer(
+	switch compact {
+	case "你好", "您好", "hi", "hello", "在吗", "你是谁", "ok", "收到", "好的":
+		return true
+	}
+	if strings.Contains(compact, "连接测试") && strings.Contains(compact, "ok") {
+		return true
+	}
+	return isCapabilityIntroRequest(text)
+}
+
+func compactUserRequestText(text string) string {
+	normalized := strings.ToLower(strings.TrimSpace(text))
+	if normalized == "" {
+		return ""
+	}
+	return strings.NewReplacer(
 		" ", "",
 		"\t", "",
 		"\n", "",
@@ -628,6 +649,13 @@ func shouldSuppressProgressAckForUserRequest(text string) bool {
 		"！", "",
 		"!", "",
 	).Replace(normalized)
+}
+
+func isCapabilityIntroRequest(text string) bool {
+	compact := compactUserRequestText(text)
+	if compact == "" {
+		return false
+	}
 	switch compact {
 	case "你好", "您好", "hi", "hello", "在吗", "你是谁":
 		return true
@@ -939,9 +967,31 @@ func (h *Handler) buildStatus() string {
 	return fmt.Sprintf("agent: %s\ntype: %s\nmodel: %s", h.defaultName, info.Type, info.Model)
 }
 
+func (h *Handler) buildCapabilityIntro() string {
+	h.mu.RLock()
+	defaultName := h.defaultName
+	workDir := h.agentWorkDirs[defaultName]
+	h.mu.RUnlock()
+
+	if strings.TrimSpace(workDir) == "" {
+		workDir = "未配置，可发送 /cwd /path 切换"
+	}
+
+	return fmt.Sprintf(`你好，我可以帮你通过微信操作这台电脑上的当前工作区。
+
+当前目录：%s
+
+我可以帮你：
+- 读写文件、查看或切换目录、运行命令
+- 查资料、分析图片和引用消息
+- 生成 Excel、文档、图片或文件，并直接发回微信
+
+要换目录，直接发：切换到 /path`, workDir)
+}
+
 func buildHelpText() string {
 	return `Available commands:
-@agent or /agent - Switch default agent
+	@agent or /agent - Switch default agent
 @agent msg or /agent msg - Send to a specific agent
 @a @b msg - Broadcast to multiple agents
 /new or /clear - Start a new session
