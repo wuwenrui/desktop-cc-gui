@@ -177,18 +177,18 @@ export const ReasoningSelect = ({
     <div className="selector-reasoning-wrap" style={{ position: 'relative', display: 'inline-block' }}>
       <button
         ref={buttonRef}
-        className={`selector-button selector-reasoning-button${currentLevel ? ' is-icon-only' : ''}`}
+        className="selector-button selector-reasoning-button"
         onClick={handleToggle}
         disabled={disabled}
         aria-label={triggerLabel}
         title={t('reasoning.title', { defaultValue: 'Select reasoning depth' })}
       >
         <span className={`codicon ${triggerIcon}`} />
-        {!currentLevel && (
-          <span className="selector-button-text">
-            {resolvedDefaultLabel}
-          </span>
-        )}
+        <span className="selector-button-text">{triggerLabel}</span>
+        <span
+          className={`codicon codicon-chevron-${isOpen ? 'up' : 'down'}`}
+          style={{ fontSize: '10px', marginLeft: '2px' }}
+        />
       </button>
 
       {isOpen && (

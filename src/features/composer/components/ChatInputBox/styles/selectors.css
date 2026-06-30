@@ -327,6 +327,7 @@
 .button-area-primary-row .selector-button:hover {
   background: color-mix(in srgb, var(--selector-pill-hover, transparent) 72%, transparent);
   border-color: transparent;
+  transform: none;
 }
 
 .button-area-primary-row .selector-button.selector-tool-dock-toggle,
@@ -514,6 +515,16 @@
   text-overflow: clip;
   max-width: none;
   transition: max-width 0.2s ease, opacity 0.2s ease, margin 0.2s ease;
+}
+
+/* Inline trigger labels (全自动 / 推理深度) mirror the readiness model label
+   (.composer-readiness-model): same --text-primary color + 400 weight, so the
+   toolbar reads as one consistent row. Scoped to the real DOM class —
+   the legacy `.button-area-inline-tools .selector-button-text` rules are dead
+   because the element class is `.button-area-inline-controls`. */
+.button-area-inline-controls .selector-button-text {
+  color: var(--text-primary);
+  font-weight: 400;
 }
 
 /* Container query for Claude: hide text when narrow (< 400px) */

@@ -10,7 +10,7 @@ vi.mock('react-i18next', () => ({
 }));
 
 describe('ReasoningSelect', () => {
-  it('shows the selected effort trigger as icon-only', () => {
+  it('shows the selected effort trigger with icon, label and chevron', () => {
     const { container } = render(
       <ReasoningSelect
         value="low"
@@ -21,13 +21,15 @@ describe('ReasoningSelect', () => {
 
     const trigger = screen.getByRole('button', { name: 'Low' });
 
-    expect(trigger.querySelector('.selector-button-text')).toBeNull();
+    // The primary-row pill always shows its label and chevron so it reads the
+    // same as the model / permission pills next to it.
+    expect(trigger.querySelector('.selector-button-text')?.textContent).toBe('Low');
     expect(trigger.querySelector('.codicon-lightbulb-empty')).toBeTruthy();
-    expect(trigger.querySelector('[class*="codicon-chevron"]')).toBeNull();
-    expect(container.querySelector('.selector-reasoning-button.is-icon-only')).toBeTruthy();
+    expect(trigger.querySelector('[class*="codicon-chevron"]')).toBeTruthy();
+    expect(container.querySelector('.selector-reasoning-button.is-icon-only')).toBeNull();
   });
 
-  it('does not render a chevron for the default trigger', () => {
+  it('renders the default trigger with label and chevron', () => {
     const { container } = render(
       <ReasoningSelect
         value={null}
@@ -40,8 +42,8 @@ describe('ReasoningSelect', () => {
 
     const trigger = screen.getByRole('button', { name: 'Claude 默认' });
 
-    expect(trigger.querySelector('.selector-button-text')).toBeTruthy();
-    expect(trigger.querySelector('[class*="codicon-chevron"]')).toBeNull();
+    expect(trigger.querySelector('.selector-button-text')?.textContent).toBe('Claude 默认');
+    expect(trigger.querySelector('[class*="codicon-chevron"]')).toBeTruthy();
     expect(container.querySelector('.selector-reasoning-button.is-icon-only')).toBeNull();
   });
 

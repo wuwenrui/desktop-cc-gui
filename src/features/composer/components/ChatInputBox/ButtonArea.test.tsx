@@ -162,8 +162,10 @@ describe("ButtonArea custom model storage refresh", () => {
     expect(container.querySelector(".selector-tool-dock-toggle")?.textContent).not.toContain("工具");
     expect(screen.queryByTestId("config-select")).toBeNull();
     expect(screen.queryByTestId("provider-select")).toBeNull();
-    expect(screen.queryByTestId("reasoning-select")).toBeNull();
     expect(screen.queryByTestId("model-select")).toBeNull();
+    // Reasoning select now lives permanently in the primary row (not the menu),
+    // so it stays visible while the tool dock is collapsed.
+    expect(screen.getByTestId("reasoning-select")).toBeTruthy();
 
     openToolDock();
 
@@ -259,7 +261,7 @@ describe("ButtonArea custom model storage refresh", () => {
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
   });
 
-  it("moves the token surface, reasoning and memory reference into the tool menu", () => {
+  it("keeps the usage ring and reasoning in the primary row while memory reference stays in the tool menu", () => {
     render(
       <ButtonArea
         currentProvider="claude"
@@ -275,16 +277,14 @@ describe("ButtonArea custom model storage refresh", () => {
       />,
     );
 
-    // The token surface is now relocated inside the "+" tool menu, so it is
-    // not rendered until the dock is opened.
-    expect(screen.queryByTestId("main-surface")).toBeNull();
+    // The usage ring and reasoning selector now live permanently in the primary
+    // row, so they are visible without opening the "+" tool menu.
+    expect(screen.getByTestId("main-surface")).toBeTruthy();
+    expect(screen.getByTestId("reasoning-select")).toBeTruthy();
 
     openToolDock();
 
-    // The usage ring, reasoning and the memory reference control all live
-    // inside the vertical tool menu (a DropdownMenu portal).
-    expect(screen.getByTestId("main-surface")).toBeTruthy();
-    expect(screen.getByTestId("reasoning-select")).toBeTruthy();
+    // The memory reference control still lives inside the vertical tool menu.
     expect(
       screen.getByRole("menuitem", { name: /composer\.memoryReferenceToggle/ }),
     ).toBeTruthy();

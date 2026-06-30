@@ -656,9 +656,9 @@
   min-width: 34px;
   height: 34px;
   padding: 0 11px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid transparent;
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.05);
+  background: transparent;
   color: var(--text-secondary);
 }
 
@@ -745,8 +745,8 @@
 
 [data-theme="light"] .home-chat .home-chat-composer-host .attach-button,
 [data-theme="light"] .home-chat .home-chat-composer-host .selector-button {
-  border-color: rgba(15, 23, 42, 0.08);
-  background: rgba(15, 23, 42, 0.035);
+  border-color: transparent;
+  background: transparent;
 }
 
 [data-theme="light"] .home-chat .home-chat-composer-host .attach-button:hover,
@@ -773,8 +773,8 @@
 @media (prefers-color-scheme: light) {
   :root:not([data-theme]) .home-chat .home-chat-composer-host .attach-button,
   :root:not([data-theme]) .home-chat .home-chat-composer-host .selector-button {
-    border-color: rgba(15, 23, 42, 0.08);
-    background: rgba(15, 23, 42, 0.035);
+    border-color: transparent;
+    background: transparent;
   }
 
   :root:not([data-theme]) .home-chat .home-chat-composer-host .attach-button:hover,
@@ -868,7 +868,33 @@
 
 .home-chat-composer-host .selector-button-text {
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 400;
+  color: var(--text-tertiary, #9aa1ab);
+}
+
+/* Permission-mode / reasoning pills in the primary row must read exactly like
+   the model selector next to them: no capsule background/border, lightweight
+   tertiary text, and no hover lift/background. This keeps the bottom toolbar a
+   single flat, consistent row. */
+.home-chat-composer-host .button-area-inline-controls .selector-button {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+.home-chat-composer-host .button-area-inline-controls .selector-button:hover,
+.home-chat-composer-host .button-area-inline-controls .selector-button:hover:not(:disabled) {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+.home-chat-composer-host .button-area .button-area-inline-controls .selector-button-text {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-tertiary, #9aa1ab);
 }
 
 .home-chat-composer-host .submit-button {

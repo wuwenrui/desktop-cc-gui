@@ -223,7 +223,7 @@ export const ButtonArea = ({
               aria-label={toolDockToggleLabel}
               style={menuMetrics ? { width: menuMetrics.width } : undefined}
             >
-              {(toolSurface || mainSurface || panelToggleSurface || curatedSkillSurface) ? (
+              {(toolSurface || panelToggleSurface || curatedSkillSurface) ? (
                 <>
                   <div className="composer-tool-menu-surface-row">
                     {toolSurface ? (
@@ -234,11 +234,6 @@ export const ButtonArea = ({
                     {curatedSkillSurface ? (
                       <div className="button-area-curated-surface">
                         {curatedSkillSurface}
-                      </div>
-                    ) : null}
-                    {mainSurface ? (
-                      <div className="button-area-main-surface">
-                        {mainSurface}
                       </div>
                     ) : null}
                     {panelToggleSurface}
@@ -270,28 +265,6 @@ export const ButtonArea = ({
                 onOpenAgentSettings={onOpenAgentSettings}
               />
               <DropdownMenuSeparator />
-              <ModeSelect
-                inline
-                value={permissionMode}
-                onChange={onModeSelect ?? NOOP_MODE}
-                provider={currentProvider}
-                selectedCollaborationModeId={selectedCollaborationModeId}
-                onSelectCollaborationMode={onSelectCollaborationMode}
-              />
-              {(currentProvider === 'codex' || currentProvider === 'claude') && (
-                <ReasoningSelect
-                  inline
-                  value={reasoningEffort}
-                  onChange={onReasoningChange ?? NOOP_REASONING}
-                  options={reasoningOptions}
-                  showDefaultOption={currentProvider === 'claude'}
-                  defaultLabel={
-                    currentProvider === 'claude'
-                      ? t('reasoning.claudeDefault', { defaultValue: 'Claude 默认' })
-                      : undefined
-                  }
-                />
-              )}
               {onSetMemoryReferenceMode ? (
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger className="composer-tool-menu-sub-trigger">
@@ -339,7 +312,35 @@ export const ButtonArea = ({
           </div>
         ) : null}
 
+        <div className="button-area-inline-controls">
+          <ModeSelect
+            value={permissionMode}
+            onChange={onModeSelect ?? NOOP_MODE}
+            provider={currentProvider}
+            selectedCollaborationModeId={selectedCollaborationModeId}
+            onSelectCollaborationMode={onSelectCollaborationMode}
+          />
+          {(currentProvider === 'codex' || currentProvider === 'claude') && (
+            <ReasoningSelect
+              value={reasoningEffort}
+              onChange={onReasoningChange ?? NOOP_REASONING}
+              options={reasoningOptions}
+              showDefaultOption={currentProvider === 'claude'}
+              defaultLabel={
+                currentProvider === 'claude'
+                  ? t('reasoning.claudeDefault', { defaultValue: 'Claude 默认' })
+                  : undefined
+              }
+            />
+          )}
+        </div>
+
         <div className="button-area-right">
+          {mainSurface ? (
+            <div className="button-area-main-surface">
+              {mainSurface}
+            </div>
+          ) : null}
           {providerProfileLabel ? (
             <span className="button-area-provider-tag" title={providerProfileLabel}>
               {providerProfileLabel}

@@ -44,8 +44,10 @@ describe('ComposerReadinessBar', () => {
     expect(container.querySelector('.composer-readiness-right-accessory')).toBeNull();
     expect(screen.getByText('Codex')).toBeTruthy();
     expect(screen.getByText('gpt-5.5')).toBeTruthy();
-    expect(screen.getByText('Auto Mode')).toBeTruthy();
-    expect(screen.getByText('Full access')).toBeTruthy();
+    // The permission mode now lives in its own primary-row pill, so the
+    // readiness bar no longer renders a duplicate mode/access chip.
+    expect(screen.queryByText('Auto Mode')).toBeNull();
+    expect(screen.queryByText('Full access')).toBeNull();
     expect(
       screen.getByText(
         'composer.manualMemorySelection · composer.readinessContextFileReference · composer.readinessContextAgent',

@@ -65,7 +65,19 @@
 .button-area-readiness-surface {
   display: flex;
   align-items: center;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+/* External control pills (permission mode / reasoning depth / context ring)
+   relocated out of the "+" tool menu into the primary row. Keep them left-
+   aligned next to the model selector; the send button stays right via
+   .button-area-right margin-left:auto. */
+.button-area-inline-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--composer-toolbar-icon-gap);
+  flex: 0 0 auto;
   min-width: 0;
 }
 

@@ -178,21 +178,6 @@
   font-weight: 600;
 }
 
-.composer-readiness-chip {
-  display: inline-flex;
-  align-items: center;
-  max-width: 112px;
-  min-height: 22px;
-  padding: 0 6px;
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  font-weight: 560;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .composer-readiness-mode-impact {
   max-width: 150px;
   color: var(--text-muted);
