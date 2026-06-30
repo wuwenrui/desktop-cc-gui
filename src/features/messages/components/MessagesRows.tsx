@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import ChevronUp from "lucide-react/dist/esm/icons/chevron-up";
-import Terminal from "lucide-react/dist/esm/icons/terminal";
+import Search from "lucide-react/dist/esm/icons/search";
 import { AgentIcon } from "../../../components/AgentIcon";
 import { hydrateClaudeDeferredImage } from "../../../services/tauri";
 import { appendMessageRowRenderBudgetDiagnostic } from "../../../services/rendererDiagnostics";
@@ -1903,26 +1903,19 @@ export const ExploreRow = memo(function ExploreRow({
               aria-expanded={isExpanded}
               aria-label={`${displayTitle} · ${t("messages.toggleDetails")}`}
             >
-              <Terminal
-                className={`tool-inline-icon explore-inline-toggle-icon${
-                  isExpanded ? " is-expanded" : ""
-                } ${item.status === "exploring" ? "processing" : "completed"}`}
-                size={14}
-                aria-hidden
-              />
+              <Search className="explore-inline-icon" size={14} aria-hidden />
               <span className="explore-inline-title" title={displayTitle}>
                 {displayTitle}
               </span>
-            </button>
-          ) : (
-            <>
-              <Terminal
-                className={`tool-inline-icon ${
-                  item.status === "exploring" ? "processing" : "completed"
-                }`}
+              <ChevronDown
+                className={`explore-inline-chevron${isExpanded ? " is-expanded" : ""}`}
                 size={14}
                 aria-hidden
               />
+            </button>
+          ) : (
+            <>
+              <Search className="explore-inline-icon" size={14} aria-hidden />
               <span className="explore-inline-title" title={displayTitle}>
                 {displayTitle}
               </span>

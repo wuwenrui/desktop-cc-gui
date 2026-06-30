@@ -2309,18 +2309,12 @@
   pointer-events: auto;
 }
 
-/* 归组块以「卡片」呈现：细边框 + 圆角 + 背景，标题行整行可点、内容手风琴展开 */
+/* 归组块：无边框极简（参考 AI SDK Task），标题行整行可点、内容沿左侧 rail 缩进展开 */
 .explore-inline {
-  margin: 8px 0;
+  margin: 4px 0;
   box-sizing: border-box;
   max-width: 100%;
   min-width: 0;
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  /* 复用代码块同款 --muted(shadcn bg-muted)：亮色浅灰、暗色深灰，
-     都与正文背景拉开对比;--surface-card 在亮色下半透明叠白几乎不可见 */
-  background: var(--muted);
-  overflow: hidden;
 }
 
 .explore-inline .tool-inline-content {
@@ -2332,23 +2326,13 @@
 .explore-inline-header {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 8px 12px;
+  gap: 8px;
+  padding: 2px 0;
   background: transparent;
   font-size: 13px;
   color: var(--text-muted);
   width: 100%;
   box-sizing: border-box;
-  transition: background-color 0.16s ease;
-}
-
-.explore-inline.is-collapsible .explore-inline-header:hover {
-  background: var(--surface-hover);
-}
-
-/* 展开时标题与内容用分隔线区隔 */
-.explore-inline:has(.explore-inline-list:not(.is-collapsed)) .explore-inline-header {
-  border-bottom: 1px solid var(--border-subtle);
 }
 
 .explore-inline-header-toggle {
@@ -2371,58 +2355,46 @@
   border-radius: 6px;
 }
 
-.explore-inline-toggle-icon {
-  transition: transform 0.16s ease;
-  transform: rotate(0deg);
-}
-
-.explore-inline-toggle-icon.is-expanded {
-  transform: rotate(90deg);
-}
-
-/* 图标对齐 Marker：统一 muted 灰 + size-4（16px），覆盖全局 .tool-inline-icon 的状态色/14px */
-.explore-inline-header .tool-inline-icon,
-.explore-inline-header .tool-inline-icon.completed,
-.explore-inline-header .tool-inline-icon.processing,
-.explore-inline-header .tool-inline-icon.failed {
-  width: 16px;
-  height: 16px;
+/* 放大镜：统一 muted 灰，标识「探索 / 搜索」语义 */
+.explore-inline-icon {
+  flex: 0 0 auto;
   color: var(--muted-foreground);
 }
 
+/* chevron 收在最右，展开旋转 180°（指向上） */
+.explore-inline-chevron {
+  flex: 0 0 auto;
+  color: var(--muted-foreground);
+  transition: transform 0.18s ease;
+  transform: rotate(0deg);
+}
+
+.explore-inline-chevron.is-expanded {
+  transform: rotate(180deg);
+}
+
 .explore-inline-title {
-  font-weight: 600;
+  flex: 1 1 auto;
+  font-weight: 500;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--text-stronger);
+  color: var(--text-muted);
 }
 
+/* 内容：无竖线，仅缩进，让条目对齐到标题文字起始处（放大镜 14 + gap 8） */
 .explore-inline-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 8px 12px;
+  gap: 6px;
+  margin: 2px 0 4px 0;
+  padding: 2px 0 2px 22px;
 }
 
-.explore-inline.is-inline-summary .explore-inline-list {
+.explore-inline.is-inline-summary .explore-inline-list,
+.explore-inline-list.is-collapsed {
   display: none;
-}
-
-.explore-inline.is-inline-summary .explore-inline-header {
-  min-width: 0;
-}
-
-.explore-inline.is-inline-summary .explore-inline-header-toggle {
-  min-width: 0;
-}
-
-.explore-inline.is-inline-summary .explore-inline-title {
-  flex: 1 1 auto;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .explore-inline-item {
@@ -2436,12 +2408,12 @@
 
 .explore-inline-kind {
   color: var(--text-subtle);
-  font-weight: 600;
+  font-weight: 400;
   flex: 0 0 auto;
 }
 
 .explore-inline-label {
-  color: var(--text-stronger);
+  color: var(--text-muted);
   min-width: 0;
   flex: 0 1 auto;
   overflow-wrap: break-word;

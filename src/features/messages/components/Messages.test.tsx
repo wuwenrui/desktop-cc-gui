@@ -1267,61 +1267,6 @@ describe("Messages", () => {
     }
   });
 
-  it("renders user-only anchors and scrolls on click", () => {
-    const scrollToMock = vi.fn();
-    HTMLElement.prototype.scrollTo = scrollToMock;
-
-    const items: ConversationItem[] = [
-      {
-        id: "anchor-u1",
-        kind: "message",
-        role: "user",
-        text: "first",
-      },
-      {
-        id: "anchor-a1",
-        kind: "message",
-        role: "assistant",
-        text: "second",
-      },
-      {
-        id: "anchor-u2",
-        kind: "message",
-        role: "user",
-        text: "third",
-      },
-    ];
-
-    render(
-      <Messages
-        items={items}
-        threadId="thread-1"
-        workspaceId="ws-1"
-        isThinking={false}
-        openTargets={[]}
-        selectedOpenAppId=""
-      />,
-    );
-
-    const rail = screen.getByRole("navigation", { name: "messages.anchorNavigation" });
-    expect(rail).toBeTruthy();
-    // Collapsed: one dash per user message (assistant message skipped).
-    expect(rail.querySelectorAll(".messages-anchor-dash").length).toBe(2);
-
-    // Hovering the rail expands the full outline panel.
-    fireEvent.mouseEnter(rail);
-    const rows = screen.getAllByTestId("messages-anchor-row");
-    expect(rows.length).toBe(2);
-    // Each row shows the real user-message text.
-    expect(rows[0]?.textContent).toBe("first");
-    expect(rows[1]?.textContent).toBe("third");
-
-    fireEvent.click(rows[0]!);
-    expect(scrollToMock).toHaveBeenCalledWith(
-      expect.objectContaining({ behavior: "smooth" }),
-    );
-  });
-
   it("collapses earlier items and reveals them on demand", () => {
     const items: ConversationItem[] = Array.from({ length: 32 }, (_, index) => ({
       id: `history-item-${index + 1}`,

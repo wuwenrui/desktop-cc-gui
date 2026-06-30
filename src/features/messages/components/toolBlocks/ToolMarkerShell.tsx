@@ -6,6 +6,7 @@
  */
 import type { ReactNode } from 'react';
 import CircleAlert from 'lucide-react/dist/esm/icons/circle-alert';
+import ChevronRight from 'lucide-react/dist/esm/icons/chevron-right';
 import Loader2 from 'lucide-react/dist/esm/icons/loader-2';
 import { cn } from '@/lib/utils';
 import { Marker, MarkerContent, MarkerIcon } from '../../../../components/ui/marker';
@@ -106,6 +107,15 @@ export function ToolMarkerShell({
           </MarkerContent>
         )}
         {trailing}
+        {clickable && body != null && (
+          <ChevronRight
+            aria-hidden
+            className={cn(
+              'ml-auto size-4 shrink-0 text-muted-foreground transition-transform',
+              expanded && 'rotate-90',
+            )}
+          />
+        )}
       </Marker>
       {expanded && body != null ? body : null}
     </div>

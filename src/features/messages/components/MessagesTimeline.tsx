@@ -5,7 +5,6 @@ import {
   useEffect,
   useMemo,
   useRef,
-  useState,
   type MutableRefObject,
   type ReactNode,
   type RefObject,
@@ -41,13 +40,6 @@ import {
   WorkingIndicator,
 } from "./MessagesRows";
 import { ConversationRowErrorBoundary } from "./ConversationRowErrorBoundary";
-import { MessagesOutlineFloater } from "./MessagesOutlineFloater";
-import type { MarkdownOutlineEntry } from "../../markdown/fastMarkdownRenderer";
-import { useMessageOutlineActive } from "../hooks/useMessageOutlineActive";
-import {
-  resolveNextMessageOutlineSnapshot,
-  type MessageOutlineSnapshot,
-} from "./messagesOutlineState";
 import { appendRendererDiagnostic } from "../../../services/rendererDiagnostics";
 import { parseReasoning } from "./messagesReasoning";
 import type { RuntimeReconnectRecoveryCallbackResult } from "./runtimeReconnect";
@@ -330,34 +322,6 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   workspaceId,
 }: MessagesTimelineProps) {
   const { t } = useTranslation();
-  const [currentOutline, setCurrentOutline] = useState<MessageOutlineSnapshot | null>(null);
-  const handleLiveOutlineReady = useCallback(
-    (snapshot: MessageOutlineSnapshot) => {
-      setCurrentOutline((previous) =>
-        resolveNextMessageOutlineSnapshot(previous, snapshot),
-      );
-    },
-    [],
-  );
-  const liveAssistantOutlineReady = useMemo(() => {
-    if (!liveAssistantMessageId) {
-      return undefined;
-    }
-    return (outline: MarkdownOutlineEntry[]) => {
-      handleLiveOutlineReady({
-        messageId: liveAssistantMessageId,
-        outline,
-      });
-    };
-  }, [handleLiveOutlineReady, liveAssistantMessageId]);
-  const floaterContainerRef = useRef<HTMLDivElement | null>(null);
-  const { activeHeadingId } = useMessageOutlineActive(
-    currentOutline?.outline ?? null,
-    floaterContainerRef,
-  );
-  useEffect(() => {
-    setCurrentOutline(null);
-  }, [threadId, workspaceId]);
   const timelineStabilityRecoveryBudgetRef = useRef(
     DEFAULT_TIMELINE_VIRTUALIZER_STABILITY_RECOVERY_BUDGET,
   );
@@ -1455,11 +1419,6 @@ export const MessagesTimeline = memo(function MessagesTimeline({
               onAssistantVisibleTextRender={onAssistantVisibleTextRender}
               suppressMemorySummaryCard={suppressedUserMemoryContextMessageIds.has(renderItem.id)}
               suppressNoteCardSummaryCard={suppressedUserNoteCardContextMessageIds.has(renderItem.id)}
-              onOutlineReady={
-                renderItem.role === "assistant" && renderItem.id === liveAssistantMessageId
-                  ? liveAssistantOutlineReady
-                  : undefined
-              }
             />
           </div>
           {shouldRenderFinalBoundary && (
@@ -1937,12 +1896,6 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       <Fragment key={row.key}>{renderProjectionRowWithBoundary(row)}</Fragment>
     ));
 
-  const handleJumpToHeading = (headingId: string) => {
-    const target = document.getElementById(headingId);
-    if (target) {
-      target.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  };
   const shouldShowConversationLightweightPrompt =
     !isThinking &&
     !isWorking &&
@@ -1997,7 +1950,6 @@ export const MessagesTimeline = memo(function MessagesTimeline({
 
   return (
     <div
-      ref={floaterContainerRef}
       className="messages-timeline-root"
       data-timeline-static-expanded-history={
         shouldUseStaticExpandedHistoryFlow ? "true" : undefined
@@ -2008,11 +1960,6 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       data-timeline-presentation-mode={presentationMode}
       data-timeline-presentation-scope={presentationScopeKey}
     >
-      <MessagesOutlineFloater
-        outline={currentOutline?.outline ?? null}
-        activeHeadingId={activeHeadingId}
-        onJumpToHeading={handleJumpToHeading}
-      />
       <div
         className="messages-full"
         data-timeline-projection-row-count={timelineProjectionRows.length}
