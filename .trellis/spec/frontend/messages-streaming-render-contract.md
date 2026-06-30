@@ -31,15 +31,19 @@
   - `renderSourceItems`：latest live source
   - `presentationRenderedItems`：当前真实 presentation surface
   - `timelinePresentationItems`：供 parent-level heavy derivations 消费的 stable snapshot
+  - `history expansion mode`：manual reveal 与 jump-to-message reveal 必须分流；manual reveal 不得再用 `scrollHeight delta` restore 伪装“保视口”，而应进入稳定的 expanded-history presentation mode
 - `MessagesTimeline` 负责：
   - 吃 `groupedEntries` / anchors / boundary sets 这类稳定派生
   - 用 `liveAssistantItem` / `liveReasoningItem` 对 active tail 做 override
+  - 把 lightweight mode bar / history sticky header / collapsed-history reveal control 与 rows 放在同一个 `messages-full` padding contract 下；不要把顶部 surface 放在 timeline root 外再靠 offset hack 补位
 - `messagesLiveWindow` 中的 snapshot helper 必须保持 pure helper 语义，方便单元测试锁定 contract。
 
 ## Forbidden Patterns
 
 - 让 `groupToolItems(...)`、anchor/sticky 计算、final boundary 计算直接重新依赖最热的 live text source。
 - 为了“看起来实时”，把整条 `presentationRenderedItems` 在每个 delta 上重新驱动到 parent timeline render。
+- 在历史 reveal 时继续执行基于 `scrollHeight` 的 viewport restore，同时又切换 virtualized/static layout mode；这种 mixed strategy 会把顶部裁剪、抖动和重叠重新带回来。
+- 把 lightweight mode bar、history sticky header 或 reveal control 放在 `messages-full` padding contract 之外，再额外给 root 塞 `padding-top` / sticky `top + 36px` 一类补丁。
 - 在 JSX/render 中为 live assistant row 反复创建新的 outline callback，导致 `Markdown` effect 因 callback identity 抖动而重复扫描相同 `throttledValue`。
 - 收到语义等价的 `{ messageId, outline }` 后仍提交新的 outline state object，造成 floater reset 或 timeline root rerender。
 - 对同一个 throttled visible Markdown source 重复执行 outline full source scan；同源重复 effect 应复用最近一次 extraction result。
@@ -70,6 +74,8 @@
 - pure helper：覆盖 deferred/current scope 不同时返回 current items，不能把当前 live items append 到旧 thread snapshot。
 - `Messages` integration：覆盖“live assistant row 已拿到最新文本/最新 final 状态时，parent boundary set 仍可停留在稳定快照，然后再收敛”。
 - `Messages` integration：覆盖 parallel Codex tab switch 时，新 `threadId` 的 `MessagesTimeline` 不接收旧 `threadId` 的 grouped entries。
+- `Messages` integration：覆盖 manual history reveal 进入稳定 expanded-history mode，并把 viewport 复位到 revealed history head。
+- `MessagesTimeline` integration：覆盖 expanded history 即使不再使用 absolute virtual canvas，也仍与 lightweight mode bar / sticky header 共享同一个 top-padding contract。
 - regression：保留 `Codex` large streaming Markdown throttle / live row render path 测试，防止有人把问题误修成 plain-text-only fallback。
 - outline regression：覆盖同一 throttled Markdown source 在 callback identity 变化时不重复 extraction；覆盖同 message + same outline 返回 previous snapshot reference。
 - Claude Code regression：覆盖 first-token diagnostics 不阻塞 first visible delta，且 diagnostics/history reconcile 不成为 live delta 前置条件。

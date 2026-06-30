@@ -3,14 +3,19 @@ use std::path::PathBuf;
 
 use serde_json::Value;
 
-#[test]
-fn macos_private_api_feature_matches_config() {
+fn read_tauri_config() -> Value {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let config_path = manifest_dir.join("tauri.conf.json");
     let config_contents = fs::read_to_string(&config_path)
         .unwrap_or_else(|error| panic!("Failed to read {config_path:?}: {error}"));
-    let config: Value = serde_json::from_str(&config_contents)
-        .unwrap_or_else(|error| panic!("Failed to parse tauri.conf.json: {error}"));
+    serde_json::from_str(&config_contents)
+        .unwrap_or_else(|error| panic!("Failed to parse tauri.conf.json: {error}"))
+}
+
+#[test]
+fn macos_private_api_feature_matches_config() {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let config = read_tauri_config();
     let macos_private_api = config
         .get("app")
         .and_then(|app| app.get("macOSPrivateApi"))
@@ -68,5 +73,26 @@ fn macos_git2_uses_vendored_libgit2() {
             .iter()
             .any(|feature| feature.as_str() == Some("vendored-libgit2")),
         "macOS git2 dependency must enable vendored-libgit2 to avoid Homebrew libgit2 dylib runtime dependency"
+    );
+}
+
+#[test]
+fn curated_skill_resources_preserve_skill_directory_layout() {
+    let config = read_tauri_config();
+    let resources = config
+        .pointer("/bundle/resources")
+        .and_then(Value::as_object)
+        .expect("bundle.resources must use object schema");
+
+    assert_eq!(
+        resources
+            .get("resources/curated-skills")
+            .and_then(Value::as_str),
+        Some("curated-skills"),
+        "curated skill resources must be mapped as a directory so Tauri preserves <skill-id>/ files",
+    );
+    assert!(
+        !resources.contains_key("resources/curated-skills/**/*"),
+        "glob map resources/curated-skills/**/* flattens skill directories in packaged clients",
     );
 }

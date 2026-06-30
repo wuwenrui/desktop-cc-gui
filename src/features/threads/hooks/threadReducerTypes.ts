@@ -172,6 +172,23 @@ export type ThreadAction =
       timestamp?: number;
     }
   | {
+      /**
+       * \u00a76: \u5408\u5e76 action\u3002\u4e00\u6b21\u6027\u628a\u539f onAgentMessageCompleted \u91cc 5 \u4e2a\u8fde\u7eed
+       * dispatch \u7684 state \u526f\u4f5c\u7528\uff08completeAgentMessage / setThreadTimestamp /
+       * setLastAgentMessage / markUnread + ensureThread\uff09\u5408\u6210 1 \u4e2a dispatch\u3002
+       * markUnread \u4ec5\u5728 isActiveThread === false \u65f6\u5e94\u7528\uff0c
+       * \u4ee5\u4fdd\u8bc1\u8bed\u4e49\u7b49\u4ef7\u3002
+       */
+      type: "flushAgentCompletedBatch";
+      workspaceId: string;
+      threadId: string;
+      itemId: string;
+      text: string;
+      hasCustomName: boolean;
+      timestamp: number;
+      isActiveThread: boolean;
+    }
+  | {
       type: "upsertItem";
       workspaceId: string;
       threadId: string;

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRenderScheduler } from "../hooks/useRenderScheduler";
 import type { MutableRefObject } from "react";
 import type { WorkspaceInfo } from "../types";
 import {
@@ -51,17 +52,6 @@ type UseWorkspaceThreadListHydrationResult = {
 
 type ThreadHydrationPhase = "active-workspace" | "idle-prewarm" | "on-demand";
 type ThreadHydrationKind = "full-catalog" | "session-radar";
-type ThreadListHydrationResult = void | { applied?: boolean; stale?: boolean };
-const ACTIVE_WORKSPACE_READY_MILESTONE: StartupMilestoneName =
-  "active-workspace-ready";
-const IDLE_PREWARM_DELAY_MS = 120;
-
-type IdleCallbackHandle = number;
-type IdleCallbackApi = typeof window & {
-  requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => IdleCallbackHandle;
-  cancelIdleCallback?: (handle: IdleCallbackHandle) => void;
-};
-
 function isDiscardedStaleHydrationResult(
   result: ThreadListHydrationResult,
 ): boolean {
@@ -112,23 +102,9 @@ function createThreadHydrationTask(
   };
 }
 
-function scheduleIdleHydration(callback: () => void): () => void {
-  if (typeof window === "undefined") {
-    const timeoutId = setTimeout(callback, IDLE_PREWARM_DELAY_MS);
-    return () => clearTimeout(timeoutId);
-  }
-  const idleWindow = window as IdleCallbackApi;
-  if (typeof idleWindow.requestIdleCallback === "function") {
-    const idleHandle = idleWindow.requestIdleCallback(callback, {
-      timeout: IDLE_PREWARM_DELAY_MS,
-    });
-    return () => {
-      idleWindow.cancelIdleCallback?.(idleHandle);
-    };
-  }
-  const timeoutId = window.setTimeout(callback, IDLE_PREWARM_DELAY_MS);
-  return () => window.clearTimeout(timeoutId);
-}
+type ThreadListHydrationResult = void | { applied?: boolean; stale?: boolean };const ACTIVE_WORKSPACE_READY_MILESTONE: StartupMilestoneName =
+  "active-workspace-ready";
+const IDLE_PREWARM_DELAY_MS = 120;
 
 export function useWorkspaceThreadListHydration({
   activeWorkspaceId,
@@ -150,6 +126,26 @@ export function useWorkspaceThreadListHydration({
   const autoHydratedActiveWorkspaceIdRef = useRef<string | null>(null);
   const idleHydrationCleanupByWorkspaceIdRef = useRef(new Map<string, () => void>());
   const [hydrationCycle, setHydrationCycle] = useState(0);
+  const renderScheduler = useRenderScheduler({
+    budgetMs: 0,
+    idleTimeoutMs: IDLE_PREWARM_DELAY_MS,
+  });
+  const scheduleIdleHydration = useCallback(
+    (callback: () => void): (() => void) => {
+      let cancelled = false;
+      renderScheduler.scheduleChunk(() => {
+        if (cancelled) {
+          return false;
+        }
+        callback();
+        return false;
+      });
+      return () => {
+        cancelled = true;
+      };
+    },
+    [renderScheduler],
+  );
 
   const backgroundHydrationWorkspaces = useMemo(() => {
     const priorityIds = new Set(activeWorkspaceProjectionOwnerIds);
@@ -301,6 +297,7 @@ export function useWorkspaceThreadListHydration({
     },
     [
       listThreadsForWorkspaceTracked,
+      scheduleIdleHydration,
       threadListLoadingByWorkspace,
       workspacesById,
     ],
@@ -345,6 +342,7 @@ export function useWorkspaceThreadListHydration({
     },
     [
       listThreadsForWorkspaceTracked,
+      scheduleIdleHydration,
       threadListLoadingByWorkspace,
       workspacesById,
     ],

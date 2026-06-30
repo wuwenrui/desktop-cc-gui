@@ -102,6 +102,7 @@ export function FileMarkdownPreviewFast({
   const [pendingFastOutlineAnchorId, setPendingFastOutlineAnchorId] = useState<string | null>(null);
   const fastPreviewRootRef = useRef<HTMLDivElement | null>(null);
   const richPreviewRootRef = useRef<HTMLDivElement | null>(null);
+  const previousOutlineLengthRef = useRef(0);
   const reportedLocalFallbackRef = useRef<string | null>(null);
 
   const handleFastRendererFallback = useCallback(
@@ -176,6 +177,7 @@ export function FileMarkdownPreviewFast({
     setIsOutlineCollapsed(true);
     setBoundedFastLineLimit(FAST_MARKDOWN_RENDERER_LIMITS.DEFAULT_BOUNDED_LINE_LIMIT);
     setPendingFastOutlineAnchorId(null);
+    previousOutlineLengthRef.current = 0;
     reportedLocalFallbackRef.current = null;
   }, [documentKey, rendererProfile, value]);
 
@@ -240,11 +242,17 @@ export function FileMarkdownPreviewFast({
   }, [richOutline, useFastPath]);
 
   useEffect(() => {
+    const previousOutlineLength = previousOutlineLengthRef.current;
+    previousOutlineLengthRef.current = activeOutline.length;
+
     if (isOutlinePinned) {
       setIsOutlineCollapsed(false);
       return;
     }
-    setIsOutlineCollapsed(true);
+
+    if (previousOutlineLength === 0 && activeOutline.length > 0) {
+      setIsOutlineCollapsed(true);
+    }
   }, [activeOutline.length, isOutlinePinned]);
 
   const handleToggleOutlineCollapsed = useCallback(() => {

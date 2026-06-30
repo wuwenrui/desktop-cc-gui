@@ -19,6 +19,31 @@ const enPart1Base = {
     refresh: "Refresh",
     retry: "Retry",
     dismiss: "Dismiss",
+    // Curated skill UI (V0.5.14+). Bundled = shipped with the desktop
+    // client, version-pinned, no network. Distinct from user-installed
+    // global/project skills rendered by `SkillsSection`.
+    curatedLoading: "Loading curated skills…",
+    curatedError: "Couldn't load curated skills.",
+    curatedSubtitle: "Client-bundled, version-pinned, shipped with the desktop client. No network.",
+    curatedBundledBadge: "Built-in",
+    curatedCategoryCodeStyle: "Code style",
+    curatedCategoryUiDesign: "UI design",
+    curatedCategoryReview: "Review",
+    curatedCategoryDebug: "Debug",
+    curatedTokenEstimate: "{{count}} tokens",
+    curatedAddSkill: "Add curated skill",
+    // Composer-side indicator that surfaces which curated skills are
+    // currently always-on. See CuratedSkillIndicator.tsx.
+    curatedActiveLabel: "Active",
+    curatedActiveTotal: "{{count}} skills · {{tokens}}",
+    // Section title for the curated-skills block in Settings > Skills.
+    curatedSectionTitle: "Curated",
+    // Per-row controls. `viewOnGithub` is the inline GitHub link in
+    // each row that opens the upstream source repository in the
+    // system browser.
+    curatedToggleAria: "Toggle {{name}}",
+    curatedViewOnGithub: "View on GitHub",
+    curatedViewOnGithubAria: "Open the upstream source for {{name}} in your browser",
     later: "Later",
     yes: "Yes",
     no: "No",

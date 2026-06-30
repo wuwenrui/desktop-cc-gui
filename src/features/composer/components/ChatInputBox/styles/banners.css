@@ -58,6 +58,94 @@
   justify-content: flex-end;
 }
 
+.composer-readiness-right-accessory {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+  max-width: min(360px, 32vw);
+  flex: 0 1 auto;
+}
+
+/* Curated skill indicator lives in the readiness header right accessory.
+ * These rules must stay in the ChatInputBox style bundle so initial app
+ * load matches the post-settings-page layout. */
+.curated-indicator {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  min-width: 0;
+  max-width: 100%;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.curated-indicator-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  color: var(--text-strong);
+  background: transparent;
+  border: 0;
+  white-space: nowrap;
+  max-width: min(190px, 18vw);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  line-height: 1.4;
+  cursor: default;
+}
+
+.curated-indicator-chip-button {
+  cursor: pointer;
+  font: inherit;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+
+.curated-indicator-chip-button:hover,
+.curated-indicator-chip-button:focus-visible {
+  color: var(--text-strong);
+  background: var(--surface-elevated, var(--surface-card));
+  outline: none;
+}
+
+.curated-indicator-chip-icon {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--text-strong);
+}
+
+.curated-indicator-chip-icon > svg {
+  width: 12px;
+  height: 12px;
+}
+
+.curated-indicator-chip-name {
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.curated-indicator-overflow {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border-muted);
+  background: var(--surface-elevated, var(--surface-card));
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
 .composer-readiness-provider,
 .composer-readiness-model,
 .composer-readiness-context-summary {

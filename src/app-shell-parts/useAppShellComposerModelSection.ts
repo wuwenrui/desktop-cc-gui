@@ -152,6 +152,10 @@ export function useAppShellComposerModelSection({
   ]);
   const resolvedModel = effectiveSelectedModel?.model ?? effectiveSelectedModelId ?? null;
   const resolvedModelSource = effectiveSelectedModel?.source ?? "unknown";
+  const resolvedProviderProfileId =
+    activeEngine === "codex"
+      ? (effectiveSelectedModel?.providerProfileId?.trim() || null)
+      : null;
   const resolvedEffort = effectiveReasoningSupported ? effectiveSelectedEffort : null;
   const handleSelectModel = useCallback(
     (id: string | null) => {
@@ -251,6 +255,7 @@ export function useAppShellComposerModelSection({
     id: effectiveSelectedModelId,
     model: resolvedModel,
     source: resolvedModelSource,
+    providerProfileId: resolvedProviderProfileId,
     effort: resolvedEffort,
     collaborationMode: collaborationModePayload,
   };

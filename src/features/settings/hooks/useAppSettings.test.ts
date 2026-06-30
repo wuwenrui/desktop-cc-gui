@@ -90,6 +90,21 @@ describe("useAppSettings", () => {
     );
     expect(result.current.settings.showSidebarProviderLabels).toBe(false);
     expect(result.current.settings.sessionAttributionMode).toBe("related");
+    expect(result.current.settings.enabledCuratedSkillIds).toEqual([
+      "lazy-senior-dev",
+    ]);
+  });
+
+  it("keeps an explicitly cleared curated skill list disabled", async () => {
+    getAppSettingsMock.mockResolvedValue({
+      enabledCuratedSkillIds: [],
+    } as unknown as AppSettings);
+
+    const { result } = renderHook(() => useAppSettings());
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.settings.enabledCuratedSkillIds).toEqual([]);
   });
 
   it("normalizes invalid session attribution mode to related", async () => {

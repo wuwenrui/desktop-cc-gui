@@ -13,8 +13,8 @@ import {
   saveNewapiEntitlementAccount,
   resetWechatBridgeLogin,
   resetWechatBridgeRebindSecretWithCode,
-  sendWechatBridgeVerificationPrompt,
   sendWechatBridgeRebindRecoveryCode,
+  sendWechatBridgeVerificationPrompt,
   setWechatBridgeRebindSecret,
   startWechatBridge,
   stopWechatBridge,
@@ -33,8 +33,8 @@ vi.mock("@/services/tauri", () => ({
   saveNewapiEntitlementAccount: vi.fn(),
   resetWechatBridgeLogin: vi.fn(),
   resetWechatBridgeRebindSecretWithCode: vi.fn(),
-  sendWechatBridgeVerificationPrompt: vi.fn(),
   sendWechatBridgeRebindRecoveryCode: vi.fn(),
+  sendWechatBridgeVerificationPrompt: vi.fn(),
   setWechatBridgeRebindSecret: vi.fn(),
   startWechatBridge: vi.fn(),
   stopWechatBridge: vi.fn(),
@@ -91,6 +91,7 @@ const t = (key: string) =>
     "settings.wechatBridgeStart": "Start WeChat",
     "settings.wechatBridgeStop": "Stop WeChat",
     "settings.wechatBridgeRebind": "Rebind WeChat",
+    "settings.wechatBridgeRebindConfirm": "Clear the current WeChat login and show a new QR code?",
     "settings.wechatBridgeRebindSecretTitle": "Rebind key",
     "settings.wechatBridgeRebindSecretDescription": "Set this key before binding. Rebinding WeChat requires it.",
     "settings.wechatBridgeRebindSecretInput": "Rebind key",
@@ -250,7 +251,10 @@ describe("WeChatBridgeSettings", () => {
       vi.mocked(runWechatBridgeDiagnostics).mockReset();
       vi.mocked(saveNewapiEntitlementAccount).mockReset();
     vi.mocked(resetWechatBridgeLogin).mockReset();
+    vi.mocked(resetWechatBridgeRebindSecretWithCode).mockReset();
+    vi.mocked(sendWechatBridgeRebindRecoveryCode).mockReset();
     vi.mocked(sendWechatBridgeVerificationPrompt).mockReset();
+    vi.mocked(setWechatBridgeRebindSecret).mockReset();
     vi.mocked(startWechatBridge).mockReset();
     vi.mocked(stopWechatBridge).mockReset();
     vi.mocked(openUrl).mockReset();
@@ -791,6 +795,7 @@ describe("WeChatBridgeSettings", () => {
     fireEvent.click(await screen.findByText("Rebind WeChat"));
     const secretInput = await screen.findByLabelText("Rebind key");
     expect((secretInput as HTMLInputElement).type).toBe("password");
+    expect(resetWechatBridgeLogin).not.toHaveBeenCalled();
     fireEvent.change(secretInput, { target: { value: "local-key-1" } });
     fireEvent.click(screen.getByText("Continue rebind"));
 
@@ -950,7 +955,7 @@ describe("WeChatBridgeSettings", () => {
     render(<WeChatBridgeSettings t={t} activeWorkspace={workspace} />);
 
     expect(await screen.findByText("WeChat connection")).toBeTruthy();
-    expect(screen.queryAllByText("Bound account detected").length).toBeGreaterThan(0);
+    expect(await screen.findByText("Bound account detected")).toBeTruthy();
     expect(screen.queryByTestId("wechat-login-qrcode")).toBeNull();
   });
 

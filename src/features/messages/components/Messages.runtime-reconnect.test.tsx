@@ -1,11 +1,14 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useEffect } from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConversationItem } from "../../../types";
 import { ensureRuntimeReady } from "../../../services/tauri";
 import { Messages } from "./Messages";
-import type { RuntimeReconnectRecoveryCallbackResult } from "./runtimeReconnect";
+import {
+  TRANSIENT_RUNTIME_RECONNECT_AUTO_DISMISS_MS,
+  type RuntimeReconnectRecoveryCallbackResult,
+} from "./runtimeReconnect";
 
 vi.mock("../../../services/tauri", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../../services/tauri")>();
@@ -54,6 +57,7 @@ describe("Messages runtime reconnect", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     cleanup();
   });
 
@@ -304,6 +308,8 @@ describe("Messages runtime reconnect", () => {
     expect(transientCard).toBeTruthy();
     expect(transientCard.className).toContain("is-transient");
     expect(screen.getByText("messages.runtimeReconnectTransientCleanup")).toBeTruthy();
+    expect(screen.queryByText("messages.runtimeReconnectAction")).toBeNull();
+    expect(screen.queryByText("messages.runtimeReconnectResendAction")).toBeNull();
     expect(
       screen.queryByText(
         "[RUNTIME_ENDED] Managed runtime stopped after manual shutdown (source: stale_reuse_cleanup).",
@@ -312,6 +318,92 @@ describe("Messages runtime reconnect", () => {
     expect(
       screen.queryByRole("group", { name: "messages.runtimeReconnectTitle" }),
     ).toBeNull();
+  });
+
+  it("drops transient runtime cleanup diagnostics after the user continues", () => {
+    renderMessages([
+      {
+        id: "assistant-runtime-stale-cleanup",
+        kind: "message",
+        role: "assistant",
+        text:
+          "[RUNTIME_ENDED] Managed runtime stopped after manual shutdown (source: stale_reuse_cleanup).",
+      },
+      {
+        id: "user-after-runtime-stale-cleanup",
+        kind: "message",
+        role: "user",
+        text: "继续",
+      },
+    ], {
+      threadId: "thread-runtime-stale-cleanup-user-follow-up",
+    });
+
+    expect(
+      screen.queryByRole("group", { name: "messages.runtimeReconnectTransientTitle" }),
+    ).toBeNull();
+    expect(screen.getByText("继续")).toBeTruthy();
+    expect(
+      screen.queryByText(
+        "[RUNTIME_ENDED] Managed runtime stopped after manual shutdown (source: stale_reuse_cleanup).",
+      ),
+    ).toBeNull();
+  });
+
+  it("auto-dismisses transient runtime cleanup diagnostics without showing raw details", async () => {
+    vi.useFakeTimers();
+    renderMessages([
+      {
+        id: "assistant-runtime-stale-cleanup",
+        kind: "message",
+        role: "assistant",
+        text:
+          "[RUNTIME_ENDED] Managed runtime stopped after manual shutdown (source: stale_reuse_cleanup).",
+      },
+    ], {
+      threadId: "thread-runtime-stale-cleanup-auto-dismiss",
+    });
+
+    expect(
+      screen.getByRole("group", { name: "messages.runtimeReconnectTransientTitle" }),
+    ).toBeTruthy();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TRANSIENT_RUNTIME_RECONNECT_AUTO_DISMISS_MS + 1);
+    });
+
+    expect(
+      screen.queryByRole("group", { name: "messages.runtimeReconnectTransientTitle" }),
+    ).toBeNull();
+    expect(
+      screen.queryByText(
+        "[RUNTIME_ENDED] Managed runtime stopped after manual shutdown (source: stale_reuse_cleanup).",
+      ),
+    ).toBeNull();
+  });
+
+  it("keeps blocking runtime-ended diagnostics after the transient auto-dismiss window", async () => {
+    vi.useFakeTimers();
+    renderMessages([
+      {
+        id: "assistant-runtime-ended",
+        kind: "message",
+        role: "assistant",
+        text:
+          "[RUNTIME_ENDED] Managed runtime ended before this conversation turn settled.",
+      },
+    ], {
+      threadId: "thread-runtime-ended-not-transient",
+    });
+
+    expect(screen.getByRole("group", { name: "messages.runtimeReconnectTitle" })).toBeTruthy();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TRANSIENT_RUNTIME_RECONNECT_AUTO_DISMISS_MS + 1);
+    });
+
+    expect(screen.getByRole("group", { name: "messages.runtimeReconnectTitle" })).toBeTruthy();
+    expect(screen.getByText("messages.runtimeReconnectEnded")).toBeTruthy();
   });
 
   it("shows only the fork action for stale thread recovery cards", () => {

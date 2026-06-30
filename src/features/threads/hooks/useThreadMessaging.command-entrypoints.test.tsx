@@ -136,6 +136,7 @@ describe("useThreadMessaging command entrypoints", () => {
         id?: string | null;
         model: string | null;
         source?: string | null;
+        providerProfileId?: string | null;
         effort: string | null;
         collaborationMode: Record<string, unknown> | null;
       };

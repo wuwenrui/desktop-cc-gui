@@ -38,6 +38,10 @@ describe('ComposerReadinessBar', () => {
       />,
     );
 
+    // The read-only always-on indicator is optional. Without a rightAccessory
+    // prop the readiness bar must not leave a visual placeholder.
+    expect(container.querySelector('.curated-indicator')).toBeNull();
+    expect(container.querySelector('.composer-readiness-right-accessory')).toBeNull();
     expect(screen.getByText('Codex')).toBeTruthy();
     expect(screen.getByText('gpt-5.5')).toBeTruthy();
     expect(screen.getByText('Auto Mode')).toBeTruthy();
@@ -94,6 +98,26 @@ describe('ComposerReadinessBar', () => {
 
     expect(screen.queryByText('composer.readinessContextEmpty')).toBeNull();
     expect(screen.queryByText('no-extra-context')).toBeNull();
+  });
+
+  it('renders the right accessory inside the readiness bar wrapper', () => {
+    const readiness = buildComposerSendReadiness({
+      engine: 'codex',
+      providerLabel: 'Codex',
+      modelLabel: 'gpt-5.5',
+      draftText: 'continue',
+    });
+
+    const { container } = render(
+      <ComposerReadinessBar
+        readiness={readiness}
+        rightAccessory={<span data-testid="readiness-accessory">Curated</span>}
+      />,
+    );
+
+    const wrapper = container.querySelector('.composer-readiness-right-accessory');
+    expect(wrapper).toBeTruthy();
+    expect(wrapper?.querySelector('[data-testid="readiness-accessory"]')).toBeTruthy();
   });
 
   it('renders request jump action only when a pending request blocks send', () => {

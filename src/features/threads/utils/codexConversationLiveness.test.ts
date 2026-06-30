@@ -36,7 +36,7 @@ describe("codexConversationLiveness", () => {
     ).toBe(false);
   });
 
-  it("allows disposable replacement only for an authoritative empty draft", () => {
+  it("does not allow disposable replacement for a native thread-start empty draft", () => {
     const resolution = resolveCodexAcceptedTurnFact({
       record: {
         fact: "empty-draft",
@@ -47,7 +47,7 @@ describe("codexConversationLiveness", () => {
     });
 
     expect(resolution.fact).toBe("empty-draft");
-    expect(canUseDisposableCodexDraftReplacement(resolution)).toBe(true);
+    expect(canUseDisposableCodexDraftReplacement(resolution)).toBe(false);
     expect(shouldDeferCodexActivityUntilTurnAccepted(resolution)).toBe(true);
   });
 

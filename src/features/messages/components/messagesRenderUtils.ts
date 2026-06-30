@@ -42,10 +42,6 @@ export function isSelectionInsideNode(selection: Selection | null, node: HTMLEle
   return false;
 }
 
-export function normalizeHistoryStickyHeaderText(text: string) {
-  return text.replace(/\s+/g, " ").trim();
-}
-
 export function isMessagesPerfDebugEnabled(): boolean {
   if (!import.meta.env.DEV) {
     return false;

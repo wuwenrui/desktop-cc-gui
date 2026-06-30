@@ -13,6 +13,12 @@ fn test_external_spec_root() -> String {
         .to_string()
 }
 
+fn claude_settings_with_curated_skill() -> crate::types::AppSettings {
+    let mut settings = crate::types::AppSettings::default();
+    settings.enabled_curated_skill_ids = vec!["lazy-senior-dev".to_string()];
+    settings
+}
+
 fn create_fake_claude_stream_environment(lines: &[&str]) -> (PathBuf, PathBuf, PathBuf) {
     let root = std::env::temp_dir().join(format!("ccgui-claude-stream-{}", uuid::Uuid::new_v4()));
     let workspace_path = root.join("workspace");
@@ -113,6 +119,21 @@ fn drain_turn_events(
         }
     }
     events
+}
+
+fn assert_no_empty_prompt_after_print_flag(args: &[String]) {
+    let print_flag_index = args
+        .iter()
+        .position(|arg| arg == "-p")
+        .expect("missing Claude print flag");
+    let next_arg = args
+        .get(print_flag_index + 1)
+        .expect("missing arg after Claude print flag");
+
+    assert_ne!(
+        next_arg, "",
+        "stream-json stdin mode must not add an empty positional prompt after -p"
+    );
 }
 
 fn turn_error_event(events: &[ClaudeTurnEvent]) -> Option<(&String, &Option<String>)> {
@@ -285,7 +306,7 @@ fn build_command_adds_external_spec_root_when_configured() {
     params.text = "hello".to_string();
     params.custom_spec_root = Some(test_external_spec_root());
 
-    let command = session.build_command(&params, false, true);
+    let command = session.build_command(&params, false, true, None, None);
     let args: Vec<String> = command
         .as_std()
         .get_args()
@@ -304,7 +325,7 @@ fn build_command_sets_disable_thinking_env_when_requested() {
     params.text = "hello".to_string();
     params.disable_thinking = true;
 
-    let command = session.build_command(&params, false, true);
+    let command = session.build_command(&params, false, true, None, None);
     let disable_thinking_env = command
         .as_std()
         .get_envs()
@@ -336,7 +357,7 @@ fn build_command_uses_stream_json_for_single_line_text() {
     params.text = "single line".to_string();
 
     let use_stream_json_input = ClaudeSession::should_use_stream_json_input(&params);
-    let command = session.build_command(&params, use_stream_json_input, true);
+    let command = session.build_command(&params, use_stream_json_input, true, None, None);
     let args: Vec<String> = command
         .as_std()
         .get_args()
@@ -347,6 +368,93 @@ fn build_command_uses_stream_json_for_single_line_text() {
         .windows(2)
         .any(|window| { window[0] == "--input-format" && window[1] == "stream-json" }));
     assert!(args.iter().all(|arg| arg != "single line"));
+    assert_no_empty_prompt_after_print_flag(&args);
+}
+
+#[test]
+fn build_command_skips_curated_append_on_windows() {
+    assert!(ClaudeSession::should_skip_curated_skill_append_for_binary(
+        r"C:\Users\demo\AppData\Roaming\npm\claude.cmd",
+        true,
+    ));
+    assert!(ClaudeSession::should_skip_curated_skill_append_for_binary(
+        r"C:\Users\demo\AppData\Roaming\npm\claude.ps1",
+        true,
+    ));
+    assert!(!ClaudeSession::should_skip_curated_skill_append_for_binary(
+        "/opt/homebrew/bin/claude",
+        false,
+    ));
+    assert!(ClaudeSession::should_skip_curated_skill_append_for_binary(
+        r"C:\Program Files\Claude\claude.exe",
+        true,
+    ));
+    assert!(ClaudeSession::should_skip_curated_skill_append_for_binary(
+        "claude", true,
+    ));
+}
+
+#[test]
+#[cfg(not(windows))]
+fn build_command_keeps_curated_append_on_non_wrapper_path() {
+    let (_root, workspace_path, script_path) = create_fake_claude_script("#!/bin/sh\n");
+    let session = test_session_with_bin(workspace_path, script_path);
+    let mut params = SendMessageParams::default();
+    params.text = "single line".to_string();
+    let settings = claude_settings_with_curated_skill();
+
+    let command = session.build_command(&params, true, true, Some(&settings), None);
+    let args: Vec<String> = command
+        .as_std()
+        .get_args()
+        .map(|arg| arg.to_string_lossy().to_string())
+        .collect();
+
+    assert!(args.iter().any(|arg| arg == "--append-system-prompt"));
+    assert!(args.iter().any(|arg| arg.contains("lazy-senior-dev")));
+}
+
+#[test]
+#[cfg(windows)]
+fn build_command_omits_curated_append_on_windows() {
+    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+    let mut params = SendMessageParams::default();
+    params.text = "single line".to_string();
+    let settings = claude_settings_with_curated_skill();
+
+    let command = session.build_command(&params, true, true, Some(&settings), None);
+    let args: Vec<String> = command
+        .as_std()
+        .get_args()
+        .map(|arg| arg.to_string_lossy().to_string())
+        .collect();
+
+    assert!(!args.iter().any(|arg| arg == "--append-system-prompt"));
+    assert!(!args.iter().any(|arg| arg.contains("lazy-senior-dev")));
+}
+
+#[test]
+fn build_command_accepts_curated_activation_hint_file_path() {
+    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+    let mut params = SendMessageParams::default();
+    params.text = "single line".to_string();
+    let hint_path = std::env::temp_dir()
+        .join("ccgui-claude-hints")
+        .join("enabled-curated-skills.md");
+
+    let command = session.build_command(&params, true, true, None, Some(&hint_path));
+    let args: Vec<String> = command
+        .as_std()
+        .get_args()
+        .map(|arg| arg.to_string_lossy().to_string())
+        .collect();
+
+    assert!(args.windows(2).any(|window| {
+        window[0] == "--append-system-prompt-file"
+            && window[1] == hint_path.to_string_lossy().as_ref()
+    }));
+    assert!(!args.iter().any(|arg| arg == "--append-system-prompt"));
+    assert!(!args.iter().any(|arg| arg.contains("Ponytail")));
 }
 
 #[test]
@@ -356,7 +464,7 @@ fn build_command_keeps_special_character_prompt_out_of_argv() {
     params.text = "run skill /review & echo %PATH% | more > out (test)!".to_string();
 
     let use_stream_json_input = ClaudeSession::should_use_stream_json_input(&params);
-    let command = session.build_command(&params, use_stream_json_input, true);
+    let command = session.build_command(&params, use_stream_json_input, true, None, None);
     let args: Vec<String> = command
         .as_std()
         .get_args()
@@ -367,6 +475,7 @@ fn build_command_keeps_special_character_prompt_out_of_argv() {
         .windows(2)
         .any(|window| { window[0] == "--input-format" && window[1] == "stream-json" }));
     assert!(args.iter().all(|arg| arg != &params.text));
+    assert_no_empty_prompt_after_print_flag(&args);
 }
 
 #[test]
@@ -376,7 +485,7 @@ fn build_command_uses_stream_json_for_multiline_text() {
     params.text = "line1\nline2".to_string();
 
     let use_stream_json_input = ClaudeSession::should_use_stream_json_input(&params);
-    let command = session.build_command(&params, use_stream_json_input, true);
+    let command = session.build_command(&params, use_stream_json_input, true, None, None);
     let args: Vec<String> = command
         .as_std()
         .get_args()
@@ -387,6 +496,7 @@ fn build_command_uses_stream_json_for_multiline_text() {
         .windows(2)
         .any(|window| { window[0] == "--input-format" && window[1] == "stream-json" }));
     assert!(args.iter().all(|arg| arg != "line1\nline2"));
+    assert_no_empty_prompt_after_print_flag(&args);
 }
 
 #[test]
@@ -399,7 +509,7 @@ fn build_resume_command_uses_stream_json_for_multiline_answer() {
     params.images = None;
 
     let use_stream_json_input = ClaudeSession::should_use_stream_json_input(&params);
-    let command = session.build_command(&params, use_stream_json_input, true);
+    let command = session.build_command(&params, use_stream_json_input, true, None, None);
     let args: Vec<String> = command
         .as_std()
         .get_args()
@@ -413,6 +523,7 @@ fn build_resume_command_uses_stream_json_for_multiline_answer() {
         .windows(2)
         .any(|window| { window[0] == "--input-format" && window[1] == "stream-json" }));
     assert!(args.iter().all(|arg| arg != "line1\r\nline2"));
+    assert_no_empty_prompt_after_print_flag(&args);
 }
 
 #[test]
@@ -700,6 +811,61 @@ async fn send_message_batches_windows_text_deltas_without_delaying_other_platfor
         }
         other => panic!("expected turn completed, got {:?}", other),
     }
+}
+
+#[tokio::test]
+async fn send_message_emits_text_delta_before_process_completion() {
+    #[cfg(windows)]
+    let script_body = concat!(
+        "@echo off\r\n",
+        "echo {\"type\":\"assistant_message_delta\",\"delta\":\"live\"}\r\n",
+        "powershell -NoProfile -Command \"Start-Sleep -Milliseconds 3000\"\r\n",
+        "echo {\"type\":\"assistant_message_delta\",\"delta\":\" tail\"}\r\n",
+        "echo {\"type\":\"result\",\"session_id\":\"11111111-1111-4111-8111-111111111111\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"live tail\"}]}}\r\n",
+        "exit /b 0\r\n"
+    );
+    #[cfg(not(windows))]
+    let script_body = concat!(
+        "#!/bin/sh\n",
+        "printf '%s\\n' '{\"type\":\"assistant_message_delta\",\"delta\":\"live\"}'\n",
+        "sleep 3\n",
+        "printf '%s\\n' '{\"type\":\"assistant_message_delta\",\"delta\":\" tail\"}'\n",
+        "printf '%s\\n' '{\"type\":\"result\",\"session_id\":\"11111111-1111-4111-8111-111111111111\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"live tail\"}]}}'\n"
+    );
+    let (root, workspace_path, script_path) = create_fake_claude_script(script_body);
+    let session = test_session_with_bin(workspace_path, script_path);
+    let mut receiver = session.subscribe();
+    let mut params = SendMessageParams::default();
+    params.text = "hello".to_string();
+
+    let send_future = session.send_message(params, "turn-live-before-exit");
+    tokio::pin!(send_future);
+
+    let first_text = loop {
+        tokio::select! {
+            result = &mut send_future => {
+                panic!("send_message completed before a live text delta was observed: {:?}", result);
+            }
+            event = receiver.recv() => {
+                let event = event.expect("receive claude event before completion");
+                if let EngineEvent::TextDelta { text, .. } = event.event {
+                    break text;
+                }
+            }
+            _ = tokio::time::sleep(std::time::Duration::from_millis(1_500)) => {
+                panic!("expected a text delta before the delayed fake Claude process completed");
+            }
+        }
+    };
+
+    assert_eq!(first_text, "live");
+
+    let response = send_future
+        .await
+        .expect("fake claude stream should eventually complete");
+    let _ = std::fs::remove_dir_all(&root);
+
+    assert_eq!(response, "live tail");
 }
 
 #[tokio::test]

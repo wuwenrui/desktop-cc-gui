@@ -3,9 +3,7 @@
 ## Purpose
 
 Defines the contract for surfacing a collapsible outline / TOC floater for Markdown-rendered messages on the messages surface, so users can navigate long AI responses by heading. The messages surface uses a lightweight raw Markdown extractor that emits `MarkdownOutlineEntry[]`-compatible records without switching the rich ReactMarkdown runtime to the file-preview fast worker path.
-
 ## Requirements
-
 ### Requirement: Messages Surface MUST Surface Markdown-Derived Outline
 
 The messages surface MUST derive a `MarkdownOutlineEntry[]`-compatible outline from the Markdown text and pass it up to the floater via a callback. The `MarkdownOutlineEntry` type itself MUST NOT be extended (its existing fields `id / depth / title / startLine / endLine / anchor / ordinal` are sufficient).
@@ -21,6 +19,18 @@ The messages surface MUST derive a `MarkdownOutlineEntry[]`-compatible outline f
 - **WHEN** the messages component receives a new outline via `onOutlineReady`
 - **THEN** the floater MUST render against the new outline.
 - **AND** if the outline identity changes, the floater MUST reset its `expanded` state.
+
+#### Scenario: repeated same outline is ignored during streaming
+
+- **WHEN** the live assistant row reports an outline whose `messageId` and outline entries are semantically identical to the currently stored outline
+- **THEN** the messages component MUST preserve the previous outline state reference.
+- **AND** the floater MUST NOT reset or re-render solely because the same outline payload was replayed.
+
+#### Scenario: live outline callback identity remains stable
+
+- **WHEN** `MessagesTimeline` re-renders while the same assistant message remains the live row
+- **THEN** the parent-owned outline callback passed into the live row MUST remain stable unless the live message identity changes.
+- **AND** callback identity churn MUST NOT trigger outline extraction for an unchanged throttled Markdown value.
 
 ### Requirement: Outline Floater MUST Hide When Message Has No Headings
 
@@ -110,7 +120,7 @@ The floater MUST NOT alter the existing virtualized list, scroll restoration, st
 #### Scenario: streaming messages continue to update outline
 
 - **WHEN** an AI message is still streaming
-- **THEN** the `onOutlineReady` callback MUST fire each time the throttled Markdown value produces a new outline (because headings may be added as more text streams in).
+- **THEN** the `onOutlineReady` callback MUST fire each time the throttled Markdown value produces a semantically new outline (because headings may be added as more text streams in).
 - **AND** the floater MUST reflect the latest outline without animation jank.
 
 #### Scenario: switching message resets floater

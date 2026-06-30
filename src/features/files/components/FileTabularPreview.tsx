@@ -84,8 +84,8 @@ export function FileTabularPreview({
 
     void (async () => {
       try {
-        const XLSX = await import("xlsx");
-        let workbook: import("xlsx").WorkBook;
+        const XLSX = await import("@e965/xlsx");
+        let workbook: import("@e965/xlsx").WorkBook;
         if (payload.kind === "inline-bytes") {
           workbook = XLSX.read(payload.text, {
             type: "string",

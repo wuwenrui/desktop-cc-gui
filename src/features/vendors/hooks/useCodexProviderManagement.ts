@@ -64,16 +64,54 @@ function normalizeProviderCustomModels(
       seenIds.add(id);
       const label = providerModel.label?.trim() || id;
       const description = providerModel.description?.trim();
+      const providerProfileId = provider.id.trim();
       mergedModels.push({
         id,
         label,
         description:
           description && description.length > 0 ? description : undefined,
+        providerProfileId:
+          providerProfileId.length > 0 ? providerProfileId : undefined,
       });
     }
   }
 
   return mergedModels;
+}
+
+function indexProviderModelOrigins(
+  providers: CodexProviderConfig[],
+): Map<string, string> {
+  const originsByModelId = new Map<string, string>();
+  const ambiguousModelIds = new Set<string>();
+
+  for (const provider of providers) {
+    const providerProfileId = provider.id.trim();
+    if (!providerProfileId) {
+      continue;
+    }
+    const providerModels = validateCodexCustomModels(provider.customModels ?? []);
+    for (const providerModel of providerModels) {
+      const id = providerModel.id.trim();
+      if (!id) {
+        continue;
+      }
+      const existingProviderProfileId = originsByModelId.get(id);
+      if (
+        existingProviderProfileId &&
+        existingProviderProfileId !== providerProfileId
+      ) {
+        ambiguousModelIds.add(id);
+        originsByModelId.delete(id);
+        continue;
+      }
+      if (!ambiguousModelIds.has(id)) {
+        originsByModelId.set(id, providerProfileId);
+      }
+    }
+  }
+
+  return originsByModelId;
 }
 
 export function mergeCodexProviderCustomModelsIntoStore(
@@ -89,16 +127,28 @@ export function mergeCodexProviderCustomModelsIntoStore(
   }
 
   const storedModels = readStoredCodexCustomModels();
+  const providerOriginByModelId = indexProviderModelOrigins(providers);
+  const enrichedStoredModels = storedModels.map((model) => {
+    if (model.providerProfileId?.trim()) {
+      return model;
+    }
+    const providerProfileId = providerOriginByModelId.get(model.id.trim());
+    return providerProfileId ? { ...model, providerProfileId } : model;
+  });
   const storedIds = new Set(storedModels.map((model) => model.id.trim()));
   const missingProviderModels = providerModels.filter(
     (model) => !storedIds.has(model.id.trim()),
   );
 
-  if (missingProviderModels.length === 0) {
+  const didEnrichStoredModels = enrichedStoredModels.some(
+    (model, index) =>
+      model.providerProfileId !== storedModels[index]?.providerProfileId,
+  );
+  if (missingProviderModels.length === 0 && !didEnrichStoredModels) {
     return;
   }
 
-  const nextModels = [...storedModels, ...missingProviderModels];
+  const nextModels = [...enrichedStoredModels, ...missingProviderModels];
   try {
     window.localStorage.setItem(
       STORAGE_KEYS.CODEX_CUSTOM_MODELS,

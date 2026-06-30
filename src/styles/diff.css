@@ -1488,7 +1488,9 @@
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
+  flex: 0 0 auto;
   gap: var(--git-filetree-badge-gap);
+  min-width: max-content;
   padding: var(--git-filetree-badge-pad-y) var(--git-filetree-badge-pad-x);
   border-radius: var(--git-filetree-badge-radius);
   border: 1px solid color-mix(in srgb, var(--border-default) 58%, transparent);

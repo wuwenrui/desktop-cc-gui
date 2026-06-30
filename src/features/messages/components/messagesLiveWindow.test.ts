@@ -3,10 +3,10 @@ import type { ConversationItem } from "../../../types";
 import {
   buildAssistantFinalBoundarySet,
   buildAssistantFinalWithVisibleProcessSet,
-  buildHistoryStickyCandidates,
   buildLiveTailWorkingSet,
+  buildMessagesPresentationScopeKey,
   buildRenderedItemsWindow,
-  resolveActiveStickyHeaderCandidate,
+  resolveMessagesPresentationMode,
   resolveStreamingPresentationItems,
 } from "./messagesLiveWindow";
 
@@ -38,7 +38,74 @@ function reasoningItem(id: string, content = id): Extract<ConversationItem, { ki
 }
 
 describe("messages live window", () => {
-  it("builds a bounded live tail working set and preserves the sticky user", () => {
+  it("separates realtime/static and collapsed/expanded presentation modes", () => {
+    expect(
+      resolveMessagesPresentationMode({
+        historyExpansionMode: null,
+        isWorking: true,
+        showAllHistoryItems: false,
+        visibleCollapsedHistoryItemCount: 12,
+      }),
+    ).toBe("realtime-collapsed-tail");
+    expect(
+      resolveMessagesPresentationMode({
+        historyExpansionMode: null,
+        isWorking: true,
+        showAllHistoryItems: false,
+        visibleCollapsedHistoryItemCount: 0,
+      }),
+    ).toBe("realtime-full-tail");
+    expect(
+      resolveMessagesPresentationMode({
+        historyExpansionMode: "manual",
+        isWorking: false,
+        showAllHistoryItems: true,
+        visibleCollapsedHistoryItemCount: 0,
+      }),
+    ).toBe("static-expanded-history-manual");
+    expect(
+      resolveMessagesPresentationMode({
+        historyExpansionMode: "jump",
+        isWorking: false,
+        showAllHistoryItems: true,
+        visibleCollapsedHistoryItemCount: 0,
+      }),
+    ).toBe("static-expanded-history-jump");
+  });
+
+  it("includes presentation mode, collapsed count, and visible window identity in the presentation scope", () => {
+    const baseScope = "ws-1\u0000thread-1";
+    const collapsedScope = buildMessagesPresentationScopeKey({
+      scopeKey: baseScope,
+      mode: "static-collapsed-history",
+      collapsedHistoryItemCount: 40,
+      itemCount: 30,
+      firstItemId: "message-41",
+      lastItemId: "message-70",
+    });
+    const expandedScope = buildMessagesPresentationScopeKey({
+      scopeKey: baseScope,
+      mode: "static-expanded-history-manual",
+      collapsedHistoryItemCount: 0,
+      itemCount: 70,
+      firstItemId: "message-1",
+      lastItemId: "message-70",
+    });
+    const liveScope = buildMessagesPresentationScopeKey({
+      scopeKey: baseScope,
+      mode: "realtime-collapsed-tail",
+      collapsedHistoryItemCount: 40,
+      itemCount: 30,
+      firstItemId: "message-41",
+      lastItemId: "message-70",
+    });
+
+    expect(collapsedScope).not.toBe(expandedScope);
+    expect(collapsedScope).not.toBe(liveScope);
+    expect(expandedScope).toContain("static-expanded-history-manual");
+  });
+
+  it("builds a bounded live tail working set and preserves the latest user row", () => {
     const items: ConversationItem[] = [
       userMessage("user-old", "早期问题"),
       ...Array.from({ length: 68 }, (_, index) =>
@@ -57,7 +124,7 @@ describe("messages live window", () => {
     expect(workingSet.items.length).toBeLessThan(items.length);
     expect(workingSet.items.some((item) => item.id === "user-latest")).toBe(true);
     expect(workingSet.items.at(-1)?.id).toBe("assistant-live");
-    expect(workingSet.stickyUserMessageId).toBe("user-latest");
+    expect(workingSet.preservedUserMessageId).toBe("user-latest");
     expect(workingSet.omittedBeforeWorkingSetCount).toBeGreaterThan(0);
   });
 
@@ -92,7 +159,7 @@ describe("messages live window", () => {
     const renderedWindow = buildRenderedItemsWindow(
       workingSet.items,
       localCollapsedCount,
-      workingSet.stickyUserMessageId,
+      workingSet.preservedUserMessageId,
     );
 
     expect(
@@ -210,25 +277,6 @@ describe("messages live window", () => {
     );
 
     expect(resolvedItems).toBe(deferredItems);
-  });
-
-  it("keeps history sticky ids stable while refreshing the active sticky text from the live snapshot", () => {
-    const stableCandidates = buildHistoryStickyCandidates(
-      [userMessage("user-1", "旧文案")],
-      false,
-    );
-
-    const resolvedCandidate = resolveActiveStickyHeaderCandidate(
-      stableCandidates,
-      "user-1",
-      [userMessage("user-1", "新文案")],
-      false,
-    );
-
-    expect(resolvedCandidate).toEqual({
-      id: "user-1",
-      text: "新文案",
-    });
   });
 
   it("keeps only the latest final assistant in each user turn as a final boundary", () => {

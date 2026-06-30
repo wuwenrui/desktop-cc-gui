@@ -36,6 +36,34 @@ describe('ChatInputBox model options', () => {
     }))).toContain('claude-custom-alpha');
   });
 
+  it('preserves Codex managed provider origin when custom models override hydrated catalog rows', () => {
+    window.localStorage.setItem(
+      STORAGE_KEYS.CODEX_CUSTOM_MODELS,
+      JSON.stringify([
+        {
+          id: 'minimax-m3',
+          label: 'MiniMax M3',
+          providerProfileId: 'provider-minimax',
+        },
+      ]),
+    );
+
+    const models = resolveAvailableModels({
+      currentProvider: 'codex',
+      models: [{ id: 'minimax-m3', label: 'Runtime MiniMax M3' }],
+      selectedModel: '',
+      modelStorageSnapshot: readModelStorageSnapshot(),
+    });
+
+    expect(models.filter((model) => model.id === 'minimax-m3')).toHaveLength(1);
+    expect(models.find((model) => model.id === 'minimax-m3')).toEqual(
+      expect.objectContaining({
+        label: 'MiniMax M3',
+        providerProfileId: 'provider-minimax',
+      }),
+    );
+  });
+
   it('preserves user-entered Claude custom model ids without regex filtering', () => {
     window.localStorage.setItem(
       STORAGE_KEYS.CLAUDE_CUSTOM_MODELS,

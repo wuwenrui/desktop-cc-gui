@@ -1013,6 +1013,53 @@ describe("history loaders", () => {
     );
   });
 
+  it("reconstructs codex exec_command heredoc writes as file changes", () => {
+    const items = parseCodexSessionHistory({
+      entries: [
+        {
+          type: "response_item",
+          payload: {
+            type: "function_call",
+            call_id: "cmd-write-1",
+            name: "exec_command",
+            arguments: JSON.stringify({
+              cmd:
+                "cat > /Users/demo/repo/src/main/java/com/example/demo/logging/LogLevel.java <<'EOF'\n" +
+                "package com.example.demo.logging;\n" +
+                "public enum LogLevel { INFO }\n" +
+                "EOF\n" +
+                "echo wrote LogLevel.java",
+            }),
+          },
+        },
+        {
+          type: "response_item",
+          payload: {
+            type: "function_call_output",
+            call_id: "cmd-write-1",
+            output: "Chunk ID: abc\nOutput:\nwrote LogLevel.java",
+          },
+        },
+      ],
+    });
+
+    expect(items).toHaveLength(1);
+    expect(items[0]).toEqual(
+      expect.objectContaining({
+        id: "cmd-write-1",
+        kind: "tool",
+        toolType: "fileChange",
+        title: "File changes",
+        changes: [
+          expect.objectContaining({
+            path: "/Users/demo/repo/src/main/java/com/example/demo/logging/LogLevel.java",
+            kind: "add",
+          }),
+        ],
+      }),
+    );
+  });
+
   it("preserves real codex user message ids from local session payloads", () => {
     const items = parseCodexSessionHistory({
       entries: [

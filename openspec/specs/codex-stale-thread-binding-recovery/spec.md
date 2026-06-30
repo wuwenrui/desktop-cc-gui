@@ -91,23 +91,21 @@ Codex stale-thread recovery MUST distinguish durable stale conversation identiti
 
 When stale Codex recovery falls back to a fresh thread, the user's immediate intent MUST remain visible and target the new active identity.
 
-#### Scenario: fresh continuation renders the replayed prompt
+#### Scenario: fresh continuation inherits source provider binding
 
-- **WHEN** a recover-and-resend or first-turn fallback sends a prompt to a fresh Codex thread
-- **THEN** the user prompt MUST be rendered or otherwise visibly represented in the fresh thread
-- **AND** duplicate suppression MUST NOT hide the prompt merely because the action originated from a stale source thread
+- **WHEN** a stale Codex first-turn draft or recover-and-resend path creates a fresh continuation
+- **AND** the source thread metadata contains a non-empty `providerProfileId`
+- **THEN** the fresh Codex thread creation request MUST include that same `providerProfileId`
+- **AND** blank, whitespace, null, or undefined provider profile ids MUST be treated as disk default and omitted from the request payload
+- **AND** the system MUST NOT silently switch a provider-bound stale recovery to the disk provider.
 
-#### Scenario: fresh continuation keeps old thread explainable
+#### Scenario: fork continuation inherits source provider binding
 
-- **WHEN** a fresh continuation replaces or supersedes a stale Codex source identity
-- **THEN** the old thread surface MUST remain explainable as stale, abandoned, replaced, or degraded-readable when visible
-- **AND** the UI MUST NOT imply that old context was fully preserved unless verified rebind occurred
-
-#### Scenario: automatic agent session creation is reason-coded
-
-- **WHEN** the app creates a fresh `agentN` style session after stale reopen or large-context recovery failure
-- **THEN** the new session MUST carry a user-visible or diagnostic reason code for fresh continuation
-- **AND** the UI MUST NOT present the fresh session as the original session unless a verified durable rebind exists
+- **WHEN** stale Codex recovery falls back to a fork continuation
+- **AND** the source thread metadata contains a non-empty `providerProfileId`
+- **THEN** the fork request MUST include `{ activate: true, providerProfileId }`
+- **AND** the parent thread metadata and visibility MUST remain unchanged
+- **AND** blank provider ids MUST be omitted so legacy disk-default behavior remains compatible.
 
 ### Requirement: Manual Stale Thread Recovery MUST Return A Classified Outcome
 
@@ -332,4 +330,3 @@ Codex create-session entrypoints MUST share the same stopping-runtime race seman
 - **WHEN** the daemon `start_thread` path observes the same stopping-runtime race
 - **THEN** it MUST use the same bounded retry and recoverable-error semantics as the app path
 - **AND** daemon parity MUST NOT create a second retry strategy that diverges from the app command path
-

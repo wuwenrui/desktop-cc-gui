@@ -81,6 +81,7 @@ import {
 import {
   buildReviewCommandText,
   extractSessionIdFromEngineSendResponse,
+  isCodexMissingThreadBindingError,
   isInvalidReviewThreadIdError,
   isLikelyForeignModelForGemini,
   isRecoverableCodexThreadBindingError,
@@ -199,6 +200,7 @@ type UseThreadMessagingOptions = {
     id?: string | null;
     model: string | null;
     source?: string | null;
+    providerProfileId?: string | null;
     effort: string | null;
     collaborationMode: Record<string, unknown> | null;
   };
@@ -1115,10 +1117,17 @@ export function useThreadMessaging({
           providerProfileId:
             getThreadProviderProfileId?.(workspace.id, threadId) ?? null,
         });
-        if (!reboundThreadId || recoveryAttempt.isUnverifiedSameThreadMissingRebind) {
+        const isSameMissingThreadRebind =
+          reboundThreadId === threadId && isCodexMissingThreadBindingError(errorMessage);
+        if (
+          !reboundThreadId ||
+          recoveryAttempt.isUnverifiedSameThreadMissingRebind ||
+          isSameMissingThreadRebind
+        ) {
           if (
             await recoveryAttempt.tryFreshDraftReplacement(
-              recoveryAttempt.isUnverifiedSameThreadMissingRebind
+              recoveryAttempt.isUnverifiedSameThreadMissingRebind ||
+                isSameMissingThreadRebind
                 ? "refresh returned the same missing thread"
                 : refreshErrorMessage
                   ? `refresh failed: ${refreshErrorMessage}`
@@ -1860,6 +1869,14 @@ export function useThreadMessaging({
 
       // Detect engine switch from the selected engine to thread ownership.
       const currentEngine = normalizeEngineSelection(activeEngine);
+      const resolvedComposerSelection = resolveComposerSelection?.() ?? null;
+      const codexFirstSendProviderProfileId =
+        currentEngine === "codex"
+          ? (resolvedComposerSelection?.providerProfileId?.trim() || null)
+          : null;
+      const codexFirstSendOptions = codexFirstSendProviderProfileId
+        ? { providerProfileId: codexFirstSendProviderProfileId }
+        : undefined;
       if (activeThreadId) {
         const storedThreadEngine = getThreadEngine(activeWorkspace.id, activeThreadId);
         const threadKind = resolveThreadKind(activeWorkspace.id, activeThreadId);
@@ -1895,6 +1912,7 @@ export function useThreadMessaging({
           const newThreadId = await startThreadForMessageSend(
             activeWorkspace,
             currentEngine,
+            codexFirstSendOptions,
           );
           if (!newThreadId) {
             return;
@@ -1911,7 +1929,11 @@ export function useThreadMessaging({
       // No engine switch, proceed normally
       const threadId = activeThreadId
         ? await ensureThreadForActiveWorkspace()
-        : await startThreadForMessageSend(activeWorkspace, currentEngine);
+        : await startThreadForMessageSend(
+            activeWorkspace,
+            currentEngine,
+            codexFirstSendOptions,
+          );
       if (!threadId) {
         return;
       }
@@ -1933,6 +1955,7 @@ export function useThreadMessaging({
       getThreadEngine,
       resolveThreadKind,
       resolveThreadEngine,
+      resolveComposerSelection,
       safeMessageActivity,
       sendMessageToThread,
       startThreadForMessageSend,

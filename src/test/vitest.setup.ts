@@ -166,6 +166,8 @@ vi.mock("react-i18next", () => ({
         "runtimeNotice.startup.activeWorkspaceReady": "当前工作区首屏数据已就绪",
         "runtimeNotice.error.threadTurnFailed":
           `${String(params?.engine ?? "Runtime")} 会话失败：${String(params?.message ?? "")}`,
+        "runtimeNotice.error.codexSessionRecoverableFailure":
+          "Codex 连接中断：旧会话绑定或运行时连接已失效，请重试或重新连接。",
         "runtimeNotice.engine.checking":
           `正在检测 ${String(params?.engine ?? "")} 状态...`,
         "runtimeNotice.engine.ready":
@@ -215,6 +217,41 @@ vi.mock("react-i18next", () => ({
         "home.refreshUsage": "Refresh usage",
         "messages.reasoningProcessBoundary": "Thinking Process",
         "messages.finalMessageBoundary": "Final Message",
+        "messages.rowRenderFailedTitle": "This message could not be rendered.",
+        "messages.rowRenderFailedDescription":
+          "The rest of the conversation is still available. Retry this row or continue working.",
+        "messages.rowRenderRetry": "Retry row",
+        "messages.rowRenderRetryBlocked": "Retry blocked",
+        "messages.conversationLightweightModeEyebrow": "Render budget",
+        "messages.conversationLightweightSuggestionTitle": "Heavy conversation detected",
+        "messages.conversationLightweightSuggestionDescription":
+          "{{heavyRows}} heavy rows, render weight {{renderWeight}}.",
+        "messages.conversationLightweightModeTitle": "Lightweight mode is on",
+        "messages.conversationLightweightModeDescription":
+          "Heavy rows are shown as summaries first.",
+        "messages.conversationOversizedHistoryTitle": "Oversized conversation detected",
+        "messages.conversationOversizedHistoryDescription":
+          "{{rows}} rows, render weight {{renderWeight}}. Full details remain visible.",
+        "messages.conversationLightweightUse": "Use lightweight",
+        "messages.conversationLightweightStayLightweight": "Stay lightweight",
+        "messages.conversationLightweightHydrateVisible": "Render details",
+        "messages.conversationLightweightRetryFullDetail": "Retry full detail",
+        "messages.conversationLightweightRowEyebrow": "Deferred detail",
+        "messages.conversationLightweightRowTitle": `${String(params?.kind ?? "")} summary`,
+        "messages.conversationLightweightRowMeta": `Render weight ${String(params?.weight ?? "")}`,
+        "messages.conversationLightweightAssistantMessage": "Assistant message",
+        "messages.conversationLightweightUserMessage": "User message",
+        "messages.markdownHeavyBlockDeferred": "Heavy Markdown detail deferred",
+        "messages.markdownHeavyBlockMeta":
+          `${String(params?.kind ?? "")} · ${String(params?.lines ?? "")} lines`,
+        "messages.markdownHeavyBlockShow": "Show detail",
+        "messages.markdownHeavyBlockTable": "Table",
+        "messages.toolHeavyDetailDeferred": "Tool detail deferred",
+        "messages.toolHeavyDetailMeta":
+          `${String(params?.kind ?? "")} · ${String(params?.count ?? "")} items`,
+        "messages.toolHeavyDetailShow": "Show detail",
+        "messages.toolHeavyOutput": "Output",
+        "messages.toolHeavyDiff": "Diff",
         "messages.agentBadgeAriaLabel": "Agent badge",
         "messages.agentBadgeWithNameAriaLabel": `Show agent badge: ${String(params?.name ?? "")}`,
         "git.semanticDiff.intent.springExceptionHandler":
@@ -337,7 +374,7 @@ vi.mock("react-i18next", () => ({
         "settings.wechatBridgeRebindConfirm": "Clear the current WeChat login and show a new QR code?",
         "settings.wechatBridgeRebindSecretTitle": "Rebind key",
         "settings.wechatBridgeRebindSecretDescription":
-          "Set this key before binding. Rebinding WeChat requires it.",
+          "Set a local key before first pairing. Rebinding WeChat requires this key.",
         "settings.wechatBridgeRebindSecretInput": "Rebind key",
         "settings.wechatBridgeRebindSecretConfirmInput": "Confirm rebind key",
         "settings.wechatBridgeRebindSecretSave": "Save rebind key",
@@ -672,7 +709,7 @@ vi.mock("react-i18next", () => ({
         "settings.clientUiVisibility.panelDescriptions.topToolControls": "Workspace, runtime, terminal, focus, and right-panel shortcuts.",
         "settings.clientUiVisibility.panelDescriptions.rightActivityToolbar": "Right-side entries for activity, radar, Git, files, and search.",
         "settings.clientUiVisibility.panelDescriptions.bottomActivityPanel": "Docked task, agent, edit, and latest-message status panel.",
-        "settings.clientUiVisibility.panelDescriptions.cornerStatusIndicator": "Sticky user bubble and message anchor rail in the conversation canvas.",
+        "settings.clientUiVisibility.panelDescriptions.cornerStatusIndicator": "Context sources card and message anchor rail in the conversation canvas.",
         "settings.clientUiVisibility.panelDescriptions.globalRuntimeNoticeDock": "Global bottom-right runtime notice entry and expandable notice panel.",
         "settings.clientUiVisibility.controls.topRunStart": "Launch script buttons",
         "settings.clientUiVisibility.controls.topToolOpenWorkspace": "Open workspace app",
@@ -690,7 +727,6 @@ vi.mock("react-i18next", () => ({
         "settings.clientUiVisibility.controls.bottomActivityAgents": "Agents tab",
         "settings.clientUiVisibility.controls.bottomActivityCheckpoint": "Result tab",
         "settings.clientUiVisibility.controls.bottomActivityLatestConversation": "Latest conversation tab",
-        "settings.clientUiVisibility.controls.curtainStickyUserBubble": "Sticky user bubble",
         "settings.clientUiVisibility.controls.curtainContextLedger": "Context sources card",
         "settings.clientUiVisibility.controls.cornerStatusMessageAnchors": "Message anchors",
         "settings.clientUiVisibility.controlDescriptions.topRunStart": "Hides launch script run/edit buttons only.",
@@ -710,7 +746,6 @@ vi.mock("react-i18next", () => ({
         "settings.clientUiVisibility.controlDescriptions.bottomActivityCheckpoint":
           "Hides the result checkpoint tab.",
         "settings.clientUiVisibility.controlDescriptions.bottomActivityLatestConversation": "Hides the latest conversation tab.",
-        "settings.clientUiVisibility.controlDescriptions.curtainStickyUserBubble": "Hides the sticky user bubble at the top of the conversation canvas.",
         "settings.clientUiVisibility.controlDescriptions.curtainContextLedger": "Hides the context sources card above the composer without disabling ledger calculations.",
         "settings.clientUiVisibility.controlDescriptions.cornerStatusMessageAnchors": "Hides message anchor dots from the conversation canvas.",
         "settings.showRemainingLimitsDesc": "Display what is left instead of what is used.",

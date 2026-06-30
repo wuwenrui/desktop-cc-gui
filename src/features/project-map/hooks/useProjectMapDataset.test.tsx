@@ -60,6 +60,104 @@ describe("useProjectMapDataset", () => {
     vi.mocked(projectMemoryList).mockResolvedValue({ items: [], total: 0 });
   });
 
+  it("keeps disabled surfaces lightweight without storage reads or background scans", async () => {
+    const spring = workspace({
+      id: "ws-spring",
+      name: "springboot-demo",
+      path: "/repo/springboot-demo",
+    });
+    const springKey = deriveProjectMapStorageKey({
+      projectName: spring.name,
+      workspacePath: spring.path,
+      workspaceId: spring.id,
+    });
+
+    const { result } = renderHook(() =>
+      useProjectMapDataset(spring, { enabled: false }),
+    );
+
+    expect(result.current.status).toBe("empty");
+    expect(result.current.dataset.manifest.storageKey).toBe(springKey);
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(readProjectMapDataset).not.toHaveBeenCalled();
+    expect(projectMemoryList).not.toHaveBeenCalled();
+    expect(runProjectMapGenerationWorker).not.toHaveBeenCalled();
+  });
+
+  it("keeps the disabled cold-start empty dataset reference stable on reload", async () => {
+    const spring = workspace({
+      id: "ws-spring",
+      name: "springboot-demo",
+      path: "/repo/springboot-demo",
+    });
+
+    const { result } = renderHook(() =>
+      useProjectMapDataset(spring, { enabled: false }),
+    );
+    const coldStartDataset = result.current.dataset;
+
+    await act(async () => {
+      await result.current.reload();
+    });
+
+    expect(result.current.status).toBe("empty");
+    expect(result.current.dataset).toBe(coldStartDataset);
+    expect(readProjectMapDataset).not.toHaveBeenCalled();
+    expect(projectMemoryList).not.toHaveBeenCalled();
+    expect(runProjectMapGenerationWorker).not.toHaveBeenCalled();
+  });
+
+  it("loads the dataset when a previously disabled surface becomes active", async () => {
+    const spring = workspace({
+      id: "ws-spring",
+      name: "springboot-demo",
+      path: "/repo/springboot-demo",
+    });
+    const springKey = deriveProjectMapStorageKey({
+      projectName: spring.name,
+      workspacePath: spring.path,
+      workspaceId: spring.id,
+    });
+    vi.mocked(readProjectMapDataset).mockResolvedValue({
+      dataset: null,
+      response: emptyReadResponse(
+        springKey,
+        `/repo/springboot-demo/.ccgui/project-map/${springKey}`,
+      ),
+    });
+
+    const { result, rerender } = renderHook(
+      ({ enabled }: { enabled: boolean }) =>
+        useProjectMapDataset(spring, { enabled }),
+      { initialProps: { enabled: false } },
+    );
+
+    expect(result.current.status).toBe("empty");
+    expect(readProjectMapDataset).not.toHaveBeenCalled();
+
+    rerender({ enabled: true });
+
+    await waitFor(() => {
+      expect(readProjectMapDataset).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workspaceId: spring.id,
+          storageMode: "global",
+        }),
+      );
+    });
+    await waitFor(() => {
+      expect(result.current.status).toBe("empty");
+      expect(result.current.storageDir).toBe(
+        `/repo/springboot-demo/.ccgui/project-map/${springKey}`,
+      );
+    });
+  });
+
   it("clears the previous workspace storage key and ignores stale reads", async () => {
     const mossx = workspace({ id: "ws-mossx", name: "mossx", path: "/repo/mossx" });
     const spring = workspace({

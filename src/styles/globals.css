@@ -1,3 +1,14 @@
+/*
+ * Cascade layer order (declared before importing Tailwind so it wins as the
+ * first declaration). `app` sits below Tailwind's `utilities` but above
+ * `base`, which means:
+ *   - utility classes (Tailwind / shadcn) always override hand-written app CSS
+ *   - hand-written app CSS still overrides Tailwind's preflight base reset
+ * Hand-written stylesheets opt into this by wrapping their rules in
+ * `@layer app { ... }` (see buttons.css).
+ */
+@layer theme, base, components, app, utilities;
+
 @import "tailwindcss";
 @import "tw-animate-css";
 

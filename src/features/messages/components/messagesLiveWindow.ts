@@ -3,9 +3,20 @@ import type { GroupedEntry } from "../utils/groupToolItems";
 import { parseAgentTaskNotification } from "../utils/agentTaskNotification";
 import type { MessageConversationItem } from "./messageItemPredicates";
 import { resolveUserMessagePresentation } from "./messagesUserPresentation";
-import { normalizeHistoryStickyHeaderText } from "./messagesRenderUtils";
 
-export function resolveOrdinaryUserStickyText(
+export type MessagesHistoryExpansionMode = "manual" | "jump" | null;
+
+export type MessagesPresentationMode =
+  | "realtime-collapsed-tail"
+  | "realtime-expanded-history-jump"
+  | "realtime-expanded-history-manual"
+  | "realtime-full-tail"
+  | "static-collapsed-history"
+  | "static-expanded-history-jump"
+  | "static-expanded-history-manual"
+  | "static-full-history";
+
+function resolveOrdinaryUserQuestionText(
   item: MessageConversationItem,
   enableCollaborationBadge: boolean,
 ) {
@@ -26,7 +37,7 @@ export function isOrdinaryUserQuestionItem(
   }
   return (
     !parseAgentTaskNotification(item.text) &&
-    resolveOrdinaryUserStickyText(item, enableCollaborationBadge).length > 0
+    resolveOrdinaryUserQuestionText(item, enableCollaborationBadge).length > 0
   );
 }
 
@@ -64,7 +75,7 @@ export function collapseExpandedExploreItems(
   return changed ? nextExpandedItemIds : expandedItemIds;
 }
 
-export function findLatestOrdinaryUserQuestionId(
+function findLatestOrdinaryUserQuestionIndex(
   items: ConversationItem[],
   options?: { enableCollaborationBadge?: boolean },
 ) {
@@ -72,10 +83,18 @@ export function findLatestOrdinaryUserQuestionId(
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = items[index];
     if (isOrdinaryUserQuestionItem(item, enableCollaborationBadge)) {
-      return item.id;
+      return index;
     }
   }
-  return null;
+  return -1;
+}
+
+export function findLatestOrdinaryUserQuestionId(
+  items: ConversationItem[],
+  options?: { enableCollaborationBadge?: boolean },
+) {
+  const latestUserIndex = findLatestOrdinaryUserQuestionIndex(items, options);
+  return latestUserIndex >= 0 ? items[latestUserIndex]?.id ?? null : null;
 }
 
 export function buildHistoryStickyCandidates(
@@ -87,8 +106,9 @@ export function buildHistoryStickyCandidates(
     if (!isOrdinaryUserQuestionItem(item, enableCollaborationBadge)) {
       continue;
     }
-    const text = normalizeHistoryStickyHeaderText(
-      resolveOrdinaryUserStickyText(item, enableCollaborationBadge),
+    const text = resolveOrdinaryUserQuestionText(
+      item,
+      enableCollaborationBadge,
     );
     if (!text) {
       continue;
@@ -110,38 +130,14 @@ export function resolveActiveStickyHeaderCandidate(
   if (!activeStickyMessageId) {
     return null;
   }
-  const stableCandidate = candidates.find((candidate) => candidate.id === activeStickyMessageId);
-  if (!stableCandidate) {
-    return null;
-  }
   const liveItem = liveItems.find((item) => item.id === activeStickyMessageId);
-  if (!isOrdinaryUserQuestionItem(liveItem, enableCollaborationBadge)) {
-    return stableCandidate;
+  if (isOrdinaryUserQuestionItem(liveItem, enableCollaborationBadge)) {
+    return {
+      id: liveItem.id,
+      text: resolveOrdinaryUserQuestionText(liveItem, enableCollaborationBadge),
+    };
   }
-  const liveText = normalizeHistoryStickyHeaderText(
-    resolveOrdinaryUserStickyText(liveItem, enableCollaborationBadge),
-  );
-  if (!liveText || liveText === stableCandidate.text) {
-    return stableCandidate;
-  }
-  return {
-    id: stableCandidate.id,
-    text: liveText,
-  };
-}
-
-function findLatestOrdinaryUserQuestionIndex(
-  items: ConversationItem[],
-  options?: { enableCollaborationBadge?: boolean },
-) {
-  const enableCollaborationBadge = options?.enableCollaborationBadge ?? false;
-  for (let index = items.length - 1; index >= 0; index -= 1) {
-    const item = items[index];
-    if (isOrdinaryUserQuestionItem(item, enableCollaborationBadge)) {
-      return index;
-    }
-  }
-  return -1;
+  return candidates.find((candidate) => candidate.id === activeStickyMessageId) ?? null;
 }
 
 export function suppressCompletedExploreItemsBetweenLatestUserTurns(
@@ -178,35 +174,72 @@ export function suppressCompletedExploreItemsBetweenLatestUserTurns(
 export function buildRenderedItemsWindow(
   timelineItems: ConversationItem[],
   collapsedHistoryItemCount: number,
-  stickyUserMessageId: string | null,
+  preservedUserMessageId: string | null,
 ) {
   const windowedItems =
     collapsedHistoryItemCount > 0
       ? timelineItems.slice(collapsedHistoryItemCount)
       : timelineItems;
-  if (!stickyUserMessageId || collapsedHistoryItemCount === 0) {
+  if (!preservedUserMessageId || collapsedHistoryItemCount === 0) {
     return {
       renderedItems: windowedItems,
       visibleCollapsedHistoryItemCount: collapsedHistoryItemCount,
     };
   }
-  if (windowedItems.some((item) => item.id === stickyUserMessageId)) {
+  if (windowedItems.some((item) => item.id === preservedUserMessageId)) {
     return {
       renderedItems: windowedItems,
       visibleCollapsedHistoryItemCount: collapsedHistoryItemCount,
     };
   }
-  const stickyUserMessage = timelineItems.find((item) => item.id === stickyUserMessageId);
-  if (!stickyUserMessage) {
+  const preservedUserMessage = timelineItems.find(
+    (item) => item.id === preservedUserMessageId,
+  );
+  if (!preservedUserMessage) {
     return {
       renderedItems: windowedItems,
       visibleCollapsedHistoryItemCount: collapsedHistoryItemCount,
     };
   }
   return {
-    renderedItems: [stickyUserMessage, ...windowedItems],
+    renderedItems: [preservedUserMessage, ...windowedItems],
     visibleCollapsedHistoryItemCount: Math.max(0, collapsedHistoryItemCount - 1),
   };
+}
+
+export function resolveMessagesPresentationMode(input: {
+  historyExpansionMode: MessagesHistoryExpansionMode;
+  isWorking: boolean;
+  showAllHistoryItems: boolean;
+  visibleCollapsedHistoryItemCount: number;
+}): MessagesPresentationMode {
+  const runtimePrefix = input.isWorking ? "realtime" : "static";
+  if (input.showAllHistoryItems) {
+    const expansionMode = input.historyExpansionMode === "jump" ? "jump" : "manual";
+    return `${runtimePrefix}-expanded-history-${expansionMode}` as MessagesPresentationMode;
+  }
+  if (input.visibleCollapsedHistoryItemCount > 0) {
+    return input.isWorking ? "realtime-collapsed-tail" : "static-collapsed-history";
+  }
+  return input.isWorking ? "realtime-full-tail" : "static-full-history";
+}
+
+export function buildMessagesPresentationScopeKey(input: {
+  collapsedHistoryItemCount: number;
+  itemCount: number;
+  firstItemId: string | null;
+  lastItemId: string | null;
+  mode: MessagesPresentationMode;
+  scopeKey: string;
+}) {
+  return [
+    input.scopeKey,
+    input.mode,
+    input.collapsedHistoryItemCount,
+    input.itemCount,
+    input.firstItemId ?? "",
+    input.lastItemId ?? "",
+  ].join("\u0000");
 }
 
 export function resolveStreamingPresentationItems(
@@ -356,6 +389,7 @@ export function buildLiveTailWorkingSet(
     return {
       items,
       omittedBeforeWorkingSetCount: 0,
+      preservedUserMessageId: null,
       stickyUserMessageId: null,
     };
   }
@@ -365,6 +399,9 @@ export function buildLiveTailWorkingSet(
     return {
       items,
       omittedBeforeWorkingSetCount: 0,
+      preservedUserMessageId: findLatestOrdinaryUserQuestionId(items, {
+        enableCollaborationBadge: options.enableCollaborationBadge,
+      }),
       stickyUserMessageId: findLatestOrdinaryUserQuestionId(items, {
         enableCollaborationBadge: options.enableCollaborationBadge,
       }),
@@ -373,30 +410,33 @@ export function buildLiveTailWorkingSet(
 
   const tailStartIndex = Math.max(0, items.length - maxWorkingSetItems);
   const tailItems = items.slice(tailStartIndex);
-  const stickyUserMessageId = findLatestOrdinaryUserQuestionId(items, {
+  const preservedUserMessageId = findLatestOrdinaryUserQuestionId(items, {
     enableCollaborationBadge: options.enableCollaborationBadge,
   });
-  if (!stickyUserMessageId || tailItems.some((item) => item.id === stickyUserMessageId)) {
+  if (!preservedUserMessageId || tailItems.some((item) => item.id === preservedUserMessageId)) {
     return {
       items: tailItems,
       omittedBeforeWorkingSetCount: tailStartIndex,
-      stickyUserMessageId,
+      preservedUserMessageId,
+      stickyUserMessageId: preservedUserMessageId,
     };
   }
 
-  const stickyUserMessageIndex = items.findIndex((item) => item.id === stickyUserMessageId);
-  const stickyUserMessage = items[stickyUserMessageIndex];
-  if (!stickyUserMessage || stickyUserMessageIndex >= tailStartIndex) {
+  const preservedUserMessageIndex = items.findIndex((item) => item.id === preservedUserMessageId);
+  const preservedUserMessage = items[preservedUserMessageIndex];
+  if (!preservedUserMessage || preservedUserMessageIndex >= tailStartIndex) {
     return {
       items: tailItems,
       omittedBeforeWorkingSetCount: tailStartIndex,
-      stickyUserMessageId,
+      preservedUserMessageId,
+      stickyUserMessageId: preservedUserMessageId,
     };
   }
 
   return {
-    items: [stickyUserMessage, ...tailItems],
+    items: [preservedUserMessage, ...tailItems],
     omittedBeforeWorkingSetCount: Math.max(0, tailStartIndex - 1),
-    stickyUserMessageId,
+    preservedUserMessageId,
+    stickyUserMessageId: preservedUserMessageId,
   };
 }

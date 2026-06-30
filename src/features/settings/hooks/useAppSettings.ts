@@ -55,6 +55,11 @@ const ALLOWED_NOTIFICATION_SOUND_IDS = new Set([
 ]);
 const allowedEmailSenderProviders = new Set(["126", "163", "qq", "custom"]);
 const allowedEmailSenderSecurity = new Set(["ssl_tls", "start_tls", "none"]);
+const DEFAULT_ENABLED_CURATED_SKILL_IDS = ["lazy-senior-dev"];
+
+function defaultEnabledCuratedSkillIds(): string[] {
+  return [...DEFAULT_ENABLED_CURATED_SKILL_IDS];
+}
 
 function readLegacyUserMsgColor(): string {
   if (typeof window === "undefined") {
@@ -136,6 +141,35 @@ function normalizeCustomSkillDirectories(value: unknown): string[] {
   return directories;
 }
 
+function normalizeEnabledCuratedSkillIds(value: unknown): string[] {
+  if (value === undefined) {
+    return defaultEnabledCuratedSkillIds();
+  }
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const seen = new Set<string>();
+  const ids: string[] = [];
+  for (const item of value) {
+    if (typeof item !== "string") {
+      continue;
+    }
+    const normalized = item.trim();
+    if (
+      !normalized ||
+      normalized.startsWith("-") ||
+      normalized.endsWith("-") ||
+      !/^[a-z0-9-]+$/.test(normalized) ||
+      seen.has(normalized)
+    ) {
+      continue;
+    }
+    seen.add(normalized);
+    ids.push(normalized);
+  }
+  return ids;
+}
+
 const defaultSettings: AppSettings = {
   claudeBin: null,
   codexBin: null,
@@ -197,6 +231,7 @@ const defaultSettings: AppSettings = {
   darkThemePresetId: "vscode-dark-modern",
   customThemePresetId: "vscode-dark-modern",
   customSkillDirectories: [],
+  enabledCuratedSkillIds: defaultEnabledCuratedSkillIds(),
   canvasWidthMode: "narrow",
   layoutMode: "default",
   userMsgColor: "",
@@ -345,6 +380,9 @@ function normalizeAppSettings(
     customThemePresetId: sanitizeThemePresetId(settings.customThemePresetId),
     customSkillDirectories: normalizeCustomSkillDirectories(
       settings.customSkillDirectories,
+    ),
+    enabledCuratedSkillIds: normalizeEnabledCuratedSkillIds(
+      settings.enabledCuratedSkillIds,
     ),
     canvasWidthMode: allowedCanvasWidthModes.has(settings.canvasWidthMode)
       ? settings.canvasWidthMode

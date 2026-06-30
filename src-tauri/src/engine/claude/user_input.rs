@@ -211,8 +211,13 @@ impl ClaudeSession {
         }
         let use_stream_json_input = Self::should_use_stream_json_input(&resume_params);
 
-        let mut cmd =
-            self.build_command(&resume_params, use_stream_json_input, include_hook_events);
+        let mut cmd = self.build_command(
+            &resume_params,
+            use_stream_json_input,
+            include_hook_events,
+            None,
+            None,
+        );
         Self::configure_spawn_command(&mut cmd);
         match cmd.spawn() {
             Ok(mut new_child) => {
@@ -581,8 +586,13 @@ impl ClaudeSession {
         }
         let use_stream_json_input = Self::should_use_stream_json_input(&resume_params);
 
-        let mut cmd =
-            self.build_command(&resume_params, use_stream_json_input, include_hook_events);
+        let mut cmd = self.build_command(
+            &resume_params,
+            use_stream_json_input,
+            include_hook_events,
+            None,
+            None,
+        );
         Self::configure_spawn_command(&mut cmd);
         match cmd.spawn() {
             Ok(mut new_child) => {

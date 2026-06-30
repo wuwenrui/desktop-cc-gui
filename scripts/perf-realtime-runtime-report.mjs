@@ -16,6 +16,10 @@ function getArgValue(name) {
   return process.argv.find((arg) => arg.startsWith(prefix))?.slice(prefix.length) ?? null;
 }
 
+function hasArg(name) {
+  return process.argv.includes(name);
+}
+
 function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -533,9 +537,64 @@ async function writeJson(path, value) {
   await writeFile(absolutePath, `${JSON.stringify(value, null, 2)}\n`, "utf-8");
 }
 
+async function collectStreamPacingMetrics() {
+  // 2026-06-24-harden-realtime-interaction-jank-during-tool-call
+  // Reads docs/perf/v0.5.13-baseline.json (preferred) or v0511-runtime-evidence.json
+  // (fallback) and surfaces 3 new capability metrics. Returns [] when neither
+  // file is present so the script remains useful without the new feature.
+  const candidates = [
+    "docs/perf/v0.5.13-baseline.json",
+    "docs/perf/v0511-runtime-evidence.json",
+  ];
+  let parsed = null;
+  let source = null;
+  for (const candidate of candidates) {
+    const absolute = resolve(process.cwd(), candidate);
+    if (!existsSync(absolute)) continue;
+    try {
+      parsed = JSON.parse(await readFile(absolute, "utf-8"));
+      source = candidate;
+      break;
+    } catch {
+      continue;
+    }
+  }
+  if (!parsed) return [];
+  const metrics = Array.isArray(parsed.metrics) ? parsed.metrics : [];
+  const findMetric = (key) => metrics.find((m) => m.metric === key) ?? null;
+  const make = (record, capabilityId, scenario) => {
+    if (!record) return null;
+    return {
+      scenario: record.scenario ?? scenario,
+      metric: record.metric,
+      capabilityId,
+      value: record.value,
+      unit: record.unit,
+      evidenceClass: record.evidenceClass ?? "proxy",
+      notes: record.notes ?? null,
+      source: `realtime-runtime-report:stream-pacing:${source}`,
+    };
+  };
+  const out = [];
+  for (const m of [
+    make(findMetric("app_server_event_dropped_snapshot_count"), "app-server-event-stream-pacing", "S-IO-AS"),
+    make(findMetric("app_server_event_payload_bytes_per_flush_p95"), "app-server-event-stream-pacing", "S-BATCH-BYTES"),
+    make(findMetric("main_thread_long_task_count_during_stream"), "streaming-schedule-tier-rollback", "S-RS-SP"),
+    make(findMetric("app_server_event_idle_yield_count"), "streaming-schedule-tier-rollback", "S-RS-SP"),
+    make(findMetric("realtime_reducer_dispatches_per_active_turn_per_sec"), "streaming-schedule-tier-rollback", "S-RSC-TIER"),
+    make(findMetric("toolOutputTailGateSaturated"), "tool-output-tail-gate", "S-TAIL-GATE"),
+    make(findMetric("appendAgentMessageDelta_first_token_p95"), "streaming-schedule-tier-rollback", "S-RSC-TIER"),
+    make(findMetric("snapshot_throttle_count"), "streaming-schedule-tier-rollback", "S-RSC-TIER"),
+  ]) {
+    if (m) out.push(m);
+  }
+  return out;
+}
+
 async function main() {
   const inputPath = getArgValue("--input") ?? DEFAULT_INPUT_PATH;
   const outputPath = getArgValue("--output") ?? DEFAULT_OUTPUT_PATH;
+  const includeStreamPacing = hasArg("--include-stream-pacing");
   let input = null;
   if (existsSync(resolve(process.cwd(), inputPath))) {
     input = JSON.parse(await readFile(resolve(process.cwd(), inputPath), "utf-8"));
@@ -544,9 +603,32 @@ async function main() {
   const summaries = collectMeasuredSummaries(entries);
   const ackDiagnostics = collectCodexTurnStartAckDiagnostics(entries);
   const codexTimingDiagnostics = collectCodexAppServerTimingDiagnostics(entries);
-  await writeJson(outputPath, buildFragment(summaries, ackDiagnostics, codexTimingDiagnostics, inputPath));
+  const streamPacingMetrics = includeStreamPacing
+    ? await collectStreamPacingMetrics()
+    : [];
+  const fragment = buildFragment(
+    summaries,
+    ackDiagnostics,
+    codexTimingDiagnostics,
+    inputPath,
+  );
+  if (includeStreamPacing) {
+    fragment.streamPacingMetrics = streamPacingMetrics;
+    fragment.streamPacingCapabilityIds = [
+      "app-server-event-stream-pacing",
+      "streaming-schedule-tier-rollback",
+      "tool-output-tail-gate",
+    ];
+  }
+  await writeJson(outputPath, fragment);
+  if (process.argv.includes("--json")) {
+    process.stdout.write(`${JSON.stringify(fragment, null, 2)}\n`);
+  }
   if (process.argv.includes("--verbose")) {
     console.info(`realtime runtime measured summaries: ${summaries.length}`);
+    if (includeStreamPacing) {
+      console.info(`stream-pacing metrics: ${streamPacingMetrics.length}`);
+    }
   }
 }
 

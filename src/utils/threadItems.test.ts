@@ -1447,6 +1447,55 @@ go lang`,
     }
   });
 
+  it("converts successful shell heredoc writes to fileChange", () => {
+    const item = buildConversationItem({
+      type: "commandExecution",
+      id: "cmd-heredoc-write-1",
+      cmd:
+        "cat > /Users/demo/repo/src/main/java/com/example/demo/logging/LogEvent.java <<'EOF'\n" +
+        "package com.example.demo.logging;\n" +
+        "public enum LogEvent { CREATED }\n" +
+        "EOF\n" +
+        "echo wrote LogEvent.java",
+      status: "completed",
+      aggregatedOutput: "wrote LogEvent.java",
+    });
+
+    expect(item).not.toBeNull();
+    if (item && item.kind === "tool") {
+      expect(item.toolType).toBe("fileChange");
+      expect(item.title).toBe("File changes");
+      expect(item.detail).toContain(
+        "/Users/demo/repo/src/main/java/com/example/demo/logging/LogEvent.java",
+      );
+      expect(item.changes).toEqual([
+        expect.objectContaining({
+          path: "/Users/demo/repo/src/main/java/com/example/demo/logging/LogEvent.java",
+          kind: "add",
+        }),
+      ]);
+    }
+  });
+
+  it("keeps output capture commandExecution out of fileChange cards", () => {
+    const item = buildConversationItem({
+      type: "commandExecution",
+      id: "cmd-output-capture-1",
+      cmd:
+        "claude --help > claude_help.txt 2>&1; " +
+        'grep -E "--append-system-prompt-file" claude_help.txt',
+      status: "completed",
+      aggregatedOutput: "--append-system-prompt-file <FILE>",
+    });
+
+    expect(item).not.toBeNull();
+    if (item && item.kind === "tool") {
+      expect(item.toolType).toBe("commandExecution");
+      expect(item.title).toContain("claude --help");
+      expect(item.changes).toBeUndefined();
+    }
+  });
+
   it("converts apply_patch commandExecution when status is missing but output has success marker", () => {
     const item = buildConversationItem({
       type: "commandExecution",

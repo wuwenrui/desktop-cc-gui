@@ -1,10 +1,8 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import Check from "lucide-react/dist/esm/icons/check";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import ChevronUp from "lucide-react/dist/esm/icons/chevron-up";
-import Copy from "lucide-react/dist/esm/icons/copy";
 import Terminal from "lucide-react/dist/esm/icons/terminal";
 import { AgentIcon } from "../../../components/AgentIcon";
 import { hydrateClaudeDeferredImage } from "../../../services/tauri";
@@ -119,11 +117,12 @@ type MessageRowProps = {
   ) => Promise<RuntimeReconnectRecoveryCallbackResult> | RuntimeReconnectRecoveryCallbackResult;
   onThreadRecoveryFork?: () => Promise<void> | void;
   retryMessage?: Pick<QueuedMessage, "text" | "images"> | null;
-  isCopied: boolean;
-  onCopy: (
+  isCopied?: boolean;
+  onCopy?: (
     item: Extract<ConversationItem, { kind: "message" }>,
     copyText?: string,
   ) => void;
+  userActionNode?: ReactNode;
   codeBlockCopyUseModifier?: boolean;
   onOpenFileLink?: (path: string) => void;
   onOpenFileLinkMenu?: (event: React.MouseEvent, path: string) => void;
@@ -334,6 +333,7 @@ function areMessageRowPropsEqual(
     previous.enableCollaborationBadge === next.enableCollaborationBadge &&
     previous.presentationProfile === next.presentationProfile &&
     previous.showRuntimeReconnectCard === next.showRuntimeReconnectCard &&
+    previous.userActionNode === next.userActionNode &&
     (
       !compareRuntimeReconnectProps ||
       (
@@ -344,8 +344,6 @@ function areMessageRowPropsEqual(
         areMessageImagesEqual(previous.retryMessage?.images, next.retryMessage?.images)
       )
     ) &&
-    previous.isCopied === next.isCopied &&
-    previous.onCopy === next.onCopy &&
     previous.codeBlockCopyUseModifier === next.codeBlockCopyUseModifier &&
     previous.onOpenFileLink === next.onOpenFileLink &&
     previous.onOpenFileLinkMenu === next.onOpenFileLinkMenu &&
@@ -687,8 +685,7 @@ export const MessageRow = memo(function MessageRow({
   onRecoverThreadRuntimeAndResend,
   onThreadRecoveryFork,
   retryMessage = null,
-  isCopied,
-  onCopy,
+  userActionNode = null,
   codeBlockCopyUseModifier,
   onOpenFileLink,
   onOpenFileLinkMenu,
@@ -1009,18 +1006,6 @@ export const MessageRow = memo(function MessageRow({
     });
     deferredImageObjectUrlsRef.current.clear();
   }, [revokeTrackedDeferredImageState]);
-  const hideCopyButton = (
-    !hasText
-    && imageItems.length === 0
-    && deferredImageItems.length === 0
-  ) || (
-    item.role === "assistant"
-    && (Boolean(resolvedMemorySummary) || Boolean(resolvedNoteCardSummary))
-    && !hasText
-    && imageItems.length === 0
-    && deferredImageItems.length === 0
-  );
-  const shouldRenderMessageActions = !hideCopyButton && item.role !== "assistant";
   const useCodexCanvasMarkdown = presentationProfile
     ? presentationProfile.codexCanvasMarkdown
     : activeEngine === "codex";
@@ -1213,6 +1198,9 @@ export const MessageRow = memo(function MessageRow({
     Boolean(runtimeReconnectHint) &&
     showRuntimeReconnectCard;
   const suppressRuntimeReconnectText = Boolean(runtimeReconnectHint);
+  if (runtimeReconnectHint && !showActiveRuntimeReconnectCard) {
+    return null;
+  }
 
   const bubbleNode = (
     <div className={`bubble message-bubble${agentTaskNotification ? " message-bubble-agent-task" : ""}`}>
@@ -1375,31 +1363,13 @@ export const MessageRow = memo(function MessageRow({
       {/* FanBox 来源摘要块：仅 assistant；无 tool-call 信号时组件自身返回 null
           （OpenSpec: add-fanbox-dialogue-cockpit）。流式中的不完整块由 derive 跳过。 */}
       {item.role === "assistant" ? <TurnSourceSummary text={item.text} /> : null}
+      {item.role === "user" && !agentTaskNotification ? userActionNode : null}
       {lightboxIndex !== null && imageItems.length > 0 && (
         <ImageLightbox
           images={imageItems}
           activeIndex={lightboxIndex}
           onClose={() => setLightboxIndex(null)}
         />
-      )}
-      {shouldRenderMessageActions && (
-        <div
-          className="message-action-bar message-action-bar-overlay"
-          aria-label={t("messages.messageActions")}
-        >
-          <button
-            type="button"
-            className={`ghost message-action-button message-copy-button${isCopied ? " is-copied" : ""}`}
-            onClick={() => onCopy(item, displayText || item.text)}
-            aria-label={t("messages.copyMessage")}
-            title={t("messages.copyMessage")}
-          >
-            <span className="message-copy-icon" aria-hidden>
-              <Copy className="message-copy-icon-copy" size={12} />
-              <Check className="message-copy-icon-check" size={12} />
-            </span>
-          </button>
-        </div>
       )}
     </div>
   );
@@ -1435,8 +1405,7 @@ export const MessageRow = memo(function MessageRow({
     || imageItems.length > 0
     || deferredImageItems.length > 0
     || showActiveRuntimeReconnectCard
-    || (hasText && !suppressRuntimeReconnectText)
-    || shouldRenderMessageActions;
+    || (hasText && !suppressRuntimeReconnectText);
   const memoryPayloadDialogNode =
     memoryPayloadDialogOpen && memorySummaryRawPayload && typeof document !== "undefined"
       ? createPortal(

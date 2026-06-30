@@ -1682,12 +1682,23 @@ pub async fn engine_send_message(
             let turn_id_clone = turn_id.clone();
             let runtime_manager_for_sender = state.runtime_manager.clone();
             let workspace_entry_for_sender = workspace_entry.clone();
+            let app_settings_snapshot = state.app_settings.lock().await.clone();
             tokio::spawn(async move {
                 let send_result = if has_images {
-                    session_clone.send_message(params, &turn_id_clone).await
+                    session_clone
+                        .send_message_with_app_settings(
+                            params,
+                            &turn_id_clone,
+                            Some(&app_settings_snapshot),
+                        )
+                        .await
                 } else {
                     session_clone
-                        .send_message_with_auto_compact_retry(params, &turn_id_clone)
+                        .send_message_with_app_settings(
+                            params,
+                            &turn_id_clone,
+                            Some(&app_settings_snapshot),
+                        )
                         .await
                 };
                 if let Err(e) = send_result {

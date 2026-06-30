@@ -10,6 +10,20 @@ const DELETE_ARCHIVE_TIMEOUT_MS: u64 = 2_000;
 const LIST_THREADS_LIVE_TIMEOUT_MS: u64 = 1_500;
 const CLAUDE_POST_COMPLETION_USAGE_GRACE_MS: u64 = 35_000;
 
+#[cfg(windows)]
+fn codex_windows_turn_developer_instructions(
+    settings: &crate::types::AppSettings,
+) -> Option<String> {
+    crate::backend::app_server_cli::codex_generated_developer_instructions_for_turn(settings)
+}
+
+#[cfg(not(windows))]
+fn codex_windows_turn_developer_instructions(
+    _settings: &crate::types::AppSettings,
+) -> Option<String> {
+    None
+}
+
 fn normalize_daemon_disk_provider_profile(
     provider_profile_id: Option<String>,
 ) -> Result<Option<String>, String> {
@@ -26,6 +40,61 @@ fn normalize_daemon_disk_provider_profile(
         "Codex provider-scoped runtime is unavailable in daemon mode for provider {provider_profile_id}; use desktop runtime or select disk .codex provider."
     ))
 }
+
+async fn run_daemon_disk_start_thread_with_readiness<
+    FEnsure,
+    FEnsureFuture,
+    FStart,
+    FStartFuture,
+    FConfirm,
+    FConfirmFuture,
+>(
+    workspace_id: &str,
+    mut ensure_runtime: FEnsure,
+    mut start_thread: FStart,
+    mut confirm_thread_ready: FConfirm,
+) -> Result<Value, String>
+where
+    FEnsure: FnMut() -> FEnsureFuture,
+    FEnsureFuture: std::future::Future<Output = Result<(), String>>,
+    FStart: FnMut() -> FStartFuture,
+    FStartFuture: std::future::Future<Output = Result<Value, String>>,
+    FConfirm: FnMut(String) -> FConfirmFuture,
+    FConfirmFuture: std::future::Future<Output = Result<(), String>>,
+{
+    ensure_runtime().await?;
+    let first_attempt = start_thread().await;
+    let response = match first_attempt {
+        Ok(response) => Ok(response),
+        Err(error) if is_stopping_runtime_race_error(&error) => {
+            log::warn!(
+                "[daemon.start_thread] retrying after stopping runtime race for workspace {}: {}",
+                workspace_id,
+                error
+            );
+            ensure_runtime().await?;
+            match start_thread().await {
+                Ok(response) => Ok(response),
+                Err(retry_error) if is_stopping_runtime_race_error(&retry_error) => {
+                    log::warn!(
+                        "[daemon.start_thread] stopping runtime race retry exhausted for workspace {}: {}",
+                        workspace_id,
+                        retry_error
+                    );
+                    Err(create_session_runtime_recovering_error())
+                }
+                Err(retry_error) => Err(retry_error),
+            }
+        }
+        Err(error) => Err(error),
+    }?;
+
+    if let Some(thread_id) = codex_core::extract_thread_id_from_response(&response) {
+        confirm_thread_ready(thread_id).await?;
+    }
+    Ok(response)
+}
+
 mod codex_local_threads;
 use codex_local_threads::{
     build_codex_daemon_empty_thread_response, build_codex_daemon_local_thread_response,
@@ -1120,12 +1189,23 @@ impl DaemonState {
 
                 let session_clone = session.clone();
                 let turn_id_clone = turn_id.clone();
+                let settings_for_send = settings.clone();
                 tokio::spawn(async move {
                     let send_result = if has_images {
-                        session_clone.send_message(params, &turn_id_clone).await
+                        session_clone
+                            .send_message_with_app_settings(
+                                params,
+                                &turn_id_clone,
+                                Some(&settings_for_send),
+                            )
+                            .await
                     } else {
                         session_clone
-                            .send_message_with_auto_compact_retry(params, &turn_id_clone)
+                            .send_message_with_auto_compact_retry_with_app_settings(
+                                params,
+                                &turn_id_clone,
+                                Some(&settings_for_send),
+                            )
                             .await
                     };
                     if let Err(error) = send_result {
@@ -1541,6 +1621,9 @@ impl DaemonState {
         let active_engine = self.get_active_engine().await;
         let effective_engine = engine.unwrap_or(active_engine);
         let normalized_custom_spec_root = normalize_custom_spec_root(custom_spec_root);
+        // Snapshot AppSettings so engine send paths can apply the current
+        // curated-skill transport policy without reading settings mid-turn.
+        let settings = self.app_settings.lock().await.clone();
 
         match effective_engine {
             engine::EngineType::Codex => Err(
@@ -1605,10 +1688,16 @@ impl DaemonState {
                 let turn_id = format!("claude-sync-{}", uuid::Uuid::new_v4());
                 let response = tokio::time::timeout(std::time::Duration::from_secs(900), async {
                     if has_images {
-                        session.send_message(params, &turn_id).await
+                        session
+                            .send_message_with_app_settings(params, &turn_id, Some(&settings))
+                            .await
                     } else {
                         session
-                            .send_message_with_auto_compact_retry(params, &turn_id)
+                            .send_message_with_auto_compact_retry_with_app_settings(
+                                params,
+                                &turn_id,
+                                Some(&settings),
+                            )
                             .await
                     }
                 })
@@ -1890,42 +1979,20 @@ impl DaemonState {
         provider_profile_id: Option<String>,
     ) -> Result<Value, String> {
         let _provider_profile_id = normalize_daemon_disk_provider_profile(provider_profile_id)?;
-        self.ensure_codex_session_for_workspace(&workspace_id)
-            .await?;
-        let first_attempt =
-            codex_core::start_thread_core(&self.sessions, workspace_id.clone(), None, None).await;
-        let response = match first_attempt {
-            Ok(response) => Ok(response),
-            Err(error) if is_stopping_runtime_race_error(&error) => {
-                log::warn!(
-                    "[daemon.start_thread] retrying after stopping runtime race for workspace {}: {}",
-                    workspace_id,
-                    error
-                );
-                self.ensure_codex_session_for_workspace(&workspace_id)
-                    .await?;
-                match codex_core::start_thread_core(
+        let response = run_daemon_disk_start_thread_with_readiness(
+            &workspace_id,
+            || self.ensure_codex_session_for_workspace(&workspace_id),
+            || codex_core::start_thread_core(&self.sessions, workspace_id.clone(), None, None),
+            |thread_id| {
+                codex_core::confirm_thread_ready_after_start_core(
                     &self.sessions,
                     workspace_id.clone(),
                     None,
-                    None,
+                    thread_id,
                 )
-                .await
-                {
-                    Ok(response) => Ok(response),
-                    Err(retry_error) if is_stopping_runtime_race_error(&retry_error) => {
-                        log::warn!(
-                            "[daemon.start_thread] stopping runtime race retry exhausted for workspace {}: {}",
-                            workspace_id,
-                            retry_error
-                        );
-                        Err(create_session_runtime_recovering_error())
-                    }
-                    Err(retry_error) => Err(retry_error),
-                }
-            }
-            Err(error) => Err(error),
-        }?;
+            },
+        )
+        .await?;
         let thread_id = codex_core::extract_thread_id_from_response(&response);
         self.record_auto_session_metadata_if_present(
             &workspace_id,
@@ -2488,9 +2555,12 @@ impl DaemonState {
     ) -> Result<Value, String> {
         self.ensure_codex_session_for_workspace(&workspace_id)
             .await?;
-        let mode_enforcement_enabled = {
+        let (mode_enforcement_enabled, extra_developer_instructions) = {
             let settings = self.app_settings.lock().await;
-            settings.codex_mode_enforcement_enabled
+            (
+                settings.codex_mode_enforcement_enabled,
+                codex_windows_turn_developer_instructions(&settings),
+            )
         };
         codex_core::send_user_message_core(
             &self.sessions,
@@ -2506,6 +2576,7 @@ impl DaemonState {
             preferred_language,
             custom_spec_root,
             mode_enforcement_enabled,
+            extra_developer_instructions,
         )
         .await
     }
@@ -2636,26 +2707,21 @@ impl DaemonState {
         custom_skill_roots: Vec<String>,
     ) -> Result<Value, String> {
         let workspaces = self.workspaces.lock().await;
-        match skills::skills_list_local_core(
+        let app_settings_snapshot = self.app_settings.lock().await.clone();
+        match skills::skills_list_local_core_with_settings(
             &self.settings_path,
             &workspaces,
             &workspace_id,
             custom_skill_roots.clone(),
+            Some(&app_settings_snapshot),
+            None,
         )
         .await
         {
             Ok(entries) => {
                 let skills_json: Vec<Value> = entries
                     .into_iter()
-                    .map(|entry| {
-                        json!({
-                            "name": entry.name,
-                            "path": entry.path,
-                            "source": entry.source,
-                            "description": entry.description,
-                            "enabled": true,
-                        })
-                    })
+                    .map(skills::skill_entry_to_json)
                     .collect();
                 Ok(json!(skills_json))
             }
@@ -2889,63 +2955,4 @@ impl DaemonState {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn codex_summary(session_id: &str, timestamp: i64) -> crate::types::LocalUsageSessionSummary {
-        crate::types::LocalUsageSessionSummary {
-            session_id: session_id.to_string(),
-            timestamp,
-            cwd: Some("/repo".to_string()),
-            model: "gpt-5".to_string(),
-            summary: Some(format!("Session {session_id}")),
-            ..Default::default()
-        }
-    }
-
-    #[test]
-    fn daemon_codex_local_thread_response_marks_live_unavailable() {
-        let sessions = vec![codex_summary("s1", 20), codex_summary("s2", 10)];
-        let response = build_codex_daemon_local_thread_response(
-            "/repo",
-            sessions,
-            None,
-            Some(1),
-            &HashMap::new(),
-        );
-        let result = response.get("result").and_then(Value::as_object).unwrap();
-        let data = result.get("data").and_then(Value::as_array).unwrap();
-
-        assert_eq!(
-            result.get("partialSource").and_then(Value::as_str),
-            Some(CODEX_DAEMON_LOCAL_THREAD_LIST_PARTIAL_SOURCE)
-        );
-        assert_eq!(data.len(), 1);
-        assert_eq!(data[0].get("id").and_then(Value::as_str), Some("s1"));
-        assert_eq!(
-            data[0].get("partialSource").and_then(Value::as_str),
-            Some(CODEX_DAEMON_LOCAL_THREAD_LIST_PARTIAL_SOURCE)
-        );
-        assert_eq!(
-            result.get("nextCursor").and_then(Value::as_str),
-            Some("codex-daemon-local:1")
-        );
-    }
-
-    #[test]
-    fn daemon_codex_empty_thread_response_still_marks_partial_source() {
-        let response =
-            build_codex_daemon_empty_thread_response(CODEX_DAEMON_LOCAL_THREAD_LIST_PARTIAL_SOURCE);
-        let result = response.get("result").and_then(Value::as_object).unwrap();
-
-        assert_eq!(
-            result.get("data").and_then(Value::as_array).unwrap().len(),
-            0
-        );
-        assert!(result.get("nextCursor").unwrap().is_null());
-        assert_eq!(
-            result.get("partialSource").and_then(Value::as_str),
-            Some(CODEX_DAEMON_LOCAL_THREAD_LIST_PARTIAL_SOURCE)
-        );
-    }
-}
+mod daemon_state_tests;

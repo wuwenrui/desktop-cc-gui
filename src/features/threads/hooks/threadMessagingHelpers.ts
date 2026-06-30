@@ -133,9 +133,10 @@ export function isCodexMissingThreadBindingError(message: string): boolean {
 }
 
 export function isRecoverableCodexThreadBindingError(message: string): boolean {
+  const classification = classifyStaleThreadRecovery(message);
   return (
     isInvalidReviewThreadIdError(message) ||
-    classifyStaleThreadRecovery(message)?.retryable === true
+    classification?.reasonCode === "stale-thread-binding"
   );
 }
 

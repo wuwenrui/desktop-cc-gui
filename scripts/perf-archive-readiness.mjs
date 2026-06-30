@@ -69,6 +69,13 @@ const BUDGET_RESIDUALS = new Map([
   ["S-RS-PE/assemblerLatency", ["realtime-runtime-evidence", "Define runtime assembler latency budget source."]],
   ["S-CS-COLD/firstPaintMs", ["release-grade-evidence-collection", "Collect measured Tauri/webview first-paint timing before setting budget."]],
   ["S-CS-COLD/firstInteractiveMs", ["release-grade-evidence-collection", "Collect measured Tauri/webview first-interactive timing before setting budget."]],
+  // 2026-06-24-harden-realtime-interaction-jank-during-tool-call: 3 new capability budgets.
+  ["S-RS-SP/main_thread_long_task_count_during_stream", ["realtime-runtime-evidence", "v0.5.13 release run measured 10min long-task count; guard <= 0 / aggressive <= 0 (anchor: docs/perf/v0.5.13-baseline.json)."]],
+  ["S-RS-SP/app_server_event_idle_yield_count", ["realtime-runtime-evidence", "v0.5.13 release run measured idle-yield count over 10min turn with input pending; guard >= 5 / aggressive >= 20 (capability streaming-schedule-tier-rollback §1)."]],
+  ["S-TAIL-GATE/toolOutputTailGateSaturated", ["realtime-runtime-evidence", "v0.5.13 release run measured gate saturation count over 10min tool-call turn; guard 1-10 / aggressive 10-50 (capability tool-output-tail-gate §1)."]],
+  ["S-TAIL-GATE/toolOutputTailGateBufferOverflow", ["realtime-runtime-evidence", "v0.5.13 release run measured 1MB buffer overflow count; guard < 5 / aggressive < 20 (capability tool-output-tail-gate §1)."]],
+  ["S-RSC-TIER/realtime_reducer_dispatches_per_1000_delta", ["realtime-runtime-evidence", "v0.5.13 release run measured per-1000-delta reducer dispatch count; guard <= 700 / aggressive <= 500 (capability streaming-schedule-tier-rollback §1, baseline 1000 = v0.5.11 proxy)."]],
+  ["S-RSC-TIER/appendAgentMessageDelta_first_token_p95", ["realtime-runtime-evidence", "v0.5.13 release run measured first-token p95; guard <= 25.2 ms / aggressive <= 25.2 ms (退化 < 5% vs 24ms baseline)."]],
 ]);
 
 const VALID_EVIDENCE_CLASSES = new Set([

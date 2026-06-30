@@ -623,8 +623,8 @@ export function WeChatBridgeSettings({
   const rebindSecretSetupReady =
     rebindSecretDraftReady && rebindSecretConfirmDraft.trim().length >= 6;
   const rebindRecoveryReady =
-    rebindRecoveryCodeDraft.trim().length > 0
-    && rebindRecoveryNewSecretDraft.trim().length >= 6;
+    rebindRecoveryCodeDraft.trim().length > 0 &&
+    rebindRecoveryNewSecretDraft.trim().length >= 6;
   const hasBoundWechatAccount =
     status?.wechatBound === true ||
     Boolean(status?.boundWechatUserId || status?.boundWechatBotId);
@@ -654,10 +654,10 @@ export function WeChatBridgeSettings({
   const shouldConfigureAccount = newapiMissing || accountMissing;
   const entitlementLoading = entitlements == null && entitlementError == null;
   const canStartBridge =
-    rebindSecretConfigured
-    && !shouldConfigureAccount
-    && !entitlementRequestFailed
-    && !entitlementLoading;
+    rebindSecretConfigured &&
+    !shouldConfigureAccount &&
+    !entitlementRequestFailed &&
+    !entitlementLoading;
   const subscriptionHelp = currentEntitlement?.plan_title
     ? `${currentEntitlement.plan_title} · ${t("settings.wechatBridgeEntitlementExpiresAt")} ${new Date(currentEntitlement.expires_at * 1000).toLocaleString()}`
     : shouldConfigureAccount

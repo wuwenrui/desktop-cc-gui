@@ -275,6 +275,7 @@ export function useSelectedComposerSession({
 
   const previousThreadIdRef = useRef<string | null>(null);
   const previousThreadWorkspaceIdRef = useRef<string | null>(null);
+  const lastComposerSelectionMigrationRef = useRef<string | null>(null);
   useEffect(() => {
     const previousThreadId = previousThreadIdRef.current;
     const previousWorkspaceId = previousThreadWorkspaceIdRef.current;
@@ -332,11 +333,22 @@ export function useSelectedComposerSession({
       previousSelectedComposerSessionKey &&
       activeSelectedComposerSessionKey
     ) {
-      const migratedSelection = normalizeComposerSessionSelectionForThread(
-        activeThreadId,
-        previousSelectedComposerValue,
-      );
-      writeSelectionForSessionKey(activeSelectedComposerSessionKey, migratedSelection);
+      const migrationKey = [
+        previousWorkspaceId ?? "",
+        previousThreadId ?? "",
+        activeWorkspaceId ?? "",
+        activeThreadId ?? "",
+        previousSelectedComposerSessionKey,
+        activeSelectedComposerSessionKey,
+      ].join("\u0000");
+      if (lastComposerSelectionMigrationRef.current !== migrationKey) {
+        lastComposerSelectionMigrationRef.current = migrationKey;
+        const migratedSelection = normalizeComposerSessionSelectionForThread(
+          activeThreadId,
+          previousSelectedComposerValue,
+        );
+        writeSelectionForSessionKey(activeSelectedComposerSessionKey, migratedSelection);
+      }
     }
     previousThreadIdRef.current = activeThreadId ?? null;
     previousThreadWorkspaceIdRef.current = activeWorkspaceId ?? null;

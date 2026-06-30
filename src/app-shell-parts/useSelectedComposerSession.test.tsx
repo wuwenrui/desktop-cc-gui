@@ -111,6 +111,78 @@ describe("useSelectedComposerSession", () => {
     );
   });
 
+  it("does not repeat the same pending-to-finalized migration after the migration state update", async () => {
+    type HookProps = {
+      activeWorkspaceId: string | null;
+      activeThreadId: string | null;
+      resolveCanonicalThreadId: (threadId: string) => string;
+    };
+    const resolveCanonicalThreadId = (threadId: string) =>
+      threadId === "codex-pending-1" ? "codex:session-1" : threadId;
+
+    composerStore["selectedModelByThread.ws-a:codex-pending-1"] = {
+      modelId: "gpt-5.4",
+      effort: "high",
+    };
+
+    const { result, rerender } = renderHook(
+      ({ activeWorkspaceId, activeThreadId }: HookProps) =>
+        useSelectedComposerSession({
+          activeWorkspaceId,
+          activeThreadId,
+          resolveCanonicalThreadId,
+        }),
+      {
+        initialProps: {
+          activeWorkspaceId: "ws-a",
+          activeThreadId: "codex-pending-1",
+          resolveCanonicalThreadId,
+        },
+      },
+    );
+
+    await waitFor(() => {
+      expect(result.current.selectedComposerSelection).toEqual({
+        modelId: "gpt-5.4",
+        effort: "high",
+      });
+    });
+    writeClientStoreValue.mockClear();
+
+    rerender({
+      activeWorkspaceId: "ws-a",
+      activeThreadId: "codex:session-1",
+      resolveCanonicalThreadId,
+    });
+
+    await waitFor(() => {
+      expect(result.current.selectedComposerSelection).toEqual({
+        modelId: "gpt-5.4",
+        effort: "high",
+      });
+    });
+    expect(writeClientStoreValue).toHaveBeenCalledTimes(1);
+    expect(writeClientStoreValue).toHaveBeenLastCalledWith(
+      "composer",
+      "selectedModelByThread.ws-a:codex:session-1",
+      { modelId: "gpt-5.4", effort: "high" },
+    );
+
+    rerender({
+      activeWorkspaceId: "ws-a",
+      activeThreadId: "codex:session-1",
+      resolveCanonicalThreadId,
+    });
+
+    await waitFor(() => {
+      expect(result.current.selectedComposerSelection).toEqual({
+        modelId: "gpt-5.4",
+        effort: "high",
+      });
+    });
+    expect(writeClientStoreValue).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps identical thread ids isolated across workspaces", async () => {
     composerStore["selectedModelByThread.ws-a:codex:session-1"] = {
       modelId: "gpt-5.4",

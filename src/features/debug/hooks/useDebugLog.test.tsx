@@ -14,6 +14,7 @@ vi.mock("../../../services/tauri", () => ({
 describe("useDebugLog", () => {
   beforeEach(() => {
     writeClientStoreData("app", {});
+    writeClientStoreData("diagnostics", {});
     vi.clearAllMocks();
   });
 
@@ -34,7 +35,7 @@ describe("useDebugLog", () => {
       });
     });
 
-    expect(getClientStoreSync("app", "diagnostics.threadSessionLog")).toEqual([
+    expect(getClientStoreSync("diagnostics", "diagnostics.threadSessionLog")).toEqual([
       {
         timestamp: 123,
         source: "client",

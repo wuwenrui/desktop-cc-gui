@@ -1708,6 +1708,17 @@
   pointer-events: none;
 }
 
+.fvp-fast-markdown-annotation-button {
+  pointer-events: auto;
+  z-index: 3;
+}
+
+.fvp-fast-markdown-annotation-button[data-active="true"],
+.fvp-fast-markdown-annotation-button:hover,
+.fvp-fast-markdown-annotation-button:focus-visible {
+  opacity: 1;
+}
+
 .fvp-fast-markdown-annotation-inline {
   position: absolute;
   right: 0;

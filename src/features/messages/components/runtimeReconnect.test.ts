@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  TRANSIENT_RUNTIME_RECONNECT_AUTO_DISMISS_MS,
   normalizeRuntimeReconnectErrorMessage,
   normalizeRuntimeReconnectRecoveryResult,
   resolveRuntimeReconnectHint,
@@ -68,6 +69,7 @@ describe("resolveRuntimeReconnectHint", () => {
       rawMessage:
         "[RUNTIME_ENDED] Managed runtime stopped after manual shutdown (source: stale_reuse_cleanup).",
       tone: "transient",
+      autoDismissMs: TRANSIENT_RUNTIME_RECONNECT_AUTO_DISMISS_MS,
     });
     expect(
       resolveRuntimeReconnectHint(
@@ -78,6 +80,7 @@ describe("resolveRuntimeReconnectHint", () => {
       rawMessage:
         "[RUNTIME_ENDED] Managed runtime stopped after manual shutdown (source: internal_replacement).",
       tone: "transient",
+      autoDismissMs: TRANSIENT_RUNTIME_RECONNECT_AUTO_DISMISS_MS,
     });
     expect(
       resolveRuntimeReconnectHint(

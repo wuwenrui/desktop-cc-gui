@@ -48,7 +48,7 @@ The system SHALL allow supported UI panels to be hidden without changing the und
 - **AND** system SHALL restore the dock using its current minimized or expanded state instead of forcing a default mode
 
 ### Requirement: Visibility controls support icon-level hiding
-The system SHALL allow supported icon buttons to be hidden independently when their parent panel is visible.
+The system SHALL allow supported icon buttons to be hidden independently when their parent panel is visible. The removed `curtain.stickyUserBubble` control SHALL NOT be treated as a supported icon button.
 
 #### Scenario: Hide a single icon button
 - **WHEN** user hides one supported icon button from appearance settings
@@ -63,6 +63,11 @@ The system SHALL allow supported icon buttons to be hidden independently when th
 - **WHEN** user hides a child icon button, hides the parent panel, and later shows the parent panel again
 - **THEN** system SHALL keep the child icon button hidden
 - **AND** system SHALL show sibling icon buttons that remain visible in preference
+
+#### Scenario: Sticky user bubble is no longer configurable
+- **WHEN** user opens the client UI visibility list in basic appearance settings
+- **THEN** system SHALL NOT show a `curtain.stickyUserBubble` control
+- **AND** the conversation canvas SHALL NOT receive visibility state for a sticky user bubble control
 
 ### Requirement: Maximum hidden mode preserves normal conversation
 The system SHALL preserve the core conversation path even when all supported optional panels and icon buttons are hidden.
@@ -114,6 +119,11 @@ The system SHALL persist client UI visibility preference across application rest
 - **WHEN** persisted visibility preference contains unknown panel or icon ids
 - **THEN** system SHALL ignore those unknown ids
 - **AND** system SHALL continue applying known ids normally
+
+#### Scenario: Legacy sticky user bubble key is ignored
+- **WHEN** persisted visibility preference contains legacy `curtain.stickyUserBubble`
+- **THEN** system SHALL ignore that key as unsupported
+- **AND** system SHALL continue applying remaining known visibility preferences normally
 
 ### Requirement: Bottom Activity Checkpoint Visibility MUST Migrate From Legacy Edits Preference
 

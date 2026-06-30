@@ -10,6 +10,7 @@ import { summarizeExploration } from "./threadItemsExploreSummary";
 import {
   inferFileChangesFromCommandExecutionArtifacts,
   inferFileChangesFromPayload,
+  inferMutatingFileChangesFromCommand,
   mergeToolChanges,
   normalizeFileChangeKind,
   shouldPreferExplicitFileChangeOutput,
@@ -1212,12 +1213,21 @@ export function buildConversationItem(
         "",
     );
     const durationMs = asNumber(item.durationMs ?? item.duration_ms);
-    const shouldTreatAsApplyPatchFileChange =
+    const isSuccessfulOrApplyPatchMarked =
+      isSuccessfulCommandExecution(status) || hasApplyPatchSuccessSignal(output);
+    const commandLooksLikeApplyPatch = command ? isApplyPatchCommand(command) : false;
+    const commandTextChanges =
+      command && isSuccessfulOrApplyPatchMarked && !commandLooksLikeApplyPatch
+        ? inferMutatingFileChangesFromCommand(command)
+        : [];
+    const shouldTreatAsFileChange =
       command &&
-      isApplyPatchCommand(command) &&
-      (isSuccessfulCommandExecution(status) || hasApplyPatchSuccessSignal(output));
-    if (shouldTreatAsApplyPatchFileChange) {
-      const normalizedChanges = inferFileChangesFromCommandExecutionArtifacts(command, output);
+      isSuccessfulOrApplyPatchMarked &&
+      (commandLooksLikeApplyPatch || commandTextChanges.length > 0);
+    if (shouldTreatAsFileChange) {
+      const normalizedChanges = commandLooksLikeApplyPatch
+        ? inferFileChangesFromCommandExecutionArtifacts(command, output)
+        : commandTextChanges;
       if (normalizedChanges.length > 0) {
         const patchDiffByPath = extractApplyPatchDiffByPath(command);
         const enrichedChanges = normalizedChanges.map((change) => ({

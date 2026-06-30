@@ -1,12 +1,12 @@
 # Runtime Evidence Gate Governance Report
 
-Generated at: 2026-06-19T19:49:13.978Z
+Generated at: 2026-06-23T12:31:55.749Z
 
 ## Archive Readiness
 
 | Change | Tasks | Recommendation | Qualifier |
 |---|---:|---|---|
-| relocate-runtime-notice-dock-sidebar-entry | 8/8 | archive-candidate-after-qualifier-review | Review validation and platform qualifiers before archive. |
+| fix-codex-provider-composer-cold-start-binding | 11/11 | archive-candidate-after-qualifier-review | Review validation and platform qualifiers before archive. |
 
 ## Accepted Budget Residuals
 
@@ -46,7 +46,8 @@ Generated at: 2026-06-19T19:49:13.978Z
 
 ## In Progress
 
-- fix-codex-parallel-runtime-ended-isolation: 63/66, not-archive-ready
+- 2026-06-24-harden-realtime-interaction-jank-during-tool-call: 32/40, not-archive-ready
+- 2026-06-22-release-pipeline-cache-sccache: 7/13, not-archive-ready
 - 2026-06-18-extend-search-palette-with-commands: 0/0, not-archive-ready
 - 2026-06-18-extend-editor-file-tab-lifecycle: 0/0, not-archive-ready
 - 2026-06-18-add-shortcuts-overview-and-conflict-detection: 0/0, not-archive-ready

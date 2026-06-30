@@ -46,8 +46,7 @@ use self::provider_profile::{resolve_codex_provider_profile, CODEX_DISK_PROVIDER
 use self::run_metadata::{extract_json_value, sanitize_run_worktree_name};
 use self::thread_listing::{build_unified_codex_thread_page, resolve_workspace_fallback_model};
 use crate::backend::app_server::{
-    spawn_workspace_session_with_launch_options as spawn_workspace_session_inner_with_options,
-    CodexAppServerLaunchOptions,
+    spawn_workspace_session_inner_with_settings, CodexAppServerLaunchOptions,
 };
 pub(crate) use crate::backend::app_server::{ResumePendingSource, WorkspaceSession};
 use crate::backend::events::AppServerEvent;
@@ -59,7 +58,17 @@ use crate::session_management::CodexProviderBinding;
 use crate::shared::workspaces_core::disconnect_workspace_session_core;
 use crate::shared::{codex_core, thread_titles_core};
 use crate::state::AppState;
-use crate::types::WorkspaceEntry;
+use crate::types::{AppSettings, WorkspaceEntry};
+
+#[cfg(windows)]
+fn codex_windows_turn_developer_instructions(settings: &AppSettings) -> Option<String> {
+    crate::backend::app_server_cli::codex_generated_developer_instructions_for_turn(settings)
+}
+
+#[cfg(not(windows))]
+fn codex_windows_turn_developer_instructions(_settings: &AppSettings) -> Option<String> {
+    None
+}
 
 fn hidden_auto_session_metadata(
     session_purpose: &str,
@@ -320,16 +329,17 @@ pub(crate) async fn spawn_workspace_session_with_launch_options(
     launch_options: CodexAppServerLaunchOptions,
 ) -> Result<Arc<WorkspaceSession>, String> {
     let client_version = app_handle.package_info().version.to_string();
-    let (auto_compaction_threshold_percent, auto_compaction_enabled) = {
+    let app_settings_snapshot = {
         let state = app_handle.state::<AppState>();
-        let settings = state.app_settings.lock().await;
-        (
-            f64::from(settings.codex_auto_compaction_threshold_percent),
-            settings.codex_auto_compaction_enabled,
-        )
+        let settings = state.app_settings.lock().await.clone();
+        settings
     };
+    let (auto_compaction_threshold_percent, auto_compaction_enabled) = (
+        f64::from(app_settings_snapshot.codex_auto_compaction_threshold_percent),
+        app_settings_snapshot.codex_auto_compaction_enabled,
+    );
     let event_sink = build_event_sink(app_handle);
-    spawn_workspace_session_inner_with_options(
+    spawn_workspace_session_inner_with_settings(
         entry,
         default_codex_bin,
         codex_args,
@@ -339,6 +349,7 @@ pub(crate) async fn spawn_workspace_session_with_launch_options(
         auto_compaction_enabled,
         event_sink,
         launch_options,
+        app_settings_snapshot,
     )
     .await
 }
@@ -1126,9 +1137,12 @@ pub(crate) async fn send_user_message(
     } else {
         resolve_workspace_fallback_model(&state, &workspace_id).await
     };
-    let mode_enforcement_enabled = {
+    let (mode_enforcement_enabled, extra_developer_instructions) = {
         let settings = state.app_settings.lock().await;
-        settings.codex_mode_enforcement_enabled
+        (
+            settings.codex_mode_enforcement_enabled,
+            codex_windows_turn_developer_instructions(&settings),
+        )
     };
 
     let response = codex_core::send_user_message_core(
@@ -1145,6 +1159,7 @@ pub(crate) async fn send_user_message(
         preferred_language,
         custom_spec_root,
         mode_enforcement_enabled,
+        extra_developer_instructions,
     )
     .await?;
 
@@ -1562,25 +1577,19 @@ pub(crate) async fn skills_list(
 
     // Local mode: try local file scanning first
     let custom_skill_roots_vec = custom_skill_roots.unwrap_or_default();
+    let resource_dir = app.path().resource_dir().ok();
     match crate::skills::skills_list_local_for_workspace(
         &*state,
         &workspace_id,
         custom_skill_roots_vec.clone(),
+        resource_dir,
     )
     .await
     {
         Ok(entries) => {
             let skills_json: Vec<Value> = entries
                 .into_iter()
-                .map(|entry| {
-                    json!({
-                        "name": entry.name,
-                        "path": entry.path,
-                        "source": entry.source,
-                        "description": entry.description,
-                        "enabled": true,
-                    })
-                })
+                .map(crate::skills::skill_entry_to_json)
                 .collect();
             Ok(json!(skills_json))
         }

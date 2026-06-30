@@ -74,7 +74,7 @@ const zhPart3 = {
     wechatBridgeRebindSecretMismatch: "两次输入的换绑秘钥不一致。",
     wechatBridgeRebindSecretContinue: "继续换绑",
     wechatBridgeRebindSecretCancel: "取消",
-    wechatBridgeRebindForgotSecret: "忘记秘钥",
+    wechatBridgeRebindForgotSecret: "忘记秘钥？",
     wechatBridgeRebindRecoverySent: "验证码已发送到原绑定微信。",
     wechatBridgeRebindRecoveryCode: "验证码",
     wechatBridgeRebindRecoveryNewSecret: "新的换绑秘钥",

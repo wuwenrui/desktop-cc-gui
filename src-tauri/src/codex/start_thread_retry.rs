@@ -1,6 +1,7 @@
 use serde_json::Value;
 use tauri::AppHandle;
 
+use super::provider_profile::CODEX_DISK_PROVIDER_PROFILE_ID;
 use super::{
     attach_hook_safe_fallback_metadata, create_session_runtime_recovering_error,
     ensure_codex_session_for_provider, ensure_codex_session_without_session_hooks_for_provider,
@@ -213,12 +214,30 @@ pub(crate) async fn start_thread_with_runtime_retry_for_provider(
             )
         },
         || {
-            codex_core::start_thread_core(
-                &state.sessions,
-                workspace_id.to_string(),
-                Some(provider_profile_id.clone()),
-                normalized_model.clone(),
-            )
+            let provider_profile_id = provider_profile_id.clone();
+            let normalized_model = normalized_model.clone();
+            async move {
+                let response = codex_core::start_thread_core(
+                    &state.sessions,
+                    workspace_id.to_string(),
+                    Some(provider_profile_id.clone()),
+                    normalized_model,
+                )
+                .await?;
+                if provider_profile_id == CODEX_DISK_PROVIDER_PROFILE_ID {
+                    if let Some(thread_id) = codex_core::extract_thread_id_from_response(&response)
+                    {
+                        codex_core::confirm_thread_ready_after_start_core(
+                            &state.sessions,
+                            workspace_id.to_string(),
+                            Some(provider_profile_id),
+                            thread_id,
+                        )
+                        .await?;
+                    }
+                }
+                Ok(response)
+            }
         },
     )
     .await

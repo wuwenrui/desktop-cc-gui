@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import type { ReactNode } from 'react';
 import { EngineIcon } from '../../../engine/components/EngineIcon';
 import type { ComposerSendReadiness } from '../../utils/composerSendReadiness';
 import type { ModelInfo, ProviderId } from './types';
@@ -27,6 +28,7 @@ type ComposerReadinessBarProps = {
   onAddModel?: () => void;
   onRefreshModelConfig?: () => Promise<void> | void;
   isModelConfigRefreshing?: boolean;
+  rightAccessory?: ReactNode;
 };
 
 export function ComposerReadinessBar({
@@ -43,6 +45,7 @@ export function ComposerReadinessBar({
   onAddModel,
   onRefreshModelConfig,
   isModelConfigRefreshing,
+  rightAccessory,
 }: ComposerReadinessBarProps) {
   const { t } = useTranslation();
   const modeLabel = readiness.target.modeLabel ?? readiness.target.accessModeLabel;
@@ -136,6 +139,11 @@ export function ComposerReadinessBar({
       </div>
 
       <div className="composer-readiness-activity" title={readiness.activity.detailLabel}>
+        {rightAccessory ? (
+          <div className="composer-readiness-right-accessory">
+            {rightAccessory}
+          </div>
+        ) : null}
         {contextLabels.length > 0 ? (
           <span
             className="composer-readiness-context-summary"

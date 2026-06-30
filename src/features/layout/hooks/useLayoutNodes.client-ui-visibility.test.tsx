@@ -105,9 +105,6 @@ vi.mock("../../client-ui-visibility/hooks/useClientUiVisibility", () => ({
           clientUiVisibilityMock.visibleControls.has(
             "bottomActivity.latestConversation",
           ),
-        "curtain.stickyUserBubble": clientUiVisibilityMock.visibleControls.has(
-          "curtain.stickyUserBubble",
-        ),
         "cornerStatus.messageAnchors":
           clientUiVisibilityMock.visibleControls.has(
             "cornerStatus.messageAnchors",
@@ -143,13 +140,11 @@ vi.mock("../../app/components/Sidebar", () => ({
 vi.mock("../../messages/components/Messages", () => ({
   Messages: ({
     showMessageAnchors,
-    showStickyUserBubble,
     conversationState,
     activeEngine,
     onForkFromMessage,
   }: {
     showMessageAnchors: boolean;
-    showStickyUserBubble: boolean;
     activeEngine?: string;
     onForkFromMessage?: (messageId: string) => void;
     conversationState?: {
@@ -162,7 +157,6 @@ vi.mock("../../messages/components/Messages", () => ({
     <section
       data-testid="messages"
       data-message-anchors={String(showMessageAnchors)}
-      data-sticky-user-bubble={String(showStickyUserBubble)}
       data-active-engine={String(activeEngine ?? "")}
       data-conversation-engine={String(conversationState?.meta?.engine ?? "")}
       data-history-restored-at={String(
@@ -992,9 +986,6 @@ describe("useLayoutNodes client UI visibility", () => {
     expect(screen.queryByTestId("runtime-notice-dock")).toBeNull();
     expect(screen.getByTestId("messages")).toBeTruthy();
     expect(screen.getByTestId("messages").dataset.messageAnchors).toBe("false");
-    expect(screen.getByTestId("messages").dataset.stickyUserBubble).toBe(
-      "false",
-    );
     expect(
       screen.getByRole("textbox", { name: "composer input" }),
     ).toBeTruthy();

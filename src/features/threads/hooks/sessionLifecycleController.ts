@@ -3,7 +3,11 @@ import type { Dispatch, MutableRefObject } from "react";
 import type { AutoSessionMetadata } from "../../../services/tauri";
 import { pushGlobalRuntimeNotice } from "../../../services/globalRuntimeNotices";
 import { previewThreadName } from "../../../utils/threadItems";
-import type { CodexProviderProfileOption } from "../constants/codexProviderProfiles";
+import {
+  CODEX_DISK_PROVIDER_PROFILE_ID,
+  CODEX_DISK_PROVIDER_PROFILE_NAME,
+  type CodexProviderProfileOption,
+} from "../constants/codexProviderProfiles";
 import type { ThreadAction, ThreadState } from "./useThreadsReducer";
 
 const HOOK_SAFE_FALLBACK_METADATA_KEY = "ccguiHookSafeFallback";
@@ -169,17 +173,22 @@ export function providerBindingFromSelectedProfile(
   const selectedProfileId = normalizeResponseString(providerProfile?.id);
   const providerProfileId =
     selectedProfileId ?? normalizeResponseString(fallbackProviderProfileId);
+  const isDiskProvider = providerProfileId === CODEX_DISK_PROVIDER_PROFILE_ID;
   const providerProfileSource = selectedProfileId
     ? normalizeResponseString(providerProfile?.source)
+    : isDiskProvider
+      ? "disk"
     : null;
   const providerProfileName = selectedProfileId
     ? normalizeResponseString(providerProfile?.name)
+    : isDiskProvider
+      ? CODEX_DISK_PROVIDER_PROFILE_NAME
     : null;
   return {
     ...(providerProfileId ? { providerProfileId } : {}),
     ...(providerProfileSource ? { providerProfileSource } : {}),
     ...(providerProfileName ? { providerProfileName } : {}),
-    ...(selectedProfileId ? { providerAvailability: "available" } : {}),
+    ...(selectedProfileId || isDiskProvider ? { providerAvailability: "available" } : {}),
   };
 }
 

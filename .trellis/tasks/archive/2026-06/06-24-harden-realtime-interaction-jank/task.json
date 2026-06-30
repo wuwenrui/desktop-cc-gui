@@ -1,0 +1,298 @@
+{
+  "id": "06-24-harden-realtime-interaction-jank",
+  "name": "harden-realtime-interaction-jank-during-tool-call",
+  "title": "Harden realtime interaction jank during tool call",
+  "description": "v2 (post-expert-review): Bind appServerEventDeliverHub to per-event createEventBackpressure via createEventHub.publish(payload), status-only coalesceKey, and snapshot-only dropPolicy; keep BatchedTauriEventSink strictly lossless with critical bypass; add Rust SnapshotThrottle (32ms per (workspaceId, itemId, kind)) for item/updated text snapshots; introduce useRenderScheduler hook (T-2 reuse) for requestIdleCallback + 8ms budget + input pending yield; add useToolOutputTailGate for stdout/stderr storms (append-buffer throttle + 60s sliding window; no generic last-write coalesce); collapse onAgentMessageCompleted's 5 dispatches into flushAgentCompletedBatch; split handleItemUpdate dispatch into urgent/transition/idle via renderSchedulingPolicy (N-1 rename); accumulate background items over 3 frames with active-thread-switch clear; expose streamingScheduleTier flag (baseline/guarded/aggressive) with full rollback. Add task 0.1/0.2 baseline-and-preflight (V-1) to fill in placeholder metrics before archive gate 11.1. OpenSpec change: openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/",
+  "status": "completed",
+  "dev_type": "fullstack",
+  "scope": "realtime-stream-pacing",
+  "package": null,
+  "priority": "P0",
+  "creator": "chenxiangning",
+  "assignee": "chenxiangning",
+  "createdAt": "2026-06-24",
+  "completedAt": "2026-06-25",
+  "branch": null,
+  "base_branch": "feature/v0.5.13",
+  "worktree_path": null,
+  "current_phase": 2,
+  "next_action": [
+    {
+      "phase": 1,
+      "action": "brainstorm"
+    },
+    {
+      "phase": 2,
+      "action": "research"
+    },
+    {
+      "phase": 3,
+      "action": "implement"
+    },
+    {
+      "phase": 4,
+      "action": "check"
+    },
+    {
+      "phase": 5,
+      "action": "update-spec"
+    },
+    {
+      "phase": 6,
+      "action": "record-session"
+    }
+  ],
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [
+    {
+      "id": "0.1",
+      "title": "v0.5.13 release run baseline for 7 metrics",
+      "openspec": "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md#0.1"
+    },
+    {
+      "id": "0.2",
+      "title": "Fill placeholder perf budgets with baseline numbers",
+      "openspec": "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md#0.2"
+    },
+    {
+      "id": "1.1",
+      "title": "Add renderSchedulingPolicy module (N-1 rename)",
+      "openspec": "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md#1.1"
+    },
+    {
+      "id": "1.2",
+      "title": "Add streamingScheduleTier + toolOutputTailGate perf flags",
+      "openspec": "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md#1.2"
+    },
+    {
+      "id": "1.3",
+      "title": "Existing 8 perf flags unchanged",
+      "openspec": "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md#1.3"
+    },
+    {
+      "id": "1.4",
+      "title": "UI expose tier switch in OtherSection",
+      "openspec": "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md#1.4"
+    },
+    {
+      "id": "2.1",
+      "title": "Add useRenderScheduler hook (T-2 reuse)",
+      "openspec": "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md#2.1"
+    },
+    {
+      "id": "2.2",
+      "title": "Refactor useWorkspaceThreadListHydration onto useRenderScheduler",
+      "openspec": "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md#2.2"
+    },
+    {
+      "id": "3.1",
+      "title": "Rust SnapshotThrottle 32ms source-side throttle",
+      "openspec": "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md#3.1"
+    },
+    {
+      "id": "3.2",
+      "title": "Tauri sink critical bypass + strict lossless",
+      "openspec": "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md#3.2"
+    },
+    {
+      "id": "3.3",
+      "title": "Tauri batch stats emit channel + SnapshotThrottle count",
+      "openspec": "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md#3.3"
+    },
+    {
+      "id": "3.4",
+      "title": "Backend tool_tail_marker in commandExecution outputDelta",
+      "openspec": "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md#3.4"
+    },
+    {
+      "id": "4.1",
+      "title": "appServerEventDeliverHub per-event backpressure (T-1)",
+      "openspec": "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md#4.1"
+    },
+    {
+      "id": "4.2",
+      "title": "defaultSchedule support input pending yield",
+      "openspec": "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md#4.2"
+    },
+    {
+      "id": "4.3",
+      "title": "dispatchAppServerEvent useRenderScheduler + input listener",
+      "openspec": "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md#4.3"
+    },
+    {
+      "id": "4.4",
+      "title": "Per-event dispatch instrumentation surface",
+      "openspec": "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md#4.4"
+    },
+    {
+      "id": "5.1",
+      "title": "Add useToolOutputTailGate hook",
+      "openspec": "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md#5.1"
+    },
+    {
+      "id": "5.2",
+      "title": "Wire tool output deltas through gate",
+      "openspec": "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md#5.2"
+    },
+    {
+      "id": "5.3",
+      "title": "Gate diagnostics instrumentation",
+      "openspec": "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md#5.3"
+    },
+    {
+      "id": "6.1",
+      "title": "Reducer flushAgentCompletedBatch action",
+      "openspec": "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md#6.1"
+    },
+    {
+      "id": "6.2",
+      "title": "onAgentMessageCompleted uses batch action",
+      "openspec": "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md#6.2"
+    },
+    {
+      "id": "6.3",
+      "title": "handleItemUpdate dispatchWithSchedule",
+      "openspec": "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md#6.3"
+    },
+    {
+      "id": "6.4",
+      "title": "Submitter instrumentation surface",
+      "openspec": "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md#6.4"
+    },
+    {
+      "id": "7.1",
+      "title": "useLayoutNodes 3-frame background accumulation",
+      "openspec": "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md#7.1"
+    },
+    {
+      "id": "8.1",
+      "title": "Wire streamingScheduleTier into all entry points",
+      "openspec": "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md#8.1"
+    },
+    {
+      "id": "9.1",
+      "title": "Engine capability matrix 3 rows",
+      "openspec": "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md#9.1"
+    },
+    {
+      "id": "9.2",
+      "title": "perf-realtime-runtime-report 3 metric producers",
+      "openspec": "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md#9.2"
+    },
+    {
+      "id": "9.3",
+      "title": "perf-archive-readiness BUDGET_RESIDUALS 3 entries",
+      "openspec": "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md#9.3"
+    },
+    {
+      "id": "9.4",
+      "title": "budget-decision-table.md with task 0.2 numbers",
+      "openspec": "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md#9.4"
+    },
+    {
+      "id": "10.1",
+      "title": "OpenSpec artifacts written (v2)",
+      "openspec": "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md#10.1"
+    },
+    {
+      "id": "10.2",
+      "title": "OpenSpec strict validation",
+      "openspec": "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md#10.2"
+    },
+    {
+      "id": "10.3",
+      "title": "Typecheck + cargo test + lint",
+      "openspec": "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md#10.3"
+    },
+    {
+      "id": "11.1",
+      "title": "Live release run verify perf budgets (using 0.2 numbers)",
+      "openspec": "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md#11.1"
+    },
+    {
+      "id": "11.2",
+      "title": "Critical event zero loss 3-path verification (V-2 split)",
+      "openspec": "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md#11.2"
+    },
+    {
+      "id": "11.3",
+      "title": "Rollback matrix 4 paths verified",
+      "openspec": "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md#11.3"
+    },
+    {
+      "id": "11.4",
+      "title": "UX acceptance jank reproduction path",
+      "openspec": "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md#11.4"
+    },
+    {
+      "id": "11.5",
+      "title": "Evidence acceptance doc",
+      "openspec": "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md#11.5"
+    },
+    {
+      "id": "12.1",
+      "title": "OpenSpec archive + spec delta sync",
+      "openspec": "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md#12.1"
+    },
+    {
+      "id": "12.2",
+      "title": "Post-archive regression",
+      "openspec": "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md#12.2"
+    },
+    {
+      "id": "12.3",
+      "title": "Trellis session record",
+      "openspec": "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md#12.3"
+    }
+  ],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/proposal.md",
+    "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/design.md",
+    "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/tasks.md",
+    "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/specs/app-server-event-stream-pacing/spec.md",
+    "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/specs/tool-output-tail-gate/spec.md",
+    "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/specs/streaming-schedule-tier-rollback/spec.md",
+    "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/specs/app-server-event-batching/spec.md",
+    "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/specs/realtime-event-batching-performance/spec.md",
+    "openspec/changes/2026-06-24-harden-realtime-interaction-jank-during-tool-call/specs/conversation-realtime-cpu-stability/spec.md",
+    "src/hooks/useRenderScheduler.ts",
+    "src-tauri/src/snapshot_throttle.rs",
+    "src-tauri/src/event_sink.rs",
+    "src-tauri/src/backend/app_server.rs",
+    "src/services/events.ts",
+    "src/services/eventBackpressure.ts",
+    "src/features/app/hooks/useAppServerEvents.ts",
+    "src/app-shell-parts/useWorkspaceThreadListHydration.ts",
+    "src/features/threads/hooks/useThreadItemEvents.ts",
+    "src/features/threads/hooks/useThreadsReducer.ts",
+    "src/features/threads/hooks/useToolOutputTailGate.ts",
+    "src/features/threads/utils/renderSchedulingPolicy.ts",
+    "src/features/threads/utils/realtimePerfFlags.ts",
+    "src/features/layout/hooks/useLayoutNodes.tsx",
+    "scripts/check-engine-capability-matrix.mjs",
+    "scripts/perf-realtime-runtime-report.mjs",
+    "scripts/perf-archive-readiness.mjs",
+    "docs/perf/budget-decision-table.md"
+  ],
+  "notes": "OpenSpec change id: 2026-06-24-harden-realtime-interaction-jank-during-tool-call (v2 after expert review). v2 changes vs v1: (C-1) sink now lossless, source-side Rust SnapshotThrottle replaces sink byte truncation; (C-2) non-target section enumerates 5 main spec semantic preservation contracts; (C-3) tier-vs-flag relationship table added; (T-1) appServerEventDeliverHub per-event backpressure replaces per-batch coalesceKey and now requires real createEventHub.publish(payload), status-only coalesceKey, snapshot-only dropPolicy, and protected raw outputDelta; (T-2) useRenderScheduler hook extracted and refactors useWorkspaceThreadListHydration; (V-1) task 0.1/0.2 baseline-and-preflight added to fill placeholder metrics before archive; (V-2) critical event zero-loss verification split into 3 sub-paths; (F-1) tasks re-scoped to <=2h each; (N-1) streamingSchedulePolicy renamed to renderSchedulingPolicy. Tier default is 'guarded' for safe side; user can flip to 'baseline' for v0.5.13-equivalent or 'aggressive' for tighter budgets.",
+  "meta": {
+    "openspec_change_id": "2026-06-24-harden-realtime-interaction-jank-during-tool-call",
+    "trellis_phase": "research",
+    "estimated_phases_remaining": 4,
+    "version": "v2",
+    "v1_review_findings_addressed": [
+      "C-1",
+      "C-2",
+      "C-3",
+      "T-1",
+      "T-2",
+      "V-1",
+      "V-2",
+      "F-1",
+      "N-1"
+    ]
+  }
+}

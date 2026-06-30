@@ -7,12 +7,46 @@ type UseCreateSessionLoadingOptions = {
   showLoadingProgressDialog: (config: LoadingProgressDialogConfig) => string;
   hideLoadingProgressDialog: (requestId: string) => void;
   t: (key: string, options?: Record<string, unknown>) => string;
+  createSessionTimeoutMs?: number;
 };
+
+export const DEFAULT_CREATE_SESSION_LOADING_TIMEOUT_MS = 45_000;
+
+function createSessionTimeoutError(timeoutMs: number): Error {
+  return new Error(
+    `Create session timed out after ${timeoutMs}ms while waiting for the engine to initialize.`,
+  );
+}
+
+async function runCreateSessionWithTimeout<T>(
+  action: () => Promise<T>,
+  timeoutMs: number,
+): Promise<T> {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    return action();
+  }
+
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(createSessionTimeoutError(timeoutMs));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([action(), timeoutPromise]);
+  } finally {
+    if (timeoutId !== null) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
 
 export function useCreateSessionLoading({
   showLoadingProgressDialog,
   hideLoadingProgressDialog,
   t,
+  createSessionTimeoutMs = DEFAULT_CREATE_SESSION_LOADING_TIMEOUT_MS,
 }: UseCreateSessionLoadingOptions) {
   return useCallback(
     async <T,>(
@@ -40,9 +74,14 @@ export function useCreateSessionLoading({
             workspace: workspaceLabel,
           }),
         },
-        action,
+        () => runCreateSessionWithTimeout(action, createSessionTimeoutMs),
       );
     },
-    [hideLoadingProgressDialog, showLoadingProgressDialog, t],
+    [
+      createSessionTimeoutMs,
+      hideLoadingProgressDialog,
+      showLoadingProgressDialog,
+      t,
+    ],
   );
 }

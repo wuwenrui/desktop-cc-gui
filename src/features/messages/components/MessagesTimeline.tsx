@@ -44,6 +44,7 @@ import {
   ReviewRow,
   WorkingIndicator,
 } from "./MessagesRows";
+import { ConversationRowErrorBoundary } from "./ConversationRowErrorBoundary";
 import { MessagesOutlineFloater } from "./MessagesOutlineFloater";
 import type { MarkdownOutlineEntry } from "../../markdown/fastMarkdownRenderer";
 import { useMessageOutlineActive } from "../hooks/useMessageOutlineActive";
@@ -54,6 +55,7 @@ import {
 import { appendRendererDiagnostic } from "../../../services/rendererDiagnostics";
 import { parseReasoning } from "./messagesReasoning";
 import type { RuntimeReconnectRecoveryCallbackResult } from "./runtimeReconnect";
+import type { MessagesPresentationMode } from "./messagesLiveWindow";
 import {
   formatCompletedTimeMs,
   type HistoryStickyCandidate,
@@ -61,23 +63,71 @@ import {
   resolveProvenanceEngineLabel,
   shouldHideCodexCanvasCommandCard,
 } from "./messagesRenderUtils";
+import { resolveUserMessagePresentation } from "./messagesUserPresentation";
 import {
   buildTimelineProjectionRows,
   findTimelineProjectionRowIndexByItemId,
   groupedEntryContainsItemId,
+  type TimelineProjectionRow,
 } from "./messagesTimelineProjection";
 import {
+  countHydratedHeavyTimelineRows,
+  deriveTimelineRowHydrationStates,
+  type TimelineRowHydrationState,
+} from "./messagesTimelineHydration";
+import {
+  resolveConversationLightweightModeState,
+  resolveConversationLightweightPolicy,
+} from "./messagesConversationLightweightMode";
+import {
+  buildTimelineRenderWeightDiagnosticPayload,
   classifyTimelineVirtualizerStability,
+  DEFAULT_TIMELINE_VIRTUALIZER_STABILITY_RECOVERY_BUDGET,
   estimateTimelineProjectionRowSize,
-  estimateTimelineProjectionRenderWeight,
   getActiveLiveTimelineRowKeys,
+  getTimelineVirtualizationThresholdReason,
   observeTimelineElementOffset,
+  resolveTimelineCanvasOverscan,
+  resolveTimelineVirtualizerStabilityRecovery,
+  TIMELINE_LIGHTWEIGHT_ROW_PLACEHOLDER_HEIGHT,
+  resolveVirtualizedTimelineRowVisualHeight,
+  resolveVirtualizedTimelineScopeReset,
   shouldVirtualizeTimelineRows,
+  summarizeTimelineProjectionRenderWeight,
 } from "./messagesTimelineVirtualization";
+import {
+  DEFAULT_HYDRATION_REMEASURE_BUDGET,
+  resolveHydrationRemeasureGuard,
+  type HydrationRemeasureBudget,
+} from "./messagesRenderLoopGuards";
 
 const TIMELINE_VIRTUALIZER_STABILITY_REMEASURE_COOLDOWN_MS = 750;
 const TIMELINE_VIRTUALIZER_STABILITY_DIAGNOSTIC_COOLDOWN_MS = 5_000;
+const TIMELINE_RENDER_WEIGHT_DIAGNOSTIC_COOLDOWN_MS = 5_000;
+const TIMELINE_HYDRATION_REMEASURE_DIAGNOSTIC_COOLDOWN_MS = 5_000;
+const CONVERSATION_LIGHTWEIGHT_DIAGNOSTIC_COOLDOWN_MS = 5_000;
 const TIMELINE_LIVE_ROW_BOTTOM_PROXIMITY_PX = 720;
+const TIMELINE_SCROLL_DIAGNOSTIC_MIN_INTERVAL_MS = 250;
+const TIMELINE_SCROLL_DIAGNOSTIC_MIN_DELTA_PX = 24;
+
+type TimelineScrollDiagnosticSnapshot = {
+  clientHeight: number;
+  distanceFromBottom: number;
+  scrollHeight: number;
+  scrollTop: number;
+};
+
+function collectTimelineScrollDiagnosticSnapshot(
+  element: HTMLElement,
+): TimelineScrollDiagnosticSnapshot {
+  const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
+  return {
+    clientHeight: Math.round(element.clientHeight),
+    distanceFromBottom: Math.round(distanceFromBottom),
+    scrollHeight: Math.round(element.scrollHeight),
+    scrollTop: Math.round(element.scrollTop),
+  };
+}
 
 type MessagesTimelineProps = {
   activeCollaborationModeId: string | null;
@@ -133,8 +183,12 @@ type MessagesTimelineProps = {
   latestRuntimeReconnectItemId: string | null;
   latestWorkingActivityLabel: string | null;
   liveAutoExpandedExploreId: string | null;
+  conversationDetailHydrationRequested?: boolean;
+  conversationLightweightModeEnabled?: boolean;
   messageNodeByIdRef: MutableRefObject<Map<string, HTMLDivElement>>;
   onOpenDiffPath?: (path: string) => void;
+  onConversationDetailHydrationRequest?: () => void;
+  onConversationLightweightModeEnable?: () => void;
   onRecoverThreadRuntime?: (
     workspaceId: string,
     threadId: string,
@@ -169,6 +223,9 @@ type MessagesTimelineProps = {
   toggleExpanded: (id: string) => void;
   claudeHistoryTranscriptFallbackActive: boolean;
   hasVisibleUserInputRequest: boolean;
+  historyExpansionActive: boolean;
+  presentationMode: MessagesPresentationMode;
+  presentationScopeKey: string;
   userInputNode: ReactNode;
   visibleCollapsedHistoryItemCount: number;
   waitingForFirstChunk: boolean;
@@ -240,8 +297,12 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   latestRuntimeReconnectItemId,
   latestWorkingActivityLabel,
   liveAutoExpandedExploreId,
+  conversationDetailHydrationRequested = false,
+  conversationLightweightModeEnabled = false,
   messageNodeByIdRef,
   onOpenDiffPath,
+  onConversationDetailHydrationRequest = () => {},
+  onConversationLightweightModeEnable = () => {},
   onRecoverThreadRuntime,
   onRecoverThreadRuntimeAndResend,
   onThreadRecoveryFork,
@@ -266,6 +327,9 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   toggleExpanded,
   claudeHistoryTranscriptFallbackActive,
   hasVisibleUserInputRequest,
+  historyExpansionActive,
+  presentationMode,
+  presentationScopeKey,
   userInputNode,
   visibleCollapsedHistoryItemCount,
   waitingForFirstChunk,
@@ -301,12 +365,49 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   useEffect(() => {
     setCurrentOutline(null);
   }, [threadId, workspaceId]);
-  const lastTimelineStabilityRemeasureAtRef = useRef(0);
-  const lastTimelineStabilityDiagnosticAtRef = useRef(0);
+  const timelineStabilityRecoveryBudgetRef = useRef(
+    DEFAULT_TIMELINE_VIRTUALIZER_STABILITY_RECOVERY_BUDGET,
+  );
+  const hydrationRemeasureBudgetRef = useRef<HydrationRemeasureBudget>(
+    DEFAULT_HYDRATION_REMEASURE_BUDGET,
+  );
+  const hydrationRemeasureRafRef = useRef<number | null>(null);
+  const lightweightRemeasureRafRef = useRef<number | null>(null);
+  const liveRowRemeasureRafRef = useRef<number | null>(null);
+  const lastTimelineRenderWeightDiagnosticRef = useRef<{
+    at: number;
+    signature: string;
+  }>({ at: 0, signature: "" });
+  const lastConversationLightweightDiagnosticRef = useRef<{
+    at: number;
+    signature: string;
+  }>({ at: 0, signature: "" });
+  const lastTimelineScrollDiagnosticRef = useRef<{
+    at: number;
+    eventKind: string;
+    snapshot: TimelineScrollDiagnosticSnapshot | null;
+  }>({ at: 0, eventKind: "", snapshot: null });
+  const retainedHydratedTimelineRowKeysRef = useRef<{
+    scopeKey: string;
+    rowKeys: Set<string>;
+  }>({ scopeKey: "", rowKeys: new Set() });
+  const lastVirtualizedTimelineScopeResetRef = useRef<string | null>(null);
 
   useEffect(() => {
-    setIsStickyHeaderCollapsed(false);
-  }, [threadId]);
+    hydrationRemeasureBudgetRef.current = DEFAULT_HYDRATION_REMEASURE_BUDGET;
+    if (typeof window !== "undefined" && hydrationRemeasureRafRef.current !== null) {
+      window.cancelAnimationFrame(hydrationRemeasureRafRef.current);
+      hydrationRemeasureRafRef.current = null;
+    }
+    if (typeof window !== "undefined" && liveRowRemeasureRafRef.current !== null) {
+      window.cancelAnimationFrame(liveRowRemeasureRafRef.current);
+      liveRowRemeasureRafRef.current = null;
+    }
+    if (typeof window !== "undefined" && lightweightRemeasureRafRef.current !== null) {
+      window.cancelAnimationFrame(lightweightRemeasureRafRef.current);
+      lightweightRemeasureRafRef.current = null;
+    }
+  }, [threadId, workspaceId]);
 
   const shouldRenderUserInputAtTail = Boolean(
     userInputNode &&
@@ -315,20 +416,42 @@ export const MessagesTimeline = memo(function MessagesTimeline({
           groupedEntryContainsItemId(entry, activeUserInputAnchorItemId),
         )),
   );
-  const timelineProjectionRows = buildTimelineProjectionRows({
-    activeUserInputAnchorItemId,
-    approvalVisible: Boolean(approvalNode),
-    claudeDockedReasoningItemIds: claudeDockedReasoningItems.map(({ item }) => item.id),
-    collapsedMiddleStepCount,
-    collapseLiveMiddleStepsEnabled,
-    effectiveItemsCount,
-    groupedEntries,
-    hasVisibleUserInputRequest,
-    hiddenClaudeReasoningOnly,
-    isHistoryLoading,
-    isThinking,
-    shouldRenderUserInputAtTail,
-  });
+  const approvalVisible = Boolean(approvalNode);
+  const claudeDockedReasoningItemIds = useMemo(
+    () => claudeDockedReasoningItems.map(({ item }) => item.id),
+    [claudeDockedReasoningItems],
+  );
+  const timelineProjectionRows = useMemo(
+    () =>
+      buildTimelineProjectionRows({
+        activeUserInputAnchorItemId,
+        approvalVisible,
+        claudeDockedReasoningItemIds,
+        collapsedMiddleStepCount,
+        collapseLiveMiddleStepsEnabled,
+        effectiveItemsCount,
+        groupedEntries,
+        hasVisibleUserInputRequest,
+        hiddenClaudeReasoningOnly,
+        isHistoryLoading,
+        isThinking,
+        shouldRenderUserInputAtTail,
+      }),
+    [
+      activeUserInputAnchorItemId,
+      approvalVisible,
+      claudeDockedReasoningItemIds,
+      collapsedMiddleStepCount,
+      collapseLiveMiddleStepsEnabled,
+      effectiveItemsCount,
+      groupedEntries,
+      hasVisibleUserInputRequest,
+      hiddenClaudeReasoningOnly,
+      isHistoryLoading,
+      isThinking,
+      shouldRenderUserInputAtTail,
+    ],
+  );
   const timelineRowByKey = useMemo(
     () => new Map(timelineProjectionRows.map((row) => [row.key, row])),
     [timelineProjectionRows],
@@ -337,35 +460,56 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     () => new Map(claudeDockedReasoningItems.map((entry) => [entry.item.id, entry])),
     [claudeDockedReasoningItems],
   );
-  const shouldVirtualizeTimeline = shouldVirtualizeTimelineRows({
+  const timelineRenderWeightSummary = useMemo(
+    () => {
+      if (isThinking || isWorking) {
+        return {
+          rowCount: timelineProjectionRows.length,
+          renderWeight: timelineProjectionRows.length,
+          heavyRowCount: 0,
+          categoryCounts: {},
+        };
+      }
+      return summarizeTimelineProjectionRenderWeight(timelineProjectionRows);
+    },
+    [isThinking, isWorking, timelineProjectionRows],
+  );
+  const conversationLightweightPolicy = useMemo(
+    () => resolveConversationLightweightPolicy(timelineRenderWeightSummary),
+    [timelineRenderWeightSummary],
+  );
+  const conversationLightweightModeState = useMemo(
+    () =>
+      resolveConversationLightweightModeState({
+        policy: conversationLightweightPolicy,
+        manualEnabled: conversationLightweightModeEnabled,
+        detailHydrationRequested: conversationDetailHydrationRequested,
+      }),
+    [
+      conversationDetailHydrationRequested,
+      conversationLightweightModeEnabled,
+      conversationLightweightPolicy,
+    ],
+  );
+  const effectiveConversationLightweightMode = conversationLightweightModeState.active;
+  const shouldVirtualizeTimelineByWeight = shouldVirtualizeTimelineRows({
     isThinking,
     rowCount: timelineProjectionRows.length,
-    renderWeight: timelineProjectionRows.reduce(
-      (total, row) => total + estimateTimelineProjectionRenderWeight(row),
-      0,
-    ),
+    renderWeight: timelineRenderWeightSummary.renderWeight,
   });
-  const timelineVirtualizer = useVirtualizer({
-    count: shouldVirtualizeTimeline ? timelineProjectionRows.length : 0,
-    enabled: shouldVirtualizeTimeline,
-    estimateSize: (index) =>
-      estimateTimelineProjectionRowSize(timelineProjectionRows[index] ?? {
-        kind: "bottomAnchor",
-        key: "bottom-anchor",
-      }),
-    getItemKey: (index) => timelineProjectionRows[index]?.key ?? `missing:${index}`,
-    getScrollElement: () => scrollElementRef.current,
-    observeElementOffset: observeTimelineElementOffset,
-    overscan: isThinking || isWorking ? 24 : 12,
-  });
-  const virtualTimelineRows = timelineVirtualizer.getVirtualItems();
-  const requestVirtualizedTimelineMeasure = useCallback(() => {
-    if (!shouldVirtualizeTimeline) {
-      return;
-    }
-    timelineVirtualizer.measure();
-  }, [shouldVirtualizeTimeline, timelineVirtualizer]);
-
+  const shouldUseStaticExpandedHistoryFlow =
+    historyExpansionActive &&
+    !isThinking &&
+    !isWorking &&
+    !pendingJumpMessageId;
+  const shouldUseStaticLightweightHistoryFlow =
+    shouldUseStaticExpandedHistoryFlow &&
+    !conversationDetailHydrationRequested &&
+    (conversationLightweightPolicy.suggested || effectiveConversationLightweightMode);
+  const shouldVirtualizeTimeline =
+    shouldVirtualizeTimelineByWeight && !shouldUseStaticExpandedHistoryFlow;
+  const shouldDeferHeavyTimelineRows =
+    shouldVirtualizeTimelineByWeight || shouldUseStaticLightweightHistoryFlow;
   const activeLiveTimelineRowKeys = useMemo(
     () =>
       getActiveLiveTimelineRowKeys({
@@ -385,11 +529,6 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     () => new Set(activeLiveTimelineRowKeys),
     [activeLiveTimelineRowKeys],
   );
-  const virtualTimelineRowKeys = useMemo(
-    () => virtualTimelineRows.map((row) => row.key),
-    [virtualTimelineRows],
-  );
-
   const pendingJumpRowIndex = useMemo(
     () =>
       pendingJumpMessageId
@@ -397,6 +536,513 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         : -1,
     [pendingJumpMessageId, timelineProjectionRows],
   );
+  const pendingJumpRowKey = pendingJumpRowIndex >= 0
+    ? timelineProjectionRows[pendingJumpRowIndex]?.key ?? null
+    : null;
+  const timelineVirtualizer = useVirtualizer({
+    count: shouldVirtualizeTimeline ? timelineProjectionRows.length : 0,
+    enabled: shouldVirtualizeTimeline,
+    estimateSize: (index) =>
+      estimateTimelineProjectionRowSize(timelineProjectionRows[index] ?? {
+        kind: "bottomAnchor",
+        key: "bottom-anchor",
+      }),
+    getItemKey: (index) => timelineProjectionRows[index]?.key ?? `missing:${index}`,
+    getScrollElement: () => scrollElementRef.current,
+    observeElementOffset: observeTimelineElementOffset,
+    overscan: resolveTimelineCanvasOverscan({
+      isThinking,
+      isWorking,
+      rowCount: timelineProjectionRows.length,
+      renderWeight: timelineRenderWeightSummary.renderWeight,
+    }),
+  });
+  const virtualTimelineRows = timelineVirtualizer.getVirtualItems();
+  const requestVirtualizedTimelineMeasure = useCallback(() => {
+    if (!shouldVirtualizeTimeline) {
+      return;
+    }
+    timelineVirtualizer.measure();
+  }, [shouldVirtualizeTimeline, timelineVirtualizer]);
+  const virtualTimelineRowKeys = useMemo(
+    () => virtualTimelineRows.map((row) => row.key),
+    [virtualTimelineRows],
+  );
+
+  useEffect(() => {
+    const scrollElement = scrollElementRef.current;
+    if (!scrollElement) {
+      return undefined;
+    }
+
+    const appendScrollDiagnostic = (
+      eventKind: "scroll" | "scrollend" | "wheel",
+      extra: Record<string, unknown> = {},
+    ) => {
+      const snapshot = collectTimelineScrollDiagnosticSnapshot(scrollElement);
+      const previous = lastTimelineScrollDiagnosticRef.current;
+      const now = Date.now();
+      const previousSnapshot = previous.snapshot;
+      const scrollTopDelta = previousSnapshot
+        ? snapshot.scrollTop - previousSnapshot.scrollTop
+        : 0;
+      const distanceFromBottomDelta = previousSnapshot
+        ? snapshot.distanceFromBottom - previousSnapshot.distanceFromBottom
+        : 0;
+      const isMeaningfulDelta =
+        Math.abs(scrollTopDelta) >= TIMELINE_SCROLL_DIAGNOSTIC_MIN_DELTA_PX ||
+        Math.abs(distanceFromBottomDelta) >= TIMELINE_SCROLL_DIAGNOSTIC_MIN_DELTA_PX ||
+        eventKind === "wheel" ||
+        previous.eventKind !== eventKind;
+      if (
+        !isMeaningfulDelta ||
+        now - previous.at < TIMELINE_SCROLL_DIAGNOSTIC_MIN_INTERVAL_MS
+      ) {
+        return;
+      }
+      lastTimelineScrollDiagnosticRef.current = { at: now, eventKind, snapshot };
+      appendRendererDiagnostic("messages/timeline-scroll-behavior", {
+        component: "MessagesTimeline",
+        eventKind,
+        threadId,
+        workspaceId: workspaceId ?? null,
+        isThinking,
+        isWorking,
+        shouldVirtualizeTimeline,
+        rowCount: timelineProjectionRows.length,
+        renderWeight: timelineRenderWeightSummary.renderWeight,
+        virtualItemCount: virtualTimelineRowKeys.length,
+        activeLiveRowCount: activeLiveTimelineRowKeys.length,
+        scrollTopDelta: Math.round(scrollTopDelta),
+        distanceFromBottomDelta: Math.round(distanceFromBottomDelta),
+        ...snapshot,
+        ...extra,
+      });
+    };
+
+    const handleScroll = () => appendScrollDiagnostic("scroll");
+    const handleScrollEnd = () => appendScrollDiagnostic("scrollend");
+    const handleWheel = (event: WheelEvent) => {
+      appendScrollDiagnostic("wheel", {
+        deltaMode: event.deltaMode,
+        deltaX: Math.round(event.deltaX),
+        deltaY: Math.round(event.deltaY),
+      });
+    };
+
+    scrollElement.addEventListener("scroll", handleScroll, { passive: true });
+    scrollElement.addEventListener("wheel", handleWheel, { passive: true });
+    scrollElement.addEventListener("scrollend", handleScrollEnd, { passive: true });
+    appendScrollDiagnostic("scroll", { reason: "listener-attached" });
+    return () => {
+      scrollElement.removeEventListener("scroll", handleScroll);
+      scrollElement.removeEventListener("wheel", handleWheel);
+      scrollElement.removeEventListener("scrollend", handleScrollEnd);
+    };
+  }, [
+    activeLiveTimelineRowKeys.length,
+    isThinking,
+    isWorking,
+    scrollElementRef,
+    shouldVirtualizeTimeline,
+    threadId,
+    timelineProjectionRows.length,
+    timelineRenderWeightSummary.renderWeight,
+    virtualTimelineRowKeys.length,
+    workspaceId,
+  ]);
+
+  const visibleTimelineRowKeySet = useMemo(
+    () => new Set(virtualTimelineRowKeys.map(String)),
+    [virtualTimelineRowKeys],
+  );
+  const virtualizedTimelineScopeKey = useMemo(
+    () => [
+      presentationScopeKey,
+      presentationMode,
+      timelineProjectionRows.length,
+      timelineRenderWeightSummary.renderWeight,
+      shouldVirtualizeTimeline ? "virtualized" : "static",
+    ].join("\u0000"),
+    [
+      presentationMode,
+      presentationScopeKey,
+      shouldVirtualizeTimeline,
+      timelineProjectionRows.length,
+      timelineRenderWeightSummary.renderWeight,
+    ],
+  );
+  const timelineRendererOptionsKey = useMemo(
+    () => [
+      activeEngine,
+      presentationProfile?.preferCommandSummary ? "command-summary" : "no-command-summary",
+      presentationProfile?.codexCanvasMarkdown ? "codex-canvas" : "plain-markdown",
+      codeBlockCopyUseModifier ? "copy-modifier" : "copy-default",
+    ].join("|"),
+    [
+      activeEngine,
+      codeBlockCopyUseModifier,
+      presentationProfile?.codexCanvasMarkdown,
+      presentationProfile?.preferCommandSummary,
+    ],
+  );
+  const retainedHydratedTimelineRowScopeKey = `${virtualizedTimelineScopeKey}\u0000${timelineRendererOptionsKey}`;
+  const retainedHydratedTimelineRowKeys = useMemo(() => {
+    const retained = retainedHydratedTimelineRowKeysRef.current;
+    if (retained.scopeKey !== retainedHydratedTimelineRowScopeKey) {
+      retained.scopeKey = retainedHydratedTimelineRowScopeKey;
+      retained.rowKeys = new Set();
+    }
+    return retained.rowKeys;
+  }, [retainedHydratedTimelineRowScopeKey]);
+  const timelineRowHydrationStates = useMemo(
+    () => {
+      if (isThinking || isWorking) {
+        return timelineProjectionRows.map((row) => ({
+          rowKey: row.key,
+          contentHash: `${timelineRendererOptionsKey}:${row.key}`,
+          rendererOptionsKey: timelineRendererOptionsKey,
+          renderWeight: 1,
+          heavy: false,
+          mode: "static" as const,
+          hydrationReason: "not-heavy" as const,
+        }));
+      }
+      const nextStates = deriveTimelineRowHydrationStates({
+        rows: timelineProjectionRows,
+        shouldVirtualize: shouldDeferHeavyTimelineRows,
+        visibleRowKeys: shouldVirtualizeTimeline ? visibleTimelineRowKeySet : new Set<string>(),
+        activeRowKeys: activeLiveTimelineRowKeySet,
+        retainedHydratedRowKeys: retainedHydratedTimelineRowKeys,
+        anchorTargetRowKey: pendingJumpRowKey,
+        detailHydrationRequested: conversationDetailHydrationRequested,
+        rendererOptionsKey: timelineRendererOptionsKey,
+      });
+      for (const state of nextStates) {
+        if (state.heavy && state.mode === "hydrated") {
+          retainedHydratedTimelineRowKeys.add(state.rowKey);
+        }
+      }
+      return nextStates;
+    },
+    [
+      activeLiveTimelineRowKeySet,
+      conversationDetailHydrationRequested,
+      isThinking,
+      isWorking,
+      pendingJumpRowKey,
+      retainedHydratedTimelineRowKeys,
+      shouldDeferHeavyTimelineRows,
+      shouldVirtualizeTimeline,
+      timelineRendererOptionsKey,
+      timelineProjectionRows,
+      visibleTimelineRowKeySet,
+    ],
+  );
+  const hydratedHeavyTimelineRowCount = useMemo(
+    () => countHydratedHeavyTimelineRows(timelineRowHydrationStates),
+    [timelineRowHydrationStates],
+  );
+  const timelineRowHydrationStateByKey = useMemo(
+    () => new Map(timelineRowHydrationStates.map((state) => [state.rowKey, state])),
+    [timelineRowHydrationStates],
+  );
+  const shouldRenderLightweightProjectionRow = useCallback(
+    (
+      row: TimelineProjectionRow,
+      hydrationState: TimelineRowHydrationState | undefined,
+    ) => {
+      if (row.kind !== "entry" || !hydrationState?.heavy) {
+        return false;
+      }
+      if (
+        hydrationState.hydrationReason === "active" ||
+        hydrationState.hydrationReason === "anchor"
+      ) {
+        return false;
+      }
+      if (isThinking || isWorking) {
+        return false;
+      }
+      if (effectiveConversationLightweightMode && !conversationDetailHydrationRequested) {
+        return true;
+      }
+      if (hydrationState.mode === "hydrated") {
+        return false;
+      }
+      return effectiveConversationLightweightMode || hydrationState.mode === "summary";
+    },
+    [
+      conversationDetailHydrationRequested,
+      effectiveConversationLightweightMode,
+      isThinking,
+      isWorking,
+    ],
+  );
+  const lightweightTimelineRowSignature = useMemo(
+    () =>
+      timelineProjectionRows
+        .filter((row) =>
+          shouldRenderLightweightProjectionRow(
+            row,
+            timelineRowHydrationStateByKey.get(row.key),
+          ),
+        )
+        .map((row) => row.key)
+        .join("|"),
+    [
+      shouldRenderLightweightProjectionRow,
+      timelineProjectionRows,
+      timelineRowHydrationStateByKey,
+    ],
+  );
+  const hydratedHeavyTimelineRowSignature = useMemo(
+    () =>
+      timelineRowHydrationStates
+        .filter((state) => state.heavy && state.mode === "hydrated")
+        .map((state) => `${state.rowKey}:${state.contentHash}:${state.hydrationReason}`)
+        .join("|"),
+    [timelineRowHydrationStates],
+  );
+  const liveRowRemeasureSignature = useMemo(() => {
+    const assistantTextLength = liveAssistantItem?.text.length ?? 0;
+    const reasoningTextLength =
+      (liveReasoningItem?.summary.length ?? 0) + (liveReasoningItem?.content.length ?? 0);
+    return [
+      liveAssistantItem?.id ?? "",
+      Math.floor(assistantTextLength / 600),
+      liveReasoningItem?.id ?? "",
+      Math.floor(reasoningTextLength / 600),
+      activeLiveTimelineRowKeys.join(","),
+    ].join(":");
+  }, [
+    activeLiveTimelineRowKeys,
+    liveAssistantItem?.id,
+    liveAssistantItem?.text.length,
+    liveReasoningItem?.content.length,
+    liveReasoningItem?.id,
+    liveReasoningItem?.summary.length,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      if (typeof window !== "undefined" && hydrationRemeasureRafRef.current !== null) {
+        window.cancelAnimationFrame(hydrationRemeasureRafRef.current);
+        hydrationRemeasureRafRef.current = null;
+      }
+      if (typeof window !== "undefined" && liveRowRemeasureRafRef.current !== null) {
+        window.cancelAnimationFrame(liveRowRemeasureRafRef.current);
+        liveRowRemeasureRafRef.current = null;
+      }
+      if (typeof window !== "undefined" && lightweightRemeasureRafRef.current !== null) {
+        window.cancelAnimationFrame(lightweightRemeasureRafRef.current);
+        lightweightRemeasureRafRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (
+      !shouldVirtualizeTimeline ||
+      lightweightTimelineRowSignature.length === 0 ||
+      typeof window === "undefined"
+    ) {
+      if (typeof window !== "undefined" && lightweightRemeasureRafRef.current !== null) {
+        window.cancelAnimationFrame(lightweightRemeasureRafRef.current);
+        lightweightRemeasureRafRef.current = null;
+      }
+      return;
+    }
+    if (lightweightRemeasureRafRef.current !== null) {
+      window.cancelAnimationFrame(lightweightRemeasureRafRef.current);
+    }
+    lightweightRemeasureRafRef.current = window.requestAnimationFrame(() => {
+      lightweightRemeasureRafRef.current = null;
+      timelineProjectionRows.forEach((row, index) => {
+        if (
+          shouldRenderLightweightProjectionRow(
+            row,
+            timelineRowHydrationStateByKey.get(row.key),
+          )
+        ) {
+          timelineVirtualizer.resizeItem(index, TIMELINE_LIGHTWEIGHT_ROW_PLACEHOLDER_HEIGHT);
+        }
+      });
+      timelineVirtualizer.measure();
+    });
+  }, [
+    lightweightTimelineRowSignature,
+    shouldRenderLightweightProjectionRow,
+    shouldVirtualizeTimeline,
+    timelineProjectionRows,
+    timelineRowHydrationStateByKey,
+    timelineVirtualizer,
+  ]);
+
+  useEffect(() => {
+    if (
+      !shouldVirtualizeTimeline ||
+      activeLiveTimelineRowKeys.length === 0 ||
+      typeof window === "undefined"
+    ) {
+      return;
+    }
+    if (liveRowRemeasureRafRef.current !== null) {
+      window.cancelAnimationFrame(liveRowRemeasureRafRef.current);
+    }
+    liveRowRemeasureRafRef.current = window.requestAnimationFrame(() => {
+      liveRowRemeasureRafRef.current = null;
+      timelineVirtualizer.measure();
+    });
+  }, [
+    activeLiveTimelineRowKeys.length,
+    liveRowRemeasureSignature,
+    shouldVirtualizeTimeline,
+    timelineVirtualizer,
+  ]);
+
+  useEffect(() => {
+    if (!shouldVirtualizeTimeline || hydratedHeavyTimelineRowCount <= 0) {
+      hydrationRemeasureBudgetRef.current = DEFAULT_HYDRATION_REMEASURE_BUDGET;
+      if (typeof window !== "undefined" && hydrationRemeasureRafRef.current !== null) {
+        window.cancelAnimationFrame(hydrationRemeasureRafRef.current);
+        hydrationRemeasureRafRef.current = null;
+      }
+      return;
+    }
+    const recovery = resolveHydrationRemeasureGuard({
+      previous: hydrationRemeasureBudgetRef.current,
+      signature: hydratedHeavyTimelineRowSignature,
+      hydratedHeavyRowCount: hydratedHeavyTimelineRowCount,
+      now: Date.now(),
+      diagnosticCooldownMs: TIMELINE_HYDRATION_REMEASURE_DIAGNOSTIC_COOLDOWN_MS,
+    });
+    hydrationRemeasureBudgetRef.current = recovery.nextBudget;
+    if (recovery.shouldRemeasure && typeof window !== "undefined") {
+      if (hydrationRemeasureRafRef.current !== null) {
+        window.cancelAnimationFrame(hydrationRemeasureRafRef.current);
+      }
+      hydrationRemeasureRafRef.current = window.requestAnimationFrame(() => {
+        hydrationRemeasureRafRef.current = null;
+        timelineVirtualizer.measure();
+      });
+    }
+    if (!recovery.shouldDiagnose) {
+      return;
+    }
+    appendRendererDiagnostic("messages/timeline-hydration-remeasure", {
+      surface: "timeline-virtualizer",
+      component: "MessagesTimeline",
+      threadId,
+      workspaceId: workspaceId ?? null,
+      hydratedHeavyRowCount: hydratedHeavyTimelineRowCount,
+      remeasureCount: recovery.nextBudget.remeasureCount,
+      remeasureSuppressed: recovery.remeasureSuppressed,
+      threshold: "bounded-hydration-remeasure",
+    });
+  }, [
+    hydratedHeavyTimelineRowCount,
+    hydratedHeavyTimelineRowSignature,
+    shouldVirtualizeTimeline,
+    threadId,
+    timelineVirtualizer,
+    workspaceId,
+  ]);
+
+  useEffect(() => {
+    const thresholdReason = getTimelineVirtualizationThresholdReason({
+      rowCount: timelineRenderWeightSummary.rowCount,
+      renderWeight: timelineRenderWeightSummary.renderWeight,
+    });
+    if (!shouldVirtualizeTimeline || thresholdReason !== "render-weight") {
+      return;
+    }
+    const signature = [
+      workspaceId ?? "",
+      threadId ?? "",
+      timelineRenderWeightSummary.rowCount,
+      timelineRenderWeightSummary.renderWeight,
+      timelineRenderWeightSummary.heavyRowCount,
+      hydratedHeavyTimelineRowCount,
+    ].join(":");
+    const now = Date.now();
+    if (
+      lastTimelineRenderWeightDiagnosticRef.current.signature === signature &&
+      now - lastTimelineRenderWeightDiagnosticRef.current.at <
+        TIMELINE_RENDER_WEIGHT_DIAGNOSTIC_COOLDOWN_MS
+    ) {
+      return;
+    }
+    lastTimelineRenderWeightDiagnosticRef.current = { at: now, signature };
+    appendRendererDiagnostic(
+      "messages/timeline-render-weight",
+      buildTimelineRenderWeightDiagnosticPayload({
+        summary: timelineRenderWeightSummary,
+        shouldVirtualize: shouldVirtualizeTimeline,
+        hydratedHeavyRowCount: hydratedHeavyTimelineRowCount,
+        localErrorState: "none",
+        threadId,
+        workspaceId: workspaceId ?? null,
+      }),
+    );
+  }, [
+    hydratedHeavyTimelineRowCount,
+    shouldVirtualizeTimeline,
+    threadId,
+    timelineRenderWeightSummary,
+    workspaceId,
+  ]);
+
+  useEffect(() => {
+    if (!conversationLightweightPolicy.suggested && !effectiveConversationLightweightMode) {
+      return;
+    }
+    const signature = [
+      workspaceId ?? "",
+      threadId ?? "",
+      conversationLightweightModeState.reason,
+      conversationLightweightPolicy.suggested ? "suggested" : "not-suggested",
+      conversationLightweightPolicy.oversized ? "oversized" : "not-oversized",
+      conversationDetailHydrationRequested ? "detail-requested" : "detail-deferred",
+      timelineRenderWeightSummary.rowCount,
+      timelineRenderWeightSummary.renderWeight,
+      timelineRenderWeightSummary.heavyRowCount,
+    ].join(":");
+    const now = Date.now();
+    if (
+      lastConversationLightweightDiagnosticRef.current.signature === signature &&
+      now - lastConversationLightweightDiagnosticRef.current.at <
+        CONVERSATION_LIGHTWEIGHT_DIAGNOSTIC_COOLDOWN_MS
+    ) {
+      return;
+    }
+    lastConversationLightweightDiagnosticRef.current = { at: now, signature };
+    appendRendererDiagnostic("messages/conversation-lightweight-mode", {
+      surface: "timeline",
+      component: "MessagesTimeline",
+      workspaceId: workspaceId ?? null,
+      threadId,
+      active: effectiveConversationLightweightMode,
+      reason: conversationLightweightModeState.reason,
+      suggested: conversationLightweightPolicy.suggested,
+      oversized: conversationLightweightPolicy.oversized,
+      detailHydrationRequested: conversationDetailHydrationRequested,
+      rowCount: timelineRenderWeightSummary.rowCount,
+      renderWeight: timelineRenderWeightSummary.renderWeight,
+      heavyRowCount: timelineRenderWeightSummary.heavyRowCount,
+    });
+  }, [
+    conversationDetailHydrationRequested,
+    conversationLightweightModeState.reason,
+    conversationLightweightPolicy.oversized,
+    conversationLightweightPolicy.suggested,
+    effectiveConversationLightweightMode,
+    threadId,
+    timelineRenderWeightSummary.heavyRowCount,
+    timelineRenderWeightSummary.renderWeight,
+    timelineRenderWeightSummary.rowCount,
+    workspaceId,
+  ]);
 
   useEffect(() => {
     if (!pendingJumpMessageId) {
@@ -422,6 +1068,43 @@ export const MessagesTimeline = memo(function MessagesTimeline({
 
   useEffect(() => {
     const scrollElement = scrollElementRef.current;
+    const reset = resolveVirtualizedTimelineScopeReset({
+      previousScopeKey: lastVirtualizedTimelineScopeResetRef.current,
+      nextScopeKey: virtualizedTimelineScopeKey,
+      shouldVirtualize: shouldVirtualizeTimeline,
+      stableHistoryView: !isThinking && !isWorking,
+      hasPendingJump: Boolean(pendingJumpMessageId),
+      hasScrollElement: Boolean(scrollElement),
+    });
+    lastVirtualizedTimelineScopeResetRef.current = reset.nextScopeKey;
+    if (!reset.shouldResetScroll && !reset.shouldMeasure) {
+      return undefined;
+    }
+    if (scrollElement && reset.shouldResetScroll && scrollElement.scrollTop > 0) {
+      scrollElement.scrollTo({ top: 0, behavior: "auto" });
+    }
+    if (typeof window === "undefined") {
+      timelineVirtualizer.measure();
+      return undefined;
+    }
+    const raf = window.requestAnimationFrame(() => {
+      timelineVirtualizer.measure();
+    });
+    return () => {
+      window.cancelAnimationFrame(raf);
+    };
+  }, [
+    isThinking,
+    isWorking,
+    pendingJumpMessageId,
+    scrollElementRef,
+    shouldVirtualizeTimeline,
+    timelineVirtualizer,
+    virtualizedTimelineScopeKey,
+  ]);
+
+  useEffect(() => {
+    const scrollElement = scrollElementRef.current;
     const distanceFromBottom = scrollElement
       ? scrollElement.scrollHeight - scrollElement.scrollTop - scrollElement.clientHeight
       : Number.POSITIVE_INFINITY;
@@ -440,21 +1123,28 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       return;
     }
 
-    const now = Date.now();
-    if (
-      now - lastTimelineStabilityRemeasureAtRef.current >=
-      TIMELINE_VIRTUALIZER_STABILITY_REMEASURE_COOLDOWN_MS
-    ) {
-      lastTimelineStabilityRemeasureAtRef.current = now;
+    const stabilitySignature = [
+      stabilityState,
+      timelineProjectionRows.length,
+      virtualTimelineRowKeys.length,
+      activeLiveTimelineRowKeys.length,
+      isThinking ? "thinking" : "idle",
+      isWorking ? "working" : "idle",
+    ].join(":");
+    const recovery = resolveTimelineVirtualizerStabilityRecovery({
+      previous: timelineStabilityRecoveryBudgetRef.current,
+      signature: stabilitySignature,
+      now: Date.now(),
+      remeasureCooldownMs: TIMELINE_VIRTUALIZER_STABILITY_REMEASURE_COOLDOWN_MS,
+      diagnosticCooldownMs: TIMELINE_VIRTUALIZER_STABILITY_DIAGNOSTIC_COOLDOWN_MS,
+    });
+    timelineStabilityRecoveryBudgetRef.current = recovery.nextBudget;
+    if (recovery.shouldRemeasure) {
       timelineVirtualizer.measure();
     }
-    if (
-      now - lastTimelineStabilityDiagnosticAtRef.current <
-      TIMELINE_VIRTUALIZER_STABILITY_DIAGNOSTIC_COOLDOWN_MS
-    ) {
+    if (!recovery.shouldDiagnose) {
       return;
     }
-    lastTimelineStabilityDiagnosticAtRef.current = now;
     appendRendererDiagnostic("messages/timeline-virtualizer-stability", {
       state: stabilityState,
       threadId,
@@ -462,9 +1152,12 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       rowCount: timelineProjectionRows.length,
       virtualItemCount: virtualTimelineRowKeys.length,
       activeLiveRowCount: activeLiveTimelineRowKeys.length,
+      hydratedHeavyRowCount: hydratedHeavyTimelineRowCount,
       isThinking,
       isWorking,
       isNearLiveTail,
+      recoveryRemeasureCount: recovery.nextBudget.remeasureCount,
+      recoveryRemeasureSuppressed: recovery.remeasureSuppressed,
       distanceFromBottom: Number.isFinite(distanceFromBottom)
         ? Math.max(0, Math.round(distanceFromBottom))
         : null,
@@ -476,6 +1169,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     scrollElementRef,
     shouldVirtualizeTimeline,
     threadId,
+    hydratedHeavyTimelineRowCount,
     timelineProjectionRows.length,
     timelineVirtualizer,
     virtualTimelineRowKeys,
@@ -517,6 +1211,17 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         renderItem.role === "assistant"
           ? messageCopyTextByAssistantId.get(renderItem.id) ?? renderItem.text
           : renderItem.text;
+      const userCopyText =
+        renderItem.role === "user"
+          ? resolveUserMessagePresentation({
+              text: renderItem.text,
+              selectedAgentName: renderItem.selectedAgentName,
+              selectedAgentIcon: renderItem.selectedAgentIcon,
+              enableCollaborationBadge: activeEngine === "codex",
+            }).displayText
+          : "";
+      const shouldRenderUserActions =
+        renderItem.role === "user" && userCopyText.trim().length > 0;
       const shouldRenderForkAction =
         isLatestFinalAssistant &&
         Boolean(actionTargetUserMessageId) &&
@@ -568,6 +1273,30 @@ export const MessagesTimeline = memo(function MessagesTimeline({
                 <span className="codicon codicon-history" aria-hidden />
               </button>
             ) : null}
+          </div>
+        );
+      };
+      const renderUserActions = () => {
+        if (!shouldRenderUserActions) {
+          return null;
+        }
+        return (
+          <div
+            className="message-action-bar message-user-bubble-actions"
+            aria-label={t("messages.messageActions")}
+          >
+            <button
+              type="button"
+              className={`ghost message-action-button message-copy-button${isCopied ? " is-copied" : ""}`}
+              onClick={() => handleCopyMessage(renderItem, userCopyText)}
+              aria-label={t("messages.copyUserMessage")}
+              title={t("messages.copyUserMessage")}
+            >
+              <span className="message-copy-icon" aria-hidden>
+                <Copy className="message-copy-icon-copy" size={12} />
+                <Check className="message-copy-icon-check" size={12} />
+              </span>
+            </button>
           </div>
         );
       };
@@ -639,8 +1368,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
                   ? latestRetryMessage
                   : null
               }
-              isCopied={isCopied}
-              onCopy={handleCopyMessage}
+              userActionNode={renderUserActions()}
               codeBlockCopyUseModifier={codeBlockCopyUseModifier}
               onOpenFileLink={openFileLink}
               onOpenFileLinkMenu={showFileLinkMenu}
@@ -828,6 +1556,111 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     }
     return renderWithAnchoredUserInput(renderSingleItem(entry.item));
   };
+  const getLightweightRowKindLabel = (row: TimelineProjectionRow) => {
+    if (row.kind !== "entry") {
+      return row.kind;
+    }
+    if (row.entry.kind !== "item") {
+      return row.entry.kind;
+    }
+    const item = row.entry.item;
+    if (item.kind === "message") {
+      return item.role === "assistant"
+        ? t("messages.conversationLightweightAssistantMessage")
+        : t("messages.conversationLightweightUserMessage");
+    }
+    return item.kind;
+  };
+  const renderLightweightProjectionRow = (
+    row: TimelineProjectionRow,
+    hydrationState: TimelineRowHydrationState,
+  ) => {
+    const rowKindLabel = getLightweightRowKindLabel(row);
+    const itemCount = row.kind === "entry" ? row.itemIds.length : 1;
+    const singleMessage =
+      row.kind === "entry" && row.entry.kind === "item" && row.entry.item.kind === "message"
+        ? row.entry.item
+        : null;
+    const actionTargetUserMessageId =
+      singleMessage?.role === "assistant"
+        ? messageActionTargetByAssistantId.get(singleMessage.id) ?? null
+        : null;
+    const shouldRenderForkAction =
+      singleMessage?.id === latestFinalAssistantMessageId &&
+      Boolean(actionTargetUserMessageId) &&
+      typeof onForkFromMessage === "function";
+    const shouldRenderRewindAction =
+      singleMessage?.id === latestFinalAssistantMessageId &&
+      Boolean(actionTargetUserMessageId) &&
+      typeof onRewindFromMessage === "function";
+    const bindLightweightMessageNode = (node: HTMLDivElement | null) => {
+      if (!singleMessage || singleMessage.role !== "user") {
+        return;
+      }
+      if (node) {
+        messageNodeByIdRef.current.set(singleMessage.id, node);
+      } else {
+        messageNodeByIdRef.current.delete(singleMessage.id);
+      }
+    };
+
+    return (
+      <div
+        ref={bindLightweightMessageNode}
+        className="messages-lightweight-row-summary"
+        data-conversation-lightweight-row="true"
+        data-message-anchor-id={singleMessage?.id}
+      >
+        <div className="messages-lightweight-row-summary-main">
+          <span className="messages-lightweight-row-summary-eyebrow">
+            {t("messages.conversationLightweightRowEyebrow")}
+          </span>
+          <strong>
+            {t("messages.conversationLightweightRowTitle", {
+              kind: rowKindLabel,
+              count: itemCount,
+            })}
+          </strong>
+          <span>
+            {t("messages.conversationLightweightRowMeta", {
+              weight: hydrationState.renderWeight,
+            })}
+          </span>
+        </div>
+        <div className="messages-lightweight-row-summary-actions">
+          {shouldRenderForkAction && actionTargetUserMessageId ? (
+            <button
+              type="button"
+              className="ghost message-action-button"
+              onClick={() => onForkFromMessage(actionTargetUserMessageId)}
+              aria-label={t("messages.forkMessage")}
+              title={t("messages.forkMessage")}
+            >
+              <span className="codicon codicon-git-branch-create" aria-hidden />
+            </button>
+          ) : null}
+          {shouldRenderRewindAction && actionTargetUserMessageId ? (
+            <button
+              type="button"
+              className="ghost message-action-button"
+              onClick={() => onRewindFromMessage(actionTargetUserMessageId)}
+              aria-label={t("messages.rewindMessage")}
+              title={t("messages.rewindMessage")}
+            >
+              <span className="codicon codicon-history" aria-hidden />
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="messages-lightweight-row-detail-button"
+            onClick={onConversationDetailHydrationRequest}
+          >
+            {t("messages.conversationLightweightHydrateVisible")}
+          </button>
+        </div>
+      </div>
+    );
+  };
   const renderProjectionRow = (row: ReturnType<typeof timelineRowByKey.get>) => {
     if (!row) {
       return null;
@@ -920,6 +1753,34 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     }
     return null;
   };
+  const renderProjectionRowWithBoundary = (
+    row: ReturnType<typeof timelineRowByKey.get>,
+  ) => {
+    if (!row) {
+      return null;
+    }
+    const hydrationState = timelineRowHydrationStateByKey.get(row.key);
+    return (
+      <ConversationRowErrorBoundary
+        key={`row-boundary:${row.key}:${hydrationState?.contentHash ?? "unknown"}`}
+        rowKey={row.key}
+        rowKind={row.kind}
+        contentHash={hydrationState?.contentHash ?? null}
+        renderWeight={hydrationState?.renderWeight ?? null}
+        engine={activeEngine}
+        threadId={threadId}
+        workspaceId={workspaceId ?? null}
+        fallbackTitle={t("messages.rowRenderFailedTitle")}
+        fallbackDescription={t("messages.rowRenderFailedDescription")}
+        retryLabel={t("messages.rowRenderRetry")}
+        retryBlockedLabel={t("messages.rowRenderRetryBlocked")}
+      >
+        {shouldRenderLightweightProjectionRow(row, hydrationState) && hydrationState
+          ? renderLightweightProjectionRow(row, hydrationState)
+          : renderProjectionRow(row)}
+      </ConversationRowErrorBoundary>
+    );
+  };
   const renderVirtualProjectionRows = () => (
     <div
       className="messages-virtualized-canvas"
@@ -931,23 +1792,39 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       {virtualTimelineRows.map((virtualRow) => {
         const row = timelineProjectionRows[virtualRow.index];
         const isActiveLiveTimelineRow = activeLiveTimelineRowKeySet.has(String(virtualRow.key));
+        const hydrationState = row ? timelineRowHydrationStateByKey.get(row.key) : undefined;
+        const isLightweightTimelineRow = row
+          ? shouldRenderLightweightProjectionRow(row, hydrationState)
+          : false;
+        const estimatedRowSize = estimateTimelineProjectionRowSize(row ?? {
+          kind: "bottomAnchor",
+          key: "bottom-anchor",
+        });
+        const placeholderHeight = resolveVirtualizedTimelineRowVisualHeight({
+          measuredSize: virtualRow.size,
+          estimatedSize: estimatedRowSize,
+          lightweight: isLightweightTimelineRow,
+        });
         return (
           <div
             key={virtualRow.key}
             data-index={virtualRow.index}
             data-active-live-row={isActiveLiveTimelineRow ? "true" : undefined}
+            data-conversation-lightweight-virtual-row={isLightweightTimelineRow ? "true" : undefined}
             data-timeline-row-kind={row?.kind}
+            data-virtual-row-size={placeholderHeight}
             className={isActiveLiveTimelineRow ? "messages-virtualized-row is-active-live-row" : "messages-virtualized-row"}
             ref={timelineVirtualizer.measureElement}
             style={{
               left: 0,
+              minHeight: `${placeholderHeight}px`,
               position: "absolute",
               top: 0,
               transform: `translateY(${virtualRow.start}px)`,
               width: "100%",
             }}
           >
-            {renderProjectionRow(row)}
+            {renderProjectionRowWithBoundary(row)}
           </div>
         );
       })}
@@ -955,7 +1832,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   );
   const renderStaticProjectionRows = () =>
     timelineProjectionRows.map((row) => (
-      <Fragment key={row.key}>{renderProjectionRow(row)}</Fragment>
+      <Fragment key={row.key}>{renderProjectionRowWithBoundary(row)}</Fragment>
     ));
 
   const handleJumpToHeading = (headingId: string) => {
@@ -964,9 +1841,73 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       target.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   };
+  const shouldShowConversationLightweightPrompt =
+    !isThinking &&
+    !isWorking &&
+    !conversationDetailHydrationRequested &&
+    (conversationLightweightPolicy.suggested || effectiveConversationLightweightMode);
+  const renderConversationLightweightPrompt = () => {
+    if (!shouldShowConversationLightweightPrompt) {
+      return null;
+    }
+    const titleKey = conversationLightweightPolicy.oversized
+      ? "messages.conversationOversizedHistoryTitle"
+      : effectiveConversationLightweightMode
+        ? "messages.conversationLightweightModeTitle"
+        : "messages.conversationLightweightSuggestionTitle";
+    const descriptionKey = conversationLightweightPolicy.oversized
+      ? "messages.conversationOversizedHistoryDescription"
+      : effectiveConversationLightweightMode
+        ? "messages.conversationLightweightModeDescription"
+        : "messages.conversationLightweightSuggestionDescription";
+    return (
+      <div
+        className="messages-lightweight-mode-banner"
+        data-conversation-lightweight-mode={effectiveConversationLightweightMode ? "active" : "suggested"}
+        role="status"
+      >
+        <div className="messages-lightweight-mode-banner-copy">
+          <span className="messages-lightweight-mode-banner-eyebrow">
+            {t("messages.conversationLightweightModeEyebrow")}
+          </span>
+          <strong>{t(titleKey)}</strong>
+          <span>
+            {t(descriptionKey, {
+              heavyRows: timelineRenderWeightSummary.heavyRowCount,
+              renderWeight: timelineRenderWeightSummary.renderWeight,
+              rows: timelineRenderWeightSummary.rowCount,
+            })}
+          </span>
+        </div>
+        <div className="messages-lightweight-mode-banner-actions">
+          {!effectiveConversationLightweightMode ? (
+            <button type="button" onClick={onConversationLightweightModeEnable}>
+              {t("messages.conversationLightweightUse")}
+            </button>
+          ) : null}
+          {effectiveConversationLightweightMode ? (
+            <button type="button" onClick={onConversationDetailHydrationRequest}>
+              {t("messages.conversationLightweightHydrateVisible")}
+            </button>
+          ) : null}
+        </div>
+      </div>
+    );
+  };
 
   return (
-    <div ref={floaterContainerRef} className="messages-timeline-root">
+    <div
+      ref={floaterContainerRef}
+      className="messages-timeline-root"
+      data-timeline-static-expanded-history={
+        shouldUseStaticExpandedHistoryFlow ? "true" : undefined
+      }
+      data-timeline-static-lightweight-history={
+        shouldUseStaticLightweightHistoryFlow ? "true" : undefined
+      }
+      data-timeline-presentation-mode={presentationMode}
+      data-timeline-presentation-scope={presentationScopeKey}
+    >
       <MessagesOutlineFloater
         outline={currentOutline?.outline ?? null}
         activeHeadingId={activeHeadingId}
@@ -1031,6 +1972,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         data-timeline-projection-row-count={timelineProjectionRows.length}
         data-timeline-virtualized={shouldVirtualizeTimeline ? "true" : "false"}
       >
+        {renderConversationLightweightPrompt()}
         {visibleCollapsedHistoryItemCount > 0 && (
           <div
             className="messages-collapsed-indicator"

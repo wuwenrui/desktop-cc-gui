@@ -79,7 +79,7 @@ impl WorkspaceSession {
                 state.first_assistant_item_event_received_at_ms = Some(stdout_received_at_ms);
                 state.first_assistant_item_event_method = method.clone();
             }
-            if method_name == Some("item/agentMessage/delta")
+            if is_agent_message_text_delta_method(method_name)
                 && state.first_agent_message_event_received_at_ms.is_none()
             {
                 state.first_agent_message_event_received_at_ms = Some(stdout_received_at_ms);
@@ -302,7 +302,7 @@ impl WorkspaceSession {
 }
 
 fn has_agent_message_text_delta(value: &Value) -> bool {
-    if extract_event_method(value) != Some("item/agentMessage/delta") {
+    if !is_agent_message_text_delta_method(extract_event_method(value)) {
         return false;
     }
     value
@@ -312,6 +312,15 @@ fn has_agent_message_text_delta(value: &Value) -> bool {
         .map(str::trim)
         .filter(|text| !text.is_empty())
         .is_some()
+}
+
+fn is_agent_message_text_delta_method(method: Option<&str>) -> bool {
+    matches!(
+        method,
+        Some(
+            "item/agentMessage/delta" | "text:delta" | "text/delta" | "item/agentMessage/textDelta"
+        )
+    )
 }
 
 fn is_reasoning_event_method(method: Option<&str>) -> bool {
@@ -638,10 +647,16 @@ async fn emit_workspace_event<E: EventSink>(
         }
     }
     if !sent_to_background {
-        event_sink.emit_app_server_event(AppServerEvent {
-            workspace_id: workspace_id.to_string(),
-            message: value,
-        });
+        let events = {
+            let mut throttle = session.snapshot_throttle.lock().await;
+            throttle.filter_event(workspace_id, value)
+        };
+        for message in events {
+            event_sink.emit_app_server_event(AppServerEvent {
+                workspace_id: workspace_id.to_string(),
+                message,
+            });
+        }
     }
 }
 

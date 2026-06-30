@@ -795,6 +795,7 @@ export function AppShell() {
     id: null as string | null,
     model: null as string | null,
     source: null as string | null,
+    providerProfileId: null as string | null,
     effort: null as string | null,
     collaborationMode: null as Record<string, unknown> | null,
   });

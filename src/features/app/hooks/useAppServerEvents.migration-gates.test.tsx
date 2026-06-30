@@ -3,13 +3,21 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppServerEvent } from "../../../types";
-import { subscribeAppServerEvents } from "../../../services/events";
+import {
+  subscribeAppServerEvents,
+  subscribeRawAppServerEvents,
+} from "../../../services/events";
 import { CONVERSATION_ASSEMBLY_MIGRATION_GATES } from "../../threads/assembly/conversationMigrationGates";
 import { useAppServerEvents } from "./useAppServerEvents";
 
-vi.mock("../../../services/events", () => ({
-  subscribeAppServerEvents: vi.fn(),
-}));
+vi.mock("../../../services/events", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../services/events")>();
+  return {
+    ...actual,
+    subscribeAppServerEvents: vi.fn(),
+    subscribeRawAppServerEvents: vi.fn(),
+  };
+});
 
 type Handlers = Parameters<typeof useAppServerEvents>[0];
 type HookOptions = Parameters<typeof useAppServerEvents>[1];
@@ -32,6 +40,10 @@ beforeEach(() => {
   listener = null;
   unlisten.mockReset();
   vi.mocked(subscribeAppServerEvents).mockImplementation((cb) => {
+    listener = cb;
+    return unlisten;
+  });
+  vi.mocked(subscribeRawAppServerEvents).mockImplementation((cb) => {
     listener = cb;
     return unlisten;
   });
@@ -63,7 +75,7 @@ describe("useAppServerEvents migration gates", () => {
         useNormalizedRealtimeAdapters: true,
       });
 
-      act(() => {
+      await act(async () => {
         listener?.({
           workspace_id: "ws-claude",
           message: {
@@ -78,6 +90,8 @@ describe("useAppServerEvents migration gates", () => {
             },
           },
         });
+
+        await new Promise((resolve) => setTimeout(resolve, 0));
       });
 
       expect(handlers.onAgentMessageDelta).not.toHaveBeenCalled();

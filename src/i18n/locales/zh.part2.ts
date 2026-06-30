@@ -60,8 +60,9 @@ const zhPart2 = {
     error: {
       createSessionRecoveryRequired:
         "{{workspace}}：会话创建失败，运行时正在恢复",
-      threadTurnFailed:
-        "{{engine}} 会话失败：{{message}} {{reasonCode}} {{actionHint}}",
+      threadTurnFailed: "{{engine}} 会话失败：{{message}}",
+      codexSessionRecoverableFailure:
+        "Codex 连接中断：旧会话绑定或运行时连接已失效，请重试或重新连接。",
     },
   },
   // 工作区

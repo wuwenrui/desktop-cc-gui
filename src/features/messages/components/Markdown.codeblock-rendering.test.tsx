@@ -101,4 +101,61 @@ describe("Markdown fenced block rendering", () => {
     expect(lines[0]?.textContent).toBe("first line");
     expect(lines[1]?.textContent).toBe("second line");
   });
+
+  it("defers heavy code blocks without changing rendered canonical value", async () => {
+    const onRenderedValueChange = vi.fn();
+    const value = [
+      "```ts",
+      ...Array.from({ length: 44 }, (_, index) => `const heavyValue${index} = ${index};`),
+      "```",
+    ].join("\n");
+
+    const { container } = render(
+      <Markdown
+        value={value}
+        className="markdown message"
+        codeBlockStyle="message"
+        onRenderedValueChange={onRenderedValueChange}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Heavy Markdown detail deferred")).toBeTruthy();
+    });
+    expect(container.textContent).not.toContain("heavyValue43");
+    expect(onRenderedValueChange).toHaveBeenCalledWith(value);
+
+    fireEvent.click(screen.getByRole("button", { name: "Show detail" }));
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("heavyValue43");
+    });
+  });
+
+  it("defers large markdown tables until explicitly expanded", async () => {
+    const value = [
+      "| A | B | C |",
+      "| - | - | - |",
+      ...Array.from({ length: 14 }, (_, index) => `| row-${index} | value | value |`),
+    ].join("\n");
+
+    const { container } = render(
+      <Markdown
+        value={value}
+        className="markdown message"
+        codeBlockStyle="message"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Heavy Markdown detail deferred")).toBeTruthy();
+    });
+    expect(container.textContent).not.toContain("row-13");
+
+    fireEvent.click(screen.getByRole("button", { name: "Show detail" }));
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("row-13");
+    });
+  });
 });

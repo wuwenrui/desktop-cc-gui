@@ -281,6 +281,7 @@ type ComposerProps = {
   dictationLevel?: number;
   onToggleDictation?: () => void;
   onOpenDictationSettings?: () => void;
+  onOpenSkillsSettings?: () => void;
   onOpenExperimentalSettings?: () => void;
   dictationTranscript?: DictationTranscript | null;
   onDictationTranscriptHandled?: (id: string) => void;
@@ -394,6 +395,13 @@ const COMPOSER_INPUT_INTERACTION_IDLE_MS = 320;
 const BROWSER_OPEN_DOCK_EVENT = "browser-agent:open-dock";
 const BROWSER_OPEN_URL_EVENT = "browser-agent:open-url";
 const PENDING_BROWSER_URL_KEY = "ccgui.browserAgent.pendingUrl";
+const COMPOSER_CANVAS_ONLY_PROPS = new Set<keyof ComposerProps>([
+  "items",
+  "threadItemsByThread",
+  "threadStatusById",
+  "contextUsage",
+  "accountRateLimits",
+]);
 
 function resolveSelectedNamedItems<T extends { name: string; displayName?: string }>(
   selectedNames: string[],
@@ -448,7 +456,7 @@ function normalizeCommandChipName(name: string) {
   return token ? token.toLowerCase() : "";
 }
 
-export const Composer = memo(function Composer({
+function ComposerImpl({
   kanbanContextMode: _kanbanContextMode = "new",
   onKanbanContextModeChange: _onKanbanContextModeChange,
   items = EMPTY_ITEMS,
@@ -548,6 +556,7 @@ export const Composer = memo(function Composer({
   dictationLevel: _dictationLevel = 0,
   onToggleDictation: _onToggleDictation,
   onOpenDictationSettings: _onOpenDictationSettings,
+  onOpenSkillsSettings: _onOpenSkillsSettings,
   onOpenExperimentalSettings: _onOpenExperimentalSettings,
   dictationTranscript = null,
   onDictationTranscriptHandled,
@@ -2510,6 +2519,7 @@ export const Composer = memo(function Composer({
               sendReadiness={composerSendReadiness}
               onJumpToRequest={activeUserInputRequest ? handleJumpToUserInputRequest : undefined}
               onToggleContextSources={contextLedgerProjection.visible ? handleToggleContextSources : undefined}
+              onOpenSkillsSettings={_onOpenSkillsSettings}
               contextSourcesExpanded={contextLedgerExpanded}
               selectedCollaborationModeId={_selectedCollaborationModeId}
               onSelectCollaborationMode={_onSelectCollaborationMode}
@@ -2549,4 +2559,42 @@ export const Composer = memo(function Composer({
       />
     </footer>
   );
-});
+}
+
+function areComposerPropsEqual(previous: ComposerProps, next: ComposerProps): boolean {
+  const shouldUseInteractionLaneComparator =
+    Boolean(previous.isProcessing) && Boolean(next.isProcessing);
+  if (!shouldUseInteractionLaneComparator) {
+    return areComposerPropsShallowEqual(previous, next, null);
+  }
+  if ((previous.items?.length ?? 0) === 0 && (next.items?.length ?? 0) > 0) {
+    return false;
+  }
+  return areComposerPropsShallowEqual(previous, next, COMPOSER_CANVAS_ONLY_PROPS);
+}
+
+function areComposerPropsShallowEqual(
+  previous: ComposerProps,
+  next: ComposerProps,
+  ignoredProps: ReadonlySet<keyof ComposerProps> | null,
+): boolean {
+  const previousKeys = Object.keys(previous) as Array<keyof ComposerProps>;
+  const nextKeys = Object.keys(next) as Array<keyof ComposerProps>;
+  if (previousKeys.length !== nextKeys.length) {
+    return false;
+  }
+  for (const key of previousKeys) {
+    if (!Object.prototype.hasOwnProperty.call(next, key)) {
+      return false;
+    }
+    if (ignoredProps?.has(key)) {
+      continue;
+    }
+    if (!Object.is(previous[key], next[key])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+export const Composer = memo(ComposerImpl, areComposerPropsEqual);

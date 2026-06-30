@@ -67,8 +67,9 @@ const enPart2 = {
     error: {
       createSessionRecoveryRequired:
         "{{workspace}}: Session creation failed while runtime recovery is in progress",
-      threadTurnFailed:
-        "{{engine}} session failed: {{message}} {{reasonCode}} {{actionHint}}",
+      threadTurnFailed: "{{engine}} session failed: {{message}}",
+      codexSessionRecoverableFailure:
+        "Codex connection interrupted: the previous session binding or runtime connection is no longer usable. Retry or reconnect.",
     },
   },
   // Workspace

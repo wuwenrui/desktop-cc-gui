@@ -45,6 +45,10 @@ describe("TopbarSessionTabs", () => {
     expect(screen.getByRole("tab", { name: "Codex · Only Session" })).toBeTruthy();
   });
 
+  it("keeps a stable displayName for profiler diagnostics", () => {
+    expect(TopbarSessionTabs.displayName).toBe("TopbarSessionTabs");
+  });
+
   it("renders tabs, sends click only for non-active items, and supports close action", () => {
     const onSelectThread = vi.fn();
     const onCloseThread = vi.fn();

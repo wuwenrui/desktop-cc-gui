@@ -21,7 +21,7 @@ use tokio::time::timeout;
 
 use super::claude_history_entries::{
     classify_claude_history_entry, extract_text_from_content, ClaudeHistoryEntryClassification,
-    ClaudeLocalControlEvent, CLAUDE_CONTROL_EVENT_TOOL_TYPE,
+    ClaudeHistoryHiddenReason, ClaudeLocalControlEvent, CLAUDE_CONTROL_EVENT_TOOL_TYPE,
 };
 use super::claude_history_large_payload::{
     estimate_base64_decoded_bytes, extract_images_and_deferred_from_content,
@@ -702,6 +702,7 @@ async fn scan_session_source_file(
     let mut transcript_cwd: Option<String> = None;
     let mut malformed_line_count: usize = 0;
     let mut read_error_count: usize = 0;
+    let mut suppress_polluted_assistant_until_next_user = false;
 
     loop {
         let Some(line) = (match lines.next_line().await {
@@ -727,6 +728,15 @@ async fn scan_session_source_file(
         };
 
         let classification = classify_claude_history_entry(&entry);
+        if matches!(
+            classification,
+            ClaudeHistoryEntryClassification::Hidden(
+                ClaudeHistoryHiddenReason::StreamJsonStdinPayload
+            )
+        ) {
+            suppress_polluted_assistant_until_next_user = true;
+            continue;
+        }
         if matches!(classification, ClaudeHistoryEntryClassification::Hidden(_)) {
             continue;
         }
@@ -752,6 +762,16 @@ async fn scan_session_source_file(
             .and_then(|r| r.as_str())
             .unwrap_or("");
         let is_meta = is_claude_meta_entry(&entry, msg);
+
+        if suppress_polluted_assistant_until_next_user && role == "assistant" {
+            continue;
+        }
+        if suppress_polluted_assistant_until_next_user
+            && role == "user"
+            && matches!(classification, ClaudeHistoryEntryClassification::Normal)
+        {
+            suppress_polluted_assistant_until_next_user = false;
+        }
 
         if (role == "user" || role == "assistant")
             && matches!(classification, ClaudeHistoryEntryClassification::Normal)
@@ -1816,6 +1836,7 @@ pub(crate) async fn load_claude_session_from_base_dir(
     let mut last_usage: Option<ClaudeSessionUsage> = None;
     let mut counter: usize = 0;
     let mut line_index: usize = 0;
+    let mut suppress_polluted_assistant_until_next_user = false;
 
     while let Ok(Some(line)) = lines.next_line().await {
         let current_line_index = line_index;
@@ -1831,6 +1852,15 @@ pub(crate) async fn load_claude_session_from_base_dir(
         };
 
         let classification = classify_claude_history_entry(&entry);
+        if matches!(
+            classification,
+            ClaudeHistoryEntryClassification::Hidden(
+                ClaudeHistoryHiddenReason::StreamJsonStdinPayload
+            )
+        ) {
+            suppress_polluted_assistant_until_next_user = true;
+            continue;
+        }
         if matches!(classification, ClaudeHistoryEntryClassification::Hidden(_)) {
             continue;
         }
@@ -1844,6 +1874,16 @@ pub(crate) async fn load_claude_session_from_base_dir(
 
         if role != "user" && role != "assistant" {
             continue;
+        }
+
+        if suppress_polluted_assistant_until_next_user && role == "assistant" {
+            continue;
+        }
+        if suppress_polluted_assistant_until_next_user
+            && role == "user"
+            && matches!(classification, ClaudeHistoryEntryClassification::Normal)
+        {
+            suppress_polluted_assistant_until_next_user = false;
         }
 
         // Extract usage data from assistant messages

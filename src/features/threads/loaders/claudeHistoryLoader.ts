@@ -82,10 +82,7 @@ type RequestUserInputSubmittedPayload = {
 };
 
 type ClaudeLocalControlEventType =
-  | "resumeFailed"
-  | "modelChanged"
-  | "interrupted"
-  | "localCommandOutput";
+  "resumeFailed" | "modelChanged" | "interrupted" | "localCommandOutput";
 
 type ClaudeLocalControlClassification =
   | { kind: "normal" }
@@ -103,6 +100,9 @@ type ClaudeLocalControlClassification =
       detail: string;
     };
 
+type ClaudeControlPlaneClassification =
+  "control-plane" | "stream-json-stdin-payload" | null;
+
 const CLAUDE_CONTROL_EVENT_TOOL_TYPE = "claudeControlEvent";
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -112,7 +112,9 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value as Record<string, unknown>;
 }
 
-function parseJsonRecordFromText(value: string): Record<string, unknown> | null {
+function parseJsonRecordFromText(
+  value: string,
+): Record<string, unknown> | null {
   const trimmed = value.trim();
   if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) {
     return null;
@@ -186,13 +188,45 @@ function isCodexCommandToken(token: string | undefined) {
   if (!token) {
     return false;
   }
-  const command = token.replace(/^['"]|['"]$/g, "").split(/[\\/]/).pop();
+  const command = token
+    .replace(/^['"]|['"]$/g, "")
+    .split(/[\\/]/)
+    .pop();
   return (
     command === "codex" ||
     command === "codex.exe" ||
     command === "codex.cmd" ||
     command === "codex.bat"
   );
+}
+
+function isClaudeStreamJsonStdinPayloadText(text: string) {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) {
+    return false;
+  }
+  const payload = parseJsonRecordFromText(trimmed);
+  if (!payload || asString(payload.type) !== "user") {
+    return false;
+  }
+  const message = asRecord(payload.message);
+  if (!message || asString(message.role) !== "user") {
+    return false;
+  }
+  const content = message.content;
+  if (!Array.isArray(content)) {
+    return false;
+  }
+  return content.some((block) => {
+    const blockType = asString(asRecord(block)?.type);
+    return (
+      blockType === "text" ||
+      blockType === "image" ||
+      blockType === "image_url" ||
+      blockType === "input_text" ||
+      blockType === "input_image"
+    );
+  });
 }
 
 function extractTextFromClaudeContent(content: unknown): string {
@@ -215,29 +249,43 @@ function extractTextFromClaudeContent(content: unknown): string {
   return "";
 }
 
-function isClaudeControlPlaneMessage(message: Record<string, unknown>) {
+function getClaudeHistoryMessageRole(
+  message: Record<string, unknown>,
+): "user" | "assistant" | "" {
+  const nestedMessage = asRecord(message.message);
+  const role = asString(message.role ?? nestedMessage?.role);
+  return role === "user" || role === "assistant" ? role : "";
+}
+
+function classifyClaudeControlPlaneMessage(
+  message: Record<string, unknown>,
+): ClaudeControlPlaneClassification {
+  const nestedMessage = asRecord(message.message);
+  const text =
+    asString(message.text ?? "") ||
+    extractTextFromClaudeContent(nestedMessage?.content);
+  if (isClaudeStreamJsonStdinPayloadText(text)) {
+    return "stream-json-stdin-payload";
+  }
+
   const method = asString(message.method);
   if (method === "initialize") {
-    return true;
+    return "control-plane";
   }
 
   const params = message.params ?? message.payload;
   if (isCcguiClientInfo(params) && hasExperimentalApiCapability(params)) {
-    return true;
+    return "control-plane";
   }
 
   if (
     recordContainsKey(message, "developer_instructions") ||
     recordContainsString(message, "developer_instructions=")
   ) {
-    return true;
+    return "control-plane";
   }
 
-  const nestedMessage = asRecord(message.message);
-  const text =
-    asString(message.text ?? "") ||
-    extractTextFromClaudeContent(nestedMessage?.content);
-  return isCodexAppServerControlPlaneText(text);
+  return isCodexAppServerControlPlaneText(text) ? "control-plane" : null;
 }
 
 function unwrapTaggedText(text: string, tag: string): string | null {
@@ -606,7 +654,9 @@ function extractDeferredClaudeImages(
       continue;
     }
     const sessionId = asString(locatorRecord.sessionId).trim();
-    const mediaType = asString(record.mediaType ?? locatorRecord.mediaType).trim();
+    const mediaType = asString(
+      record.mediaType ?? locatorRecord.mediaType,
+    ).trim();
     const lineIndex = Number(locatorRecord.lineIndex);
     const blockIndex = Number(locatorRecord.blockIndex);
     if (
@@ -849,7 +899,9 @@ function parseAskUserAnswerParts(raw: string): AskUserQuestionAnswer {
   return { selectedOptions, note };
 }
 
-function decodeBase64JsonRecord(base64Value: string): Record<string, unknown> | null {
+function decodeBase64JsonRecord(
+  base64Value: string,
+): Record<string, unknown> | null {
   try {
     const binary = globalThis.atob(base64Value);
     const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
@@ -928,12 +980,16 @@ function parseAskUserAnswerSegments(
     positionalAnswerSegments,
     displaySelectionText: baseSegments
       .map((segment) => {
-        const keyedMatch = segment.match(/^([A-Za-z0-9_.:-]+)\s*=\s*([\s\S]*)$/);
+        const keyedMatch = segment.match(
+          /^([A-Za-z0-9_.:-]+)\s*=\s*([\s\S]*)$/,
+        );
         if (!keyedMatch) {
           return segment;
         }
         const questionId = asString(keyedMatch[1]).trim();
-        return templateIds.has(questionId) ? asString(keyedMatch[2]).trim() : segment;
+        return templateIds.has(questionId)
+          ? asString(keyedMatch[2]).trim()
+          : segment;
       })
       .filter(Boolean)
       .join("; "),
@@ -1590,12 +1646,19 @@ export function parseClaudeHistoryMessages(
   };
 
   const messages = Array.isArray(messagesData) ? messagesData : [];
+  let suppressPollutedAssistantUntilNextUser = false;
   for (const rawMessage of messages) {
     const message = asRecord(rawMessage);
     if (!message) {
       continue;
     }
-    if (isClaudeControlPlaneMessage(message)) {
+    const controlPlaneClassification =
+      classifyClaudeControlPlaneMessage(message);
+    if (controlPlaneClassification === "stream-json-stdin-payload") {
+      suppressPollutedAssistantUntilNextUser = true;
+      continue;
+    }
+    if (controlPlaneClassification) {
       continue;
     }
     const localControlClassification =
@@ -1615,7 +1678,14 @@ export function parseClaudeHistoryMessages(
     }
     const kind = asString(message.kind ?? "");
     if (kind === "message") {
-      const role = asString(message.role) === "user" ? "user" : "assistant";
+      const role =
+        getClaudeHistoryMessageRole(message) === "user" ? "user" : "assistant";
+      if (suppressPollutedAssistantUntilNextUser && role === "assistant") {
+        continue;
+      }
+      if (suppressPollutedAssistantUntilNextUser && role === "user") {
+        suppressPollutedAssistantUntilNextUser = false;
+      }
       const text = asString(message.text ?? "");
       if (shouldSkipSyntheticApprovalResumePrompt(role, text)) {
         continue;
@@ -1634,10 +1704,7 @@ export function parseClaudeHistoryMessages(
         const pendingAskToolId = peekPendingAskTool();
         if (pendingAskToolId) {
           const templates = askTemplatesByToolId.get(pendingAskToolId) ?? [];
-          const parsedAnswer = parseAskUserQuestionAnswerText(
-            text,
-            templates,
-          );
+          const parsedAnswer = parseAskUserQuestionAnswerText(text, templates);
           if (parsedAnswer) {
             pendingAskToolIds.shift();
             markAskToolCompleted(
@@ -1682,8 +1749,7 @@ export function parseClaudeHistoryMessages(
         text: normalizedMessageText,
         ...(messageTurnId ? { turnId: messageTurnId } : {}),
         images: images.length > 0 ? images : undefined,
-        deferredImages:
-          deferredImages.length > 0 ? deferredImages : undefined,
+        deferredImages: deferredImages.length > 0 ? deferredImages : undefined,
         ...(typeof assistantFinalFlag === "boolean"
           ? { isFinal: assistantFinalFlag }
           : {}),
@@ -2099,7 +2165,8 @@ export function recoverClaudeInterruptedAssistantFromShadow({
   hasExplicitFinalAfterLastUser?: boolean;
 }) {
   const resolvedExpectedTurnId = expectedTurnId?.trim() || null;
-  const lookupTurnId = resolvedExpectedTurnId || deriveLatestTurnIdFromItems(items);
+  const lookupTurnId =
+    resolvedExpectedTurnId || deriveLatestTurnIdFromItems(items);
   const unsettledShadow = findLiveAssistantShadowTranscriptForRestore({
     workspaceId,
     threadId,

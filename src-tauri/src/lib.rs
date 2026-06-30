@@ -131,6 +131,7 @@ mod code_intel;
 mod codex;
 mod command_registry;
 mod computer_use;
+mod curated_skills;
 mod diagnostics_bundle;
 mod dictation;
 mod email;
@@ -170,6 +171,7 @@ mod skill_installer;
 // Lawyer copilot: skill 市场（下载平台 skill 写入 ~/.claude/skills）
 mod skill_market;
 mod skills;
+mod snapshot_throttle;
 mod startup_guard;
 mod state;
 mod storage;

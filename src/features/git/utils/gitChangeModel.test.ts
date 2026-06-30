@@ -53,6 +53,22 @@ describe("gitChangeModel", () => {
     });
   });
 
+  it("fills missing status stats from matching diff evidence", () => {
+    const result = buildCanonicalGitChanges({
+      files: [statusFile("CHANGELOG.md", "M", 0, 0)],
+      unstagedFiles: [statusFile("CHANGELOG.md", "M", 0, 0)],
+      diffs: [
+        diffFile(
+          "CHANGELOG.md",
+          "@@ -1,2 +1,8 @@\n old\n+one\n+two\n+three\n+four\n+five\n+six",
+        ),
+      ],
+    });
+
+    expect(result.files).toEqual([statusFile("CHANGELOG.md", "M", 6, 0)]);
+    expect(result.unstagedFiles).toEqual([statusFile("CHANGELOG.md", "M", 6, 0)]);
+  });
+
   it("adds diff-only new files as preview-only fallback rows", () => {
     const result = buildCanonicalGitChanges({
       files: [],
@@ -116,6 +132,19 @@ describe("gitChangeModel", () => {
     expect(getGitChangeActionKey("unstaged", "src/app.ts", "discard")).toBe(
       "unstaged:src/app.ts:discard",
     );
+  });
+
+  it("does not duplicate fallback diff stats across staged and unstaged rows", () => {
+    const result = buildCanonicalGitChanges({
+      files: [statusFile("src/app.ts", "M", 0, 0)],
+      stagedFiles: [statusFile("src/app.ts", "M", 0, 0)],
+      unstagedFiles: [statusFile("src/app.ts", "M", 0, 0)],
+      diffs: [diffFile("src/app.ts", "@@ -1 +1 @@\n-old\n+new")],
+    });
+
+    expect(result.files).toEqual([statusFile("src/app.ts", "M", 1, 1)]);
+    expect(result.stagedFiles).toEqual([statusFile("src/app.ts", "M", 0, 0)]);
+    expect(result.unstagedFiles).toEqual([statusFile("src/app.ts", "M", 0, 0)]);
   });
 
   it("infers status consistently for CRLF and LF diffs", () => {

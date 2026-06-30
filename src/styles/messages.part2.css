@@ -434,6 +434,78 @@
   border-color: var(--border-accent);
 }
 
+.message .markdown-heavy-island-placeholder {
+  border-style: dashed;
+}
+
+.message .markdown-heavy-island-placeholder-body {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  color: var(--text-muted);
+  font-size: var(--message-meta-font-size);
+}
+
+.message .markdown-heavy-island-placeholder-body strong {
+  color: var(--text-strong);
+  font-size: var(--message-content-font-size);
+}
+
+.message .markdown-heavy-island-placeholder-body button {
+  justify-self: start;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--surface-control);
+  color: var(--text-default);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--message-meta-font-size);
+}
+
+.message .markdown-heavy-island-placeholder-body button:hover,
+.message .markdown-heavy-island-placeholder-body button:focus-visible {
+  background: var(--surface-control-hover);
+  color: var(--text-strong);
+}
+
+.tool-heavy-detail-placeholder {
+  display: grid;
+  gap: 6px;
+  margin: 6px 0;
+  padding: 10px 12px;
+  border: 1px dashed var(--border-subtle);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-control) 88%, #2563eb 12%);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.tool-heavy-detail-placeholder strong {
+  color: var(--text-strong);
+  font-size: 13px;
+}
+
+.tool-heavy-detail-placeholder button {
+  justify-self: start;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--surface-control);
+  color: var(--text-default);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+.tool-heavy-detail-placeholder button:hover,
+.tool-heavy-detail-placeholder button:focus-visible {
+  background: var(--surface-control-hover);
+  color: var(--text-strong);
+}
+
 .message .markdown-codeblock pre {
   margin: 0;
   padding: 10px 0 12px;

@@ -1,4 +1,5 @@
 import type { TFunction } from 'i18next';
+import type { ReactNode } from 'react';
 import type { ComposerSendReadiness } from '../../utils/composerSendReadiness';
 import type { Attachment, ModelInfo, ProviderId, QueuedMessage } from './types.js';
 import type { ProviderModelGroup } from './modelOptions.js';
@@ -31,6 +32,7 @@ export function ChatInputBoxHeader({
   onAddModel,
   onRefreshModelConfig,
   isModelConfigRefreshing,
+  rightAccessory,
   showOpenSourceBanner,
   onDismissOpenSourceBanner,
 }: {
@@ -58,6 +60,7 @@ export function ChatInputBoxHeader({
   onAddModel?: () => void;
   onRefreshModelConfig?: () => Promise<void> | void;
   isModelConfigRefreshing?: boolean;
+  rightAccessory?: ReactNode;
   showOpenSourceBanner?: boolean;
   onDismissOpenSourceBanner?: () => void;
 }) {
@@ -138,6 +141,7 @@ export function ChatInputBoxHeader({
           onAddModel={onAddModel}
           onRefreshModelConfig={onRefreshModelConfig}
           isModelConfigRefreshing={isModelConfigRefreshing}
+          rightAccessory={rightAccessory}
         />
       )}
 

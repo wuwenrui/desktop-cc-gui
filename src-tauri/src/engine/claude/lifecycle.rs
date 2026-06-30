@@ -169,6 +169,95 @@ impl ClaudeSession {
         }
     }
 
+    /// Variant of `send_message_with_auto_compact_retry` that threads a
+    /// caller-owned `AppSettings` snapshot through every internal
+    /// `send_message` call. The snapshot reaches `build_command`, which
+    /// is the only place that reads `enabled_curated_skill_ids` to build
+    /// the `--append-system-prompt` body. Without this variant the auto
+    /// compact retry path silently drops the snapshot, so a curated
+    /// skill that was enabled after the first attempt's settings clone
+    /// would not be injected on retry.
+    #[allow(dead_code)] // callers live in `bin/cc_gui_daemon`; the lib
+                        // build cannot see those references and the
+                        // method is otherwise correct.
+    pub async fn send_message_with_auto_compact_retry_with_app_settings(
+        &self,
+        params: SendMessageParams,
+        turn_id: &str,
+        app_settings: Option<&crate::types::AppSettings>,
+    ) -> Result<String, String> {
+        let first_attempt = self
+            .send_message_with_app_settings(params.clone(), turn_id, app_settings)
+            .await;
+        let first_error = match first_attempt {
+            Ok(response) => return Ok(response),
+            Err(error) => error,
+        };
+
+        let trigger_error = match Self::extract_retryable_prompt_too_long_error(&first_error) {
+            Some(error) => error,
+            None => return Err(Self::clear_retryable_prompt_too_long_marker(first_error)),
+        };
+
+        log::warn!(
+            "[claude] turn={} hit prompt-too-long boundary, triggering one-time /compact recovery",
+            turn_id
+        );
+
+        self.emit_compaction_signal(turn_id, "compacting", None);
+
+        let mut compact_params = params.clone();
+        compact_params.text = "/compact".to_string();
+        compact_params.images = None;
+        compact_params.continue_session = true;
+        if compact_params.session_id.is_none() {
+            compact_params.session_id = self.get_session_id().await;
+        }
+        let compact_turn_id = format!("{turn_id}::auto-compact");
+        if let Err(compact_error) = self
+            .send_message_with_app_settings(compact_params, &compact_turn_id, app_settings)
+            .await
+        {
+            let compact_error = Self::clear_retryable_prompt_too_long_marker(compact_error);
+            let failure_message = format!(
+                "Prompt is too long and automatic /compact failed: {}",
+                compact_error
+            );
+            let mut failure_payload = serde_json::Map::new();
+            failure_payload.insert("reason".to_string(), Value::String(failure_message.clone()));
+            self.emit_compaction_signal(turn_id, "compaction_failed", Some(failure_payload));
+            self.emit_error(turn_id, failure_message.clone());
+            return Err(failure_message);
+        }
+
+        let mut retry_params = params;
+        retry_params.continue_session = true;
+        if retry_params.session_id.is_none() {
+            retry_params.session_id = self.get_session_id().await;
+        }
+        match self
+            .send_message_with_app_settings(retry_params, turn_id, app_settings)
+            .await
+        {
+            Ok(response) => Ok(response),
+            Err(retry_error) => {
+                let retry_error = Self::clear_retryable_prompt_too_long_marker(retry_error);
+                let final_message = format!(
+                    "Prompt is too long. Retried once after /compact but still failed: {}",
+                    retry_error
+                );
+                log::error!(
+                    "[claude] auto /compact retry failed (turn={}): trigger={}, final={}",
+                    turn_id,
+                    trigger_error,
+                    final_message
+                );
+                self.emit_error(turn_id, final_message.clone());
+                Err(final_message)
+            }
+        }
+    }
+
     /// Try to extract context window usage from any event
     /// Claude CLI may provide usage data in multiple locations:
     /// 1. context_window.current_usage (statusline/hooks - most accurate)

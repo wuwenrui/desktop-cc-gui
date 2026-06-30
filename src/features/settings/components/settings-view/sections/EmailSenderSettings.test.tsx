@@ -478,7 +478,9 @@ describe("EmailSenderSettings", () => {
         expect.objectContaining({ clearSecret: true }),
       );
     });
-    expect((screen.getByLabelText("settings.emailSecret") as HTMLInputElement).value).toBe("");
+    await waitFor(() => {
+      expect((screen.getByLabelText("settings.emailSecret") as HTMLInputElement).value).toBe("");
+    });
   });
 
   it("shows structured test-send errors", async () => {

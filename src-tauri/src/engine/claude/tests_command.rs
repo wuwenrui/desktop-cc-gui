@@ -12,7 +12,7 @@ fn build_command_uses_session_id_for_new_conversation_without_continue() {
     params.continue_session = false;
     params.session_id = Some("11111111-1111-4111-8111-111111111111".to_string());
 
-    let command = session.build_command(&params, false, true);
+    let command = session.build_command(&params, false, true, None, None);
     let args: Vec<String> = command
         .as_std()
         .get_args()
@@ -35,7 +35,7 @@ fn build_command_uses_resume_when_continue_session_is_enabled() {
     params.continue_session = true;
     params.session_id = Some("22222222-2222-4222-8222-222222222222".to_string());
 
-    let command = session.build_command(&params, false, true);
+    let command = session.build_command(&params, false, true, None, None);
     let args: Vec<String> = command
         .as_std()
         .get_args()
@@ -54,7 +54,7 @@ fn build_command_includes_hook_events_when_requested() {
     let mut params = SendMessageParams::default();
     params.text = "hello".to_string();
 
-    let command = session.build_command(&params, false, true);
+    let command = session.build_command(&params, false, true, None, None);
     let args: Vec<String> = command
         .as_std()
         .get_args()
@@ -70,7 +70,7 @@ fn build_command_marks_gui_launch_as_claude_non_interactive() {
     let mut params = SendMessageParams::default();
     params.text = "hello".to_string();
 
-    let command = session.build_command(&params, false, true);
+    let command = session.build_command(&params, false, true, None, None);
 
     assert!(command.as_std().get_envs().any(|(key, value)| {
         key == CLAUDE_NON_INTERACTIVE_ENV && value.is_some_and(|entry| entry == "1")
@@ -84,7 +84,7 @@ fn build_command_adds_safe_mode_when_requested() {
     params.text = "hello".to_string();
     params.safe_mode = true;
 
-    let command = session.build_command(&params, false, true);
+    let command = session.build_command(&params, false, true, None, None);
     let args: Vec<String> = command
         .as_std()
         .get_args()
@@ -101,7 +101,7 @@ fn build_command_appends_hidden_system_prompt_when_requested() {
     params.text = "微信原文".to_string();
     params.append_system_prompt = Some("微信规则：只输出微信回复".to_string());
 
-    let command = session.build_command(&params, true, true);
+    let command = session.build_command(&params, true, true, None, None);
     let args: Vec<String> = command
         .as_std()
         .get_args()
@@ -120,7 +120,7 @@ fn build_command_can_omit_hook_events_for_legacy_retry() {
     let mut params = SendMessageParams::default();
     params.text = "hello".to_string();
 
-    let command = session.build_command(&params, false, false);
+    let command = session.build_command(&params, false, false, None, None);
     let args: Vec<String> = command
         .as_std()
         .get_args()
@@ -151,7 +151,7 @@ fn build_command_uses_native_fork_session_contract() {
     params.session_id = Some("child-should-not-be-used".to_string());
     params.fork_session_id = Some("33333333-3333-4333-8333-333333333333".to_string());
 
-    let command = session.build_command(&params, false, true);
+    let command = session.build_command(&params, false, true, None, None);
     let args: Vec<String> = command
         .as_std()
         .get_args()
@@ -191,7 +191,7 @@ fn build_command_rejects_invalid_native_fork_session_ids() {
             ClaudeSession::normalized_fork_session_id(&params).is_err(),
             "expected invalid fork session id to be rejected: {invalid:?}",
         );
-        let command = session.build_command(&params, false, true);
+        let command = session.build_command(&params, false, true, None, None);
         let args: Vec<String> = command
             .as_std()
             .get_args()
@@ -221,7 +221,7 @@ fn build_command_passes_custom_bracket_model_to_cli_argv() {
     params.text = "1+1".to_string();
     params.model = Some("Cxn[1m]".to_string());
 
-    let command = session.build_command(&params, false, true);
+    let command = session.build_command(&params, false, true, None, None);
     let args: Vec<String> = command
         .as_std()
         .get_args()
@@ -242,7 +242,7 @@ fn build_command_appends_allowed_reasoning_efforts() {
         params.text = "1+1".to_string();
         params.effort = Some(effort.to_string());
 
-        let command = session.build_command(&params, false, true);
+        let command = session.build_command(&params, false, true, None, None);
         let args: Vec<String> = command
             .as_std()
             .get_args()
@@ -266,7 +266,7 @@ fn build_command_ignores_missing_empty_and_invalid_reasoning_effort() {
         params.text = "1+1".to_string();
         params.effort = effort.map(str::to_string);
 
-        let command = session.build_command(&params, false, true);
+        let command = session.build_command(&params, false, true, None, None);
         let args: Vec<String> = command
             .as_std()
             .get_args()

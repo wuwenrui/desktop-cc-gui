@@ -1,6 +1,6 @@
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -11,6 +11,7 @@ use crate::state::AppState;
 use crate::text_encoding::decode_text_bytes;
 
 const MAX_TASK_OUTPUT_TAIL_BYTES: u64 = 16_000;
+const TASK_OUTPUT_TEMP_DIR_PREFIX: &str = "ccgui-task-output-";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -30,20 +31,8 @@ fn empty_artifact_response() -> EngineTaskOutputArtifactTailResponse {
     }
 }
 
-fn candidate_temp_roots() -> Vec<PathBuf> {
-    let mut roots = vec![std::env::temp_dir()];
-    #[cfg(unix)]
-    {
-        roots.push(PathBuf::from("/tmp"));
-        roots.push(PathBuf::from("/private/tmp"));
-    }
-    roots
-}
-
 fn canonical_allowed_roots(workspace_path: &str) -> Vec<PathBuf> {
-    let mut roots = vec![PathBuf::from(workspace_path)];
-    roots.extend(candidate_temp_roots());
-    roots
+    vec![PathBuf::from(workspace_path)]
         .into_iter()
         .filter_map(|root| root.canonicalize().ok())
         .fold(Vec::<PathBuf>::new(), |mut acc, root| {
@@ -52,6 +41,14 @@ fn canonical_allowed_roots(workspace_path: &str) -> Vec<PathBuf> {
             }
             acc
         })
+}
+
+fn path_is_allowed_task_output_temp_file(canonical_path: &Path) -> bool {
+    canonical_path
+        .parent()
+        .and_then(|parent| parent.file_name())
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.starts_with(TASK_OUTPUT_TEMP_DIR_PREFIX))
 }
 
 fn resolve_allowed_task_output_artifact_path(
@@ -83,6 +80,7 @@ fn resolve_allowed_task_output_artifact_path(
     if !allowed_roots
         .iter()
         .any(|allowed_root| canonical_path.starts_with(allowed_root))
+        && !path_is_allowed_task_output_temp_file(&canonical_path)
     {
         return Err("Task output artifact is outside allowed directories.".to_string());
     }

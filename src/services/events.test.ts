@@ -3,6 +3,8 @@ import type { Event, EventCallback, UnlistenFn } from "@tauri-apps/api/event";
 import { listen } from "@tauri-apps/api/event";
 import type { AppServerEvent } from "../types";
 import {
+  getAppServerEventBackpressureForTests,
+  resetAppServerEventBackpressureForTests,
   subscribeAppServerEvents,
   subscribeCliInstallerEvents,
   subscribeEnvironmentInstallerEvents,
@@ -23,14 +25,15 @@ describe("events subscriptions", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.useRealTimers();
+    resetAppServerEventBackpressureForTests();
   });
 
   it("delivers payloads and unsubscribes on cleanup", async () => {
-    let listener: EventCallback<AppServerEvent> = () => {};
+    const listeners = new Map<string, EventCallback<unknown>>();
     const unlisten = vi.fn();
 
-    vi.mocked(listen).mockImplementation((_event, handler) => {
-      listener = handler as EventCallback<AppServerEvent>;
+    vi.mocked(listen).mockImplementation((eventName, handler) => {
+      listeners.set(String(eventName), handler as EventCallback<unknown>);
       return Promise.resolve(unlisten);
     });
 
@@ -46,12 +49,60 @@ describe("events subscriptions", () => {
       id: 1,
       payload,
     };
-    listener(event);
+    listeners.get("app-server-event")?.(event);
+    await new Promise((resolve) => setTimeout(resolve, 50));
     expect(onEvent).toHaveBeenCalledWith(payload);
 
     cleanup();
     await Promise.resolve();
-    expect(unlisten).toHaveBeenCalledTimes(1);
+    expect(unlisten).toHaveBeenCalledTimes(2);
+  });
+
+  it("fans out app-server-event-batch payloads through the per-event subscription", async () => {
+    const listeners = new Map<string, EventCallback<unknown>>();
+    const unlisten = vi.fn();
+
+    vi.mocked(listen).mockImplementation((eventName, handler) => {
+      listeners.set(String(eventName), handler as EventCallback<unknown>);
+      return Promise.resolve(unlisten);
+    });
+
+    const onEvent = vi.fn();
+    const cleanup = subscribeAppServerEvents(onEvent);
+    const first: AppServerEvent = {
+      workspace_id: "ws-1",
+      message: { method: "thread/tokenUsage/updated", params: { threadId: "t1" } },
+    };
+    const second: AppServerEvent = {
+      workspace_id: "ws-1",
+      message: { method: "turn/completed", params: { threadId: "t1" } },
+    };
+
+    listeners.get("app-server-event-batch")?.({
+      event: "app-server-event-batch",
+      id: 2,
+      payload: [first, second],
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(onEvent).toHaveBeenCalledWith(second);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(onEvent).toHaveBeenCalledWith(first);
+
+    cleanup();
+  });
+
+  it("bounds app-server raw diagnostics retention to 128 events", () => {
+    const backpressure = getAppServerEventBackpressureForTests();
+    for (let i = 0; i < 200; i++) {
+      backpressure.push({
+        workspace_id: "ws-1",
+        message: { method: "processing/heartbeat", params: { threadId: `t-${i}` } },
+      });
+    }
+
+    expect(backpressure.getStats().rawRetainedCount).toBe(128);
+    expect(backpressure.getRawRecent()).toHaveLength(128);
   });
 
   it("cleans up listeners that resolve after unsubscribe", async () => {

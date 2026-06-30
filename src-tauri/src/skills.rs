@@ -35,6 +35,30 @@ pub(crate) struct SkillEntry {
     pub(crate) source: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) description: Option<String>,
+    /// Whether the user has enabled this skill. Defaults to `true` so that
+    /// existing 12 source buckets keep their pre-curated behaviour. Curated
+    /// entries use this field to expose their on/off state to the UI.
+    #[serde(default = "default_skill_entry_enabled")]
+    pub(crate) enabled: bool,
+}
+
+pub(crate) fn skill_entry_to_json(entry: SkillEntry) -> serde_json::Value {
+    serde_json::json!({
+        "name": entry.name,
+        "path": entry.path,
+        "source": entry.source,
+        "description": entry.description,
+        "enabled": entry.enabled,
+    })
+}
+
+#[allow(dead_code)]
+fn default_skill_entry_enabled() -> bool {
+    // Referenced by the `#[serde(default = "default_skill_entry_enabled")]`
+    // attribute on `SkillEntry::enabled`. The compiler cannot see the
+    // reference inside the macro expansion, so the function is reported as
+    // dead without an explicit allow.
+    true
 }
 
 /// Error type for skill scanning operations.
@@ -366,6 +390,7 @@ fn discover_skills_in(dir: &Path, source: &str) -> Result<Vec<SkillEntry>, Skill
                 path: nested_skill_path.to_string_lossy().to_string(),
                 source: source.to_string(),
                 description,
+                enabled: true,
             });
             continue;
         }
@@ -408,6 +433,7 @@ fn discover_skills_in(dir: &Path, source: &str) -> Result<Vec<SkillEntry>, Skill
             path: path.to_string_lossy().to_string(),
             source: source.to_string(),
             description,
+            enabled: true,
         });
     }
 
@@ -443,14 +469,84 @@ fn merge_skills_by_priority(sources: Vec<Vec<SkillEntry>>) -> Vec<SkillEntry> {
     merged
 }
 
-/// Core local skill scanning that works with individual fields.
-/// Used by both `skills_list_local_for_workspace` (Tauri command path)
-/// and the daemon path to avoid duplicating scanning logic.
+/// Back-compat shim: thin wrapper around [`skills_list_local_core_with_settings`]
+/// that passes `None` for the AppSettings snapshot. All in-tree callers have
+/// been migrated to the `_with_settings` variant; the shim is preserved for
+/// external plugin / test callers.
+#[allow(dead_code)]
 pub(crate) async fn skills_list_local_core(
     settings_path: &Path,
     workspaces: &HashMap<String, WorkspaceEntry>,
     workspace_id: &str,
     custom_skill_roots: Vec<String>,
+) -> Result<Vec<SkillEntry>, SkillScanError> {
+    skills_list_local_core_with_settings(
+        settings_path,
+        workspaces,
+        workspace_id,
+        custom_skill_roots,
+        None,
+        None,
+    )
+    .await
+}
+
+/// Build SkillEntry rows for every curated skill defined in skills-lock.json,
+/// with each entry's `enabled` flag reflecting whether the user has toggled
+/// it on in `AppSettings.enabled_curated_skill_ids`. Skills whose on-disk
+/// asset is missing are surfaced with `enabled: false` and a stub path so
+/// the UI can still render them (and surface a warning). Network requests
+/// are never issued.
+fn build_curated_skill_entries(
+    resource_dir: Option<&Path>,
+    app_settings: &crate::types::AppSettings,
+) -> Vec<SkillEntry> {
+    use std::collections::HashSet;
+    let enabled_ids: HashSet<&str> = app_settings
+        .enabled_curated_skill_ids
+        .iter()
+        .map(|s| s.as_str())
+        .collect();
+    let entries = match crate::curated_skills::load_curated_skills(resource_dir, None) {
+        Ok(v) => v,
+        Err(err) => {
+            log::warn!("curated skills load failed: {}", err);
+            return Vec::new();
+        }
+    };
+    entries
+        .into_iter()
+        .map(|e| {
+            let is_enabled = enabled_ids.contains(e.name.as_str());
+            let path = e
+                .body_path
+                .as_ref()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default();
+            SkillEntry {
+                name: e.name,
+                path,
+                source: crate::curated_skills::SKILL_SOURCE_CURATED_BUNDLED.to_string(),
+                description: Some(e.description),
+                enabled: is_enabled,
+            }
+        })
+        .collect()
+}
+
+/// Variant that also accepts the live `AppSettings` so the curated bucket
+/// (filtered by `enabled_curated_skill_ids`) is merged into the result and
+/// per-skill `enabled` flags are computed. The Tauri command path and the
+/// daemon binary both call this; when `app_settings` is `None` (e.g. legacy
+/// callers), the curated bucket is empty and the other 12 sources keep their
+/// pre-curated behaviour with `enabled: true`.
+pub(crate) async fn skills_list_local_core_with_settings(
+    settings_path: &Path,
+    workspaces: &HashMap<String, WorkspaceEntry>,
+    workspace_id: &str,
+    custom_skill_roots: Vec<String>,
+    app_settings: Option<&crate::types::AppSettings>,
+    resource_dir: Option<PathBuf>,
 ) -> Result<Vec<SkillEntry>, SkillScanError> {
     let custom_skill_roots = normalize_custom_skill_roots(custom_skill_roots);
     let (
@@ -492,6 +588,7 @@ pub(crate) async fn skills_list_local_core(
         )
     };
 
+    let app_settings_snapshot = app_settings.cloned();
     task::spawn_blocking(move || {
         let safe_discover = |dir: &Path, source: &str| -> Vec<SkillEntry> {
             match discover_skills_in(dir, source) {
@@ -561,6 +658,11 @@ pub(crate) async fn skills_list_local_core(
             }
         };
 
+        let curated_skills = match app_settings_snapshot {
+            Some(settings) => build_curated_skill_entries(resource_dir.as_deref(), &settings),
+            None => Vec::new(),
+        };
+
         Ok(merge_skills_by_priority(vec![
             workspace_skills,
             project_claude_skills,
@@ -573,6 +675,7 @@ pub(crate) async fn skills_list_local_core(
             codex_skills,
             agents_skills,
             gemini_skills,
+            curated_skills,
         ]))
     })
     .await
@@ -580,18 +683,24 @@ pub(crate) async fn skills_list_local_core(
 }
 
 /// Scan local skills directories for a specific workspace.
-/// Wrapper around `skills_list_local_core` for the Tauri command path.
+/// Wrapper around `skills_list_local_core_with_settings` for the Tauri
+/// command path. Passes the live `AppSettings` so the curated bucket is
+/// merged and per-skill `enabled` flags are populated.
 pub(crate) async fn skills_list_local_for_workspace(
     state: &AppState,
     workspace_id: &str,
     custom_skill_roots: Vec<String>,
+    resource_dir: Option<PathBuf>,
 ) -> Result<Vec<SkillEntry>, SkillScanError> {
     let workspaces = state.workspaces.lock().await;
-    skills_list_local_core(
+    let app_settings = state.app_settings.lock().await.clone();
+    skills_list_local_core_with_settings(
         &state.settings_path,
         &workspaces,
         workspace_id,
         custom_skill_roots,
+        Some(&app_settings),
+        resource_dir,
     )
     .await
 }
@@ -714,36 +823,42 @@ mod tests {
             path: "/workspace/shared.md".to_string(),
             source: SKILL_SOURCE_WORKSPACE_MANAGED.to_string(),
             description: None,
+            enabled: true,
         };
         let project_claude_skill = SkillEntry {
             name: "shared".to_string(),
             path: "/workspace/.claude/skills/shared.md".to_string(),
             source: SKILL_SOURCE_PROJECT_CLAUDE.to_string(),
             description: None,
+            enabled: true,
         };
         let claude_skill = SkillEntry {
             name: "shared".to_string(),
             path: "/home/.claude/skills/shared.md".to_string(),
             source: SKILL_SOURCE_GLOBAL_CLAUDE.to_string(),
             description: None,
+            enabled: true,
         };
         let claude_plugin_skill = SkillEntry {
             name: "shared".to_string(),
             path: "/home/.claude/plugins/cache/owner/plugin/skills/shared/SKILL.md".to_string(),
             source: SKILL_SOURCE_GLOBAL_CLAUDE_PLUGIN.to_string(),
             description: None,
+            enabled: true,
         };
         let codex_skill = SkillEntry {
             name: "shared".to_string(),
             path: "/home/.codex/skills/shared.md".to_string(),
             source: SKILL_SOURCE_GLOBAL_CODEX.to_string(),
             description: None,
+            enabled: true,
         };
         let agents_skill = SkillEntry {
             name: "shared".to_string(),
             path: "/home/.agents/skills/shared.md".to_string(),
             source: SKILL_SOURCE_GLOBAL_AGENTS.to_string(),
             description: None,
+            enabled: true,
         };
 
         let merged = merge_skills_by_priority(vec![
@@ -864,5 +979,24 @@ mod tests {
         let _ = fs::remove_dir_all(home);
         let _ = fs::remove_dir_all(external_cache);
         let _ = fs::remove_dir_all(external_skills);
+    }
+
+    #[test]
+    fn skill_entry_to_json_preserves_disabled_state() {
+        let entry = SkillEntry {
+            name: "lazy-senior-dev".to_string(),
+            path: "/app/curated-skills/lazy-senior-dev/SKILL.md".to_string(),
+            source: crate::curated_skills::SKILL_SOURCE_CURATED_BUNDLED.to_string(),
+            description: Some("curated".to_string()),
+            enabled: false,
+        };
+
+        let value = skill_entry_to_json(entry);
+
+        assert_eq!(value.get("enabled").and_then(|v| v.as_bool()), Some(false));
+        assert_eq!(
+            value.get("name").and_then(|v| v.as_str()),
+            Some("lazy-senior-dev")
+        );
     }
 }

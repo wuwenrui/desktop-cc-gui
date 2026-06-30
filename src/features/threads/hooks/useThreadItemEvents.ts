@@ -1,4 +1,4 @@
-import { startTransition, useCallback, useEffect, useRef } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useRef } from "react";
 import { workspaceScopedHas, type WorkspaceScopedMap } from "./workspaceScopedMap";
 import type { Dispatch, MutableRefObject } from "react";
 import { buildConversationItem } from "../../../utils/threadItems";
@@ -11,7 +11,16 @@ import {
 import { asString } from "../utils/threadNormalize";
 import type { ConversationItem, DebugEntry } from "../../../types";
 import type { ThreadAction } from "./useThreadsReducer";
-import { isRealtimeBatchingEnabled } from "../utils/realtimePerfFlags";
+import { isRealtimeBatchingEnabled, readStreamingScheduleTier } from "../utils/realtimePerfFlags";
+import {
+  resolveDispatchSubmitMode,
+  type DispatchSubmitMode,
+} from "../utils/renderSchedulingPolicy";
+import {
+  buildToolOutputKey,
+  createToolOutputTailGate,
+  type ToolOutputKey,
+} from "./useToolOutputTailGate";
 import {
   applyPendingClaudeMcpOutputNoticeToAgentCompleted,
   applyPendingClaudeMcpOutputNoticeToAgentDelta,
@@ -944,6 +953,89 @@ export function useThreadItemEvents({
     flushNormalizedRealtimeOps();
   }, [flushNormalizedRealtimeOps, flushRealtimeDeltaOps]);
 
+
+  // \u00a76.3 / \u00a76.4: dispatch \u8c03\u5ea6\u4e0e\u4eea\u8868\u62ee\u53d6
+  const submitScheduleInstrumentationRef = useRef({
+    urgentDispatchCount: 0,
+    transitionDispatchCount: 0,
+    idleDispatchCount: 0,
+    totalDispatchCostMs: 0,
+    lastDispatchAtMs: 0,
+  });
+
+  const dispatchWithSchedule = useCallback(
+    (
+      action: ThreadAction,
+      options: {
+        isLiveRow?: boolean;
+        isCritical?: boolean;
+      } = {},
+    ) => {
+      const tier = readStreamingScheduleTier();
+      const isLiveRow = options.isLiveRow ?? false;
+      const isCritical = options.isCritical ?? false;
+      const mode: DispatchSubmitMode = resolveDispatchSubmitMode({
+        tier,
+        isLiveRow,
+        isHeavy: false,
+        isCritical,
+      });
+      const startedAt =
+        typeof performance !== "undefined" && typeof performance.now === "function"
+          ? performance.now()
+          : Date.now();
+      // §6.4: instrumentation \u5728 submit-mode \u9009\u5b9a\u540e\u7acb\u5373\u8bb0\u5f55,
+      // \u4e0d\u7b49 dispatch \u5b8c\u6210\u3002\u8fd9\u6837 test \u4ee5 act() \u540c\u6b65\u8c03\u7528\u540e\u7acb\u5373\u80fd\u770b\u5230
+      // \u8ba1\u6570\u4e0a\u53b8\u3002
+      const inst0 = submitScheduleInstrumentationRef.current;
+      if (mode === "urgent") inst0.urgentDispatchCount += 1;
+      else if (mode === "transition") inst0.transitionDispatchCount += 1;
+      else inst0.idleDispatchCount += 1;
+      const finalize = () => {
+        const endedAt =
+          typeof performance !== "undefined" && typeof performance.now === "function"
+            ? performance.now()
+            : Date.now();
+        inst0.totalDispatchCostMs += Math.max(0, endedAt - startedAt);
+        inst0.lastDispatchAtMs = endedAt;
+        dispatch(action);
+      };
+      if (mode === "urgent") {
+        finalize();
+        return;
+      }
+      if (mode === "transition") {
+        startTransition(() => {
+          finalize();
+        });
+        return;
+      }
+      // mode === "idle"
+      if (
+        typeof (globalThis as { requestIdleCallback?: unknown }).requestIdleCallback ===
+        "function"
+      ) {
+        (globalThis as unknown as {
+          requestIdleCallback: (cb: () => void) => void;
+        }).requestIdleCallback(() => {
+          finalize();
+        });
+        return;
+      }
+      // fallback: setTimeout(0)
+      globalThis.setTimeout(() => {
+        finalize();
+      }, 0);
+    },
+    [dispatch],
+  );
+
+  const __getSubmitScheduleInstrumentationForTests = useCallback(
+    () => submitScheduleInstrumentationRef.current,
+    [],
+  );
+
+
   const handleItemUpdate = useCallback(
     (
       workspaceId: string,
@@ -960,7 +1052,14 @@ export function useThreadItemEvents({
       if (isRealtimeTurnTerminal(threadId, turnId)) {
         return;
       }
-      dispatch({ type: "ensureThread", workspaceId, threadId, engine: inferEngineFromThreadId(threadId) });
+      // \u00a76.3: \u5165\u53e3 ensureThread \u8d70 dispatchWithSchedule\u3002
+      // baseline \u4e0e isLiveRow / isCritical \u90fd\u9000\u5316\u4e3a urgent\uff0c\u8bed\u4e49\u4e0e\u539f\u540c\u3002
+      // \u4f4e\u4f18\u5148\u7ea7\u4f1a\u8bdd\uff08threadId !== activeThreadId\uff09+ guarded / aggressive \u8d70 transition / idle \u3002
+      const isLiveRow = threadId === activeThreadId;
+      dispatchWithSchedule(
+        { type: "ensureThread", workspaceId, threadId, engine: inferEngineFromThreadId(threadId) },
+        { isLiveRow, isCritical: false },
+      );
       const itemType = asString(item?.type ?? "");
       const itemId = asString(item?.id ?? "");
       const itemEngineSource = inferItemEngineSource(item, threadId);
@@ -1123,8 +1222,10 @@ export function useThreadItemEvents({
       safeMessageActivity();
     },
     [
+      activeThreadId,
       applyCollabThreadLinks,
       dispatch,
+      dispatchWithSchedule,
       flushRealtimeDeltaOps,
       getCustomName,
       interruptedThreadsRef,
@@ -1140,24 +1241,92 @@ export function useThreadItemEvents({
     ],
   );
 
+  // 2026-06-24-harden-realtime-interaction-jank-during-tool-call §5.2
+  // Tool output tail gate. Coalesces per-item deltas at 32ms (or 16ms in
+  // aggressive tier) and caps the per-key buffer at 1 MiB. The flush
+  // handler enqueues a single `toolOutputDelta` op into the existing
+  // realtime delta queue, preserving the contract with
+  // `applyRealtimeDeltaOperation`. The gate can be disabled at runtime
+  // via `localStorage.setItem("ccgui.perf.toolOutputTailGate", "off")`,
+  // in which case the flush handler is invoked synchronously per submit.
+  const toolOutputMetadataRef = useRef(
+    new Map<ToolOutputKey, { threadId: string; turnId: string | null }>(),
+  );
+
+  const toolOutputTailGate = useMemo(
+    () =>
+      createToolOutputTailGate({
+        onEntryEvicted: (key) => {
+          toolOutputMetadataRef.current.delete(key);
+        },
+        flushHandler: (key, fullText) => {
+          // Re-decompose the key into the original tuple. The gate is
+          // append-only, so we forward the merged text as a single delta.
+          // The reducer is idempotent for repeated text appends.
+          const [workspaceId, itemId] = key.split("\0") as [
+            string,
+            string,
+            string,
+          ];
+          const metadata = toolOutputMetadataRef.current.get(key);
+          const threadId = metadata?.threadId ?? "";
+          if (!workspaceId || !threadId || !itemId) return;
+          enqueueRealtimeDeltaOperation({
+            kind: "toolOutputDelta",
+            workspaceId,
+            threadId,
+            itemId,
+            delta: fullText,
+            turnId: metadata?.turnId ?? null,
+          });
+        },
+      }),
+    [enqueueRealtimeDeltaOperation],
+  );
+
+  // Flush the tool output gate on item completion / turn completion so the
+  // user sees the final tail before the next reducer turn kicks in.
+  useEffect(() => {
+    return () => {
+      // Drain on unmount so any buffered deltas land before the hook is
+      // torn down. Tests can call __flushAllForTests synchronously.
+      toolOutputTailGate.flushAll();
+    };
+  }, [toolOutputTailGate]);
+
   const handleToolOutputDelta = useCallback(
     (
       workspaceId: string,
       threadId: string,
       itemId: string,
       delta: string,
+      kind: "commandExecution" | "fileChange",
       turnId?: string | null,
     ) => {
-      enqueueRealtimeDeltaOperation({
-        kind: "toolOutputDelta",
-        workspaceId,
+      // 2026-06-24-harden-realtime-interaction-jank-during-tool-call §5.2
+      // Forward the delta into the tail gate instead of the realtime delta
+      // queue directly. The gate coalesces and forwards the merged text
+      // to `enqueueRealtimeDeltaOperation` at its 32ms cadence.
+      const key = buildToolOutputKey(workspaceId, itemId, kind);
+      toolOutputMetadataRef.current.set(key, {
         threadId,
-        itemId,
-        delta,
-        turnId,
+        turnId: turnId ?? null,
       });
+      toolOutputTailGate.submit(key, delta);
     },
-    [enqueueRealtimeDeltaOperation],
+    [toolOutputTailGate],
+  );
+
+  const flushToolOutputForItem = useCallback(
+    (workspaceId: string, itemId: string) => {
+      for (const kind of ["commandExecution", "fileChange"] as const) {
+        const key = buildToolOutputKey(workspaceId, itemId, kind);
+        toolOutputTailGate.flush(key);
+        toolOutputTailGate.reset(key);
+        toolOutputMetadataRef.current.delete(key);
+      }
+    },
+    [toolOutputTailGate],
   );
 
   const handleTerminalInteraction = useCallback(
@@ -1178,12 +1347,12 @@ export function useThreadItemEvents({
         threadId,
         itemId,
         `\n[stdin]\n${normalized}${suffix}`,
+        "commandExecution",
         turnId,
       );
     },
     [handleToolOutputDelta],
   );
-
   const onAgentMessageDelta = useCallback(
     ({
       workspaceId,
@@ -1283,34 +1452,23 @@ export function useThreadItemEvents({
         return;
       }
       const timestamp = Date.now();
+      // \u00a76.2: \u4fdd\u8bc1\u4e0a\u4e0b\u6587\u5148 ensureThread (\u539f\u987a\u5e8f)
       dispatch({ type: "ensureThread", workspaceId, threadId, engine: inferEngineFromThreadId(threadId) });
       const hasCustomName = Boolean(getCustomName(workspaceId, threadId));
+      // \u00a76.2: \u4e00\u6b21\u6027\u5408\u5e76 completeAgentMessage + setThreadTimestamp +
+      // setLastAgentMessage + (\u6761\u4ef6) markUnread\uff0c\u51cf\u5c11 reducer \u8c03\u5ea6\u6b21\u6570\u3002
       dispatch({
-        type: "completeAgentMessage",
+        type: "flushAgentCompletedBatch",
         workspaceId,
         threadId,
         itemId,
         text: resolvedText,
         hasCustomName,
         timestamp,
-      });
-      dispatch({
-        type: "setThreadTimestamp",
-        workspaceId,
-        threadId,
-        timestamp,
-      });
-      dispatch({
-        type: "setLastAgentMessage",
-        threadId,
-        text: resolvedText,
-        timestamp,
+        isActiveThread: threadId === activeThreadId,
       });
       recordThreadActivity(workspaceId, threadId, timestamp);
       safeMessageActivity();
-      if (threadId !== activeThreadId) {
-        dispatch({ type: "markUnread", threadId, hasUnread: true });
-      }
       onAgentMessageCompletedExternal?.({
         workspaceId,
         threadId,
@@ -1356,9 +1514,13 @@ export function useThreadItemEvents({
 
   const onItemCompleted = useCallback(
     (workspaceId: string, threadId: string, item: Record<string, unknown>) => {
+      const itemId = asString(item.id ?? "");
+      if (itemId) {
+        flushToolOutputForItem(workspaceId, itemId);
+      }
       handleItemUpdate(workspaceId, threadId, item, false, false);
     },
-    [handleItemUpdate],
+    [flushToolOutputForItem, handleItemUpdate],
   );
 
   const onReasoningSummaryDelta = useCallback(
@@ -1503,7 +1665,14 @@ export function useThreadItemEvents({
       delta: string,
       turnId?: string | null,
     ) => {
-      handleToolOutputDelta(workspaceId, threadId, itemId, delta, turnId);
+      handleToolOutputDelta(
+        workspaceId,
+        threadId,
+        itemId,
+        delta,
+        "commandExecution",
+        turnId,
+      );
     },
     [handleToolOutputDelta],
   );
@@ -1529,7 +1698,14 @@ export function useThreadItemEvents({
       delta: string,
       turnId?: string | null,
     ) => {
-      handleToolOutputDelta(workspaceId, threadId, itemId, delta, turnId);
+      handleToolOutputDelta(
+        workspaceId,
+        threadId,
+        itemId,
+        delta,
+        "fileChange",
+        turnId,
+      );
     },
     [handleToolOutputDelta],
   );
@@ -1596,6 +1772,8 @@ export function useThreadItemEvents({
     onCommandOutputDelta,
     onTerminalInteraction,
     onFileChangeOutputDelta,
+    // §6.4: instrumentation test surface
+    __getSubmitScheduleInstrumentationForTests,
     flushPendingRealtimeEvents,
     isRealtimeTurnTerminalExact,
     noteRealtimeTurnStarted,

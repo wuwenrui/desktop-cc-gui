@@ -70,6 +70,19 @@ vi.mock("./McpSection", () => ({
   ),
 }));
 
+vi.mock("../../curated-skills/components/CuratedSection", () => ({
+  CuratedSection: () => <div data-testid="curated-section-stub">Mock Curated Section</div>,
+}));
+
+vi.mock("../../curated-skills/hooks/useCuratedSkills", () => ({
+  useCuratedSkills: () => ({
+    skills: [],
+    loading: false,
+    error: null,
+    refresh: () => Promise.resolve(),
+  }),
+}));
+
 vi.mock("./SkillsSection", () => ({
   SkillsSection: (props: {
     embedded?: boolean;
@@ -1092,7 +1105,7 @@ describe("SettingsView Display", () => {
     });
   });
 
-  it("persists Gemini and OpenCode disable toggles inside CLI validation tabs", async () => {
+  it("hides deprecated Gemini and OpenCode entries inside CLI validation tabs", () => {
     cleanup();
     const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
     render(
@@ -1131,25 +1144,13 @@ describe("SettingsView Display", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("tab", { name: "Gemini CLI" }));
-    fireEvent.click(screen.getByRole("switch", { name: "Gemini CLI" }));
-
-    await waitFor(() => {
-      expect(onUpdateAppSettings).toHaveBeenCalledWith(
-        expect.objectContaining({ geminiEnabled: false }),
-      );
-    });
-
-    onUpdateAppSettings.mockClear();
-
-    fireEvent.click(screen.getByRole("tab", { name: "OpenCode CLI" }));
-    fireEvent.click(screen.getByRole("switch", { name: "OpenCode CLI" }));
-
-    await waitFor(() => {
-      expect(onUpdateAppSettings).toHaveBeenCalledWith(
-        expect.objectContaining({ opencodeEnabled: false }),
-      );
-    });
+    expect(screen.getByRole("tab", { name: "Codex" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Claude Code" })).toBeTruthy();
+    expect(screen.queryByRole("tab", { name: "Gemini CLI" })).toBeNull();
+    expect(screen.queryByRole("tab", { name: "OpenCode CLI" })).toBeNull();
+    expect(screen.queryByRole("switch", { name: "Gemini CLI" })).toBeNull();
+    expect(screen.queryByRole("switch", { name: "OpenCode CLI" })).toBeNull();
+    expect(onUpdateAppSettings).not.toHaveBeenCalled();
   });
 
   it("updates the theme selection", async () => {
@@ -1479,7 +1480,6 @@ describe("SettingsView Display", () => {
     expect(screen.getByText("Client UI visibility")).toBeTruthy();
     expect(screen.getByText("Conversation canvas")).toBeTruthy();
     expect(screen.getByText("Runtime notice dock")).toBeTruthy();
-    expect(screen.getByText("Sticky user bubble")).toBeTruthy();
     expect(screen.getByText("Context sources card")).toBeTruthy();
 
     const topSessionTabsRow = screen
@@ -1487,9 +1487,6 @@ describe("SettingsView Display", () => {
       .closest(".settings-toggle-row") as HTMLElement | null;
     const terminalRow = screen
       .getByText("Terminal shortcut")
-      .closest(".settings-toggle-row") as HTMLElement | null;
-    const stickyUserBubbleRow = screen
-      .getByText("Sticky user bubble")
       .closest(".settings-toggle-row") as HTMLElement | null;
     const contextSourcesCardRow = screen
       .getByText("Context sources card")
@@ -1500,7 +1497,6 @@ describe("SettingsView Display", () => {
     if (
       !topSessionTabsRow ||
       !terminalRow ||
-      !stickyUserBubbleRow ||
       !contextSourcesCardRow ||
       !runtimeNoticeDockRow
     ) {
@@ -1513,11 +1509,6 @@ describe("SettingsView Display", () => {
     ).toBeTruthy();
     expect(
       terminalRow.querySelector(".settings-client-ui-visibility-row-icon svg"),
-    ).toBeTruthy();
-    expect(
-      stickyUserBubbleRow.querySelector(
-        ".settings-client-ui-visibility-row-icon svg",
-      ),
     ).toBeTruthy();
     expect(
       contextSourcesCardRow.querySelector(

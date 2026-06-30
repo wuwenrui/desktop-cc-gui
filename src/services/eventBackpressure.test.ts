@@ -52,9 +52,9 @@ describe("eventBackpressure", () => {
 
     expect(listener).toHaveBeenCalledTimes(1);
     expect(listener).toHaveBeenCalledWith({ id: "exit", kind: "exit", critical: true });
-    expect(backpressure.droppedCount).toBe(1);
+    expect(backpressure.droppedCount).toBe(0);
     scheduled.shift()?.();
-    expect(listener).toHaveBeenCalledTimes(2);
+    expect(listener).toHaveBeenCalledTimes(3);
   });
 
   it("coalesces duplicate status events by stable key", () => {
@@ -91,7 +91,7 @@ describe("eventBackpressure", () => {
     backpressure.push({ id: "3", kind: "line" });
     backpressure.push({ id: "4", kind: "line" });
 
-    expect(backpressure.queueDepth).toBe(1);
+    expect(backpressure.queueDepth).toBe(4);
     expect(backpressure.getRawRecent().map((event) => event.id)).toEqual(["2", "3", "4"]);
   });
 
@@ -117,7 +117,7 @@ describe("eventBackpressure", () => {
     expect(backpressure.getRawRecent()).toHaveLength(1);
   });
 
-  it("clears coalesce keys when queue depth drops old events", () => {
+  it("drops only events marked as drop-eligible snapshots on queue overflow", () => {
     const scheduled: Array<() => void> = [];
     const listener = vi.fn();
     const backpressure = createEventBackpressure<TestEvent>({
@@ -126,16 +126,27 @@ describe("eventBackpressure", () => {
       maxQueueDepth: 1,
       schedule: (callback) => scheduled.push(callback),
       coalesceKey: (event) => `${event.kind}:${event.id}`,
+      dropPolicy: (event) =>
+        event.kind === "snapshot" ? "drop-eligible-snapshot" : "protected",
     });
     backpressure.subscribe(listener);
 
-    backpressure.push({ id: "ws-1", kind: "running", body: "dropped" });
-    backpressure.push({ id: "ws-2", kind: "running", body: "queued" });
-    backpressure.push({ id: "ws-1", kind: "running", body: "requeued" });
+    backpressure.push({ id: "ws-1", kind: "snapshot", body: "dropped" });
+    backpressure.push({ id: "ws-2", kind: "protected", body: "queued" });
+    backpressure.push({ id: "ws-3", kind: "protected", body: "also queued" });
     scheduled.shift()?.();
 
-    expect(backpressure.droppedCount).toBe(2);
-    expect(listener).toHaveBeenCalledTimes(1);
-    expect(listener).toHaveBeenCalledWith({ id: "ws-1", kind: "running", body: "requeued" });
+    expect(backpressure.droppedCount).toBe(1);
+    expect(listener).toHaveBeenCalledTimes(2);
+    expect(listener).toHaveBeenNthCalledWith(1, {
+      id: "ws-2",
+      kind: "protected",
+      body: "queued",
+    });
+    expect(listener).toHaveBeenNthCalledWith(2, {
+      id: "ws-3",
+      kind: "protected",
+      body: "also queued",
+    });
   });
 });

@@ -1622,6 +1622,39 @@ describe("useThreadMessaging", () => {
     );
   });
 
+  it("passes selected Codex provider profile when first send creates a managed-provider thread", async () => {
+    const startThreadForWorkspace = vi.fn(async () => "thread-provider-1");
+    const { result } = makeThreadMessagingHook("codex", {
+      activeThreadId: null,
+      ensuredThreadId: "thread-provider-1",
+      startThreadForWorkspace,
+      resolveComposerSelection: () => ({
+        id: "minimax-m3",
+        model: "minimax-m3",
+        source: "custom",
+        providerProfileId: "provider-minimax",
+        effort: null,
+        collaborationMode: null,
+      }),
+    });
+
+    await act(async () => {
+      await result.current.sendUserMessage("first provider message");
+    });
+
+    expect(startThreadForWorkspace).toHaveBeenCalledWith("ws-1", {
+      activate: true,
+      engine: "codex",
+      providerProfileId: "provider-minimax",
+    });
+    expect(sendUserMessage).toHaveBeenCalledWith(
+      "ws-1",
+      "thread-provider-1",
+      "first provider message",
+      expect.any(Object),
+    );
+  });
+
   it("does not show create-session loading for follow-up sends on existing threads", async () => {
     const runWithCreateSessionLoading = vi.fn(async (_params, action) => action());
     const { result } = makeThreadMessagingHook("codex", {
@@ -1872,16 +1905,12 @@ describe("useThreadMessaging", () => {
     });
   });
 
-  it("freshly resends first prompt when empty local codex draft lost its marker", async () => {
-    vi.mocked(sendUserMessage)
-      .mockResolvedValueOnce({
-        error: {
-          message: "thread not found: legacy-thread-id",
-        },
-      } as never)
-      .mockResolvedValueOnce({
-        result: { turn: { id: "turn-fresh-local-draft" } },
-      } as never);
+  it("does not fresh-replace an empty local codex draft when the native thread is missing", async () => {
+    vi.mocked(sendUserMessage).mockResolvedValueOnce({
+      error: {
+        message: "thread not found: legacy-thread-id",
+      },
+    } as never);
     const refreshThread = vi.fn(async () => null);
     const startThreadForWorkspace = vi.fn(async () => "thread-fresh-local-draft");
     const dispatch = vi.fn();
@@ -1899,66 +1928,33 @@ describe("useThreadMessaging", () => {
 
     await waitFor(() => {
       expect(refreshThread).toHaveBeenCalledWith("ws-1", "legacy-thread-id");
-      expect(startThreadForWorkspace).toHaveBeenCalledWith("ws-1", {
-        activate: true,
-        engine: "codex",
-      });
-      expect(sendUserMessage).toHaveBeenCalledTimes(2);
-      expect(sendUserMessage).toHaveBeenNthCalledWith(
-        2,
-        "ws-1",
-        "thread-fresh-local-draft",
-        "hello codex",
-        expect.any(Object),
-      );
-      expect(dispatch).toHaveBeenCalledWith({
-        type: "setActiveThreadId",
-        workspaceId: "ws-1",
-        threadId: "thread-fresh-local-draft",
-      });
-      expect(dispatch).toHaveBeenCalledWith(
+      expect(startThreadForWorkspace).not.toHaveBeenCalled();
+      expect(sendUserMessage).toHaveBeenCalledTimes(1);
+      expect(dispatch).not.toHaveBeenCalledWith(
         expect.objectContaining({
-          type: "upsertItem",
-          workspaceId: "ws-1",
+          type: "setActiveThreadId",
           threadId: "thread-fresh-local-draft",
-          item: expect.objectContaining({
-            id: expect.stringMatching(/^optimistic-user-/),
-            text: "hello codex",
-          }),
         }),
       );
-      expect(dispatch).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: "markCodexAcceptedTurn",
-          threadId: "thread-fresh-local-draft",
-          fact: "accepted",
-          source: "turn-start-response",
-        }),
+      expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+        workspace.id,
+        "legacy-thread-id",
+        expect.any(String),
       );
-      expect(pushThreadErrorMessage).not.toHaveBeenCalled();
       expect(recordThreadActivity).not.toHaveBeenCalledWith(
         "ws-1",
         "legacy-thread-id",
         expect.any(Number),
       );
-      expect(recordThreadActivity).toHaveBeenCalledWith(
-        "ws-1",
-        "thread-fresh-local-draft",
-        expect.any(Number),
-      );
     });
   });
 
-  it("freshly resends first prompt when stale refresh throws before draft can rebind", async () => {
-    vi.mocked(sendUserMessage)
-      .mockResolvedValueOnce({
-        error: {
-          message: "thread not found: legacy-thread-id",
-        },
-      } as never)
-      .mockResolvedValueOnce({
-        result: { turn: { id: "turn-fresh-refresh-throw" } },
-      } as never);
+  it("does not fresh-replace a native Codex thread when refresh throws before rebind", async () => {
+    vi.mocked(sendUserMessage).mockResolvedValueOnce({
+      error: {
+        message: "thread not found: legacy-thread-id",
+      },
+    } as never);
     const refreshThread = vi.fn(async () => {
       throw new Error("thread not found: legacy-thread-id");
     });
@@ -1985,40 +1981,21 @@ describe("useThreadMessaging", () => {
 
     await waitFor(() => {
       expect(refreshThread).toHaveBeenCalledWith("ws-1", "legacy-thread-id");
-      expect(startThreadForWorkspace).toHaveBeenCalledWith("ws-1", {
-        activate: true,
-        engine: "codex",
-      });
-      expect(sendUserMessage).toHaveBeenCalledTimes(2);
-      expect(sendUserMessage).toHaveBeenNthCalledWith(
-        2,
-        "ws-1",
-        "thread-fresh-refresh-throw",
-        "hello codex",
-        expect.any(Object),
-      );
-      expect(dispatch).toHaveBeenCalledWith({
-        type: "setActiveThreadId",
-        workspaceId: "ws-1",
-        threadId: "thread-fresh-refresh-throw",
-      });
+      expect(startThreadForWorkspace).not.toHaveBeenCalled();
+      expect(sendUserMessage).toHaveBeenCalledTimes(1);
       expect(dispatch).not.toHaveBeenCalledWith(
         expect.objectContaining({
-          type: "renameThreadId",
-          oldThreadId: "legacy-thread-id",
-          newThreadId: "thread-fresh-refresh-throw",
+          type: "setActiveThreadId",
+          threadId: "thread-fresh-refresh-throw",
         }),
       );
-      expect(pushThreadErrorMessage).not.toHaveBeenCalled();
-      expect(onDebug).toHaveBeenCalledWith(
-        expect.objectContaining({
-          label: "turn/start draft fresh fallback",
-          payload: expect.objectContaining({
-            outcome: "fresh",
-            acceptedTurnFact: "empty-draft",
-            reason: expect.stringContaining("refresh failed"),
-          }),
-        }),
+      expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+        workspace.id,
+        "legacy-thread-id",
+        expect.any(String),
+      );
+      expect(onDebug).not.toHaveBeenCalledWith(
+        expect.objectContaining({ label: "turn/start draft fresh fallback" }),
       );
     });
   });
@@ -2066,21 +2043,17 @@ describe("useThreadMessaging", () => {
     });
   });
 
-  it("freshly resends first prompt when empty codex draft cannot be rebound", async () => {
-    vi.mocked(sendUserMessage)
-      .mockResolvedValueOnce({
-        error: {
-          message: "thread not found: legacy-thread-id",
-        },
-      } as never)
-      .mockResolvedValueOnce({
-        result: { turn: { id: "turn-fresh-draft" } },
-      } as never);
+  it("does not fresh-replace a thread-start Codex draft that cannot be rebound", async () => {
+    vi.mocked(sendUserMessage).mockResolvedValueOnce({
+      error: {
+        message: "thread not found: legacy-thread-id",
+      },
+    } as never);
     const refreshThread = vi.fn(async () => null);
     const forkThreadForWorkspace = vi.fn(async () => "thread-fork-should-not-use");
     const startThreadForWorkspace = vi.fn(async () => "thread-fresh-draft");
     const dispatch = vi.fn();
-    const { result, recordThreadActivity } = makeThreadMessagingHook("codex", {
+    const { result, recordThreadActivity, pushThreadErrorMessage } = makeThreadMessagingHook("codex", {
       activeThreadId: "legacy-thread-id",
       ensuredThreadId: "legacy-thread-id",
       startThreadForWorkspace,
@@ -2103,81 +2076,51 @@ describe("useThreadMessaging", () => {
     await waitFor(() => {
       expect(refreshThread).toHaveBeenCalledWith("ws-1", "legacy-thread-id");
       expect(forkThreadForWorkspace).not.toHaveBeenCalled();
-      expect(startThreadForWorkspace).toHaveBeenCalledWith("ws-1", {
-        activate: true,
-        engine: "codex",
-      });
-      expect(sendUserMessage).toHaveBeenCalledTimes(2);
-      expect(sendUserMessage).toHaveBeenNthCalledWith(
-        2,
-        "ws-1",
-        "thread-fresh-draft",
-        "hello codex",
-        expect.any(Object),
-      );
-      expect(dispatch).toHaveBeenCalledWith({
-        type: "setActiveThreadId",
-        workspaceId: "ws-1",
-        threadId: "thread-fresh-draft",
-      });
-      expect(dispatch).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: "setThreadItems",
-          threadId: "legacy-thread-id",
-        }),
-      );
-      expect(dispatch).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: "markCodexAcceptedTurn",
-          threadId: "thread-fresh-draft",
-          fact: "accepted",
-          source: "turn-start-response",
-        }),
-      );
+      expect(startThreadForWorkspace).not.toHaveBeenCalled();
+      expect(sendUserMessage).toHaveBeenCalledTimes(1);
       expect(dispatch).not.toHaveBeenCalledWith(
         expect.objectContaining({
-          type: "renameThreadId",
-          oldThreadId: "legacy-thread-id",
-          newThreadId: "thread-fresh-draft",
+          type: "setActiveThreadId",
+          threadId: "thread-fresh-draft",
         }),
+      );
+      expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+        workspace.id,
+        "legacy-thread-id",
+        expect.any(String),
       );
       expect(recordThreadActivity).not.toHaveBeenCalledWith(
         "ws-1",
         "legacy-thread-id",
         expect.any(Number),
       );
-      expect(recordThreadActivity).toHaveBeenCalledWith(
-        "ws-1",
-        "thread-fresh-draft",
-        expect.any(Number),
-      );
     });
   });
 
-  it("freshly resends first prompt when a newly started empty codex draft refreshes to the same missing thread", async () => {
-    vi.mocked(sendUserMessage)
-      .mockResolvedValueOnce({
-        error: {
-          message: "thread not found: legacy-thread-id",
-        },
-      } as never)
-      .mockResolvedValueOnce({
-        result: { turn: { id: "turn-fresh-after-same-id" } },
-      } as never);
+  it("does not create a second Codex thread when newly started draft refreshes to the same missing thread", async () => {
+    vi.mocked(sendUserMessage).mockResolvedValueOnce({
+      error: {
+        message: "thread not found: legacy-thread-id",
+      },
+    } as never);
     const refreshThread = vi.fn(async () => "legacy-thread-id");
     const forkThreadForWorkspace = vi.fn(async () => "thread-fork-should-not-use");
-    const startThreadForWorkspace = vi
-      .fn()
-      .mockResolvedValueOnce("legacy-thread-id")
-      .mockResolvedValueOnce("thread-fresh-after-same-id");
+    const startThreadForWorkspace = vi.fn().mockResolvedValueOnce("legacy-thread-id");
     const dispatch = vi.fn();
-    const { result, recordThreadActivity } = makeThreadMessagingHook("codex", {
-      activeThreadId: null,
-      ensuredThreadId: null,
+    const { result, recordThreadActivity, pushThreadErrorMessage } = makeThreadMessagingHook("codex", {
+      activeThreadId: "legacy-thread-id",
+      ensuredThreadId: "legacy-thread-id",
       startThreadForWorkspace,
       refreshThread,
       forkThreadForWorkspace,
       dispatch,
+      codexAcceptedTurnByThread: {
+        "legacy-thread-id": {
+          fact: "empty-draft",
+          source: "thread-start",
+          updatedAt: 1,
+        },
+      },
     });
 
     await act(async () => {
@@ -2187,8 +2130,8 @@ describe("useThreadMessaging", () => {
     await waitFor(() => {
       expect(refreshThread).toHaveBeenCalledWith("ws-1", "legacy-thread-id");
       expect(forkThreadForWorkspace).not.toHaveBeenCalled();
-      expect(startThreadForWorkspace).toHaveBeenCalledTimes(2);
-      expect(sendUserMessage).toHaveBeenCalledTimes(2);
+      expect(startThreadForWorkspace).not.toHaveBeenCalled();
+      expect(sendUserMessage).toHaveBeenCalledTimes(1);
       expect(sendUserMessage).toHaveBeenNthCalledWith(
         1,
         "ws-1",
@@ -2196,26 +2139,20 @@ describe("useThreadMessaging", () => {
         "hello codex",
         expect.any(Object),
       );
-      expect(sendUserMessage).toHaveBeenNthCalledWith(
-        2,
-        "ws-1",
-        "thread-fresh-after-same-id",
-        "hello codex",
-        expect.any(Object),
+      expect(dispatch).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "setActiveThreadId",
+          threadId: "thread-fresh-after-same-id",
+        }),
       );
-      expect(dispatch).toHaveBeenCalledWith({
-        type: "setActiveThreadId",
-        workspaceId: "ws-1",
-        threadId: "thread-fresh-after-same-id",
-      });
+      expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+        workspace.id,
+        "legacy-thread-id",
+        expect.any(String),
+      );
       expect(recordThreadActivity).not.toHaveBeenCalledWith(
         "ws-1",
         "legacy-thread-id",
-        expect.any(Number),
-      );
-      expect(recordThreadActivity).toHaveBeenCalledWith(
-        "ws-1",
-        "thread-fresh-after-same-id",
         expect.any(Number),
       );
     });
@@ -2273,10 +2210,11 @@ describe("useThreadMessaging", () => {
         expect.objectContaining({
           severity: "error",
           category: "user-action-error",
-          messageKey: "runtimeNotice.error.threadTurnFailed",
+          messageKey: "runtimeNotice.error.codexSessionRecoverableFailure",
           messageParams: {
             engine: "Codex",
-            message: "[RUNTIME_ENDED] Managed runtime ended before this conversation turn settled.",
+            rawMessage:
+              "[RUNTIME_ENDED] Managed runtime ended before this conversation turn settled.",
             reasonCode: "runtime-ended",
             userAction: "reconnect",
             actionHint: "Reconnect the runtime and retry.",
