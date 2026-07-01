@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ButtonArea } from "./ButtonArea";
 
@@ -29,9 +29,13 @@ function openMemoryReferenceMenu() {
     name: /composer\.memoryReferenceToggle/,
   });
   // Radix opens a submenu on ArrowRight/Enter (not a bare click), so drive it
-  // with the keyboard the way a real menu user would.
-  trigger.focus();
-  fireEvent.keyDown(trigger, { key: "ArrowRight" });
+  // with the keyboard the way a real menu user would. The raw focus() and the
+  // submenu open both trigger roving-focus state updates, so wrap them in act
+  // to keep them from leaking as "not wrapped in act(...)" warnings.
+  act(() => {
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "ArrowRight" });
+  });
   return trigger;
 }
 
