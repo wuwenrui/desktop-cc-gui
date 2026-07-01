@@ -2686,6 +2686,9 @@ const enPart2 = {
     claudeContextTooltipTitle: "Claude background info window:",
     claudeContextTooltipTotalLabel: "New turn usage",
     claudeContextTooltipWindowTokensLabel: "Window tokens",
+    claudeContextInputLabel: "Input",
+    claudeContextOutputLabel: "Output",
+    claudeContextCacheLabel: "Cache",
     claudeContextInputDetail: "input {{tokens}}",
     claudeContextCachedDetail: "cached {{tokens}}",
     claudeContextCachedExcludedDetail:

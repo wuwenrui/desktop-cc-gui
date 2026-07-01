@@ -111,7 +111,10 @@ export function ToolMarkerShell({
           <ChevronRight
             aria-hidden
             className={cn(
-              'ml-auto size-4 shrink-0 text-muted-foreground transition-transform',
+              'size-4 shrink-0 text-muted-foreground transition-transform',
+              // trailing 自带 ml-auto 已把右侧组顶到最右；无 trailing 时 chevron 自己贴右。
+              // 避免双 ml-auto 平分空白导致状态图标被顶到中间。
+              trailing == null && 'ml-auto',
               expanded && 'rotate-90',
             )}
           />

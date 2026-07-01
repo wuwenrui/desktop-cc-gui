@@ -452,14 +452,12 @@ describe("GenericToolBlock", () => {
     expect(document.querySelector(".tool-output-raw-pre")).toBeNull();
   });
 
-  it("keeps heavy file-change diffs collapsed until a row is opened, preserving open-diff actions", () => {
-    const onOpenDiffPath = vi.fn();
+  it("keeps heavy file-change diffs collapsed until a row is opened", () => {
     const view = render(
       <GenericToolBlock
         item={heavyFileChangeItem}
         isExpanded
         onToggle={vi.fn()}
-        onOpenDiffPath={onOpenDiffPath}
       />,
     );
 
@@ -467,10 +465,8 @@ describe("GenericToolBlock", () => {
     expect(view.container.querySelectorAll('[data-slot="marker"]').length).toBe(8);
     expect(view.container.querySelector(".tool-change-inline-diff")).toBeNull();
 
-    // 点击文件名仅触发跳转，不展开本行
-    fireEvent.click(screen.getByRole("button", { name: "heavy-0.ts" }));
-    expect(onOpenDiffPath).toHaveBeenCalledWith("src/heavy-0.ts");
-    expect(view.container.querySelector(".tool-change-inline-diff")).toBeNull();
+    // 文件名为纯文本，不再是可点跳转链接
+    expect(screen.queryByRole("button", { name: "heavy-0.ts" })).toBeNull();
 
     // 点击行头展开后才渲染该行 diff
     fireEvent.click(view.container.querySelector('[data-slot="marker"]')!);
@@ -505,41 +501,6 @@ describe("GenericToolBlock", () => {
 
     expect(screen.getAllByText("+1").length).toBeGreaterThan(0);
     expect(screen.getAllByText("-1").length).toBeGreaterThan(0);
-  });
-
-  it("opens diff path when clicking file-change row link without toggling card", () => {
-    const onOpenDiffPath = vi.fn();
-    const onToggle = vi.fn();
-    render(
-      <GenericToolBlock
-        item={fileChangeItem}
-        isExpanded
-        onToggle={onToggle}
-        onOpenDiffPath={onOpenDiffPath}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "App.tsx" }));
-    expect(onOpenDiffPath).toHaveBeenCalledWith("src/App.tsx");
-    expect(onToggle).not.toHaveBeenCalled();
-  });
-
-  it("contains diff-route callback errors and keeps card interactive", () => {
-    const onOpenDiffPath = vi.fn(() => {
-      throw new Error("route failed");
-    });
-    const onToggle = vi.fn();
-    render(
-      <GenericToolBlock
-        item={fileChangeItem}
-        isExpanded
-        onToggle={onToggle}
-        onOpenDiffPath={onOpenDiffPath}
-      />,
-    );
-
-    expect(() => fireEvent.click(screen.getByRole("button", { name: "App.tsx" }))).not.toThrow();
-    expect(onToggle).not.toHaveBeenCalled();
   });
 
   it("keeps markdown-like output in raw text mode", () => {

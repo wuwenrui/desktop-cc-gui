@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import type { ConversationItem } from "../../../../types";
 import { EditToolGroupBlock } from "./EditToolGroupBlock";
 
@@ -47,25 +47,6 @@ describe("EditToolGroupBlock", () => {
     expect(screen.getByText("app.ts")).toBeTruthy();
     expect(screen.getAllByText("+1").length).toBeGreaterThan(0);
     expect(screen.getAllByText("-1").length).toBeGreaterThan(0);
-  });
-
-  it("opens git diff when clicking edited file name", () => {
-    const onOpenDiffPath = vi.fn();
-    render(
-      <EditToolGroupBlock
-        items={[
-          createEditToolItem("tool-3", {
-            file_path: "src/App.tsx",
-            old_string: "old",
-            new_string: "new",
-          }),
-        ]}
-        onOpenDiffPath={onOpenDiffPath}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "App.tsx" }));
-    expect(onOpenDiffPath).toHaveBeenCalledWith("src/App.tsx");
   });
 
   it("supports nested input and camelCase edit fields", () => {

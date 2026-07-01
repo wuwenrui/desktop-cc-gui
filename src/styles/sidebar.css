@@ -675,13 +675,22 @@
   align-items: center;
   gap: 2px;
   margin-right: 0;
+  /* Never let the fixed-width action buttons be squeezed; the name truncates instead. */
+  flex: 0 0 auto;
+  /* Collapse to zero width while idle so the name reclaims the full row; expand
+     and fade in on hover/focus/active. */
+  max-width: 0;
+  overflow: hidden;
   opacity: 0;
-  transition: opacity 0.2s ease;
+  transition:
+    max-width 0.2s ease,
+    opacity 0.2s ease;
 }
 
 .workspace-row:hover .workspace-actions,
 .workspace-row:focus-within .workspace-actions,
 .workspace-row.active .workspace-actions {
+  max-width: 160px;
   opacity: 1;
 }
 
@@ -2122,7 +2131,6 @@
 }
 
 .thread-engine-badge.is-processing > * {
-  animation: sidebar-thread-engine-spin 0.95s linear infinite;
   transform-origin: center;
 }
 

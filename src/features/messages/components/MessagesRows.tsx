@@ -5,6 +5,9 @@ import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import ChevronUp from "lucide-react/dist/esm/icons/chevron-up";
 import Search from "lucide-react/dist/esm/icons/search";
 import { AgentIcon } from "../../../components/AgentIcon";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { hydrateClaudeDeferredImage } from "../../../services/tauri";
 import { appendMessageRowRenderBudgetDiagnostic } from "../../../services/rendererDiagnostics";
 import {
@@ -1203,58 +1206,87 @@ export const MessageRow = memo(function MessageRow({
         </div>
       ) : null}
       {agentTaskNotification && agentTaskDisplay ? (
-        <div className="message-agent-task-card">
-          <div className="message-agent-task-header">
-            <div className="message-agent-task-avatar" aria-hidden>
+        <Card className="message-agent-task-card gap-3 rounded-[8px] p-4 before:rounded-[7px]">
+          <div className="flex items-center gap-3">
+            <div
+              className="flex size-9 shrink-0 items-center justify-center rounded-xl border bg-primary/10 text-primary"
+              aria-hidden
+            >
               <AgentIcon
                 seed={agentTaskDisplay.title || agentTaskNotification.taskId || item.id}
                 fallback="codicon-hubot"
-                className="message-agent-task-avatar-icon"
+                className="inline-flex"
                 size={18}
               />
             </div>
-            <div className="message-agent-task-heading">
-              <span className="message-agent-task-eyebrow">Agent session</span>
-              <strong className="message-agent-task-title">{agentTaskDisplay.title}</strong>
+            <div className="grid min-w-0 flex-1 gap-0.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                Agent session
+              </span>
+              <strong className="min-w-0 truncate text-sm font-semibold leading-tight text-foreground">
+                {agentTaskDisplay.title}
+              </strong>
               {agentTaskDisplay.subtitle ? (
-                <span className="message-agent-task-subtitle">{agentTaskDisplay.subtitle}</span>
+                <span className="min-w-0 truncate text-xs text-muted-foreground">
+                  {agentTaskDisplay.subtitle}
+                </span>
               ) : null}
             </div>
-            <span className={`message-agent-task-status is-${agentTaskDisplay.status.tone}`}>
+            <Badge
+              variant={
+                agentTaskDisplay.status.tone === "completed"
+                  ? "success"
+                  : agentTaskDisplay.status.tone === "running"
+                    ? "info"
+                    : agentTaskDisplay.status.tone === "error"
+                      ? "error"
+                      : "secondary"
+              }
+              className="shrink-0 uppercase"
+            >
               {agentTaskDisplay.status.label}
-            </span>
+            </Badge>
           </div>
-          <div className="message-agent-task-meta">
+          <div className="flex flex-wrap gap-1.5">
             {agentTaskNotification.taskId ? (
-              <span className="message-agent-task-chip">task {agentTaskNotification.taskId}</span>
+              <Badge variant="secondary" className="max-w-full truncate font-normal">
+                task {agentTaskNotification.taskId}
+              </Badge>
             ) : null}
             {agentTaskNotification.toolUseId ? (
-              <span className="message-agent-task-chip">tool {agentTaskNotification.toolUseId}</span>
+              <Badge variant="secondary" className="max-w-full truncate font-normal">
+                tool {agentTaskNotification.toolUseId}
+              </Badge>
             ) : null}
             {agentTaskDisplay.outputFileName ? (
-              <span className="message-agent-task-chip">{agentTaskDisplay.outputFileName}</span>
+              <Badge variant="secondary" className="max-w-full truncate font-normal">
+                {agentTaskDisplay.outputFileName}
+              </Badge>
             ) : null}
           </div>
           {agentTaskOutputSnapshot ? (
-            <button
+            <Button
               type="button"
-              className="engine-task-output-card-action"
+              variant="outline"
+              size="sm"
+              className="w-fit"
               onClick={() => setInspectedTaskOutput(agentTaskOutputSnapshot)}
             >
               {t("engineTaskOutput.inspect")}
-            </button>
+            </Button>
           ) : null}
           {inspectedTaskOutput ? (
-            <div className="engine-task-output-inline">
+            <div className="mt-1">
               <EngineTaskOutputInspector
                 snapshot={inspectedTaskOutputState.snapshot ?? inspectedTaskOutput}
                 refreshState={inspectedTaskOutputState.refreshState}
                 onRefresh={inspectedTaskOutputState.refresh}
                 onClose={() => setInspectedTaskOutput(null)}
+                className="border-border/60 bg-muted/30 shadow-none before:hidden"
               />
             </div>
           ) : null}
-        </div>
+        </Card>
       ) : null}
       {imageItems.length > 0 && (
         <MessageImageGrid

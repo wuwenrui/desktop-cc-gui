@@ -59,26 +59,24 @@ describe("FileChangeRow", () => {
     expect(screen.getByText("raw output")).toBeTruthy();
   });
 
-  it("routes to diff view via file link without toggling the row", () => {
+  it("renders the file name as plain text, never a diff-link button", () => {
     const onOpenDiffPath = vi.fn();
-    const loadDiff = vi.fn((): FileChangeDiffPreview => ({ lines: [{ kind: "add", text: "x" }] }));
-    const view = render(
+    render(
       <FileChangeRow
         filePath="src/App.tsx"
         additions={1}
         deletions={0}
         status="completed"
         canExpand
-        loadDiff={loadDiff}
+        loadDiff={() => ({ lines: [{ kind: "add", text: "x" }] })}
         onOpenDiffPath={onOpenDiffPath}
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "App.tsx" }));
-    expect(onOpenDiffPath).toHaveBeenCalledWith("src/App.tsx");
-    // 点击文件名不展开本行
-    expect(loadDiff).not.toHaveBeenCalled();
-    expect(view.container.querySelector(".tool-change-inline-diff")).toBeNull();
+    // 文件名统一为纯文本：无可点链接按钮，onOpenDiffPath 不再被文件名触发
+    expect(screen.queryByRole("button", { name: "App.tsx" })).toBeNull();
+    expect(screen.getByText("App.tsx")).toBeTruthy();
+    expect(onOpenDiffPath).not.toHaveBeenCalled();
   });
 
   it("renders a non-expandable display row when canExpand is false", () => {

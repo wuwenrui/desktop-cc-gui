@@ -76,7 +76,11 @@ interface FileChangeRowProps {
   loadDiff?: () => FileChangeDiffPreview;
   /** 展开后无 diff 预览时的回退展开体（如原始工具输出） */
   fallbackBody?: ReactNode;
-  /** 提供时文件名渲染为可点链接，点击跳转 diff 视图而不展开本行 */
+  /**
+   * @deprecated 文件名已统一为纯文本展示，不再作为可点链接（对齐 EditToolBlock 的历史/渲染态口径）。
+   * 保留该 prop 仅为兼容既有调用链，避免跨 ToolBlockRenderer→Messages→renderAppShell 的删除级联。
+   * ponytail: 惰性 prop（上限：死管线）。彻底移除请沿上述链一并清理 onOpenDiffPath 与相关测试。
+   */
   onOpenDiffPath?: (path: string) => void;
   defaultExpanded?: boolean;
   wrapperClassName?: string;
@@ -137,7 +141,6 @@ export const FileChangeRow = memo(function FileChangeRow({
   canExpand = false,
   loadDiff,
   fallbackBody,
-  onOpenDiffPath,
   defaultExpanded = false,
   wrapperClassName,
 }: FileChangeRowProps) {
@@ -171,27 +174,9 @@ export const FileChangeRow = memo(function FileChangeRow({
       trailing={<ToolStatusIcon status={status} />}
       body={body}
     >
-      {onOpenDiffPath ? (
-        <button
-          type="button"
-          className="min-w-0 cursor-pointer truncate border-0 bg-transparent p-0 text-left text-sm text-muted-foreground transition-colors hover:text-foreground hover:underline"
-          title={filePath}
-          onClick={(event) => {
-            event.stopPropagation();
-            try {
-              onOpenDiffPath(filePath);
-            } catch {
-              // Keep conversation interactive even if diff entry routing fails.
-            }
-          }}
-        >
-          {fileName}
-        </button>
-      ) : (
-        <span className="min-w-0 truncate" title={filePath}>
-          {fileName}
-        </span>
-      )}
+      <span className="min-w-0 truncate" title={filePath}>
+        {fileName}
+      </span>
       {hasStats && (
         <span className="flex shrink-0 items-center gap-1 tabular-nums">
           {additions > 0 && (
