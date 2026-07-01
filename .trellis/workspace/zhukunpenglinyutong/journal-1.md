@@ -314,3 +314,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 7: 文件变更统一渲染为每文件紧凑行
+
+**Date**: 2026-07-01
+**Task**: 文件变更统一渲染为每文件紧凑行
+**Branch**: `feat/ui-refactoring`
+
+### Summary
+
+重构 GenericToolBlock：移除聚合 N files 计数/A-M-D 徽标/折叠预览，文件变更统一为每文件一行紧凑 marker 行，diff 点击行头内联展开，折叠态天然延迟渲染；同步更新测试断言。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6a4ef2bd` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 6
-- **Last Active**: 2026-06-29
+- **Total Sessions**: 7
+- **Last Active**: 2026-07-01
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~316 | Active |
+| `journal-1.md` | ~349 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 7 | 2026-07-01 | 文件变更统一渲染为每文件紧凑行 | `6a4ef2bd` | `feat/ui-refactoring` |
 | 6 | 2026-06-29 | 工具表面收纳进“+”菜单并打磨样式 | `524bcf9a` | `feat/ui-refactoring` |
 | 5 | 2026-06-29 | 工具菜单下拉化与时间线空行修复 | `bd00e490` | `feat/ui-refactoring` |
 | 4 | 2026-06-27 | 工具块尺寸对齐 shadcn 官方 Marker 默认规格 | `144563c2` | `feat/ui-refactoring` |
