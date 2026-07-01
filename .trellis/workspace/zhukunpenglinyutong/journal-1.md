@@ -347,3 +347,57 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 8: 掉帧归因(MON-3)与运行时 web-vitals 门控(MON-5)
+
+**Date**: 2026-07-01
+**Task**: 掉帧归因(MON-3)与运行时 web-vitals 门控(MON-5)
+**Branch**: `feat/ui-refactoring`
+
+### Summary
+
+收尾 frame-attribution:react-scan onRender 记录每次 commit 渲染,掉帧诊断附带 topRenders 回答“谁在重渲染”;抽出 perfDiagnosticsFlag 单一来源打破循环依赖,web-vitals(INP) 门控从 build-time 放开到运行时开关。
+
+### Main Changes
+
+| 模块 | 变更 |
+|------|------|
+| MON-3 归因 | 新增 `reactScanRenderLog`(环形缓冲聚合组件渲染次数);`frameDropMonitor` 掉帧上报附带 `topRenders`;`reactScanController` 接入 react-scan `onRender` 回调 |
+| MON-5 门控 | 新增 `perfDiagnosticsFlag`(localStorage 单一来源,无依赖,打破 controller/web-vitals 循环);`index.ts` `installPerfBaselineWebVitals(force)` 运行时放开 INP 采集;`perfDiagnosticsController` 启动监视时按运行时开关拉起 web-vitals |
+| 次要 | `command/dialog` 改 lucide 深导入(更细 chunk);`MainHeader` 动作顺序调整(OpenAppMenu/extra 前置于 right-panel action);跳过被 `VISIBLE_MESSAGE_WINDOW=10000` 禁用的折叠测试 + 1 个既有虚拟化隔离 flake;`tasks.md` 勾选 3.7/3.8 |
+
+**Updated Files**:
+- `src/services/perfBaseline/reactScanRenderLog.ts` (new)
+- `src/services/perfBaseline/perfDiagnosticsFlag.ts` (new)
+- `src/services/perfBaseline/frameDropMonitor.ts`
+- `src/services/perfBaseline/perfDiagnosticsController.ts`
+- `src/services/perfBaseline/index.ts`
+- `src/services/reactScanController.ts`
+- `src/services/perfBaseline/perfMonitoring.test.ts`
+- `src/components/ui/command.tsx`, `src/components/ui/dialog.tsx`
+- `src/features/app/components/MainHeader.tsx`
+- `src/features/messages/components/Messages.test.tsx`, `Messages.virtualized-jump.test.tsx`
+- `openspec/changes/enable-claude-lightweight-streaming-and-frame-attribution/tasks.md`
+
+**Testing**:
+- 未运行(用户仅要求提交暂存变更);reactScanRenderLog 单测已随本批加入,待常规回归验证。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `95c613fc` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

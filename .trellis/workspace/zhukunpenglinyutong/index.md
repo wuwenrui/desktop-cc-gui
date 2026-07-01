@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 7
+- **Total Sessions**: 8
 - **Last Active**: 2026-07-01
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~349 | Active |
+| `journal-1.md` | ~403 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 8 | 2026-07-01 | 掉帧归因(MON-3)与运行时 web-vitals 门控(MON-5) | `95c613fc` | `feat/ui-refactoring` |
 | 7 | 2026-07-01 | 文件变更统一渲染为每文件紧凑行 | `6a4ef2bd` | `feat/ui-refactoring` |
 | 6 | 2026-06-29 | 工具表面收纳进“+”菜单并打磨样式 | `524bcf9a` | `feat/ui-refactoring` |
 | 5 | 2026-06-29 | 工具菜单下拉化与时间线空行修复 | `bd00e490` | `feat/ui-refactoring` |
