@@ -2033,7 +2033,7 @@ describe("useThreadEventHandlers diagnostics", () => {
     );
   });
 
-  it("does not settle a codex turn from assistant message completion without a terminal event", () => {
+  it("settles a codex turn from assistant message completion when no terminal event follows", () => {
     const onDebug = vi.fn();
     const options = makeOptions(onDebug);
     const { result } = renderHook(() => useThreadEventHandlers(options));
@@ -2061,11 +2061,28 @@ describe("useThreadEventHandlers diagnostics", () => {
       vi.advanceTimersByTime(3_000);
     });
 
-    expect(options.markProcessing).not.toHaveBeenCalledWith("thread-1", false);
-    expect(options.setActiveTurnId).not.toHaveBeenCalledWith("thread-1", null);
-    expect(itemHookFactory.getMarkRealtimeTurnTerminal()).not.toHaveBeenCalledWith(
+    expect(options.markProcessing).toHaveBeenCalledWith("thread-1", false);
+    expect(options.setActiveTurnId).toHaveBeenCalledWith("thread-1", null);
+    expect(itemHookFactory.getMarkRealtimeTurnTerminal()).toHaveBeenCalledWith(
       "thread-1",
       "turn-1",
+    );
+    expect(options.dispatch).toHaveBeenCalledWith({
+      type: "markTerminalSettlement",
+      threadId: "thread-1",
+    });
+    const fallbackEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) => entry.label === "thread/session:turn-diagnostic:assistant-final-settlement-fallback-applied",
+    );
+    expect(fallbackEntry?.payload).toEqual(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        turnId: "turn-1",
+        assistantCompletedItemId: "assistant-1",
+        diagnosticCategory: "frontend-terminal-settlement",
+        reason: "assistant-final-without-terminal",
+      }),
     );
   });
 

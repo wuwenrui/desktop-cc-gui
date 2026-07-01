@@ -63,6 +63,8 @@ import {
 } from "./threadEventDiagnostics";
 export { CODEX_EXECUTION_ACTIVE_NO_PROGRESS_STALL_MS, CODEX_TURN_NO_PROGRESS_STALL_MS } from "./threadEventDiagnostics";
 
+const ASSISTANT_FINAL_SETTLEMENT_FALLBACK_MS = 3_000;
+
 export function useThreadEventHandlers({
   activeThreadId,
   dispatch,
@@ -105,6 +107,7 @@ export function useThreadEventHandlers({
   const turnFirstDeltaTimerRef = useRef<Map<string, number>>(new Map());
   const turnStallTimerRef = useRef<Map<string, number>>(new Map());
   const codexNoProgressTimerRef = useRef<Map<string, number>>(new Map());
+  const assistantFinalSettlementTimerRef = useRef<Map<string, number>>(new Map());
   const reconciliationQueryInFlightRef = useRef<Set<string>>(new Set());
   const flushDeferredTurnCompletionRef = useRef<
     ((threadId: string, source: DeferredCompletionFlushSource) => void) | null
@@ -207,6 +210,15 @@ export function useThreadEventHandlers({
     }
     window.clearTimeout(timerId);
     codexNoProgressTimerRef.current.delete(threadId);
+  }, []);
+
+  const clearAssistantFinalSettlementTimer = useCallback((threadId: string) => {
+    const timerId = assistantFinalSettlementTimerRef.current.get(threadId);
+    if (timerId === undefined) {
+      return;
+    }
+    window.clearTimeout(timerId);
+    assistantFinalSettlementTimerRef.current.delete(threadId);
   }, []);
 
   const markCodexNoProgressSuspected = useCallback(
@@ -1043,6 +1055,7 @@ export function useThreadEventHandlers({
     const firstDeltaTimers = turnFirstDeltaTimerRef.current;
     const stallTimers = turnStallTimerRef.current;
     const codexNoProgressTimers = codexNoProgressTimerRef.current;
+    const assistantFinalSettlementTimers = assistantFinalSettlementTimerRef.current;
     const assistantSnapshotIngressLength = assistantSnapshotIngressLengthRef.current;
     const quarantinedCodexTurns = quarantinedCodexTurnsRef.current;
     const reconciliationQueryInFlight = reconciliationQueryInFlightRef.current;
@@ -1059,6 +1072,10 @@ export function useThreadEventHandlers({
         window.clearTimeout(timerId);
       });
       codexNoProgressTimers.clear();
+      assistantFinalSettlementTimers.forEach((timerId) => {
+        window.clearTimeout(timerId);
+      });
+      assistantFinalSettlementTimers.clear();
       assistantSnapshotIngressLength.clear();
       quarantinedCodexTurns.clear();
       reconciliationQueryInFlight.clear();
@@ -1353,6 +1370,154 @@ export function useThreadEventHandlers({
     [domainEventController],
   );
 
+  const applyAssistantFinalSettlementFallback = useCallback(
+    (payload: {
+      workspaceId: string;
+      threadId: string;
+      turnId: string | null;
+      itemId: string;
+    }) => {
+      const diagnostic = turnDiagnosticsRef.current.get(payload.threadId);
+      if (!diagnostic || diagnostic.assistantCompletedAt === null) {
+        return false;
+      }
+      if (diagnostic.completedAt !== null || diagnostic.errorAt !== null) {
+        return false;
+      }
+      const lifecycle = getThreadLifecycleSnapshot(payload.threadId);
+      const normalizedTurnId = (payload.turnId || diagnostic.turnId || "").trim();
+      const activeTurnMatches =
+        !normalizedTurnId ||
+        lifecycle.activeTurnId === null ||
+        lifecycle.activeTurnId === normalizedTurnId;
+      const blockers = listDeferredCompletionBlockers(diagnostic);
+      if (!lifecycle.isProcessing || !activeTurnMatches || blockers.length > 0) {
+        emitTurnDiagnostic("assistant-final-settlement-fallback-skipped", {
+          workspaceId: payload.workspaceId,
+          threadId: payload.threadId,
+          turnId: normalizedTurnId,
+          assistantCompletedItemId: payload.itemId,
+          isProcessing: lifecycle.isProcessing,
+          activeTurnId: lifecycle.activeTurnId,
+          activeTurnMatches,
+          blockers,
+          diagnosticCategory: "frontend-terminal-settlement",
+          reason: !lifecycle.isProcessing
+            ? "not-processing"
+            : !activeTurnMatches
+              ? "active-turn-mismatch"
+              : "blocked-by-active-execution",
+          ...buildThreadStreamCorrelationDimensions(payload.threadId),
+        }, { force: true });
+        return false;
+      }
+
+      const now = Date.now();
+      clearFirstDeltaTimer(payload.threadId);
+      clearTurnStallTimer(payload.threadId);
+      clearCodexNoProgressTimer(payload.threadId);
+      clearAssistantFinalSettlementTimer(payload.threadId);
+      if (normalizedTurnId) {
+        markRealtimeTurnTerminal(payload.threadId, normalizedTurnId);
+      }
+      dispatch({ type: "clearProcessingGeneratedImages", threadId: payload.threadId });
+      dispatch({ type: "markTerminalSettlement", threadId: payload.threadId });
+      dispatch({
+        type: "finalizePendingToolStatuses",
+        threadId: payload.threadId,
+        status: "completed",
+      });
+      dispatch({
+        type: "markContextCompacting",
+        threadId: payload.threadId,
+        isCompacting: false,
+        timestamp: now,
+      });
+      dispatch({
+        type: "settleThreadPlanInProgress",
+        threadId: payload.threadId,
+        targetStatus: "completed",
+      });
+      markProcessingTracked(payload.threadId, false);
+      setActiveTurnIdTracked(payload.threadId, null);
+      workspaceScopedDelete(pendingInterruptsRef.current, payload.workspaceId, payload.threadId);
+      workspaceScopedDelete(interruptedThreadsRef.current, payload.workspaceId, payload.threadId);
+      dispatch({ type: "resetAgentSegment", threadId: payload.threadId });
+      dispatch({ type: "markLatestAssistantMessageFinal", threadId: payload.threadId });
+      onTurnCompletedExternal?.({
+        workspaceId: payload.workspaceId,
+        threadId: payload.threadId,
+        turnId: normalizedTurnId,
+      });
+      onTurnTerminalExternal?.({
+        workspaceId: payload.workspaceId,
+        threadId: payload.threadId,
+        turnId: normalizedTurnId,
+        rawTurnId: normalizedTurnId,
+        status: "completed",
+      });
+      emitTurnDomainEvent(payload.workspaceId, payload.threadId, normalizedTurnId, "completed", {
+        durationMs: Math.max(0, now - diagnostic.startedAt),
+      });
+      emitTurnDiagnostic("assistant-final-settlement-fallback-applied", {
+        workspaceId: payload.workspaceId,
+        threadId: payload.threadId,
+        turnId: normalizedTurnId,
+        elapsedMs: Math.max(0, now - diagnostic.startedAt),
+        assistantCompletedAtMs: Math.max(0, diagnostic.assistantCompletedAt - diagnostic.startedAt),
+        assistantCompletedItemId: payload.itemId,
+        isProcessing: lifecycle.isProcessing,
+        activeTurnId: lifecycle.activeTurnId,
+        diagnosticCategory: "frontend-terminal-settlement",
+        reason: "assistant-final-without-terminal",
+        ...buildThreadStreamCorrelationDimensions(payload.threadId),
+      }, { force: true });
+      diagnostic.completedAt = now;
+      turnDiagnosticsRef.current.delete(payload.threadId);
+      clearAssistantSnapshotIngressForThread(payload.threadId);
+      completeThreadStreamTurn(payload.threadId);
+      return true;
+    },
+    [
+      clearAssistantFinalSettlementTimer,
+      clearAssistantSnapshotIngressForThread,
+      clearCodexNoProgressTimer,
+      clearFirstDeltaTimer,
+      clearTurnStallTimer,
+      dispatch,
+      emitTurnDiagnostic,
+      emitTurnDomainEvent,
+      getThreadLifecycleSnapshot,
+      interruptedThreadsRef,
+      markProcessingTracked,
+      markRealtimeTurnTerminal,
+      onTurnCompletedExternal,
+      onTurnTerminalExternal,
+      pendingInterruptsRef,
+      setActiveTurnIdTracked,
+    ],
+  );
+
+  const scheduleAssistantFinalSettlementFallback = useCallback(
+    (payload: {
+      workspaceId: string;
+      threadId: string;
+      turnId: string | null;
+      itemId: string;
+    }) => {
+      if (typeof window === "undefined") {
+        return;
+      }
+      clearAssistantFinalSettlementTimer(payload.threadId);
+      const timerId = window.setTimeout(() => {
+        assistantFinalSettlementTimerRef.current.delete(payload.threadId);
+        applyAssistantFinalSettlementFallback(payload);
+      }, ASSISTANT_FINAL_SETTLEMENT_FALLBACK_MS);
+      assistantFinalSettlementTimerRef.current.set(payload.threadId, timerId);
+    },
+    [applyAssistantFinalSettlementFallback, clearAssistantFinalSettlementTimer],
+  );
+
   const onTurnStartedTracked = useCallback(
     (workspaceId: string, threadId: string, turnId: string) => {
       const normalizedTurnId = turnId.trim();
@@ -1382,6 +1547,7 @@ export function useThreadEventHandlers({
       }
       const startedAt = Date.now();
       noteRealtimeTurnStarted(threadId, turnId);
+      clearAssistantFinalSettlementTimer(threadId);
       clearAssistantSnapshotIngressForThread(threadId);
       noteThreadTurnStarted({
         workspaceId,
@@ -1411,6 +1577,8 @@ export function useThreadEventHandlers({
       });
     },
     [
+      clearAssistantFinalSettlementTimer,
+      clearAssistantSnapshotIngressForThread,
       clearFirstDeltaTimer,
       clearTurnStallTimer,
       dispatch,
@@ -1420,7 +1588,6 @@ export function useThreadEventHandlers({
       noteRealtimeTurnStarted,
       scheduleCodexNoProgressTimer,
       scheduleFirstDeltaTimer,
-      clearAssistantSnapshotIngressForThread,
       findQuarantinedCodexTurn,
     ],
   );
@@ -1502,6 +1669,12 @@ export function useThreadEventHandlers({
         textLength: payload.text.length,
         source: "completion",
       });
+      scheduleAssistantFinalSettlementFallback({
+        workspaceId: payload.workspaceId,
+        threadId: payload.threadId,
+        turnId: eventTurnId || null,
+        itemId: payload.itemId,
+      });
     },
     [
       interruptedThreadsRef,
@@ -1509,6 +1682,7 @@ export function useThreadEventHandlers({
       onAgentMessageCompleted,
       recordAssistantCompletionEvidence,
       recordAssistantStreamIngress,
+      scheduleAssistantFinalSettlementFallback,
     ],
   );
 
@@ -1687,6 +1861,12 @@ export function useThreadEventHandlers({
           source: "completion",
         });
         recordAssistantCompletionEvidence(event.threadId, event.item.id);
+        scheduleAssistantFinalSettlementFallback({
+          workspaceId: event.workspaceId,
+          threadId: event.threadId,
+          turnId: asString(event.turnId).trim() || null,
+          itemId: event.item.id,
+        });
       }
       if (!event.rawItem) {
         return;
@@ -1725,6 +1905,7 @@ export function useThreadEventHandlers({
       onNormalizedRealtimeEvent,
       recordAssistantCompletionEvidence,
       recordAssistantStreamIngress,
+      scheduleAssistantFinalSettlementFallback,
       shouldSkipLateCodexNormalizedEvent,
     ],
   );
@@ -1805,6 +1986,7 @@ export function useThreadEventHandlers({
       clearFirstDeltaTimer(threadId);
       clearTurnStallTimer(threadId);
       clearCodexNoProgressTimer(threadId);
+      clearAssistantFinalSettlementTimer(threadId);
       if (!diagnostic) {
         return;
       }
@@ -1877,6 +2059,7 @@ export function useThreadEventHandlers({
       completeThreadStreamTurn(threadId);
     },
     [
+      clearAssistantFinalSettlementTimer,
       clearAssistantSnapshotIngressForThread,
       clearFirstDeltaTimer,
       clearTurnStallTimer,
