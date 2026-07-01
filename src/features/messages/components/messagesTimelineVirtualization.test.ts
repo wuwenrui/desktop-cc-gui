@@ -21,6 +21,7 @@ import {
   TIMELINE_CANVAS_STREAMING_OVERSCAN,
   TIMELINE_LIGHTWEIGHT_ROW_PLACEHOLDER_HEIGHT,
   TIMELINE_RENDER_WEIGHT_BASELINE_FLAG_KEY,
+  TIMELINE_RENDER_WEIGHT_VIRTUALIZATION_FLAG_KEY,
   TIMELINE_VIRTUAL_ROW_PLACEHOLDER_MAX_HEIGHT,
   TIMELINE_VIRTUAL_ROW_PLACEHOLDER_MIN_HEIGHT,
   TIMELINE_VIRTUALIZER_STABILITY_MAX_REMEASURE_COUNT,
@@ -34,6 +35,7 @@ import type { ConversationItem } from "../../../types";
 describe("messagesTimelineVirtualization", () => {
   afterEach(() => {
     globalThis.localStorage.removeItem(TIMELINE_RENDER_WEIGHT_BASELINE_FLAG_KEY);
+    globalThis.localStorage.removeItem(TIMELINE_RENDER_WEIGHT_VIRTUALIZATION_FLAG_KEY);
   });
 
   it("enables virtualization only for long stable timelines", () => {
@@ -132,7 +134,7 @@ describe("messagesTimelineVirtualization", () => {
     })).toBe(false);
   });
 
-  it("keeps the render-weight gate enabled when storage is unavailable", () => {
+  it("keeps the render-weight gate disabled when storage is unavailable", () => {
     const descriptor = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
     Object.defineProperty(globalThis, "localStorage", {
       configurable: true,
@@ -142,12 +144,12 @@ describe("messagesTimelineVirtualization", () => {
     });
 
     try {
-      expect(isTimelineRenderWeightGateEnabled()).toBe(true);
+      expect(isTimelineRenderWeightGateEnabled()).toBe(false);
       expect(shouldVirtualizeTimelineRows({
         isThinking: false,
         rowCount: 12,
         renderWeight: TIMELINE_VIRTUALIZATION_MIN_RENDER_WEIGHT * 4,
-      })).toBe(true);
+      })).toBe(false);
     } finally {
       if (descriptor) {
         Object.defineProperty(globalThis, "localStorage", descriptor);
@@ -223,6 +225,7 @@ describe("messagesTimelineVirtualization", () => {
   });
 
   it("virtualizes #721-class heavy history even when row count is below the threshold", () => {
+    globalThis.localStorage.setItem(TIMELINE_RENDER_WEIGHT_VIRTUALIZATION_FLAG_KEY, "1");
     const { rows } = createHeavyHistoryFixture("heavy");
     const summary = summarizeTimelineProjectionRenderWeight(rows);
 
