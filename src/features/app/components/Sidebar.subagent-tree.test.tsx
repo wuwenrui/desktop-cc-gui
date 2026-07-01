@@ -282,6 +282,8 @@ describe("Sidebar subagent tree", () => {
     );
 
     const parentRow = screen.getByText("同时启动2个子 agent").closest(".thread-row");
+    // Subagent trees collapse by default; expand to reveal the pending child row.
+    fireEvent.click(parentRow?.querySelector(".thread-tree-expander") as HTMLElement);
     const childRow = screen.getByText("分析 km-chat-new-web 项目").closest(".thread-row");
     expect(parentRow?.classList.contains("is-subagent-parent")).toBe(true);
     expect(parentRow?.classList.contains("is-active-subagent-parent")).toBe(true);
@@ -340,6 +342,13 @@ describe("Sidebar subagent tree", () => {
       />,
     );
 
+    // Subagent trees collapse by default; expand the parent to reveal the real child.
+    fireEvent.click(
+      screen
+        .getByText("同时启动2个子 agent")
+        .closest(".thread-row")
+        ?.querySelector(".thread-tree-expander") as HTMLElement,
+    );
     const childRow = screen.getByText("真实子会话").closest(".thread-row");
     expect(childRow?.classList.contains("is-subagent")).toBe(true);
     expect(childRow?.classList.contains("is-pending-subagent")).toBe(false);
@@ -397,6 +406,13 @@ describe("Sidebar subagent tree", () => {
       throw new Error("Missing folder group");
     }
     expect(within(folderGroup).getByText("请同时启动2个子 a")).toBeTruthy();
+    // Subagent trees collapse by default; expand to reveal the child inside the folder.
+    fireEvent.click(
+      within(folderGroup)
+        .getByText("请同时启动2个子 a")
+        .closest(".thread-row")
+        ?.querySelector(".thread-tree-expander") as HTMLElement,
+    );
     expect(within(folderGroup).getByText("你负责分析 `/Users`")).toBeTruthy();
   });
 
@@ -481,21 +497,37 @@ describe("Sidebar subagent tree", () => {
       fireEvent.click(targetFolderItem);
     });
 
+    const getTargetFolderGroup = () => {
+      const group = screen
+        .getByRole("treeitem", { name: "Target" })
+        .closest(".workspace-session-folder-group");
+      if (!group) {
+        throw new Error("Missing target folder group");
+      }
+      return group as HTMLElement;
+    };
+
     await waitFor(() => {
       expect(assignWorkspaceSessionFolders).toHaveBeenCalledWith(
         "ws-1",
         ["claude:parent", "claude:child-a", "claude:child-b"],
         "folder-target",
       );
-      const targetFolderGroup = screen
-        .getByRole("treeitem", { name: "Target" })
-        .closest(".workspace-session-folder-group");
-      if (!targetFolderGroup) {
-        throw new Error("Missing target folder group");
-      }
-      expect(within(targetFolderGroup as HTMLElement).getByText("Parent")).toBeTruthy();
-      expect(within(targetFolderGroup as HTMLElement).getByText("Child A")).toBeTruthy();
-      expect(within(targetFolderGroup as HTMLElement).getByText("Child B")).toBeTruthy();
+      expect(within(getTargetFolderGroup()).getByText("Parent")).toBeTruthy();
+    });
+
+    // The parent lands collapsed in the target folder; expand to reveal its descendants.
+    fireEvent.click(
+      within(getTargetFolderGroup())
+        .getByText("Parent")
+        .closest(".thread-row")
+        ?.querySelector(".thread-tree-expander") as HTMLElement,
+    );
+
+    await waitFor(() => {
+      const targetFolderGroup = getTargetFolderGroup();
+      expect(within(targetFolderGroup).getByText("Child A")).toBeTruthy();
+      expect(within(targetFolderGroup).getByText("Child B")).toBeTruthy();
     });
     expect(assignWorkspaceSessionFolder).not.toHaveBeenCalled();
   });
