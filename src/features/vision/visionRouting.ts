@@ -129,15 +129,20 @@ export function buildVisionSendOptions({
   visionModelId,
   hasImages = false,
   hasVisualFiles = false,
+  mainModelSupportsVision = false,
 }: {
   currentOptions?: MessageSendOptions;
   selectedSkills: SkillLike[];
   visionModelId?: string | null;
   hasImages?: boolean;
   hasVisualFiles?: boolean;
+  mainModelSupportsVision?: boolean;
 }): MessageSendOptions | undefined {
   const selectedVisionSkill = resolveSelectedVisionSkill(selectedSkills);
   if (!selectedVisionSkill && !hasImages && !hasVisualFiles) {
+    return currentOptions;
+  }
+  if (!selectedVisionSkill && mainModelSupportsVision) {
     return currentOptions;
   }
   const skillName = selectedVisionSkill?.name.trim() ?? VISION_OCR_SKILL_NAME;

@@ -125,7 +125,7 @@ import {
 import { IntentCanvasAttachmentCard } from "../../intent-canvas/components/IntentCanvasAttachmentCard";
 import type { IntentCanvasDocument } from "../../intent-canvas/types";
 import { resolveBrowserNavigationUrl } from "../utils/browserNavigation";
-import { buildVisionSendOptions } from "../../vision/visionRouting";
+import { buildVisionSendOptions, modelSupportsVision } from "../../vision/visionRouting";
 import {
   collectVisionFilePaths,
   collectVisionImageInputs,
@@ -1520,6 +1520,16 @@ function ComposerImpl({
         explicitPaths: explicitVisionFilePaths,
         workspacePath: activeWorkspacePath,
       });
+      const resolvedMainModelSupportsVision = (() => {
+        if (!selectedModelId) return false;
+        const catalogModels = providerModelCatalogs
+          ? Object.values(providerModelCatalogs).flat()
+          : [];
+        const fullModel = catalogModels.find(
+          (m) => m && (m.id === selectedModelId || m.model === selectedModelId),
+        );
+        return fullModel ? modelSupportsVision(fullModel) : false;
+      })();
       const sendPreparedMessage = (finalImages: string[]) => {
         const dedupedImages = Array.from(new Set(finalImages));
         const sendOptions = buildVisionSendOptions({
@@ -1528,6 +1538,7 @@ function ComposerImpl({
           visionModelId,
           hasImages: dedupedImages.length > 0,
           hasVisualFiles: visualFilePaths.length > 0,
+          mainModelSupportsVision: resolvedMainModelSupportsVision,
         });
         const sendResult = onSend(
           resolvedFinalTextWithAnnotations,
