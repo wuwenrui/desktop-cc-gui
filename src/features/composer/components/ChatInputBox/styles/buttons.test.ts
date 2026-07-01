@@ -9,10 +9,10 @@ const buttonsCss = readFileSync(
 
 describe("chat input button styles", () => {
   it("renders the streaming stop button as a solid rounded square with a visible stop icon", () => {
-    expect(buttonsCss).toMatch(/\.stop-button\s*\{[^}]*width:\s*24px/s);
-    expect(buttonsCss).toMatch(/\.stop-button\s*\{[^}]*height:\s*24px/s);
+    expect(buttonsCss).toMatch(/\.stop-button\s*\{[^}]*width:\s*32px/s);
+    expect(buttonsCss).toMatch(/\.stop-button\s*\{[^}]*height:\s*32px/s);
     expect(buttonsCss).toMatch(/\.stop-button\s*\{[^}]*aspect-ratio:\s*1 \/ 1/s);
-    expect(buttonsCss).toMatch(/\.stop-button\s*\{[^}]*border-radius:\s*8px/s);
+    expect(buttonsCss).toMatch(/\.stop-button\s*\{[^}]*border-radius:\s*10px/s);
     // 用纯色填充 + 显示 codicon 停止图标，不再用旋转的位图背景
     expect(buttonsCss).not.toMatch(/icon\.png/s);
     expect(buttonsCss).toMatch(/\.stop-button \.codicon\s*\{[^}]*opacity:\s*1/s);
