@@ -1,67 +1,74 @@
-"use client";
+import * as React from "react"
 
-import { Field as FieldPrimitive } from "@base-ui/react/field";
+import { cn } from "@/lib/utils"
 
-import { cn } from "@/lib/utils";
-
-function Field({ className, ...props }: FieldPrimitive.Root.Props) {
+function Field({ className, ...props }: React.ComponentProps<"div">) {
   return (
-    <FieldPrimitive.Root
-      className={cn("flex flex-col items-start gap-2", className)}
+    <div
       data-slot="field"
+      className={cn("flex flex-col items-start gap-2", className)}
       {...props}
     />
-  );
+  )
 }
 
-function FieldLabel({ className, ...props }: FieldPrimitive.Label.Props) {
+function FieldLabel({ className, ...props }: React.ComponentProps<"label">) {
   return (
-    <FieldPrimitive.Label
+    <label
+      data-slot="field-label"
       className={cn(
         "inline-flex items-center gap-2 font-medium text-base/4.5 text-foreground sm:text-sm/4",
-        className,
+        className
       )}
-      data-slot="field-label"
       {...props}
     />
-  );
+  )
 }
 
-function FieldItem({ className, ...props }: FieldPrimitive.Item.Props) {
+function FieldItem({ className, ...props }: React.ComponentProps<"div">) {
   return (
-    <FieldPrimitive.Item
-      className={cn("flex", className)}
-      data-slot="field-item"
-      {...props}
-    />
-  );
+    <div data-slot="field-item" className={cn("flex", className)} {...props} />
+  )
 }
 
-function FieldDescription({
-  className,
-  ...props
-}: FieldPrimitive.Description.Props) {
+function FieldDescription({ className, ...props }: React.ComponentProps<"p">) {
   return (
-    <FieldPrimitive.Description
-      className={cn("text-muted-foreground text-xs", className)}
+    <p
       data-slot="field-description"
+      className={cn("text-muted-foreground text-xs", className)}
       {...props}
     />
-  );
+  )
 }
 
-function FieldError({ className, ...props }: FieldPrimitive.Error.Props) {
+function FieldError({ className, ...props }: React.ComponentProps<"div">) {
   return (
-    <FieldPrimitive.Error
-      className={cn("text-destructive-foreground text-xs", className)}
+    <div
+      role="alert"
       data-slot="field-error"
+      className={cn("text-destructive-foreground text-xs", className)}
       {...props}
     />
-  );
+  )
 }
 
-const FieldControl = FieldPrimitive.Control;
-const FieldValidity = FieldPrimitive.Validity;
+function FieldControl({ className, ...props }: React.ComponentProps<"input">) {
+  return (
+    <input
+      data-slot="field-control"
+      className={cn(className)}
+      {...props}
+    />
+  )
+}
+
+function FieldValidity({
+  children,
+}: {
+  children: (state: { valid: boolean | null }) => React.ReactNode
+}) {
+  return <>{children({ valid: null })}</>
+}
 
 export {
   Field,
@@ -71,4 +78,4 @@ export {
   FieldControl,
   FieldItem,
   FieldValidity,
-};
+}

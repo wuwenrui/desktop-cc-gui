@@ -324,6 +324,10 @@ pub(crate) fn build_menu<R: tauri::Runtime>(
     let toggle_terminal_item = MenuItemBuilder::with_id("view_toggle_terminal", "切换终端")
         .accelerator("CmdOrCtrl+Shift+T")
         .build(handle)?;
+    let toggle_devtools_item =
+        MenuItemBuilder::with_id("view_toggle_devtools", "切换开发者工具")
+            .accelerator("CmdOrCtrl+Alt+I")
+            .build(handle)?;
     let next_agent_item =
         MenuItemBuilder::with_id("view_next_agent", "下一个代理").build(handle)?;
     let prev_agent_item =
@@ -340,6 +344,7 @@ pub(crate) fn build_menu<R: tauri::Runtime>(
     registry.register("view_toggle_global_search", &toggle_global_search_item);
     registry.register("view_toggle_debug_panel", &toggle_debug_panel_item);
     registry.register("view_toggle_terminal", &toggle_terminal_item);
+    registry.register("view_toggle_devtools", &toggle_devtools_item);
     registry.register("view_next_agent", &next_agent_item);
     registry.register("view_prev_agent", &prev_agent_item);
     registry.register("view_next_workspace", &next_workspace_item);
@@ -358,6 +363,7 @@ pub(crate) fn build_menu<R: tauri::Runtime>(
                 &PredefinedMenuItem::separator(handle)?,
                 &toggle_debug_panel_item,
                 &toggle_terminal_item,
+                &toggle_devtools_item,
                 &PredefinedMenuItem::separator(handle)?,
                 &next_agent_item,
                 &prev_agent_item,
@@ -380,6 +386,7 @@ pub(crate) fn build_menu<R: tauri::Runtime>(
                 &PredefinedMenuItem::separator(handle)?,
                 &toggle_debug_panel_item,
                 &toggle_terminal_item,
+                &toggle_devtools_item,
                 &PredefinedMenuItem::separator(handle)?,
                 &next_agent_item,
                 &prev_agent_item,
@@ -497,6 +504,15 @@ pub(crate) fn handle_menu_event<R: tauri::Runtime>(
             if let Some(window) = resolve_target_webview_window(app) {
                 let is_fullscreen = window.is_fullscreen().unwrap_or(false);
                 let _ = window.set_fullscreen(!is_fullscreen);
+            }
+        }
+        "view_toggle_devtools" => {
+            if let Some(window) = resolve_target_webview_window(app) {
+                if window.is_devtools_open() {
+                    window.close_devtools();
+                } else {
+                    window.open_devtools();
+                }
             }
         }
         "window_minimize" => {

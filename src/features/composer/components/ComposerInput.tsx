@@ -743,7 +743,7 @@ export function ComposerInput({
   const showEffortPicker = Boolean(reasoningSupported && onSelectEffort);
   const effortDefaultLabel =
     selectedEngine === "claude"
-      ? t("reasoning.claudeDefault", { defaultValue: "Claude 默认" })
+      ? t("reasoning.claudeDefault", { defaultValue: "默认" })
       : t("composer.effortDefault");
   const showOpenCodeDock = Boolean(selectedEngine === "opencode" && openCodeDock);
   const canOpenOpenCodePanelFromModelIndicator = Boolean(

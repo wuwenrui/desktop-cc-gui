@@ -319,6 +319,7 @@ async function buildMacOS(arch, options = {}) {
   const createDmgScript = join(ROOT_DIR, "scripts", "create-dmg.sh");
   exec(`bash "${createDmgScript}" "${bundlePath}" "${RELEASE_DIR}/${dmgName}" "${getMacInstallerTitle(tauriConfig)}"`);
 
+
   // Notarize
   if (!skipNotarize && !skipSign) {
     console.log("\nNotarizing...");

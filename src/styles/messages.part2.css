@@ -116,13 +116,14 @@
 
 .reasoning-markdown :where(h1, h2) {
   padding-bottom: 0.28em;
-  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 88%, transparent);
+  border-bottom: 1px solid var(--border);
 }
 
+/* shadcn typography 特征：semibold + tracking-tight（thinking 次要尺度） */
 .reasoning-markdown :where(h1, h2, h3, h4) {
-  font-weight: 650;
+  font-weight: 600;
   color: var(--text-strongest, var(--text-stronger));
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
 }
 
 .reasoning-markdown :where(h1) {
@@ -161,13 +162,15 @@
   white-space: normal;
 }
 
+/* shadcn typography blockquote：中性 border-l-2 + italic（thinking 紧凑版） */
 .reasoning-markdown :where(blockquote) {
   margin: 0;
-  padding: 0.45rem 0.9rem;
-  border-left: 4px solid color-mix(in srgb, #0969da 38%, var(--border-subtle));
-  border-radius: 0 10px 10px 0;
-  background: color-mix(in srgb, #0969da 6%, transparent);
-  color: var(--text-muted);
+  padding-left: 1rem;
+  border-left: 2px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font-style: italic;
 }
 
 .reasoning-markdown :where(table) {
@@ -175,15 +178,30 @@
 }
 
 .reasoning-markdown :where(code) {
-  font-size: 0.95em;
+  font-size: 0.875em;
 }
 
+/* shadcn typography inline code: bg-muted（thinking 紧凑版） */
+.reasoning-markdown :where(:not(pre) > code) {
+  background: var(--muted);
+  border-radius: 0.25rem;
+  padding: 0.15rem 0.3rem;
+  font-weight: 600;
+}
+
+/* shadcn typography link: 统一为文件链接绿 + 点线下划线 */
 .reasoning-markdown :where(a) {
-  color: color-mix(in srgb, #0969da 82%, var(--message-link-color));
+  color: var(--md-link-color);
+  text-decoration-line: underline;
+  text-decoration-style: dotted;
+  text-decoration-thickness: 1px;
+  text-decoration-color: currentColor;
+  text-underline-offset: 2px;
 }
 
 .reasoning-markdown :where(a:hover) {
-  color: color-mix(in srgb, #0550ae 82%, var(--text-stronger));
+  text-decoration-thickness: 2px;
+  opacity: 0.95;
 }
 
 /* Thinking Status Indicator */
@@ -290,30 +308,28 @@
 }
 
 .markdown {
-  box-sizing: border-box;
-  max-width: 100%;
   white-space: normal;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   word-break: break-word;
   min-width: 0;
+  font-family: "Geist", var(--font-sans);
   font-size: var(--message-content-font-size);
-  line-height: 1.5;
-  color: var(--text-stronger);
+  line-height: 1.7;
+  /* 文档化观感：正文用接近纯黑的强字色（仅 .markdown 内覆盖，不动全局令牌） */
+  color: var(--text-strong);
 }
 
 .markdown > * {
-  max-width: 100%;
   margin: 0;
 }
 
+/* shadcn typography 块间距：相邻块上间距（≈ mt-6，文档化留白） */
 .markdown > * + * {
-  margin-top: 8px;
+  margin-top: 1.5em;
 }
 
 .markdown pre {
-  max-width: 100%;
   margin: 0;
-  overflow-x: auto;
   white-space: pre-wrap;
 }
 
@@ -323,13 +339,15 @@
   line-height: var(--code-line-height, 1.28);
 }
 
+/* shadcn typography inline code: rounded bg-muted px-[0.3rem] py-[0.2rem] text-sm font-semibold */
 .message .markdown :not(pre) > code {
   color: var(--text-stronger);
-  background: color-mix(in srgb, var(--surface-command) 82%, transparent);
-  border: 1px solid var(--border-subtle);
-  padding: 1px 5px;
-  border-radius: 6px;
-  font-size: 0.97em;
+  background: var(--muted);
+  border: none;
+  padding: 0.2rem 0.3rem;
+  border-radius: 0.25rem;
+  font-size: 0.875em;
+  font-weight: 600;
 }
 
 .message .markdown .katex {
@@ -351,10 +369,14 @@
 }
 
 :root {
-  --message-codeblock-bg: color-mix(in srgb, var(--surface-command) 92%, var(--surface-card) 8%);
-  --message-codeblock-header-bg: color-mix(in srgb, var(--surface-control) 88%, var(--surface-card) 12%);
-  --message-codeblock-border: color-mix(in srgb, var(--border-stronger) 92%, transparent);
-  --message-codeblock-shadow: 0 10px 20px rgba(0, 0, 0, 0.14);
+  /* shadcn bg-muted — soft grey card surface, header shares it (seamless). */
+  --message-codeblock-bg: var(--muted);
+  --message-codeblock-header-bg: var(--message-codeblock-bg);
+  /* A faint hairline under the header, matching shadcn's subtle divider. */
+  --message-codeblock-divider: color-mix(in srgb, var(--border) 60%, transparent);
+  /* Dedicated line-height so the global --code-line-height (1.28) does not
+     override the roomier code-block rhythm via fallback. */
+  --message-codeblock-line-height: 1.75;
   --message-code-token-comment: rgba(150, 170, 200, 0.75);
   --message-code-token-punctuation: rgba(200, 210, 220, 0.85);
   --message-code-token-constant: #ff7b72;
@@ -363,13 +385,14 @@
   --message-code-token-operator: rgba(200, 210, 220, 0.9);
   --message-code-token-keyword: #8bd5ff;
   --message-code-token-function: #d2a8ff;
+  /* markdown 链接绿（移植自 idea-claude-code-gui，暗 #a5d6a7 / 亮 #107c10） */
+  --md-link-color: #a5d6a7;
 }
 
 :root[data-theme="light"] {
-  --message-codeblock-bg: color-mix(in srgb, var(--surface-card-strong) 94%, #eef4ff 6%);
-  --message-codeblock-header-bg: color-mix(in srgb, var(--surface-control) 72%, #eef4ff 28%);
-  --message-codeblock-border: color-mix(in srgb, var(--border-stronger) 74%, #9db7eb 26%);
-  --message-codeblock-shadow: 0 8px 18px rgba(15, 23, 36, 0.08);
+  /* shadcn bg-muted (#f4f4f5) — the soft grey card surface from the docs. */
+  --message-codeblock-bg: var(--muted);
+  --message-codeblock-header-bg: var(--message-codeblock-bg);
   --message-code-token-comment: rgba(87, 96, 110, 0.86);
   --message-code-token-punctuation: rgba(36, 41, 47, 0.88);
   --message-code-token-constant: #cf222e;
@@ -378,18 +401,19 @@
   --message-code-token-operator: rgba(36, 41, 47, 0.86);
   --message-code-token-keyword: #8250df;
   --message-code-token-function: #0550ae;
+  --md-link-color: #107c10;
 }
 
+/* shadcn 化代码块：扁平边框卡（border + var(--radius)，去重阴影）。
+   边框用 --border-strong 而非 --border：亮色下 --border 与 --muted 底色几近同色、
+   四边几乎隐形，--border-strong 让淡边框清晰可见又不喧宾夺主。 */
 .message .markdown-codeblock {
-  box-sizing: border-box;
-  min-width: 0;
-  max-width: 100%;
-  border: 1px solid var(--message-codeblock-border);
-  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
   background: var(--message-codeblock-bg);
   overflow: hidden;
-  box-shadow: var(--message-codeblock-shadow);
-  margin: 6px 0;
+  box-shadow: none;
+  margin: 1.25em 0;
 }
 
 .message .markdown-codeblock-header {
@@ -397,41 +421,71 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 4px 8px;
+  padding: 5px 14px;
   background: var(--message-codeblock-header-bg);
-  border-bottom: 1px solid var(--border-strong);
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-faint);
+  border-bottom: 1px solid var(--message-codeblock-divider);
+  font-size: 13px;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--text-muted);
 }
 
 .message .markdown-codeblock-language {
-  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+
+.message .markdown-codeblock-language-icon {
+  width: 16px;
+  height: 16px;
+  opacity: 0.6;
+  flex: none;
+}
+
+.message .markdown-codeblock-language-text {
+  line-height: 1;
+  font-family: var(--code-font-family);
 }
 
 .message .markdown-codeblock-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
+/*
+ * shadcn icon-button copy control: no border / no background at rest,
+ * a soft hover surface, square 28px hit area with a 16px glyph.
+ */
 .message .markdown-codeblock-copy {
-  border: 1px solid var(--border-strong);
-  border-radius: 999px;
-  padding: 2px 8px;
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-stronger);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
 .message .markdown-codeblock-copy:hover {
   background: var(--surface-control-hover);
+  color: var(--text-strong);
 }
 
 .message .markdown-codeblock-copy.is-copied {
-  border-color: var(--border-accent);
+  color: var(--text-strong);
+}
+
+.message .markdown-codeblock-copy-icon {
+  width: 14px;
+  height: 14px;
 }
 
 .message .markdown-heavy-island-placeholder {
@@ -508,13 +562,13 @@
 
 .message .markdown-codeblock pre {
   margin: 0;
-  padding: 10px 0 12px;
+  padding: 12px 0 16px;
   white-space: pre;
   overflow-x: auto;
   font-family: var(--code-font-family);
-  font-size: var(--code-font-size, 11px);
+  font-size: var(--message-codeblock-font-size, 13px);
   font-weight: var(--code-font-weight, 400);
-  line-height: var(--code-line-height, 1.28);
+  line-height: var(--message-codeblock-line-height, 1.6);
 }
 
 .message .markdown-codeblock code,
@@ -529,8 +583,60 @@
 
 .message .markdown-codeblock-line {
   display: block;
-  min-height: calc(var(--code-font-size, 11px) * var(--code-line-height, 1.28));
-  padding: 0 12px;
+  min-height: calc(var(--message-codeblock-font-size, 13px) * var(--message-codeblock-line-height, 1.6));
+  padding: 0 16px;
+}
+
+/* Line numbers: CSS counter on each pre-highlighted line. The gutter
+   prefix scrolls with the code (min-width: max-content on <code>), which
+   keeps numbers aligned to their line without a separate fixed column. */
+.message .markdown-codeblock pre[data-line-numbers] {
+  counter-reset: markdown-codeblock-line;
+}
+
+/* Line numbers live in an absolutely-positioned gutter so text selection
+   never includes them — only the code (the "black region") is selectable
+   and copyable. The line still reserves left padding for the gutter. */
+.message .markdown-codeblock pre[data-line-numbers] {
+  position: relative;
+}
+
+.message .markdown-codeblock pre[data-line-numbers] .markdown-codeblock-line {
+  position: relative;
+  padding-left: 3.6em;
+  padding-right: 16px;
+}
+
+.message .markdown-codeblock pre[data-line-numbers] .markdown-codeblock-line::before {
+  counter-increment: markdown-codeblock-line;
+  content: counter(markdown-codeblock-line);
+  position: absolute;
+  left: 0;
+  width: 2.5em;
+  padding-right: 8px;
+  text-align: right;
+  color: var(--text-faint);
+  user-select: none;
+  -webkit-user-select: none;
+  pointer-events: none;
+}
+
+/* A single continuous gutter divider that spans the full code height and
+   scrolls horizontally with the code (drawn on <code>, which is
+   min-width: max-content), so it stays aligned with the line numbers. */
+.message .markdown-codeblock pre[data-line-numbers] code {
+  position: relative;
+}
+
+.message .markdown-codeblock pre[data-line-numbers] code::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3.05em;
+  width: 1px;
+  background: var(--border);
+  pointer-events: none;
 }
 
 .message .markdown-codeblock :is(.token.comment, .token.prolog, .token.doctype, .token.cdata),
@@ -574,28 +680,28 @@
 }
 
 .message .markdown-codeblock-single {
-  margin: 6px 0;
-  padding: 10px 12px 12px;
-  border: 1px solid var(--message-codeblock-border);
-  border-radius: 10px;
+  margin: 1.25em 0;
+  padding: 14px 16px 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
   background: var(--message-codeblock-bg);
   white-space: pre;
   overflow-x: auto;
   font-family: var(--code-font-family);
-  font-size: var(--code-font-size, 11px);
+  font-size: var(--message-codeblock-font-size, 13px);
   font-weight: var(--code-font-weight, 400);
-  line-height: var(--code-line-height, 1.28);
-  box-shadow: var(--message-codeblock-shadow);
+  line-height: var(--message-codeblock-line-height, 1.6);
+  box-shadow: none;
 }
 
 .message .markdown-codeblock-markdown {
   --message-codeblock-bg: color-mix(in srgb, var(--surface-card-strong) 88%, var(--surface-command) 12%);
-  --message-codeblock-header-bg: color-mix(in srgb, #8bb5ff 12%, var(--surface-control) 88%);
+  --message-codeblock-header-bg: var(--message-codeblock-bg);
 }
 
 :root[data-theme="light"] .message .markdown-codeblock-markdown {
   --message-codeblock-bg: color-mix(in srgb, var(--surface-card-strong) 92%, #f3f8ff 8%);
-  --message-codeblock-header-bg: color-mix(in srgb, #dceaff 70%, var(--surface-control) 30%);
+  --message-codeblock-header-bg: var(--message-codeblock-bg);
 }
 
 .message .markdown-codeblock-markdown-content {
@@ -614,7 +720,7 @@
   display: block;
   font-family: var(--code-font-family);
   font-weight: var(--code-font-weight, 400);
-  line-height: var(--code-line-height, 1.28);
+  line-height: var(--message-codeblock-line-height, 1.6);
 }
 
 /* ---- Mermaid Block ---- */
@@ -622,7 +728,16 @@
 .message .markdown-mermaidblock-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.message .markdown-mermaidblock-action {
+  flex: 0 0 24px;
+  min-width: 24px;
+  white-space: nowrap;
 }
 
 .message .markdown-mermaidblock-diagram {
@@ -692,12 +807,17 @@
 }
 
 .message .markdown-linkblock a {
-  color: var(--message-link-color);
-  text-decoration: underline;
+  color: var(--md-link-color);
+  text-decoration-line: underline;
+  text-decoration-style: dotted;
+  text-decoration-thickness: 1px;
+  text-decoration-color: currentColor;
+  text-underline-offset: 2px;
 }
 
 .message .markdown-linkblock a:hover {
-  color: var(--text-strong);
+  text-decoration-thickness: 2px;
+  opacity: 0.95;
 }
 
 .markdown img {
@@ -707,27 +827,41 @@
   border-radius: 8px;
 }
 
+/* shadcn typography lists: my-6 ml-6 list-disc/decimal [&>li]:mt-2 */
 .markdown ul,
 .markdown ol {
-  margin: 10px 0;
+  margin: 1.5em 0;
+  padding-left: 1.5em;
   max-width: 100%;
   list-style-position: outside;
 }
 
 .markdown ul {
-  padding-left: 24px;
   list-style-type: disc;
 }
 
 .markdown ol {
-  padding-left: 30px;
   list-style-type: decimal;
 }
 
 .markdown li {
-  margin-bottom: 4px;
   word-wrap: break-word;
   overflow-wrap: break-word;
+}
+
+/* [&>li]:mt-2 —— 同级条目之间留 0.5em，首项不留 */
+.markdown :where(li) + :where(li) {
+  margin-top: 0.5em;
+}
+
+/* 嵌套列表保持紧凑 */
+.markdown li > ul,
+.markdown li > ol {
+  margin: 0.5em 0;
+}
+
+.markdown li::marker {
+  color: var(--text-muted);
 }
 
 .markdown li p {
@@ -742,23 +876,77 @@
   font-weight: 600;
 }
 
+/* thematic break (---)：不渲染可见分隔线（用户要求去掉），仅靠块间距分隔 */
+.markdown :where(hr) {
+  display: none;
+}
+
+/* shadcn typography: 斜体保持正文色，不再变灰 */
 .markdown :where(em) {
-  color: var(--text-muted);
+  font-style: italic;
 }
 
-.markdown :where(h1, h2, h3, h4) {
+/* shadcn typography 标题层级（适配聊天尺度：保留字重/紧字距/分隔线，字号相对正文缩放）
+   h1 text-4xl extrabold text-balance / h2 text-3xl semibold border-b / h3 text-2xl / h4 text-xl */
+.markdown :where(h1, h2, h3, h4, h5, h6) {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: var(--text-strong);
+}
+
+.markdown :where(h1) {
+  font-size: 1.85em;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+  text-wrap: balance;
+}
+
+.markdown :where(h2) {
+  font-size: 1.4em;
+}
+
+.markdown :where(h3) {
+  font-size: 1.2em;
+  letter-spacing: -0.015em;
+}
+
+.markdown :where(h4) {
+  font-size: 1.05em;
+  letter-spacing: -0.01em;
+}
+
+.markdown :where(h5) {
   font-size: 1em;
-  font-weight: 650;
-  letter-spacing: 0.01em;
 }
 
-.markdown :where(blockquote) {
-  margin: 0;
-  padding: 6px 10px;
-  border-left: 2px solid var(--border-accent-soft);
-  background: color-mix(in srgb, var(--surface-card-strong) 65%, transparent);
-  border-radius: 6px;
+.markdown :where(h6) {
+  font-size: 0.9em;
   color: var(--text-muted);
+}
+
+.markdown :where(h1, h2) {
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--border);
+}
+
+.markdown > :where(p, ul, ol, pre, blockquote, table, .markdown-codeblock) + :where(h1, h2) {
+  margin-top: 2em;
+}
+
+.markdown > :where(p, ul, ol, pre, blockquote, table, .markdown-codeblock) + :where(h3, h4, h5, h6) {
+  margin-top: 1.6em;
+}
+
+/* shadcn typography blockquote: border-l-2 pl-6 italic（保持正文色，不变灰） */
+.markdown :where(blockquote) {
+  padding-left: 1.5em;
+  border-left: 2px solid var(--border);
+  background: transparent;
+  border-radius: 0;
+  color: inherit;
+  font-style: italic;
 }
 
 .markdown .markdown-alert-label {
@@ -774,34 +962,36 @@
   line-height: 1.1;
 }
 
+/* shadcn Alert 化：rounded-lg + 四边 border + px-4 py-3，各 tone 语义配色 */
 .markdown :where(blockquote.markdown-alert) {
-  padding: 10px 12px;
-  border-left-width: 3px;
-  border-radius: 0 10px 10px 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-style: normal;
 }
 
 .markdown :where(blockquote.markdown-alert-tip) {
-  border-left-color: color-mix(in srgb, #0969da 42%, var(--border-accent-soft));
+  border-color: color-mix(in srgb, #0969da 35%, var(--border));
   background: color-mix(in srgb, #0969da 8%, var(--surface-card-strong));
 }
 
 .markdown :where(blockquote.markdown-alert-note) {
-  border-left-color: color-mix(in srgb, #64748b 42%, var(--border-accent-soft));
+  border-color: color-mix(in srgb, #64748b 35%, var(--border));
   background: color-mix(in srgb, #64748b 8%, var(--surface-card-strong));
 }
 
 .markdown :where(blockquote.markdown-alert-important) {
-  border-left-color: color-mix(in srgb, #7c3aed 42%, var(--border-accent-soft));
+  border-color: color-mix(in srgb, #7c3aed 35%, var(--border));
   background: color-mix(in srgb, #7c3aed 8%, var(--surface-card-strong));
 }
 
 .markdown :where(blockquote.markdown-alert-warning) {
-  border-left-color: color-mix(in srgb, #d97706 42%, var(--border-accent-soft));
+  border-color: color-mix(in srgb, #d97706 35%, var(--border));
   background: color-mix(in srgb, #d97706 10%, var(--surface-card-strong));
 }
 
 .markdown :where(blockquote.markdown-alert-caution) {
-  border-left-color: color-mix(in srgb, #dc2626 42%, var(--border-accent-soft));
+  border-color: color-mix(in srgb, #dc2626 35%, var(--border));
   background: color-mix(in srgb, #dc2626 10%, var(--surface-card-strong));
 }
 
@@ -891,17 +1081,18 @@
   border-left-color: color-mix(in srgb, #2563eb 56%, var(--border-strong));
 }
 
+/* shadcn typography table: 全框线（均匀）+ 偶数行 even:bg-muted 斑马纹 + bold 表头
+   说明：表格因横向滚动需 display:block，border-collapse 在 block 上失效。
+   故用「单边来源」拼网格——每格只画 right+bottom，table 补 top+left 外框，
+   避免相邻边框在 display:table 的 separate 模式下叠加变厚。 */
 .markdown table {
-  box-sizing: border-box;
-  border-collapse: separate;
-  border-spacing: 0;
   width: 100%;
-  margin: 10px 0;
+  margin: 1.5em 0;
   display: block;
   max-width: 100%;
   overflow-x: auto;
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-top: 1px solid var(--border);
+  border-left: 1px solid var(--border);
 }
 
 .markdown thead,
@@ -912,45 +1103,51 @@
   table-layout: fixed;
 }
 
+.markdown tbody tr:nth-child(even) {
+  background: var(--muted);
+}
+
 .markdown th,
 .markdown td {
-  border-bottom: 1px solid var(--border-subtle);
-  border-right: 1px solid var(--border-subtle);
-  padding: 10px 16px;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 0.5rem 1rem;
   text-align: left;
   word-wrap: break-word;
-  overflow-wrap: anywhere;
-}
-
-.markdown th:last-child,
-.markdown td:last-child {
-  border-right: none;
-}
-
-.markdown tbody tr:last-child td {
-  border-bottom: none;
+  overflow-wrap: break-word;
 }
 
 .markdown th {
-  font-weight: 600;
+  font-weight: 700;
 }
 
+/* markdown 链接：移植自 idea-claude-code-gui 的文件链接样式（message.less / variables.less）
+   颜色 暗 #a5d6a7 / 亮 #107c10（变量见 :root），点线下划线（dotted）+ offset 2px */
 .markdown a {
-  color: var(--message-link-color);
+  color: var(--md-link-color);
+  text-decoration-line: underline;
+  text-decoration-style: dotted;
+  text-decoration-thickness: 1px;
+  text-decoration-color: currentColor;
   text-underline-offset: 2px;
 }
 
 .markdown a:hover {
-  color: var(--text-stronger);
+  text-decoration-thickness: 2px;
+  opacity: 0.95;
 }
 
 .message .markdown a,
 .message .markdown a:visited {
-  color: var(--message-link-color);
-  font-size: 0.98em;
+  color: var(--md-link-color);
 }
 
 .message .markdown a code {
-  color: var(--message-link-color);
-  font-size: 0.97em;
+  color: var(--md-link-color);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    --md-link-color: #107c10;
+  }
 }

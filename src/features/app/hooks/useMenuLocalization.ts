@@ -57,6 +57,7 @@ export function useMenuLocalization() {
       { id: "view_toggle_global_search", text: t("menu.toggleGlobalSearch") },
       { id: "view_toggle_debug_panel", text: t("menu.toggleDebugPanel") },
       { id: "view_toggle_terminal", text: t("menu.toggleTerminal") },
+      { id: "view_toggle_devtools", text: t("menu.toggleDevtools") },
       { id: "view_next_agent", text: t("menu.nextAgent") },
       { id: "view_prev_agent", text: t("menu.previousAgent") },
       { id: "view_next_workspace", text: t("menu.nextWorkspace") },

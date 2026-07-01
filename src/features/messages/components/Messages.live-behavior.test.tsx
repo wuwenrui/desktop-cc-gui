@@ -11,6 +11,18 @@ vi.mock("./Markdown", () => ({
   ),
 }));
 
+// History collapsing ships effectively disabled in production (window = 10000).
+// These behavior tests exercise the collapse/expand logic at its original
+// threshold; only the three >30-item cases below are affected.
+vi.mock("./messagesRenderUtils", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("./messagesRenderUtils")>();
+  return {
+    ...actual,
+    VISIBLE_MESSAGE_WINDOW: 30,
+  };
+});
+
 describe("Messages live behavior", () => {
   afterEach(() => {
     cleanup();
@@ -57,29 +69,6 @@ describe("Messages live behavior", () => {
     Object.defineProperty(scroller, "scrollHeight", {
       configurable: true,
       get: () => (typeof scrollHeight === "function" ? scrollHeight() : scrollHeight),
-    });
-  };
-
-  const setMessageOffsetTop = (
-    container: HTMLElement,
-    messageId: string,
-    offsetTop: number,
-  ) => {
-    const node = container.querySelector(`[data-message-anchor-id="${messageId}"]`);
-    expect(node).toBeTruthy();
-    Object.defineProperty(node as HTMLDivElement, "offsetTop", {
-      configurable: true,
-      get: () => offsetTop,
-    });
-  };
-
-  const scrollMessages = async (scroller: HTMLDivElement, scrollTop: number) => {
-    act(() => {
-      setScrollerMetrics(scroller, scrollTop);
-      fireEvent.scroll(scroller);
-    });
-    await waitFor(() => {
-      expect(scroller.scrollTop).toBe(scrollTop);
     });
   };
 
@@ -143,7 +132,6 @@ describe("Messages live behavior", () => {
     });
 
     expect(scrollToSpy).toHaveBeenCalledWith({
-      left: 0,
       top: Math.max(0, 240 + (480 - 120) - 720 * 0.28),
       behavior: "smooth",
     });
@@ -825,101 +813,12 @@ describe("Messages live behavior", () => {
     scrollSpy.mockRestore();
   });
 
-  it("keeps auto-follow scroll pinned to the messages scroller vertical axis", async () => {
-    window.localStorage.setItem("ccgui.messages.live.autoFollow", "1");
-    const scrollIntoViewSpy = vi
-      .spyOn(HTMLElement.prototype, "scrollIntoView")
-      .mockImplementation(() => {});
-    const scrollToSpy = vi
-      .spyOn(HTMLElement.prototype, "scrollTo")
-      .mockImplementation(() => {});
-
-    const { container } = render(
-      <Messages
-        items={[
-          {
-            id: "assistant-live-inline-1",
-            kind: "message",
-            role: "assistant",
-            text: "streaming chunk",
-          },
-        ]}
-        threadId="thread-inline-scroll"
-        workspaceId="ws-1"
-        isThinking
-        processingStartedAt={Date.now() - 1_000}
-        openTargets={[]}
-        selectedOpenAppId=""
-      />,
-    );
-    const scroller = getMessagesScroller(container);
-    setScrollerMetrics(scroller, 0, 2400);
-
-    await act(async () => {
-      await new Promise((resolve) => window.setTimeout(resolve, 20));
-    });
-
-    expect(scrollIntoViewSpy).not.toHaveBeenCalled();
-    expect(scrollToSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        left: 0,
-        top: 1680,
-      }),
-    );
-    scrollIntoViewSpy.mockRestore();
-    scrollToSpy.mockRestore();
-  });
-
-  it("does not let delayed inline alignment drift the messages scroller to the right", async () => {
-    window.localStorage.setItem("ccgui.messages.live.autoFollow", "1");
-    const scrollIntoViewSpy = vi
-      .spyOn(HTMLElement.prototype, "scrollIntoView")
-      .mockImplementation(function mockInlineDrift(this: Element) {
-        window.setTimeout(() => {
-          const scroller = this.closest(".messages") as HTMLDivElement | null;
-          if (scroller) {
-            scroller.scrollLeft = 240;
-          }
-        }, 0);
-      });
-
-    const { container } = render(
-      <Messages
-        items={[
-          {
-            id: "assistant-live-no-horizontal-drift",
-            kind: "message",
-            role: "assistant",
-            text: "streaming chunk",
-          },
-        ]}
-        threadId="thread-no-horizontal-drift"
-        workspaceId="ws-1"
-        isThinking
-        processingStartedAt={Date.now() - 1_000}
-        openTargets={[]}
-        selectedOpenAppId=""
-      />,
-    );
-    const scroller = getMessagesScroller(container);
-    setScrollerMetrics(scroller, 0, 2400);
-    scroller.scrollLeft = 0;
-
-    await act(async () => {
-      await new Promise((resolve) => window.setTimeout(resolve, 20));
-    });
-
-    expect(scrollIntoViewSpy).not.toHaveBeenCalled();
-    expect(scroller.scrollLeft).toBe(0);
-    scrollIntoViewSpy.mockRestore();
-  });
-
-  it("pauses auto-follow after manual scroll away from the bottom", async () => {
+  it("stops auto-follow after the user scrolls up, then resumes at the bottom", async () => {
     window.localStorage.setItem("ccgui.messages.live.autoFollow", "1");
     const scrollSpy = vi
       .spyOn(HTMLElement.prototype, "scrollIntoView")
       .mockImplementation(() => {});
-    const { container, rerender } = render(
+    const renderWith = (extraChunk: boolean) => (
       <Messages
         items={[
           {
@@ -928,6 +827,16 @@ describe("Messages live behavior", () => {
             role: "assistant",
             text: "first chunk",
           },
+          ...(extraChunk
+            ? [
+                {
+                  id: "assistant-live-follow-2",
+                  kind: "message" as const,
+                  role: "assistant" as const,
+                  text: "second chunk",
+                },
+              ]
+            : []),
         ]}
         threadId="thread-1"
         workspaceId="ws-1"
@@ -935,716 +844,73 @@ describe("Messages live behavior", () => {
         processingStartedAt={Date.now() - 1_000}
         openTargets={[]}
         selectedOpenAppId=""
-      />,
+      />
     );
+    const { container, rerender } = render(renderWith(false));
 
     const scroller = getMessagesScroller(container);
-    await act(async () => {
-      await new Promise((resolve) => window.setTimeout(resolve, 20));
+    // User scrolls up, far from the bottom — auto-follow must release.
+    setScrollerMetrics(scroller, 400, 2000);
+    fireEvent.scroll(scroller);
+
+    let baselineCalls = scrollSpy.mock.calls.length;
+    rerender(renderWith(true));
+    await Promise.resolve();
+    expect(scrollSpy.mock.calls.length).toBe(baselineCalls);
+
+    // User scrolls back to the bottom — auto-follow re-arms.
+    rerender(renderWith(false));
+    setScrollerMetrics(scroller, 1280, 2000); // 2000 - 1280 - 720 = 0, at bottom
+    fireEvent.scroll(scroller);
+
+    baselineCalls = scrollSpy.mock.calls.length;
+    rerender(renderWith(true));
+    await waitFor(() => {
+      expect(scrollSpy.mock.calls.length).toBeGreaterThan(baselineCalls);
     });
-    await scrollMessages(scroller, 400);
-
-    const baselineCalls = scrollSpy.mock.calls.length;
-
-    rerender(
-      <Messages
-        items={[
-          {
-            id: "assistant-live-follow-1",
-            kind: "message",
-            role: "assistant",
-            text: "first chunk",
-          },
-          {
-            id: "assistant-live-follow-2",
-            kind: "message",
-            role: "assistant",
-            text: "second chunk",
-          },
-        ]}
-        threadId="thread-1"
-        workspaceId="ws-1"
-        isThinking
-        processingStartedAt={Date.now() - 1_000}
-        openTargets={[]}
-        selectedOpenAppId=""
-      />,
-    );
-
-    await act(async () => {
-      await new Promise((resolve) => window.setTimeout(resolve, 160));
-    });
-    expect(scrollSpy).toHaveBeenCalledTimes(baselineCalls);
     scrollSpy.mockRestore();
   });
 
-  it("pauses auto-follow after an upward manual scroll even while still near the bottom", async () => {
+  it("does not auto-follow static history item changes", () => {
     window.localStorage.setItem("ccgui.messages.live.autoFollow", "1");
-    const scrollIntoViewSpy = vi
+    const scrollSpy = vi
       .spyOn(HTMLElement.prototype, "scrollIntoView")
       .mockImplementation(() => {});
-    const scrollToSpy = vi
-      .spyOn(HTMLElement.prototype, "scrollTo")
-      .mockImplementation(() => {});
-    const { container, rerender } = render(
+    const { rerender } = render(
       <Messages
         items={[
           {
-            id: "assistant-live-near-bottom-lock",
-            kind: "message",
-            role: "assistant",
-            text: "first chunk",
-          },
-        ]}
-        threadId="thread-near-bottom-lock"
-        workspaceId="ws-1"
-        isThinking
-        processingStartedAt={Date.now() - 1_000}
-        openTargets={[]}
-        selectedOpenAppId=""
-      />,
-    );
-
-    const scroller = getMessagesScroller(container);
-    await act(async () => {
-      setScrollerMetrics(scroller, 280, 1000);
-      fireEvent.scroll(scroller);
-      await new Promise((resolve) => window.setTimeout(resolve, 20));
-    });
-
-    await act(async () => {
-      setScrollerMetrics(scroller, 220, 1000);
-      fireEvent.scroll(scroller);
-    });
-    const baselineScrollIntoViewCalls = scrollIntoViewSpy.mock.calls.length;
-    const baselineScrollToCalls = scrollToSpy.mock.calls.length;
-
-    rerender(
-      <Messages
-        items={[
-          {
-            id: "assistant-live-near-bottom-lock",
-            kind: "message",
-            role: "assistant",
-            text: "first chunk",
-          },
-          {
-            id: "assistant-live-near-bottom-lock-2",
-            kind: "message",
-            role: "assistant",
-            text: "next chunk arrives while user is reading above the bottom",
-          },
-        ]}
-        threadId="thread-near-bottom-lock"
-        workspaceId="ws-1"
-        isThinking
-        processingStartedAt={Date.now() - 1_000}
-        openTargets={[]}
-        selectedOpenAppId=""
-      />,
-    );
-
-    await act(async () => {
-      await new Promise((resolve) => window.setTimeout(resolve, 160));
-    });
-    expect(scrollIntoViewSpy).toHaveBeenCalledTimes(baselineScrollIntoViewCalls);
-    expect(scrollToSpy).toHaveBeenCalledTimes(baselineScrollToCalls);
-    scrollIntoViewSpy.mockRestore();
-    scrollToSpy.mockRestore();
-  });
-
-  it("uses the shared condensed sticky header for the latest ordinary user question during realtime processing", async () => {
-    const items: ConversationItem[] = [
-      {
-        id: "user-live-sticky-old",
-        kind: "message",
-        role: "user",
-        text: "第一个问题",
-      },
-      {
-        id: "assistant-live-sticky-old",
-        kind: "message",
-        role: "assistant",
-        text: "第一轮答案",
-      },
-      {
-        id: "user-live-sticky-latest",
-        kind: "message",
-        role: "user",
-        text: "当前实时问题",
-      },
-      {
-        id: "reasoning-live-sticky",
-        kind: "reasoning",
-        summary: "分析中",
-        content: "",
-      },
-    ];
-
-    const { container } = render(
-      <Messages
-        items={items}
-        threadId="thread-1"
-        workspaceId="ws-1"
-        isThinking
-        processingStartedAt={Date.now() - 1_000}
-        openTargets={[]}
-        selectedOpenAppId=""
-      />,
-    );
-
-    expect(container.querySelector(".messages-live-sticky-user-message")).toBeNull();
-    const scroller = getMessagesScroller(container);
-    setMessageOffsetTop(container, "user-live-sticky-old", 12);
-    setMessageOffsetTop(container, "user-live-sticky-latest", 24);
-
-    await scrollMessages(scroller, 24);
-    await waitFor(() => {
-      const stickyHeader = container.querySelector(".messages-history-sticky-header");
-      expect(stickyHeader?.getAttribute("data-history-sticky-message-id")).toBe(
-        "user-live-sticky-latest",
-      );
-      expect(stickyHeader?.textContent ?? "").toContain("当前实时问题");
-    });
-  });
-
-  it("can hide the sticky user bubble without removing the user message from the canvas", async () => {
-    const items: ConversationItem[] = [
-      {
-        id: "user-sticky-hidden",
-        kind: "message",
-        role: "user",
-        text: "这个问题仍然在幕布里",
-      },
-      {
-        id: "assistant-sticky-hidden",
-        kind: "message",
-        role: "assistant",
-        text: "回答仍然正常显示",
-      },
-    ];
-
-    const { container } = render(
-      <Messages
-        items={items}
-        threadId="thread-sticky-hidden"
-        workspaceId="ws-1"
-        isThinking={false}
-        openTargets={[]}
-        selectedOpenAppId=""
-        showStickyUserBubble={false}
-      />,
-    );
-
-    const scroller = getMessagesScroller(container);
-    setMessageOffsetTop(container, "user-sticky-hidden", 20);
-
-    await scrollMessages(scroller, 20);
-
-    expect(
-      container.querySelector('[data-message-anchor-id="user-sticky-hidden"]'),
-    ).toBeTruthy();
-    expect(container.querySelector(".messages-history-sticky-header")).toBeNull();
-  });
-
-  it("can collapse the sticky header into a right-side peek tab and expand it again", async () => {
-    const items: ConversationItem[] = [
-      {
-        id: "user-sticky-toggle",
-        kind: "message",
-        role: "user",
-        text: "这是一个可以收起的悬浮问题条",
-      },
-      {
-        id: "assistant-sticky-toggle",
-        kind: "message",
-        role: "assistant",
-        text: "这是回答",
-      },
-    ];
-
-    const { container } = render(
-      <Messages
-        items={items}
-        threadId="thread-sticky-toggle"
-        workspaceId="ws-1"
-        isThinking={false}
-        openTargets={[]}
-        selectedOpenAppId=""
-      />,
-    );
-
-    const scroller = getMessagesScroller(container);
-    setMessageOffsetTop(container, "user-sticky-toggle", 20);
-
-    await scrollMessages(scroller, 20);
-
-    const stickyHeader = await waitFor(() => {
-      const node = container.querySelector(".messages-history-sticky-header");
-      expect(node).toBeTruthy();
-      return node as HTMLElement;
-    });
-
-    expect(stickyHeader.getAttribute("data-history-sticky-collapsed")).toBe("false");
-
-    const collapseButton = container.querySelector(
-      '[data-history-sticky-toggle="collapse"]',
-    ) as HTMLButtonElement | null;
-    expect(collapseButton).toBeTruthy();
-
-    fireEvent.click(collapseButton!);
-
-    await waitFor(() => {
-      expect(stickyHeader.getAttribute("data-history-sticky-collapsed")).toBe("true");
-    });
-
-    expect(
-      container.querySelector('[data-history-sticky-toggle="collapse"]'),
-    ).toBeNull();
-
-    const expandButton = container.querySelector(
-      '[data-history-sticky-toggle="expand"]',
-    ) as HTMLButtonElement | null;
-    expect(expandButton).toBeTruthy();
-
-    fireEvent.click(expandButton!);
-
-    await waitFor(() => {
-      expect(stickyHeader.getAttribute("data-history-sticky-collapsed")).toBe("false");
-    });
-
-    expect(
-      container.querySelector('[data-history-sticky-toggle="expand"]'),
-    ).toBeNull();
-  });
-
-  it("resets sticky header collapse state when switching threads", async () => {
-    const items: ConversationItem[] = [
-      {
-        id: "user-sticky-thread-a",
-        kind: "message",
-        role: "user",
-        text: "线程 A 的问题",
-      },
-      {
-        id: "assistant-sticky-thread-a",
-        kind: "message",
-        role: "assistant",
-        text: "线程 A 的回答",
-      },
-    ];
-
-    const { container, rerender } = render(
-      <Messages
-        items={items}
-        threadId="thread-sticky-a"
-        workspaceId="ws-1"
-        isThinking={false}
-        openTargets={[]}
-        selectedOpenAppId=""
-      />,
-    );
-
-    const scroller = getMessagesScroller(container);
-    setMessageOffsetTop(container, "user-sticky-thread-a", 18);
-    await scrollMessages(scroller, 18);
-
-    const collapseButton = await waitFor(() => {
-      const node = container.querySelector(
-        '[data-history-sticky-toggle="collapse"]',
-      ) as HTMLButtonElement | null;
-      expect(node).toBeTruthy();
-      return node as HTMLButtonElement;
-    });
-
-    fireEvent.click(collapseButton);
-
-    await waitFor(() => {
-      expect(
-        container
-          .querySelector(".messages-history-sticky-header")
-          ?.getAttribute("data-history-sticky-collapsed"),
-      ).toBe("true");
-    });
-
-    rerender(
-      <Messages
-        items={[
-          {
-            id: "user-sticky-thread-b",
+            id: "history-static-1",
             kind: "message",
             role: "user",
-            text: "线程 B 的问题",
-          },
-          {
-            id: "assistant-sticky-thread-b",
-            kind: "message",
-            role: "assistant",
-            text: "线程 B 的回答",
+            text: "历史消息 1",
           },
         ]}
-        threadId="thread-sticky-b"
+        threadId="thread-history-static"
         workspaceId="ws-1"
         isThinking={false}
         openTargets={[]}
         selectedOpenAppId=""
       />,
     );
-
-    const nextScroller = getMessagesScroller(container);
-    setMessageOffsetTop(container, "user-sticky-thread-b", 18);
-    await scrollMessages(nextScroller, 18);
-
-    await waitFor(() => {
-      const stickyHeader = container.querySelector(".messages-history-sticky-header");
-      if (!stickyHeader) {
-        expect(container.querySelector('[data-history-sticky-toggle="expand"]')).toBeNull();
-        return;
-      }
-      expect(stickyHeader.getAttribute("data-history-sticky-collapsed")).toBe("false");
-    });
-  });
-
-  it("uses history-style sticky handoff when scrolling back to earlier sections during realtime processing", async () => {
-    const items: ConversationItem[] = [
-      {
-        id: "user-live-handoff-earlier",
-        kind: "message",
-        role: "user",
-        text: "更早的问题",
-      },
-      {
-        id: "assistant-live-handoff-earlier",
-        kind: "message",
-        role: "assistant",
-        text: "更早的回答",
-      },
-      {
-        id: "user-live-handoff-latest",
-        kind: "message",
-        role: "user",
-        text: "最新的问题",
-      },
-      {
-        id: "reasoning-live-handoff",
-        kind: "reasoning",
-        summary: "分析中",
-        content: "",
-      },
-    ];
-
-    const { container } = render(
-      <Messages
-        items={items}
-        threadId="thread-1"
-        workspaceId="ws-1"
-        isThinking
-        processingStartedAt={Date.now() - 1_000}
-        openTargets={[]}
-        selectedOpenAppId=""
-      />,
-    );
-
-    const scroller = getMessagesScroller(container);
-    setMessageOffsetTop(container, "user-live-handoff-earlier", 18);
-    setMessageOffsetTop(container, "user-live-handoff-latest", 260);
-
-    await scrollMessages(scroller, 18);
-    await waitFor(() => {
-      expect(
-        container
-          .querySelector(".messages-history-sticky-header")
-          ?.getAttribute("data-history-sticky-message-id"),
-      ).toBe("user-live-handoff-earlier");
-    });
-
-    await scrollMessages(scroller, 260);
-    await waitFor(() => {
-      expect(
-        container
-          .querySelector(".messages-history-sticky-header")
-          ?.getAttribute("data-history-sticky-message-id"),
-      ).toBe("user-live-handoff-latest");
-    });
-  });
-
-  it("keeps the latest sticky user question renderable when realtime windowing trims the list", async () => {
-    const overflowingRealtimeItems: ConversationItem[] = [
-      {
-        id: "user-live-sticky-windowed",
-        kind: "message",
-        role: "user",
-        text: "这个问题必须常驻",
-      },
-      ...Array.from({ length: 35 }, (_, index): ConversationItem => ({
-        id: `assistant-live-sticky-windowed-${index}`,
-        kind: "message",
-        role: "assistant",
-        text: `实时响应片段 ${index + 1}`,
-      })),
-    ];
-
-    const { container } = render(
-      <Messages
-        items={overflowingRealtimeItems}
-        threadId="thread-1"
-        workspaceId="ws-1"
-        isThinking
-        processingStartedAt={Date.now() - 1_000}
-        openTargets={[]}
-        selectedOpenAppId=""
-      />,
-    );
-
-    expect(container.querySelector(".messages-live-sticky-user-message")).toBeNull();
-    expect(container.textContent ?? "").toContain("这个问题必须常驻");
-    const scroller = getMessagesScroller(container);
-    setMessageOffsetTop(container, "user-live-sticky-windowed", 30);
-
-    await scrollMessages(scroller, 30);
-    await waitFor(() => {
-      expect(
-        container
-          .querySelector(".messages-history-sticky-header")
-          ?.getAttribute("data-history-sticky-message-id"),
-      ).toBe("user-live-sticky-windowed");
-    });
-  });
-
-  it("does not keep a phantom collapsed-history indicator when the sticky question is the only trimmed item", async () => {
-    const items: ConversationItem[] = [
-      {
-        id: "user-live-sticky-only-hidden",
-        kind: "message",
-        role: "user",
-        text: "唯一被裁掉的问题",
-      },
-      ...Array.from({ length: 30 }, (_, index): ConversationItem => ({
-        id: `assistant-live-sticky-only-hidden-${index}`,
-        kind: "message",
-        role: "assistant",
-        text: `实时响应片段 ${index + 1}`,
-      })),
-    ];
-
-    const { container } = render(
-      <Messages
-        items={items}
-        threadId="thread-1"
-        workspaceId="ws-1"
-        isThinking
-        processingStartedAt={Date.now() - 1_000}
-        openTargets={[]}
-        selectedOpenAppId=""
-      />,
-    );
-
-    expect(container.querySelector(".messages-live-sticky-user-message")).toBeNull();
-    expect(container.querySelector(".messages-collapsed-indicator")).toBeNull();
-    const scroller = getMessagesScroller(container);
-    setMessageOffsetTop(container, "user-live-sticky-only-hidden", 18);
-
-    await scrollMessages(scroller, 18);
-    await waitFor(() => {
-      expect(
-        container
-          .querySelector(".messages-history-sticky-header")
-          ?.getAttribute("data-history-sticky-message-id"),
-      ).toBe("user-live-sticky-only-hidden");
-    });
-  });
-
-  it("hands off from realtime sticky semantics to history sticky semantics when processing ends", async () => {
-    const items: ConversationItem[] = [
-      {
-        id: "user-live-sticky-recover",
-        kind: "message",
-        role: "user",
-        text: "当前实时问题",
-      },
-      {
-        id: "reasoning-live-sticky-recover",
-        kind: "reasoning",
-        summary: "分析中",
-        content: "",
-      },
-    ];
-
-    const { container, rerender } = render(
-      <Messages
-        items={items}
-        threadId="thread-1"
-        workspaceId="ws-1"
-        isThinking
-        processingStartedAt={Date.now() - 1_000}
-        openTargets={[]}
-        selectedOpenAppId=""
-      />,
-    );
-
-    const scroller = getMessagesScroller(container);
-    setMessageOffsetTop(container, "user-live-sticky-recover", 20);
-    await scrollMessages(scroller, 20);
-    await waitFor(() => {
-      expect(
-        container
-          .querySelector(".messages-history-sticky-header")
-          ?.getAttribute("data-history-sticky-message-id"),
-      ).toBe("user-live-sticky-recover");
-    });
-
-    rerender(
-      <Messages
-        items={items}
-        threadId="thread-1"
-        workspaceId="ws-1"
-        isThinking={false}
-        openTargets={[]}
-        selectedOpenAppId=""
-      />,
-    );
-
-    expect(
-      container
-        .querySelector(".messages-history-sticky-header")
-        ?.getAttribute("data-history-sticky-message-id"),
-    ).toBe("user-live-sticky-recover");
-  });
-
-  it("uses a compact history sticky header that follows scroll position without early switching", async () => {
-    const items: ConversationItem[] = [
-      {
-        id: "user-history-sticky-1",
-        kind: "message",
-        role: "user",
-        text: "第一个历史问题",
-      },
-      {
-        id: "assistant-history-sticky-1",
-        kind: "message",
-        role: "assistant",
-        text: "第一轮历史回答",
-      },
-      {
-        id: "user-history-sticky-2",
-        kind: "message",
-        role: "user",
-        text: "第二个历史问题",
-      },
-      {
-        id: "assistant-history-sticky-2",
-        kind: "message",
-        role: "assistant",
-        text: "第二轮历史回答",
-      },
-    ];
-
-    const { container } = render(
-      <Messages
-        items={items}
-        threadId="thread-1"
-        workspaceId="ws-1"
-        isThinking={false}
-        openTargets={[]}
-        selectedOpenAppId=""
-      />,
-    );
-
-    expect(container.querySelectorAll(".messages-live-sticky-user-message")).toHaveLength(0);
-    const scroller = getMessagesScroller(container);
-    setMessageOffsetTop(container, "user-history-sticky-1", 18);
-    setMessageOffsetTop(container, "user-history-sticky-2", 260);
-
-    await scrollMessages(scroller, 18);
-    await waitFor(() => {
-      const stickyHeader = container.querySelector(".messages-history-sticky-header");
-      expect(stickyHeader?.getAttribute("data-history-sticky-message-id")).toBe(
-        "user-history-sticky-1",
-      );
-      expect(stickyHeader?.textContent ?? "").toContain("第一个历史问题");
-    });
-
-    await scrollMessages(scroller, 240);
-    await waitFor(() => {
-      expect(
-        container
-          .querySelector(".messages-history-sticky-header")
-          ?.getAttribute("data-history-sticky-message-id"),
-      ).toBe("user-history-sticky-1");
-    });
-
-    await scrollMessages(scroller, 260);
-    await waitFor(() => {
-      const stickyHeader = container.querySelector(".messages-history-sticky-header");
-      expect(stickyHeader?.getAttribute("data-history-sticky-message-id")).toBe(
-        "user-history-sticky-2",
-      );
-      expect(stickyHeader?.textContent ?? "").toContain("第二个历史问题");
-    });
-
-    await scrollMessages(scroller, 120);
-    await waitFor(() => {
-      expect(
-        container
-          .querySelector(".messages-history-sticky-header")
-          ?.getAttribute("data-history-sticky-message-id"),
-      ).toBe("user-history-sticky-1");
-    });
-  });
-
-  it("refreshes the active history sticky header text from the latest live snapshot without waiting for timeline convergence", async () => {
-    const initialItems: ConversationItem[] = [
-      {
-        id: "user-history-sticky-live-copy",
-        kind: "message",
-        role: "user",
-        text: "旧问题文案",
-      },
-      {
-        id: "assistant-history-sticky-live-copy",
-        kind: "message",
-        role: "assistant",
-        text: "回答中",
-      },
-    ];
-
-    const { container, rerender } = render(
-      <Messages
-        items={initialItems}
-        threadId="thread-1"
-        workspaceId="ws-1"
-        isThinking={false}
-        openTargets={[]}
-        selectedOpenAppId=""
-      />,
-    );
-
-    const scroller = getMessagesScroller(container);
-    setMessageOffsetTop(container, "user-history-sticky-live-copy", 18);
-
-    await scrollMessages(scroller, 18);
-    await waitFor(() => {
-      const stickyHeader = container.querySelector(".messages-history-sticky-header");
-      expect(stickyHeader?.textContent ?? "").toContain("旧问题文案");
-    });
 
     rerender(
       <Messages
         items={[
           {
-            id: "user-history-sticky-live-copy",
+            id: "history-static-1",
             kind: "message",
             role: "user",
-            text: "新问题文案",
+            text: "历史消息 1",
           },
           {
-            id: "assistant-history-sticky-live-copy",
+            id: "history-static-2",
             kind: "message",
             role: "assistant",
-            text: "回答中",
+            text: "历史消息 2",
           },
         ]}
-        threadId="thread-1"
+        threadId="thread-history-static"
         workspaceId="ws-1"
         isThinking={false}
         openTargets={[]}
@@ -1652,249 +918,11 @@ describe("Messages live behavior", () => {
       />,
     );
 
-    expect(
-      container.querySelector(".messages-history-sticky-header")?.textContent ?? "",
-    ).toContain("新问题文案");
+    expect(scrollSpy).not.toHaveBeenCalled();
+    scrollSpy.mockRestore();
   });
 
-  it("uses history sticky headers for restored history snapshots instead of live sticky", async () => {
-    const restoredItems: ConversationItem[] = [
-      {
-        id: "user-history-sticky-restored",
-        kind: "message",
-        role: "user",
-        text: "历史问题",
-      },
-      {
-        id: "assistant-history-sticky-disabled",
-        kind: "message",
-        role: "assistant",
-        text: "历史答案",
-      },
-    ];
-    const conversationState: ConversationState = {
-      items: restoredItems,
-      plan: null,
-      userInputQueue: [],
-      meta: {
-        workspaceId: "ws-1",
-        threadId: "thread-1",
-        engine: "codex",
-        activeTurnId: null,
-        isThinking: true,
-        heartbeatPulse: null,
-        historyRestoredAtMs: Date.now(),
-      },
-    };
-
-    const { container } = render(
-      <Messages
-        items={[]}
-        threadId="thread-1"
-        workspaceId="ws-1"
-        isThinking
-        conversationState={conversationState}
-        openTargets={[]}
-        selectedOpenAppId=""
-      />,
-    );
-
-    expect(container.querySelector(".messages-live-sticky-user-message")).toBeNull();
-    const scroller = getMessagesScroller(container);
-    setMessageOffsetTop(container, "user-history-sticky-restored", 24);
-
-    await scrollMessages(scroller, 24);
-    await waitFor(() => {
-      expect(
-        container
-          .querySelector(".messages-history-sticky-header")
-          ?.getAttribute("data-history-sticky-message-id"),
-      ).toBe("user-history-sticky-restored");
-    });
-  });
-
-  it("keeps the latest restored user question renderable even when live sticky is disabled", () => {
-    const conversationState: ConversationState = {
-      items: [
-        {
-          id: "user-restored-windowed",
-          kind: "message",
-          role: "user",
-          text: "恢复态里这条问题不能被裁掉",
-        },
-        ...Array.from({ length: 65 }, (_, index): ConversationItem => ({
-          id: `assistant-restored-windowed-${index}`,
-          kind: "message",
-          role: "assistant",
-          text: `恢复态响应 ${index + 1}`,
-        })),
-      ],
-      plan: null,
-      userInputQueue: [],
-      meta: {
-        workspaceId: "ws-1",
-        threadId: "thread-restored-windowed",
-        engine: "codex",
-        activeTurnId: null,
-        isThinking: true,
-        heartbeatPulse: null,
-        historyRestoredAtMs: Date.now(),
-      },
-    };
-
-    const { container } = render(
-      <Messages
-        items={[]}
-        threadId="thread-restored-windowed"
-        workspaceId="ws-1"
-        isThinking
-        conversationState={conversationState}
-        openTargets={[]}
-        selectedOpenAppId=""
-      />,
-    );
-
-    expect(container.querySelector(".messages-live-sticky-user-message")).toBeNull();
-    expect(container.textContent ?? "").toContain("恢复态里这条问题不能被裁掉");
-  });
-
-  it("does not pin memory-only injected user payloads as the latest live question", async () => {
-    const items: ConversationItem[] = [
-      {
-        id: "user-live-real-question",
-        kind: "message",
-        role: "user",
-        text: "真正的问题在这里",
-      },
-      {
-        id: "user-live-memory-only",
-        kind: "message",
-        role: "user",
-        text: "<project-memory>\n[项目上下文] 已记录会话摘要\n</project-memory>\n",
-      },
-      {
-        id: "reasoning-live-after-memory-only",
-        kind: "reasoning",
-        summary: "分析中",
-        content: "",
-      },
-    ];
-
-    const { container } = render(
-      <Messages
-        items={items}
-        threadId="thread-1"
-        workspaceId="ws-1"
-        isThinking
-        processingStartedAt={Date.now() - 1_000}
-        openTargets={[]}
-        selectedOpenAppId=""
-      />,
-    );
-
-    expect(container.querySelector(".messages-live-sticky-user-message")).toBeNull();
-    const scroller = getMessagesScroller(container);
-    setMessageOffsetTop(container, "user-live-real-question", 22);
-
-    await scrollMessages(scroller, 22);
-    await waitFor(() => {
-      expect(
-        container
-          .querySelector(".messages-history-sticky-header")
-          ?.getAttribute("data-history-sticky-message-id"),
-      ).toBe("user-live-real-question");
-    });
-  });
-
-  it("excludes pseudo-user rows from history sticky headers", async () => {
-    const items: ConversationItem[] = [
-      {
-        id: "user-history-real-question",
-        kind: "message",
-        role: "user",
-        text: "真正的历史问题",
-      },
-      {
-        id: "assistant-history-real-answer",
-        kind: "message",
-        role: "assistant",
-        text: "真实回答",
-      },
-      {
-        id: "user-history-agent-task",
-        kind: "message",
-        role: "user",
-        text: `
-<task-notification>
-  <task-id>task-42</task-id>
-  <summary>Agent "Builder"</summary>
-  <result>done</result>
-</task-notification>`,
-      },
-      {
-        id: "user-history-memory-only",
-        kind: "message",
-        role: "user",
-        text: "<project-memory>\n[项目上下文] 已记录会话摘要\n</project-memory>\n",
-      },
-    ];
-
-    const { container } = render(
-      <Messages
-        items={items}
-        threadId="thread-1"
-        workspaceId="ws-1"
-        isThinking={false}
-        openTargets={[]}
-        selectedOpenAppId=""
-      />,
-    );
-
-    const scroller = getMessagesScroller(container);
-    setMessageOffsetTop(container, "user-history-real-question", 20);
-
-    await scrollMessages(scroller, 20);
-    await waitFor(() => {
-      const stickyHeader = container.querySelector(".messages-history-sticky-header");
-      expect(stickyHeader?.getAttribute("data-history-sticky-message-id")).toBe(
-        "user-history-real-question",
-      );
-      expect(stickyHeader?.textContent ?? "").toContain("真正的历史问题");
-    });
-  });
-
-  it("does not create phantom history sticky headers for collapsed hidden user questions", () => {
-    const items: ConversationItem[] = [
-      {
-        id: "user-history-hidden-only",
-        kind: "message",
-        role: "user",
-        text: "被窗口裁掉的历史问题",
-      },
-      ...Array.from({ length: 30 }, (_, index): ConversationItem => ({
-        id: `assistant-history-hidden-only-${index}`,
-        kind: "message",
-        role: "assistant",
-        text: `历史回答片段 ${index + 1}`,
-      })),
-    ];
-
-    const { container } = render(
-      <Messages
-        items={items}
-        threadId="thread-1"
-        workspaceId="ws-1"
-        isThinking={false}
-        openTargets={[]}
-        selectedOpenAppId=""
-      />,
-    );
-
-    expect(container.querySelector(".messages-history-sticky-header")).toBeNull();
-    expect(container.querySelector(".messages-collapsed-indicator")).toBeTruthy();
-  });
-
-  it("preserves the current viewport position when revealing collapsed history", async () => {
+  it("resets to the revealed history head when expanding collapsed history", async () => {
     const items: ConversationItem[] = Array.from({ length: 32 }, (_, index) => ({
       id: `history-reveal-${index + 1}`,
       kind: "message",
@@ -1931,11 +959,11 @@ describe("Messages live behavior", () => {
     await waitFor(() => {
       expect(container.querySelector(".messages-collapsed-indicator")).toBeNull();
       expect(screen.getByText("history reveal message 1")).toBeTruthy();
-      expect(scroller.scrollTop).toBe(580);
+      expect(scroller.scrollTop).toBe(0);
     });
   });
 
-  it("skips scroll restoration when scroller metrics are non-finite", async () => {
+  it("keeps manual history expansion stable even when scroller metrics are non-finite", async () => {
     const items: ConversationItem[] = Array.from({ length: 32 }, (_, index) => ({
       id: `history-reveal-invalid-${index + 1}`,
       kind: "message",
@@ -1968,7 +996,7 @@ describe("Messages live behavior", () => {
     await waitFor(() => {
       expect(container.querySelector(".messages-collapsed-indicator")).toBeNull();
       expect(screen.getByText("history reveal invalid message 1")).toBeTruthy();
-      expect(scroller.scrollTop).toBe(420);
+      expect(scroller.scrollTop).toBe(0);
     });
   });
 

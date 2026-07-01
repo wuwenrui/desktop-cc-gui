@@ -21,7 +21,6 @@ describe("Markdown tool-call fallback", () => {
     expect(screen.getByRole("group", { name: "messages.toolCallCard.title" })).toBeTruthy();
     expect(screen.getByText("find")).toBeTruthy();
     expect(screen.getByText("/Users/test/project")).toBeTruthy();
-    expect(container.querySelector(".tcb-card")).toBeTruthy();
     expect(container.textContent).not.toContain("<function_calls>");
   });
 

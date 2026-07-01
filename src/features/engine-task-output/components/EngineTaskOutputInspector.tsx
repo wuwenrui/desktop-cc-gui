@@ -5,6 +5,10 @@ import CircleAlert from "lucide-react/dist/esm/icons/circle-alert";
 import CircleCheck from "lucide-react/dist/esm/icons/circle-check";
 import Clock3 from "lucide-react/dist/esm/icons/clock-3";
 import X from "lucide-react/dist/esm/icons/x";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import type {
   EngineTaskOutputArtifactRefreshState,
   EngineTaskOutputSnapshot,
@@ -16,6 +20,7 @@ type EngineTaskOutputInspectorProps = {
   refreshState?: EngineTaskOutputArtifactRefreshState;
   onRefresh?: () => void;
   onClose?: () => void;
+  className?: string;
 };
 
 const STATUS_ICON = {
@@ -24,6 +29,16 @@ const STATUS_ICON = {
   error: CircleAlert,
   unavailable: CircleAlert,
 } as const;
+
+const STATUS_BADGE_VARIANT = {
+  running: "info",
+  completed: "success",
+  error: "error",
+  unavailable: "secondary",
+} as const satisfies Record<
+  EngineTaskOutputStatus,
+  "info" | "success" | "error" | "secondary"
+>;
 
 function formatTokenCount(value: number | null | undefined) {
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
@@ -57,6 +72,7 @@ export const EngineTaskOutputInspector = memo(function EngineTaskOutputInspector
   refreshState,
   onRefresh,
   onClose,
+  className,
 }: EngineTaskOutputInspectorProps) {
   const { t } = useTranslation();
   const StatusIcon = STATUS_ICON[snapshot.status] ?? Clock3;
@@ -71,120 +87,154 @@ export const EngineTaskOutputInspector = memo(function EngineTaskOutputInspector
     : [];
 
   return (
-    <aside
-      className="engine-task-output-inspector"
+    <Card
       aria-label={t("engineTaskOutput.label")}
+      className={cn("gap-4 rounded-[8px] p-4 before:rounded-[7px]", className)}
     >
-      <div className="engine-task-output-header">
-        <div className="engine-task-output-title-block">
-          <span className="engine-task-output-avatar" aria-hidden>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 gap-2.5">
+          <span
+            className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary"
+            aria-hidden
+          >
             <Bot size={16} />
           </span>
-          <div>
-            <div className="engine-task-output-eyebrow">
+          <div className="min-w-0">
+            <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
               {t("engineTaskOutput.engine", { engine: snapshot.engine })}
             </div>
-            <h3 className="engine-task-output-title">{snapshot.title}</h3>
+            <h3 className="mt-0.5 truncate text-sm font-semibold leading-tight text-foreground">
+              {snapshot.title}
+            </h3>
             {snapshot.description ? (
-              <p className="engine-task-output-description">
+              <p className="mt-1 text-xs leading-snug text-muted-foreground">
                 {snapshot.description}
               </p>
             ) : null}
           </div>
         </div>
-        <div className="engine-task-output-header-actions">
-          <span className={`engine-task-output-status is-${snapshot.status}`}>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <Badge variant={STATUS_BADGE_VARIANT[snapshot.status]} className="gap-1">
             <StatusIcon size={13} aria-hidden />
             {t(resolveStatusKey(snapshot.status))}
-          </span>
+          </Badge>
           {onClose ? (
-            <button
+            <Button
               type="button"
-              className="engine-task-output-close"
+              variant="ghost"
+              size="icon-xs"
               onClick={onClose}
               aria-label={t("engineTaskOutput.close")}
               title={t("engineTaskOutput.close")}
             >
               <X size={14} aria-hidden />
-            </button>
+            </Button>
           ) : null}
         </div>
       </div>
 
-      <div className="engine-task-output-grid">
-        <div className="engine-task-output-section">
-          <h4>{t("engineTaskOutput.identity")}</h4>
-          <div className="engine-task-output-chips">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <section className="grid min-w-0 gap-2">
+          <h4 className="text-[11px] font-bold text-muted-foreground">
+            {t("engineTaskOutput.identity")}
+          </h4>
+          <div className="flex flex-wrap gap-1.5">
             {snapshot.taskId ? (
-              <span className="engine-task-output-chip">task {snapshot.taskId}</span>
+              <Badge variant="secondary" className="max-w-full truncate font-normal">
+                task {snapshot.taskId}
+              </Badge>
             ) : null}
             {snapshot.toolUseId ? (
-              <span className="engine-task-output-chip">tool {snapshot.toolUseId}</span>
+              <Badge variant="secondary" className="max-w-full truncate font-normal">
+                tool {snapshot.toolUseId}
+              </Badge>
             ) : null}
             {snapshot.threadId ? (
-              <span className="engine-task-output-chip">thread {snapshot.threadId}</span>
+              <Badge variant="secondary" className="max-w-full truncate font-normal">
+                thread {snapshot.threadId}
+              </Badge>
             ) : null}
             {snapshot.outputFileName ? (
-              <span className="engine-task-output-chip">{snapshot.outputFileName}</span>
+              <Badge variant="secondary" className="max-w-full truncate font-normal">
+                {snapshot.outputFileName}
+              </Badge>
             ) : null}
           </div>
-        </div>
+        </section>
 
-        <div className="engine-task-output-section">
-          <h4>{t("engineTaskOutput.telemetry")}</h4>
+        <section className="grid min-w-0 gap-2">
+          <h4 className="text-[11px] font-bold text-muted-foreground">
+            {t("engineTaskOutput.telemetry")}
+          </h4>
           {usage ? (
-            <div className="engine-task-output-token-grid">
+            <div className="grid grid-cols-2 gap-1.5">
               {usageRows.map(([labelKey, value]) => (
-                <div className="engine-task-output-token" key={labelKey}>
-                  <span>{t(labelKey)}</span>
-                  <strong>{formatTokenCount(value) ?? t("engineTaskOutput.pending")}</strong>
+                <div
+                  key={labelKey}
+                  className="grid gap-0.5 rounded-md bg-muted/50 p-1.5"
+                >
+                  <span className="text-[11px] text-muted-foreground">
+                    {t(labelKey)}
+                  </span>
+                  <strong className="text-xs text-foreground">
+                    {formatTokenCount(value) ?? t("engineTaskOutput.pending")}
+                  </strong>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="engine-task-output-muted">{t("engineTaskOutput.telemetryPending")}</p>
+            <p className="text-[11px] text-muted-foreground">
+              {t("engineTaskOutput.telemetryPending")}
+            </p>
           )}
-          <p className="engine-task-output-muted">
+          <p className="text-[11px] text-muted-foreground">
             {t(`engineTaskOutput.telemetryStatus.${snapshot.telemetryStatus}`)}
           </p>
-        </div>
+        </section>
       </div>
 
-      <div className="engine-task-output-section">
-        <div className="engine-task-output-section-heading">
-          <h4>{t("engineTaskOutput.recentOutput")}</h4>
+      <section className="grid gap-2">
+        <div className="flex items-center justify-between gap-2">
+          <h4 className="text-[11px] font-bold text-muted-foreground">
+            {t("engineTaskOutput.recentOutput")}
+          </h4>
           {onRefresh && snapshot.outputFilePath ? (
-            <button
+            <Button
               type="button"
-              className="engine-task-output-refresh"
+              variant="outline"
+              size="xs"
               onClick={onRefresh}
               disabled={refreshState?.isRefreshing ?? false}
             >
               {refreshState?.isRefreshing
                 ? t("engineTaskOutput.refreshing")
                 : t("engineTaskOutput.refresh")}
-            </button>
+            </Button>
           ) : null}
         </div>
         {snapshot.recentOutput ? (
-          <pre className="engine-task-output-pre">{snapshot.recentOutput}</pre>
+          <pre className="m-0 max-h-[220px] overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted/50 p-2.5 font-mono text-[11px] leading-relaxed text-foreground">
+            {snapshot.recentOutput}
+          </pre>
         ) : (
-          <p className="engine-task-output-muted">{t("engineTaskOutput.outputUnavailable")}</p>
+          <p className="text-[11px] text-muted-foreground">
+            {t("engineTaskOutput.outputUnavailable")}
+          </p>
         )}
         {refreshState?.error ? (
-          <p className="engine-task-output-muted">
+          <p className="text-[11px] text-muted-foreground">
             {t("engineTaskOutput.artifactUnavailable")}
           </p>
         ) : refreshState?.truncated ? (
-          <p className="engine-task-output-muted">
+          <p className="text-[11px] text-muted-foreground">
             {t("engineTaskOutput.artifactTruncated")}
           </p>
         ) : refreshState?.source === "artifact" ? (
-          <p className="engine-task-output-muted">
+          <p className="text-[11px] text-muted-foreground">
             {t("engineTaskOutput.artifactLive")}
           </p>
         ) : null}
-      </div>
-    </aside>
+      </section>
+    </Card>
   );
 });

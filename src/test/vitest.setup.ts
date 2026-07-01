@@ -53,6 +53,17 @@ if (typeof Element !== "undefined" && !Element.prototype.getAnimations) {
   });
 }
 
+// Radix primitives (Select, etc.) call scrollIntoView on the active item when
+// opening/positioning; jsdom does not implement it. A no-op keeps tests from
+// throwing "scrollIntoView is not a function".
+if (typeof Element !== "undefined" && !Element.prototype.scrollIntoView) {
+  Object.defineProperty(Element.prototype, "scrollIntoView", {
+    value: () => {},
+    configurable: true,
+    writable: true,
+  });
+}
+
 // Mock react-i18next to return keys or fallback text during tests
 vi.mock("react-i18next", () => ({
   initReactI18next: {

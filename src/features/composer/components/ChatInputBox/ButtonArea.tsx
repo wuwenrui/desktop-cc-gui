@@ -1,35 +1,46 @@
 import {
   useCallback,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
-  useEffect,
-  useLayoutEffect,
-  type CSSProperties,
 } from 'react';
-import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import DatabaseZap from 'lucide-react/dist/esm/icons/database-zap';
-import X from 'lucide-react/dist/esm/icons/x';
+import ArrowUp from 'lucide-react/dist/esm/icons/arrow-up';
+import Square from 'lucide-react/dist/esm/icons/square';
+import Plus from 'lucide-react/dist/esm/icons/plus';
 import type { ButtonAreaProps, MemoryReferenceMode, PermissionMode, ReasoningEffort } from './types';
-import { ConfigSelect, ModeSelect, ReasoningSelect, ShortcutActionsSelect } from './selectors';
+import { ConfigSelect, ModeSelect, ReasoningSelect } from './selectors';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 // Stable no-op callbacks to avoid re-renders when optional handlers are not provided
 const NOOP_MODE = (_mode: PermissionMode) => {};
 const NOOP_REASONING = (_effort: ReasoningEffort | null) => {};
-const MEMORY_REFERENCE_POPOVER_WIDTH = 312;
-const MEMORY_REFERENCE_POPOVER_GAP = 6;
-const MEMORY_REFERENCE_POPOVER_VIEWPORT_MARGIN = 12;
 
-function clampMemoryReferencePopoverPosition(value: number, min: number, max: number) {
-  if (max < min) {
-    return min;
-  }
-  return Math.min(Math.max(value, min), max);
-}
+// Memory reference modes offered inside the vertical tool menu submenu.
+const MEMORY_REFERENCE_OPTIONS: ReadonlyArray<{
+  mode: MemoryReferenceMode;
+  labelKey: string;
+  fallback: string;
+}> = [
+  { mode: 'off', labelKey: 'composer.memoryReferenceDisable', fallback: '关闭' },
+  { mode: 'single', labelKey: 'composer.memoryReferenceEnableSingle', fallback: '单次引用' },
+  { mode: 'always', labelKey: 'composer.memoryReferenceEnableAlways', fallback: '常开引用' },
+];
 
 function ToolGridIcon() {
-  return <span className="codicon codicon-extensions selector-tool-icon" aria-hidden="true" />;
+  return <Plus size={18} className="selector-tool-icon" aria-hidden="true" />;
 }
 
 /**
@@ -72,13 +83,13 @@ export const ButtonArea = ({
   selectedAgent,
   onAgentSelect,
   onOpenAgentSettings,
-  shortcutActions,
+  readinessSurface,
   mainSurface,
   toolSurface,
   panelToggleSurface,
+  curatedSkillSurface,
 }: ButtonAreaProps) => {
   const { t } = useTranslation();
-  const isPlanModeEnabled = (selectedCollaborationModeId ?? 'code') === 'plan';
   const supportsStreamActivityPhaseFx =
     currentProvider === 'codex' ||
     currentProvider === 'claude' ||
@@ -87,145 +98,71 @@ export const ButtonArea = ({
     supportsStreamActivityPhaseFx ? streamActivityPhase : 'idle';
 
   const [isToolDockOpen, setIsToolDockOpen] = useState(false);
-  const [isMemoryReferencePopoverOpen, setIsMemoryReferencePopoverOpen] = useState(false);
   const toolDockId = useId();
-  const memoryReferencePopoverId = useId();
-  const memoryReferenceRootRef = useRef<HTMLDivElement>(null);
-  const memoryReferenceButtonRef = useRef<HTMLButtonElement>(null);
-  const memoryReferencePopoverRef = useRef<HTMLDivElement>(null);
-  const [memoryReferencePopoverStyle, setMemoryReferencePopoverStyle] =
-    useState<CSSProperties | null>(null);
-  const isMemoryReferenceEnabled = memoryReferenceMode !== 'off';
+  const buttonAreaRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  // The tool menu should read as a panel attached to the input box's top edge:
+  // full input width, left edge aligned to the box. Radix anchors the popover
+  // to the "+" trigger, so we measure the box width and the trigger's offset
+  // to derive an equivalent width + negative alignOffset.
+  const [menuMetrics, setMenuMetrics] = useState<{
+    width: number;
+    alignOffset: number;
+    sideOffset: number;
+  } | null>(null);
+
+  useLayoutEffect(() => {
+    if (!isToolDockOpen) {
+      return;
+    }
+    const buttonArea = buttonAreaRef.current;
+    const trigger = triggerRef.current;
+    if (!buttonArea || !trigger || typeof window === 'undefined') {
+      return;
+    }
+    // Gap between the menu's bottom edge and the input box's top edge.
+    const MENU_GAP = 8;
+    const inputBox = buttonArea.closest('.chat-input-box') as HTMLElement | null;
+    const measure = () => {
+      const boxRect = buttonArea.getBoundingClientRect();
+      const triggerRect = trigger.getBoundingClientRect();
+      const width = Math.round(boxRect.width);
+      if (width <= 0) {
+        return;
+      }
+      const alignOffset = -Math.round(triggerRect.left - boxRect.left);
+      // Lift the menu fully above the input box (not just the "+" trigger), so
+      // it never overlaps the text area. sideOffset is measured from the
+      // trigger's top edge up to the box's top edge, plus a small gap.
+      const anchorTop = inputBox
+        ? inputBox.getBoundingClientRect().top
+        : boxRect.top;
+      const sideOffset = Math.max(8, Math.round(triggerRect.top - anchorTop) + MENU_GAP);
+      setMenuMetrics((prev) =>
+        prev &&
+        prev.width === width &&
+        prev.alignOffset === alignOffset &&
+        prev.sideOffset === sideOffset
+          ? prev
+          : { width, alignOffset, sideOffset },
+      );
+    };
+    measure();
+    const resizeObserver =
+      typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+    resizeObserver?.observe(buttonArea);
+    window.addEventListener('resize', measure);
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [isToolDockOpen]);
   const memoryReferenceStateLabel =
     memoryReferenceMode === 'always'
       ? t('composer.memoryReferenceAlwaysOn')
       : memoryReferenceMode === 'single'
         ? t('composer.memoryReferenceSingleOn')
         : t('composer.memoryReferenceToggle');
-
-  useEffect(() => {
-    if (!isToolDockOpen) {
-      setIsMemoryReferencePopoverOpen(false);
-      return;
-    }
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setIsToolDockOpen(false);
-      }
-    };
-
-    document.addEventListener('keydown', handleEscape);
-    return () => {
-      document.removeEventListener('keydown', handleEscape);
-    };
-  }, [isToolDockOpen]);
-
-  useEffect(() => {
-    if (!isMemoryReferencePopoverOpen) {
-      return;
-    }
-
-    const handlePointerOutside = (event: MouseEvent) => {
-      const root = memoryReferenceRootRef.current;
-      const popover = memoryReferencePopoverRef.current;
-      const target = event.target;
-      if (!(target instanceof Node)) {
-        return;
-      }
-      if (
-        (root && root.contains(target)) ||
-        (popover && popover.contains(target))
-      ) {
-        return;
-      }
-      if (root || popover) {
-        setIsMemoryReferencePopoverOpen(false);
-      }
-    };
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setIsMemoryReferencePopoverOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handlePointerOutside);
-    document.addEventListener('keydown', handleEscape);
-    return () => {
-      document.removeEventListener('mousedown', handlePointerOutside);
-      document.removeEventListener('keydown', handleEscape);
-    };
-  }, [isMemoryReferencePopoverOpen]);
-
-  const updateMemoryReferencePopoverPosition = useCallback(() => {
-    if (!isMemoryReferencePopoverOpen || typeof window === 'undefined') {
-      return;
-    }
-    const trigger = memoryReferenceButtonRef.current;
-    if (!trigger) {
-      return;
-    }
-    const triggerRect = trigger.getBoundingClientRect();
-    const popoverRect = memoryReferencePopoverRef.current?.getBoundingClientRect();
-    const popoverWidth = Math.min(
-      MEMORY_REFERENCE_POPOVER_WIDTH,
-      Math.max(
-        160,
-        window.innerWidth - MEMORY_REFERENCE_POPOVER_VIEWPORT_MARGIN * 2,
-      ),
-    );
-    const measuredWidth = popoverRect?.width || popoverWidth;
-    const measuredHeight = popoverRect?.height || 140;
-    const left = clampMemoryReferencePopoverPosition(
-      triggerRect.right - measuredWidth,
-      MEMORY_REFERENCE_POPOVER_VIEWPORT_MARGIN,
-      window.innerWidth - measuredWidth - MEMORY_REFERENCE_POPOVER_VIEWPORT_MARGIN,
-    );
-    const preferredTop =
-      triggerRect.top - measuredHeight - MEMORY_REFERENCE_POPOVER_GAP;
-    const fallbackTop =
-      triggerRect.bottom + MEMORY_REFERENCE_POPOVER_GAP;
-    const top =
-      preferredTop >= MEMORY_REFERENCE_POPOVER_VIEWPORT_MARGIN
-        ? preferredTop
-        : clampMemoryReferencePopoverPosition(
-            fallbackTop,
-            MEMORY_REFERENCE_POPOVER_VIEWPORT_MARGIN,
-            window.innerHeight - measuredHeight - MEMORY_REFERENCE_POPOVER_VIEWPORT_MARGIN,
-          );
-
-    setMemoryReferencePopoverStyle({
-      left,
-      top,
-      width: popoverWidth,
-      maxWidth: `calc(100vw - ${MEMORY_REFERENCE_POPOVER_VIEWPORT_MARGIN * 2}px)`,
-      maxHeight: `calc(100vh - ${MEMORY_REFERENCE_POPOVER_VIEWPORT_MARGIN * 2}px)`,
-    });
-  }, [isMemoryReferencePopoverOpen]);
-
-  useLayoutEffect(() => {
-    if (!isMemoryReferencePopoverOpen) {
-      setMemoryReferencePopoverStyle(null);
-      return;
-    }
-    updateMemoryReferencePopoverPosition();
-    const rafId = window.requestAnimationFrame(updateMemoryReferencePopoverPosition);
-    return () => window.cancelAnimationFrame(rafId);
-  }, [isMemoryReferencePopoverOpen, updateMemoryReferencePopoverPosition]);
-
-  useEffect(() => {
-    if (!isMemoryReferencePopoverOpen) {
-      return;
-    }
-    const handleViewportChange = () => updateMemoryReferencePopoverPosition();
-    const scrollOptions = { capture: true, passive: true } as const;
-    window.addEventListener('resize', handleViewportChange);
-    window.addEventListener('scroll', handleViewportChange, scrollOptions);
-    return () => {
-      window.removeEventListener('resize', handleViewportChange);
-      window.removeEventListener('scroll', handleViewportChange, scrollOptions);
-    };
-  }, [isMemoryReferencePopoverOpen, updateMemoryReferencePopoverPosition]);
 
   /**
    * Handle submit button click
@@ -250,146 +187,62 @@ export const ButtonArea = ({
     onProviderSelect?.(providerId);
   }, [onProviderSelect]);
 
-  const handlePlanModeToggle = useCallback(() => {
-    if (!onSelectCollaborationMode) {
-      return;
-    }
-    onSelectCollaborationMode(isPlanModeEnabled ? 'code' : 'plan');
-  }, [isPlanModeEnabled, onSelectCollaborationMode]);
-
-  const handleToolDockToggle = useCallback(() => {
-    setIsToolDockOpen((current) => {
-      if (current) {
-        setIsMemoryReferencePopoverOpen(false);
-      }
-      return !current;
-    });
-  }, []);
-
-  const handleMemoryReferenceToggleClick = useCallback(() => {
-    if (!onSetMemoryReferenceMode) {
-      return;
-    }
-    if (memoryReferenceMode !== 'off') {
-      onSetMemoryReferenceMode('off');
-      setIsMemoryReferencePopoverOpen(false);
-      return;
-    }
-    setIsMemoryReferencePopoverOpen((current) => !current);
-  }, [memoryReferenceMode, onSetMemoryReferenceMode]);
-
-  const handleSelectMemoryReferenceMode = useCallback((nextMode: MemoryReferenceMode) => {
-    if (!onSetMemoryReferenceMode || memoryReferenceMode !== 'off') {
-      setIsMemoryReferencePopoverOpen(false);
-      return;
-    }
-    onSetMemoryReferenceMode(nextMode);
-    setIsMemoryReferencePopoverOpen(false);
-  }, [memoryReferenceMode, onSetMemoryReferenceMode]);
-
   const toolDockToggleLabel = t('chat.toolDockToggle', {
     defaultValue: isToolDockOpen ? '收起工具' : '展开工具',
   });
 
-  const memoryReferencePopover =
-    isMemoryReferencePopoverOpen && typeof document !== 'undefined'
-      ? createPortal(
-          <div
-            ref={memoryReferencePopoverRef}
-            id={memoryReferencePopoverId}
-            className="composer-memory-reference-popover"
-            role="dialog"
-            aria-label={t('composer.memoryReferenceDialogTitle')}
-            style={memoryReferencePopoverStyle ?? undefined}
-          >
-            <div className="composer-memory-reference-popover-head">
-              <div className="composer-memory-reference-popover-title-group">
-                <span className="composer-memory-reference-popover-title">
-                  {t('composer.memoryReferenceDialogTitle')}
-                </span>
-              </div>
-              <button
-                type="button"
-                className="composer-memory-reference-popover-close"
-                onClick={() => setIsMemoryReferencePopoverOpen(false)}
-                aria-label={t('common.close', { defaultValue: '关闭' })}
-              >
-                <X size={12} aria-hidden />
-              </button>
-            </div>
-            <div className="composer-memory-reference-popover-body">
-              <div className="composer-memory-reference-popover-row">
-                <span className="composer-memory-reference-popover-label">
-                  {t('composer.memoryReferenceMode')}
-                </span>
-                <span className="composer-memory-reference-popover-value">
-                  {t('composer.memoryReferenceModeChoice')}
-                </span>
-              </div>
-              <div className="composer-memory-reference-popover-copy">
-                {t('composer.memoryReferenceModeHint')}
-              </div>
-            </div>
-            <div className="composer-memory-reference-popover-actions">
-              <button
-                type="button"
-                className="composer-memory-reference-popover-secondary"
-                onClick={() => setIsMemoryReferencePopoverOpen(false)}
-              >
-                {t('common.cancel', { defaultValue: '取消' })}
-              </button>
-              <button
-                type="button"
-                className={`composer-memory-reference-popover-mode${
-                  memoryReferenceMode === 'single' ? ' is-selected' : ''
-                }`}
-                aria-pressed={memoryReferenceMode === 'single'}
-                onClick={() => handleSelectMemoryReferenceMode('single')}
-              >
-                {t('composer.memoryReferenceEnableSingle')}
-              </button>
-              <button
-                type="button"
-                className={`composer-memory-reference-popover-mode${
-                  memoryReferenceMode === 'always' ? ' is-selected' : ''
-                }`}
-                aria-pressed={memoryReferenceMode === 'always'}
-                onClick={() => handleSelectMemoryReferenceMode('always')}
-              >
-                {t('composer.memoryReferenceEnableAlways')}
-              </button>
-            </div>
-          </div>,
-          document.body,
-        )
-      : null;
-
   return (
     <div
+      ref={buttonAreaRef}
       className={`button-area${isToolDockOpen ? ' is-tool-dock-open' : ''}`}
       data-provider={currentProvider}
     >
       <div className="button-area-primary-row">
         <div className="button-area-left button-area-left--primary">
-          <button
-            type="button"
-            className="selector-button selector-tool-dock-toggle"
-            onClick={handleToolDockToggle}
-            title={toolDockToggleLabel}
-            aria-label={toolDockToggleLabel}
-            aria-expanded={isToolDockOpen}
-            aria-controls={toolDockId}
-          >
-            <ToolGridIcon />
-          </button>
-          {isToolDockOpen ? (
-            <div
+          <DropdownMenu open={isToolDockOpen} onOpenChange={setIsToolDockOpen}>
+            <DropdownMenuTrigger asChild>
+              <button
+                ref={triggerRef}
+                type="button"
+                className="selector-button selector-tool-dock-toggle"
+                title={toolDockToggleLabel}
+                aria-label={toolDockToggleLabel}
+                aria-controls={toolDockId}
+              >
+                <ToolGridIcon />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
               id={toolDockId}
-              className="button-area-inline-tools"
-              role="group"
+              side="top"
+              align="start"
+              sideOffset={menuMetrics?.sideOffset ?? 12}
+              alignOffset={menuMetrics?.alignOffset ?? 0}
+              avoidCollisions={false}
+              className="composer-tool-menu"
               aria-label={toolDockToggleLabel}
+              style={menuMetrics ? { width: menuMetrics.width } : undefined}
             >
+              {(toolSurface || panelToggleSurface || curatedSkillSurface) ? (
+                <>
+                  <div className="composer-tool-menu-surface-row">
+                    {toolSurface ? (
+                      <div className="button-area-tool-surface">
+                        {toolSurface}
+                      </div>
+                    ) : null}
+                    {curatedSkillSurface ? (
+                      <div className="button-area-curated-surface">
+                        {curatedSkillSurface}
+                      </div>
+                    ) : null}
+                    {panelToggleSurface}
+                  </div>
+                  <DropdownMenuSeparator />
+                </>
+              ) : null}
               <ConfigSelect
+                inline
                 currentProvider={currentProvider}
                 onProviderChange={handleProviderSelect}
                 providerAvailability={providerAvailability}
@@ -411,100 +264,105 @@ export const ButtonArea = ({
                 onAgentSelect={onAgentSelect}
                 onOpenAgentSettings={onOpenAgentSettings}
               />
-              <ShortcutActionsSelect actions={shortcutActions} />
-              <ModeSelect
-                value={permissionMode}
-                onChange={onModeSelect ?? NOOP_MODE}
-                provider={currentProvider}
-                selectedCollaborationModeId={selectedCollaborationModeId}
-                onSelectCollaborationMode={onSelectCollaborationMode}
-              />
-              {currentProvider === 'codex' && isPlanModeEnabled && (
-                <button
-                  className={`selector-button selector-plan-mode-button ${isPlanModeEnabled ? 'active' : ''}`}
-                  onClick={handlePlanModeToggle}
-                  title={t('composer.planModeToggle')}
-                  disabled={!onSelectCollaborationMode}
-                >
-                  <span className="codicon codicon-git-branch" />
-                  <span className="selector-button-text">
-                    {t('composer.planModeShort')}
-                  </span>
-                </button>
-              )}
-              {toolSurface ? (
-                <div className="button-area-tool-surface">
-                  {toolSurface}
-                </div>
-              ) : null}
-              {panelToggleSurface}
+              <DropdownMenuSeparator />
               {onSetMemoryReferenceMode ? (
-                <div
-                  ref={memoryReferenceRootRef}
-                  className="composer-memory-reference-control"
-                >
-                  <button
-                    ref={memoryReferenceButtonRef}
-                    type="button"
-                    className={`composer-memory-reference-toggle${
-                      isMemoryReferenceEnabled ? ' is-armed' : ''
-                    }${
-                      memoryReferenceMode === 'always' ? ' is-always' : ''
-                    }`}
-                    onClick={handleMemoryReferenceToggleClick}
-                    aria-pressed={isMemoryReferenceEnabled}
-                    aria-expanded={isMemoryReferencePopoverOpen}
-                    aria-controls={memoryReferencePopoverId}
-                    aria-label={t('composer.memoryReferenceToggle')}
-                    title={memoryReferenceStateLabel}
-                    disabled={disabled}
-                  >
-                    <span className="composer-memory-reference-icon" aria-hidden>
-                      <DatabaseZap size={17} />
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger className="composer-tool-menu-sub-trigger">
+                    <span className="composer-tool-menu-item-icon" aria-hidden>
+                      <DatabaseZap size={16} />
                     </span>
-                  </button>
-                  {memoryReferencePopover}
-                </div>
+                    <span className="composer-tool-menu-item-body">
+                      <span className="composer-tool-menu-item-label">
+                        {t('composer.memoryReferenceToggle')}
+                      </span>
+                      <span className="composer-tool-menu-item-value">
+                        {memoryReferenceStateLabel}
+                      </span>
+                    </span>
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="composer-tool-menu-sub-content">
+                    {MEMORY_REFERENCE_OPTIONS.map((option) => (
+                      <DropdownMenuItem
+                        key={option.mode}
+                        className={`composer-tool-menu-option${
+                          memoryReferenceMode === option.mode ? ' is-selected' : ''
+                        }`}
+                        onSelect={() => onSetMemoryReferenceMode?.(option.mode)}
+                      >
+                        <span className="composer-tool-menu-option-body">
+                          <span className="composer-tool-menu-option-label">
+                            {t(option.labelKey, { defaultValue: option.fallback })}
+                          </span>
+                        </span>
+                        {memoryReferenceMode === option.mode && (
+                          <span className="codicon codicon-check composer-tool-menu-option-check" aria-hidden="true" />
+                        )}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
               ) : null}
-              {(currentProvider === 'codex' || currentProvider === 'claude') && (
-                <ReasoningSelect
-                  value={reasoningEffort}
-                  onChange={onReasoningChange ?? NOOP_REASONING}
-                  options={reasoningOptions}
-                  showDefaultOption={currentProvider === 'claude'}
-                  defaultLabel={
-                    currentProvider === 'claude'
-                      ? t('reasoning.claudeDefault', { defaultValue: 'Claude 默认' })
-                      : undefined
-                  }
-                />
-              )}
-              {mainSurface ? (
-                <div className="button-area-main-surface">
-                  {mainSurface}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        {readinessSurface ? (
+          <div className="button-area-readiness-surface">
+            {readinessSurface}
+          </div>
+        ) : null}
+
+        <div className="button-area-inline-controls">
+          <ModeSelect
+            value={permissionMode}
+            onChange={onModeSelect ?? NOOP_MODE}
+            provider={currentProvider}
+            selectedCollaborationModeId={selectedCollaborationModeId}
+            onSelectCollaborationMode={onSelectCollaborationMode}
+          />
+          {(currentProvider === 'codex' || currentProvider === 'claude') && (
+            <ReasoningSelect
+              value={reasoningEffort}
+              onChange={onReasoningChange ?? NOOP_REASONING}
+              options={reasoningOptions}
+              showDefaultOption={currentProvider === 'claude'}
+              defaultLabel={
+                currentProvider === 'claude'
+                  ? t('reasoning.claudeDefault', { defaultValue: '默认' })
+                  : undefined
+              }
+            />
+          )}
         </div>
 
         <div className="button-area-right">
+          {mainSurface ? (
+            <div className="button-area-main-surface">
+              {mainSurface}
+            </div>
+          ) : null}
           {providerProfileLabel ? (
             <span className="button-area-provider-tag" title={providerProfileLabel}>
               {providerProfileLabel}
             </span>
           ) : null}
           {isLoading ? (
-            <button
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
               className={`submit-button stop-button is-${resolvedStopButtonPhase}`}
               onClick={handleStopClick}
               title={t('chat.stopGeneration')}
               data-stream-phase={resolvedStopButtonPhase}
             >
-              <span className="codicon codicon-debug-stop" />
-            </button>
+              <Square aria-hidden fill="currentColor" />
+            </Button>
           ) : (
-            <button
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
               className="submit-button"
               onClick={handleSubmitClick}
               disabled={disabled || !hasInputContent}
@@ -514,8 +372,8 @@ export const ButtonArea = ({
                   : t('chat.sendMessageEnter')
               }
             >
-              <span className="codicon codicon-send" />
-            </button>
+              <ArrowUp aria-hidden />
+            </Button>
           )}
         </div>
       </div>

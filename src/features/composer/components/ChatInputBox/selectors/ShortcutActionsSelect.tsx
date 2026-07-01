@@ -1,12 +1,18 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ShortcutAction } from '../types';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 
 interface ShortcutActionsSelectProps {
   actions?: ShortcutAction[];
+  /**
+   * When true, render as DropdownMenuItem rows for the vertical tool menu
+   * instead of a standalone button + popover (Radix owns focus/keyboard).
+   */
+  inline?: boolean;
 }
 
-export const ShortcutActionsSelect = ({ actions }: ShortcutActionsSelectProps) => {
+export const ShortcutActionsSelect = ({ actions, inline = false }: ShortcutActionsSelectProps) => {
   const { t } = useTranslation();
   const menuId = useId();
   const [isOpen, setIsOpen] = useState(false);
@@ -144,6 +150,24 @@ export const ShortcutActionsSelect = ({ actions }: ShortcutActionsSelectProps) =
 
   if (!hasActions) {
     return null;
+  }
+
+  if (inline) {
+    return (
+      <>
+        {actions?.map((action) => (
+          <DropdownMenuItem
+            key={action.key}
+            className="composer-tool-menu-action"
+            onSelect={() => action.onClick()}
+          >
+            <span className="codicon codicon-zap composer-tool-menu-item-icon" aria-hidden="true" />
+            <span className="composer-tool-menu-action-label">{action.label}</span>
+            <span className="composer-tool-menu-action-trigger">{action.trigger}</span>
+          </DropdownMenuItem>
+        ))}
+      </>
+    );
   }
 
   return (

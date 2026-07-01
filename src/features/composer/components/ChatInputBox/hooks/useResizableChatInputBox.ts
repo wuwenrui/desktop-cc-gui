@@ -22,6 +22,9 @@ const MAX_WRAPPER_HEIGHT_VIEWPORT_RATIO = 0.55;
 const MAX_WRAPPER_HEIGHT_CAP_PX = 520;
 const MIN_MAX_WRAPPER_HEIGHT_PX = 140;
 const DEFAULT_MIN_WRAPPER_HEIGHT_PX = 66;
+// Default editable area shows ~5 lines: 5 × (14.5px × 1.58 line-height) + 22px wrapper padding ≈ 137px.
+// This is only the initial size; users can still drag down to DEFAULT_MIN_WRAPPER_HEIGHT_PX.
+const DEFAULT_WRAPPER_HEIGHT_PX = 137;
 const LEGACY_WRAPPER_HEIGHT_REDUCTION_PX = 46;
 const COLLAPSE_OVERSHOOT_PX = 36;
 const EXPAND_DRAG_THRESHOLD_PX = 18;
@@ -95,7 +98,8 @@ function readInitialSize(): SizeState {
     // fall through to default size
   }
 
-  return { wrapperHeightPx: null, isCollapsed: false };
+  // No stored record: start at the 5-line default height (still resizable down to min).
+  return { wrapperHeightPx: DEFAULT_WRAPPER_HEIGHT_PX, isCollapsed: false };
 }
 
 export function computeResize(

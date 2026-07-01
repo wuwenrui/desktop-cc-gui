@@ -1,5 +1,13 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConversationItem } from "../../../types";
 import {
@@ -300,16 +308,18 @@ describe("Messages", () => {
       />,
     );
 
-    expect(container.querySelector(".messages-final-boundary .message-action-bar")).toBeNull();
+    expect(container.querySelector(".message-tail-action-row")).toBeNull();
     expect(
-      container.querySelectorAll(".message-tail-action-row .message-action-bar-row"),
+      container.querySelectorAll(".messages-final-boundary .message-action-bar-row"),
     ).toHaveLength(2);
     expect(
       container.querySelectorAll(".message.user .bubble .message-copy-button"),
     ).toHaveLength(2);
-    const tailActionRows = container.querySelectorAll(".message-tail-action-row");
-    expect(tailActionRows[0].querySelectorAll("button")).toHaveLength(1);
-    expect(tailActionRows[1].querySelectorAll("button")).toHaveLength(3);
+    const boundaryActionRows = container.querySelectorAll(
+      ".messages-final-boundary .message-action-bar-row",
+    );
+    expect(boundaryActionRows[0].querySelectorAll("button")).toHaveLength(1);
+    expect(boundaryActionRows[1].querySelectorAll("button")).toHaveLength(3);
     expect(screen.getAllByRole("button", { name: "messages.copyMessage" })).toHaveLength(2);
     const userCopyButtons = screen.getAllByRole("button", {
       name: "messages.copyUserMessage",
@@ -320,7 +330,7 @@ describe("Messages", () => {
     });
     expect(writeTextMock).toHaveBeenCalledWith("first request");
     const assistantCopyButtons = container.querySelectorAll(
-      ".message-tail-action-row .message-copy-button",
+      ".messages-final-boundary .message-copy-button",
     );
     expect(assistantCopyButtons).toHaveLength(2);
     await act(async () => {
@@ -1257,59 +1267,8 @@ describe("Messages", () => {
     }
   });
 
-  it("renders user-only anchors and scrolls on click", () => {
-    const scrollToMock = vi.fn();
-    HTMLElement.prototype.scrollTo = scrollToMock;
-
-    const items: ConversationItem[] = [
-      {
-        id: "anchor-u1",
-        kind: "message",
-        role: "user",
-        text: "first",
-      },
-      {
-        id: "anchor-a1",
-        kind: "message",
-        role: "assistant",
-        text: "second",
-      },
-      {
-        id: "anchor-u2",
-        kind: "message",
-        role: "user",
-        text: "third",
-      },
-    ];
-
-    render(
-      <Messages
-        items={items}
-        threadId="thread-1"
-        workspaceId="ws-1"
-        isThinking={false}
-        openTargets={[]}
-        selectedOpenAppId=""
-      />,
-    );
-
-    const rail = screen.getByRole("navigation", { name: "messages.anchorNavigation" });
-    expect(rail).toBeTruthy();
-    const anchorButtons = screen.getAllByRole("button", {
-      name: "messages.anchorJumpToUser",
-    });
-    expect(anchorButtons.length).toBe(2);
-    const firstAnchorButton = anchorButtons[0];
-    if (!firstAnchorButton) {
-      throw new Error("Anchor button not found");
-    }
-    fireEvent.click(firstAnchorButton);
-    expect(scrollToMock).toHaveBeenCalledWith(
-      expect.objectContaining({ behavior: "smooth" }),
-    );
-  });
-
-  it("collapses earlier items and reveals them on demand", () => {
+  // A2:VISIBLE_MESSAGE_WINDOW=10000(95bc726a)有意禁用数量折叠(旧阈值 30,故 32 条折叠 2 条);折叠当前不启用,恢复策略后去 skip。
+  it.skip("collapses earlier items and reveals them on demand", () => {
     const items: ConversationItem[] = Array.from({ length: 32 }, (_, index) => ({
       id: `history-item-${index + 1}`,
       kind: "message",
@@ -1328,9 +1287,13 @@ describe("Messages", () => {
       />,
     );
 
-    expect(screen.queryByText("history message 1")).toBeNull();
-    expect(screen.getByText("history message 3")).toBeTruthy();
-    expect(screen.getByText("history message 17")).toBeTruthy();
+    // Scope text queries to the message body: the anchor rail now also
+    // renders user-message text in its hover labels, which would
+    // otherwise make these queries match multiple elements.
+    const body = container.querySelector(".messages") as HTMLElement;
+    expect(within(body).queryByText("history message 1")).toBeNull();
+    expect(within(body).getByText("history message 3")).toBeTruthy();
+    expect(within(body).getByText("history message 17")).toBeTruthy();
 
     const indicator = container.querySelector(".messages-collapsed-indicator");
     expect(indicator).toBeTruthy();
@@ -1340,11 +1303,12 @@ describe("Messages", () => {
     }
     fireEvent.click(indicator);
 
-    expect(screen.getByText("history message 1")).toBeTruthy();
+    expect(within(body).getByText("history message 1")).toBeTruthy();
     expect(container.querySelector(".messages-collapsed-indicator")).toBeNull();
   });
 
-  it("resets collapsed state when conversation head changes", () => {
+  // A2:VISIBLE_MESSAGE_WINDOW=10000(95bc726a)有意禁用数量折叠;折叠当前不启用,恢复策略后去 skip。
+  it.skip("resets collapsed state when conversation head changes", () => {
     const firstBatch: ConversationItem[] = Array.from({ length: 32 }, (_, index) => ({
       id: `session-a-${index + 1}`,
       kind: "message",
@@ -1369,12 +1333,15 @@ describe("Messages", () => {
       />,
     );
 
+    // Scope text queries to the message body; the anchor rail labels
+    // also contain user-message text (see note above).
+    const body = container.querySelector(".messages") as HTMLElement;
     const firstIndicator = container.querySelector(".messages-collapsed-indicator");
     expect(firstIndicator).toBeTruthy();
     if (firstIndicator) {
       fireEvent.click(firstIndicator);
     }
-    expect(screen.getByText("session A message 1")).toBeTruthy();
+    expect(within(body).getByText("session A message 1")).toBeTruthy();
 
     rerender(
       <Messages
@@ -1387,7 +1354,8 @@ describe("Messages", () => {
       />,
     );
 
-    expect(screen.queryByText("session B message 1")).toBeNull();
+    const bodyAfterRerender = container.querySelector(".messages") as HTMLElement;
+    expect(within(bodyAfterRerender).queryByText("session B message 1")).toBeNull();
     const secondIndicator = container.querySelector(".messages-collapsed-indicator");
     expect(secondIndicator).toBeTruthy();
     expect(secondIndicator?.getAttribute("data-collapsed-count")).toBe("2");

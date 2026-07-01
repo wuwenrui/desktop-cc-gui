@@ -2202,3 +2202,174 @@
   background: color-mix(in srgb, var(--accent-soft) 30%, transparent);
   color: var(--text-strong);
 }
+
+/* ============================================================
+   Composer Branch Badge (输入框下方的 git 分支胶囊)
+   ============================================================ */
+.composer-branch-row {
+  display: flex;
+  align-items: center;
+  padding: 0 2px;
+}
+
+.composer-branch-badge {
+  position: relative;
+  display: inline-flex;
+}
+
+.composer-branch-badge-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 320px;
+  height: 28px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-tertiary, #9aa1ab);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.composer-branch-badge-trigger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--surface-active, rgba(15, 23, 36, 0.06)) 50%, transparent);
+  color: var(--text-primary, #333);
+}
+
+.composer-branch-badge-trigger:disabled {
+  cursor: default;
+  opacity: 0.85;
+}
+
+.composer-branch-badge-icon {
+  flex: 0 0 auto;
+  opacity: 0.6;
+}
+
+.composer-branch-badge-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 400;
+}
+
+.composer-branch-badge-caret {
+  flex: 0 0 auto;
+  opacity: 0.7;
+}
+
+/* 菜单向上弹出，贴在胶囊上方 */
+.composer-branch-badge-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 10000;
+  width: 280px;
+  max-width: 90vw;
+  padding: 8px;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.composer-branch-badge-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.composer-branch-badge-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--input-border, var(--border-strong, rgba(15, 23, 36, 0.14)));
+  border-radius: 7px;
+  background: var(--surface-input, var(--surface-card, #fff));
+  color: var(--text-primary, #333);
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+}
+
+.composer-branch-badge-input:focus {
+  border-color: color-mix(in srgb, var(--accent-strong, #3b82f6) 60%, transparent);
+}
+
+.composer-branch-badge-create {
+  flex: 0 0 auto;
+  height: 30px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 7px;
+  background: var(--accent-strong, #3b82f6);
+  color: #fff;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.composer-branch-badge-create:disabled {
+  background: color-mix(in srgb, var(--text-muted, #999) 26%, transparent);
+  cursor: not-allowed;
+}
+
+.composer-branch-badge-hint {
+  font-size: 11px;
+  color: var(--text-muted, #999);
+  padding: 0 2px;
+}
+
+.composer-branch-badge-error {
+  font-size: 11px;
+  color: var(--error-color, #f44336);
+  padding: 0 2px;
+}
+
+.composer-branch-badge-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.composer-branch-badge-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-primary, #333);
+  font-size: 12px;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background 0.12s;
+}
+
+.composer-branch-badge-item:hover {
+  background: color-mix(in srgb, var(--surface-active, rgba(15, 23, 36, 0.06)) 60%, transparent);
+}
+
+.composer-branch-badge-item.is-active {
+  color: var(--accent-strong, #3b82f6);
+  font-weight: 600;
+}
+
+.composer-branch-badge-empty {
+  padding: 10px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted, #999);
+}

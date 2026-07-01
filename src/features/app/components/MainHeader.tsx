@@ -1,4 +1,12 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import {
+  cloneElement,
+  isValidElement,
+  memo,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import Check from "lucide-react/dist/esm/icons/check";
 import ClipboardCopy from "lucide-react/dist/esm/icons/clipboard-copy";
@@ -8,8 +16,9 @@ import GitBranch from "lucide-react/dist/esm/icons/git-branch";
 import Search from "lucide-react/dist/esm/icons/search";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import type { BranchInfo, OpenAppTarget, WorkspaceInfo } from "../../../types";
-import type { FocusEvent, ReactNode } from "react";
+import type { FocusEvent, ReactElement, ReactNode } from "react";
 import { OpenAppMenu, type OpenAppMenuExtraAction } from "./OpenAppMenu";
+import { TooltipIconButton } from "../../../components/ui/tooltip-icon-button";
 import { LaunchScriptButton } from "./LaunchScriptButton";
 import { LaunchScriptEntryButton } from "./LaunchScriptEntryButton";
 import type { WorkspaceLaunchScriptsState } from "../hooks/useWorkspaceLaunchScripts";
@@ -225,8 +234,16 @@ function MainHeaderImpl({
     }),
     [resolvedWorktreePath, t],
   );
+  // 「右侧边栏开关」从下拉菜单中抽出，单独渲染为顶栏独立图标按钮（见下方 JSX）
+  const rightPanelAction = useMemo(
+    () => openAppExtraActions.find((action) => action.id === "right-panel"),
+    [openAppExtraActions],
+  );
   const openAppMenuActions = useMemo(
-    () => [...openAppExtraActions, copyPathAction],
+    () => [
+      ...openAppExtraActions.filter((action) => action.id !== "right-panel"),
+      copyPathAction,
+    ],
     [copyPathAction, openAppExtraActions],
   );
   const relativeWorktreePath = useMemo(() => {
@@ -824,6 +841,21 @@ function MainHeaderImpl({
           />
         ) : null}
         {extraActionsNode}
+        {rightPanelAction ? (
+          <TooltipIconButton
+            className="ghost main-header-action"
+            onClick={rightPanelAction.onSelect}
+            data-tauri-drag-region="false"
+            label={rightPanelAction.label}
+          >
+            {isValidElement(rightPanelAction.icon)
+              ? cloneElement(
+                  rightPanelAction.icon as ReactElement<{ size?: number }>,
+                  { size: 14 },
+                )
+              : rightPanelAction.icon}
+          </TooltipIconButton>
+        ) : null}
       </div>
     </header>
   );

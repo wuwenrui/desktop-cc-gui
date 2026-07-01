@@ -297,14 +297,16 @@ describe("ThreadList", () => {
       />,
     );
 
-    const childRow = screen.getByText("Nested Agent").closest(".thread-row");
     const parentRow = screen.getByText("Alpha").closest(".thread-row");
     expect(parentRow?.classList.contains("is-subagent-parent")).toBe(true);
     expect(parentRow?.classList.contains("is-active-subagent-parent")).toBe(true);
+    // Subagent trees collapse by default; expand to reveal the child session row.
+    fireEvent.click(parentRow?.querySelector(".thread-tree-expander") as HTMLElement);
     expect(parentRow?.getAttribute("aria-expanded")).toBe("true");
     expect(parentRow?.querySelector(".thread-tree-expander")?.getAttribute("aria-label")).toBe(
       "Collapse subagent tree",
     );
+    const childRow = screen.getByText("Nested Agent").closest(".thread-row");
     expect(childRow).toBeTruthy();
     if (!childRow) {
       throw new Error("Missing subagent child row");
@@ -358,6 +360,8 @@ describe("ThreadList", () => {
     );
 
     const topLevelRow = screen.getByText("Alpha").closest(".thread-row");
+    // Subagent trees collapse by default; expand the top-level parent to reveal its child.
+    fireEvent.click(topLevelRow?.querySelector(".thread-tree-expander") as HTMLElement);
     const midRow = screen.getByText("Mid Agent").closest(".thread-row");
     expect(topLevelRow?.classList.contains("is-subagent-parent")).toBe(true);
     expect(topLevelRow?.querySelector(".thread-tree-expander")).toBeTruthy();
@@ -397,6 +401,11 @@ describe("ThreadList", () => {
       />,
     );
 
+    // Subagent trees collapse by default; expand the parent to reveal the pending child.
+    fireEvent.click(
+      screen.getByText("Alpha").closest(".thread-row")
+        ?.querySelector(".thread-tree-expander") as HTMLElement,
+    );
     const childRow = screen.getByText("Nested Agent").closest(".thread-row");
     expect(childRow?.classList.contains("is-pending-subagent")).toBe(true);
     expect(childRow?.querySelector(".thread-subagent-badge")).toBeNull();
@@ -445,18 +454,23 @@ describe("ThreadList", () => {
       throw new Error("Missing subagent tree expander");
     }
 
-    fireEvent.click(expander);
-    expect(onSelectThread).not.toHaveBeenCalled();
+    // Subagent trees collapse by default.
     expect(parentRow?.getAttribute("aria-expanded")).toBe("false");
     expect(expander.getAttribute("aria-label")).toBe("Expand subagent tree");
     expect(screen.queryByText("Nested Agent")).toBeNull();
 
-    fireEvent.click(parentRow);
-    expect(onSelectThread).toHaveBeenCalledWith("ws-1", "claude:parent");
-    fireEvent.keyDown(expander, { key: "Enter" });
+    fireEvent.click(expander);
+    expect(onSelectThread).not.toHaveBeenCalled();
     expect(parentRow?.getAttribute("aria-expanded")).toBe("true");
     expect(expander.getAttribute("aria-label")).toBe("Collapse subagent tree");
     expect(screen.getByText("Nested Agent")).toBeTruthy();
+
+    fireEvent.click(parentRow);
+    expect(onSelectThread).toHaveBeenCalledWith("ws-1", "claude:parent");
+    fireEvent.keyDown(expander, { key: "Enter" });
+    expect(parentRow?.getAttribute("aria-expanded")).toBe("false");
+    expect(expander.getAttribute("aria-label")).toBe("Expand subagent tree");
+    expect(screen.queryByText("Nested Agent")).toBeNull();
   });
 
   it("shows inline delete confirmation bubble beside the row", () => {

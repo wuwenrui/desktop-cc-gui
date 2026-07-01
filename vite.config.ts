@@ -2,8 +2,13 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
+import type { PluginOption } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+// Preserves readable React component names in production bundles so the bundled
+// react-scan overlay can attribute renders to real names (e.g. MessagesTimeline)
+// instead of minified identifiers. Build-only: dev already keeps names, tests skip it.
+import reactComponentName from "react-scan/react-component-name/vite";
 
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
@@ -16,18 +21,15 @@ const packageJson = JSON.parse(
 };
 
 // https://vite.dev/config/
-export default defineConfig(async ({ mode }) => ({
-  plugins: [react(), tailwindcss()],
+export default defineConfig(({ command }) => ({
+  plugins: [
+    react(),
+    ...(command === "build" ? [reactComponentName({}) as PluginOption] : []),
+    tailwindcss(),
+  ],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
-      ...(mode === "test"
-        ? {
-            "@lobehub/fluent-emoji": "/src/test/mocks/fluentEmoji.ts",
-            "@lobehub/fluent-emoji/es": "/src/test/mocks/fluentEmoji.ts",
-            "@lobehub/fluent-emoji/es/index.js": "/src/test/mocks/fluentEmoji.ts",
-          }
-        : {}),
     },
     dedupe: [
       "@codemirror/state",
@@ -63,7 +65,7 @@ export default defineConfig(async ({ mode }) => ({
           if (id.includes("/viewerjs/") || id.includes("/viewerjs-")) return "vendor-mermaid";
           if (id.includes("/pdfjs-dist/") || id.includes("/mammoth/") || id.includes("/xlsx/"))
             return "vendor-docs";
-          if (id.includes("/framer-motion/") || id.includes("/antd/") || id.includes("/lucide-react/"))
+          if (id.includes("/lucide-react/"))
             return "vendor-ui-heavy";
         },
       },
@@ -78,7 +80,7 @@ export default defineConfig(async ({ mode }) => ({
     deps: {
       optimizer: {
         web: {
-          include: ["react-i18next", "@lobehub/fluent-emoji"],
+          include: ["react-i18next"],
         },
       },
     },

@@ -2,6 +2,10 @@ import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import Wrench from "lucide-react/dist/esm/icons/wrench";
 import { useTranslation } from "react-i18next";
 import type { ToolCallParam } from "../utils/toolCallBlocks";
+import {
+  ToolMarkerShell,
+  TOOL_MARKER_BODY_CLASS,
+} from "./toolBlocks/ToolMarkerShell";
 
 type ToolCallBlockProps = {
   raw: string;
@@ -56,34 +60,28 @@ export const ToolCallBlock = memo(function ToolCallBlock({
   }, [raw]);
 
   return (
-    <section
-      className={live ? "tcb-card tcb-card-live" : "tcb-card"}
+    <ToolMarkerShell
+      icon={<Wrench />}
+      ariaLabel={t("messages.toolCallCard.title")}
       role="group"
-      aria-label={t("messages.toolCallCard.title")}
-    >
-      <div className="tcb-header">
-        <div className="tcb-title-wrap">
-          <span className="tcb-icon" aria-hidden="true">
-            <Wrench size={14} strokeWidth={2} />
-          </span>
-          <div className="tcb-heading">
-            <div className="tcb-title-line">
-              <span>{t("messages.toolCallCard.title")}</span>
+      wrapperClassName="tcb-marker"
+      label={
+        <span className="tcb-title-line">
+          <span>{t("messages.toolCallCard.title")}</span>
+          <span className="tcb-title-separator" aria-hidden="true">·</span>
+          <span className="tcb-tool-name">{displayTool}</span>
+          {live ? (
+            <>
               <span className="tcb-title-separator" aria-hidden="true">·</span>
-              <span className="tcb-tool-name">{displayTool}</span>
-              {live ? (
-                <>
-                  <span className="tcb-title-separator" aria-hidden="true">·</span>
-                  <span className="tcb-live-label">
-                    <span className="tcb-live-dot" aria-hidden="true" />
-                    {t("messages.toolCallCard.streaming")}
-                  </span>
-                </>
-              ) : null}
-            </div>
-            <div className="tcb-preview">{preview}</div>
-          </div>
-        </div>
+              <span className="tcb-live-label">
+                <span className="tcb-live-dot" aria-hidden="true" />
+                {t("messages.toolCallCard.streaming")}
+              </span>
+            </>
+          ) : null}
+        </span>
+      }
+      trailing={
         <div className="tcb-actions">
           <button
             type="button"
@@ -105,10 +103,10 @@ export const ToolCallBlock = memo(function ToolCallBlock({
             {expanded ? t("messages.toolCallCard.collapse") : t("messages.toolCallCard.expand")}
           </button>
         </div>
-      </div>
-
-      {expanded ? (
-        <div className="tcb-body">
+      }
+      expanded={expanded}
+      body={
+        <div className={`tcb-body ${TOOL_MARKER_BODY_CLASS}`}>
           <div className="tcb-section">
             <div className="tcb-section-title">{t("messages.toolCallCard.parameters")}</div>
             {hasParams ? (
@@ -129,8 +127,10 @@ export const ToolCallBlock = memo(function ToolCallBlock({
             <pre className="tcb-raw"><code>{raw}</code></pre>
           </div>
         </div>
-      ) : null}
-    </section>
+      }
+    >
+      <span className="tcb-preview">{preview}</span>
+    </ToolMarkerShell>
   );
 });
 

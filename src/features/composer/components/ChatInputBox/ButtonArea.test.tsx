@@ -1,7 +1,43 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ButtonArea } from "./ButtonArea";
+
+// The tool dock is a Radix DropdownMenu; it opens on a pointer event
+// sequence rather than a bare click. This helper drives it the way a real
+// pointer would so the menu content (and the legacy inline tools mounted
+// alongside it) renders synchronously enough for assertions.
+function openToolDock() {
+  // The DropdownMenu is modal, so once it opens Radix marks the trigger (and
+  // every sibling) aria-hidden. `hidden: true` lets us re-find the trigger to
+  // toggle it closed again.
+  const toggle = screen.getByRole("button", {
+    name: "Expand or collapse input tools",
+    hidden: true,
+  });
+  fireEvent.pointerDown(toggle, { button: 0, ctrlKey: false });
+  fireEvent.pointerUp(toggle, { button: 0 });
+  return toggle;
+}
+
+// Opens the tool dock and then the memory reference submenu, returning its
+// SubTrigger. The trigger is a Radix menuitem whose accessible name combines
+// the label with the current-state text, so it is matched by regex.
+function openMemoryReferenceMenu() {
+  openToolDock();
+  const trigger = screen.getByRole("menuitem", {
+    name: /composer\.memoryReferenceToggle/,
+  });
+  // Radix opens a submenu on ArrowRight/Enter (not a bare click), so drive it
+  // with the keyboard the way a real menu user would. The raw focus() and the
+  // submenu open both trigger roving-focus state updates, so wrap them in act
+  // to keep them from leaking as "not wrapped in act(...)" warnings.
+  act(() => {
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "ArrowRight" });
+  });
+  return trigger;
+}
 
 vi.mock("./selectors", () => ({
   ConfigSelect: () => <div data-testid="config-select" />,
@@ -60,12 +96,12 @@ describe("ButtonArea custom model storage refresh", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Expand or collapse input tools" }));
+    openToolDock();
 
     expect(screen.getByTestId("reasoning-select")).toBeTruthy();
     expect(screen.getByTestId("reasoning-value").textContent).toBe("");
     expect(screen.getByTestId("reasoning-options").textContent).toBe("low,medium,high,xhigh,max");
-    expect(screen.getByTestId("reasoning-default").textContent).toBe("Claude 默认");
+    expect(screen.getByTestId("reasoning-default").textContent).toBe("默认");
   });
 
   it("does not render reasoning selector for Gemini", () => {
@@ -81,7 +117,7 @@ describe("ButtonArea custom model storage refresh", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Expand or collapse input tools" }));
+    openToolDock();
 
     expect(screen.queryByTestId("reasoning-select")).toBeNull();
   });
@@ -101,7 +137,7 @@ describe("ButtonArea custom model storage refresh", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Expand or collapse input tools" }));
+    openToolDock();
 
     expect(screen.getByTestId("reasoning-select")).toBeTruthy();
     expect(screen.getByTestId("reasoning-value").textContent).toBe("high");
@@ -126,23 +162,21 @@ describe("ButtonArea custom model storage refresh", () => {
     const toggle = screen.getByRole("button", { name: "Expand or collapse input tools" });
 
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
-    expect(toggle.querySelector(".selector-tool-icon.codicon-extensions")).toBeTruthy();
+    expect(toggle.querySelector(".selector-tool-icon")).toBeTruthy();
     expect(container.querySelector(".selector-tool-dock-toggle")?.textContent).not.toContain("工具");
     expect(screen.queryByTestId("config-select")).toBeNull();
     expect(screen.queryByTestId("provider-select")).toBeNull();
-    expect(screen.queryByTestId("reasoning-select")).toBeNull();
     expect(screen.queryByTestId("model-select")).toBeNull();
+    // Reasoning select now lives permanently in the primary row (not the menu),
+    // so it stays visible while the tool dock is collapsed.
+    expect(screen.getByTestId("reasoning-select")).toBeTruthy();
 
-    fireEvent.click(toggle);
+    openToolDock();
 
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
     expect(screen.getByTestId("config-select")).toBeTruthy();
     expect(screen.queryByTestId("provider-select")).toBeNull();
     expect(screen.getByTestId("reasoning-select")).toBeTruthy();
-    expect(
-      toggle.compareDocumentPosition(screen.getByTestId("config-select")) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
   });
 
   it("renders the active provider tag before the send control", () => {
@@ -170,7 +204,7 @@ describe("ButtonArea custom model storage refresh", () => {
     expect(providerTag.compareDocumentPosition(sendButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("renders the status panel toggle inside the opened tool dock", () => {
+  it("renders the status panel toggle inside the tool menu", () => {
     const onToggleStatusPanel = vi.fn();
 
     render(
@@ -194,9 +228,9 @@ describe("ButtonArea custom model storage refresh", () => {
       />,
     );
 
-    expect(screen.queryByRole("button", { name: "Collapse status panel" })).toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: "Expand or collapse input tools" }));
+    // The panel toggle now lives inside the "+" tool menu alongside the other
+    // relocated surfaces, so it is gated behind opening the dock.
+    openToolDock();
     screen.getByRole("button", { name: "Collapse status panel" }).click();
 
     expect(onToggleStatusPanel).toHaveBeenCalledTimes(1);
@@ -216,24 +250,22 @@ describe("ButtonArea custom model storage refresh", () => {
       />,
     );
 
-    const toggle = screen.getByRole("button", { name: "Expand or collapse input tools" });
-
-    fireEvent.click(toggle);
+    const toggle = openToolDock();
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
     expect(screen.getByTestId("config-select")).toBeTruthy();
 
-    fireEvent.click(toggle);
+    openToolDock();
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
     expect(screen.queryByTestId("config-select")).toBeNull();
 
-    fireEvent.click(toggle);
+    openToolDock();
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
 
     fireEvent.keyDown(document, { key: "Escape" });
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
   });
 
-  it("places memory reference, reasoning, and token surface in visual order", () => {
+  it("keeps the usage ring and reasoning in the primary row while memory reference stays in the tool menu", () => {
     render(
       <ButtonArea
         currentProvider="claude"
@@ -249,17 +281,20 @@ describe("ButtonArea custom model storage refresh", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Expand or collapse input tools" }));
+    // The usage ring and reasoning selector now live permanently in the primary
+    // row, so they are visible without opening the "+" tool menu.
+    expect(screen.getByTestId("main-surface")).toBeTruthy();
+    expect(screen.getByTestId("reasoning-select")).toBeTruthy();
 
-    const mainSurface = screen.getByTestId("main-surface");
-    const reasoningSelect = screen.getByTestId("reasoning-select");
-    const memoryReferenceToggle = screen.getByRole("button", { name: "composer.memoryReferenceToggle" });
+    openToolDock();
 
-    expect(memoryReferenceToggle.compareDocumentPosition(reasoningSelect) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(reasoningSelect.compareDocumentPosition(mainSurface) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The memory reference control still lives inside the vertical tool menu.
+    expect(
+      screen.getByRole("menuitem", { name: /composer\.memoryReferenceToggle/ }),
+    ).toBeTruthy();
   });
 
-  it("confirms single-send memory reference before enabling it", () => {
+  it("selects single-send memory reference directly from the submenu", () => {
     const onSetMemoryReferenceMode = vi.fn();
 
     render(
@@ -275,46 +310,19 @@ describe("ButtonArea custom model storage refresh", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Expand or collapse input tools" }));
+    openMemoryReferenceMenu();
 
-    const toggle = screen.getByRole("button", { name: "composer.memoryReferenceToggle" });
-    fireEvent.click(toggle);
+    // The new submenu design has no confirmation dialog — picking an option is
+    // itself the explicit action. The option labels render from their i18n
+    // fallback text in the test environment.
+    expect(screen.queryByRole("dialog")).toBeNull();
 
-    expect(onSetMemoryReferenceMode).not.toHaveBeenCalled();
-    expect(screen.getByRole("dialog", { name: "composer.memoryReferenceDialogTitle" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "composer.memoryReferenceEnableSingle" }).getAttribute("aria-pressed")).toBe("false");
-    expect(screen.getByRole("button", { name: "composer.memoryReferenceEnableAlways" }).getAttribute("aria-pressed")).toBe("false");
-
-    fireEvent.click(screen.getByRole("button", { name: "composer.memoryReferenceEnableSingle" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "单次引用" }));
 
     expect(onSetMemoryReferenceMode).toHaveBeenCalledWith("single");
-    expect(screen.queryByRole("dialog", { name: "composer.memoryReferenceDialogTitle" })).toBeNull();
   });
 
-  it("renders the memory reference popover through a body portal", () => {
-    const { container } = render(
-      <ButtonArea
-        currentProvider="codex"
-        models={[]}
-        selectedModel=""
-        hasInputContent
-        onSubmit={vi.fn()}
-        shortcutActions={[]}
-        memoryReferenceMode="off"
-        onSetMemoryReferenceMode={vi.fn()}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Expand or collapse input tools" }));
-    fireEvent.click(screen.getByRole("button", { name: "composer.memoryReferenceToggle" }));
-
-    const dialog = screen.getByRole("dialog", { name: "composer.memoryReferenceDialogTitle" });
-
-    expect(dialog.parentElement).toBe(document.body);
-    expect(container.querySelector(".composer-memory-reference-popover")).toBeNull();
-  });
-
-  it("keeps memory reference action clicks stable before closing the popover", () => {
+  it("enables always-on memory reference from the submenu", () => {
     const onSetMemoryReferenceMode = vi.fn();
 
     render(
@@ -330,74 +338,14 @@ describe("ButtonArea custom model storage refresh", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Expand or collapse input tools" }));
-    fireEvent.click(screen.getByRole("button", { name: "composer.memoryReferenceToggle" }));
+    openMemoryReferenceMenu();
 
-    const alwaysButton = screen.getByRole("button", {
-      name: "composer.memoryReferenceEnableAlways",
-    });
-
-    fireEvent.mouseDown(alwaysButton);
-    fireEvent.click(alwaysButton);
+    fireEvent.click(screen.getByRole("menuitem", { name: "常开引用" }));
 
     expect(onSetMemoryReferenceMode).toHaveBeenCalledWith("always");
-    expect(screen.queryByRole("dialog", { name: "composer.memoryReferenceDialogTitle" })).toBeNull();
   });
 
-  it("closes the memory reference popover from outside click and Escape", () => {
-    render(
-      <ButtonArea
-        currentProvider="codex"
-        models={[]}
-        selectedModel=""
-        hasInputContent
-        onSubmit={vi.fn()}
-        shortcutActions={[]}
-        memoryReferenceMode="off"
-        onSetMemoryReferenceMode={vi.fn()}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Expand or collapse input tools" }));
-    fireEvent.click(screen.getByRole("button", { name: "composer.memoryReferenceToggle" }));
-    expect(screen.getByRole("dialog", { name: "composer.memoryReferenceDialogTitle" })).toBeTruthy();
-
-    fireEvent.mouseDown(document.body);
-    expect(screen.queryByRole("dialog", { name: "composer.memoryReferenceDialogTitle" })).toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: "composer.memoryReferenceToggle" }));
-    expect(screen.getByRole("dialog", { name: "composer.memoryReferenceDialogTitle" })).toBeTruthy();
-
-    fireEvent.keyDown(document, { key: "Escape" });
-    expect(screen.queryByRole("dialog", { name: "composer.memoryReferenceDialogTitle" })).toBeNull();
-  });
-
-  it("can enable always-on memory reference from the popover", () => {
-    const onSetMemoryReferenceMode = vi.fn();
-
-    render(
-      <ButtonArea
-        currentProvider="codex"
-        models={[]}
-        selectedModel=""
-        hasInputContent
-        onSubmit={vi.fn()}
-        shortcutActions={[]}
-        memoryReferenceMode="off"
-        onSetMemoryReferenceMode={onSetMemoryReferenceMode}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Expand or collapse input tools" }));
-
-    fireEvent.click(screen.getByRole("button", { name: "composer.memoryReferenceToggle" }));
-    fireEvent.click(screen.getByRole("button", { name: "composer.memoryReferenceEnableAlways" }));
-
-    expect(onSetMemoryReferenceMode).toHaveBeenCalledWith("always");
-    expect(screen.queryByRole("dialog", { name: "composer.memoryReferenceDialogTitle" })).toBeNull();
-  });
-
-  it("turns off enabled memory reference directly from the icon", () => {
+  it("turns memory reference off from the submenu when already enabled", () => {
     const onSetMemoryReferenceMode = vi.fn();
 
     render(
@@ -413,12 +361,13 @@ describe("ButtonArea custom model storage refresh", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Expand or collapse input tools" }));
+    // The SubTrigger reflects the current always-on state.
+    const trigger = openMemoryReferenceMenu();
+    expect(trigger.textContent).toContain("composer.memoryReferenceAlwaysOn");
 
-    fireEvent.click(screen.getByRole("button", { name: "composer.memoryReferenceToggle" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "关闭" }));
 
     expect(onSetMemoryReferenceMode).toHaveBeenCalledWith("off");
-    expect(screen.queryByRole("dialog", { name: "composer.memoryReferenceDialogTitle" })).toBeNull();
   });
 
   it("keeps the stop action clickable while advisory stream phase changes", () => {

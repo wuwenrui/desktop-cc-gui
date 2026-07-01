@@ -1,9 +1,11 @@
 /**
  * 批量命令执行分组组件（时间线布局）
  * Groups multiple consecutive Bash tool calls into a timeline view
+ * 统一 Marker 风格折叠行：灰色描边图标 + 批量标题 + 进度；展开体为命令时间线
  */
 import { memo, useMemo, useRef, useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import Terminal from 'lucide-react/dist/esm/icons/terminal';
 import type { ConversationItem } from '../../../../types';
 import { highlightLine } from '../../../../utils/syntax';
 import {
@@ -16,6 +18,7 @@ import {
   asRecord,
   getFirstCommandField,
 } from './toolConstants';
+import { ToolMarkerShell } from './ToolMarkerShell';
 
 type ToolItem = Extract<ConversationItem, { kind: 'tool' }>;
 
@@ -147,25 +150,15 @@ export const BashToolGroupBlock = memo(function BashToolGroupBlock({
   })();
 
   return (
-    <div className="task-container bash-group-container">
-      <div
-        className="task-header bash-group-header"
-        onClick={() => setIsExpanded((prev) => !prev)}
-      >
-        <div className="task-title-section">
-          <span
-            className="codicon codicon-terminal tool-title-icon bash-group-chevron"
-          />
-          <span className="tool-title-text">
-            {t("tools.bashGroupBatchRun")} ({totalCount})
-          </span>
-        </div>
-        <div className="bash-group-summary">{progressNode}</div>
-      </div>
-
-      {isExpanded && (
+    <ToolMarkerShell
+      icon={<Terminal />}
+      label={`${t("tools.bashGroupBatchRun")} (${totalCount})`}
+      expanded={isExpanded}
+      onToggle={() => setIsExpanded((prev) => !prev)}
+      trailing={<span className="ml-auto shrink-0">{progressNode}</span>}
+      body={
         <div
-          className="bash-group-timeline"
+          className="bash-group-timeline mt-1 overflow-hidden rounded-md"
           ref={timelineRef}
           style={{
             maxHeight: `${listHeight + 16}px`,
@@ -260,8 +253,8 @@ export const BashToolGroupBlock = memo(function BashToolGroupBlock({
             );
           })}
         </div>
-      )}
-    </div>
+      }
+    />
   );
 });
 

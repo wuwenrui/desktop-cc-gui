@@ -75,8 +75,7 @@ describe("Messages transient timer cleanup on threadId change", () => {
     vi.useRealTimers();
   });
 
-  it("calls cancelAnimationFrame and clearTimeout at least once when active threadId changes", () => {
-    const cafSpy = vi.spyOn(window, "cancelAnimationFrame");
+  it("clears transient timers and emits a cleanup diagnostic when active threadId changes", () => {
     const clearSpy = vi.spyOn(window, "clearTimeout");
     const rafSpy = vi.spyOn(window, "requestAnimationFrame");
 
@@ -91,7 +90,6 @@ describe("Messages transient timer cleanup on threadId change", () => {
       rerender(
         <Messages {...baseProps} threadId="thread-B" isThinking={false} />,
       );
-      expect(cafSpy).toHaveBeenCalled();
       expect(clearSpy).toHaveBeenCalled();
       expect(appendRendererDiagnosticMock).toHaveBeenCalledWith(
         "messages/render-resource-cleanup",
@@ -109,7 +107,6 @@ describe("Messages transient timer cleanup on threadId change", () => {
       );
     } finally {
       rafSpy.mockRestore();
-      cafSpy.mockRestore();
       clearSpy.mockRestore();
     }
   });

@@ -121,6 +121,9 @@ describe("client typography font-size coverage", () => {
     expect(getCssRuleBlock(messagesCss, ".markdown")).toContain(
       "font-size: var(--message-content-font-size);",
     );
+    expect(getCssRuleBlock(messagesCss, ".markdown")).toContain(
+      'font-family: "Geist", var(--font-sans);',
+    );
     expect(getCssRuleBlock(messagesCss, ".thinking-content")).toContain(
       "font-size: var(--message-caption-font-size);",
     );

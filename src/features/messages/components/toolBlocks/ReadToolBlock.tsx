@@ -1,11 +1,14 @@
 /**
  * 读取文件工具块组件
  * Read Tool Block Component - for displaying file read operations
- * 使用 task-container 样式 + codicon 图标（匹配参考项目）
+ * 统一 Marker 风格折叠行：灰色描边图标 + 文件名 + 行号范围 + 靠右状态图标
  */
 import { memo, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import FileText from 'lucide-react/dist/esm/icons/file-text';
+import Folder from 'lucide-react/dist/esm/icons/folder';
 import type { ConversationItem } from '../../../../types';
+import { cn } from '@/lib/utils';
 import {
   asRecord,
   parseToolArgs,
@@ -13,8 +16,12 @@ import {
   getFileName,
   resolveToolStatus,
 } from './toolConstants';
-import { FileIcon } from './FileIcon';
 import { Markdown } from '../Markdown';
+import {
+  ToolMarkerShell,
+  ToolStatusIcon,
+  TOOL_MARKER_BODY_CLASS,
+} from './ToolMarkerShell';
 
 interface ReadToolBlockProps {
   item: Extract<ConversationItem, { kind: 'tool' }>;
@@ -102,44 +109,21 @@ export const ReadToolBlock = memo(function ReadToolBlock({
   }
 
   const isDirectory = filePath?.endsWith('/') || fileName === '.' || fileName === '..';
-  const iconClass = isDirectory ? 'codicon-folder' : 'codicon-file-code';
   const actionText = isDirectory ? t("tools.readDirectory") : t("tools.readFile");
 
   const status = resolveToolStatus(item.status, Boolean(renderedOutput));
-  const isCompleted = status === 'completed';
-  const isError = status === 'failed';
+  const hasBody = Boolean(renderedOutput);
 
   return (
-    <div className="task-container">
-      <div
-        className="task-header"
-        onClick={() => setExpanded((prev) => !prev)}
-        style={{
-          borderBottom: expanded ? '1px solid var(--border-primary)' : undefined,
-        }}
-      >
-        <div className="task-title-section">
-          <span className={`codicon ${iconClass} tool-title-icon`} />
-          <span className="tool-title-text">{actionText}</span>
-          {fileName && (
-            <span className="tool-title-summary" style={{ display: 'flex', alignItems: 'center' }}>
-              <span style={{ marginRight: '4px', display: 'flex', alignItems: 'center', width: '16px', height: '16px' }}>
-                <FileIcon fileName={isDirectory ? fileName + '/' : fileName} size={16} />
-              </span>
-              {fileName}
-            </span>
-          )}
-          {lineInfo && (
-            <span className="tool-title-summary" style={{ marginLeft: '8px', fontSize: '12px' }}>
-              {lineInfo}
-            </span>
-          )}
-        </div>
-        <div className={`tool-status-indicator ${isError ? 'error' : isCompleted ? 'completed' : 'pending'}`} />
-      </div>
-
-      {expanded && renderedOutput && (
-        <div className="task-details read-tool-details" style={{ border: 'none' }}>
+    <ToolMarkerShell
+      icon={isDirectory ? <Folder /> : <FileText />}
+      label={actionText}
+      labelHidden
+      expanded={expanded && hasBody}
+      onToggle={() => setExpanded((prev) => !prev)}
+      trailing={<ToolStatusIcon status={status} />}
+      body={
+        <div className={cn(TOOL_MARKER_BODY_CLASS, 'read-tool-details')}>
           {renderAsMarkdown ? (
             <div className="task-content-wrapper read-tool-markdown-wrapper">
               <div className="read-tool-rendered-content">
@@ -158,8 +142,17 @@ export const ReadToolBlock = memo(function ReadToolBlock({
             </div>
           )}
         </div>
+      }
+    >
+      {fileName && (
+        <span className="truncate" title={filePath}>
+          {fileName}
+        </span>
       )}
-    </div>
+      {lineInfo && (
+        <span className="shrink-0 text-muted-foreground/70">{lineInfo}</span>
+      )}
+    </ToolMarkerShell>
   );
 });
 

@@ -8,10 +8,8 @@
   column-gap: 12px;
   min-height: var(--composer-control-band-height, 44px);
   padding: 4px 12px;
-  border-bottom: 1px solid color-mix(in srgb, var(--input-border) 72%, transparent);
-  border-top-left-radius: 19px;
-  border-top-right-radius: 19px;
-  background: color-mix(in srgb, var(--input-bg) 88%, var(--context-bar-bg) 12%);
+  border-bottom: none;
+  background: transparent;
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.2;
@@ -19,7 +17,7 @@
 }
 
 .composer-readiness-bar--warning {
-  background: color-mix(in srgb, var(--input-bg) 88%, var(--context-bar-bg) 12%);
+  background: transparent;
 }
 
 .composer-readiness-target-group,
@@ -52,6 +50,14 @@
 
 .composer-readiness-target-button:hover {
   color: var(--text-primary);
+}
+
+/* Radix returns focus to the trigger after the model menu closes; suppress the
+   focus ring so the model pill never flashes a blue outline. */
+.composer-readiness-target-button:focus,
+.composer-readiness-target-button:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
 .composer-readiness-activity {
@@ -157,7 +163,7 @@
 .composer-readiness-provider,
 .composer-readiness-model {
   color: var(--text-primary);
-  font-weight: 620;
+  font-weight: 400;
 }
 
 .composer-readiness-divider {
@@ -178,22 +184,6 @@
   max-width: min(420px, 42vw);
   color: var(--text-muted);
   font-weight: 600;
-}
-
-.composer-readiness-chip {
-  display: inline-flex;
-  align-items: center;
-  max-width: 112px;
-  min-height: 22px;
-  padding: 0 9px;
-  border-radius: 6px;
-  border: 1px solid color-mix(in srgb, var(--button-primary) 28%, transparent);
-  background: color-mix(in srgb, var(--button-primary) 12%, transparent);
-  color: var(--button-primary);
-  font-weight: 620;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .composer-readiness-mode-impact {

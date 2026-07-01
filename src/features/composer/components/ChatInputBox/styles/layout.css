@@ -15,7 +15,7 @@
   display: flex;
   flex-direction: column;
   width: 100%;
-  background: var(--input-bg);
+  background: transparent;
   border: 1px solid var(--input-border);
   border-radius: 14px;
   overflow: visible;
@@ -41,10 +41,10 @@
   border-color: color-mix(in srgb, var(--input-focus-border) 72%, var(--input-border));
 }
 
-/* Show blue border on focus (consistent with hover) */
+/* Show blue border on focus (consistent with hover); no glow shadow */
 .chat-input-box:focus-within {
   border-color: var(--input-focus-border);
-  box-shadow: var(--composer-panel-focus-shadow, var(--composer-panel-shadow, none));
+  box-shadow: none;
 }
 
 .chat-input-box.is-resizing {

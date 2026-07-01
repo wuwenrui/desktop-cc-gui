@@ -297,19 +297,14 @@ describe("ContextBar live canvas controls visibility", () => {
       />,
     );
 
+    // Trigger label + card header both surface the used percentage.
     expect(screen.getAllByText("65%").length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText("35%")).toBeTruthy();
-    expect(screen.getByText("570.4k")).toBeTruthy();
-    const totalBreakdown = screen.getByText(
-      "chat.claudeContextInputDetail · chat.claudeContextOutputDetail",
-    );
-    expect(screen.getByText("chat.claudeContextCachedExcludedDetail")).toBeTruthy();
-    const windowBreakdown = screen.getByText(
-      "chat.claudeContextInputDetail + chat.claudeContextCachedDetail",
-    );
-    expect(totalBreakdown.closest(".context-dual-tooltip-note--detail")).toBeTruthy();
-    expect(windowBreakdown.closest(".context-dual-tooltip-note--detail")).toBeTruthy();
+    // Header shows the context window occupancy (used / total).
     expect(screen.getByText("167.8k / 258.4k")).toBeTruthy();
+    // Body renders per-category usage rows (Input / Output / Cache).
+    expect(screen.getByText("400k")).toBeTruthy();
+    expect(screen.getByText("150.4k")).toBeTruthy();
+    expect(screen.getByText("chat.claudeContextCachedExcludedDetail")).toBeTruthy();
     expect(screen.getByText("chat.claudeContextCategoryTitle")).toBeTruthy();
     expect(screen.getByText("System prompt")).toBeTruthy();
     expect(screen.getByText("Memory files")).toBeTruthy();

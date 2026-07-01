@@ -13,6 +13,28 @@
 @import "tw-animate-css";
 
 /*
+ * Map shadcn's `dark:` variant to this app's theme mechanism.
+ * The app sets data-theme="dark" | "dim" | "light" on <html>
+ * (see features/layout/hooks/useThemePreference.ts); theme="system"
+ * removes the attribute and follows the OS preference. Tailwind v4
+ * defaults `dark:` to prefers-color-scheme, which is wrong whenever the
+ * user overrides the OS theme — so we key the variant off data-theme.
+ */
+@custom-variant dark {
+  &:where([data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
+  }
+  &:where([data-theme="dim"], [data-theme="dim"] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme]) *) {
+      @slot;
+    }
+  }
+}
+
+/*
  * Theme variables are defined in themes.dark.css / themes.light.css
  * using the @coss/ui standard naming (--background, --foreground, --card, etc.)
  * This file maps those CSS variables to Tailwind theme tokens.
@@ -53,6 +75,7 @@
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
+  --radius-xl: calc(var(--radius) * 1.4);
 
   --font-sans: var(--ui-font-family, "SF Pro Text", system-ui, sans-serif);
   --font-mono: var(
@@ -62,6 +85,22 @@
     "Monaco",
     monospace
   );
+}
+
+/*
+ * Tailwind v4 defaults the bare `border` utility to `currentColor`, so shadcn
+ * components that rely on a plain `border` (dropdown-menu / popover / command /
+ * dialog …) would otherwise paint a near-black border from the popover text
+ * color. shadcn expects this base rule to be present: every default border is
+ * painted with the light, theme-aware `--border` token instead. Kept in the
+ * `base` layer so any element that sets its own border-color still wins.
+ */
+@layer base {
+  *,
+  ::after,
+  ::before {
+    border-color: var(--border);
+  }
 }
 
 .proxy-status-badge {

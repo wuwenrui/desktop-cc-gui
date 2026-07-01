@@ -64,13 +64,13 @@ describe("HomeChat interactions", () => {
 
     const searchInput = screen.getByPlaceholderText("Search projects");
     expect(searchInput).toBeTruthy();
-    expect(screen.getByRole("button", { name: /desktop-cc-gui/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /idea-claude-code-gui/i })).toBeTruthy();
+    expect(screen.getByRole("option", { name: /desktop-cc-gui/i })).toBeTruthy();
+    expect(screen.getByRole("option", { name: /idea-claude-code-gui/i })).toBeTruthy();
 
     fireEvent.change(searchInput, { target: { value: "idea" } });
 
-    expect(screen.queryByRole("button", { name: /desktop-cc-gui/i })).toBeNull();
-    expect(screen.getByRole("button", { name: /idea-claude-code-gui/i })).toBeTruthy();
+    expect(screen.queryByRole("option", { name: /desktop-cc-gui/i })).toBeNull();
+    expect(screen.getByRole("option", { name: /idea-claude-code-gui/i })).toBeTruthy();
   });
 
   it("selects a filtered workspace from the menu", () => {
@@ -82,7 +82,7 @@ describe("HomeChat interactions", () => {
     fireEvent.change(screen.getByPlaceholderText("Search projects"), {
       target: { value: "idea" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /idea-claude-code-gui/i }));
+    fireEvent.click(screen.getByRole("option", { name: /idea-claude-code-gui/i }));
 
     expect(onSelectWorkspace).toHaveBeenCalledWith("ws-2");
     expect(screen.queryByPlaceholderText("Search projects")).toBeNull();
@@ -94,7 +94,7 @@ describe("HomeChat interactions", () => {
     render(<HomeChat {...baseProps} onAddWorkspace={onAddWorkspace} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Workspace" }));
-    fireEvent.click(screen.getByRole("button", { name: "Add new project" }));
+    fireEvent.click(screen.getByRole("option", { name: "Add new project" }));
 
     expect(onAddWorkspace).toHaveBeenCalledTimes(1);
     expect(screen.queryByPlaceholderText("Search projects")).toBeNull();

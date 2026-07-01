@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { HomeChat } from "./HomeChat";
@@ -44,7 +44,12 @@ const baseProps = {
   composerNode: <div>Composer node</div>,
   selectedEngine: "claude" as const,
   selectedWorkspaceId: "ws-1",
-  selectedBranchName: "feature/ref-layout",
+  branchControl: {
+    branchName: "feature/ref-layout",
+    branches: [{ name: "feature/ref-layout", lastCommit: 1 }],
+    onCheckout: vi.fn(),
+    onCreate: vi.fn(),
+  },
   workspaces: [
     { id: "ws-1", name: "desktop-cc-gui", path: "/Users/demo/Desktop/desktop-cc-gui", kind: "main" as const },
     { id: "ws-2", name: "workfree", path: "/Users/demo/Desktop/workfree", kind: "worktree" as const, worktree: { branch: "feature/workfree" } },
@@ -58,13 +63,13 @@ describe("HomeChat", () => {
     expect(markup).toContain("Create anything");
     expect(markup).toContain("desktop-cc-gui");
     expect(markup).toContain("home-chat-workspace-select");
-    expect(markup).toContain("home-chat-workspace-select-trigger");
+    expect(markup).toContain("composer-branch-badge-trigger");
     expect(markup).toContain('aria-label="Workspace"');
-    expect(markup).toContain("Primary branch");
-    expect(markup).toContain("(feature/ref-layout)");
+    expect(markup).toContain("composer-branch-badge");
+    expect(markup).toContain("feature/ref-layout");
     expect(markup).toContain("Composer node");
     expect(markup).toContain("home-chat-engine-mark");
-    expect(markup).toContain("home-chat-workspace-summary");
+    expect(markup).toContain("home-chat-composer-meta");
   });
 
   it("keeps the composer mounted inside the dedicated host container", () => {
@@ -79,7 +84,6 @@ describe("HomeChat", () => {
       <HomeChat
         {...baseProps}
         selectedWorkspaceId="80ad34fc-f38d-4023-8bb5-3073b0f3e001"
-        selectedBranchName="feature/hero-layout"
         workspaces={[
           {
             id: "80ad34fc-f38d-4023-8bb5-3073b0f3e001",
@@ -92,7 +96,7 @@ describe("HomeChat", () => {
     );
 
     expect(markup).toMatch(
-      /home-chat-workspace-select-label">desktop-cc-gui<\/span>/,
+      /composer-branch-badge-name">desktop-cc-gui<\/span>/,
     );
     expect(markup).not.toContain("/Users/demo/Desktop/desktop-cc-gui");
   });
@@ -106,14 +110,14 @@ describe("HomeChat", () => {
       />,
     );
 
-    expect(markup).not.toContain("home-chat-workspace-summary");
+    expect(markup).not.toContain("home-chat-composer-meta");
   });
 
-  it("does not render an unknown branch placeholder when branch data is unavailable", () => {
+  it("does not render a branch badge when branch data is unavailable", () => {
     const markup = renderToStaticMarkup(
       <HomeChat
         {...baseProps}
-        selectedBranchName={null}
+        branchControl={null}
         workspaces={[
           {
             id: "ws-1",
@@ -125,8 +129,8 @@ describe("HomeChat", () => {
       />,
     );
 
-    expect(markup).not.toContain("unknown");
-    expect(markup).not.toContain("home-chat-workspace-branch");
+    // 工作区选择器现已复用 composer-branch-badge 视觉，分支胶囊的独有标识是 git-branch 图标
+    expect(markup).not.toContain("lucide-git-branch");
   });
 
   it("keeps New Home creation-first without a runtime dashboard", () => {
@@ -164,59 +168,6 @@ describe("HomeChat", () => {
 });
 
 
-describe("HomeChat workspace picker virtualization", () => {
-  it("renders a bounded DOM row count when 200 workspaces are present", () => {
-    const longWorkspaces = Array.from({ length: 200 }, (_, index) => ({
-      id: `ws-virt-${index}`,
-      name: `workspace-${index}`,
-      path: `/tmp/workspace-${index}`,
-      kind: "main" as const,
-    }));
-    render(
-      <HomeChat
-        {...baseProps}
-        workspaces={longWorkspaces}
-        selectedWorkspaceId={longWorkspaces[0]?.id ?? null}
-        selectedBranchName="main"
-      />,
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Workspace" }));
-    const list = screen
-      .getByRole("list", { name: "Workspace" })
-      ?.parentElement?.querySelector(".home-chat-workspace-picker-list");
-    expect(list).toBeTruthy();
-    expect(list?.getAttribute("data-virtualized")).toBe("true");
-    const spacer = document.querySelector(".home-chat-workspace-picker-virtual-spacer");
-    expect(spacer).toBeTruthy();
-    // The whole point of virtualization: with 200 workspaces, the DOM
-    // MUST NOT mount all 200 .home-chat-workspace-picker-item elements.
-    const mountedItems = document.querySelectorAll(
-      ".home-chat-workspace-picker-item",
-    ).length;
-    expect(mountedItems).toBeLessThan(200);
-  });
-
-  it("exposes a 100-row virtualization threshold and bounded item-key derivation", async () => {
-    const helpers = await import("./HomeChatVirtualization");
-    expect(helpers.HOME_CHAT_WORKSPACE_VIRTUALIZATION_MIN_ROWS).toBe(100);
-    expect(helpers.shouldVirtualizeWorkspaceList(99)).toBe(false);
-    expect(helpers.shouldVirtualizeWorkspaceList(100)).toBe(true);
-    expect(helpers.shouldVirtualizeWorkspaceList(200)).toBe(true);
-    // Item key derivation MUST be stable per workspace id, never index.
-    expect(
-      helpers.resolveWorkspaceVirtualItemKey(
-        [{ id: "ws-1", name: "alpha" }, { id: "ws-2", name: "beta" }],
-        0,
-      ),
-    ).toBe("ws-1");
-    expect(
-      helpers.resolveWorkspaceVirtualItemKey(
-        [{ id: "ws-1", name: "alpha" }, { id: "ws-2", name: "beta" }],
-        1,
-      ),
-    ).toBe("ws-2");
-    expect(
-      helpers.resolveWorkspaceVirtualItemKey([], 0),
-    ).toMatch(/^workspace-fallback-/);
-  });
-});
+// Workspace picker virtualization was removed when the picker migrated to the
+// shadcn Popover + Command combobox; cmdk renders the (rarely large) project
+// list directly, so there is no virtualization threshold left to assert.

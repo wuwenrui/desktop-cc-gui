@@ -1,10 +1,12 @@
 /**
  * 批量搜索分组组件
  * Groups multiple consecutive Search/Grep/Glob tool calls
+ * 统一 Marker 风格折叠行：灰色描边图标 + 计数 + 靠右状态图标；展开体为搜索列表
  */
 import { memo, useMemo, useRef, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { openUrl } from '@tauri-apps/plugin-opener';
+import SearchIcon from 'lucide-react/dist/esm/icons/search';
 import type { ConversationItem } from '../../../../types';
 import {
   parseToolArgs,
@@ -14,6 +16,7 @@ import {
   extractToolName,
   type ToolStatusTone,
 } from './toolConstants';
+import { ToolMarkerShell, ToolStatusIcon } from './ToolMarkerShell';
 
 type ToolItem = Extract<ConversationItem, { kind: 'tool' }>;
 
@@ -164,35 +167,23 @@ export const SearchToolGroupBlock = memo(function SearchToolGroupBlock({
     const name = extractToolName(item.title).toLowerCase();
     return name.includes('glob') || name.includes('find');
   });
+  const groupLabel = hasGlob ? t("tools.batchSearchMatch") : t("tools.batchSearch");
 
   return (
-    <div className="task-container">
-      <div
-        className="task-header"
-        onClick={() => setIsExpanded((prev) => !prev)}
-        style={{
-          borderBottom: isExpanded ? '1px solid var(--border-primary)' : undefined,
-        }}
-      >
+    <ToolMarkerShell
+      icon={<SearchIcon />}
+      label={groupLabel}
+      labelHidden
+      ariaLabel={groupLabel}
+      expanded={isExpanded}
+      onToggle={() => setIsExpanded((prev) => !prev)}
+      trailing={<ToolStatusIcon status={status} />}
+      body={
         <div
-          className="task-title-section search-title-minimal"
-          aria-label={hasGlob ? t("tools.batchSearchMatch") : t("tools.batchSearch")}
-        >
-          <span className="codicon codicon-search tool-title-icon" />
-          <span className="tool-title-summary search-group-count">
-            ({items.length})
-          </span>
-        </div>
-        <div className={`tool-status-indicator ${status === 'failed' ? 'error' : status === 'completed' ? 'completed' : 'pending'}`} />
-      </div>
-
-      {isExpanded && (
-        <div
-          className="task-details file-list-container"
+          className="file-list-container mt-1 overflow-hidden rounded-md"
           ref={listRef}
           style={{
             padding: '4px 8px',
-            border: 'none',
             maxHeight: needsScroll ? `${listHeight + 12}px` : undefined,
             overflowY: needsScroll ? 'auto' : 'hidden',
             overflowX: 'hidden',
@@ -241,8 +232,10 @@ export const SearchToolGroupBlock = memo(function SearchToolGroupBlock({
             </div>
           ))}
         </div>
-      )}
-    </div>
+      }
+    >
+      <span className="shrink-0 text-muted-foreground">({items.length})</span>
+    </ToolMarkerShell>
   );
 });
 

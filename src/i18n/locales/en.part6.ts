@@ -182,7 +182,7 @@ const enPart6 = {
   reasoning: {
     title: "Select reasoning depth",
     default: "Default",
-    claudeDefault: "Claude default",
+    claudeDefault: "Default",
     defaultDescription: "Use the engine default reasoning behavior",
     low: {
       label: "Low",
@@ -253,6 +253,7 @@ const enPart6 = {
     toggleGlobalSearch: "Toggle Global Search",
     toggleDebugPanel: "Toggle Debug Panel",
     toggleTerminal: "Toggle Terminal",
+    toggleDevtools: "Toggle Developer Tools",
     nextAgent: "Next Agent",
     previousAgent: "Previous Agent",
     nextWorkspace: "Next Workspace",

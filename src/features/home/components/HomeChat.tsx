@@ -1,15 +1,8 @@
-import { useDeferredValue, useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { useVirtualizer } from "@tanstack/react-virtual";
-import {
-  resolveWorkspaceVirtualItemKey,
-  shouldVirtualizeWorkspaceList,
-} from "./HomeChatVirtualization";
+import { useDeferredValue, useEffect, useState, type ReactNode } from "react";
 import Check from "lucide-react/dist/esm/icons/check";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import Folder from "lucide-react/dist/esm/icons/folder";
 import FolderPlus from "lucide-react/dist/esm/icons/folder-plus";
-import GitBranch from "lucide-react/dist/esm/icons/git-branch";
-import Search from "lucide-react/dist/esm/icons/search";
 import { useTranslation } from "react-i18next";
 import type { EngineType } from "../../../types";
 import type { WorkspaceKind } from "../../../types";
@@ -18,7 +11,19 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "../../../components/ui/popover";
+import {
+  Command,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from "../../../components/ui/command";
 import { EngineIcon } from "../../engine/components/EngineIcon";
+import {
+  ComposerBranchBadge,
+  type ComposerBranchControl,
+} from "../../composer/components/ComposerBranchBadge";
 
 type LatestAgentRun = {
   message: string;
@@ -48,7 +53,7 @@ type HomeChatProps = {
   onAddWorkspace?: () => void;
   composerNode?: ReactNode;
   selectedEngine?: EngineType;
-  selectedBranchName?: string | null;
+  branchControl?: ComposerBranchControl | null;
 };
 
 function getEngineLabel(engine: EngineType): string {
@@ -72,14 +77,11 @@ export function HomeChat({
   onAddWorkspace,
   composerNode,
   selectedEngine = "codex",
-  selectedBranchName = null,
+  branchControl = null,
 }: HomeChatProps) {
   const { t } = useTranslation();
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const [workspaceQuery, setWorkspaceQuery] = useState("");
-  const searchInputRef = useRef<HTMLInputElement | null>(null);
-  const workspacePanelId = useId();
-  const workspaceSearchId = useId();
   const engineLabel = getEngineLabel(selectedEngine);
   const selectedWorkspace = workspaces.find((workspace) => workspace.id === selectedWorkspaceId)
     ?? workspaces[0]
@@ -92,43 +94,11 @@ export function HomeChat({
       const path = workspace.path?.toLowerCase() ?? "";
       return name.includes(deferredWorkspaceQuery) || path.includes(deferredWorkspaceQuery);
     });
-  const workspaceListRef = useRef<HTMLDivElement | null>(null);
-  const workspaceListHeightRef = useRef<number | null>(null);
-  const shouldVirtualizeWorkspacePicker = shouldVirtualizeWorkspaceList(filteredWorkspaces.length);
-  const workspaceListHeight =
-    workspaceListHeightRef.current ?? Math.min(360, Math.max(48, filteredWorkspaces.length * 36));
-  const workspaceVirtualizer = useVirtualizer({
-    count: shouldVirtualizeWorkspacePicker ? filteredWorkspaces.length : 0,
-    getScrollElement: () => workspaceListRef.current,
-    estimateSize: () => 36,
-    overscan: 8,
-    getItemKey: (index) =>
-      resolveWorkspaceVirtualItemKey(filteredWorkspaces, index),
-  });
-  useEffect(() => {
-    if (!shouldVirtualizeWorkspacePicker) {
-      workspaceListHeightRef.current = null;
-      return;
-    }
-    workspaceListHeightRef.current = Math.min(
-      360,
-      Math.max(48, filteredWorkspaces.length * 36),
-    );
-  }, [filteredWorkspaces.length, shouldVirtualizeWorkspacePicker]);
-  const branchLabel = selectedWorkspace
-    ? selectedBranchName?.trim() || selectedWorkspace.worktree?.branch || null
-    : null;
-  const branchDescriptor = selectedWorkspace?.kind === "worktree"
-    ? t("workspace.homeBranchLabelWorktree")
-    : t("workspace.homeBranchLabelMain");
   const resolvedWorkspaceId = selectedWorkspace?.id ?? workspaces[0]?.id ?? "";
   useEffect(() => {
     if (!workspaceMenuOpen) {
       setWorkspaceQuery("");
-      return;
     }
-
-    searchInputRef.current?.focus();
   }, [workspaceMenuOpen]);
 
   function handleWorkspaceSelect(workspaceId: string) {
@@ -163,176 +133,6 @@ export function HomeChat({
             <h1 className="home-chat-title">
               {t("homeChat.minimalTitle", "Create anything")}
             </h1>
-
-            {selectedWorkspace ? (
-              <div
-                className="home-chat-workspace-summary"
-                title={selectedWorkspace.name}
-              >
-                <div className="home-chat-workspace-select" title={selectedWorkspace.name}>
-                  <Popover open={workspaceMenuOpen} onOpenChange={setWorkspaceMenuOpen}>
-                    <PopoverTrigger asChild>
-                      <button
-                        type="button"
-                        className="home-chat-workspace-select-trigger"
-                        aria-label={t("homeChat.workspaceSelectLabel", "Workspace")}
-                        aria-expanded={workspaceMenuOpen}
-                        aria-controls={workspacePanelId}
-                      >
-                        <span className="home-chat-workspace-select-label">
-                          {selectedWorkspace.name}
-                        </span>
-                        <ChevronDown
-                          size={16}
-                          aria-hidden
-                          className="home-chat-workspace-select-trigger-icon"
-                          data-open={workspaceMenuOpen ? "true" : undefined}
-                        />
-                      </button>
-                    </PopoverTrigger>
-                    <PopoverContent
-                      align="center"
-                      className="home-chat-workspace-picker-popover"
-                      onOpenAutoFocus={(event) => event.preventDefault()}
-                      side="bottom"
-                      sideOffset={8}
-                    >
-                      <div className="home-chat-workspace-picker">
-                        <label className="home-chat-workspace-picker-search" htmlFor={workspaceSearchId}>
-                          <Search size={16} aria-hidden className="home-chat-workspace-picker-search-icon" />
-                          <input
-                            ref={searchInputRef}
-                            id={workspaceSearchId}
-                            type="text"
-                            value={workspaceQuery}
-                            onChange={(event) => setWorkspaceQuery(event.target.value)}
-                            className="home-chat-workspace-picker-search-input"
-                            placeholder={t("homeChat.workspaceSearchPlaceholder", "Search projects")}
-                            autoComplete="off"
-                            spellCheck={false}
-                          />
-                        </label>
-
-                        <div
-                          id={workspacePanelId}
-                          ref={workspaceListRef}
-                          className="home-chat-workspace-picker-list"
-                          role="list"
-                          aria-label={t("homeChat.workspaceSelectLabel", "Workspace")}
-                          data-virtualized={shouldVirtualizeWorkspacePicker ? "true" : undefined}
-                          style={
-                            shouldVirtualizeWorkspacePicker
-                              ? { maxHeight: `${workspaceListHeight}px` }
-                              : undefined
-                          }
-                        >
-                          {filteredWorkspaces.length > 0 ? (
-                            shouldVirtualizeWorkspacePicker ? (
-                              <div
-                                className="home-chat-workspace-picker-virtual-spacer"
-                                style={{ height: `${workspaceVirtualizer.getTotalSize()}px` }}
-                              >
-                                {workspaceVirtualizer.getVirtualItems().map((virtualRow) => {
-                                  const workspace = filteredWorkspaces[virtualRow.index];
-                                  if (!workspace) {
-                                    return null;
-                                  }
-                                  const isSelected = workspace.id === resolvedWorkspaceId;
-                                  return (
-                                    <button
-                                      key={virtualRow.key}
-                                      type="button"
-                                      className="home-chat-workspace-picker-item"
-                                      data-selected={isSelected ? "true" : undefined}
-                                      onClick={() => handleWorkspaceSelect(workspace.id)}
-                                      style={{
-                                        transform: `translateY(${virtualRow.start}px)`,
-                                      }}
-                                    >
-                                      <Folder
-                                        size={16}
-                                        aria-hidden
-                                        className="home-chat-workspace-picker-item-icon"
-                                      />
-                                      <span className="home-chat-workspace-picker-item-label">
-                                        {workspace.name}
-                                      </span>
-                                      {isSelected ? (
-                                        <Check
-                                          size={16}
-                                          aria-hidden
-                                          className="home-chat-workspace-picker-item-check"
-                                        />
-                                      ) : null}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            ) : (
-                              filteredWorkspaces.map((workspace) => {
-                                const isSelected = workspace.id === resolvedWorkspaceId;
-
-                                return (
-                                  <button
-                                    key={workspace.id}
-                                    type="button"
-                                    className="home-chat-workspace-picker-item"
-                                    data-selected={isSelected ? "true" : undefined}
-                                    onClick={() => handleWorkspaceSelect(workspace.id)}
-                                  >
-                                    <Folder
-                                      size={16}
-                                      aria-hidden
-                                      className="home-chat-workspace-picker-item-icon"
-                                    />
-                                    <span className="home-chat-workspace-picker-item-label">
-                                      {workspace.name}
-                                    </span>
-                                    {isSelected ? (
-                                      <Check
-                                        size={16}
-                                        aria-hidden
-                                        className="home-chat-workspace-picker-item-check"
-                                      />
-                                    ) : null}
-                                  </button>
-                                );
-                              })
-                            )
-                          ) : (
-                            <div className="home-chat-workspace-picker-empty">
-                              {t("homeChat.workspaceNoMatch", "No projects found")}
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="home-chat-workspace-picker-divider" />
-
-                        <button
-                          type="button"
-                          className="home-chat-workspace-picker-add"
-                          onClick={handleAddWorkspace}
-                        >
-                          <FolderPlus
-                            size={16}
-                            aria-hidden
-                            className="home-chat-workspace-picker-add-icon"
-                          />
-                          <span>{t("homeChat.addWorkspaceAction", "Add new project")}</span>
-                        </button>
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                </div>
-                {branchLabel ? (
-                  <div className="home-chat-workspace-branch">
-                    <GitBranch size={18} aria-hidden className="home-chat-workspace-branch-icon" />
-                    <span className="home-chat-workspace-branch-label">{branchDescriptor}</span>
-                    <span className="home-chat-workspace-branch-value">({branchLabel})</span>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
           </div>
         </header>
 
@@ -342,6 +142,96 @@ export function HomeChat({
             aria-label={t("home.newConversation", "New Conversation")}
           >
             <div className="home-chat-composer-host">{composerNode}</div>
+            {selectedWorkspace ? (
+              <div
+                className="home-chat-composer-meta"
+                title={selectedWorkspace.name}
+              >
+                <div className="composer-branch-badge home-chat-workspace-select" title={selectedWorkspace.name}>
+                  <Popover open={workspaceMenuOpen} onOpenChange={setWorkspaceMenuOpen}>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        className="composer-branch-badge-trigger"
+                        aria-label={t("homeChat.workspaceSelectLabel", "Workspace")}
+                        aria-expanded={workspaceMenuOpen}
+                      >
+                        <Folder
+                          size={13}
+                          aria-hidden
+                          className="composer-branch-badge-icon"
+                        />
+                        <span className="composer-branch-badge-name">
+                          {selectedWorkspace.name}
+                        </span>
+                        <ChevronDown
+                          size={12}
+                          aria-hidden
+                          className="composer-branch-badge-caret"
+                        />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      align="center"
+                      className="w-72 p-0"
+                      side="bottom"
+                      sideOffset={8}
+                    >
+                      <Command shouldFilter={false}>
+                        <CommandInput
+                          value={workspaceQuery}
+                          onValueChange={setWorkspaceQuery}
+                          placeholder={t("homeChat.workspaceSearchPlaceholder", "Search projects")}
+                          autoFocus
+                          aria-label={t("homeChat.workspaceSelectLabel", "Workspace")}
+                        />
+                        <CommandList>
+                          <CommandGroup>
+                            {filteredWorkspaces.map((workspace) => {
+                              const isSelected = workspace.id === resolvedWorkspaceId;
+                              return (
+                                <CommandItem
+                                  key={workspace.id}
+                                  value={workspace.id}
+                                  data-selected={isSelected ? "true" : undefined}
+                                  onSelect={() => handleWorkspaceSelect(workspace.id)}
+                                >
+                                  <Folder className="size-4 shrink-0 opacity-60" aria-hidden />
+                                  <span className="min-w-0 flex-1 truncate">
+                                    {workspace.name}
+                                  </span>
+                                  {isSelected ? (
+                                    <Check className="size-4 shrink-0" aria-hidden />
+                                  ) : null}
+                                </CommandItem>
+                              );
+                            })}
+                          </CommandGroup>
+                          {filteredWorkspaces.length === 0 ? (
+                            <div className="py-6 text-center text-sm text-muted-foreground">
+                              {t("homeChat.workspaceNoMatch", "No projects found")}
+                            </div>
+                          ) : null}
+                          <CommandSeparator />
+                          <CommandGroup>
+                            <CommandItem
+                              value="__add_workspace__"
+                              onSelect={handleAddWorkspace}
+                            >
+                              <FolderPlus className="size-4 shrink-0" aria-hidden />
+                              <span>{t("homeChat.addWorkspaceAction", "Add new project")}</span>
+                            </CommandItem>
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+                {branchControl?.branchName ? (
+                  <ComposerBranchBadge {...branchControl} />
+                ) : null}
+              </div>
+            ) : null}
           </section>
 
         </section>

@@ -1,5 +1,6 @@
 import type { MetricType } from "web-vitals";
 import { appendRendererPerfDiagnostic } from "../rendererDiagnostics";
+import { isPerfDiagnosticsFlagEnabled } from "./perfDiagnosticsFlag";
 
 export const PERF_BASELINE_SCHEMA_VERSION = "1.0";
 export const MAX_PERF_ENTRIES = 1000;
@@ -40,7 +41,7 @@ export function isPerfBaselineEnabled(env: PerfEnv = readPerfEnv()) {
 }
 
 export function reportWebVital(metric: MetricType) {
-  if (!isPerfBaselineEnabled()) {
+  if (!isPerfBaselineEnabled() && !isPerfDiagnosticsFlagEnabled()) {
     return;
   }
   appendRendererPerfDiagnostic("perf.web-vital", {
@@ -70,8 +71,11 @@ export function consumeProfilerSamples() {
   return samples;
 }
 
-export async function installPerfBaselineWebVitals() {
-  if (webVitalsInstalled || !isPerfBaselineEnabled()) {
+export async function installPerfBaselineWebVitals(force = false) {
+  if (webVitalsInstalled) {
+    return;
+  }
+  if (!force && !isPerfBaselineEnabled() && !isPerfDiagnosticsFlagEnabled()) {
     return;
   }
   if (typeof window === "undefined" || typeof PerformanceObserver === "undefined") {

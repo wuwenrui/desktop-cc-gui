@@ -1,12 +1,12 @@
 /**
  * 批量编辑文件分组组件
- * 参考 idea-claude-code-gui 的渲染细节，展示连续编辑工具的文件列表与 diff 统计
+ * 统一 Marker 风格折叠行：灰色描边图标 + 批量标题 + 计数 + 总统计；展开体为文件列表与 diff 统计
  */
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import FilePen from 'lucide-react/dist/esm/icons/file-pen';
 import type { ConversationItem } from '../../../../types';
 import {
-  getFileName,
   parseToolArgs,
   resolveToolStatus,
   type ToolStatusTone,
@@ -17,8 +17,14 @@ import {
   EDIT_NEW_KEYS,
   EDIT_CONTENT_KEYS,
 } from './toolConstants';
-import { computeDiffStats, computeDiffFromUnifiedPatch, type DiffStats } from '../../utils/diffUtils';
-import { FileIcon } from './FileIcon';
+import { computeDiff, computeDiffFromUnifiedPatch, type DiffStats } from '../../utils/diffUtils';
+import { ToolMarkerShell } from './ToolMarkerShell';
+import {
+  FileChangeRow,
+  structuredDiffToLines,
+  unifiedDiffToPreview,
+  type FileChangeDiffLine,
+} from './FileChangeRow';
 
 type ToolItem = Extract<ConversationItem, { kind: 'tool' }>;
 
@@ -29,9 +35,9 @@ interface EditToolGroupBlockProps {
 
 interface ParsedEditItem {
   id: string;
-  fileName: string;
   filePath: string;
   diff: DiffStats;
+  diffLines: FileChangeDiffLine[];
   status: ToolStatusTone;
 }
 
@@ -44,6 +50,7 @@ function parseEditItem(item: ToolItem): ParsedEditItem | null {
   const nestedArgs = asRecord(args?.arguments);
   let filePath = '';
   let diff: DiffStats;
+  let diffLines: FileChangeDiffLine[] = [];
   if (item.toolType === 'fileChange' && item.changes?.length) {
     filePath = item.changes[0]?.path ?? '';
     diff = item.changes.reduce(
@@ -53,16 +60,25 @@ function parseEditItem(item: ToolItem): ParsedEditItem | null {
       },
       { additions: 0, deletions: 0 },
     );
+    const unified = item.changes
+      .map((change) => change.diff ?? '')
+      .filter(Boolean)
+      .join('\n');
+    diffLines = unified ? unifiedDiffToPreview(unified).lines : [];
   } else {
     filePath = pickStringField(args, nestedInput, nestedArgs, EDIT_PATH_KEYS);
     const oldString = pickStringField(args, nestedInput, nestedArgs, EDIT_OLD_KEYS);
     const newString = pickStringField(args, nestedInput, nestedArgs, EDIT_NEW_KEYS);
     if (oldString || newString) {
-      diff = computeDiffStats(oldString, newString);
+      const result = computeDiff(oldString, newString);
+      diff = { additions: result.additions, deletions: result.deletions };
+      diffLines = structuredDiffToLines(result.lines);
     } else {
       const content = pickStringField(args, nestedInput, nestedArgs, EDIT_CONTENT_KEYS);
       if (content) {
-        diff = { additions: content.split('\n').length, deletions: 0 };
+        const result = computeDiff('', content);
+        diff = { additions: result.additions, deletions: result.deletions };
+        diffLines = structuredDiffToLines(result.lines);
       } else {
         diff = { additions: 0, deletions: 0 };
       }
@@ -79,8 +95,8 @@ function parseEditItem(item: ToolItem): ParsedEditItem | null {
   return {
     id: item.id,
     filePath,
-    fileName: getFileName(filePath) || filePath,
     diff,
+    diffLines,
     status,
   };
 }
@@ -121,70 +137,53 @@ export const EditToolGroupBlock = memo(function EditToolGroupBlock({
   const listHeight = Math.min(parsedItems.length, MAX_VISIBLE_ITEMS) * ITEM_HEIGHT;
 
   return (
-    <div className="task-container edit-group-task-container">
-      <div
-        className="task-header"
-        onClick={() => setIsExpanded((previous) => !previous)}
-        style={{
-          borderBottom: isExpanded ? '1px solid var(--border-primary)' : undefined,
-        }}
-      >
-        <div className="task-title-section" style={{ overflow: 'hidden' }}>
-          <span className="codicon codicon-edit tool-title-icon" />
-          <span className="tool-title-text" style={{ flexShrink: 0 }}>
-            {t('tools.batchEditFile')}
-          </span>
-          <span className="tool-title-summary edit-group-item-count">({parsedItems.length})</span>
-          {(totalDiff.additions > 0 || totalDiff.deletions > 0) && (
-            <span className="edit-group-diff-total">
-              {totalDiff.additions > 0 && <span className="diff-stat-add">+{totalDiff.additions}</span>}
-              {totalDiff.deletions > 0 && <span className="diff-stat-del">-{totalDiff.deletions}</span>}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {isExpanded && (
+    <ToolMarkerShell
+      icon={<FilePen />}
+      label={t('tools.batchEditFile')}
+      expanded={isExpanded}
+      onToggle={() => setIsExpanded((previous) => !previous)}
+      body={
         <div
           ref={listRef}
-          className="task-details file-list-container"
+          className="file-list-container mt-1 overflow-hidden rounded-md"
           style={{
             padding: '6px 8px',
-            border: 'none',
             maxHeight: needsScroll ? `${listHeight + 12}px` : undefined,
             overflowY: needsScroll ? 'auto' : 'hidden',
             overflowX: 'hidden',
           }}
         >
-          {parsedItems.map((item) => (
-            <div key={item.id} className="file-list-item edit-group-file-item">
-              <span className="edit-group-file-icon-wrap">
-                <FileIcon fileName={item.fileName} size={16} />
-              </span>
-              <button
-                type="button"
-                className={`edit-group-file-link${onOpenDiffPath ? ' is-clickable' : ''}`}
-                disabled={!onOpenDiffPath}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  if (onOpenDiffPath) {
-                    onOpenDiffPath(item.filePath);
-                  }
-                }}
-                title={item.filePath}
-              >
-                {item.fileName}
-              </button>
-              <span className="edit-item-diff-stats">
-                {item.diff.additions > 0 && <span className="diff-stat-add">+{item.diff.additions}</span>}
-                {item.diff.deletions > 0 && <span className="diff-stat-del">-{item.diff.deletions}</span>}
-              </span>
-              <div className={`tool-status-indicator ${item.status === 'failed' ? 'error' : item.status}`} />
-            </div>
+          {parsedItems.map((entry) => (
+            <FileChangeRow
+              key={entry.id}
+              filePath={entry.filePath}
+              additions={entry.diff.additions}
+              deletions={entry.diff.deletions}
+              status={entry.status}
+              canExpand={entry.diffLines.length > 0}
+              loadDiff={
+                entry.diffLines.length > 0
+                  ? () => ({ lines: entry.diffLines })
+                  : undefined
+              }
+              onOpenDiffPath={onOpenDiffPath}
+            />
           ))}
         </div>
+      }
+    >
+      <span className="shrink-0 text-muted-foreground">({parsedItems.length})</span>
+      {(totalDiff.additions > 0 || totalDiff.deletions > 0) && (
+        <span className="flex shrink-0 items-center gap-1 tabular-nums">
+          {totalDiff.additions > 0 && (
+            <span className="text-emerald-600 dark:text-emerald-400">+{totalDiff.additions}</span>
+          )}
+          {totalDiff.deletions > 0 && (
+            <span className="text-red-500 dark:text-red-400">-{totalDiff.deletions}</span>
+          )}
+        </span>
       )}
-    </div>
+    </ToolMarkerShell>
   );
 });
 

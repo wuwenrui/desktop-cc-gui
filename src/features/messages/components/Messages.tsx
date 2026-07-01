@@ -17,6 +17,7 @@ import type {
 import { isMacPlatform, isWindowsPlatform } from "../../../utils/platform";
 import type { ConversationState } from "../../threads/contracts/conversationCurtainContracts";
 import { useStreamActivityPhase } from "../../threads/hooks/useStreamActivityPhase";
+import { setPerfStreamingState } from "../../../services/perfBaseline/perfContextBridge";
 import {
   noteThreadVisibleTextRendered,
   noteThreadVisibleRender,
@@ -39,7 +40,6 @@ import {
   groupToolItems,
 } from "../utils/groupToolItems";
 import { MessagesTimeline } from "./MessagesTimeline";
-import { MessagesAnchorRail } from "./MessagesAnchorRail";
 import {
   MessagesInlineApproval,
   MessagesInlineUserInput,
@@ -50,8 +50,6 @@ import {
 import {
   buildAssistantFinalBoundarySet,
   buildAssistantFinalWithVisibleProcessSet,
-  buildHistoryStickyCandidates,
-  resolveActiveStickyHeaderCandidate,
   buildLiveTailWorkingSet,
   buildMessagesPresentationScopeKey,
   buildRenderedItemsWindow,
@@ -62,7 +60,6 @@ import {
   suppressCompletedExploreItemsBetweenLatestUserTurns,
   type MessagesHistoryExpansionMode,
 } from "./messagesLiveWindow";
-import { addBoundedConversationRenderModeKey } from "./messagesConversationLightweightMode";
 import {
   isAssistantMessageConversationItem,
   isReasoningConversationItem,
@@ -82,12 +79,10 @@ import {
   findLastAssistantMessageIndex,
   findLatestAssistantMessageIdAfterIndex,
   findLastUserMessageIndex,
-  HistoryStickyCandidate,
   isMessagesPerfDebugEnabled,
   isSelectionInsideNode,
   logClaudeRender,
   logMessagesPerf,
-  MESSAGES_SLOW_ANCHOR_WARN_MS,
   MESSAGES_SLOW_RENDER_WARN_MS,
   resolveRenderableItems,
   resolveWorkingActivityLabel,
@@ -105,15 +100,9 @@ import {
   findLatestAssistantTextLength,
   isMessagesScrollNearBottom,
   mergeReadableRecoveryItems,
-  readHistoryExpansionScrollSnapshot,
-  resolveMessagesAutoFollowAfterScroll,
-  resolveMessagesBottomScrollTop,
   resolveActiveUserInputRequest,
-  resolveActiveMessageAnchor,
   resolveCollapsedTimelineItems,
   resolveVisibleMessageItems,
-  restoreHistoryExpansionScrollPosition,
-  type HistoryExpansionScrollSnapshot,
   type PreservedReadableWindow,
 } from "./messagesViewModel";
 import {
@@ -124,12 +113,9 @@ import {
   VISIBLE_TEXT_REPORT_MIN_GROWTH_CHARS,
   VISIBLE_TEXT_REPORT_MIN_INTERVAL_MS,
 } from "./messagesConstants";
+import { addBoundedConversationRenderModeKey } from "./messagesConversationLightweightMode";
 import {
-  DEFAULT_RENDER_LOOP_GUARD_BUDGET,
-  resolveIdempotentRenderLoopGuard,
-  type RenderLoopGuardBudget,
-} from "./messagesRenderLoopGuards";
-import {
+  TRANSIENT_RUNTIME_RECONNECT_AUTO_DISMISS_MS,
   resolveAssistantRuntimeReconnectHint,
   resolveRetryMessageForReconnectItem,
 } from "./runtimeReconnect";
@@ -141,11 +127,6 @@ import type {
 
 const EMPTY_TASK_RUNS: NonNullable<MessagesProps["taskRuns"]> = [];
 
-function pinMessagesHorizontalScroll(container: HTMLDivElement | null) {
-  if (container && container.scrollLeft !== 0) {
-    container.scrollLeft = 0;
-  }
-}
 
 function areStringSetsEqual(left: ReadonlySet<string>, right: ReadonlySet<string>) {
   if (left.size !== right.size) {
@@ -175,8 +156,6 @@ export const Messages = memo(function Messages({
   workspacePath = null,
   openTargets,
   selectedOpenAppId,
-  showMessageAnchors = true,
-  showStickyUserBubble = true,
   codeBlockCopyUseModifier = false,
   userInputRequests: legacyUserInputRequests = [],
   approvals = [],
@@ -252,6 +231,8 @@ export const Messages = memo(function Messages({
   const activeTurnId = effectiveState.meta.activeTurnId ?? null;
   const activeEngine = toConversationEngine(effectiveState.meta.engine);
   const renderScopeKey = `${workspaceId ?? ""}\u0000${threadId ?? ""}`;
+  const conversationRenderModeKey =
+    workspaceId && threadId ? `${workspaceId}\u0000${threadId}` : null;
   const isThinking = conversationState
     ? effectiveState.meta.isThinking
     : legacyIsThinking;
@@ -278,18 +259,32 @@ export const Messages = memo(function Messages({
     threadStreamLatencySnapshot?.latencyCategory === "visible-output-stall-after-first-delta";
   const readableWindowRecoveryActive =
     blankingRecoveryActive || visibleStallRecoveryActive;
-  const [dismissedTransientRuntimeReconnectItemKeys, setDismissedTransientRuntimeReconnectItemKeys] =
-    useState<Set<string>>(() => new Set());
-  const latestRuntimeReconnectCandidate = useMemo(() => {
-    const dismissKeyPrefix = [workspaceId ?? "", threadId ?? ""].join("\u0000");
-    let hasNewerUserMessage = false;
+  const transientRuntimeReconnectSeenAtByItemIdRef = useRef<Map<string, number>>(new Map());
+  const [transientRuntimeReconnectClock, setTransientRuntimeReconnectClock] = useState(() =>
+    Date.now(),
+  );
+  useEffect(() => {
+    const currentMessageIds = new Set(
+      items
+        .filter((item) => item.kind === "message")
+        .map((item) => item.id),
+    );
+    const seenAtByItemId = transientRuntimeReconnectSeenAtByItemIdRef.current;
+    for (const itemId of seenAtByItemId.keys()) {
+      if (!currentMessageIds.has(itemId)) {
+        seenAtByItemId.delete(itemId);
+      }
+    }
+  }, [items]);
+  const latestRuntimeReconnectItemId = useMemo(() => {
+    let sawUserMessageAfterDiagnostic = false;
     for (let index = items.length - 1; index >= 0; index -= 1) {
       const item = items[index];
       if (!item || item.kind !== "message") {
         continue;
       }
       if (item.role === "user") {
-        hasNewerUserMessage = true;
+        sawUserMessageAfterDiagnostic = true;
         continue;
       }
       if (item.role !== "assistant") {
@@ -302,44 +297,54 @@ export const Messages = memo(function Messages({
       if (!runtimeReconnectHint) {
         return null;
       }
-      const dismissKey = [dismissKeyPrefix, item.id].join("\u0000");
-      if (
-        runtimeReconnectHint.tone === "transient" &&
-        (hasNewerUserMessage || dismissedTransientRuntimeReconnectItemKeys.has(dismissKey))
-      ) {
-        return null;
+      if (runtimeReconnectHint.tone === "transient" && sawUserMessageAfterDiagnostic) {
+        continue;
       }
-      return {
-        dismissKey,
-        hint: runtimeReconnectHint,
-        itemId: item.id,
-      };
+      if (runtimeReconnectHint.tone === "transient") {
+        const seenAtByItemId = transientRuntimeReconnectSeenAtByItemIdRef.current;
+        const seenAt =
+          seenAtByItemId.get(item.id) ?? transientRuntimeReconnectClock;
+        if (!seenAtByItemId.has(item.id)) {
+          seenAtByItemId.set(item.id, seenAt);
+        }
+        const autoDismissMs =
+          runtimeReconnectHint.autoDismissMs ??
+          TRANSIENT_RUNTIME_RECONNECT_AUTO_DISMISS_MS;
+        if (transientRuntimeReconnectClock - seenAt >= autoDismissMs) {
+          continue;
+        }
+      }
+      return item.id;
     }
     return null;
-  }, [dismissedTransientRuntimeReconnectItemKeys, items, threadId, workspaceId]);
+  }, [items, transientRuntimeReconnectClock]);
   useEffect(() => {
-    if (!latestRuntimeReconnectCandidate?.hint.autoDismissMs) {
-      return undefined;
+    if (!latestRuntimeReconnectItemId) {
+      return;
     }
-    if (latestRuntimeReconnectCandidate.hint.tone !== "transient") {
-      return undefined;
+    const item = items.find((candidate) => candidate.id === latestRuntimeReconnectItemId);
+    if (!item || item.kind !== "message" || item.role !== "assistant") {
+      return;
     }
-    const dismissKey = latestRuntimeReconnectCandidate.dismissKey;
-    const timer = window.setTimeout(() => {
-      setDismissedTransientRuntimeReconnectItemKeys((previous) => {
-        if (previous.has(dismissKey)) {
-          return previous;
-        }
-        const next = new Set(previous);
-        next.add(dismissKey);
-        return next;
-      });
-    }, latestRuntimeReconnectCandidate.hint.autoDismissMs);
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [latestRuntimeReconnectCandidate]);
-  const latestRuntimeReconnectItemId = latestRuntimeReconnectCandidate?.itemId ?? null;
+    const runtimeReconnectHint = resolveAssistantRuntimeReconnectHint(
+      item,
+      Boolean(parseAgentTaskNotification(item.text)),
+    );
+    if (runtimeReconnectHint?.tone !== "transient") {
+      return;
+    }
+    const seenAt =
+      transientRuntimeReconnectSeenAtByItemIdRef.current.get(item.id) ??
+      transientRuntimeReconnectClock;
+    const autoDismissMs =
+      runtimeReconnectHint.autoDismissMs ??
+      TRANSIENT_RUNTIME_RECONNECT_AUTO_DISMISS_MS;
+    const remainingMs = Math.max(0, seenAt + autoDismissMs - Date.now());
+    const timeoutId = window.setTimeout(() => {
+      setTransientRuntimeReconnectClock(Date.now());
+    }, remainingMs);
+    return () => window.clearTimeout(timeoutId);
+  }, [items, latestRuntimeReconnectItemId, transientRuntimeReconnectClock]);
   const latestRetryMessage = useMemo(
     () => resolveRetryMessageForReconnectItem(items, latestRuntimeReconnectItemId),
     [items, latestRuntimeReconnectItemId],
@@ -348,16 +353,11 @@ export const Messages = memo(function Messages({
     typeof performance === "undefined" ? 0 : performance.now();
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const pendingHistoryExpansionScrollSnapshotRef =
-    useRef<HistoryExpansionScrollSnapshot | null>(null);
   const pendingHistoryExpansionModeRef = useRef<MessagesHistoryExpansionMode>(null);
   const messageNodeByIdRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const agentTaskNodeByTaskIdRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const agentTaskNodeByToolUseIdRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const autoScrollRef = useRef(true);
-  const lastObservedScrollTopRef = useRef<number | null>(null);
-  const anchorUpdateRafRef = useRef<number | null>(null);
-  const historyStickyUpdateRafRef = useRef<number | null>(null);
   const lastRenderSnapshotRef = useRef<LastRenderSnapshot | null>(null);
   const preservedReadableWindowRef = useRef<PreservedReadableWindow>({
     threadId: null,
@@ -370,12 +370,50 @@ export const Messages = memo(function Messages({
     Record<string, Extract<AccessMode, "default" | "full-access">>
   >({});
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
-  const [activeAnchorId, setActiveAnchorId] = useState<string | null>(null);
-  const activeAnchorIdRef = useRef<string | null>(null);
-  const anchorLoopGuardRef = useRef<RenderLoopGuardBudget>(
-    DEFAULT_RENDER_LOOP_GUARD_BUDGET,
+  const [lightweightConversationKeys, setLightweightConversationKeys] = useState<Set<string>>(
+    () => new Set(),
   );
-  const [activeStickyMessageId, setActiveStickyMessageId] = useState<string | null>(null);
+  const [detailHydrationConversationKeys, setDetailHydrationConversationKeys] = useState<
+    Set<string>
+  >(() => new Set());
+  const conversationLightweightModeEnabled = Boolean(
+    conversationRenderModeKey && lightweightConversationKeys.has(conversationRenderModeKey),
+  );
+  const conversationDetailHydrationRequested = Boolean(
+    conversationRenderModeKey && detailHydrationConversationKeys.has(conversationRenderModeKey),
+  );
+  const handleConversationLightweightModeEnable = useCallback(() => {
+    if (!conversationRenderModeKey) {
+      return;
+    }
+    setLightweightConversationKeys((previous) => {
+      return addBoundedConversationRenderModeKey(previous, conversationRenderModeKey);
+    });
+    setDetailHydrationConversationKeys((previous) => {
+      if (!previous.has(conversationRenderModeKey)) {
+        return previous;
+      }
+      const next = new Set(previous);
+      next.delete(conversationRenderModeKey);
+      return next;
+    });
+  }, [conversationRenderModeKey]);
+  const handleConversationDetailHydrationRequest = useCallback(() => {
+    if (!conversationRenderModeKey) {
+      return;
+    }
+    setDetailHydrationConversationKeys((previous) => {
+      return addBoundedConversationRenderModeKey(previous, conversationRenderModeKey);
+    });
+    setLightweightConversationKeys((previous) => {
+      if (!previous.has(conversationRenderModeKey)) {
+        return previous;
+      }
+      const next = new Set(previous);
+      next.delete(conversationRenderModeKey);
+      return next;
+    });
+  }, [conversationRenderModeKey]);
   const [showAllHistoryItems, setShowAllHistoryItems] = useState(false);
   const [historyExpansionMode, setHistoryExpansionMode] =
     useState<MessagesHistoryExpansionMode>(null);
@@ -411,6 +449,7 @@ export const Messages = memo(function Messages({
   const lastStreamSurfaceDiagnosticKeyRef = useRef<string | null>(null);
   const previousAssistantThinkingRef = useRef(isThinking);
   const previousAssistantThreadIdRef = useRef(threadId);
+  const resourceCleanupThreadIdRef = useRef(threadId);
   const frozenItemsRef = useRef<ConversationItem[] | null>(null);
   const latestItemsRef = useRef(items);
   latestItemsRef.current = items;
@@ -436,6 +475,12 @@ export const Messages = memo(function Messages({
     [effectiveItems, enableCollaborationBadge, isThinking, showAllHistoryItems],
   );
   const renderSourceItems = liveTailWorkingSet.items;
+  // 跨 token 稳定引用:供 handleAssistantVisibleTextRender 在回调体内读取最新条目,
+  // 而不必把每 token 换新引用的 renderSourceItems 放进 useCallback 依赖。render 期
+  // 同步赋值,读取不滞后一帧。不复用 latestItemsRef(=未 windowing 的原始 items),
+  // 以免 codex finalizing 分支的 targetTextLength 语义漂移。
+  const renderSourceItemsRef = useRef(renderSourceItems);
+  renderSourceItemsRef.current = renderSourceItems;
   const renderSourceSnapshot = useMemo(
     () => ({
       scopeKey: renderScopeKey,
@@ -458,28 +503,6 @@ export const Messages = memo(function Messages({
   const activeUserInputAnchorItemId =
     activeUserInputRequest?.params.item_id?.trim() || null;
   const rawScrollKey = buildMessagesScrollKey(effectiveItems, activeUserInputRequestId);
-  const conversationRenderModeKey = useMemo(
-    () => [workspaceId ?? "", threadId || rawScrollKey].join("\u0000"),
-    [rawScrollKey, threadId, workspaceId],
-  );
-  const [conversationLightweightModeKeys, setConversationLightweightModeKeys] = useState<Set<string>>(
-    () => new Set(),
-  );
-  const [conversationDetailHydrationKeys, setConversationDetailHydrationKeys] = useState<Set<string>>(
-    () => new Set(),
-  );
-  const conversationLightweightModeEnabled = conversationLightweightModeKeys.has(conversationRenderModeKey);
-  const conversationDetailHydrationRequested = conversationDetailHydrationKeys.has(conversationRenderModeKey);
-  const handleConversationLightweightModeEnable = useCallback(() => {
-    setConversationLightweightModeKeys((previous) =>
-      addBoundedConversationRenderModeKey(previous, conversationRenderModeKey),
-    );
-  }, [conversationRenderModeKey]);
-  const handleConversationDetailHydrationRequest = useCallback(() => {
-    setConversationDetailHydrationKeys((previous) =>
-      addBoundedConversationRenderModeKey(previous, conversationRenderModeKey),
-    );
-  }, [conversationRenderModeKey]);
   // Throttle scrollKey during streaming to avoid flooding the main thread
   // with smooth-scroll animations that block keyboard input.
   const [scrollKey, setScrollKey] = useState(rawScrollKey);
@@ -522,48 +545,20 @@ export const Messages = memo(function Messages({
     [],
   );
 
-  const computeActiveAnchor = useCallback(() => {
-    return resolveActiveMessageAnchor(containerRef.current, messageNodeByIdRef.current);
-  }, []);
-
-  const scrollMessagesToBottom = useCallback((behavior: ScrollBehavior) => {
-    const container = containerRef.current;
-    if (!container) {
+  const requestAutoScroll = useCallback(() => {
+    if (!liveAutoFollowEnabled || !isWorking) {
       return;
     }
-    const top = resolveMessagesBottomScrollTop(container);
-    if (typeof container.scrollTo === "function") {
-      container.scrollTo({
-        left: 0,
-        top,
-        behavior,
-      });
-    } else {
-      container.scrollTop = top;
-    }
-    container.scrollLeft = 0;
-    lastObservedScrollTopRef.current = top;
-  }, []);
-
-  const requestAutoScroll = useCallback(() => {
-    if (!liveAutoFollowEnabled) {
+    // Respect a manual scroll-up: never yank the user back to the bottom.
+    if (!autoScrollRef.current) {
       return;
     }
     if (!bottomRef.current) {
       return;
     }
-    const container = containerRef.current;
-    const shouldScroll =
-      autoScrollRef.current ||
-      (container ? isNearBottom(container) : true);
-    if (!shouldScroll) {
-      return;
-    }
-    pinMessagesHorizontalScroll(container);
-    // Keep auto-follow scoped to the messages scroller to avoid horizontal inline alignment.
-    scrollMessagesToBottom("instant");
-    pinMessagesHorizontalScroll(container);
-  }, [isNearBottom, liveAutoFollowEnabled, scrollMessagesToBottom]);
+    // Always use instant for programmatic scroll requests to avoid blocking input
+    bottomRef.current.scrollIntoView({ behavior: "instant", block: "end" });
+  }, [isWorking, liveAutoFollowEnabled]);
 
   const scrollToAgentTaskCard = useCallback((request: AgentTaskScrollRequest | null) => {
     if (!request) {
@@ -586,46 +581,31 @@ export const Messages = memo(function Messages({
       container.scrollTop + (nodeRect.top - containerRect.top) - container.clientHeight * 0.22;
     autoScrollRef.current = false;
     container.scrollTo({
-      left: 0,
       top: Math.max(0, targetTop),
       behavior: "smooth",
     });
   }, []);
 
   useEffect(() => {
-    const previousThreadId = previousAssistantThreadIdRef.current;
+    const previousThreadId = resourceCleanupThreadIdRef.current;
     const threadChanged = previousThreadId !== threadId;
     const pendingResourceCounts = {
-      anchorUpdateRaf: anchorUpdateRafRef.current === null ? 0 : 1,
-      historyStickyUpdateRaf: historyStickyUpdateRafRef.current === null ? 0 : 1,
-      planPanelFocusRaf: planPanelFocusRafRef.current === null ? 0 : 1,
-      planPanelFocusTimeout: planPanelFocusTimeoutRef.current === null ? 0 : 1,
-      assistantFinalizingTimer: assistantFinalizingTimerRef.current === null ? 0 : 1,
-      copyTimeout: copyTimeoutRef.current === null ? 0 : 1,
+      planFocusRaf: planPanelFocusRafRef.current !== null ? 1 : 0,
+      planFocusTimer: planPanelFocusTimeoutRef.current !== null ? 1 : 0,
+      assistantFinalizingTimer: assistantFinalizingTimerRef.current !== null ? 1 : 0,
+      copyTimer: copyTimeoutRef.current !== null ? 1 : 0,
       scrollThrottleTimer: scrollThrottleRef.current ? 1 : 0,
       messageNodeCount: messageNodeByIdRef.current.size,
-      agentTaskNodeByTaskIdCount: agentTaskNodeByTaskIdRef.current.size,
-      agentTaskNodeByToolUseIdCount: agentTaskNodeByToolUseIdRef.current.size,
+      agentTaskNodeCount:
+        agentTaskNodeByTaskIdRef.current.size + agentTaskNodeByToolUseIdRef.current.size,
     };
     autoScrollRef.current = true;
-    lastObservedScrollTopRef.current = null;
-    setExpandedItems(new Set());
+    setExpandedItems((previous) => (previous.size === 0 ? previous : new Set()));
     setIsSelectionFrozen(false);
     frozenItemsRef.current = null;
-    pendingHistoryExpansionScrollSnapshotRef.current = null;
     pendingHistoryExpansionModeRef.current = null;
     setHistoryExpansionMode(null);
-    activeAnchorIdRef.current = null;
-    anchorLoopGuardRef.current = DEFAULT_RENDER_LOOP_GUARD_BUDGET;
     if (typeof window !== "undefined") {
-      if (anchorUpdateRafRef.current !== null) {
-        window.cancelAnimationFrame(anchorUpdateRafRef.current);
-        anchorUpdateRafRef.current = null;
-      }
-      if (historyStickyUpdateRafRef.current !== null) {
-        window.cancelAnimationFrame(historyStickyUpdateRafRef.current);
-        historyStickyUpdateRafRef.current = null;
-      }
       if (planPanelFocusRafRef.current !== null) {
         window.cancelAnimationFrame(planPanelFocusRafRef.current);
         planPanelFocusRafRef.current = null;
@@ -651,12 +631,13 @@ export const Messages = memo(function Messages({
       appendRendererDiagnostic("messages/render-resource-cleanup", {
         surface: "conversation",
         component: "Messages",
-        workspaceId,
+        workspaceId: workspaceId ?? null,
         previousThreadId,
         threadId,
         pendingResourceCounts,
       });
     }
+    resourceCleanupThreadIdRef.current = threadId;
     setFinalizingAssistantMessageId(null);
     previousAssistantThinkingRef.current = false;
     previousAssistantThreadIdRef.current = threadId;
@@ -745,19 +726,18 @@ export const Messages = memo(function Messages({
     };
   }, []);
   useEffect(() => {
-    if (!liveAutoFollowEnabled) {
+    if (!liveAutoFollowEnabled || !isWorking) {
       return;
     }
     autoScrollRef.current = true;
     requestAutoScroll();
-  }, [liveAutoFollowEnabled, requestAutoScroll]);
+  }, [isWorking, liveAutoFollowEnabled, requestAutoScroll]);
   useEffect(() => {
     const currentFirstId = effectiveItems[0]?.id ?? null;
     if (currentFirstId !== firstItemIdRef.current) {
       setShowAllHistoryItems(false);
       setHistoryExpansionMode(null);
       setPendingJumpMessageId(null);
-      pendingHistoryExpansionScrollSnapshotRef.current = null;
       pendingHistoryExpansionModeRef.current = null;
     }
     firstItemIdRef.current = currentFirstId;
@@ -1172,6 +1152,15 @@ export const Messages = memo(function Messages({
       (activeEngine === "codex" || activeEngine === "claude" || activeEngine === "gemini"),
     items: deferredRenderSourceItems,
   });
+  // 把对话页当前的流式状态 / 可见行数写入性能上下文桥,供掉帧 / 长任务采集器在
+  // 掉帧瞬间附带"当时在干什么"。廉价 effect,仅在派生值变化时触发。
+  useEffect(() => {
+    setPerfStreamingState({
+      isStreaming: isThinking,
+      streamActivityPhase: streamActivityPhase ? String(streamActivityPhase) : null,
+      visibleRowCount: renderSourceItems.length,
+    });
+  }, [isThinking, streamActivityPhase, renderSourceItems.length]);
   const codexSilentSuspectedLabel =
     activeEngine === "codex" && codexSilentSuspectedAt !== null
       ? t("messages.codexSilentSuspected")
@@ -1294,10 +1283,10 @@ export const Messages = memo(function Messages({
       buildRenderedItemsWindow(
         timelineItems,
         timelineCollapsedHistoryItemCount,
-        liveTailWorkingSet.stickyUserMessageId,
+        liveTailWorkingSet.preservedUserMessageId,
       ),
     [
-      liveTailWorkingSet.stickyUserMessageId,
+      liveTailWorkingSet.preservedUserMessageId,
       timelineCollapsedHistoryItemCount,
       timelineItems,
     ],
@@ -1584,50 +1573,6 @@ export const Messages = memo(function Messages({
     timelinePresentationItems.length,
     visibleStallRecoveryActive,
   ]);
-  const historyStickyCandidates = useMemo(() => {
-    return buildHistoryStickyCandidates(
-      timelinePresentationItems,
-      enableCollaborationBadge,
-    ) satisfies HistoryStickyCandidate[];
-  }, [enableCollaborationBadge, timelinePresentationItems]);
-  const activeStickyHeaderCandidate = useMemo(
-    () => {
-      if (!showStickyUserBubble) {
-        return null;
-      }
-      return resolveActiveStickyHeaderCandidate(
-        historyStickyCandidates,
-        activeStickyMessageId,
-        renderSourceItems,
-        enableCollaborationBadge,
-      );
-    },
-    [
-      activeStickyMessageId,
-      enableCollaborationBadge,
-      historyStickyCandidates,
-      renderSourceItems,
-      showStickyUserBubble,
-    ],
-  );
-  const messageAnchors = useMemo(() => {
-    const messageItems = timelinePresentationItems.filter(
-      (item): item is Extract<ConversationItem, { kind: "message" }> =>
-        item.kind === "message" && item.role === "user",
-    );
-    if (!messageItems.length) {
-      return [];
-    }
-    return messageItems.map((item, index) => {
-      const position =
-        messageItems.length === 1 ? 0.5 : 0.04 + (index / (messageItems.length - 1)) * 0.92;
-      return {
-        id: item.id,
-        role: item.role,
-        position,
-      };
-    });
-  }, [timelinePresentationItems]);
   const suppressedUserNoteCardContextMessageIds = useMemo(
     () => buildSuppressedUserNoteCardContextMessageIdSet(timelinePresentationItems),
     [timelinePresentationItems],
@@ -1636,171 +1581,31 @@ export const Messages = memo(function Messages({
     () => buildSuppressedUserMemoryContextMessageIdSet(timelinePresentationItems),
     [timelinePresentationItems],
   );
-  const hasAnchorRail = showMessageAnchors && messageAnchors.length > 1;
-  const commitActiveAnchorId = useCallback(
-    (nextActiveAnchor: string | null, reason: "scroll" | "sync") => {
-      const signature = [
-        "anchor",
-        reason,
-        nextActiveAnchor ?? "none",
-        messageAnchors.length,
-      ].join(":");
-      const guard = resolveIdempotentRenderLoopGuard({
-        previous: anchorLoopGuardRef.current,
-        signature,
-        changed: activeAnchorIdRef.current !== nextActiveAnchor,
-        now: Date.now(),
-      });
-      anchorLoopGuardRef.current = guard.nextBudget;
-      if (!guard.shouldCommit) {
-        if (guard.shouldDiagnose) {
-          appendRendererDiagnostic("messages/overlay-loop-guard", {
-            surface: "anchor-rail",
-            component: "Messages",
-            reason,
-            threadId,
-            workspaceId: workspaceId ?? null,
-            rowKind: "message-anchor",
-            counter: guard.suppressedCount,
-            threshold: "idempotent-state-write",
-            anchorCount: messageAnchors.length,
-          });
-        }
-        return;
-      }
-      activeAnchorIdRef.current = nextActiveAnchor;
-      setActiveAnchorId(nextActiveAnchor);
-    },
-    [messageAnchors.length, threadId, workspaceId],
-  );
-  const computeActiveStickyMessageId = useCallback(
-    (candidates: HistoryStickyCandidate[]) => {
-      const container = containerRef.current;
-      if (!container || candidates.length === 0) {
-        return null;
-      }
-      const topBoundaryY = container.scrollTop;
-      let nextStickyId: string | null = null;
-      for (const candidate of candidates) {
-        const node = messageNodeByIdRef.current.get(candidate.id);
-        if (!node) {
-          continue;
-        }
-        if (node.offsetTop <= topBoundaryY) {
-          nextStickyId = candidate.id;
-        }
-      }
-      return nextStickyId;
-    },
-    [],
-  );
-  const scheduleAnchorUpdate = useCallback(
-    (reason: "scroll" | "sync") => {
-      if (!hasAnchorRail) {
-        return;
-      }
-      if (anchorUpdateRafRef.current !== null) {
-        return;
-      }
-      anchorUpdateRafRef.current = window.requestAnimationFrame(() => {
-        anchorUpdateRafRef.current = null;
-        const anchorStartedAt =
-          typeof performance === "undefined" ? 0 : performance.now();
-        const nextActiveAnchor =
-          computeActiveAnchor() ?? messageAnchors[messageAnchors.length - 1]?.id ?? null;
-        const elapsedMs =
-          typeof performance === "undefined"
-            ? 0
-            : performance.now() - anchorStartedAt;
-        if (elapsedMs >= MESSAGES_SLOW_ANCHOR_WARN_MS) {
-          logMessagesPerf("anchor.compute", {
-            ms: Number(elapsedMs.toFixed(2)),
-            reason,
-            anchorCount: messageAnchors.length,
-            threadId,
-          });
-        }
-        commitActiveAnchorId(nextActiveAnchor, reason);
-      });
-    },
-    [commitActiveAnchorId, computeActiveAnchor, hasAnchorRail, messageAnchors, threadId],
-  );
-  const scheduleStickyHeaderUpdate = useCallback(
-    (reason: "scroll" | "sync") => {
-      if (!showStickyUserBubble || historyStickyCandidates.length === 0) {
-        return;
-      }
-      if (historyStickyUpdateRafRef.current !== null) {
-        return;
-      }
-      historyStickyUpdateRafRef.current = window.requestAnimationFrame(() => {
-        historyStickyUpdateRafRef.current = null;
-        const stickyStartedAt =
-          typeof performance === "undefined" ? 0 : performance.now();
-        const nextStickyId = computeActiveStickyMessageId(historyStickyCandidates);
-        const elapsedMs =
-          typeof performance === "undefined"
-            ? 0
-            : performance.now() - stickyStartedAt;
-        if (elapsedMs >= MESSAGES_SLOW_ANCHOR_WARN_MS) {
-          logMessagesPerf("sticky-header.compute", {
-            ms: Number(elapsedMs.toFixed(2)),
-            reason,
-            candidateCount: historyStickyCandidates.length,
-            threadId,
-          });
-        }
-        setActiveStickyMessageId((previous) =>
-          previous === nextStickyId ? previous : nextStickyId,
-        );
-      });
-    },
-    [
-      computeActiveStickyMessageId,
-      historyStickyCandidates,
-      showStickyUserBubble,
-      threadId,
-    ],
-  );
   const revealAllHistoryItems = useCallback((mode: "manual" | "jump") => {
     pendingHistoryExpansionModeRef.current = mode;
     setHistoryExpansionMode(mode);
-    pendingHistoryExpansionScrollSnapshotRef.current =
-      mode === "manual" && collapsedHistoryItemCount > 0
-        ? readHistoryExpansionScrollSnapshot(containerRef.current)
-        : null;
     setShowAllHistoryItems(true);
-  }, [collapsedHistoryItemCount]);
+  }, []);
   const handleShowAllHistoryItems = useCallback(() => {
     revealAllHistoryItems("manual");
   }, [revealAllHistoryItems]);
   useLayoutEffect(() => {
     if (!showAllHistoryItems) {
-      pendingHistoryExpansionScrollSnapshotRef.current = null;
       pendingHistoryExpansionModeRef.current = null;
       return;
     }
     const pendingExpansionMode = pendingHistoryExpansionModeRef.current;
-    const pendingSnapshot = pendingHistoryExpansionScrollSnapshotRef.current;
     const container = containerRef.current;
     if (!pendingExpansionMode || !container) {
       return;
     }
     pendingHistoryExpansionModeRef.current = null;
-    pendingHistoryExpansionScrollSnapshotRef.current = null;
-    if (
-      pendingExpansionMode === "manual" &&
-      pendingSnapshot &&
-      !restoreHistoryExpansionScrollPosition(container, pendingSnapshot)
-    ) {
-      return;
+    if (pendingExpansionMode === "manual") {
+      autoScrollRef.current = false;
+      container.scrollTop = 0;
     }
-    scheduleAnchorUpdate("sync");
-    scheduleStickyHeaderUpdate("sync");
   }, [
     timelinePresentationItems,
-    scheduleAnchorUpdate,
-    scheduleStickyHeaderUpdate,
     showAllHistoryItems,
   ]);
   const updateAutoScroll = useCallback(() => {
@@ -1808,35 +1613,17 @@ export const Messages = memo(function Messages({
     if (!container) {
       return;
     }
-    pinMessagesHorizontalScroll(container);
-    const nearBottom = isNearBottom(container);
-    autoScrollRef.current = resolveMessagesAutoFollowAfterScroll({
-      previousScrollTop: lastObservedScrollTopRef.current,
-      nextScrollTop: container.scrollTop,
-      nearBottom,
-    });
-    lastObservedScrollTopRef.current = Number.isFinite(container.scrollTop)
-      ? container.scrollTop
-      : 0;
-    scheduleAnchorUpdate("scroll");
-    scheduleStickyHeaderUpdate("scroll");
+    // Auto-follow tracks the user's real scroll position: stick to the bottom
+    // only while the viewport is actually near the bottom. Scrolling up cancels
+    // the follow; scrolling back to the bottom re-enables it.
+    autoScrollRef.current = isNearBottom(container);
   }, [
     isNearBottom,
-    scheduleAnchorUpdate,
-    scheduleStickyHeaderUpdate,
   ]);
   const clearTransientUiState = useCallback(() => {
     if (copyTimeoutRef.current) {
       window.clearTimeout(copyTimeoutRef.current);
       copyTimeoutRef.current = null;
-    }
-    if (anchorUpdateRafRef.current !== null) {
-      window.cancelAnimationFrame(anchorUpdateRafRef.current);
-      anchorUpdateRafRef.current = null;
-    }
-    if (historyStickyUpdateRafRef.current !== null) {
-      window.cancelAnimationFrame(historyStickyUpdateRafRef.current);
-      historyStickyUpdateRafRef.current = null;
     }
     if (planPanelFocusRafRef.current !== null) {
       window.cancelAnimationFrame(planPanelFocusRafRef.current);
@@ -1850,6 +1637,9 @@ export const Messages = memo(function Messages({
       planPanelFocusNodeRef.current.classList.remove("plan-panel-focus-ring");
       planPanelFocusNodeRef.current = null;
     }
+    messageNodeByIdRef.current.clear();
+    agentTaskNodeByTaskIdRef.current.clear();
+    agentTaskNodeByToolUseIdRef.current.clear();
   }, []);
 
   useEffect(() => {
@@ -1894,7 +1684,6 @@ export const Messages = memo(function Messages({
         ms: Number(renderCostMs.toFixed(2)),
         items: effectiveItems.length,
         visibleItems: renderedItems.length,
-        anchors: messageAnchors.length,
         threadId,
         changed: changedKeys,
       });
@@ -1939,7 +1728,7 @@ export const Messages = memo(function Messages({
         isAssistantFinalizing &&
         payload.itemId === finalizingAssistantMessageId
       ) {
-        const targetItem = renderSourceItems.find(
+        const targetItem = renderSourceItemsRef.current.find(
           (item) =>
             isAssistantMessageConversationItem(item) &&
             item.id === payload.itemId,
@@ -2002,60 +1791,11 @@ export const Messages = memo(function Messages({
       finalizingAssistantMessageId,
       isAssistantFinalizing,
       isThinking,
-      renderSourceItems,
       threadId,
     ],
   );
 
   useEffect(() => clearTransientUiState, [clearTransientUiState]);
-
-  useEffect(() => {
-    let postTransitionTimer = 0;
-    const handleResize = () => {
-      pinMessagesHorizontalScroll(containerRef.current);
-      window.clearTimeout(postTransitionTimer);
-      postTransitionTimer = window.setTimeout(() => {
-        pinMessagesHorizontalScroll(containerRef.current);
-      }, 250);
-    };
-    window.addEventListener("resize", handleResize);
-    return () => {
-      window.removeEventListener("resize", handleResize);
-      window.clearTimeout(postTransitionTimer);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!hasAnchorRail) {
-      if (anchorUpdateRafRef.current !== null) {
-        window.cancelAnimationFrame(anchorUpdateRafRef.current);
-        anchorUpdateRafRef.current = null;
-      }
-      activeAnchorIdRef.current = null;
-      anchorLoopGuardRef.current = DEFAULT_RENDER_LOOP_GUARD_BUDGET;
-      setActiveAnchorId((current) => (current === null ? current : null));
-      return;
-    }
-    scheduleAnchorUpdate("sync");
-  }, [hasAnchorRail, messageAnchors, scheduleAnchorUpdate, scrollKey, threadId]);
-
-  useEffect(() => {
-    if (!showStickyUserBubble || historyStickyCandidates.length === 0) {
-      if (historyStickyUpdateRafRef.current !== null) {
-        window.cancelAnimationFrame(historyStickyUpdateRafRef.current);
-        historyStickyUpdateRafRef.current = null;
-      }
-      setActiveStickyMessageId(null);
-      return;
-    }
-    scheduleStickyHeaderUpdate("sync");
-  }, [
-    historyStickyCandidates,
-    scheduleStickyHeaderUpdate,
-    showStickyUserBubble,
-    scrollKey,
-    threadId,
-  ]);
 
   const handleCopyMessage = useCallback(
     async (
@@ -2082,25 +1822,26 @@ export const Messages = memo(function Messages({
     if (!bottomRef.current) {
       return undefined;
     }
-    if (!liveAutoFollowEnabled) {
+    if (!liveAutoFollowEnabled || (!isWorking && !isAssistantFinalizing)) {
       return undefined;
     }
     const container = containerRef.current;
+    // Follow new content only when the user is parked at the bottom. A manual
+    // scroll up flips autoScrollRef off (see updateAutoScroll) and stops the
+    // pull-to-bottom; scrolling back down re-arms it.
     const shouldScroll =
-      autoScrollRef.current ||
-      (container ? isNearBottom(container) : true);
+      autoScrollRef.current || (container ? isNearBottom(container) : true);
     if (!shouldScroll) {
       return undefined;
     }
     let raf = 0;
+    const target = bottomRef.current;
     // Use instant scroll during streaming to avoid blocking the main thread
     // with smooth-scroll animations that compete with keyboard input events.
     const scrollBehavior =
       isThinking || isAssistantFinalizing ? "instant" as const : "smooth" as const;
     raf = window.requestAnimationFrame(() => {
-      pinMessagesHorizontalScroll(container);
-      scrollMessagesToBottom(scrollBehavior);
-      pinMessagesHorizontalScroll(container);
+      target.scrollIntoView({ behavior: scrollBehavior, block: "end" });
     });
     return () => {
       if (raf) {
@@ -2109,11 +1850,11 @@ export const Messages = memo(function Messages({
     };
   }, [
     isAssistantFinalizing,
-    scrollKey,
-    isThinking,
     isNearBottom,
+    isThinking,
+    isWorking,
     liveAutoFollowEnabled,
-    scrollMessagesToBottom,
+    scrollKey,
   ]);
 
   const groupedEntries = useMemo(
@@ -2230,13 +1971,11 @@ export const Messages = memo(function Messages({
       container.scrollTop + (nodeRect.top - containerRect.top) - container.clientHeight * 0.28;
     autoScrollRef.current = false;
     container.scrollTo({
-      left: 0,
       top: Math.max(0, targetTop),
       behavior: "smooth",
     });
-    commitActiveAnchorId(messageId, "sync");
     return true;
-  }, [commitActiveAnchorId]);
+  }, []);
 
   const requestScrollToAnchor = useCallback((messageId: string) => {
     if (scrollToAnchor(messageId)) {
@@ -2287,16 +2026,8 @@ export const Messages = memo(function Messages({
 
   return (
     <div
-      className={`messages-shell${hasAnchorRail ? " has-anchor-rail" : ""}${enableClaudeRenderSafeMode ? " claude-render-safe" : ""}`}
+      className={`messages-shell${enableClaudeRenderSafeMode ? " claude-render-safe" : ""}`}
     >
-      <MessagesAnchorRail
-        activeAnchorId={activeAnchorId}
-        anchors={messageAnchors}
-        anchorNavigationLabel={t("messages.anchorNavigation")}
-        getJumpLabel={(index) => t("messages.anchorJumpToUser", { index: index + 1 })}
-        getTitle={(index) => t("messages.anchorUserTitle", { index: index + 1 })}
-        onScrollToAnchor={requestScrollToAnchor}
-      />
       <div
         className="messages"
         ref={containerRef}
@@ -2328,7 +2059,6 @@ export const Messages = memo(function Messages({
           activeCollaborationModeId={activeCollaborationModeId}
           activeEngine={activeEngine}
           activeUserInputAnchorItemId={activeUserInputAnchorItemId}
-          activeStickyHeaderCandidate={activeStickyHeaderCandidate}
           activeUserInputRequestId={activeUserInputRequestId}
           agentTaskNodeByTaskIdRef={agentTaskNodeByTaskIdRef}
           agentTaskNodeByToolUseIdRef={agentTaskNodeByToolUseIdRef}
@@ -2363,22 +2093,22 @@ export const Messages = memo(function Messages({
           isWorking={isWorking}
           lastDurationMs={lastDurationMs}
           liveAssistantMessageId={liveAssistantMessageId}
-          conversationDetailHydrationRequested={conversationDetailHydrationRequested}
-          conversationLightweightModeEnabled={conversationLightweightModeEnabled}
           latestReasoningLabel={workingIndicatorReasoningLabel}
           latestReasoningId={latestReasoningId}
           latestRetryMessage={latestRetryMessage}
           latestRuntimeReconnectItemId={latestRuntimeReconnectItemId}
           latestWorkingActivityLabel={latestWorkingActivityLabel}
           liveAutoExpandedExploreId={liveAutoExpandedExploreId}
+          conversationDetailHydrationRequested={conversationDetailHydrationRequested}
+          conversationLightweightModeEnabled={conversationLightweightModeEnabled}
           messageNodeByIdRef={messageNodeByIdRef}
           onOpenDiffPath={onOpenDiffPath}
+          onConversationDetailHydrationRequest={handleConversationDetailHydrationRequest}
+          onConversationLightweightModeEnable={handleConversationLightweightModeEnable}
           onRecoverThreadRuntime={onRecoverThreadRuntime}
           onRecoverThreadRuntimeAndResend={onRecoverThreadRuntimeAndResend}
           onThreadRecoveryFork={onThreadRecoveryFork}
           onAssistantVisibleTextRender={handleAssistantVisibleTextRender}
-          onConversationDetailHydrationRequest={handleConversationDetailHydrationRequest}
-          onConversationLightweightModeEnable={handleConversationLightweightModeEnable}
           onShowAllHistoryItems={handleShowAllHistoryItems}
           openFileLink={openFileLink}
           presentationProfile={presentationProfile}

@@ -91,6 +91,6 @@ describe("ComposerInput collaboration mode", () => {
       onSelectEffort: vi.fn(),
     });
 
-    expect(within(view.container).getAllByText("Claude 默认").length).toBeGreaterThan(0);
+    expect(within(view.container).getAllByText("默认").length).toBeGreaterThan(0);
   });
 });

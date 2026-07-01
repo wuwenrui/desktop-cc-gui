@@ -10,7 +10,13 @@
     font-size: 13px;
   }
 
-  button {
+  /*
+   * `:where(.markdown-codeblock-copy)` is excluded so code-block copy buttons
+   * can adopt the shadcn icon-button look without inheriting the global
+   * radius/padding/font. `:where()` has zero specificity, so this exclusion
+   * does not change how the global rule applies to the other ~300 buttons.
+   */
+  button:not(:where(.markdown-codeblock-copy)) {
     appearance: none;
     -webkit-appearance: none;
     -moz-appearance: none;

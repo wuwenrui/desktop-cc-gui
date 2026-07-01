@@ -52,7 +52,7 @@ export function EngineSelector({
 
   const selectedEngineInfo = engineList.find((e) => e.type === selectedEngine);
 
-  const handleChange = (value: EngineType | null) => {
+  const handleChange = (value: string) => {
     if (!value) {
       return;
     }

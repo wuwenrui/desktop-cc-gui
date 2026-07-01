@@ -48,7 +48,6 @@ export function ComposerReadinessBar({
   rightAccessory,
 }: ComposerReadinessBarProps) {
   const { t } = useTranslation();
-  const modeLabel = readiness.target.modeLabel ?? readiness.target.accessModeLabel;
   const hasContext = readiness.contextSummary.chips.length > 0;
   const contextLabels = readiness.contextSummary.chips.map((chip) => {
     const memoryCount = parseContextChipCount(chip, 'memory:');
@@ -126,16 +125,6 @@ export function ComposerReadinessBar({
             </span>
           </div>
         )}
-        {modeLabel ? (
-          <span className="composer-readiness-chip">
-            {modeLabel}
-          </span>
-        ) : null}
-        {readiness.target.modeImpactLabel ? (
-          <span className="composer-readiness-mode-impact">
-            {readiness.target.modeImpactLabel}
-          </span>
-        ) : null}
       </div>
 
       <div className="composer-readiness-activity" title={readiness.activity.detailLabel}>

@@ -818,6 +818,23 @@ const enPart1 = {
       "Reset {{count}} performance flag override(s). Reload the window to refresh module-level caches.",
     performanceFlagsResetAlreadyDefault:
       "Performance flags already use defaults. Reload the window if you are verifying runtime behavior.",
+    reactScanTitle: "Render performance panel (react-scan)",
+    reactScanDescription:
+      "Overlays highlights on the UI to flag components that are re-rendering, with render counts, to help pinpoint conversation jank. Takes effect immediately.",
+    reactScanDetail:
+      "Developer-grade tool for local diagnostics. Note: packaged (production) builds only show re-render highlights and counts, not per-render timings — use a dev build (npm run dev:scan) for timings.",
+    perfDiagnosticsCaptureTitle: "Performance diagnostics capture",
+    perfDiagnosticsCaptureDescription:
+      "Records frame drops (rAF), long tasks (longtask), and recent interaction context in the background; works in packaged builds too. Off by default — reproduce the jank, then export the capture in one click.",
+    perfDiagnosticsCaptureDetail:
+      "Very low overhead, local-only, contains no conversation content. Turn it on when hunting jank, reproduce the issue, then use \"Copy performance report\" below.",
+    perfCopyReportTitle: "Copy performance report",
+    perfCopyReportDescription:
+      "Summarizes recent frame drops / long tasks / performance metrics into text you can send to the maintainer.",
+    perfCopyReportButton: "Copy",
+    perfCopyReportDone: "Copied to clipboard.",
+    perfCopyReportDownloaded: "Clipboard unavailable — downloaded as a text file.",
+    perfCopyReportFailed: "Copy failed, please retry.",
     costBudgetTitle: "Cost budget",
     costBudgetDescription:
       "Set a local monthly budget for the StatusPanel BudgetBar and cost guidance.",
@@ -2759,6 +2776,8 @@ const enPart1 = {
     copyCodeBlockWithFence: "Copy fenced code block",
     copy: "Copy",
     copyWithFence: "Fence copy",
+    showMermaidSource: "Show Mermaid source",
+    previewMermaidDiagram: "Preview Mermaid diagram",
     toolCallCard: {
       title: "Tool call",
       expand: "Expand",

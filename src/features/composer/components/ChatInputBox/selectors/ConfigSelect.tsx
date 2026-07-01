@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Switch } from 'antd';
+import { Switch } from '@/components/ui/switch';
+import {
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+} from '@/components/ui/dropdown-menu';
 import { AgentIcon } from '../../../../../components/AgentIcon';
 import { agentProvider, CREATE_NEW_AGENT_ID, EMPTY_STATE_ID, type AgentItem } from '../providers/agentProvider';
 import type { AccountRateLimitsInfo, CodexSpeedMode, ProviderId, SelectedAgent } from '../types';
@@ -27,6 +34,12 @@ interface ConfigSelectProps {
   selectedAgent?: SelectedAgent | null;
   onAgentSelect?: (agent: SelectedAgent) => void;
   onOpenAgentSettings?: () => void;
+  /**
+   * When true, render config entries as DropdownMenu items/subs (a Fragment
+   * flattened into the parent vertical tool menu) instead of a standalone
+   * button + popover.
+   */
+  inline?: boolean;
 }
 
 /**
@@ -51,6 +64,7 @@ export const ConfigSelect = ({
   selectedAgent,
   onAgentSelect,
   onOpenAgentSettings,
+  inline = false,
 }: ConfigSelectProps) => {
   const USAGE_REFRESH_TIMEOUT_MS = 10_000;
   const { t } = useTranslation();
@@ -451,6 +465,305 @@ export const ConfigSelect = ({
     </div>
   );
 
+  if (inline) {
+    return (
+      <>
+        {/* Agent submenu */}
+        <DropdownMenuSub
+          onOpenChange={(open) => {
+            if (open) {
+              void loadAgents();
+            }
+          }}
+        >
+          <DropdownMenuSubTrigger className="composer-tool-menu-sub-trigger">
+            <AgentIcon
+              icon={selectedAgent?.icon}
+              seed={selectedAgent?.id || selectedAgent?.name}
+              fallback="codicon-robot"
+              className="composer-tool-menu-item-icon"
+              size={16}
+            />
+            <span className="composer-tool-menu-item-body">
+              <span className="composer-tool-menu-item-label">{t('settings.agent.title')}</span>
+              {selectedAgent?.name ? (
+                <span className="composer-tool-menu-item-value">{selectedAgent.name}</span>
+              ) : null}
+            </span>
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className="composer-tool-menu-sub-content">
+            {agentsLoading ? (
+              <div className="composer-tool-menu-option is-disabled">
+                <span className="codicon codicon-loading codicon-modifier-spin composer-tool-menu-option-icon" aria-hidden="true" />
+                <span className="composer-tool-menu-option-body">
+                  <span className="composer-tool-menu-option-label">{t('chat.loadingDropdown')}</span>
+                </span>
+              </div>
+            ) : (
+              agentItems.map((agent) => {
+                const isInfo = agent.id === EMPTY_STATE_ID;
+                const isCreate = agent.id === CREATE_NEW_AGENT_ID;
+                const isSelected = !!selectedAgent && selectedAgent.id === agent.id;
+                const description = agent.prompt
+                  ? agent.prompt.length > 60
+                    ? `${agent.prompt.substring(0, 60)}...`
+                    : agent.prompt
+                  : isCreate
+                    ? t('settings.agent.createAgentHint')
+                    : null;
+                return (
+                  <DropdownMenuItem
+                    key={agent.id}
+                    className={`composer-tool-menu-option${isSelected ? ' is-selected' : ''}${isInfo ? ' is-disabled' : ''}`}
+                    disabled={isInfo}
+                    onSelect={() => {
+                      if (isInfo) return;
+                      if (isCreate) {
+                        onOpenAgentSettings?.();
+                        return;
+                      }
+                      onAgentSelect?.({
+                        id: agent.id,
+                        name: agent.name,
+                        prompt: agent.prompt,
+                        icon: agent.icon,
+                      });
+                    }}
+                  >
+                    {isCreate ? (
+                      <span className="codicon codicon-add composer-tool-menu-option-icon" aria-hidden="true" />
+                    ) : isInfo ? (
+                      <span className="codicon codicon-info composer-tool-menu-option-icon" aria-hidden="true" />
+                    ) : (
+                      <AgentIcon
+                        icon={agent.icon}
+                        seed={agent.id || agent.name}
+                        fallback="codicon-robot"
+                        className="composer-tool-menu-option-icon"
+                        size={16}
+                      />
+                    )}
+                    <span className="composer-tool-menu-option-body">
+                      <span className="composer-tool-menu-option-label">{agent.name}</span>
+                      {description ? (
+                        <span className="composer-tool-menu-option-description">{description}</span>
+                      ) : null}
+                    </span>
+                    {isSelected && (
+                      <span className="codicon codicon-check composer-tool-menu-option-check" aria-hidden="true" />
+                    )}
+                  </DropdownMenuItem>
+                );
+              })
+            )}
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+
+        {!isCodexProvider && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="composer-tool-menu-toggle"
+              onSelect={(event) => {
+                event.preventDefault();
+                onStreamingEnabledChange?.(!streamingEnabled);
+              }}
+            >
+              <span className="codicon codicon-sync composer-tool-menu-item-icon" aria-hidden="true" />
+              <span className="composer-tool-menu-toggle-label">{t('settings.basic.streaming.label')}</span>
+              <Switch
+                className="composer-tool-menu-toggle-switch"
+                checked={streamingEnabled ?? true}
+                onCheckedChange={(checked) => onStreamingEnabledChange?.(checked)}
+                onClick={(event) => event.stopPropagation()}
+              />
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="composer-tool-menu-toggle"
+              onSelect={(event) => {
+                event.preventDefault();
+                onToggleThinking?.(!alwaysThinkingEnabled);
+              }}
+            >
+              <span className="codicon codicon-lightbulb composer-tool-menu-item-icon" aria-hidden="true" />
+              <span className="composer-tool-menu-toggle-label">{t('common.thinking')}</span>
+              <Switch
+                className="composer-tool-menu-toggle-switch"
+                checked={alwaysThinkingEnabled ?? false}
+                onCheckedChange={(checked) => onToggleThinking?.(checked)}
+                onClick={(event) => event.stopPropagation()}
+              />
+            </DropdownMenuItem>
+          </>
+        )}
+
+        {isCodexProvider && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="composer-tool-menu-toggle"
+              onSelect={(event) => {
+                event.preventDefault();
+                handlePlanModeToggle(!isPlanModeEnabled);
+              }}
+            >
+              <span className="codicon codicon-git-branch composer-tool-menu-item-icon" aria-hidden="true" />
+              <span className="composer-tool-menu-toggle-label">{t('composer.planModeToggle')}</span>
+              <Switch
+                className="composer-tool-menu-toggle-switch"
+                checked={isPlanModeEnabled}
+                disabled={!onSelectCollaborationMode}
+                onCheckedChange={(checked) => handlePlanModeToggle(checked)}
+                onClick={(event) => event.stopPropagation()}
+              />
+            </DropdownMenuItem>
+          </>
+        )}
+
+        {isCodexProvider && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger className="composer-tool-menu-sub-trigger">
+                <span className="codicon codicon-zap composer-tool-menu-item-icon" aria-hidden="true" />
+                <span className="composer-tool-menu-item-body">
+                  <span className="composer-tool-menu-item-label">{t('composer.speed')}</span>
+                  <span className="composer-tool-menu-item-value">
+                    {codexSpeedMode === 'fast'
+                      ? t('composer.speedFast')
+                      : t('composer.speedStandard')}
+                  </span>
+                </span>
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent className="composer-tool-menu-sub-content">
+                <DropdownMenuItem
+                  className={`composer-tool-menu-option${codexSpeedMode === 'standard' ? ' is-selected' : ''}`}
+                  onSelect={() => handleCodexSpeedSelect('standard')}
+                >
+                  <span className="composer-tool-menu-option-body">
+                    <span className="composer-tool-menu-option-label">{t('composer.speedStandard')}</span>
+                  </span>
+                  {codexSpeedMode === 'standard' && (
+                    <span className="codicon codicon-check composer-tool-menu-option-check" aria-hidden="true" />
+                  )}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className={`composer-tool-menu-option${codexSpeedMode === 'fast' ? ' is-selected' : ''}`}
+                  onSelect={() => handleCodexSpeedSelect('fast')}
+                >
+                  <span className="composer-tool-menu-option-body">
+                    <span className="composer-tool-menu-option-label">{t('composer.speedFast')}</span>
+                  </span>
+                  {codexSpeedMode === 'fast' && (
+                    <span className="codicon codicon-check composer-tool-menu-option-check" aria-hidden="true" />
+                  )}
+                </DropdownMenuItem>
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+          </>
+        )}
+
+        {supportsReviewQuickAction && (
+          <>
+            <DropdownMenuSeparator />
+            {supportsForkQuickAction && (
+              <DropdownMenuItem
+                className="composer-tool-menu-action"
+                onSelect={() => handleForkQuickStart()}
+              >
+                <span className="codicon codicon-git-branch-create composer-tool-menu-item-icon" aria-hidden="true" />
+                <span className="composer-tool-menu-action-label">{t('composer.forkQuickAction')}</span>
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem
+              className="composer-tool-menu-action"
+              onSelect={() => handleCodexReviewQuickStart()}
+            >
+              <span className="codicon codicon-search composer-tool-menu-item-icon" aria-hidden="true" />
+              <span className="composer-tool-menu-action-label">{t('composer.reviewQuickAction')}</span>
+            </DropdownMenuItem>
+          </>
+        )}
+
+        {isCodexProvider && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuSub
+              onOpenChange={(open) => {
+                if (open) {
+                  void refreshUsageSnapshot();
+                }
+              }}
+            >
+              <DropdownMenuSubTrigger className="composer-tool-menu-sub-trigger">
+                <span className="codicon codicon-pulse composer-tool-menu-item-icon" aria-hidden="true" />
+                <span className="composer-tool-menu-item-body">
+                  <span className="composer-tool-menu-item-label">{t('composer.liveUsage')}</span>
+                </span>
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent className="composer-tool-menu-sub-content composer-tool-menu-usage">
+                <div className="selector-usage-header">
+                  <span>{t('home.usageSnapshot')}</span>
+                  <button
+                    type="button"
+                    className="selector-usage-refresh"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void refreshUsageSnapshot();
+                    }}
+                    title={t('home.refreshUsage')}
+                  >
+                    <span className={`codicon ${usageLoading ? 'codicon-loading codicon-modifier-spin' : 'codicon-refresh'}`} />
+                  </button>
+                </div>
+                <div className="selector-usage-row">
+                  <div className="selector-usage-row-top">
+                    <span>5h limit</span>
+                    <span>
+                      {usageSnapshot.sessionPercent === null
+                        ? '--'
+                        : `${usageSnapshot.sessionPercent}% ${t(usageShowRemaining ? 'usage.remaining' : 'usage.used')}`}
+                    </span>
+                  </div>
+                  <div className="selector-usage-progress-track" aria-hidden>
+                    <span
+                      className="selector-usage-progress-fill"
+                      style={{ width: `${usageSnapshot.sessionPercent ?? 0}%` }}
+                    />
+                  </div>
+                  {usageSnapshot.sessionResetLabel && (
+                    <div className="selector-usage-reset">{usageSnapshot.sessionResetLabel}</div>
+                  )}
+                </div>
+                {usageSnapshot.showWeekly && (
+                  <div className="selector-usage-row">
+                    <div className="selector-usage-row-top">
+                      <span>Weekly limit</span>
+                      <span>
+                        {usageSnapshot.weeklyPercent === null
+                          ? '--'
+                          : `${usageSnapshot.weeklyPercent}% ${t(usageShowRemaining ? 'usage.remaining' : 'usage.used')}`}
+                      </span>
+                    </div>
+                    <div className="selector-usage-progress-track" aria-hidden>
+                      <span
+                        className="selector-usage-progress-fill"
+                        style={{ width: `${usageSnapshot.weeklyPercent ?? 0}%` }}
+                      />
+                    </div>
+                    {usageSnapshot.weeklyResetLabel && (
+                      <div className="selector-usage-reset">{usageSnapshot.weeklyResetLabel}</div>
+                    )}
+                  </div>
+                )}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+          </>
+        )}
+      </>
+    );
+  }
+
   return (
     <div style={{ position: 'relative', display: 'inline-block' }}>
       <button
@@ -533,12 +846,9 @@ export const ConfigSelect = ({
                   <span>{t('settings.basic.streaming.label')}</span>
                 </div>
                 <Switch
-                  size="small"
                   checked={streamingEnabled ?? true}
-                  onClick={(checked, e) => {
-                     e.stopPropagation();
-                     onStreamingEnabledChange?.(checked);
-                  }}
+                  onCheckedChange={(checked) => onStreamingEnabledChange?.(checked)}
+                  onClick={(e) => e.stopPropagation()}
                 />
               </div>
 
@@ -560,12 +870,9 @@ export const ConfigSelect = ({
                   <span>{t('common.thinking')}</span>
                 </div>
                 <Switch
-                  size="small"
                   checked={alwaysThinkingEnabled ?? false}
-                  onClick={(checked, e) => {
-                     e.stopPropagation();
-                     onToggleThinking?.(checked);
-                  }}
+                  onCheckedChange={(checked) => onToggleThinking?.(checked)}
+                  onClick={(e) => e.stopPropagation()}
                 />
               </div>
             </>
@@ -588,13 +895,10 @@ export const ConfigSelect = ({
                   <span>{t('composer.planModeToggle')}</span>
                 </div>
                 <Switch
-                  size="small"
                   checked={isPlanModeEnabled}
                   disabled={!onSelectCollaborationMode}
-                  onClick={(checked, e) => {
-                     e.stopPropagation();
-                     handlePlanModeToggle(checked);
-                  }}
+                  onCheckedChange={(checked) => handlePlanModeToggle(checked)}
+                  onClick={(e) => e.stopPropagation()}
                 />
               </div>
             </>

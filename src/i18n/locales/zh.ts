@@ -5,6 +5,7 @@ import zhPart4 from "./zh.part4";
 import zhPart5 from "./zh.part5";
 import zhPart6 from "./zh.part6";
 import zhPart7 from "./zh.part7";
+import zhPart8 from "./zh.part8";
 
 const zhPart2Settings =
   (zhPart2 as { settings?: Partial<typeof zhPart1.settings> }).settings ?? {};
@@ -24,6 +25,7 @@ const zh = {
   ...zhPart4,
   ...zhPart5,
   ...zhPart6,
+  ...zhPart8,
   messages: {
     ...zhPart1.messages,
     ...zhPart7Messages,

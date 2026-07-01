@@ -23,6 +23,7 @@ import type {
 } from './types.js';
 import { ChatInputBoxHeader } from './ChatInputBoxHeader.js';
 import { ChatInputBoxFooter } from './ChatInputBoxFooter.js';
+import { ComposerReadinessBar } from './ComposerReadinessBar.js';
 import { ContextBar } from './ContextBar.js';
 import { ResizeHandles } from './ResizeHandles.js';
 import { TokenIndicator } from './TokenIndicator.js';
@@ -1360,18 +1361,10 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
       editableWrapperStyle,
       getHandleProps,
       nudge,
-      collapse,
     } = useResizableChatInputBox({
       containerRef,
       editableWrapperRef,
     });
-
-    const handleExpandCollapsedInputBox = useCallback(() => {
-      nudge({ wrapperHeightPx: 24 });
-      window.requestAnimationFrame(() => {
-        focusInput();
-      });
-    }, [focusInput, nudge]);
 
     const handleShortcutChipClick = useCallback((trigger: '@' | '@@' | '/' | '$' | '#' | '!') => {
       const editableElement = editableRef.current;
@@ -1448,6 +1441,33 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
     const curatedSkillIndicator = (
       <CuratedSkillIndicator onOpenSkillsSettings={onOpenSkillsSettings} />
     );
+    const readinessSurface = sendReadiness ? (
+      <ComposerReadinessBar
+        readiness={sendReadiness}
+        onJumpToRequest={onJumpToRequest}
+        onToggleContextSources={onToggleContextSources}
+        contextSourcesExpanded={contextSourcesExpanded}
+        selectedModel={selectedModel}
+        models={availableModels}
+        modelGroups={onProviderSelect ? providerModelGroups : undefined}
+        currentProvider={currentProvider}
+        onModelSelect={onModelSelect ? handleModelSelect : undefined}
+        onProviderModelSelect={
+          onModelSelect && onProviderSelect ? handleProviderModelSelect : undefined
+        }
+        onAddModel={
+          onOpenModelSettings && supportsModelConfigActions
+            ? handleOpenCurrentProviderModelSettings
+            : undefined
+        }
+        onRefreshModelConfig={
+          onRefreshModelConfig && supportsModelConfigActions
+            ? handleRefreshCurrentProviderModelConfig
+            : undefined
+        }
+        isModelConfigRefreshing={isModelConfigRefreshing}
+      />
+    ) : null;
     const mainToolbarSurface = (
       <>
         {shouldShowMainLegacyTokenIndicator ? (
@@ -1521,9 +1541,7 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
             <ResizeHandles
               getHandleProps={getHandleProps}
               nudge={nudge}
-              collapse={collapse}
               isCollapsed={isInputBoxCollapsed}
-              onExpandCollapsed={handleExpandCollapsedInputBox}
             />
           )}
 
@@ -1537,29 +1555,6 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
               attachments={attachments}
               onRemoveAttachment={handleRemoveAttachment}
               messageQueue={messageQueue}
-              sendReadiness={sendReadiness}
-              onJumpToRequest={onJumpToRequest}
-              onToggleContextSources={onToggleContextSources}
-              contextSourcesExpanded={contextSourcesExpanded}
-              selectedModel={selectedModel}
-              models={availableModels}
-              modelGroups={onProviderSelect ? providerModelGroups : undefined}
-              onModelSelect={onModelSelect ? handleModelSelect : undefined}
-              onProviderModelSelect={
-                onModelSelect && onProviderSelect ? handleProviderModelSelect : undefined
-              }
-              onAddModel={
-                onOpenModelSettings && supportsModelConfigActions
-                  ? handleOpenCurrentProviderModelSettings
-                  : undefined
-              }
-              onRefreshModelConfig={
-                onRefreshModelConfig && supportsModelConfigActions
-                  ? handleRefreshCurrentProviderModelConfig
-                  : undefined
-              }
-              isModelConfigRefreshing={isModelConfigRefreshing}
-              rightAccessory={curatedSkillIndicator}
               onRemoveFromQueue={onRemoveFromQueue}
               onFuseFromQueue={onFuseFromQueue}
               canFuseFromQueue={canFuseFromQueue}
@@ -1751,8 +1746,10 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
               selectedManualMemoryIds={selectedManualMemoryIds}
               selectedNoteCardIds={selectedNoteCardIds}
               shortcutActions={settingsShortcutActions}
+              readinessSurface={readinessSurface}
               mainSurface={mainToolbarSurface}
               panelToggleSurface={panelToggleSurface}
+              curatedSkillSurface={curatedSkillIndicator}
               toolSurface={(
                 <ContextBar
                   surface="tool-popover"

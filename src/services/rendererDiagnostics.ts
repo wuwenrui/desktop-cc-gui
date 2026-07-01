@@ -298,6 +298,13 @@ function readPersistedDiagnostics() {
   );
 }
 
+/**
+ * 导出合并后的诊断条目(只读),供设置页「复制卡顿现场」等外部消费。
+ */
+export function exportRendererDiagnostics(): RendererDiagnosticEntry[] {
+  return readPersistedDiagnostics();
+}
+
 export function appendRendererDiagnostic(
   label: string,
   payload: Record<string, unknown> = {},
@@ -978,6 +985,17 @@ export function installRendererLifecycleDiagnostics() {
     })
     .catch((error: unknown) => {
       appendRendererDiagnostic("perf.web-vital/install-failed", {
+        error: formatUnknown(error),
+      });
+    });
+
+  // rAF 掉帧监视器 / longtask 观测 / 交互跟踪:受运行时开关控制,打包版同样可用。
+  void import("./perfBaseline/perfDiagnosticsController")
+    .then((module) => {
+      module.startPerfDiagnosticsIfEnabled();
+    })
+    .catch((error: unknown) => {
+      appendRendererDiagnostic("perf.diagnostics/install-failed", {
         error: formatUnknown(error),
       });
     });

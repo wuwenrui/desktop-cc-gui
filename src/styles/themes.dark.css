@@ -1,9 +1,13 @@
 :root {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
   color: var(--text-primary);
-  background-color: #0d0f14;
+  background-color: oklch(0.141 0.005 285.823);
   font-synthesis: none;
-  text-rendering: optimizeLegibility;
+  /* 回到浏览器默认渲染：optimizeLegibility 会强制 kerning/连字，CJK + 小字号下观感发怪/不均 */
+  text-rendering: auto;
+  /* 抗锯齿：Mac 上让系统字体更清爽细腻（不换字体的核心观感优化，全主题继承） */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   color-scheme: dark;
   --ui-font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
   --code-font-family: "SF Mono", "SFMono-Regular", Menlo, Monaco,
@@ -21,42 +25,43 @@
   --text-faint: #808080;
   --text-fainter: #737373;
   --text-dim: #595959;
-  --surface-sidebar: #121212;
-  --surface-sidebar-opaque: #121212;
-  --surface-topbar: #0f1118;
-  --surface-right-panel: #0e1018;
-  --surface-composer: #0f1118;
-  --surface-messages: #0d0f14;
-  --surface-card: #1f1f25;
-  --surface-card-strong: #30303a;
-  --surface-card-muted: #232329;
-  --surface-item: #1b1b20;
-  --surface-control: #27272e;
-  --surface-control-hover: #353540;
-  --surface-control-disabled: #212127;
-  --surface-hover: #212127;
-  --surface-active: #1e2a38;
-  --surface-approval: #0e1018;
-  --surface-debug: #0e1016;
-  --surface-command: #0c0e14;
-  --surface-diff-card: #101218;
-  --surface-bubble: #30303a;
+  /* zinc-neutral surface ramp (navy tint removed; functional accents kept) */
+  --surface-sidebar: oklch(0.165 0.004 286);
+  --surface-sidebar-opaque: oklch(0.165 0.004 286);
+  --surface-topbar: oklch(0.16 0.004 286);
+  --surface-right-panel: oklch(0.155 0.004 286);
+  --surface-composer: oklch(0.16 0.004 286);
+  --surface-messages: oklch(0.141 0.005 285.823);
+  --surface-card: oklch(0.21 0.006 285.885);
+  --surface-card-strong: oklch(0.3 0.006 286);
+  --surface-card-muted: oklch(0.235 0.006 286);
+  --surface-item: oklch(0.195 0.006 286);
+  --surface-control: oklch(0.274 0.006 286.033);
+  --surface-control-hover: oklch(0.32 0.006 286);
+  --surface-control-disabled: oklch(0.215 0.006 286);
+  --surface-hover: oklch(0.215 0.006 286);
+  --surface-active: oklch(0.305 0.006 286);
+  --surface-approval: oklch(0.155 0.004 286);
+  --surface-debug: oklch(0.15 0.004 286);
+  --surface-command: oklch(0.14 0.005 286);
+  --surface-diff-card: oklch(0.165 0.005 286);
+  --surface-bubble: oklch(0.3 0.006 286);
   --surface-bubble-user: #005fb8;
   --color-message-user-bg: #005fb8;
   --color-message-user-text: #ffffff;
-  --surface-context-core: #0c0f16;
-  --surface-popover: #0a0e14;
+  --surface-context-core: oklch(0.145 0.005 286);
+  --surface-popover: oklch(0.18 0.005 286);
   --surface-review: #281c26;
   --border-review: #6b3a56;
   --surface-review-active: #3a2636;
   --text-review-active: #f2c3e2;
   --surface-review-done: #1e3830;
   --text-review-done: #aafcdc;
-  --border-subtle: #252530;
-  --border-muted: #222228;
-  --border-strong: #353540;
-  --border-stronger: #3a3a46;
-  --border-quiet: #404050;
+  --border-subtle: oklch(0.245 0.005 286);
+  --border-muted: oklch(0.225 0.005 286);
+  --border-strong: oklch(0.32 0.006 286);
+  --border-stronger: oklch(0.35 0.006 286);
+  --border-quiet: oklch(0.38 0.006 286);
   --border-accent: #4a8caa;
   --border-accent-soft: #2a5570;
   --text-accent: #7a9dcc;
@@ -77,57 +82,58 @@
   --tabbar-height: 56px;
   --ui-scale: 1;
 
-  /* @coss/ui standard theme variables (bridge) */
-  --background: #0d0f14;
-  --foreground: #e6e7ea;
-  --card: #1f1f25;
-  --card-foreground: #e6e7ea;
-  --popover: #0a0e14;
-  --popover-foreground: #e6e7ea;
-  --primary: #7a9dcc;
-  --primary-foreground: #0d0f14;
-  --secondary: #27272e;
-  --secondary-foreground: #e6e7ea;
-  --muted: #27272e;
-  --muted-foreground: #b3b3b3;
-  --accent: #212127;
-  --accent-foreground: #e6e7ea;
-  --destructive: #ff6e6e;
-  --destructive-foreground: #ffffff;
+  /* shadcn default theme tokens (zinc) — dark */
+  --background: oklch(0.141 0.005 285.823);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.21 0.006 285.885);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.21 0.006 285.885);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.92 0.004 286.32);
+  --primary-foreground: oklch(0.21 0.006 285.885);
+  --secondary: oklch(0.274 0.006 286.033);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.274 0.006 286.033);
+  --muted-foreground: oklch(0.705 0.015 286.067);
+  --accent: oklch(0.274 0.006 286.033);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.985 0 0);
+  /* app-specific status accents (not part of shadcn) */
   --success: #78ebbe;
   --success-foreground: #0d0f14;
   --warning: #ffaf55;
   --warning-foreground: #0d0f14;
   --info: #7a9dcc;
   --info-foreground: #0d0f14;
-  --border: #222228;
-  --input: #27272e;
-  --ring: #4a8caa;
-  --radius: 0.5rem;
-  --sidebar-background: #121212;
-  --sidebar-foreground: #b3b3b3;
-  --sidebar-border: #222228;
-  --sidebar-accent: #1f1f25;
-  --sidebar-accent-foreground: #ffffff;
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.552 0.016 285.938);
+  --radius: 0.625rem;
+  --sidebar-background: oklch(0.21 0.006 285.885);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-accent: oklch(0.274 0.006 286.033);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
 
   /* 滚动条颜色 - Scrollbar colors */
-  --scrollbar-track: #1a1a1a;
-  --scrollbar-thumb: #404050;
-  --scrollbar-thumb-hover: #5a5a6a;
+  --scrollbar-track: oklch(0.2 0.003 286);
+  --scrollbar-thumb: oklch(0.38 0.006 286);
+  --scrollbar-thumb-hover: oklch(0.48 0.007 286);
 
   /* 工具块主题变量 (参考 idea-claude-code-gui) */
-  --bg-primary: #1e1e1e;
-  --bg-secondary: #252526;
-  --bg-tertiary: #2b2d31;
-  --bg-hover: #35373c;
-  --bg-active: #37373d;
+  --bg-primary: oklch(0.205 0.005 286);
+  --bg-secondary: oklch(0.24 0.005 286);
+  --bg-tertiary: oklch(0.275 0.005 286);
+  --bg-hover: oklch(0.33 0.005 286);
+  --bg-active: oklch(0.34 0.005 286);
 
   --text-secondary: #e0e0e0;
   --text-tertiary: #858585;
 
-  --border-primary: #333;
-  --border-color: #353540;
-  --border-hover: #484858;
+  --border-primary: oklch(0.31 0.005 286);
+  --border-color: oklch(0.32 0.006 286);
+  --border-hover: oklch(0.42 0.007 286);
 
   --color-success: #4caf50;
   --color-warning: #ff9800;
@@ -143,19 +149,19 @@
   --color-tool-file-link: #a5d6a7;
 
   /* Dropdown/Selector styles */
-  --dropdown-bg: #1a1d26;
-  --dropdown-border: #2a2d36;
-  --dropdown-hover: #262b34;
+  --dropdown-bg: oklch(0.21 0.006 285.885);
+  --dropdown-border: oklch(0.28 0.006 286);
+  --dropdown-hover: oklch(0.26 0.006 286);
   --dropdown-selected: transparent;
   --dropdown-selected-text: #e6e7ea;
   --success-color: #78ebbe;
-  --tooltip-bg: #1a1d26;
-  --dropdown-hover-color: #262B34;
-  --dropdown-divider-color: #2a2d36;
+  --tooltip-bg: oklch(0.21 0.006 285.885);
+  --dropdown-hover-color: oklch(0.26 0.006 286);
+  --dropdown-divider-color: oklch(0.28 0.006 286);
   --dropdown-title-color: #7a8088;
   --dropdown-description-color: #7a8088;
-  --dropdown-add-bg: #262b34;
-  --dropdown-add-hover-bg: #2e3540;
+  --dropdown-add-bg: oklch(0.26 0.006 286);
+  --dropdown-add-hover-bg: oklch(0.3 0.006 286);
   --dropdown-add-text-color: #d0d0d0;
   --dropdown-shadow-color: rgba(0, 0, 0, 0.5);
   --dropdown-text-color: #e6e7ea;

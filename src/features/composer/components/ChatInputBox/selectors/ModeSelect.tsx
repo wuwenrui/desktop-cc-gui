@@ -1,11 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
+import CheckIcon from 'lucide-react/dist/esm/icons/check';
 import { AVAILABLE_MODES, type PermissionMode } from '../types';
 import xuanzhonIcon from '../../../../../assets/xuanzhong.svg';
 import {
   MODE_SELECT_FLASH_DURATION_MS,
   MODE_SELECT_FLASH_EVENT,
 } from './modeSelectFlash';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+} from '@/components/ui/dropdown-menu';
 
 interface ModeSelectProps {
   value: PermissionMode;
@@ -13,6 +23,11 @@ interface ModeSelectProps {
   provider?: string;
   selectedCollaborationModeId?: string | null;
   onSelectCollaborationMode?: (id: string | null) => void;
+  /**
+   * When true, render as a DropdownMenuSub for the vertical tool menu
+   * instead of a standalone button + popover.
+   */
+  inline?: boolean;
 }
 
 type ModeSelectFlashStyle = CSSProperties & {
@@ -30,13 +45,12 @@ export const ModeSelect = ({
   provider,
   selectedCollaborationModeId,
   onSelectCollaborationMode,
+  inline = false,
 }: ModeSelectProps) => {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [isChevronFlashing, setIsChevronFlashing] = useState(false);
   const [flashCycle, setFlashCycle] = useState(0);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
   const flashTimerRef = useRef<number | null>(null);
   const fallbackMode = AVAILABLE_MODES[0] ?? {
     id: 'default' as PermissionMode,
@@ -101,14 +115,6 @@ export const ModeSelect = ({
   };
 
   /**
-   * Toggle dropdown
-   */
-  const handleToggle = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    setIsOpen(!isOpen);
-  }, [isOpen]);
-
-  /**
    * Select mode
    */
   const handleSelect = useCallback((mode: PermissionMode, disabled?: boolean) => {
@@ -126,34 +132,6 @@ export const ModeSelect = ({
     onChange(mode);
     setIsOpen(false);
   }, [onChange, onSelectCollaborationMode, provider]);
-
-  /**
-   * Close on outside click
-   */
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const handleClickOutside = (e: MouseEvent) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(e.target as Node) &&
-        buttonRef.current &&
-        !buttonRef.current.contains(e.target as Node)
-      ) {
-        setIsOpen(false);
-      }
-    };
-
-    // Delay adding event listener to prevent immediate trigger
-    const timer = setTimeout(() => {
-      document.addEventListener('mousedown', handleClickOutside);
-    }, 0);
-
-    return () => {
-      clearTimeout(timer);
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isOpen]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -210,66 +188,110 @@ export const ModeSelect = ({
     };
   }, [flashCycle, isChevronFlashing]);
 
-  return (
-    <div style={{ position: 'relative', display: 'inline-block' }}>
-      <button
-        ref={buttonRef}
-        className={`selector-button selector-button-mode-trigger${isChevronFlashing ? ' is-flashing' : ''}`}
-        onClick={handleToggle}
-        style={flashingButtonStyle}
-        title={getModeText(currentMode.id, 'tooltip') || `${t('chat.currentMode', { mode: getModeText(currentMode.id, 'label') })}`}
-      >
-        <span
-          className={`codicon ${currentMode.icon} selector-button-mode-icon`}
-          aria-hidden="true"
-        />
-        <span className="selector-button-text">{getModeText(currentMode.id, 'label')}</span>
-        <span
-          className={`codicon codicon-chevron-${isOpen ? 'up' : 'down'} selector-button-mode-chevron${isChevronFlashing ? ' is-flashing' : ''}`}
-          style={flashingChevronStyle}
-        />
-      </button>
-
-      {isOpen && (
-        <div
-          ref={dropdownRef}
-          className="selector-dropdown selector-dropdown--mode"
-          style={{
-            position: 'absolute',
-            bottom: '100%',
-            left: 0,
-            marginBottom: '4px',
-            zIndex: 10000,
-          }}
-        >
+  if (inline) {
+    return (
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger className="composer-tool-menu-sub-trigger">
+          <span
+            className={`codicon ${currentMode.icon} composer-tool-menu-item-icon`}
+            aria-hidden="true"
+          />
+          <span className="composer-tool-menu-item-body">
+            <span className="composer-tool-menu-item-label">
+              {t('chat.permissionModeEntry', { defaultValue: '权限模式' })}
+            </span>
+            <span className="composer-tool-menu-item-value">
+              {getModeText(currentMode.id, 'label')}
+            </span>
+          </span>
+        </DropdownMenuSubTrigger>
+        <DropdownMenuSubContent className="composer-tool-menu-sub-content">
           {modeOptions.map((mode) => (
-            <div
+            <button
               key={mode.id}
+              type="button"
               data-mode-id={mode.id}
-              className={`selector-option ${mode.id === selectedModeId ? 'selected' : ''} ${mode.disabled ? 'disabled' : ''}`}
+              className={`composer-tool-menu-option${mode.id === selectedModeId ? ' is-selected' : ''}${mode.disabled ? ' is-disabled' : ''}`}
+              disabled={mode.disabled}
               onClick={() => handleSelect(mode.id, mode.disabled)}
               title={getModeText(mode.id, 'tooltip')}
-              style={{
-                opacity: mode.disabled ? 0.5 : 1,
-                cursor: mode.disabled ? 'not-allowed' : 'pointer',
-              }}
             >
               <span
-                className={`codicon ${mode.icon} mode-icon`}
+                className={`codicon ${mode.icon} composer-tool-menu-option-icon`}
                 aria-hidden="true"
               />
-              <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-                <span>{getModeText(mode.id, 'label')}</span>
-                <span className="mode-description">{getModeText(mode.id, 'description')}</span>
-              </div>
+              <span className="composer-tool-menu-option-body">
+                <span className="composer-tool-menu-option-label">
+                  {getModeText(mode.id, 'label')}
+                </span>
+                <span className="composer-tool-menu-option-description">
+                  {getModeText(mode.id, 'description')}
+                </span>
+              </span>
               {mode.id === selectedModeId && (
-                <img src={xuanzhonIcon} className="check-mark" style={{ width: 20, height: 20 }} aria-hidden />
+                <img
+                  src={xuanzhonIcon}
+                  className="composer-tool-menu-option-check"
+                  aria-hidden
+                />
               )}
-            </div>
+            </button>
           ))}
-        </div>
-      )}
-    </div>
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
+    );
+  }
+
+  return (
+    <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
+      <DropdownMenuTrigger asChild>
+        <button
+          className={`selector-button selector-button-mode-trigger${isChevronFlashing ? ' is-flashing' : ''}`}
+          style={flashingButtonStyle}
+          title={getModeText(currentMode.id, 'tooltip') || `${t('chat.currentMode', { mode: getModeText(currentMode.id, 'label') })}`}
+        >
+          <span
+            className={`codicon ${currentMode.icon} selector-button-mode-icon`}
+            aria-hidden="true"
+          />
+          <span className="selector-button-text">{getModeText(currentMode.id, 'label')}</span>
+          <span
+            className={`codicon codicon-chevron-${isOpen ? 'up' : 'down'} selector-button-mode-chevron${isChevronFlashing ? ' is-flashing' : ''}`}
+            style={flashingChevronStyle}
+          />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" side="top" sideOffset={4} className="w-72">
+        {modeOptions.map((mode) => (
+          <DropdownMenuItem
+            key={mode.id}
+            data-mode-id={mode.id}
+            data-selected={mode.id === selectedModeId ? 'true' : undefined}
+            disabled={mode.disabled}
+            onSelect={(event) => {
+              event.preventDefault();
+              handleSelect(mode.id, mode.disabled);
+            }}
+            title={getModeText(mode.id, 'tooltip')}
+            className="items-start gap-2"
+          >
+            <span
+              className={`codicon ${mode.icon} mt-0.5 shrink-0`}
+              aria-hidden="true"
+            />
+            <div className="flex min-w-0 flex-1 flex-col">
+              <span className="text-sm font-medium">{getModeText(mode.id, 'label')}</span>
+              <span className="text-xs text-muted-foreground whitespace-normal">
+                {getModeText(mode.id, 'description')}
+              </span>
+            </div>
+            {mode.id === selectedModeId && (
+              <CheckIcon className="mt-0.5 size-4 shrink-0" aria-hidden />
+            )}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 };
 

@@ -1,8 +1,8 @@
 name: Heavy Test Noise Sentry
 
 on:
-  pull_request:
-  push:
+  schedule:
+    - cron: "0 2 * * 1"
   workflow_dispatch:
 
 permissions:

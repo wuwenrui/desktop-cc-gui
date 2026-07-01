@@ -7,7 +7,6 @@ import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import type { ConversationItem } from '../../../../types';
-import { parseDiff, type ParsedDiffLine } from '../../../../utils/diff';
 import { computeDiff } from '../../utils/diffUtils';
 import { LocalImage } from '../LocalImage';
 import { Markdown } from '../Markdown';
@@ -28,6 +27,26 @@ import {
   resolveToolStatus,
 } from './toolConstants';
 import { FileIcon } from './FileIcon';
+import { cn } from '@/lib/utils';
+import { Marker, MarkerContent, MarkerIcon } from '../../../../components/ui/marker';
+import { ToolStatusIcon } from './ToolMarkerShell';
+import { FileChangeRow, unifiedDiffToPreview } from './FileChangeRow';
+import FileText from 'lucide-react/dist/esm/icons/file-text';
+import FilePen from 'lucide-react/dist/esm/icons/file-pen';
+import FilePlus from 'lucide-react/dist/esm/icons/file-plus';
+import Terminal from 'lucide-react/dist/esm/icons/terminal';
+import Search from 'lucide-react/dist/esm/icons/search';
+import FolderSearch from 'lucide-react/dist/esm/icons/folder-search';
+import Globe from 'lucide-react/dist/esm/icons/globe';
+import FileDiff from 'lucide-react/dist/esm/icons/file-diff';
+import ListChecks from 'lucide-react/dist/esm/icons/list-checks';
+import Zap from 'lucide-react/dist/esm/icons/zap';
+import NotebookPen from 'lucide-react/dist/esm/icons/notebook-pen';
+import Database from 'lucide-react/dist/esm/icons/database';
+import MessagesSquare from 'lucide-react/dist/esm/icons/messages-square';
+import CheckCheck from 'lucide-react/dist/esm/icons/check-check';
+import Trash2 from 'lucide-react/dist/esm/icons/trash-2';
+import Wrench from 'lucide-react/dist/esm/icons/wrench';
 
 type StatusTone = 'completed' | 'processing' | 'failed' | 'pending';
 type NormalizedChangeKind = 'added' | 'modified' | 'deleted' | 'renamed';
@@ -55,10 +74,7 @@ const FILE_CHANGE_DIFF_KEYS = [
   'unifiedDiff',
 ];
 
-const FILE_CHANGE_DIFF_PREVIEW_MAX_LINES = 48;
 const HEAVY_TOOL_OUTPUT_MIN_CHARS = 8_000;
-const HEAVY_TOOL_CHANGE_MIN_FILES = 8;
-const HEAVY_TOOL_CHANGE_DIFF_MIN_CHARS = 12_000;
 const IMAGE_FILE_EXTENSION_REGEX =
   /\.(png|jpe?g|gif|webp|bmp|tiff?|svg|ico|avif)(?:[?#].*)?$/i;
 
@@ -68,8 +84,6 @@ type DisplayChange = {
   kindCode: 'A' | 'M' | 'D' | 'R';
   diffStats: DiffStats;
   diffText?: string;
-  diffPreviewLines: ParsedDiffLine[];
-  diffPreviewTruncated: boolean;
 };
 
 type ExitPlanCardContent = {
@@ -897,29 +911,11 @@ function resolveChangeDiffStats(
   return direct;
 }
 
-function buildDiffPreview(diffText?: string): {
-  lines: ParsedDiffLine[];
-  truncated: boolean;
-} {
-  if (!diffText) {
-    return { lines: [], truncated: false };
-  }
-  const parsed = parseDiff(diffText);
-  if (parsed.length <= FILE_CHANGE_DIFF_PREVIEW_MAX_LINES) {
-    return { lines: parsed, truncated: false };
-  }
-  return {
-    lines: parsed.slice(0, FILE_CHANGE_DIFF_PREVIEW_MAX_LINES),
-    truncated: true,
-  };
-}
-
 function toDisplayChanges(
   changes: Array<{ path: string; kind?: string; diff?: string }>,
   candidateArgs: Record<string, unknown>[],
   outputStats: DiffStats,
   outputDiffText: string,
-  includePreview: boolean,
 ): DisplayChange[] {
   return changes.map((change) => {
     const normalizedKind = normalizeChangeKind(change.kind);
@@ -929,9 +925,6 @@ function toDisplayChanges(
       candidateArgs,
       outputDiffText,
     );
-    const preview = includePreview
-      ? buildDiffPreview(diffText)
-      : { lines: [], truncated: false };
     return {
       path: change.path,
       normalizedKind,
@@ -944,38 +937,52 @@ function toDisplayChanges(
         diffText,
       ),
       diffText,
-      diffPreviewLines: preview.lines,
-      diffPreviewTruncated: preview.truncated,
     };
   });
-}
-
-function collectChangeStats(changes: DisplayChange[]) {
-  let additions = 0;
-  let deletions = 0;
-  let added = 0;
-  let modified = 0;
-  let deleted = 0;
-  let renamed = 0;
-
-  for (const change of changes) {
-    const kind = change.normalizedKind;
-    if (kind === 'added') added += 1;
-    if (kind === 'modified') modified += 1;
-    if (kind === 'deleted') deleted += 1;
-    if (kind === 'renamed') renamed += 1;
-    additions += change.diffStats.additions;
-    deletions += change.diffStats.deletions;
-  }
-  return { additions, deletions, added, modified, deleted, renamed };
 }
 
 function getChangeEntryKey(path: string, index: number): string {
   return `${path}::${index}`;
 }
 
-function formatFileCountLabel(count: number): string {
-  return count === 1 ? '1 file' : `${count} files`;
+/**
+ * 将 codicon 类名映射为灰色 lucide 描边图标（marker 风格前置图标）
+ */
+function resolveToolMarkerIcon(codiconClass: string) {
+  switch (codiconClass) {
+    case 'codicon-eye':
+      return <FileText />;
+    case 'codicon-edit':
+      return <FilePen />;
+    case 'codicon-pencil':
+      return <FilePlus />;
+    case 'codicon-terminal':
+      return <Terminal />;
+    case 'codicon-search':
+      return <Search />;
+    case 'codicon-folder':
+      return <FolderSearch />;
+    case 'codicon-globe':
+      return <Globe />;
+    case 'codicon-diff':
+      return <FileDiff />;
+    case 'codicon-checklist':
+      return <ListChecks />;
+    case 'codicon-zap':
+      return <Zap />;
+    case 'codicon-notebook':
+      return <NotebookPen />;
+    case 'codicon-database':
+      return <Database />;
+    case 'codicon-comment-discussion':
+      return <MessagesSquare />;
+    case 'codicon-check-all':
+      return <CheckCheck />;
+    case 'codicon-trash':
+      return <Trash2 />;
+    default:
+      return <Wrench />;
+  }
 }
 
 export const GenericToolBlock = memo(function GenericToolBlock({
@@ -1055,9 +1062,6 @@ export const GenericToolBlock = memo(function GenericToolBlock({
 
   const isCollapsible = isCollapsibleTool(toolName, item.title);
   const [internalExpanded, setInternalExpanded] = useState(false);
-  const [expandedCollapsedChangeRows, setExpandedCollapsedChangeRows] = useState<
-    Record<string, boolean>
-  >({});
   const [copiedOutput, setCopiedOutput] = useState(false);
   const [copiedPlanMarkdown, setCopiedPlanMarkdown] = useState(false);
   const [toolDetailHydrated, setToolDetailHydrated] = useState(false);
@@ -1093,55 +1097,21 @@ export const GenericToolBlock = memo(function GenericToolBlock({
     () => item.output ?? '',
     [item.output],
   );
-  const totalChangeDiffLength = useMemo(
-    () => (item.changes ?? []).reduce((total, change) => total + (change.diff?.length ?? 0), 0),
-    [item.changes],
-  );
-  const shouldDeferToolChangeDetails =
-    hasChanges &&
-    isExpanded &&
-    !toolDetailHydrated &&
-    ((item.changes?.length ?? 0) >= HEAVY_TOOL_CHANGE_MIN_FILES ||
-      totalChangeDiffLength >= HEAVY_TOOL_CHANGE_DIFF_MIN_CHARS);
   const shouldDeferToolOutput =
     isExpanded &&
     Boolean(item.output) &&
     !hasChanges &&
     !toolDetailHydrated &&
     (item.output?.length ?? 0) >= HEAVY_TOOL_OUTPUT_MIN_CHARS;
-  const hasExpandedCollapsedChangeRow = useMemo(
-    () => Object.values(expandedCollapsedChangeRows).some(Boolean),
-    [expandedCollapsedChangeRows],
-  );
+  // diff 预览由每行 FileChangeRow 展开时懒解析，这里只解析路径与统计（轻量字符串扫描）。
   const displayChanges = useMemo(
     () => toDisplayChanges(
       item.changes ?? [],
       fileChangeCandidateArgs,
       outputStats,
       outputDiffText,
-      (isExpanded && !shouldDeferToolChangeDetails) || hasExpandedCollapsedChangeRow,
     ),
-    [
-      item.changes,
-      fileChangeCandidateArgs,
-      outputStats,
-      outputDiffText,
-      isExpanded,
-      hasExpandedCollapsedChangeRow,
-      shouldDeferToolChangeDetails,
-    ],
-  );
-  const changeStats = useMemo(
-    () => collectChangeStats(displayChanges),
-    [displayChanges],
-  );
-  const collapsedPreviewChange = useMemo(
-    () => (!isExpanded && hasChanges ? displayChanges[0] : undefined),
-    [isExpanded, hasChanges, displayChanges],
-  );
-  const collapsedPreviewMoreCount = useMemo(
-    () => Math.max(0, (item.changes?.length ?? 0) - 1),
-    [item.changes],
+    [item.changes, fileChangeCandidateArgs, outputStats, outputDiffText],
   );
   const filePath = useMemo(() => {
     if (!parsedArgs) return null;
@@ -1193,25 +1163,11 @@ export const GenericToolBlock = memo(function GenericToolBlock({
     activeCollaborationModeId === "code" &&
     activeEngine !== "claude" &&
     !suppressPlanModeHintForClaude;
-  const hasTaskDetails =
-    shouldShowDetails ||
-    (isExpanded && Boolean(item.output) && !hasChanges) ||
-    (isExpanded && hasChanges && Boolean(item.changes)) ||
-    (isExpanded && !shouldShowDetails && !item.output && !hasChanges && Boolean(item.detail)) ||
-    showPlanModeHint ||
-    (isImageViewTool && Boolean(imageViewPreviewSrc));
-  const showCollapsedMultiFileRows =
-    isFileChangeTool && !isExpanded && displayChanges.length > 1;
-  const collapsedContainerClassName = `task-container${
-    hasTaskDetails ? '' : ' task-container-collapsed'
-  }${
-    isFileChangeTool && !isExpanded ? ' tool-change-collapsed-card tool-change-stack-entry' : ''
-  }${
-    isFileChangeTool && isExpanded ? ' tool-change-expanded-card' : ''
-  }`;
-  const collapsedHeaderClassName = `task-header${
-    isFileChangeTool ? ' tool-change-stack-header' : ''
-  }`;
+  const markerStatus =
+    status === 'failed' ? 'failed' : status === 'completed' ? 'completed' : 'processing';
+  const isInteractive = Boolean(
+    isCollapsible || otherParams.length > 0 || item.output || hasChanges,
+  );
 
   const handleClick = () => {
     if (isExitPlanTool) {
@@ -1433,176 +1389,48 @@ export const GenericToolBlock = memo(function GenericToolBlock({
     );
   }
 
-  if (showCollapsedMultiFileRows) {
+  // 文件变更统一渲染为「每文件一行」的共享 FileChangeRow：
+  // 与 EditToolBlock / 分组编辑同源同款，单文件 / 多文件、实时 / 历史处处一致。
+  // diff 由 FileChangeRow 展开时懒解析（折叠态不触发 parseDiff）。
+  if (isFileChangeTool && hasChanges) {
     return (
       <div className="tool-change-stack" role="group" aria-label="File changes">
-        {displayChanges.map((change, index) => (
-          (() => {
-            const changeEntryKey = getChangeEntryKey(change.path, index);
-            const isChangeExpanded = expandedCollapsedChangeRows[changeEntryKey] ?? false;
-            return (
-              <div
-                key={changeEntryKey}
-                className={`task-container tool-change-stack-entry${
-                  isChangeExpanded ? '' : ' task-container-collapsed'
-                }`}
-              >
-            <div
-              className="task-header tool-change-stack-header"
-              onClick={() => {
-                setExpandedCollapsedChangeRows((prev) => ({
-                  ...prev,
-                  [changeEntryKey]: !prev[changeEntryKey],
-                }));
-              }}
-              style={{
-                cursor: 'pointer',
-                borderBottom: isChangeExpanded ? '1px solid var(--border-primary)' : undefined,
-              }}
-            >
-              <div className="task-title-section">
-                <span className="codicon codicon-diff tool-title-icon tool-title-icon-file-change tool-title-icon-file-change-collapsed" />
-                <span className="tool-title-text">{displayName}</span>
-                <span className="tool-change-summary tool-change-summary-single">
-                  <span className="tool-change-summary-count">{formatFileCountLabel(1)}</span>
-                  <span className="diff-stat-add">+{change.diffStats.additions}</span>
-                  <span className="diff-stat-del">-{change.diffStats.deletions}</span>
-                  <span className="tool-change-collapsed-preview" title={change.path}>
-                    <span className={`tool-change-kind-badge ${change.normalizedKind}`}>
-                      {change.kindCode}
-                    </span>
-                    <FileIcon fileName={getFileName(change.path)} size={14} />
-                    <span className="tool-change-collapsed-file-name">
-                      {getFileName(change.path)}
-                    </span>
-                  </span>
-                </span>
-              </div>
-              <div className={`tool-status-indicator ${status === 'failed' ? 'error' : status === 'completed' ? 'completed' : 'pending'}`} />
-            </div>
-                {isChangeExpanded && (
-                  <div className="task-details tool-change-details" style={{ border: 'none' }}>
-                    <div className="task-content-wrapper">
-                      <div className="tool-change-entry">
-                        <div className="tool-change-row">
-                          <span className={`tool-change-kind-badge ${change.normalizedKind}`}>
-                            {change.kindCode}
-                          </span>
-                          <FileIcon fileName={getFileName(change.path)} size={14} />
-                          {onOpenDiffPath ? (
-                            <button
-                              type="button"
-                              className="tool-change-file-name tool-change-file-link"
-                              title={change.path}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                try {
-                                  onOpenDiffPath(change.path);
-                                } catch {
-                                  // Keep conversation interactive even if diff entry routing fails.
-                                }
-                              }}
-                            >
-                              {getFileName(change.path)}
-                            </button>
-                          ) : (
-                            <span className="tool-change-file-name" title={change.path}>
-                              {getFileName(change.path)}
-                            </span>
-                          )}
-                          <span className="tool-change-file-diff-stats">
-                            <span className="diff-stat-add">+{change.diffStats.additions}</span>
-                            <span className="diff-stat-del">-{change.diffStats.deletions}</span>
-                          </span>
-                        </div>
-                        {change.diffPreviewLines.length > 0 && (
-                          <div className="tool-change-inline-diff edit-diff-viewer">
-                            {change.diffPreviewLines.map((line, lineIndex) => {
-                              const lineClass =
-                                line.type === 'del'
-                                  ? 'is-deleted'
-                                  : line.type === 'add'
-                                    ? 'is-added'
-                                    : line.type === 'hunk' || line.type === 'meta'
-                                      ? 'is-hunk'
-                                      : '';
-                              const sign =
-                                line.type === 'del'
-                                  ? '-'
-                                  : line.type === 'add'
-                                    ? '+'
-                                    : line.type === 'hunk'
-                                      ? ''
-                                      : ' ';
-                              const signNode =
-                                line.type === 'hunk' ? (
-                                  <span
-                                    className="codicon codicon-diff tool-change-hunk-icon"
-                                    aria-hidden
-                                  />
-                                ) : (
-                                  sign
-                                );
-                              const content =
-                                line.type === 'hunk'
-                                  ? line.text
-                                      .replace(/^@@\s*/, '')
-                                      .replace(/\s*@@$/, '')
-                                  : line.text;
-                              return (
-                                <div
-                                  key={`${change.path}-${line.type}-${lineIndex}`}
-                                  className={`edit-diff-line ${lineClass}`}
-                                >
-                                  <div className="edit-diff-gutter" />
-                                  <div className={`edit-diff-sign ${lineClass}`}>{signNode}</div>
-                                  <pre className="edit-diff-content">{content}</pre>
-                                </div>
-                              );
-                            })}
-                            {change.diffPreviewTruncated && (
-                              <div className="tool-change-inline-diff-truncated">
-                                Diff truncated…
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })()
-        ))}
+        {displayChanges.map((change, index) => {
+          const diffText = change.diffText;
+          return (
+            <FileChangeRow
+              key={getChangeEntryKey(change.path, index)}
+              filePath={change.path}
+              additions={change.diffStats.additions}
+              deletions={change.diffStats.deletions}
+              status={markerStatus}
+              canExpand={Boolean(diffText)}
+              loadDiff={
+                diffText ? () => unifiedDiffToPreview(diffText) : undefined
+              }
+              onOpenDiffPath={onOpenDiffPath}
+            />
+          );
+        })}
       </div>
     );
   }
 
   return (
-    <div className={collapsedContainerClassName}>
-      <div
-        className={collapsedHeaderClassName}
-        onClick={handleClick}
-        style={{
-          cursor: isCollapsible || otherParams.length > 0 || item.output || hasChanges ? 'pointer' : 'default',
-          borderBottom: isExpanded ? '1px solid var(--border-primary)' : undefined,
-        }}
+    <div>
+      <Marker
+        {...(isInteractive ? { onClick: handleClick } : {})}
+        className={cn(
+          'gap-2 rounded-md px-3 py-1.5 text-sm transition-colors',
+          isInteractive && 'cursor-pointer select-none hover:bg-accent/50',
+        )}
       >
-        <div className="task-title-section">
-          <span
-            className={`codicon ${codiconClass} tool-title-icon${
-              isFileChangeTool ? ' tool-title-icon-file-change' : ''
-            }${
-              isFileChangeTool && !isExpanded
-                ? ' tool-title-icon-file-change-collapsed'
-                : ''
-            }`}
-          />
-          <span className="tool-title-text">{displayName}</span>
+        <MarkerIcon>{resolveToolMarkerIcon(codiconClass)}</MarkerIcon>
+        <span className="shrink-0">{displayName}</span>
+        <MarkerContent className="flex min-w-0 items-center gap-2">
           {summary && (
             <span
-              className="tool-title-summary"
+              className="truncate"
               title={summary}
               style={(isFile || isDirectory) ? { display: 'inline-flex', alignItems: 'center', gap: '4px' } : undefined}
             >
@@ -1612,33 +1440,9 @@ export const GenericToolBlock = memo(function GenericToolBlock({
               {summary}
             </span>
           )}
-          {hasChanges && (
-            <span
-              className="tool-change-summary"
-            >
-              <span className="tool-change-summary-count">
-                {formatFileCountLabel(item.changes?.length ?? 0)}
-              </span>
-              <span className="diff-stat-add">+{changeStats.additions}</span>
-              <span className="diff-stat-del">-{changeStats.deletions}</span>
-              {collapsedPreviewChange && (
-                <span className="tool-change-collapsed-preview" title={collapsedPreviewChange.path}>
-                  <FileIcon fileName={getFileName(collapsedPreviewChange.path)} size={14} />
-                  <span className="tool-change-collapsed-file-name">
-                    {getFileName(collapsedPreviewChange.path)}
-                  </span>
-                  {collapsedPreviewMoreCount > 0 && (
-                    <span className="tool-change-collapsed-more">
-                      +{collapsedPreviewMoreCount} more
-                    </span>
-                  )}
-                </span>
-              )}
-            </span>
-          )}
-        </div>
-        <div className={`tool-status-indicator ${status === 'failed' ? 'error' : status === 'completed' ? 'completed' : 'pending'}`} />
-      </div>
+        </MarkerContent>
+        <ToolStatusIcon status={markerStatus} />
+      </Marker>
 
       {shouldShowDetails && (
         <div className="task-details" style={{ border: 'none' }}>
@@ -1700,104 +1504,6 @@ export const GenericToolBlock = memo(function GenericToolBlock({
               loading="lazy"
               style={{ maxWidth: '100%', maxHeight: '240px', borderRadius: '8px' }}
             />
-          </div>
-        </div>
-      )}
-
-      {isExpanded && hasChanges && item.changes && (
-        <div className="task-details tool-change-details" style={{ border: 'none' }}>
-          <div className="task-content-wrapper">
-            {shouldDeferToolChangeDetails
-              ? renderToolDetailPlaceholder(
-                t("messages.toolHeavyDiff"),
-                item.changes.length,
-              )
-              : null}
-            {displayChanges.map((change, index) => (
-              <div key={`${change.path}-${index}`} className="tool-change-entry">
-                <div className="tool-change-row">
-                  <span className={`tool-change-kind-badge ${change.normalizedKind}`}>
-                    {change.kindCode}
-                  </span>
-                  <FileIcon fileName={getFileName(change.path)} size={14} />
-                  {onOpenDiffPath ? (
-                    <button
-                      type="button"
-                      className="tool-change-file-name tool-change-file-link"
-                      title={change.path}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        try {
-                          onOpenDiffPath(change.path);
-                        } catch {
-                          // Keep conversation interactive even if diff entry routing fails.
-                        }
-                      }}
-                    >
-                      {getFileName(change.path)}
-                    </button>
-                  ) : (
-                    <span className="tool-change-file-name" title={change.path}>
-                      {getFileName(change.path)}
-                    </span>
-                  )}
-                  <span className="tool-change-file-diff-stats">
-                    <span className="diff-stat-add">+{change.diffStats.additions}</span>
-                    <span className="diff-stat-del">-{change.diffStats.deletions}</span>
-                  </span>
-                </div>
-                {change.diffPreviewLines.length > 0 && (
-                  <div className="tool-change-inline-diff edit-diff-viewer">
-                    {change.diffPreviewLines.map((line, lineIndex) => {
-                      const lineClass =
-                        line.type === 'del'
-                          ? 'is-deleted'
-                          : line.type === 'add'
-                            ? 'is-added'
-                            : line.type === 'hunk' || line.type === 'meta'
-                              ? 'is-hunk'
-                              : '';
-                      const sign =
-                        line.type === 'del'
-                          ? '-'
-                          : line.type === 'add'
-                            ? '+'
-                            : line.type === 'hunk'
-                              ? ''
-                              : ' ';
-                      const signNode =
-                        line.type === 'hunk' ? (
-                          <span
-                            className="codicon codicon-diff tool-change-hunk-icon"
-                            aria-hidden
-                          />
-                        ) : (
-                          sign
-                        );
-                      const content =
-                        line.type === 'hunk'
-                          ? line.text
-                              .replace(/^@@\s*/, '')
-                              .replace(/\s*@@$/, '')
-                          : line.text;
-                      return (
-                        <div
-                          key={`${change.path}-${line.type}-${lineIndex}`}
-                          className={`edit-diff-line ${lineClass}`}
-                        >
-                          <div className="edit-diff-gutter" />
-                          <div className={`edit-diff-sign ${lineClass}`}>{signNode}</div>
-                          <pre className="edit-diff-content">{content}</pre>
-                        </div>
-                      );
-                    })}
-                    {change.diffPreviewTruncated && (
-                      <div className="tool-change-inline-diff-truncated">Diff truncated…</div>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))}
           </div>
         </div>
       )}

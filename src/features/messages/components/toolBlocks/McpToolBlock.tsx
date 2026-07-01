@@ -1,9 +1,14 @@
 /**
  * MCP 工具块组件 - 用于展示 MCP (Model Context Protocol) 工具调用
  * MCP Tool Block Component - for displaying MCP tool calls
- * 使用 task-container 样式 + codicon 图标（匹配参考项目）
+ * 统一 Marker 风格折叠行：灰色描边图标 + 工具名 + 摘要 + 靠右状态图标
  */
 import { memo, useMemo, useState } from 'react';
+import SearchIcon from 'lucide-react/dist/esm/icons/search';
+import Database from 'lucide-react/dist/esm/icons/database';
+import Globe from 'lucide-react/dist/esm/icons/globe';
+import FileText from 'lucide-react/dist/esm/icons/file-text';
+import Wrench from 'lucide-react/dist/esm/icons/wrench';
 import type { ConversationItem } from '../../../../types';
 import {
   parseToolArgs,
@@ -11,6 +16,7 @@ import {
   truncateText,
   resolveToolStatus,
 } from './toolConstants';
+import { TOOL_MARKER_BODY_CLASS, ToolMarkerShell, ToolStatusIcon } from './ToolMarkerShell';
 
 interface McpToolBlockProps {
   item: Extract<ConversationItem, { kind: 'tool' }>;
@@ -36,25 +42,25 @@ function formatMcpToolName(title: string): string {
 }
 
 /**
- * 根据 MCP 工具名称获取 codicon 类名
+ * 根据 MCP 工具名称获取 lucide 描边图标
  */
-function getMcpCodicon(title: string): string {
+function getMcpIcon(title: string) {
   const lower = title.toLowerCase();
 
   if (lower.includes('search') || lower.includes('context') || lower.includes('query')) {
-    return 'codicon-search';
+    return <SearchIcon />;
   }
   if (lower.includes('database') || lower.includes('sql') || lower.includes('db')) {
-    return 'codicon-database';
+    return <Database />;
   }
   if (lower.includes('web') || lower.includes('fetch') || lower.includes('http')) {
-    return 'codicon-globe';
+    return <Globe />;
   }
   if (lower.includes('read') || lower.includes('file') || lower.includes('doc')) {
-    return 'codicon-eye';
+    return <FileText />;
   }
 
-  return 'codicon-tools';
+  return <Wrench />;
 }
 
 /**
@@ -73,10 +79,7 @@ export const McpToolBlock = memo(function McpToolBlock({
   const args = useMemo(() => parseToolArgs(item.detail), [item.detail]);
 
   const displayName = formatMcpToolName(item.title);
-  const codiconClass = getMcpCodicon(item.title);
   const status = getStatus(item);
-  const isError = status === 'failed';
-  const isCompleted = status === 'completed';
 
   const summary = getFirstStringField(args, ['query', 'pattern', 'path', 'file_path', 'text', 'prompt']);
   const displaySummary = truncateText(summary, 50);
@@ -90,32 +93,17 @@ export const McpToolBlock = memo(function McpToolBlock({
     );
   }, [args, omitFields]);
 
-  const hasDetails = otherParams.length > 0 || item.output;
+  const hasDetails = otherParams.length > 0 || Boolean(item.output);
 
   return (
-    <div className="task-container">
-      <div
-        className="task-header"
-        onClick={() => setExpanded(prev => !prev)}
-        style={{
-          cursor: 'pointer',
-          borderBottom: expanded && hasDetails ? '1px solid var(--border-primary)' : undefined,
-        }}
-      >
-        <div className="task-title-section">
-          <span className={`codicon ${codiconClass} tool-title-icon`} />
-          <span className="tool-title-text">{displayName}</span>
-          {displaySummary && (
-            <span className="tool-title-summary" title={summary}>
-              {displaySummary}
-            </span>
-          )}
-        </div>
-        <div className={`tool-status-indicator ${isError ? 'error' : isCompleted ? 'completed' : 'pending'}`} />
-      </div>
-
-      {expanded && hasDetails && (
-        <div className="task-details" style={{ border: 'none' }}>
+    <ToolMarkerShell
+      icon={getMcpIcon(item.title)}
+      label={displayName}
+      expanded={expanded && hasDetails}
+      onToggle={() => setExpanded(prev => !prev)}
+      trailing={<ToolStatusIcon status={status} />}
+      body={
+        <div className={TOOL_MARKER_BODY_CLASS}>
           {otherParams.length > 0 && (
             <div className="task-content-wrapper">
               {otherParams.map(([key, value]) => (
@@ -137,8 +125,14 @@ export const McpToolBlock = memo(function McpToolBlock({
             </div>
           )}
         </div>
+      }
+    >
+      {displaySummary && (
+        <span className="truncate" title={summary}>
+          {displaySummary}
+        </span>
       )}
-    </div>
+    </ToolMarkerShell>
   );
 });
 

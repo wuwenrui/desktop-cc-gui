@@ -2626,12 +2626,9 @@ const enPart2 = {
   // Chat input box
   chat: {
     sendMessage: "Send message to {{provider}}",
-    inputPlaceholder:
-      "@reference files, @@reference memories, $select skills, #invoke agents, !insert prompts, ⌘/Ctrl+/ enhance prompt, Enter to send",
-    inputPlaceholderEnter:
-      "@reference files, @@reference memories, $select skills, #invoke agents, !insert prompts, ⌘/Ctrl+/ enhance prompt, Enter to send",
-    inputPlaceholderCmdEnter:
-      "@reference files, @@reference memories, $select skills, #invoke agents, !insert prompts, ⌘/Ctrl+/ enhance prompt, ⌘/Ctrl+Enter to send",
+    inputPlaceholder: "Message, or @ files · $ skills · # agents",
+    inputPlaceholderEnter: "Message, or @ files · $ skills · # agents",
+    inputPlaceholderCmdEnter: "Message, or @ files · $ skills · # agents",
     shortcutActionsAriaLabel: "Quick input actions",
     shortcutActionsEntry: "Shortcuts",
     toolDockToggle: "Expand or collapse input tools",
@@ -2689,6 +2686,9 @@ const enPart2 = {
     claudeContextTooltipTitle: "Claude background info window:",
     claudeContextTooltipTotalLabel: "New turn usage",
     claudeContextTooltipWindowTokensLabel: "Window tokens",
+    claudeContextInputLabel: "Input",
+    claudeContextOutputLabel: "Output",
+    claudeContextCacheLabel: "Cache",
     claudeContextInputDetail: "input {{tokens}}",
     claudeContextCachedDetail: "cached {{tokens}}",
     claudeContextCachedExcludedDetail:

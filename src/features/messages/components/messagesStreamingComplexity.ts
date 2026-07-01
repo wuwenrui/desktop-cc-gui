@@ -118,6 +118,24 @@ export function analyzeStreamingMarkdownComplexity(
   };
 }
 
+/**
+ * 判定某引擎的流式 assistant 消息是否启用 staged 轻量 markdown 渲染。
+ *
+ * 历史上仅 codex 走该路径(useCodexStagedMarkdownThrottle);Claude 作为主引擎却
+ * 恒走 full react-markdown 全量重解析,是 Issue #721 对话页 6FPS 的主因。此处把
+ * codex 已在生产验证的轻量流式路径同样启用给 claude;opencode 与其它引擎保持不变,
+ * 除非 presentationProfile 显式开启。
+ */
+export function shouldUseStagedStreamingMarkdown(
+  activeEngine: MessagesEngine,
+  presentationProfile: PresentationProfile | null | undefined,
+): boolean {
+  if (presentationProfile?.useCodexStagedMarkdownThrottle === true) {
+    return true;
+  }
+  return activeEngine === "codex" || activeEngine === "claude";
+}
+
 export function resolveAssistantMessageStreamingThrottleMs(
   item: Extract<ConversationItem, { kind: "message" }>,
   isStreaming: boolean,
@@ -135,8 +153,10 @@ export function resolveAssistantMessageStreamingThrottleMs(
   const baselineThrottleMs =
     presentationProfile?.assistantMarkdownStreamingThrottleMs ??
     LIVE_ASSISTANT_MARKDOWN_THROTTLE_MS;
-  const useStagedMarkdownThrottle =
-    presentationProfile?.useCodexStagedMarkdownThrottle ?? activeEngine === "codex";
+  const useStagedMarkdownThrottle = shouldUseStagedStreamingMarkdown(
+    activeEngine,
+    presentationProfile,
+  );
   if (item.role !== "assistant" || !useStagedMarkdownThrottle) {
     return baselineThrottleMs;
   }

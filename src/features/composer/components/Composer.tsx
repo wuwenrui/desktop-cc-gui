@@ -51,6 +51,7 @@ import {
   type ClaudeRewindPreviewState,
 } from "./ClaudeRewindConfirmDialog";
 import { ReviewInlinePrompt } from "./ReviewInlinePrompt";
+import { ComposerBranchBadge, type ComposerBranchControl } from "./ComposerBranchBadge";
 import type {
   ClaudeContextUsageViewModel,
   CodexCompactionSource,
@@ -331,6 +332,7 @@ type ComposerProps = {
   activeWorkspaceId?: string | null;
   activeWorkspaceName?: string | null;
   activeWorkspacePath?: string | null;
+  branchControl?: ComposerBranchControl | null;
   rewindWorkspaceGitState?: {
     isGitRepository: boolean;
     hasDetectedChanges: boolean;
@@ -596,6 +598,7 @@ function ComposerImpl({
   activeWorkspaceId = null,
   activeWorkspaceName = null,
   activeWorkspacePath = null,
+  branchControl = null,
   rewindWorkspaceGitState = null,
   activeThreadId = null,
   threadItemsByThread,
@@ -2540,6 +2543,11 @@ function ComposerImpl({
               completionEmailDisabled={completionEmailDisabled}
               onToggleCompletionEmail={onToggleCompletionEmail}
             />
+            {branchControl?.branchName ? (
+              <div className="composer-branch-row">
+                <ComposerBranchBadge {...branchControl} />
+              </div>
+            ) : null}
           </>
         )}
       </div>

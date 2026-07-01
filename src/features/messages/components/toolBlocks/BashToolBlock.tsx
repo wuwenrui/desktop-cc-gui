@@ -1,10 +1,11 @@
 /**
  * 终端命令工具块组件
  * Bash Tool Block Component - for displaying terminal command executions
- * 使用 task-container 样式 + codicon 图标（匹配参考项目）
+ * 统一 Marker 风格折叠行：灰色描边图标 + 命令 + 靠右状态图标
  */
 import { memo, useMemo, useEffect, useRef, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import Terminal from 'lucide-react/dist/esm/icons/terminal';
 import type { ConversationItem } from '../../../../types';
 import { highlightLine } from '../../../../utils/syntax';
 import {
@@ -12,6 +13,7 @@ import {
   truncateText,
   resolveToolStatus,
 } from './toolConstants';
+import { ToolMarkerShell, ToolStatusIcon } from './ToolMarkerShell';
 
 interface BashToolBlockProps {
   item: Extract<ConversationItem, { kind: 'tool' }>;
@@ -116,34 +118,20 @@ export const BashToolBlock = memo(function BashToolBlock({
   }, [isRunning, showLiveOutput, onRequestAutoScroll]);
 
   const isError = status === 'failed';
-  const isCompleted = status === 'completed';
   const showOutput = isExpanded || (isRunning && showLiveOutput) || isLongRunning || isError;
   const isErrorLine = (line: string) => /(?:\berror\b|\bfailed\b|\bexception\b)/i.test(line);
   const isTableLikeLine = (line: string) => /^\s*\|.*\|\s*$/.test(line);
 
   return (
-    <div className="task-container">
-      <div
-        className="task-header"
-        onClick={() => onToggle(item.id)}
-        style={{
-          borderBottom: showOutput ? '1px solid var(--border-primary)' : undefined,
-        }}
-      >
-        <div className="task-title-section">
-          <span className="codicon codicon-terminal tool-title-icon" />
-          <span className="tool-title-text">{t("tools.runCommand")}</span>
-          {displayCommand ? (
-            <span className="tool-title-summary" title={command} style={{ fontFamily: 'var(--font-mono, monospace)', opacity: 0.8 }}>
-              {displayCommand}
-            </span>
-          ) : null}
-        </div>
-        <div className={`tool-status-indicator ${isError ? 'error' : isCompleted ? 'completed' : 'pending'}`} />
-      </div>
-
-      {showOutput && (
-        <div className="task-details" style={{ padding: 0, border: 'none' }}>
+    <ToolMarkerShell
+      icon={<Terminal />}
+      label={t("tools.runCommand")}
+      labelHidden
+      expanded={showOutput}
+      onToggle={() => onToggle(item.id)}
+      trailing={<ToolStatusIcon status={status} />}
+      body={
+        <div className="mt-1 overflow-hidden rounded-md">
           {isExpanded && command && (
             <div className="bash-command-shell">
               <div className="bash-command-shell-head">
@@ -218,8 +206,14 @@ export const BashToolBlock = memo(function BashToolBlock({
             </div>
           )}
         </div>
+      }
+    >
+      {displayCommand && (
+        <span className="truncate font-mono" title={command}>
+          {displayCommand}
+        </span>
       )}
-    </div>
+    </ToolMarkerShell>
   );
 });
 

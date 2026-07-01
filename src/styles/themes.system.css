@@ -1,16 +1,16 @@
 @media (prefers-color-scheme: light) {
   :root:not([data-theme]) {
     color-scheme: light;
-    --text-primary: #1a1d24;
+    --text-primary: #18181b;
     --text-strong: #0e1118;
-    --text-emphasis: rgba(17, 20, 28, 0.9);
-    --text-stronger: rgba(17, 20, 28, 0.85);
-    --text-quiet: rgba(17, 20, 28, 0.75);
-    --text-muted: rgba(17, 20, 28, 0.7);
-    --text-subtle: rgba(17, 20, 28, 0.6);
-    --text-faint: rgba(17, 20, 28, 0.5);
-    --text-fainter: rgba(17, 20, 28, 0.45);
-    --text-dim: rgba(17, 20, 28, 0.35);
+    --text-emphasis: rgba(24, 24, 27, 0.9);
+    --text-stronger: rgba(24, 24, 27, 0.85);
+    --text-quiet: rgba(24, 24, 27, 0.75);
+    --text-muted: rgba(24, 24, 27, 0.7);
+    --text-subtle: rgba(24, 24, 27, 0.6);
+    --text-faint: rgba(24, 24, 27, 0.5);
+    --text-fainter: rgba(24, 24, 27, 0.45);
+    --text-dim: rgba(24, 24, 27, 0.35);
     --surface-sidebar: rgba(255, 255, 255, 0.82);
     --surface-sidebar-opaque: rgb(255, 255, 255);
     --surface-topbar: rgba(255, 255, 255, 0.9);
@@ -21,10 +21,10 @@
     --surface-card-strong: rgba(255, 255, 255, 0.92);
     --surface-card-muted: rgba(255, 255, 255, 0.7);
     --surface-item: rgba(255, 255, 255, 0.6);
-    --surface-control: rgba(15, 23, 36, 0.08);
-    --surface-control-hover: rgba(15, 23, 36, 0.12);
-    --surface-control-disabled: rgba(15, 23, 36, 0.05);
-    --surface-hover: rgba(15, 23, 36, 0.06);
+    --surface-control: rgba(24, 24, 27, 0.08);
+    --surface-control-hover: rgba(24, 24, 27, 0.12);
+    --surface-control-disabled: rgba(24, 24, 27, 0.05);
+    --surface-hover: rgba(24, 24, 27, 0.06);
     --surface-active: rgba(77, 153, 255, 0.18);
     --surface-approval: rgba(255, 255, 255, 0.92);
     --surface-debug: rgba(255, 255, 255, 0.9);
@@ -36,8 +36,8 @@
     --color-message-user-text: #ffffff;
     --surface-context-core: rgba(255, 255, 255, 0.9);
     --surface-popover: rgba(255, 255, 255, 0.99);
-    --desktop-shell-background: #eeeff3;
-    --desktop-sidebar-background: #eceef2;
+    --desktop-shell-background: #f4f4f5;
+    --desktop-sidebar-background: #ededf0;
     --desktop-main-background: #ffffff;
     --desktop-main-radius: 16px;
     --desktop-main-shadow: none;
@@ -47,11 +47,11 @@
     --text-review-active: rgba(120, 30, 70, 0.9);
     --surface-review-done: rgba(140, 235, 200, 0.35);
     --text-review-done: rgba(20, 90, 60, 0.9);
-    --border-subtle: rgba(15, 23, 36, 0.08);
-    --border-muted: rgba(15, 23, 36, 0.06);
-    --border-strong: rgba(15, 23, 36, 0.14);
-    --border-stronger: rgba(15, 23, 36, 0.18);
-    --border-quiet: rgba(15, 23, 36, 0.2);
+    --border-subtle: rgba(24, 24, 27, 0.08);
+    --border-muted: rgba(24, 24, 27, 0.06);
+    --border-strong: rgba(24, 24, 27, 0.14);
+    --border-stronger: rgba(24, 24, 27, 0.18);
+    --border-quiet: rgba(24, 24, 27, 0.2);
     --border-accent: rgba(77, 153, 255, 0.5);
     --border-accent-soft: rgba(77, 153, 255, 0.28);
     --text-accent: rgba(45, 93, 170, 0.7);
@@ -62,19 +62,45 @@
     --status-success: rgba(30, 155, 110, 0.9);
     --status-warning: rgba(215, 120, 20, 0.9);
     --status-error: rgba(200, 45, 45, 0.9);
-    --status-unknown: rgba(17, 20, 28, 0.25);
-    --select-caret: rgba(15, 23, 36, 0.45);
+    --status-unknown: rgba(24, 24, 27, 0.25);
+    --select-caret: rgba(24, 24, 27, 0.45);
 
     --color-thinking-border: #d0d0d0;
     --color-thinking-text: #666666;
 
-    /* @coss/ui standard theme variables (bridge) */
-    --background: #ffffff;
+    /* shadcn default theme tokens (zinc) — light (system).
+       Full bridge set so system-light no longer inherits the dark
+       :root{} bridge values for everything except --background. */
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.141 0.005 285.823);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.141 0.005 285.823);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.141 0.005 285.823);
+    --primary: oklch(0.21 0.006 285.885);
+    --primary-foreground: oklch(0.985 0 0);
+    --secondary: oklch(0.967 0.001 286.375);
+    --secondary-foreground: oklch(0.21 0.006 285.885);
+    --muted: oklch(0.967 0.001 286.375);
+    --muted-foreground: oklch(0.552 0.016 285.938);
+    --accent: oklch(0.967 0.001 286.375);
+    --accent-foreground: oklch(0.21 0.006 285.885);
+    --destructive: oklch(0.577 0.245 27.325);
+    --destructive-foreground: oklch(0.985 0 0);
+    --border: oklch(0.92 0.004 286.32);
+    --input: oklch(0.92 0.004 286.32);
+    --ring: oklch(0.705 0.015 286.067);
+    --radius: 0.625rem;
+    --sidebar-background: oklch(0.985 0 0);
+    --sidebar-foreground: oklch(0.141 0.005 285.823);
+    --sidebar-border: oklch(0.92 0.004 286.32);
+    --sidebar-accent: oklch(0.967 0.001 286.375);
+    --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
 
     /* 滚动条颜色 - Scrollbar colors (浅色系统模式) */
     --scrollbar-track: transparent;
-    --scrollbar-thumb: rgba(15, 23, 36, 0.18);
-    --scrollbar-thumb-hover: rgba(15, 23, 36, 0.32);
+    --scrollbar-thumb: rgba(24, 24, 27, 0.18);
+    --scrollbar-thumb-hover: rgba(24, 24, 27, 0.32);
   }
 
   :root:not([data-theme]) .app.reduced-transparency {
@@ -88,10 +114,10 @@
     --surface-card-strong: rgba(255, 255, 255, 0.98);
     --surface-card-muted: rgba(252, 253, 255, 0.96);
     --surface-item: rgba(250, 251, 253, 0.96);
-    --surface-control: rgba(15, 23, 36, 0.12);
-    --surface-control-hover: rgba(15, 23, 36, 0.18);
-    --surface-control-disabled: rgba(15, 23, 36, 0.08);
-    --surface-hover: rgba(15, 23, 36, 0.1);
+    --surface-control: rgba(24, 24, 27, 0.12);
+    --surface-control-hover: rgba(24, 24, 27, 0.18);
+    --surface-control-disabled: rgba(24, 24, 27, 0.08);
+    --surface-hover: rgba(24, 24, 27, 0.1);
     --surface-active: rgba(77, 153, 255, 0.22);
     --surface-approval: rgba(255, 255, 255, 0.98);
     --surface-debug: rgba(255, 255, 255, 0.98);
@@ -131,30 +157,30 @@
 
   /* Kanban - softer borders in system light mode */
   :root:not([data-theme]) .kanban-column {
-    border-right-color: rgba(15, 23, 36, 0.08);
+    border-right-color: rgba(24, 24, 27, 0.08);
   }
 
   :root:not([data-theme]) .kanban-column-header {
-    border-bottom-color: rgba(15, 23, 36, 0.08);
+    border-bottom-color: rgba(24, 24, 27, 0.08);
   }
 
   :root:not([data-theme]) .kanban-card {
-    border-bottom-color: rgba(15, 23, 36, 0.06);
+    border-bottom-color: rgba(24, 24, 27, 0.06);
   }
 
   :root:not([data-theme]) .kanban-board-header {
-    border-bottom-color: rgba(15, 23, 36, 0.08);
+    border-bottom-color: rgba(24, 24, 27, 0.08);
   }
 
   :root:not([data-theme]) .kanban-search-box {
-    border-color: rgba(15, 23, 36, 0.1);
+    border-color: rgba(24, 24, 27, 0.1);
   }
 
   /* Native select/option light mode override (Windows WebView2) */
   :root:not([data-theme]) select,
   :root:not([data-theme]) select option {
     background-color: #ffffff;
-    color: #1a1d24;
+    color: #18181b;
   }
 }
 

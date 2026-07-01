@@ -38,6 +38,7 @@ import {
   hashStableString,
 } from "../utils/fileMarkdownDocument";
 import { highlightLine } from "../../../utils/syntax";
+import { CodeBlockLanguageBadge } from "../../messages/components/codeBlockLanguageIcon";
 import {
   isThemeMutationAttribute,
   mapAppearanceToMermaidTheme,
@@ -671,9 +672,12 @@ function FileMarkdownCodeBlock({
 
   return (
     <div className="fvp-file-markdown-codeblock">
-      {languageTag ? (
-        <div className="fvp-file-markdown-codeblock-label">{languageTag}</div>
-      ) : null}
+      <div className="fvp-file-markdown-codeblock-label">
+        <CodeBlockLanguageBadge
+          languageTag={languageTag}
+          label={languageTag ?? "Code"}
+        />
+      </div>
       <pre>
         <code
           className={className}

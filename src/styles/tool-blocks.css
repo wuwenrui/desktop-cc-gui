@@ -8,12 +8,22 @@
 .tool-change-summary {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  margin-left: 8px;
+  gap: 8px;
+  margin-left: 0;
   color: var(--text-faint);
   font-size: var(--message-meta-font-size);
-  flex-shrink: 1;
+  flex: 1 1 auto;
   min-width: 0;
+}
+
+/* 文件名作主文本：正常前景、可截断；统计信息收进 meta 弱化靠右 */
+.tool-change-summary-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-left: auto;
+  color: var(--text-faint);
 }
 
 .tool-change-summary-multi {
@@ -43,8 +53,8 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  margin-left: 6px;
   min-width: 0;
+  flex: 0 1 auto;
   max-width: min(42vw, 360px);
   color: var(--text-secondary);
 }
@@ -142,8 +152,15 @@
 
 .tool-change-collapsed-card .tool-change-collapsed-preview,
 .tool-change-stack .tool-change-collapsed-preview {
-  margin-left: 2px;
+  margin-left: 0;
   max-width: min(42vw, 320px);
+}
+
+/* 折叠头里的 diff 计数：保留绿/红语义色，但去掉等宽块感与加粗，贴合极简风 */
+.tool-change-summary-meta .diff-stat-add,
+.tool-change-summary-meta .diff-stat-del {
+  min-width: 0;
+  font-weight: 400;
 }
 
 .tool-change-collapsed-card .tool-change-kind-badge,
@@ -1877,7 +1894,7 @@
 .edit-group-file-link {
   display: inline-flex;
   align-items: center;
-  color: var(--text-primary);
+  color: var(--muted-foreground);
   font-size: 12px;
   padding: 0;
   margin: 0;

@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
+import Check from "lucide-react/dist/esm/icons/check";
+import Code from "lucide-react/dist/esm/icons/code";
+import Copy from "lucide-react/dist/esm/icons/copy";
+import FileCode from "lucide-react/dist/esm/icons/file-code";
+import Eye from "lucide-react/dist/esm/icons/eye";
 import Maximize2 from "lucide-react/dist/esm/icons/maximize-2";
 import {
   isThemeMutationAttribute,
@@ -10,6 +15,7 @@ import {
   MermaidFullscreenViewer,
   preloadViewerjs,
 } from "../../markdown/mermaidFullscreen";
+import { CodeBlockLanguageBadge } from "./codeBlockLanguageIcon";
 
 type MermaidBlockProps = {
   value: string;
@@ -155,43 +161,65 @@ export default function MermaidBlock({
   return (
     <div className="markdown-codeblock markdown-mermaidblock">
       <div className="markdown-codeblock-header">
-        <span className="markdown-codeblock-language">Mermaid</span>
+        <CodeBlockLanguageBadge languageTag="mermaid" label="Mermaid" />
         <div className="markdown-mermaidblock-actions">
           <button
             type="button"
-            className="ghost markdown-codeblock-copy"
+            className="ghost markdown-codeblock-copy markdown-mermaidblock-action"
             onClick={handleToggleSource}
+            aria-label={
+              showSource
+                ? t("messages.previewMermaidDiagram")
+                : t("messages.showMermaidSource")
+            }
+            title={
+              showSource
+                ? t("messages.previewMermaidDiagram")
+                : t("messages.showMermaidSource")
+            }
           >
-            {showSource ? "Preview" : "Source"}
+            {showSource ? (
+              <Eye className="markdown-codeblock-copy-icon" aria-hidden="true" />
+            ) : (
+              <Code className="markdown-codeblock-copy-icon" aria-hidden="true" />
+            )}
           </button>
           <button
             type="button"
-            className={`ghost markdown-codeblock-copy${copiedMode === "plain" ? " is-copied" : ""}`}
+            className={`ghost markdown-codeblock-copy markdown-mermaidblock-action${copiedMode === "plain" ? " is-copied" : ""}`}
             onClick={handleCopy}
             aria-label={t("messages.copyCodeBlock")}
             title={copiedMode === "plain" ? t("messages.copied") : t("messages.copy")}
           >
-            {copiedMode === "plain" ? t("messages.copied") : t("messages.copy")}
+            {copiedMode === "plain" ? (
+              <Check className="markdown-codeblock-copy-icon" aria-hidden="true" />
+            ) : (
+              <Copy className="markdown-codeblock-copy-icon" aria-hidden="true" />
+            )}
           </button>
           <button
             type="button"
-            className={`ghost markdown-codeblock-copy${copiedMode === "fenced" ? " is-copied" : ""}`}
+            className={`ghost markdown-codeblock-copy markdown-mermaidblock-action${copiedMode === "fenced" ? " is-copied" : ""}`}
             onClick={handleCopyFenced}
             aria-label={t("messages.copyCodeBlockWithFence")}
             title={copiedMode === "fenced" ? t("messages.copied") : t("messages.copyWithFence")}
           >
-            {copiedMode === "fenced" ? t("messages.copied") : t("messages.copyWithFence")}
+            {copiedMode === "fenced" ? (
+              <Check className="markdown-codeblock-copy-icon" aria-hidden="true" />
+            ) : (
+              <FileCode className="markdown-codeblock-copy-icon" aria-hidden="true" />
+            )}
           </button>
           <button
             type="button"
-            className="ghost markdown-codeblock-copy"
+            className="ghost markdown-codeblock-copy markdown-mermaidblock-action"
             onClick={() => setIsFullscreenOpen(true)}
             disabled={renderState.status !== "success"}
             aria-label={t("common.markdownMermaidFullscreenHint")}
             title={t("common.markdownMermaidFullscreen")}
             data-testid="mermaid-fullscreen-button"
           >
-            <Maximize2 size={14} aria-hidden />
+            <Maximize2 className="markdown-codeblock-copy-icon" aria-hidden="true" />
           </button>
         </div>
       </div>

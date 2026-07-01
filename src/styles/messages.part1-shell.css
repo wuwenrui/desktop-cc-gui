@@ -125,7 +125,6 @@
 
 .messages {
   overflow-y: auto;
-  overflow-x: clip;
   -webkit-app-region: no-drag;
   flex: 1;
   min-height: 0;
@@ -135,32 +134,35 @@
 }
 
 .messages-full {
-  box-sizing: border-box;
   padding: 12px 0 16px;
   position: relative;
-  max-width: min(750px, 100%);
+  max-width: 750px;
   margin-left: auto;
   margin-right: auto;
   width: 100%;
-  min-width: 0;
   min-height: 100%;
-}
-
-.messages-virtualized-canvas {
-  width: 100%;
-  min-width: 0;
-  max-width: 100%;
 }
 
 .messages-virtualized-row {
   contain: layout paint style;
+  box-sizing: border-box;
   min-width: 0;
-  max-width: 100%;
+  overflow: visible;
 }
 
 .messages-virtualized-row.is-active-live-row {
   contain: layout paint;
   isolation: isolate;
+}
+
+/* 判定为空的虚拟行：彻底塌缩，禁止内层 margin 穿透撑出异常间距。 */
+.messages-virtualized-row.is-empty-virtual-row {
+  height: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  pointer-events: none;
 }
 
 .messages-lightweight-mode-banner {
@@ -320,8 +322,8 @@
 }
 
 .app.canvas-width-wide .messages {
-  padding-left: 38px;
-  padding-right: 38px;
+  padding-left: 50px;
+  padding-right: 25px;
 }
 
 .messages-collapsed-indicator {
@@ -340,112 +342,51 @@
   text-decoration: underline;
 }
 
+/**
+ * Turn boundary 分隔条 —— shadcn Marker 的 separator 形态。
+ * 两侧线条由 Marker variant="separator" 的 before/after 提供（纯色 flex-1，
+ * 中间也清晰）；此处只补间距、字号与 muted 文字，无图标、无彩色。
+ */
 .messages-turn-boundary {
-  position: relative;
-  width: 100%;
-  margin: 14px 0 10px;
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: center;
+  margin: 25px 0;
   gap: 8px;
-  text-align: center;
-  color: var(--text-strong);
-  color: color-mix(in srgb, var(--text-strong) 84%, var(--text-muted));
   font-size: var(--message-meta-font-size);
   letter-spacing: 0.03em;
-  flex-wrap: nowrap;
+  color: color-mix(in srgb, var(--text-strong) 84%, var(--text-muted));
 }
 
+/* 两侧线条加深：默认 Marker 用 --border，这里换成更明显的 --border-strong */
 .messages-turn-boundary::before,
 .messages-turn-boundary::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  height: 1.5px;
-  pointer-events: none;
-  z-index: 0;
-}
-
-.messages-turn-boundary::before {
-  left: 0;
-  right: 50%;
-  background: linear-gradient(90deg, transparent 0%, var(--border-strong) 100%);
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--border-strong) 26%, transparent) 0%,
-    color-mix(in srgb, var(--border-strong) 86%, transparent) 100%
-  );
-  clip-path: polygon(0 50%, 100% 0, 100% 100%);
-}
-
-.messages-turn-boundary::after {
-  left: 50%;
-  right: 0;
-  background: linear-gradient(90deg, var(--border-strong) 0%, transparent 100%);
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--border-strong) 86%, transparent) 0%,
-    color-mix(in srgb, var(--border-strong) 26%, transparent) 100%
-  );
-  clip-path: polygon(0 0, 100% 50%, 0 100%);
+  background-color: var(--border-strong);
 }
 
 .messages-turn-boundary-label {
-  position: relative;
   display: inline-flex;
   align-items: center;
-  padding: 0 10px;
-  background: var(--surface-messages);
-  color: var(--text-stronger);
-  color: color-mix(in srgb, var(--text-stronger) 92%, var(--text-strong));
   font-weight: 600;
   line-height: 1.2;
-  z-index: 1;
+  color: color-mix(in srgb, var(--text-strong) 88%, var(--text-muted));
 }
 
 .messages-turn-boundary-label-content {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-}
-
-.messages-turn-boundary-icon {
-  color: var(--text-stronger);
-  color: color-mix(in srgb, var(--text-stronger) 88%, var(--text-muted));
-  opacity: 0.9;
 }
 
 .messages-turn-boundary-meta {
-  position: relative;
   display: inline-flex;
   align-items: center;
-  padding: 0 8px;
-  background: var(--surface-messages);
   letter-spacing: 0.01em;
-  text-transform: none;
   font-size: var(--message-meta-font-size);
   line-height: 1.2;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  color: var(--text-strong);
   color: color-mix(in srgb, var(--text-strong) 82%, var(--text-muted));
-  z-index: 1;
-}
-
-.messages-turn-boundary-meta-placeholder {
-  visibility: hidden;
-  pointer-events: none;
 }
 
 .messages-reasoning-boundary {
-  margin-bottom: 8px;
-}
-
-.messages-reasoning-boundary .messages-turn-boundary-label {
-  color: var(--text-strong);
-  color: color-mix(in srgb, var(--status-info, #3b82f6) 68%, var(--text-strong));
+  margin-bottom: 25px;
 }
 
 .message-provenance-row {
@@ -476,15 +417,12 @@
 .message-tool-block-shell {
   display: flex;
   flex-direction: column;
+  /* 工具块与下方文字/相邻块之间留白，对齐正文段落间距，避免混排时下间距偏挤 */
+  margin-bottom: 12px;
 }
 
 .messages-final-boundary {
-  margin-top: 10px;
-}
-
-.messages-final-boundary .messages-turn-boundary-label {
-  color: var(--text-strong);
-  color: color-mix(in srgb, var(--status-success, #22c55e) 64%, var(--text-strong));
+  margin-top: 25px;
 }
 
 .main .messages {

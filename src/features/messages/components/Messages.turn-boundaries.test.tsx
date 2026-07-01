@@ -392,9 +392,9 @@ describe("Messages turn boundaries", () => {
     expect(finalMessageNode).toBeTruthy();
     expect(reasoningBoundaryNode).toBeTruthy();
     expect(reasoningBoundaryNode?.textContent ?? "").toContain("Thinking Process");
-    expect(reasoningBoundaryMetaNode?.textContent ?? "").toContain("04-10 14:41:42");
-    expect(reasoningBoundaryMetaNode?.getAttribute("aria-hidden")).toBe("true");
-    expect(reasoningBoundaryMetaNode?.textContent).toBe(finalBoundaryMetaNode?.textContent);
+    // 推理过程分隔线右侧不再渲染时间占位，两侧线条随标题宽度自适应铺满
+    expect(reasoningBoundaryMetaNode).toBeNull();
+    expect(finalBoundaryMetaNode?.textContent ?? "").toContain("04-10 14:41:42");
     if (finalMessageNode && reasoningBoundaryNode) {
       expect(
         reasoningBoundaryNode.compareDocumentPosition(finalMessageNode) &

@@ -35,6 +35,12 @@ function isPathCandidate(
   if (value.startsWith("//")) {
     return false;
   }
+  // Reject plain-language phrases that merely contain slashes (e.g. CJK text
+  // like "/分支/历史回溯"). Real file paths always carry at least one ASCII
+  // letter or digit segment; a token with none is prose, not a path.
+  if (!/[A-Za-z0-9]/.test(value)) {
+    return false;
+  }
   if (leadingContext.endsWith("://")) {
     return false;
   }

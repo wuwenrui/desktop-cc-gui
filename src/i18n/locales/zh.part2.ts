@@ -2507,12 +2507,9 @@ const zhPart2 = {
   // 聊天输入框
   chat: {
     sendMessage: "给 {{provider}} 发送消息",
-    inputPlaceholder:
-      "@引用文件，@@引用记忆，$选择技能，#唤起智能体，!插入提示词，⌘/Ctrl+/ 提示词增强，Enter 发送",
-    inputPlaceholderEnter:
-      "@引用文件，@@引用记忆，$选择技能，#唤起智能体，!插入提示词，⌘/Ctrl+/ 提示词增强，Enter 发送",
-    inputPlaceholderCmdEnter:
-      "@引用文件，@@引用记忆，$选择技能，#唤起智能体，!插入提示词，⌘/Ctrl+/ 提示词增强，⌘/Ctrl+Enter 发送",
+    inputPlaceholder: "输入消息，或 @ 引用、$ 技能、# 智能体",
+    inputPlaceholderEnter: "输入消息，或 @ 引用、$ 技能、# 智能体",
+    inputPlaceholderCmdEnter: "输入消息，或 @ 引用、$ 技能、# 智能体",
     shortcutActionsAriaLabel: "快捷输入动作",
     shortcutActionsEntry: "快捷动作",
     toolDockToggle: "展开或收起输入工具",
@@ -2567,6 +2564,9 @@ const zhPart2 = {
     claudeContextTooltipTitle: "Claude 背景信息窗口：",
     claudeContextTooltipTotalLabel: "本轮新消耗",
     claudeContextTooltipWindowTokensLabel: "窗口已用标记",
+    claudeContextInputLabel: "输入",
+    claudeContextOutputLabel: "输出",
+    claudeContextCacheLabel: "缓存",
     claudeContextInputDetail: "input {{tokens}}",
     claudeContextCachedDetail: "cached {{tokens}}",
     claudeContextCachedExcludedDetail: "cached {{tokens}} 不计入本轮新消耗",

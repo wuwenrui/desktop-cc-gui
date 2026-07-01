@@ -20,7 +20,7 @@ const CLAUDE_HIDE_REASONING_MODULE_FLAG_KEY = "ccgui.claude.hideReasoningModule"
 const CLAUDE_RENDER_DEBUG_FLAG_KEY = "ccgui.debug.claude.render";
 export const MESSAGES_SLOW_RENDER_WARN_MS = 18;
 export const MESSAGES_SLOW_ANCHOR_WARN_MS = 8;
-export const VISIBLE_MESSAGE_WINDOW = 30;
+export const VISIBLE_MESSAGE_WINDOW = 10000;
 
 export type HistoryStickyCandidate = {
   id: string;

@@ -866,7 +866,7 @@ describe("Messages rich content", () => {
     });
   });
 
-  it("routes file-change row clicks to onOpenDiffPath", () => {
+  it("renders file-change row file names as plain text, not diff-link buttons", () => {
     const onOpenDiffPath = vi.fn();
     const items: ConversationItem[] = [
       {
@@ -880,7 +880,7 @@ describe("Messages rich content", () => {
       },
     ];
 
-    const { container } = render(
+    render(
       <Messages
         items={items}
         threadId="thread-1"
@@ -892,13 +892,10 @@ describe("Messages rich content", () => {
       />,
     );
 
-    const header = container.querySelector(".task-header");
-    expect(header).toBeTruthy();
-    if (header) {
-      fireEvent.click(header);
-    }
-    fireEvent.click(screen.getByRole("button", { name: "App.tsx" }));
-    expect(onOpenDiffPath).toHaveBeenCalledWith("src/App.tsx");
+    // 文件名统一为纯文本：不再存在可点跳转的 diff 链接按钮
+    expect(screen.queryByRole("button", { name: "App.tsx" })).toBeNull();
+    expect(screen.getByText("App.tsx")).toBeTruthy();
+    expect(onOpenDiffPath).not.toHaveBeenCalled();
   });
 
 });

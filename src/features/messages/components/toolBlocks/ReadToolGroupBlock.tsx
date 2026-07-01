@@ -1,10 +1,12 @@
 /**
  * 批量读取文件分组组件
  * Groups multiple consecutive Read tool calls into a collapsible file list
- * 使用 task-container 样式 + codicon 图标（匹配参考项目）
+ * 统一 Marker 风格折叠行：灰色描边图标 + 批量标题 + 计数；展开体为文件列表
  */
 import { memo, useMemo, useRef, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import FileText from 'lucide-react/dist/esm/icons/file-text';
+import Folder from 'lucide-react/dist/esm/icons/folder';
 import type { ConversationItem } from '../../../../types';
 import {
   parseToolArgs,
@@ -12,7 +14,7 @@ import {
   getFileName,
   resolveToolStatus,
 } from './toolConstants';
-import { FileIcon } from './FileIcon';
+import { ToolMarkerShell } from './ToolMarkerShell';
 
 type ToolItem = Extract<ConversationItem, { kind: 'tool' }>;
 
@@ -118,34 +120,17 @@ export const ReadToolGroupBlock = memo(function ReadToolGroupBlock({
     : parsed.length * ITEM_HEIGHT;
 
   return (
-    <div className="task-container">
-      <div
-        className="task-header"
-        onClick={() => setIsExpanded((prev) => !prev)}
-        style={{
-          borderBottom: isExpanded ? '1px solid var(--border-primary)' : undefined,
-        }}
-      >
-        <div className="task-title-section" style={{ overflow: 'hidden' }}>
-          <span className="codicon codicon-file-code tool-title-icon" />
-          <span className="tool-title-text" style={{ flexShrink: 0 }}>{t("tools.batchReadFile")}</span>
-          <span className="tool-title-summary" style={{
-            color: 'var(--text-secondary)',
-            marginLeft: '4px',
-            flexShrink: 0,
-          }}>
-            ({parsed.length})
-          </span>
-        </div>
-      </div>
-
-      {isExpanded && (
+    <ToolMarkerShell
+      icon={<FileText />}
+      label={t("tools.batchReadFile")}
+      expanded={isExpanded}
+      onToggle={() => setIsExpanded((prev) => !prev)}
+      body={
         <div
           ref={listRef}
-          className="task-details file-list-container"
+          className="file-list-container mt-1 overflow-hidden rounded-md"
           style={{
             padding: '6px 8px',
-            border: 'none',
             display: 'flex',
             flexDirection: 'column',
             gap: '0',
@@ -170,19 +155,14 @@ export const ReadToolGroupBlock = memo(function ReadToolGroupBlock({
               }}
               title={entry.filePath}
             >
-              <span style={{
-                marginRight: '8px',
-                display: 'flex',
-                alignItems: 'center',
-                width: '16px',
-                height: '16px',
-                flexShrink: 0,
-              }}>
-                <FileIcon fileName={entry.isDirectory ? entry.fileName + '/' : entry.fileName || 'file'} size={16} />
-              </span>
+              {entry.isDirectory ? (
+                <Folder className="mr-2 size-4 shrink-0 text-muted-foreground" />
+              ) : (
+                <FileText className="mr-2 size-4 shrink-0 text-muted-foreground" />
+              )}
               <span style={{
                 fontSize: '12px',
-                color: 'var(--text-primary)',
+                color: 'var(--muted-foreground)',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
@@ -209,8 +189,10 @@ export const ReadToolGroupBlock = memo(function ReadToolGroupBlock({
             </div>
           ))}
         </div>
-      )}
-    </div>
+      }
+    >
+      <span className="shrink-0 text-muted-foreground">({parsed.length})</span>
+    </ToolMarkerShell>
   );
 });
 

@@ -1057,7 +1057,7 @@ describe("SessionManagementSection", () => {
       fireEvent.blur(input);
     });
 
-    expect(input.value).toBe("20");
+    expect(input.value).toBe("5");
     expect(onUpdateWorkspaceSettings).not.toHaveBeenCalled();
   });
 

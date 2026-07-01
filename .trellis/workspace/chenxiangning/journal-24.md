@@ -1473,3 +1473,69 @@ Windows Codex app-server wrapper fallback 改为通过 provider/default CODEX_HO
 ### Next Steps
 
 - None - task complete
+
+
+## Session 957: 修复 Markdown HTML 序列化依赖声明
+
+**Date**: 2026-06-29
+**Task**: 修复 Markdown HTML 序列化依赖声明
+**Branch**: `ui-refactoring`
+
+### Summary
+
+补齐 hast-util-to-html 依赖声明，移除 Input 组件未使用的 nativeInput prop；typecheck 与 lint 通过，全量测试在既有 Sidebar.subagent-tree.test.tsx 用例失败处中止。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `72eac29a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 958: 优化 Mermaid 卡片操作按钮
+
+**Date**: 2026-06-29
+**Task**: 优化 Mermaid 卡片操作按钮
+**Branch**: `ui-refactoring`
+
+### Summary
+
+将幕布 Mermaid 卡片右上角文字操作改为稳定图标按钮，补充 Source/Preview i18n；兼容性复核深层 lucide import、按钮尺寸、copied/disabled/accessibility 状态，并通过 typecheck、lint 和 focused Mermaid tests。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ba7bae44` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

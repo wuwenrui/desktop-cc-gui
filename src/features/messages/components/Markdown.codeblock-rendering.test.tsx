@@ -21,7 +21,12 @@ describe("Markdown fenced block rendering", () => {
     await waitFor(() => {
       expect(container.querySelector(".markdown-codeblock-markdown")).toBeTruthy();
     });
-    expect(container.querySelector(".markdown-codeblock-language")?.textContent).toBe("MARKDOWN");
+    expect(
+      container.querySelector(".markdown-codeblock-language-text")?.textContent,
+    ).toBe("MARKDOWN");
+    expect(
+      container.querySelector(".markdown-codeblock-language-icon"),
+    ).toBeTruthy();
     expect(container.querySelector("blockquote.markdown-alert-tip")).toBeTruthy();
     expect(container.querySelector(".markdown-alert-label-tip")?.textContent).toBe("TIP");
     expect(
@@ -100,6 +105,13 @@ describe("Markdown fenced block rendering", () => {
     expect(lines).toHaveLength(2);
     expect(lines[0]?.textContent).toBe("first line");
     expect(lines[1]?.textContent).toBe("second line");
+    // Line numbers are driven by a CSS counter, gated on data-line-numbers.
+    expect(container.querySelector(".markdown-codeblock pre[data-line-numbers]")).toBeTruthy();
+    // Header shows a language icon badge next to the label.
+    expect(container.querySelector(".markdown-codeblock-language-icon")).toBeTruthy();
+    expect(
+      container.querySelector(".markdown-codeblock-language-text")?.textContent,
+    ).toBe("text");
   });
 
   it("defers heavy code blocks without changing rendered canonical value", async () => {

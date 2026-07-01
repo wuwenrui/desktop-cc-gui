@@ -38,33 +38,33 @@
    Send/Stop Button
    ============================================================ */
 .submit-button {
-  --composer-submit-button-bg: color-mix(in srgb, var(--input-focus-border, #2563eb) 88%, white 12%);
-  --composer-submit-button-bg-hover: color-mix(in srgb, var(--input-focus-border, #2563eb) 94%, white 6%);
-  --composer-submit-button-shadow: color-mix(in srgb, var(--input-focus-border, #2563eb) 28%, transparent);
-  --composer-submit-button-shadow-hover: color-mix(in srgb, var(--input-focus-border, #2563eb) 36%, transparent);
+  /* ai-sdk / shadcn 风格：品牌蓝圆角方块 + 白色箭头 */
+  --composer-submit-button-bg: #0b5cff;
+  --composer-submit-button-bg-hover: color-mix(in srgb, #0b5cff 88%, black 12%);
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  padding: 0;
   background: var(--composer-submit-button-bg);
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
   color: #ffffff;
   cursor: pointer;
-  box-shadow: 0 8px 22px var(--composer-submit-button-shadow);
+  box-shadow: none;
   transition:
     background 0.2s,
-    box-shadow 0.2s,
     opacity 0.2s,
     transform 0.12s;
 }
 
 .submit-button:hover:not(:disabled) {
   background: var(--composer-submit-button-bg-hover);
-  box-shadow: 0 10px 26px var(--composer-submit-button-shadow-hover);
+  box-shadow: none;
   opacity: 1;
-  transform: translateY(-1px);
+  transform: none;
 }
 
 .submit-button.stop-button:hover:not(:disabled) {
@@ -79,14 +79,26 @@
 }
 
 .submit-button:disabled {
-  background: color-mix(in srgb, var(--text-muted, #666) 42%, transparent);
+  background: color-mix(in srgb, var(--text-muted, #666) 26%, transparent);
+  color: #ffffff;
   box-shadow: none;
   cursor: not-allowed;
-  opacity: 0.62;
+  opacity: 1;
 }
 
 .submit-button .codicon {
   font-size: 14px;
+}
+
+/* lucide 图标（ArrowUp / Square）：箭头略大、停止方块略小 */
+.submit-button > svg {
+  width: 16px;
+  height: 16px;
+}
+
+.submit-button.stop-button > svg {
+  width: 11px;
+  height: 11px;
 }
 
 .stop-button {
@@ -94,18 +106,18 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  min-width: 24px;
-  min-height: 24px;
-  max-width: 24px;
-  max-height: 24px;
-  flex: 0 0 24px;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  max-width: 32px;
+  max-height: 32px;
+  flex: 0 0 32px;
   aspect-ratio: 1 / 1;
   padding: 0;
   background: var(--error-color, #f44336);
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
   color: #ffffff;
   box-shadow: 0 6px 18px color-mix(in srgb, var(--error-color, #f44336) 26%, transparent);
   transition: background 0.2s, box-shadow 0.2s, opacity 0.2s, transform 0.12s;

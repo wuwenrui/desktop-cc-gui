@@ -1,11 +1,13 @@
 /**
  * 搜索工具块组件 - 用于展示 Grep、Glob 等搜索操作
  * Search Tool Block Component - for displaying grep, glob and other search operations
- * 使用 task-container 样式 + codicon 图标（匹配参考项目）
+ * 统一 Marker 风格折叠行：灰色描边图标 + 查询/摘要（含链接）+ 靠右状态图标
  */
 import { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { openUrl } from '@tauri-apps/plugin-opener';
+import SearchIcon from 'lucide-react/dist/esm/icons/search';
+import FolderSearch from 'lucide-react/dist/esm/icons/folder-search';
 import type { ConversationItem } from '../../../../types';
 import {
   parseToolArgs,
@@ -14,6 +16,7 @@ import {
   extractToolName,
   resolveToolStatus,
 } from './toolConstants';
+import { TOOL_MARKER_BODY_CLASS, ToolMarkerShell, ToolStatusIcon } from './ToolMarkerShell';
 
 interface SearchToolBlockProps {
   item: Extract<ConversationItem, { kind: 'tool' }>;
@@ -142,10 +145,7 @@ export const SearchToolBlock = memo(function SearchToolBlock({
   const inlineSegments = renderTextWithLinks(inlineSummary);
 
   const status = getStatus(item);
-  const codiconClass = isGlob ? 'codicon-folder' : 'codicon-search';
   const displayName = isGlob ? t("tools.fileMatch") : t("tools.search");
-  const isError = status === 'failed';
-  const isCompleted = status === 'completed';
   const expandedOutput = useMemo(
     () => formatSearchDetailValue(item.output ?? ""),
     [item.output],
@@ -160,55 +160,17 @@ export const SearchToolBlock = memo(function SearchToolBlock({
     Boolean(pattern) || Boolean(path) || shouldShowExpandedOutput || shouldShowExpandedDetail;
 
   return (
-    <div className="task-container search-task-container">
-      <div
-        className="task-header search-task-header"
-        onClick={() => {
-          if (hasExpandedDetails) {
-            onToggle(item.id);
-          }
-        }}
-        style={{
-          cursor: hasExpandedDetails ? 'pointer' : 'default',
-          borderBottom: isExpanded && hasExpandedDetails ? '1px solid var(--border-primary)' : undefined,
-        }}
-      >
-        <div className="task-title-section search-title-minimal" aria-label={displayName}>
-          <span className={`codicon ${codiconClass} tool-title-icon`} />
-          {displayPattern && !inlineSummary && (
-            <span className="tool-title-summary" title={pattern}>
-              {displayPattern}
-            </span>
-          )}
-          {inlineSummary && (
-            <span className="tool-title-summary search-inline-summary" title={normalizedInline}>
-              {inlineSegments.map((segment, idx) => (
-                segment.type === 'link' && segment.href ? (
-                  <a
-                    key={`${segment.href}-${idx}`}
-                    className="search-inline-link"
-                    href={segment.href}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      void openUrl(segment.href!);
-                    }}
-                  >
-                    {segment.value}
-                  </a>
-                ) : (
-                  <span key={`${segment.value}-${idx}`}>{segment.value}</span>
-                )
-              ))}
-            </span>
-          )}
-        </div>
-        <div className={`tool-status-indicator ${isError ? 'error' : isCompleted ? 'completed' : 'pending'}`} />
-      </div>
-      {isExpanded && hasExpandedDetails && (
-        <div className="task-details" style={{ border: 'none' }}>
+    <ToolMarkerShell
+      icon={isGlob ? <FolderSearch /> : <SearchIcon />}
+      label={displayName}
+      labelHidden
+      ariaLabel={displayName}
+      interactive={hasExpandedDetails}
+      expanded={isExpanded && hasExpandedDetails}
+      onToggle={() => onToggle(item.id)}
+      trailing={<ToolStatusIcon status={status} />}
+      body={
+        <div className={TOOL_MARKER_BODY_CLASS}>
           {pattern && (
             <div className="task-field">
               <div className="task-field-label">query</div>
@@ -258,8 +220,38 @@ export const SearchToolBlock = memo(function SearchToolBlock({
             </div>
           )}
         </div>
+      }
+    >
+      {displayPattern && !inlineSummary && (
+        <span className="truncate" title={pattern}>
+          {displayPattern}
+        </span>
       )}
-    </div>
+      {inlineSummary && (
+        <span className="search-inline-summary truncate" title={normalizedInline}>
+          {inlineSegments.map((segment, idx) => (
+            segment.type === 'link' && segment.href ? (
+              <a
+                key={`${segment.href}-${idx}`}
+                className="search-inline-link"
+                href={segment.href}
+                target="_blank"
+                rel="noreferrer noopener"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  void openUrl(segment.href!);
+                }}
+              >
+                {segment.value}
+              </a>
+            ) : (
+              <span key={`${segment.value}-${idx}`}>{segment.value}</span>
+            )
+          ))}
+        </span>
+      )}
+    </ToolMarkerShell>
   );
 });
 

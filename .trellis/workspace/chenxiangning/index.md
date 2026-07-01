@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-24.md`
-- **Total Sessions**: 956
-- **Last Active**: 2026-06-27
+- **Total Sessions**: 958
+- **Last Active**: 2026-06-29
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-24.md` | ~1475 | Active |
+| `journal-24.md` | ~1541 | Active |
 | `journal-23.md` | ~1965 | Archived |
 | `journal-22.md` | ~1969 | Archived |
 | `journal-21.md` | ~1970 | Archived |
@@ -52,6 +52,8 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 958 | 2026-06-29 | 优化 Mermaid 卡片操作按钮 | `ba7bae44` | `ui-refactoring` |
+| 957 | 2026-06-29 | 修复 Markdown HTML 序列化依赖声明 | `72eac29a` | `ui-refactoring` |
 | 956 | 2026-06-27 | 修复 Sidebar 会话目录分页游标 | `6d624c5a` | `feature/v0.6.1` |
 | 955 | 2026-06-27 | 隔离幕布渲染场景作用域 | `5017632f` | `feature/v0.6.1` |
 | 954 | 2026-06-27 | 修复 Windows Codex 内置技能启动回退 | `8a12f560` | `feature/v0.6.1` |

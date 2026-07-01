@@ -1,5 +1,6 @@
 @import "./themes.css";
 @import "../assets/fonts/codicon.css";
+@import "../assets/fonts/geist.css";
 @import "../components/common/RichTextInput/richTextInput.css";
 
 .app.reduced-transparency {

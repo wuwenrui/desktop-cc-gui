@@ -235,6 +235,12 @@
   flex-shrink: 0;
 }
 
+/* 临时隐藏 Claude 上下文指示器入口（组件与逻辑代码均保留，
+   后续调整满意后删除本条规则即可恢复显示）。 */
+.context-bar .context-token-indicator {
+  display: none;
+}
+
 .context-tool-btn {
   display: flex;
   align-items: center;

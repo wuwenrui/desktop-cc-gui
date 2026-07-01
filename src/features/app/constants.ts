@@ -2,7 +2,7 @@ import type { OpenAppTarget } from "../../types";
 
 export const OPEN_APP_STORAGE_KEY = "open-workspace-app";
 export const DEFAULT_OPEN_APP_ID = "vscode";
-export const DEFAULT_VISIBLE_THREAD_ROOT_COUNT = 20;
+export const DEFAULT_VISIBLE_THREAD_ROOT_COUNT = 5;
 export const MIN_VISIBLE_THREAD_ROOT_COUNT = 1;
 export const MAX_VISIBLE_THREAD_ROOT_COUNT = 200;
 

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { ModelSelect } from "./ModelSelect";
@@ -23,7 +24,8 @@ vi.mock("../../../../engine/components/EngineIcon", () => ({
 }));
 
 describe("ModelSelect", () => {
-  it("renders the readiness trigger with provider and selected model chrome", () => {
+  it("renders the readiness trigger with provider and selected model chrome", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
     const onChange = vi.fn();
 
     render(
@@ -40,20 +42,19 @@ describe("ModelSelect", () => {
     const trigger = screen.getByRole("button", { name: "chat.currentModel:demo" });
 
     expect(trigger.className).toContain("composer-readiness-target-button");
-    expect(trigger.textContent).toContain("Codex");
+    // Provider is shown as an engine icon, the selected model as text.
+    expect(within(trigger).getByTestId("codex-icon")).toBeTruthy();
     expect(trigger.textContent).toContain("demo");
 
-    fireEvent.click(trigger);
-    const dropdownOption = screen.getAllByText("demo").find((node) => {
-      return node.closest(".selector-option");
-    });
-    expect(dropdownOption).toBeTruthy();
-    fireEvent.click(dropdownOption!);
+    await user.click(trigger);
+    const option = await screen.findByRole("menuitem", { name: /demo/ });
+    await user.click(option);
 
     expect(onChange).toHaveBeenCalledWith("demo");
   });
 
-  it("renders compact grouped provider models and selects provider plus model", () => {
+  it("renders compact grouped provider models and selects provider plus model", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
     const onChange = vi.fn();
     const onProviderModelChange = vi.fn();
 
@@ -83,13 +84,16 @@ describe("ModelSelect", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "chat.currentModel:models.codex.gpt54.label" }));
+    await user.click(
+      screen.getByRole("button", { name: "chat.currentModel:models.codex.gpt54.label" }),
+    );
 
-    expect(screen.getByText("Claude Code")).toBeTruthy();
-    expect(screen.getAllByText("Codex").length).toBeGreaterThanOrEqual(2);
+    // Group headings render, and grouped items stay compact (no description).
+    expect(await screen.findByText("Claude Code")).toBeTruthy();
+    expect(screen.getByText("Codex")).toBeTruthy();
     expect(screen.queryByText("hidden")).toBeNull();
 
-    fireEvent.click(screen.getByText("Sonnet 4.6"));
+    await user.click(screen.getByText("Sonnet 4.6"));
 
     expect(onProviderModelChange).toHaveBeenCalledWith("claude", "claude-sonnet-4-6");
     expect(onChange).not.toHaveBeenCalled();
@@ -116,7 +120,8 @@ describe("ModelSelect", () => {
     expect(buttonText).not.toContain("gpt-5.5");
   });
 
-  it("renders independent add model and refresh config footer actions", () => {
+  it("renders independent add model and refresh config footer actions", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
     const onAddModel = vi.fn();
     const onRefreshConfig = vi.fn();
 
@@ -131,13 +136,14 @@ describe("ModelSelect", () => {
       />,
     );
 
-    fireEvent.click(screen.getAllByRole("button")[0]);
-    fireEvent.click(screen.getByRole("button", { name: "models.refreshConfig" }));
+    await user.click(screen.getAllByRole("button")[0]);
+    await user.click(await screen.findByRole("menuitem", { name: "models.refreshConfig" }));
 
     expect(onRefreshConfig).toHaveBeenCalledTimes(1);
     expect(onAddModel).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "models.addModel" }));
+    // Refresh keeps the menu open; the add action is still reachable.
+    await user.click(screen.getByRole("menuitem", { name: "models.addModel" }));
 
     expect(onAddModel).toHaveBeenCalledTimes(1);
     expect(onRefreshConfig).toHaveBeenCalledTimes(1);
@@ -174,8 +180,6 @@ describe("ModelSelect", () => {
       />,
     );
 
-    fireEvent.click(screen.getAllByRole("button")[0]);
-
     expect(screen.queryByText("sonnet")).toBeNull();
     expect(screen.getByRole("button").textContent ?? "").toContain("models.selectModel");
   });
@@ -202,7 +206,8 @@ describe("ModelSelect", () => {
     expect(buttonText).not.toContain("Opus 4.6");
   });
 
-  it("disables refresh config action while refreshing", () => {
+  it("disables refresh config action while refreshing", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
     render(
       <ModelSelect
         value="claude-sonnet-4-6"
@@ -215,16 +220,16 @@ describe("ModelSelect", () => {
       />,
     );
 
-    fireEvent.click(screen.getAllByRole("button")[0]);
+    await user.click(screen.getAllByRole("button")[0]);
 
-    const refreshButton = screen.getByRole("button", {
+    const refreshItem = await screen.findByRole("menuitem", {
       name: "models.refreshingConfig",
     });
-    expect((refreshButton as HTMLButtonElement).disabled).toBe(true);
-    expect(refreshButton.getAttribute("aria-busy")).toBe("true");
+    expect(refreshItem.getAttribute("data-disabled")).not.toBeNull();
   });
 
   it("keeps the dropdown usable when refresh config fails", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
     render(
       <ModelSelect
         value="gemini-2.5-flash"
@@ -236,8 +241,8 @@ describe("ModelSelect", () => {
       />,
     );
 
-    fireEvent.click(screen.getAllByRole("button")[0]);
-    fireEvent.click(screen.getByRole("button", { name: "models.refreshConfig" }));
+    await user.click(screen.getAllByRole("button")[0]);
+    await user.click(await screen.findByRole("menuitem", { name: "models.refreshConfig" }));
 
     await waitFor(() => {
       expect(screen.getByRole("status").textContent).toContain("settings.json invalid");

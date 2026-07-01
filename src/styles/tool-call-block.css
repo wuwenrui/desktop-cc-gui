@@ -1,45 +1,15 @@
-.tcb-card {
-  margin: 0.45rem 0;
-  border: 1px solid color-mix(in srgb, var(--border-subtle, #2b3340) 82%, transparent);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--surface-card, #151820) 92%, transparent);
-  color: var(--text-strong, #d6d9df);
-  overflow: hidden;
+/*
+ * 工具调用块外壳已迁移至共享 ToolMarkerShell（无边框 Marker 折叠行），
+ * 与其它工具块统一；这里仅保留标题文本、按钮与展开体内容的专属样式。
+ * 间距对齐 .markdown 段落留白：单向上 margin。
+ */
+.tcb-marker {
+  margin-top: 1.5em;
 }
 
-.tcb-card-live {
-  border-color: color-mix(in srgb, var(--status-info, #3b82f6) 30%, var(--border-subtle, #2b3340));
-}
-
-.tcb-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.55rem 0.65rem;
-}
-
-.tcb-title-wrap {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.45rem;
-  min-width: 0;
-}
-
-.tcb-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.15rem;
-  height: 1.15rem;
-  margin-top: 0.08rem;
-  color: color-mix(in srgb, var(--status-info, #3b82f6) 72%, var(--text-muted, #8b949e));
-  flex: 0 0 auto;
-  opacity: 0.85;
-}
-
-.tcb-heading {
-  min-width: 0;
+/* 连续工具块并排时彼此紧贴，不插入段落级留白 */
+.tcb-marker + .tcb-marker {
+  margin-top: 0;
 }
 
 .tcb-title-line {
@@ -63,8 +33,8 @@
 }
 
 .tcb-preview {
-  margin-top: 0.14rem;
-  max-width: min(70vw, 56rem);
+  /* Marker 行内紧跟标题，作为单行预览，对齐其它工具块的行内摘要 */
+  min-width: 0;
   overflow: hidden;
   color: var(--text-muted, #9aa3ad);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
@@ -97,6 +67,8 @@
   align-items: center;
   gap: 0.35rem;
   flex: 0 0 auto;
+  /* Marker 行内靠右，对齐其它工具块的 trailing 状态图标 */
+  margin-left: auto;
 }
 
 .tcb-button {
@@ -117,7 +89,7 @@
 }
 
 .tcb-body {
-  border-top: 1px solid color-mix(in srgb, var(--border-subtle, #2b3340) 74%, transparent);
+  /* 外框已移除（统一为无边框 Marker）；展开体由 TOOL_MARKER_BODY_CLASS 提供灰底圆角 */
   padding: 0.6rem 0.65rem 0.65rem;
 }
 

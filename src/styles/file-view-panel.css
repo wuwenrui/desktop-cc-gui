@@ -1954,12 +1954,12 @@
   font-size: 0.92em;
 }
 
+/* Aligned with the shadcn code-block look shared across surfaces. */
 .fvp-file-markdown-codeblock {
   margin: 0 0 16px;
-  border-bottom: 1px solid var(--border-subtle);
-  border: 1px solid var(--fvp-markdown-rule);
-  border-radius: 12px;
-  background: var(--fvp-markdown-code-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--message-codeblock-bg);
   overflow: hidden;
 }
 
@@ -1968,24 +1968,43 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 7px 12px 6px;
-  border-bottom: 1px solid var(--fvp-markdown-rule);
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  padding: 5px 14px;
+  border-bottom: 1px solid var(--message-codeblock-divider);
+  font-size: 13px;
+  letter-spacing: normal;
+  text-transform: none;
   color: var(--fvp-reader-faint);
-  background: color-mix(in srgb, var(--surface-control) 58%, transparent);
+  background: var(--message-codeblock-bg);
+}
+
+.fvp-file-markdown-codeblock-label .markdown-codeblock-language {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+
+.fvp-file-markdown-codeblock-label .markdown-codeblock-language-icon {
+  width: 16px;
+  height: 16px;
+  opacity: 0.6;
+  flex: none;
+}
+
+.fvp-file-markdown-codeblock-label .markdown-codeblock-language-text {
+  line-height: 1;
+  font-family: var(--code-font-family);
 }
 
 .fvp-file-markdown-codeblock pre {
   margin: 0;
-  padding: 13px 14px 14px;
+  padding: 12px 16px 16px;
   white-space: pre;
   overflow-x: auto;
   font-family: var(--code-font-family);
-  font-size: var(--code-font-size, 11px);
+  font-size: var(--message-codeblock-font-size, 13px);
   font-weight: var(--code-font-weight, 400);
-  line-height: var(--code-line-height, 1.28);
+  line-height: var(--message-codeblock-line-height, 1.6);
 }
 
 .fvp-file-markdown-codeblock code {

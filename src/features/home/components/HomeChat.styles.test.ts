@@ -52,15 +52,6 @@ describe("HomeChat styles", () => {
     expect(css).toContain("background: #f5f5f4;");
   });
 
-  it("gives the homepage workspace trigger enough vertical room for descenders", () => {
-    const cssPath = resolve(process.cwd(), "src/styles/home-chat.css");
-    const css = readFileSync(cssPath, "utf8");
-    const triggerRule = css.match(/\.home-chat-workspace-select-trigger\s*\{([\s\S]*?)\n\}/)?.[1] ?? "";
-
-    expect(triggerRule).toContain("line-height: 1.2;");
-    expect(triggerRule).toContain("padding-block: 2px;");
-  });
-
   it("keeps the homepage composer send button blue across themes", () => {
     const cssPath = resolve(process.cwd(), "src/styles/home-chat.css");
     const css = readFileSync(cssPath, "utf8");

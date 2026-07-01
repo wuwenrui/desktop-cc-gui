@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render } from "@testing-library/react";
+import { act, render, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ModeSelect } from "./ModeSelect";
 import {
@@ -14,8 +15,23 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
+// Radix DropdownMenu portals its content to document.body, so options are not
+// inside the render container. Query the whole document instead.
+const queryOption = (modeId: string): HTMLElement | null =>
+  document.body.querySelector(`[data-mode-id="${modeId}"]`);
+
+const isDisabled = (el: HTMLElement | null) =>
+  el?.hasAttribute("data-disabled") ?? false;
+
+// The menu opens asynchronously; wait until at least one option is mounted.
+const waitForMenu = () =>
+  waitFor(() => {
+    expect(document.body.querySelector("[data-mode-id]")).toBeTruthy();
+  });
+
 describe("ModeSelect", () => {
-  it("allows selecting plan mode for gemini provider", () => {
+  it("allows selecting plan mode for gemini provider", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
     const onChange = vi.fn();
     const { container } = render(
       <ModeSelect value="default" onChange={onChange} provider="gemini" />,
@@ -23,19 +39,19 @@ describe("ModeSelect", () => {
 
     const trigger = container.querySelector(".selector-button");
     expect(trigger).toBeTruthy();
-    fireEvent.click(trigger as HTMLElement);
+    await user.click(trigger as HTMLElement);
+    await waitForMenu();
 
-    const planOption = container.querySelector(
-      '.selector-option[data-mode-id="plan"]',
-    ) as HTMLElement | null;
+    const planOption = queryOption("plan");
     expect(planOption).toBeTruthy();
-    expect(planOption?.classList.contains("disabled")).toBe(false);
+    expect(isDisabled(planOption)).toBe(false);
 
-    fireEvent.click(planOption as HTMLElement);
+    await user.click(planOption as HTMLElement);
     expect(onChange).toHaveBeenCalledWith("plan");
   });
 
-  it("allows default and plan modes for claude provider but keeps acceptEdits disabled", () => {
+  it("allows default and plan modes for claude provider but keeps acceptEdits disabled", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
     const onChange = vi.fn();
     const { container } = render(
       <ModeSelect value="bypassPermissions" onChange={onChange} provider="claude" />,
@@ -43,45 +59,30 @@ describe("ModeSelect", () => {
 
     const trigger = container.querySelector(".selector-button");
     expect(trigger).toBeTruthy();
-    fireEvent.click(trigger as HTMLElement);
+    await user.click(trigger as HTMLElement);
+    await waitForMenu();
 
-    const planOption = container.querySelector(
-      '.selector-option[data-mode-id="plan"]',
-    ) as HTMLElement | null;
-    const defaultOption = container.querySelector(
-      '.selector-option[data-mode-id="default"]',
-    ) as HTMLElement | null;
-    const acceptEditsOption = container.querySelector(
-      '.selector-option[data-mode-id="acceptEdits"]',
-    ) as HTMLElement | null;
+    expect(isDisabled(queryOption("plan"))).toBe(false);
+    expect(isDisabled(queryOption("default"))).toBe(false);
+    expect(isDisabled(queryOption("acceptEdits"))).toBe(true);
 
-    expect(planOption).toBeTruthy();
-    expect(defaultOption).toBeTruthy();
-    expect(acceptEditsOption).toBeTruthy();
-    expect(planOption?.classList.contains("disabled")).toBe(false);
-    expect(defaultOption?.classList.contains("disabled")).toBe(false);
-    expect(acceptEditsOption?.classList.contains("disabled")).toBe(true);
-
-    fireEvent.click(planOption as HTMLElement);
+    await user.click(queryOption("plan") as HTMLElement);
     expect(onChange).toHaveBeenCalledWith("plan");
 
-    fireEvent.click(trigger as HTMLElement);
-    const defaultOptionAfterReopen = container.querySelector(
-      '.selector-option[data-mode-id="default"]',
-    ) as HTMLElement | null;
-    const acceptEditsOptionAfterReopen = container.querySelector(
-      '.selector-option[data-mode-id="acceptEdits"]',
-    ) as HTMLElement | null;
-
-    fireEvent.click(defaultOptionAfterReopen as HTMLElement);
+    await user.click(trigger as HTMLElement);
+    await waitForMenu();
+    await user.click(queryOption("default") as HTMLElement);
     expect(onChange).toHaveBeenNthCalledWith(2, "default");
 
-    fireEvent.click(trigger as HTMLElement);
-    fireEvent.click(acceptEditsOptionAfterReopen as HTMLElement);
+    await user.click(trigger as HTMLElement);
+    await waitForMenu();
+    // acceptEdits is disabled, so clicking it must not fire another change.
+    await user.click(queryOption("acceptEdits") as HTMLElement);
     expect(onChange).toHaveBeenCalledTimes(2);
   });
 
-  it("shows only plan and full-auto entries for codex provider", () => {
+  it("shows only plan and full-auto entries for codex provider", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
     const onChange = vi.fn();
     const onSelectCollaborationMode = vi.fn();
     const { container } = render(
@@ -96,34 +97,21 @@ describe("ModeSelect", () => {
 
     const trigger = container.querySelector(".selector-button");
     expect(trigger).toBeTruthy();
-    fireEvent.click(trigger as HTMLElement);
+    await user.click(trigger as HTMLElement);
+    await waitForMenu();
 
-    const planOption = container.querySelector(
-      '.selector-option[data-mode-id="plan"]',
-    ) as HTMLElement | null;
-    const fullAutoOption = container.querySelector(
-      '.selector-option[data-mode-id="bypassPermissions"]',
-    ) as HTMLElement | null;
-    const defaultOption = container.querySelector(
-      '.selector-option[data-mode-id="default"]',
-    ) as HTMLElement | null;
-    const acceptEditsOption = container.querySelector(
-      '.selector-option[data-mode-id="acceptEdits"]',
-    ) as HTMLElement | null;
+    expect(queryOption("plan")).toBeTruthy();
+    expect(queryOption("bypassPermissions")).toBeTruthy();
+    expect(queryOption("default")).toBeNull();
+    expect(queryOption("acceptEdits")).toBeNull();
 
-    expect(planOption).toBeTruthy();
-    expect(fullAutoOption).toBeTruthy();
-    expect(defaultOption).toBeNull();
-    expect(acceptEditsOption).toBeNull();
-    expect(planOption?.classList.contains("disabled")).toBe(false);
-    expect(fullAutoOption?.classList.contains("disabled")).toBe(false);
-
-    fireEvent.click(planOption as HTMLElement);
+    await user.click(queryOption("plan") as HTMLElement);
     expect(onSelectCollaborationMode).toHaveBeenCalledWith("plan");
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it("links codex mode menu selection to the plan-mode switch state", () => {
+  it("links codex mode menu selection to the plan-mode switch state", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
     const onChange = vi.fn();
     const onSelectCollaborationMode = vi.fn();
     const { container, rerender } = render(
@@ -139,13 +127,10 @@ describe("ModeSelect", () => {
     const trigger = container.querySelector(".selector-button");
     expect(trigger).toBeTruthy();
     expect(trigger?.textContent).toContain("modes.plan.label");
-    fireEvent.click(trigger as HTMLElement);
+    await user.click(trigger as HTMLElement);
+    await waitForMenu();
 
-    const planOption = container.querySelector(
-      '.selector-option[data-mode-id="plan"]',
-    ) as HTMLElement | null;
-    expect(planOption?.classList.contains("selected")).toBe(true);
-    expect(planOption?.querySelector(".check-mark")).toBeTruthy();
+    expect(queryOption("plan")?.getAttribute("data-selected")).toBe("true");
 
     rerender(
       <ModeSelect
@@ -158,11 +143,9 @@ describe("ModeSelect", () => {
     );
 
     expect(trigger?.textContent).toContain("modes.bypassPermissions.label");
-    const fullAutoOption = container.querySelector(
-      '.selector-option[data-mode-id="bypassPermissions"]',
-    ) as HTMLElement | null;
+    const fullAutoOption = queryOption("bypassPermissions");
     expect(fullAutoOption).toBeTruthy();
-    fireEvent.click(fullAutoOption as HTMLElement);
+    await user.click(fullAutoOption as HTMLElement);
 
     expect(onSelectCollaborationMode).toHaveBeenCalledWith("code");
     expect(onChange).toHaveBeenCalledWith("bypassPermissions");

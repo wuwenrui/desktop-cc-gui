@@ -1,24 +1,16 @@
-"use client";
-
-import { Input as InputPrimitive } from "@base-ui/react/input";
-import type * as React from "react";
+import * as React from "react";
 
 import { cn } from "@/lib/utils";
 
-type InputProps = Omit<
-  InputPrimitive.Props & React.RefAttributes<HTMLInputElement>,
-  "size"
-> & {
+type InputProps = Omit<React.ComponentProps<"input">, "size"> & {
   size?: "sm" | "default" | "lg" | number;
   unstyled?: boolean;
-  nativeInput?: boolean;
 };
 
 function Input({
   className,
   size = "default",
   unstyled = false,
-  nativeInput = false,
   ...props
 }: InputProps) {
   const inputClassName = cn(
@@ -44,21 +36,12 @@ function Input({
       data-size={size}
       data-slot="input-control"
     >
-      {nativeInput ? (
-        <input
-          className={inputClassName}
-          data-slot="input"
-          size={typeof size === "number" ? size : undefined}
-          {...props}
-        />
-      ) : (
-        <InputPrimitive
-          className={inputClassName}
-          data-slot="input"
-          size={typeof size === "number" ? size : undefined}
-          {...props}
-        />
-      )}
+      <input
+        className={inputClassName}
+        data-slot="input"
+        size={typeof size === "number" ? size : undefined}
+        {...props}
+      />
     </span>
   );
 }

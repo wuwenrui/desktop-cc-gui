@@ -439,6 +439,15 @@
   scrollbar-width: none;
 }
 
+/* Radix ScrollArea wraps content in an inline `display: table; min-width: 100%`
+   div that shrink-wraps to content, letting a long row grow wider than the
+   sidebar and push its right-aligned action buttons past the clipped edge.
+   Force block layout so the wrapper fills — never exceeds — the viewport width,
+   clamping every row to the visible sidebar width. */
+.sidebar-content-column > [data-slot="scroll-area-viewport"] > div {
+  display: block !important;
+}
+
 .sidebar-content-column > [data-slot="scroll-area-viewport"]::-webkit-scrollbar {
   width: 0;
   height: 0;

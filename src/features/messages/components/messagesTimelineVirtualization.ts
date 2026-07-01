@@ -1,6 +1,10 @@
 import type { Virtualizer } from "@tanstack/react-virtual";
 import type { ConversationItem } from "../../../types";
 import type { TimelineProjectionRow } from "./messagesTimelineProjection";
+import {
+  shouldHideCodexCanvasCommandCard,
+  type MessagesEngine,
+} from "./messagesRenderUtils";
 
 export const TIMELINE_VIRTUALIZATION_MIN_ROWS = 200;
 export const TIMELINE_VIRTUALIZATION_MIN_RENDER_WEIGHT = 96;
@@ -439,6 +443,59 @@ export function estimateTimelineProjectionRowSize(row: TimelineProjectionRow) {
       return 132;
     case "bottomAnchor":
       return 1;
+  }
+}
+
+/**
+ * 部分投影行在某些上下文下会渲染成 null/空（如非工作态的 workingIndicator、
+ * Claude 引擎下被跳过的 bashGroup、被隐藏的 codex canvas 命令卡）。虚拟行容器对
+ * 每行强制 minHeight=估高，这些空行因而被撑出大段空白。此函数复刻 MessagesTimeline
+ * 中对应的渲染条件，供虚拟化层把空行的占位高度归零。
+ *
+ * 注意：判断逻辑必须与 renderEntry/renderProjectionRow/WorkingIndicator 的真实
+ * 渲染分支保持同步，否则会错判（漏判=残留空白，误判=塌掉真实行）。
+ */
+export function isEmptyVirtualProjectionRow(
+  row: TimelineProjectionRow,
+  input: {
+    activeEngine: MessagesEngine;
+    claudeHistoryTranscriptFallbackActive: boolean;
+    hasTailUserInputNode: boolean;
+    isWorking: boolean;
+    lastDurationMs: number | null;
+    effectiveItemsCount: number;
+  },
+): boolean {
+  switch (row.kind) {
+    case "bottomAnchor":
+      return true;
+    case "workingIndicator": {
+      // WorkingIndicator 收到 isThinking={isWorking}、hasItems={effectiveItemsCount > 0}。
+      // 工作态显示 spinner；非工作态仅在「上一轮耗时已知且有内容」时显示完成提示，否则为空。
+      if (input.isWorking) {
+        return false;
+      }
+      const showsTurnComplete =
+        input.lastDurationMs !== null && input.effectiveItemsCount > 0;
+      return !showsTurnComplete;
+    }
+    case "tailUserInput":
+      return !input.hasTailUserInputNode;
+    case "entry": {
+      if (row.entry.kind === "bashGroup") {
+        return (
+          input.activeEngine === "codex" ||
+          (input.activeEngine === "claude" &&
+            !input.claudeHistoryTranscriptFallbackActive)
+        );
+      }
+      if (row.entry.kind === "item" && row.entry.item.kind === "tool") {
+        return shouldHideCodexCanvasCommandCard(row.entry.item, input.activeEngine);
+      }
+      return false;
+    }
+    default:
+      return false;
   }
 }
 

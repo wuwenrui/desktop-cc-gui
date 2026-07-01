@@ -273,9 +273,11 @@ export function ChatInputBoxFooter({
   selectedManualMemoryIds = [],
   selectedNoteCardIds = [],
   shortcutActions,
+  readinessSurface,
   mainSurface,
   toolSurface,
   panelToggleSurface,
+  curatedSkillSurface,
   tooltip,
   promptEnhancer,
   t,
@@ -337,9 +339,11 @@ export function ChatInputBoxFooter({
   selectedManualMemoryIds?: string[];
   selectedNoteCardIds?: string[];
   shortcutActions?: ShortcutAction[];
+  readinessSurface?: React.ReactNode;
   mainSurface?: React.ReactNode;
   toolSurface?: React.ReactNode;
   panelToggleSurface?: React.ReactNode;
+  curatedSkillSurface?: React.ReactNode;
   tooltip: TooltipState | null;
   promptEnhancer: {
     isOpen: boolean;
@@ -566,9 +570,11 @@ export function ChatInputBoxFooter({
         isModelConfigRefreshing={isModelConfigRefreshing}
         onClearAgent={onClearAgent}
         shortcutActions={shortcutActions}
+        readinessSurface={readinessSurface}
         mainSurface={mainSurface}
         toolSurface={toolSurface}
         panelToggleSurface={panelToggleSurface}
+        curatedSkillSurface={curatedSkillSurface}
       />
 
       {/* @ file reference dropdown menu */}

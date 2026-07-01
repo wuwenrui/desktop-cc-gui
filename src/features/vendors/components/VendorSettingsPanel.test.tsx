@@ -191,7 +191,12 @@ function renderPanel(
 }
 
 async function openCodexTab() {
-  fireEvent.click(screen.getByText("Codex"));
+  const codexTab = screen.getByText("Codex");
+  // Radix Tabs uses focus-based automatic activation; jsdom fireEvent.click
+  // does not focus the trigger, so focus it to actually switch to the Codex
+  // panel (otherwise its mount effects never run and waitFor times out).
+  fireEvent.focus(codexTab);
+  fireEvent.click(codexTab);
   await waitFor(() => {
     expect(getCodexUnifiedExecExternalStatusMock).toHaveBeenCalled();
   });

@@ -5,20 +5,14 @@ import {
   useEffect,
   useMemo,
   useRef,
-  useState,
   type MutableRefObject,
   type ReactNode,
   type RefObject,
 } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useTranslation } from "react-i18next";
-import Bell from "lucide-react/dist/esm/icons/bell";
 import Check from "lucide-react/dist/esm/icons/check";
-import ChevronLeft from "lucide-react/dist/esm/icons/chevron-left";
-import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
 import Copy from "lucide-react/dist/esm/icons/copy";
-import Flag from "lucide-react/dist/esm/icons/flag";
-import MessageSquareText from "lucide-react/dist/esm/icons/message-square-text";
 import type {
   AccessMode,
   ConversationItem,
@@ -28,6 +22,7 @@ import type { StreamMitigationProfile } from "../../threads/utils/streamLatencyD
 import type { GroupedEntry } from "../utils/groupToolItems";
 import { parseAgentTaskNotification } from "../utils/agentTaskNotification";
 import type { PresentationProfile } from "../presentation/presentationProfile";
+import { Marker } from "../../../components/ui/marker";
 import {
   ToolBlockRenderer,
   ReadToolGroupBlock,
@@ -45,20 +40,12 @@ import {
   WorkingIndicator,
 } from "./MessagesRows";
 import { ConversationRowErrorBoundary } from "./ConversationRowErrorBoundary";
-import { MessagesOutlineFloater } from "./MessagesOutlineFloater";
-import type { MarkdownOutlineEntry } from "../../markdown/fastMarkdownRenderer";
-import { useMessageOutlineActive } from "../hooks/useMessageOutlineActive";
-import {
-  resolveNextMessageOutlineSnapshot,
-  type MessageOutlineSnapshot,
-} from "./messagesOutlineState";
 import { appendRendererDiagnostic } from "../../../services/rendererDiagnostics";
 import { parseReasoning } from "./messagesReasoning";
 import type { RuntimeReconnectRecoveryCallbackResult } from "./runtimeReconnect";
 import type { MessagesPresentationMode } from "./messagesLiveWindow";
 import {
   formatCompletedTimeMs,
-  type HistoryStickyCandidate,
   type MessagesEngine,
   resolveProvenanceEngineLabel,
   shouldHideCodexCanvasCommandCard,
@@ -86,6 +73,7 @@ import {
   estimateTimelineProjectionRowSize,
   getActiveLiveTimelineRowKeys,
   getTimelineVirtualizationThresholdReason,
+  isEmptyVirtualProjectionRow,
   observeTimelineElementOffset,
   resolveTimelineCanvasOverscan,
   resolveTimelineVirtualizerStabilityRecovery,
@@ -133,7 +121,6 @@ type MessagesTimelineProps = {
   activeCollaborationModeId: string | null;
   activeEngine: MessagesEngine;
   activeUserInputAnchorItemId: string | null;
-  activeStickyHeaderCandidate: HistoryStickyCandidate | null;
   activeUserInputRequestId: string | number | null;
   agentTaskNodeByTaskIdRef: MutableRefObject<Map<string, HTMLDivElement>>;
   agentTaskNodeByToolUseIdRef: MutableRefObject<Map<string, HTMLDivElement>>;
@@ -183,12 +170,12 @@ type MessagesTimelineProps = {
   latestRuntimeReconnectItemId: string | null;
   latestWorkingActivityLabel: string | null;
   liveAutoExpandedExploreId: string | null;
-  conversationDetailHydrationRequested?: boolean;
-  conversationLightweightModeEnabled?: boolean;
+  conversationDetailHydrationRequested: boolean;
+  conversationLightweightModeEnabled: boolean;
   messageNodeByIdRef: MutableRefObject<Map<string, HTMLDivElement>>;
   onOpenDiffPath?: (path: string) => void;
-  onConversationDetailHydrationRequest?: () => void;
-  onConversationLightweightModeEnable?: () => void;
+  onConversationDetailHydrationRequest: () => void;
+  onConversationLightweightModeEnable: () => void;
   onRecoverThreadRuntime?: (
     workspaceId: string,
     threadId: string,
@@ -256,7 +243,6 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   activeCollaborationModeId,
   activeEngine,
   activeUserInputAnchorItemId,
-  activeStickyHeaderCandidate,
   activeUserInputRequestId,
   agentTaskNodeByTaskIdRef,
   agentTaskNodeByToolUseIdRef,
@@ -297,12 +283,12 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   latestRuntimeReconnectItemId,
   latestWorkingActivityLabel,
   liveAutoExpandedExploreId,
-  conversationDetailHydrationRequested = false,
-  conversationLightweightModeEnabled = false,
+  conversationDetailHydrationRequested,
+  conversationLightweightModeEnabled,
   messageNodeByIdRef,
   onOpenDiffPath,
-  onConversationDetailHydrationRequest = () => {},
-  onConversationLightweightModeEnable = () => {},
+  onConversationDetailHydrationRequest,
+  onConversationLightweightModeEnable,
   onRecoverThreadRuntime,
   onRecoverThreadRuntimeAndResend,
   onThreadRecoveryFork,
@@ -336,39 +322,18 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   workspaceId,
 }: MessagesTimelineProps) {
   const { t } = useTranslation();
-  const [isStickyHeaderCollapsed, setIsStickyHeaderCollapsed] = useState(false);
-  const [currentOutline, setCurrentOutline] = useState<MessageOutlineSnapshot | null>(null);
-  const handleLiveOutlineReady = useCallback(
-    (snapshot: MessageOutlineSnapshot) => {
-      setCurrentOutline((previous) =>
-        resolveNextMessageOutlineSnapshot(previous, snapshot),
-      );
-    },
-    [],
-  );
-  const liveAssistantOutlineReady = useMemo(() => {
-    if (!liveAssistantMessageId) {
-      return undefined;
-    }
-    return (outline: MarkdownOutlineEntry[]) => {
-      handleLiveOutlineReady({
-        messageId: liveAssistantMessageId,
-        outline,
-      });
-    };
-  }, [handleLiveOutlineReady, liveAssistantMessageId]);
-  const floaterContainerRef = useRef<HTMLDivElement | null>(null);
-  const { activeHeadingId } = useMessageOutlineActive(
-    currentOutline?.outline ?? null,
-    floaterContainerRef,
-  );
-  useEffect(() => {
-    setCurrentOutline(null);
-  }, [threadId, workspaceId]);
   const timelineStabilityRecoveryBudgetRef = useRef(
     DEFAULT_TIMELINE_VIRTUALIZER_STABILITY_RECOVERY_BUDGET,
   );
   const hydrationRemeasureBudgetRef = useRef<HydrationRemeasureBudget>(
+    DEFAULT_HYDRATION_REMEASURE_BUDGET,
+  );
+  // lightweight / live 两套重测同样复用 budget guard：签名不变时封顶重测次数 +
+  // cooldown，避免 measure→重排→ResizeObserver→再 measure 的回路造成持续闪动。
+  const lightweightRemeasureBudgetRef = useRef<HydrationRemeasureBudget>(
+    DEFAULT_HYDRATION_REMEASURE_BUDGET,
+  );
+  const liveRowRemeasureBudgetRef = useRef<HydrationRemeasureBudget>(
     DEFAULT_HYDRATION_REMEASURE_BUDGET,
   );
   const hydrationRemeasureRafRef = useRef<number | null>(null);
@@ -395,6 +360,8 @@ export const MessagesTimeline = memo(function MessagesTimeline({
 
   useEffect(() => {
     hydrationRemeasureBudgetRef.current = DEFAULT_HYDRATION_REMEASURE_BUDGET;
+    lightweightRemeasureBudgetRef.current = DEFAULT_HYDRATION_REMEASURE_BUDGET;
+    liveRowRemeasureBudgetRef.current = DEFAULT_HYDRATION_REMEASURE_BUDGET;
     if (typeof window !== "undefined" && hydrationRemeasureRafRef.current !== null) {
       window.cancelAnimationFrame(hydrationRemeasureRafRef.current);
       hydrationRemeasureRafRef.current = null;
@@ -542,11 +509,32 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   const timelineVirtualizer = useVirtualizer({
     count: shouldVirtualizeTimeline ? timelineProjectionRows.length : 0,
     enabled: shouldVirtualizeTimeline,
-    estimateSize: (index) =>
-      estimateTimelineProjectionRowSize(timelineProjectionRows[index] ?? {
-        kind: "bottomAnchor",
-        key: "bottom-anchor",
-      }),
+    estimateSize: (index) => {
+      const projectionRow = timelineProjectionRows[index];
+      if (!projectionRow) {
+        return estimateTimelineProjectionRowSize({
+          kind: "bottomAnchor",
+          key: "bottom-anchor",
+        });
+      }
+      // 渲染为空的投影行（被跳过的工具卡、非工作态 working 指示等）视觉高度为 0；
+      // 估高也必须归零。否则 measure() 重置后虚拟器会按 row.kind 估高（如 tool=58px）
+      // 给这些空行预留布局偏移，在相邻两行之间撑出 phantom 间隙——这正是对话过程中
+      // 时不时空一大段的根因（resizeItem(index,0) 会被后续 measure() 重置覆盖）。
+      if (
+        isEmptyVirtualProjectionRow(projectionRow, {
+          activeEngine,
+          claudeHistoryTranscriptFallbackActive,
+          hasTailUserInputNode: Boolean(userInputNode),
+          isWorking,
+          lastDurationMs,
+          effectiveItemsCount,
+        })
+      ) {
+        return 0;
+      }
+      return estimateTimelineProjectionRowSize(projectionRow);
+    },
     getItemKey: (index) => timelineProjectionRows[index]?.key ?? `missing:${index}`,
     getScrollElement: () => scrollElementRef.current,
     observeElementOffset: observeTimelineElementOffset,
@@ -558,12 +546,6 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     }),
   });
   const virtualTimelineRows = timelineVirtualizer.getVirtualItems();
-  const requestVirtualizedTimelineMeasure = useCallback(() => {
-    if (!shouldVirtualizeTimeline) {
-      return;
-    }
-    timelineVirtualizer.measure();
-  }, [shouldVirtualizeTimeline, timelineVirtualizer]);
   const virtualTimelineRowKeys = useMemo(
     () => virtualTimelineRows.map((row) => row.key),
     [virtualTimelineRows],
@@ -686,7 +668,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       presentationProfile?.preferCommandSummary,
     ],
   );
-  const retainedHydratedTimelineRowScopeKey = `${virtualizedTimelineScopeKey}\u0000${timelineRendererOptionsKey}`;
+  const retainedHydratedTimelineRowScopeKey = `${virtualizedTimelineScopeKey} ${timelineRendererOptionsKey}`;
   const retainedHydratedTimelineRowKeys = useMemo(() => {
     const retained = retainedHydratedTimelineRowKeysRef.current;
     if (retained.scopeKey !== retainedHydratedTimelineRowScopeKey) {
@@ -824,6 +806,50 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     liveReasoningItem?.summary.length,
   ]);
 
+  // 判定为空的虚拟行：除了 CSS 压成 0，还要主动把虚拟化器内部记录的尺寸归零，
+  // 否则 measure() 重算时会沿用上一次的非 0 测量值，导致后续行 translateY 偏移。
+  const emptyTimelineRowIndexSignature = useMemo(() => {
+    if (!shouldVirtualizeTimeline) {
+      return "";
+    }
+    const indices: number[] = [];
+    timelineProjectionRows.forEach((row, index) => {
+      const isEmpty = isEmptyVirtualProjectionRow(row, {
+        activeEngine,
+        claudeHistoryTranscriptFallbackActive,
+        hasTailUserInputNode: Boolean(userInputNode),
+        isWorking,
+        lastDurationMs,
+        effectiveItemsCount,
+      });
+      if (isEmpty) {
+        indices.push(index);
+      }
+    });
+    return indices.join(",");
+  }, [
+    activeEngine,
+    claudeHistoryTranscriptFallbackActive,
+    effectiveItemsCount,
+    isWorking,
+    lastDurationMs,
+    shouldVirtualizeTimeline,
+    timelineProjectionRows,
+    userInputNode,
+  ]);
+
+  useEffect(() => {
+    if (!shouldVirtualizeTimeline || emptyTimelineRowIndexSignature.length === 0) {
+      return;
+    }
+    emptyTimelineRowIndexSignature.split(",").forEach((rawIndex) => {
+      const index = Number(rawIndex);
+      if (Number.isInteger(index) && index >= 0) {
+        timelineVirtualizer.resizeItem(index, 0);
+      }
+    });
+  }, [emptyTimelineRowIndexSignature, shouldVirtualizeTimeline, timelineVirtualizer]);
+
   useEffect(() => {
     return () => {
       if (typeof window !== "undefined" && hydrationRemeasureRafRef.current !== null) {
@@ -851,6 +877,16 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         window.cancelAnimationFrame(lightweightRemeasureRafRef.current);
         lightweightRemeasureRafRef.current = null;
       }
+      return;
+    }
+    const recovery = resolveHydrationRemeasureGuard({
+      previous: lightweightRemeasureBudgetRef.current,
+      signature: lightweightTimelineRowSignature,
+      hydratedHeavyRowCount: 1,
+      now: Date.now(),
+    });
+    lightweightRemeasureBudgetRef.current = recovery.nextBudget;
+    if (!recovery.shouldRemeasure) {
       return;
     }
     if (lightweightRemeasureRafRef.current !== null) {
@@ -885,6 +921,18 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       activeLiveTimelineRowKeys.length === 0 ||
       typeof window === "undefined"
     ) {
+      return;
+    }
+    // 流式打字时 liveRowRemeasureSignature 随文本量化变化（每 ~600 字符）→ budget
+    // 重置 → 正常重测；只有签名不变还反复触发时才封顶，掐断测量回路闪动。
+    const recovery = resolveHydrationRemeasureGuard({
+      previous: liveRowRemeasureBudgetRef.current,
+      signature: liveRowRemeasureSignature,
+      hydratedHeavyRowCount: 1,
+      now: Date.now(),
+    });
+    liveRowRemeasureBudgetRef.current = recovery.nextBudget;
+    if (!recovery.shouldRemeasure) {
       return;
     }
     if (liveRowRemeasureRafRef.current !== null) {
@@ -1320,22 +1368,17 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       return (
         <Fragment key={itemRenderKey}>
           {shouldRenderReasoningBoundary && (
-            <div className="messages-turn-boundary messages-reasoning-boundary" role="separator">
+            <Marker
+              variant="separator"
+              role="separator"
+              className="messages-turn-boundary messages-reasoning-boundary"
+            >
               <span className="messages-turn-boundary-label">
                 <span className="messages-turn-boundary-label-content">
-                  <Bell className="messages-turn-boundary-icon" size={13} aria-hidden />
-                  <span>{t("messages.reasoningProcessBoundary")}</span>
+                  {t("messages.reasoningProcessBoundary")}
                 </span>
               </span>
-              {finalMetaText && (
-                <span
-                  className="messages-turn-boundary-meta messages-turn-boundary-meta-placeholder"
-                  aria-hidden="true"
-                >
-                  {finalMetaText}
-                </span>
-              )}
-            </div>
+            </Marker>
           )}
           <div
             ref={bindMessageNode}
@@ -1374,36 +1417,27 @@ export const MessagesTimeline = memo(function MessagesTimeline({
               onOpenFileLinkMenu={showFileLinkMenu}
               streamMitigationProfile={streamMitigationProfile}
               onAssistantVisibleTextRender={onAssistantVisibleTextRender}
-              onContentLayoutChange={
-                shouldVirtualizeTimeline ? requestVirtualizedTimelineMeasure : undefined
-              }
               suppressMemorySummaryCard={suppressedUserMemoryContextMessageIds.has(renderItem.id)}
               suppressNoteCardSummaryCard={suppressedUserNoteCardContextMessageIds.has(renderItem.id)}
-              onOutlineReady={
-                renderItem.role === "assistant" && renderItem.id === liveAssistantMessageId
-                  ? liveAssistantOutlineReady
-                  : undefined
-              }
             />
           </div>
           {shouldRenderFinalBoundary && (
-            <div className="messages-turn-boundary messages-final-boundary" role="separator">
+            <Marker
+              variant="separator"
+              role="separator"
+              className="messages-turn-boundary messages-final-boundary"
+            >
               <span className="messages-turn-boundary-label">
                 <span className="messages-turn-boundary-label-content">
-                  <Flag className="messages-turn-boundary-icon" size={13} aria-hidden />
-                  <span>{t("messages.finalMessageBoundary")}</span>
+                  {t("messages.finalMessageBoundary")}
                 </span>
               </span>
               {finalMetaText && (
                 <span className="messages-turn-boundary-meta">{finalMetaText}</span>
               )}
-            </div>
-          )}
-          {shouldRenderAssistantActions ? (
-            <div className="message-tail-action-row">
               {renderAssistantActions()}
-            </div>
-          ) : null}
+            </Marker>
+          )}
         </Fragment>
       );
     }
@@ -1800,11 +1834,24 @@ export const MessagesTimeline = memo(function MessagesTimeline({
           kind: "bottomAnchor",
           key: "bottom-anchor",
         });
-        const placeholderHeight = resolveVirtualizedTimelineRowVisualHeight({
-          measuredSize: virtualRow.size,
-          estimatedSize: estimatedRowSize,
-          lightweight: isLightweightTimelineRow,
-        });
+        const isEmptyTimelineRow = row
+          ? isEmptyVirtualProjectionRow(row, {
+              activeEngine,
+              claudeHistoryTranscriptFallbackActive,
+              hasTailUserInputNode: Boolean(userInputNode),
+              isWorking,
+              lastDurationMs,
+              effectiveItemsCount,
+            })
+          : false;
+        // 渲染为空/null 的行不应占据估高占位，否则虚拟行的 minHeight 会撑出大段空白。
+        const placeholderHeight = isEmptyTimelineRow
+          ? 0
+          : resolveVirtualizedTimelineRowVisualHeight({
+              measuredSize: virtualRow.size,
+              estimatedSize: estimatedRowSize,
+              lightweight: isLightweightTimelineRow,
+            });
         return (
           <div
             key={virtualRow.key}
@@ -1812,19 +1859,33 @@ export const MessagesTimeline = memo(function MessagesTimeline({
             data-active-live-row={isActiveLiveTimelineRow ? "true" : undefined}
             data-conversation-lightweight-virtual-row={isLightweightTimelineRow ? "true" : undefined}
             data-timeline-row-kind={row?.kind}
+            data-empty-virtual-row={isEmptyTimelineRow ? "true" : undefined}
             data-virtual-row-size={placeholderHeight}
-            className={isActiveLiveTimelineRow ? "messages-virtualized-row is-active-live-row" : "messages-virtualized-row"}
-            ref={timelineVirtualizer.measureElement}
+            className={
+              isEmptyTimelineRow
+                ? "messages-virtualized-row is-empty-virtual-row"
+                : isActiveLiveTimelineRow
+                  ? "messages-virtualized-row is-active-live-row"
+                  : "messages-virtualized-row"
+            }
+            // 空行不挂 measureElement：避免内层残留内容/margin 穿透被测成非 0
+            // 高度，扰乱后续行的 translateY 累加（重叠 + 测量回路闪动的根因）。
+            ref={isEmptyTimelineRow ? undefined : timelineVirtualizer.measureElement}
             style={{
               left: 0,
-              minHeight: `${placeholderHeight}px`,
+              height: isEmptyTimelineRow ? 0 : undefined,
+              // 只有轻量摘要行（固定高度卡片）用估高占位；普通行的高度交给
+              // measureElement 量真实内容。给普通行设 minHeight=估高会与
+              // measureElement 形成正反馈棘轮：元素被撑到估高 → 量得估高 →
+              // 永远塌不回真实内容高度，短内容行下方因此残留大段空白。
+              minHeight: isLightweightTimelineRow ? `${placeholderHeight}px` : undefined,
               position: "absolute",
               top: 0,
               transform: `translateY(${virtualRow.start}px)`,
               width: "100%",
             }}
           >
-            {renderProjectionRowWithBoundary(row)}
+            {isEmptyTimelineRow ? null : renderProjectionRowWithBoundary(row)}
           </div>
         );
       })}
@@ -1835,12 +1896,6 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       <Fragment key={row.key}>{renderProjectionRowWithBoundary(row)}</Fragment>
     ));
 
-  const handleJumpToHeading = (headingId: string) => {
-    const target = document.getElementById(headingId);
-    if (target) {
-      target.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  };
   const shouldShowConversationLightweightPrompt =
     !isThinking &&
     !isWorking &&
@@ -1885,11 +1940,9 @@ export const MessagesTimeline = memo(function MessagesTimeline({
               {t("messages.conversationLightweightUse")}
             </button>
           ) : null}
-          {effectiveConversationLightweightMode ? (
-            <button type="button" onClick={onConversationDetailHydrationRequest}>
-              {t("messages.conversationLightweightHydrateVisible")}
-            </button>
-          ) : null}
+          <button type="button" onClick={onConversationDetailHydrationRequest}>
+            {t("messages.conversationLightweightHydrateVisible")}
+          </button>
         </div>
       </div>
     );
@@ -1897,7 +1950,6 @@ export const MessagesTimeline = memo(function MessagesTimeline({
 
   return (
     <div
-      ref={floaterContainerRef}
       className="messages-timeline-root"
       data-timeline-static-expanded-history={
         shouldUseStaticExpandedHistoryFlow ? "true" : undefined
@@ -1908,65 +1960,6 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       data-timeline-presentation-mode={presentationMode}
       data-timeline-presentation-scope={presentationScopeKey}
     >
-      <MessagesOutlineFloater
-        outline={currentOutline?.outline ?? null}
-        activeHeadingId={activeHeadingId}
-        onJumpToHeading={handleJumpToHeading}
-      />
-      {activeStickyHeaderCandidate && (
-        <div
-          className="messages-history-sticky-header"
-          data-history-sticky-message-id={activeStickyHeaderCandidate.id}
-          data-history-sticky-collapsed={isStickyHeaderCollapsed ? "true" : "false"}
-        >
-          <div className="messages-history-sticky-header-inner">
-            <div className="messages-history-sticky-header-content">
-              <div
-                className={`messages-history-sticky-header-bubble${
-                  isStickyHeaderCollapsed ? " is-collapsed" : ""
-                }`}
-              >
-                {!isStickyHeaderCollapsed ? (
-                  <button
-                    type="button"
-                    className="messages-history-sticky-header-toggle"
-                    data-history-sticky-toggle="collapse"
-                    aria-label={t("messages.collapseStickyHeader")}
-                    title={t("messages.collapseStickyHeader")}
-                    aria-expanded={!isStickyHeaderCollapsed}
-                    onClick={() => {
-                      setIsStickyHeaderCollapsed(true);
-                    }}
-                  >
-                    <ChevronRight size={15} aria-hidden />
-                  </button>
-                ) : null}
-                <span className="messages-history-sticky-header-leading" aria-hidden="true">
-                  <MessageSquareText size={12} />
-                </span>
-                <div className="messages-history-sticky-header-text">
-                  {activeStickyHeaderCandidate.text}
-                </div>
-                {isStickyHeaderCollapsed ? (
-                  <button
-                    type="button"
-                    className="messages-history-sticky-header-peek"
-                    data-history-sticky-toggle="expand"
-                    aria-label={t("messages.expandStickyHeader")}
-                    title={t("messages.expandStickyHeader")}
-                    aria-expanded={!isStickyHeaderCollapsed}
-                    onClick={() => {
-                      setIsStickyHeaderCollapsed(false);
-                    }}
-                  >
-                    <ChevronLeft size={14} aria-hidden />
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
       <div
         className="messages-full"
         data-timeline-projection-row-count={timelineProjectionRows.length}
