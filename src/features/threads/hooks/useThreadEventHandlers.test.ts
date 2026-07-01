@@ -2086,6 +2086,59 @@ describe("useThreadEventHandlers diagnostics", () => {
     );
   });
 
+  it("settles a turn from assistant item updated snapshot when no terminal event follows", () => {
+    const onDebug = vi.fn();
+    const options = makeOptions(onDebug);
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-1");
+    });
+    options.markProcessing.mockClear();
+    options.setActiveTurnId.mockClear();
+
+    act(() => {
+      result.current.onItemUpdated("ws-1", "thread-1", {
+        id: "assistant-1",
+        type: "agentMessage",
+        text: "final answer from snapshot",
+        turnId: "turn-1",
+        engineSource: "claude",
+      });
+    });
+
+    expect(options.markProcessing).not.toHaveBeenCalledWith("thread-1", false);
+    expect(options.setActiveTurnId).not.toHaveBeenCalledWith("thread-1", null);
+
+    act(() => {
+      vi.advanceTimersByTime(15_000);
+    });
+
+    expect(options.markProcessing).toHaveBeenCalledWith("thread-1", false);
+    expect(options.setActiveTurnId).toHaveBeenCalledWith("thread-1", null);
+    expect(itemHookFactory.getMarkRealtimeTurnTerminal()).toHaveBeenCalledWith(
+      "thread-1",
+      "turn-1",
+    );
+    expect(options.dispatch).toHaveBeenCalledWith({
+      type: "markTerminalSettlement",
+      threadId: "thread-1",
+    });
+    const fallbackEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) => entry.label === "thread/session:turn-diagnostic:assistant-final-settlement-fallback-applied",
+    );
+    expect(fallbackEntry?.payload).toEqual(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        turnId: "turn-1",
+        assistantCompletedItemId: "assistant-1",
+        diagnosticCategory: "frontend-terminal-settlement",
+        reason: "assistant-final-without-terminal",
+      }),
+    );
+  });
+
   it("clears matched terminal busy residue when completed settlement is rejected without fallback evidence", () => {
     const onDebug = vi.fn();
     const options = makeOptions(onDebug);

@@ -64,6 +64,7 @@ import {
 export { CODEX_EXECUTION_ACTIVE_NO_PROGRESS_STALL_MS, CODEX_TURN_NO_PROGRESS_STALL_MS } from "./threadEventDiagnostics";
 
 const ASSISTANT_FINAL_SETTLEMENT_FALLBACK_MS = 3_000;
+const ASSISTANT_SNAPSHOT_SETTLEMENT_FALLBACK_MS = 15_000;
 
 export function useThreadEventHandlers({
   activeThreadId,
@@ -1504,7 +1505,7 @@ export function useThreadEventHandlers({
       threadId: string;
       turnId: string | null;
       itemId: string;
-    }) => {
+    }, delayMs = ASSISTANT_FINAL_SETTLEMENT_FALLBACK_MS) => {
       if (typeof window === "undefined") {
         return;
       }
@@ -1512,10 +1513,37 @@ export function useThreadEventHandlers({
       const timerId = window.setTimeout(() => {
         assistantFinalSettlementTimerRef.current.delete(payload.threadId);
         applyAssistantFinalSettlementFallback(payload);
-      }, ASSISTANT_FINAL_SETTLEMENT_FALLBACK_MS);
+      }, delayMs);
       assistantFinalSettlementTimerRef.current.set(payload.threadId, timerId);
     },
     [applyAssistantFinalSettlementFallback, clearAssistantFinalSettlementTimer],
+  );
+
+  const scheduleAssistantSnapshotSettlementFallback = useCallback(
+    (workspaceId: string, threadId: string, item: Record<string, unknown>) => {
+      if (asString(item.type).trim() !== "agentMessage") {
+        return;
+      }
+      const text = resolveAgentMessageSnapshotText(item);
+      if (!text.trim()) {
+        return;
+      }
+      const itemId = asString(item.id).trim();
+      if (!itemId) {
+        return;
+      }
+      recordAssistantCompletionEvidence(threadId, itemId);
+      scheduleAssistantFinalSettlementFallback(
+        {
+          workspaceId,
+          threadId,
+          turnId: extractTurnIdFromRawItem(item) || null,
+          itemId,
+        },
+        ASSISTANT_SNAPSHOT_SETTLEMENT_FALLBACK_MS,
+      );
+    },
+    [recordAssistantCompletionEvidence, scheduleAssistantFinalSettlementFallback],
   );
 
   const onTurnStartedTracked = useCallback(
@@ -1745,6 +1773,7 @@ export function useThreadEventHandlers({
       maybeRecordAgentMessageSnapshotIngress(workspaceId, threadId, item);
       captureTurnItemDiagnostic(workspaceId, threadId,
         "updated", item);
+      scheduleAssistantSnapshotSettlementFallback(workspaceId, threadId, item);
       flushDeferredTurnCompletionRef.current?.(threadId, "item-terminal");
     },
     [
@@ -1754,6 +1783,7 @@ export function useThreadEventHandlers({
       maybeRecordAgentMessageSnapshotIngress,
       noteCodexTurnProgressEvidence,
       onItemUpdated,
+      scheduleAssistantSnapshotSettlementFallback,
       shouldSkipCodexTurnEvent,
     ],
   );
@@ -1886,6 +1916,11 @@ export function useThreadEventHandlers({
       if (event.operation === "itemUpdated") {
         captureTurnItemDiagnostic(event.workspaceId, event.threadId,
         "updated", event.rawItem);
+        scheduleAssistantSnapshotSettlementFallback(
+          event.workspaceId,
+          event.threadId,
+          event.rawItem,
+        );
         flushDeferredTurnCompletionRef.current?.(event.threadId, "item-terminal");
         return;
       }
@@ -1905,6 +1940,7 @@ export function useThreadEventHandlers({
       onNormalizedRealtimeEvent,
       recordAssistantCompletionEvidence,
       recordAssistantStreamIngress,
+      scheduleAssistantSnapshotSettlementFallback,
       scheduleAssistantFinalSettlementFallback,
       shouldSkipLateCodexNormalizedEvent,
     ],
