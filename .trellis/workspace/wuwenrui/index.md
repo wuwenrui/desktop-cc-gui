@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 9
-- **Last Active**: 2026-06-25
+- **Total Sessions**: 10
+- **Last Active**: 2026-07-01
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~363 | Active |
+| `journal-1.md` | ~420 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 10 | 2026-07-01 | 修复最终消息后忙碌态残留 | `38e3f12e` | `main` |
 | 9 | 2026-06-25 | 完善微信高级功能与远程控制 | `2516c712` | `feat/wechat-bridge` |
 | 8 | 2026-06-16 | 核验设置崩溃/模型映射修复并补回填测试 | `0bf97e77` | `main` |
 | 7 | 2026-06-15 | 修复设置崩溃和模型映射回填 | `84c1c07d` | `main` |
