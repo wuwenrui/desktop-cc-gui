@@ -35,6 +35,7 @@ import { domainEventFactories } from "../domain-events";
 import type { ThreadEventHandlersOptions } from "./threadEventHandlerTypes";
 import { handleThreadAppServerEventDiagnostics } from "./threadAppServerEventDiagnostics";
 import {
+  CODEX_NO_PROGRESS_FORCE_SETTLEMENT_MS,
   TURN_FIRST_DELTA_WARNING_MS,
   TURN_STALL_WARNING_MS,
   applyActiveExecutionItemEvent,
@@ -61,7 +62,11 @@ import {
   type ThreadLifecycleSnapshot,
   type TurnDiagnosticState,
 } from "./threadEventDiagnostics";
-export { CODEX_EXECUTION_ACTIVE_NO_PROGRESS_STALL_MS, CODEX_TURN_NO_PROGRESS_STALL_MS } from "./threadEventDiagnostics";
+export {
+  CODEX_EXECUTION_ACTIVE_NO_PROGRESS_STALL_MS,
+  CODEX_NO_PROGRESS_FORCE_SETTLEMENT_MS,
+  CODEX_TURN_NO_PROGRESS_STALL_MS,
+} from "./threadEventDiagnostics";
 
 const ASSISTANT_FINAL_SETTLEMENT_FALLBACK_MS = 3_000;
 const ASSISTANT_SNAPSHOT_SETTLEMENT_FALLBACK_MS = 15_000;
@@ -72,6 +77,9 @@ const ASSISTANT_SNAPSHOT_SETTLEMENT_FALLBACK_MS = 15_000;
  * 阈值需容忍正文后的长 thinking 段（reasoning 增量不经过本 hook）。
  */
 const TURN_INGRESS_SILENCE_SETTLEMENT_MS = 90_000;
+// 活跃执行项会让静默看门狗持续改期；若最新执行项开始后超过该上限仍无任何
+// 流量，判定为流中断遗留的僵尸项，不再无限等待，转入收尾。
+const TURN_INGRESS_EXECUTION_STALE_CEILING_MS = 10 * 60_000;
 
 export function useThreadEventHandlers({
   activeThreadId,
@@ -115,6 +123,8 @@ export function useThreadEventHandlers({
   const turnFirstDeltaTimerRef = useRef<Map<string, number>>(new Map());
   const turnStallTimerRef = useRef<Map<string, number>>(new Map());
   const codexNoProgressTimerRef = useRef<Map<string, number>>(new Map());
+  const codexNoProgressEscalationTimerRef = useRef<Map<string, number>>(new Map());
+  const forceSettleSuspectedCodexTurnRef = useRef<((threadId: string) => void) | null>(null);
   const assistantFinalSettlementTimerRef = useRef<Map<string, number>>(new Map());
   const turnIngressSilenceTimerRef = useRef<Map<string, number>>(new Map());
   const lastAssistantIngressRef = useRef<
@@ -218,14 +228,24 @@ export function useThreadEventHandlers({
     turnStallTimerRef.current.delete(threadId);
   }, []);
 
+  const clearCodexNoProgressEscalationTimer = useCallback((threadId: string) => {
+    const timerId = codexNoProgressEscalationTimerRef.current.get(threadId);
+    if (timerId === undefined) {
+      return;
+    }
+    window.clearTimeout(timerId);
+    codexNoProgressEscalationTimerRef.current.delete(threadId);
+  }, []);
+
   const clearCodexNoProgressTimer = useCallback((threadId: string) => {
+    clearCodexNoProgressEscalationTimer(threadId);
     const timerId = codexNoProgressTimerRef.current.get(threadId);
     if (timerId === undefined) {
       return;
     }
     window.clearTimeout(timerId);
     codexNoProgressTimerRef.current.delete(threadId);
-  }, []);
+  }, [clearCodexNoProgressEscalationTimer]);
 
   const clearAssistantFinalSettlementTimer = useCallback((threadId: string) => {
     const timerId = assistantFinalSettlementTimerRef.current.get(threadId);
@@ -299,8 +319,22 @@ export function useThreadEventHandlers({
         handled: false,
         fallbackApplied: false,
       });
+      if (typeof window !== "undefined") {
+        clearCodexNoProgressEscalationTimer(threadId);
+        const escalationTimerId = window.setTimeout(() => {
+          codexNoProgressEscalationTimerRef.current.delete(threadId);
+          forceSettleSuspectedCodexTurnRef.current?.(threadId);
+        }, CODEX_NO_PROGRESS_FORCE_SETTLEMENT_MS);
+        codexNoProgressEscalationTimerRef.current.set(threadId, escalationTimerId);
+      }
     },
-    [dispatch, emitThreeEvidenceDryRunDiagnostic, emitTurnDiagnostic, getThreadLifecycleSnapshot],
+    [
+      clearCodexNoProgressEscalationTimer,
+      dispatch,
+      emitThreeEvidenceDryRunDiagnostic,
+      emitTurnDiagnostic,
+      getThreadLifecycleSnapshot,
+    ],
   );
 
   const emitCodexNoProgressWatchdogDiagnostic = useCallback(
@@ -538,6 +572,7 @@ export function useThreadEventHandlers({
       diagnostic.noProgressSuspectedAt = null;
       diagnostic.noProgressSuspectedSource = null;
       if (wasSuspected) {
+        clearCodexNoProgressEscalationTimer(threadId);
         dispatch({ type: "clearCodexSilentSuspected", threadId });
         const lifecycle = getThreadLifecycleSnapshot(threadId);
         emitTurnDiagnostic("codex-no-progress-recovered", {
@@ -563,6 +598,7 @@ export function useThreadEventHandlers({
       scheduleCodexNoProgressTimer(workspaceId, threadId);
     },
     [
+      clearCodexNoProgressEscalationTimer,
       emitTurnDiagnostic,
       dispatch,
       getThreadLifecycleSnapshot,
@@ -1090,6 +1126,7 @@ export function useThreadEventHandlers({
     const firstDeltaTimers = turnFirstDeltaTimerRef.current;
     const stallTimers = turnStallTimerRef.current;
     const codexNoProgressTimers = codexNoProgressTimerRef.current;
+    const codexNoProgressEscalationTimers = codexNoProgressEscalationTimerRef.current;
     const assistantFinalSettlementTimers = assistantFinalSettlementTimerRef.current;
     const turnIngressSilenceTimers = turnIngressSilenceTimerRef.current;
     const lastAssistantIngress = lastAssistantIngressRef.current;
@@ -1109,6 +1146,10 @@ export function useThreadEventHandlers({
         window.clearTimeout(timerId);
       });
       codexNoProgressTimers.clear();
+      codexNoProgressEscalationTimers.forEach((timerId) => {
+        window.clearTimeout(timerId);
+      });
+      codexNoProgressEscalationTimers.clear();
       assistantFinalSettlementTimers.forEach((timerId) => {
         window.clearTimeout(timerId);
       });
@@ -1542,6 +1583,65 @@ export function useThreadEventHandlers({
     ],
   );
 
+  const forceSettleSuspectedCodexTurn = useCallback(
+    (threadId: string) => {
+      const diagnostic = turnDiagnosticsRef.current.get(threadId);
+      if (
+        !diagnostic ||
+        diagnostic.noProgressSuspectedAt === null ||
+        diagnostic.completedAt !== null ||
+        diagnostic.errorAt !== null
+      ) {
+        return;
+      }
+      const ingress = lastAssistantIngressRef.current.get(threadId);
+      // 没有任何助手正文时不敢代为收尾，维持横幅等待用户处置。
+      if (!ingress || diagnostic.deltaCount === 0) {
+        return;
+      }
+      const lifecycle = getThreadLifecycleSnapshot(threadId);
+      if (!lifecycle.isProcessing) {
+        return;
+      }
+      const now = Date.now();
+      emitTurnDiagnostic("codex-no-progress-forced-settlement", {
+        workspaceId: ingress.workspaceId,
+        threadId,
+        turnId: diagnostic.turnId,
+        silenceMs: Math.max(0, now - diagnostic.lastProgressAt),
+        suspectedForMs: Math.max(0, now - diagnostic.noProgressSuspectedAt),
+        deltaCount: diagnostic.deltaCount,
+        diagnosticCategory: "frontend-terminal-settlement",
+        reason: "codex-no-progress-suspicion-expired",
+        ...buildThreadStreamCorrelationDimensions(threadId),
+      }, { force: true });
+      if (diagnostic.assistantCompletedAt === null) {
+        diagnostic.assistantCompletedAt = ingress.at;
+        diagnostic.assistantCompletedItemId =
+          diagnostic.assistantCompletedItemId ?? (ingress.itemId || null);
+      }
+      const applied = applyAssistantFinalSettlementFallback({
+        workspaceId: ingress.workspaceId,
+        threadId,
+        turnId: diagnostic.turnId || null,
+        itemId: ingress.itemId,
+      });
+      if (!applied && typeof window !== "undefined") {
+        // 被 collab 阻塞项等挡住时保留重试，阻塞解除或回合终结后自然停止。
+        const retryTimerId = window.setTimeout(() => {
+          codexNoProgressEscalationTimerRef.current.delete(threadId);
+          forceSettleSuspectedCodexTurnRef.current?.(threadId);
+        }, CODEX_NO_PROGRESS_FORCE_SETTLEMENT_MS);
+        codexNoProgressEscalationTimerRef.current.set(threadId, retryTimerId);
+      }
+    },
+    [applyAssistantFinalSettlementFallback, emitTurnDiagnostic, getThreadLifecycleSnapshot],
+  );
+
+  useEffect(() => {
+    forceSettleSuspectedCodexTurnRef.current = forceSettleSuspectedCodexTurn;
+  }, [forceSettleSuspectedCodexTurn]);
+
   const scheduleAssistantFinalSettlementFallback = useCallback(
     (payload: {
       workspaceId: string;
@@ -1595,8 +1695,15 @@ export function useThreadEventHandlers({
           return;
         }
         if (diagnostic.activeExecutionItems.size > 0) {
-          scheduleTurnIngressSilenceWatchdogRef.current?.(threadId);
-          return;
+          const newestExecutionStartedAt = Math.max(
+            ...Array.from(diagnostic.activeExecutionItems.values()).map(
+              (item) => item.startedAt,
+            ),
+          );
+          if (now - newestExecutionStartedAt < TURN_INGRESS_EXECUTION_STALE_CEILING_MS) {
+            scheduleTurnIngressSilenceWatchdogRef.current?.(threadId);
+            return;
+          }
         }
         if (diagnostic.deltaCount === 0) {
           return;

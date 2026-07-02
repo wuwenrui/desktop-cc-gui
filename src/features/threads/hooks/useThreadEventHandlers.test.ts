@@ -7,6 +7,7 @@ import {
 } from "./workspaceScopedMap";
 import {
   CODEX_EXECUTION_ACTIVE_NO_PROGRESS_STALL_MS,
+  CODEX_NO_PROGRESS_FORCE_SETTLEMENT_MS,
   CODEX_TURN_NO_PROGRESS_STALL_MS,
   useThreadEventHandlers,
 } from "./useThreadEventHandlers";
@@ -2174,6 +2175,143 @@ describe("useThreadEventHandlers diagnostics", () => {
         diagnosticCategory: "frontend-terminal-settlement",
         reason: "stream-silent-without-terminal",
       }),
+    );
+  });
+
+  it("force-settles a suspected codex turn once the escalation window expires", () => {
+    const onDebug = vi.fn();
+    const options = makeOptions(onDebug);
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-1");
+      result.current.onAgentMessageDelta({
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        itemId: "assistant-1",
+        delta: "full answer already streamed",
+      });
+    });
+    options.markProcessing.mockClear();
+    options.setActiveTurnId.mockClear();
+
+    act(() => {
+      vi.advanceTimersByTime(CODEX_TURN_NO_PROGRESS_STALL_MS);
+    });
+    expect(options.dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "markCodexSilentSuspected", threadId: "thread-1" }),
+    );
+    expect(options.markProcessing).not.toHaveBeenCalledWith("thread-1", false);
+
+    act(() => {
+      vi.advanceTimersByTime(CODEX_NO_PROGRESS_FORCE_SETTLEMENT_MS);
+    });
+
+    expect(options.markProcessing).toHaveBeenCalledWith("thread-1", false);
+    expect(options.setActiveTurnId).toHaveBeenCalledWith("thread-1", null);
+    const forcedEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) =>
+        entry.label === "thread/session:turn-diagnostic:codex-no-progress-forced-settlement",
+    );
+    expect(forcedEntry?.payload).toEqual(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        turnId: "turn-1",
+        diagnosticCategory: "frontend-terminal-settlement",
+        reason: "codex-no-progress-suspicion-expired",
+      }),
+    );
+    const fallbackEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) =>
+        entry.label === "thread/session:turn-diagnostic:assistant-final-settlement-fallback-applied",
+    );
+    expect(fallbackEntry?.payload).toEqual(
+      expect.objectContaining({ threadId: "thread-1", turnId: "turn-1" }),
+    );
+  });
+
+  it("does not force-settle a suspected codex turn when progress resumes", () => {
+    const onDebug = vi.fn();
+    const options = makeOptions(onDebug);
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-1");
+      result.current.onAgentMessageDelta({
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        itemId: "assistant-1",
+        delta: "first chunk",
+      });
+      vi.advanceTimersByTime(CODEX_TURN_NO_PROGRESS_STALL_MS);
+    });
+    expect(options.dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "markCodexSilentSuspected", threadId: "thread-1" }),
+    );
+    options.markProcessing.mockClear();
+    options.setActiveTurnId.mockClear();
+
+    act(() => {
+      result.current.onAgentMessageDelta({
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        itemId: "assistant-1",
+        delta: "second chunk arrives late",
+      });
+      vi.advanceTimersByTime(CODEX_NO_PROGRESS_FORCE_SETTLEMENT_MS * 2);
+    });
+
+    expect(options.markProcessing).not.toHaveBeenCalledWith("thread-1", false);
+    expect(options.setActiveTurnId).not.toHaveBeenCalledWith("thread-1", null);
+    const forcedEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) =>
+        entry.label === "thread/session:turn-diagnostic:codex-no-progress-forced-settlement",
+    );
+    expect(forcedEntry).toBeUndefined();
+  });
+
+  it("settles a hung claude turn even when a stale execution item never completes", () => {
+    const onDebug = vi.fn();
+    const options = makeOptions(onDebug);
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+    const threadId = "claude:session-stale-exec";
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", threadId, "turn-1");
+      result.current.onAgentMessageDelta({
+        workspaceId: "ws-1",
+        threadId,
+        itemId: "assistant-1",
+        delta: "answer text before the tool call",
+      });
+      result.current.onItemStarted("ws-1", threadId, {
+        id: "cmd-1",
+        type: "commandExecution",
+        command: "long running command",
+        status: "running",
+      });
+    });
+    options.markProcessing.mockClear();
+    options.setActiveTurnId.mockClear();
+
+    // 执行项仍新鲜时看门狗持续改期，不得提前收尾。
+    act(() => {
+      vi.advanceTimersByTime(5 * 60_000);
+    });
+    expect(options.markProcessing).not.toHaveBeenCalledWith(threadId, false);
+
+    // 超过僵尸执行项上限后必须收尾，不能无限等待。
+    act(() => {
+      vi.advanceTimersByTime(8 * 60_000);
+    });
+    expect(options.markProcessing).toHaveBeenCalledWith(threadId, false);
+    expect(options.setActiveTurnId).toHaveBeenCalledWith(threadId, null);
+    const silenceEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) => entry.label === "thread/session:turn-diagnostic:ingress-silence-settlement-triggered",
+    );
+    expect(silenceEntry?.payload).toEqual(
+      expect.objectContaining({ threadId, turnId: "turn-1" }),
     );
   });
 

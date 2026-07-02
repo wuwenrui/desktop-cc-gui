@@ -5,6 +5,9 @@ export const TURN_FIRST_DELTA_WARNING_MS = 6_000;
 export const TURN_STALL_WARNING_MS = 6_000;
 export const CODEX_TURN_NO_PROGRESS_STALL_MS = 600_000;
 export const CODEX_EXECUTION_ACTIVE_NO_PROGRESS_STALL_MS = 20 * 60_000;
+// 怀疑无进展后再等这么久仍无任何进展，且回合已有助手正文，则强制前端收尾，
+// 防止流中断后忙碌态无限悬挂（怀疑态此前只发横幅与诊断，永不落地）。
+export const CODEX_NO_PROGRESS_FORCE_SETTLEMENT_MS = 120_000;
 
 const TURN_DIAGNOSTIC_VERBOSE_FLAG_KEY = "ccgui.debug.turnDiagnosticsVerbose";
 const REQUEST_USER_INPUT_BLOCKED_REASON_CODE =
