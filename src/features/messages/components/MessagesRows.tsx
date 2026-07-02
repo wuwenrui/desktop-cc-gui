@@ -52,6 +52,7 @@ import { IntentCanvasContextSummaryCard } from "./IntentCanvasContextSummaryCard
 import { NoteCardContextSummaryCard } from "./NoteCardContextSummaryCard";
 import { TurnSourceSummary } from "../../session-evidence/TurnSourceSummary";
 import { parseMemoryContextSummary } from "./messagesMemoryContext";
+import { parseVisionPreflightStatus } from "../../vision/visionPreflight";
 import {
   parseNoteCardContextSummary,
 } from "./messagesNoteCardContext";
@@ -770,6 +771,11 @@ export const MessageRow = memo(function MessageRow({
         : userMessagePresentation?.noteCardSummary ?? null,
     [item.role, item.text, userMessagePresentation?.noteCardSummary],
   );
+  const visionPreflightStatus = useMemo(
+    () =>
+      item.role === "assistant" ? parseVisionPreflightStatus(item.text) : null,
+    [item.role, item.text],
+  );
   const resolvedMemorySummary = suppressMemorySummaryCard ? null : memorySummary;
   const resolvedNoteCardSummary = suppressNoteCardSummaryCard ? null : noteCardSummary;
   const memorySummaryRecords = resolvedMemorySummary?.records ?? [];
@@ -819,7 +825,7 @@ export const MessageRow = memo(function MessageRow({
             ? ""
             : stripBrowserContextPrompt(userMessagePresentation?.displayText ?? item.text)
         )
-      : resolvedMemorySummary || resolvedNoteCardSummary
+      : resolvedMemorySummary || resolvedNoteCardSummary || visionPreflightStatus
         ? ""
         : item.text;
   const messageRowSubtype = agentTaskNotification
@@ -1615,11 +1621,56 @@ export const MessageRow = memo(function MessageRow({
       {memoryPayloadDialogNode}
     </>
   ) : null;
-  if (!memorySummaryNode && !noteCardSummaryNode && !browserContextSummaryNode && !intentCanvasContextSummaryNode && !codeAnnotationContextNode && !shouldRenderBubble) {
+  const visionPreflightStatusNode = visionPreflightStatus ? (
+    <div
+      className={`vision-preflight-card is-${visionPreflightStatus.status}`}
+      role="status"
+      data-testid="vision-preflight-card"
+    >
+      {visionPreflightStatus.status === "running" ? (
+        <span className="vision-preflight-card-spinner" aria-hidden />
+      ) : (
+        <span className="vision-preflight-card-state-dot" aria-hidden />
+      )}
+      <span className="vision-preflight-card-copy">
+        <span className="vision-preflight-card-title">
+          {visionPreflightStatus.status === "running"
+            ? t("messages.visionPreflightRunning", {
+                skill: visionPreflightStatus.skillName,
+              })
+            : visionPreflightStatus.status === "done"
+              ? t("messages.visionPreflightDone", {
+                  skill: visionPreflightStatus.skillName,
+                })
+              : t("messages.visionPreflightFailed", {
+                  skill: visionPreflightStatus.skillName,
+                })}
+        </span>
+        <span className="vision-preflight-card-meta">
+          {visionPreflightStatus.status === "running"
+            ? t("messages.visionPreflightRunningMeta", {
+                model: visionPreflightStatus.model,
+                count: visionPreflightStatus.imageCount,
+              })
+            : visionPreflightStatus.status === "done"
+              ? t("messages.visionPreflightDoneMeta", {
+                  chars: visionPreflightStatus.resultChars ?? 0,
+                  seconds: Math.max(
+                    1,
+                    Math.round((visionPreflightStatus.durationMs ?? 0) / 1000),
+                  ),
+                })
+              : visionPreflightStatus.errorMessage ?? ""}
+        </span>
+      </span>
+    </div>
+  ) : null;
+  if (!memorySummaryNode && !noteCardSummaryNode && !browserContextSummaryNode && !intentCanvasContextSummaryNode && !codeAnnotationContextNode && !visionPreflightStatusNode && !shouldRenderBubble) {
     return null;
   }
-  const stackedContent = memorySummaryNode || noteCardSummaryNode || browserContextSummaryNode || intentCanvasContextSummaryNode || codeAnnotationContextNode ? (
+  const stackedContent = memorySummaryNode || noteCardSummaryNode || browserContextSummaryNode || intentCanvasContextSummaryNode || codeAnnotationContextNode || visionPreflightStatusNode ? (
     <div className={`message-context-stack${item.role === "user" ? " is-user" : ""}`}>
+      {visionPreflightStatusNode}
       {memorySummaryNode}
       {codeAnnotationContextNode}
       {browserContextSummaryNode}

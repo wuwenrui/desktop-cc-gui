@@ -116,6 +116,7 @@ import {
 } from "./messageRuntimeController";
 import { useCodexMessageRecovery } from "./useCodexMessageRecovery";
 import {
+  buildVisionPreflightStatusText,
   injectVisionPreflightContext,
   runVisionPreflight,
 } from "../../vision/visionPreflight";
@@ -598,12 +599,46 @@ export function useThreadMessaging({
       }
       let visionPreflightInjected = false;
       if (options?.visionPreflight && finalImages.length > 0) {
+        const visionStatusItemId = `vision-preflight-${Date.now()}-${Math.random()
+          .toString(36)
+          .slice(2, 8)}`;
+        const visionStatusBase = {
+          skillName: options.visionPreflight.skillName,
+          model: options.visionPreflight.model,
+          mode: options.visionPreflight.mode,
+          imageCount: finalImages.length,
+        };
+        const upsertVisionStatus = (
+          status: Parameters<typeof buildVisionPreflightStatusText>[0],
+        ) => {
+          dispatch({
+            type: "upsertItem",
+            workspaceId: workspace.id,
+            threadId,
+            item: {
+              id: visionStatusItemId,
+              kind: "message",
+              role: "assistant",
+              text: buildVisionPreflightStatusText(status),
+            },
+            hasCustomName: Boolean(getCustomName(workspace.id, threadId)),
+          });
+        };
+        const visionPreflightStartedAt = Date.now();
+        upsertVisionStatus({ ...visionStatusBase, status: "running" });
+        safeMessageActivity();
         try {
           const visionPreflightResult = await runVisionPreflight({
             workspaceId: workspace.id,
             userText: finalText,
             images: finalImages,
             preflight: options.visionPreflight,
+          });
+          upsertVisionStatus({
+            ...visionStatusBase,
+            status: "done",
+            resultChars: visionPreflightResult?.text.length ?? 0,
+            durationMs: Math.max(0, Date.now() - visionPreflightStartedAt),
           });
           if (visionPreflightResult) {
             finalText = injectVisionPreflightContext(
@@ -630,6 +665,12 @@ export function useThreadMessaging({
         } catch (error) {
           const message =
             error instanceof Error ? error.message : String(error);
+          upsertVisionStatus({
+            ...visionStatusBase,
+            status: "failed",
+            durationMs: Math.max(0, Date.now() - visionPreflightStartedAt),
+            errorMessage: message,
+          });
           pushThreadErrorMessage(
             workspace.id,
             threadId,

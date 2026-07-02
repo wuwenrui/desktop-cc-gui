@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildVisionPreflightStatusText,
   injectVisionPreflightContext,
+  parseVisionPreflightStatus,
   stripVisionPreflightContext,
   type VisionPreflightResult,
+  type VisionPreflightStatus,
 } from "./visionPreflight";
 
 const preflightResult: VisionPreflightResult = {
@@ -49,5 +52,50 @@ describe("stripVisionPreflightContext", () => {
   it("returns text without a preflight block unchanged", () => {
     const plain = "普通消息，没有视觉预处理。";
     expect(stripVisionPreflightContext(plain)).toBe(plain);
+  });
+});
+
+describe("visionPreflightStatus", () => {
+  it("round-trips running, done and failed status payloads", () => {
+    const statuses: VisionPreflightStatus[] = [
+      {
+        status: "running",
+        skillName: "视觉OCR",
+        model: "qwen3-vl-flash",
+        mode: "ocr",
+        imageCount: 2,
+      },
+      {
+        status: "done",
+        skillName: "视觉OCR",
+        model: "qwen3-vl-flash",
+        mode: "ocr",
+        imageCount: 2,
+        resultChars: 1234,
+        durationMs: 28000,
+      },
+      {
+        status: "failed",
+        skillName: "文件转Markdown",
+        model: "qwen3-vl-flash",
+        mode: "file-to-markdown",
+        imageCount: 1,
+        durationMs: 3000,
+        errorMessage: "network error",
+      },
+    ];
+    for (const status of statuses) {
+      expect(
+        parseVisionPreflightStatus(buildVisionPreflightStatusText(status)),
+      ).toEqual(status);
+    }
+  });
+
+  it("returns null for plain text and malformed payloads", () => {
+    expect(parseVisionPreflightStatus("普通助手消息")).toBeNull();
+    expect(parseVisionPreflightStatus("【视觉解析】\nnot-json")).toBeNull();
+    expect(
+      parseVisionPreflightStatus('【视觉解析】\n{"status":"unknown"}'),
+    ).toBeNull();
   });
 });

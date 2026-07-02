@@ -847,6 +847,85 @@
   max-width: 860px;
 }
 
+.vision-preflight-card {
+  --vision-preflight-accent: var(--accent-blue, #2563eb);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 860px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--vision-preflight-accent) 38%, var(--border-subtle));
+  border-radius: 12px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--vision-preflight-accent) 10%, transparent), transparent 55%),
+    var(--surface-card);
+}
+
+.vision-preflight-card.is-failed {
+  --vision-preflight-accent: #b91c1c;
+}
+
+.vision-preflight-card.is-done {
+  --vision-preflight-accent: #15803d;
+}
+
+.vision-preflight-card-spinner {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--vision-preflight-accent) 28%, transparent);
+  border-top-color: var(--vision-preflight-accent);
+  animation: vision-preflight-spin 0.9s linear infinite;
+}
+
+.vision-preflight-card-state-dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--vision-preflight-accent);
+}
+
+.vision-preflight-card-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.vision-preflight-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.vision-preflight-card.is-running .vision-preflight-card-title {
+  animation: vision-preflight-pulse 1.6s ease-in-out infinite;
+}
+
+.vision-preflight-card-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+@keyframes vision-preflight-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes vision-preflight-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
 .browser-context-summary-card {
   --browser-context-summary-accent: var(--accent-blue, #2563eb);
   --browser-context-summary-accent-rgb: 37 99 235;

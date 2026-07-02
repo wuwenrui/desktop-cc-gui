@@ -50,6 +50,50 @@ export function buildVisionPreflightPrompt({
   ].join("\n");
 }
 
+export const VISION_PREFLIGHT_STATUS_PREFIX = "【视觉解析】";
+
+export type VisionPreflightStatusState = "running" | "done" | "failed";
+
+export type VisionPreflightStatus = {
+  status: VisionPreflightStatusState;
+  skillName: string;
+  model: string;
+  mode: VisionPreflightOptions["mode"];
+  imageCount: number;
+  resultChars?: number;
+  durationMs?: number;
+  errorMessage?: string;
+};
+
+export function buildVisionPreflightStatusText(
+  status: VisionPreflightStatus,
+): string {
+  return `${VISION_PREFLIGHT_STATUS_PREFIX}\n${JSON.stringify(status)}`;
+}
+
+export function parseVisionPreflightStatus(
+  text: string,
+): VisionPreflightStatus | null {
+  const normalized = text.trim();
+  if (!normalized.startsWith(VISION_PREFLIGHT_STATUS_PREFIX)) {
+    return null;
+  }
+  const payload = normalized.slice(VISION_PREFLIGHT_STATUS_PREFIX.length).trim();
+  try {
+    const parsed = JSON.parse(payload) as VisionPreflightStatus;
+    if (
+      parsed.status !== "running" &&
+      parsed.status !== "done" &&
+      parsed.status !== "failed"
+    ) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 const VISION_PREFLIGHT_BLOCK_PATTERN =
   /\n*<hidden_vision_preflight_result>[\s\S]*?(?:<\/hidden_vision_preflight_result>|$)\n*(?:Use the hidden vision preflight result[^\n]*\n?)?/g;
 

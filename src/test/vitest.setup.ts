@@ -252,6 +252,11 @@ vi.mock("react-i18next", () => ({
         "messages.conversationLightweightRowMeta": `Render weight ${String(params?.weight ?? "")}`,
         "messages.conversationLightweightAssistantMessage": "Assistant message",
         "messages.conversationLightweightUserMessage": "User message",
+        "messages.visionPreflightRunning": `${String(params?.skill ?? "")} is analyzing images…`,
+        "messages.visionPreflightRunningMeta": `${String(params?.model ?? "")} · ${String(params?.count ?? "")} image(s)`,
+        "messages.visionPreflightDone": `${String(params?.skill ?? "")} analysis complete`,
+        "messages.visionPreflightDoneMeta": `Extracted ~${String(params?.chars ?? "")} chars · ${String(params?.seconds ?? "")}s`,
+        "messages.visionPreflightFailed": `${String(params?.skill ?? "")} analysis failed`,
         "messages.markdownHeavyBlockDeferred": "Heavy Markdown detail deferred",
         "messages.markdownHeavyBlockMeta":
           `${String(params?.kind ?? "")} · ${String(params?.lines ?? "")} lines`,
