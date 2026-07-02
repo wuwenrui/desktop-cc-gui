@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 11
-- **Last Active**: 2026-07-01
+- **Total Sessions**: 12
+- **Last Active**: 2026-07-02
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~453 | Active |
+| `journal-1.md` | ~505 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 12 | 2026-07-02 | 新增会话悬浮预览卡 | `869a6528` | `main` |
 | 11 | 2026-07-01 | 修复快照完成后忙碌态残留 | `fdf14630` | `main` |
 | 10 | 2026-07-01 | 修复最终消息后忙碌态残留 | `38e3f12e` | `main` |
 | 9 | 2026-06-25 | 完善微信高级功能与远程控制 | `2516c712` | `feat/wechat-bridge` |
