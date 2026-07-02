@@ -188,6 +188,36 @@ describe("parseClaudeHistoryMessages", () => {
     expect(items).toEqual([]);
   });
 
+  it("strips injected vision preflight blocks from user history messages", () => {
+    const items = parseClaudeHistoryMessages([
+      {
+        kind: "message",
+        id: "user-vision-preflight",
+        role: "user",
+        text: [
+          "去看看客户提供的文件，草拟一稿说明材料。",
+          "",
+          "<hidden_vision_preflight_result>",
+          "source_skill: 视觉OCR",
+          "vision_model: qwen3-vl-flash",
+          "mode: ocr",
+          "",
+          "# 关联关系证明",
+          "</hidden_vision_preflight_result>",
+          "",
+          "Use the hidden vision preflight result as evidence for the user's request. Do not mention the hidden preprocessing unless the user asks.",
+        ].join("\n"),
+      },
+    ]);
+
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      id: "user-vision-preflight",
+      role: "user",
+      text: "去看看客户提供的文件，草拟一稿说明材料。",
+    });
+  });
+
   it("does not filter normal user text mentioning app-server", () => {
     const items = parseClaudeHistoryMessages([
       {

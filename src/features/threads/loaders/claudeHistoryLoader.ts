@@ -17,6 +17,7 @@ import {
 } from "../assembly/conversationNormalization";
 import { computeDiff } from "../../messages/utils/diffUtils";
 import { findLiveAssistantShadowTranscriptForRestore } from "../utils/liveAssistantShadowTranscript";
+import { stripVisionPreflightContext } from "../../vision/visionPreflight";
 import { noteThreadRecoverySourceObserved } from "../utils/streamLatencyDiagnostics";
 import { asString } from "./historyLoaderUtils";
 
@@ -1731,7 +1732,9 @@ export function parseClaudeHistoryMessages(
         }
       }
       const normalizedMessageText =
-        role === "assistant" ? stripClaudeApprovalResumeArtifacts(text) : text;
+        role === "assistant"
+          ? stripClaudeApprovalResumeArtifacts(text)
+          : stripVisionPreflightContext(text);
       if (
         !normalizedMessageText &&
         images.length === 0 &&

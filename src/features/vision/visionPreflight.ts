@@ -50,6 +50,21 @@ export function buildVisionPreflightPrompt({
   ].join("\n");
 }
 
+const VISION_PREFLIGHT_BLOCK_PATTERN =
+  /\n*<hidden_vision_preflight_result>[\s\S]*?(?:<\/hidden_vision_preflight_result>|$)\n*(?:Use the hidden vision preflight result[^\n]*\n?)?/g;
+
+/**
+ * 从用户消息文本中剥离注入的视觉预处理块。发送时注入的全文会写进
+ * claude 会话历史，历史重载渲染用户气泡前必须剥掉，否则用户会看到
+ * hidden 块原文。闭合标签缺失（截断）时剥到文本末尾。
+ */
+export function stripVisionPreflightContext(text: string): string {
+  if (!text.includes("<hidden_vision_preflight_result>")) {
+    return text;
+  }
+  return text.replace(VISION_PREFLIGHT_BLOCK_PATTERN, "\n").trimEnd();
+}
+
 export function injectVisionPreflightContext(
   userText: string,
   result: VisionPreflightResult,
