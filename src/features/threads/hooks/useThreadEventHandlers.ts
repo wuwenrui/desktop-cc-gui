@@ -65,6 +65,13 @@ export { CODEX_EXECUTION_ACTIVE_NO_PROGRESS_STALL_MS, CODEX_TURN_NO_PROGRESS_STA
 
 const ASSISTANT_FINAL_SETTLEMENT_FALLBACK_MS = 3_000;
 const ASSISTANT_SNAPSHOT_SETTLEMENT_FALLBACK_MS = 15_000;
+/**
+ * Claude 引擎兜底：正文已流出但上游流悬挂（既无 message 完成事件也无
+ * terminal 事件，如非 Anthropic 模型经中转未发 message_stop）时，
+ * 静默超过该时长且无执行中的工具即强制结算，避免忙碌态永久残留。
+ * 阈值需容忍正文后的长 thinking 段（reasoning 增量不经过本 hook）。
+ */
+const TURN_INGRESS_SILENCE_SETTLEMENT_MS = 90_000;
 
 export function useThreadEventHandlers({
   activeThreadId,
@@ -109,6 +116,13 @@ export function useThreadEventHandlers({
   const turnStallTimerRef = useRef<Map<string, number>>(new Map());
   const codexNoProgressTimerRef = useRef<Map<string, number>>(new Map());
   const assistantFinalSettlementTimerRef = useRef<Map<string, number>>(new Map());
+  const turnIngressSilenceTimerRef = useRef<Map<string, number>>(new Map());
+  const lastAssistantIngressRef = useRef<
+    Map<string, { workspaceId: string; itemId: string; at: number }>
+  >(new Map());
+  const scheduleTurnIngressSilenceWatchdogRef = useRef<
+    ((threadId: string, delayMs?: number) => void) | null
+  >(null);
   const reconciliationQueryInFlightRef = useRef<Set<string>>(new Set());
   const flushDeferredTurnCompletionRef = useRef<
     ((threadId: string, source: DeferredCompletionFlushSource) => void) | null
@@ -220,6 +234,15 @@ export function useThreadEventHandlers({
     }
     window.clearTimeout(timerId);
     assistantFinalSettlementTimerRef.current.delete(threadId);
+  }, []);
+
+  const clearTurnIngressSilenceTimer = useCallback((threadId: string) => {
+    const timerId = turnIngressSilenceTimerRef.current.get(threadId);
+    if (timerId === undefined) {
+      return;
+    }
+    window.clearTimeout(timerId);
+    turnIngressSilenceTimerRef.current.delete(threadId);
   }, []);
 
   const markCodexNoProgressSuspected = useCallback(
@@ -973,6 +996,17 @@ export function useThreadEventHandlers({
         return;
       }
       const deltaTimestamp = Date.now();
+      lastAssistantIngressRef.current.set(payload.threadId, {
+        workspaceId: payload.workspaceId,
+        itemId: payload.itemId,
+        at: deltaTimestamp,
+      });
+      if (
+        inferThreadEngine(payload.threadId) === "claude" &&
+        !turnIngressSilenceTimerRef.current.has(payload.threadId)
+      ) {
+        scheduleTurnIngressSilenceWatchdogRef.current?.(payload.threadId);
+      }
       const source = payload.source;
       const isDeltaIngress = source === "delta" || source === "snapshot";
       if (isDeltaIngress) {
@@ -1057,6 +1091,8 @@ export function useThreadEventHandlers({
     const stallTimers = turnStallTimerRef.current;
     const codexNoProgressTimers = codexNoProgressTimerRef.current;
     const assistantFinalSettlementTimers = assistantFinalSettlementTimerRef.current;
+    const turnIngressSilenceTimers = turnIngressSilenceTimerRef.current;
+    const lastAssistantIngress = lastAssistantIngressRef.current;
     const assistantSnapshotIngressLength = assistantSnapshotIngressLengthRef.current;
     const quarantinedCodexTurns = quarantinedCodexTurnsRef.current;
     const reconciliationQueryInFlight = reconciliationQueryInFlightRef.current;
@@ -1077,6 +1113,11 @@ export function useThreadEventHandlers({
         window.clearTimeout(timerId);
       });
       assistantFinalSettlementTimers.clear();
+      turnIngressSilenceTimers.forEach((timerId) => {
+        window.clearTimeout(timerId);
+      });
+      turnIngressSilenceTimers.clear();
+      lastAssistantIngress.clear();
       assistantSnapshotIngressLength.clear();
       quarantinedCodexTurns.clear();
       reconciliationQueryInFlight.clear();
@@ -1418,6 +1459,7 @@ export function useThreadEventHandlers({
       clearTurnStallTimer(payload.threadId);
       clearCodexNoProgressTimer(payload.threadId);
       clearAssistantFinalSettlementTimer(payload.threadId);
+      clearTurnIngressSilenceTimer(payload.threadId);
       if (normalizedTurnId) {
         markRealtimeTurnTerminal(payload.threadId, normalizedTurnId);
       }
@@ -1484,6 +1526,7 @@ export function useThreadEventHandlers({
       clearAssistantSnapshotIngressForThread,
       clearCodexNoProgressTimer,
       clearFirstDeltaTimer,
+      clearTurnIngressSilenceTimer,
       clearTurnStallTimer,
       dispatch,
       emitTurnDiagnostic,
@@ -1518,6 +1561,81 @@ export function useThreadEventHandlers({
     },
     [applyAssistantFinalSettlementFallback, clearAssistantFinalSettlementTimer],
   );
+
+  const scheduleTurnIngressSilenceWatchdog = useCallback(
+    (threadId: string, delayMs = TURN_INGRESS_SILENCE_SETTLEMENT_MS) => {
+      if (typeof window === "undefined") {
+        return;
+      }
+      clearTurnIngressSilenceTimer(threadId);
+      const timerId = window.setTimeout(() => {
+        turnIngressSilenceTimerRef.current.delete(threadId);
+        const diagnostic = turnDiagnosticsRef.current.get(threadId);
+        const ingress = lastAssistantIngressRef.current.get(threadId);
+        if (
+          !diagnostic ||
+          !ingress ||
+          diagnostic.completedAt !== null ||
+          diagnostic.errorAt !== null
+        ) {
+          return;
+        }
+        const lifecycle = getThreadLifecycleSnapshot(threadId);
+        if (!lifecycle.isProcessing) {
+          return;
+        }
+        const now = Date.now();
+        const lastActivityAt = Math.max(ingress.at, diagnostic.lastProgressAt);
+        const silenceMs = Math.max(0, now - lastActivityAt);
+        if (silenceMs < TURN_INGRESS_SILENCE_SETTLEMENT_MS) {
+          scheduleTurnIngressSilenceWatchdogRef.current?.(
+            threadId,
+            Math.max(1_000, TURN_INGRESS_SILENCE_SETTLEMENT_MS - silenceMs),
+          );
+          return;
+        }
+        if (diagnostic.activeExecutionItems.size > 0) {
+          scheduleTurnIngressSilenceWatchdogRef.current?.(threadId);
+          return;
+        }
+        if (diagnostic.deltaCount === 0) {
+          return;
+        }
+        emitTurnDiagnostic("ingress-silence-settlement-triggered", {
+          workspaceId: ingress.workspaceId,
+          threadId,
+          turnId: diagnostic.turnId,
+          silenceMs,
+          deltaCount: diagnostic.deltaCount,
+          diagnosticCategory: "frontend-terminal-settlement",
+          reason: "stream-silent-without-terminal",
+          ...buildThreadStreamCorrelationDimensions(threadId),
+        }, { force: true });
+        if (diagnostic.assistantCompletedAt === null) {
+          diagnostic.assistantCompletedAt = ingress.at;
+          diagnostic.assistantCompletedItemId =
+            diagnostic.assistantCompletedItemId ?? (ingress.itemId || null);
+        }
+        applyAssistantFinalSettlementFallback({
+          workspaceId: ingress.workspaceId,
+          threadId,
+          turnId: diagnostic.turnId || null,
+          itemId: ingress.itemId,
+        });
+      }, delayMs);
+      turnIngressSilenceTimerRef.current.set(threadId, timerId);
+    },
+    [
+      applyAssistantFinalSettlementFallback,
+      clearTurnIngressSilenceTimer,
+      emitTurnDiagnostic,
+      getThreadLifecycleSnapshot,
+    ],
+  );
+
+  useEffect(() => {
+    scheduleTurnIngressSilenceWatchdogRef.current = scheduleTurnIngressSilenceWatchdog;
+  }, [scheduleTurnIngressSilenceWatchdog]);
 
   const scheduleAssistantSnapshotSettlementFallback = useCallback(
     (workspaceId: string, threadId: string, item: Record<string, unknown>) => {
@@ -1576,6 +1694,8 @@ export function useThreadEventHandlers({
       const startedAt = Date.now();
       noteRealtimeTurnStarted(threadId, turnId);
       clearAssistantFinalSettlementTimer(threadId);
+      clearTurnIngressSilenceTimer(threadId);
+      lastAssistantIngressRef.current.delete(threadId);
       clearAssistantSnapshotIngressForThread(threadId);
       noteThreadTurnStarted({
         workspaceId,
@@ -1608,6 +1728,7 @@ export function useThreadEventHandlers({
       clearAssistantFinalSettlementTimer,
       clearAssistantSnapshotIngressForThread,
       clearFirstDeltaTimer,
+      clearTurnIngressSilenceTimer,
       clearTurnStallTimer,
       dispatch,
       emitTurnDiagnostic,
@@ -2023,6 +2144,8 @@ export function useThreadEventHandlers({
       clearTurnStallTimer(threadId);
       clearCodexNoProgressTimer(threadId);
       clearAssistantFinalSettlementTimer(threadId);
+      clearTurnIngressSilenceTimer(threadId);
+      lastAssistantIngressRef.current.delete(threadId);
       if (!diagnostic) {
         return;
       }
@@ -2098,6 +2221,7 @@ export function useThreadEventHandlers({
       clearAssistantFinalSettlementTimer,
       clearAssistantSnapshotIngressForThread,
       clearFirstDeltaTimer,
+      clearTurnIngressSilenceTimer,
       clearTurnStallTimer,
       clearCodexNoProgressTimer,
       emitTurnDiagnostic,

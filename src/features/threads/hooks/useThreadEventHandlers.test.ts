@@ -2139,6 +2139,82 @@ describe("useThreadEventHandlers diagnostics", () => {
     );
   });
 
+  it("settles a hung claude turn after prolonged stream silence without a completion event", () => {
+    const onDebug = vi.fn();
+    const options = makeOptions(onDebug);
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+    const threadId = "claude:session-1";
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", threadId, "turn-1");
+      result.current.onAgentMessageDelta({
+        workspaceId: "ws-1",
+        threadId,
+        itemId: "assistant-1",
+        delta: "partial answer streamed via deltas",
+      });
+    });
+    options.markProcessing.mockClear();
+    options.setActiveTurnId.mockClear();
+
+    act(() => {
+      vi.advanceTimersByTime(90_000);
+    });
+
+    expect(options.markProcessing).toHaveBeenCalledWith(threadId, false);
+    expect(options.setActiveTurnId).toHaveBeenCalledWith(threadId, null);
+    const silenceEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) => entry.label === "thread/session:turn-diagnostic:ingress-silence-settlement-triggered",
+    );
+    expect(silenceEntry?.payload).toEqual(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        threadId,
+        turnId: "turn-1",
+        diagnosticCategory: "frontend-terminal-settlement",
+        reason: "stream-silent-without-terminal",
+      }),
+    );
+  });
+
+  it("extends the claude silence watchdog while deltas keep arriving", () => {
+    const onDebug = vi.fn();
+    const options = makeOptions(onDebug);
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+    const threadId = "claude:session-1";
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", threadId, "turn-1");
+      result.current.onAgentMessageDelta({
+        workspaceId: "ws-1",
+        threadId,
+        itemId: "assistant-1",
+        delta: "first chunk",
+      });
+    });
+    options.markProcessing.mockClear();
+    options.setActiveTurnId.mockClear();
+
+    act(() => {
+      vi.advanceTimersByTime(60_000);
+      result.current.onAgentMessageDelta({
+        workspaceId: "ws-1",
+        threadId,
+        itemId: "assistant-1",
+        delta: "second chunk",
+      });
+      vi.advanceTimersByTime(30_000);
+    });
+
+    expect(options.markProcessing).not.toHaveBeenCalledWith(threadId, false);
+
+    act(() => {
+      vi.advanceTimersByTime(60_000);
+    });
+
+    expect(options.markProcessing).toHaveBeenCalledWith(threadId, false);
+  });
+
   it("clears matched terminal busy residue when completed settlement is rejected without fallback evidence", () => {
     const onDebug = vi.fn();
     const options = makeOptions(onDebug);
