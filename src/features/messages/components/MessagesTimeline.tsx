@@ -1940,9 +1940,11 @@ export const MessagesTimeline = memo(function MessagesTimeline({
               {t("messages.conversationLightweightUse")}
             </button>
           ) : null}
-          <button type="button" onClick={onConversationDetailHydrationRequest}>
-            {t("messages.conversationLightweightHydrateVisible")}
-          </button>
+          {effectiveConversationLightweightMode ? (
+            <button type="button" onClick={onConversationDetailHydrationRequest}>
+              {t("messages.conversationLightweightHydrateVisible")}
+            </button>
+          ) : null}
         </div>
       </div>
     );

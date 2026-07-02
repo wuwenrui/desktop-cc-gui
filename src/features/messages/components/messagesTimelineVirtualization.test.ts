@@ -224,8 +224,7 @@ describe("messagesTimelineVirtualization", () => {
     expect(estimateTimelineProjectionRenderWeight(imageRow)).toBeGreaterThan(40);
   });
 
-  it("virtualizes #721-class heavy history even when row count is below the threshold", () => {
-    globalThis.localStorage.setItem(TIMELINE_RENDER_WEIGHT_VIRTUALIZATION_FLAG_KEY, "1");
+  it("keeps #721-class heavy history in normal flow by default below the row-count threshold", () => {
     const { rows } = createHeavyHistoryFixture("heavy");
     const summary = summarizeTimelineProjectionRenderWeight(rows);
 
@@ -240,6 +239,16 @@ describe("messagesTimelineVirtualization", () => {
       isThinking: false,
       rowCount: summary.rowCount,
       renderWeight: summary.renderWeight,
+    })).toBe(false);
+  });
+
+  it("allows render-weight virtualization only through an explicit local opt-in", () => {
+    globalThis.localStorage.setItem(TIMELINE_RENDER_WEIGHT_VIRTUALIZATION_FLAG_KEY, "1");
+
+    expect(shouldVirtualizeTimelineRows({
+      isThinking: false,
+      rowCount: 12,
+      renderWeight: TIMELINE_VIRTUALIZATION_MIN_RENDER_WEIGHT * 4,
     })).toBe(true);
   });
 

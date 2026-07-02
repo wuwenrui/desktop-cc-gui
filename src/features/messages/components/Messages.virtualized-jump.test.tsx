@@ -529,7 +529,7 @@ describe("Messages virtualized jump behavior", () => {
 
     expect(screen.getByText("Oversized conversation detected")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Use lightweight" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Render details" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Render details" })).toBeNull();
     expect(screen.getAllByText(/Oversized section/).length).toBeGreaterThan(0);
     expect(screen.queryByText("Deferred detail")).toBeNull();
     expect(screen.queryByRole("button", { name: "Retry full detail" })).toBeNull();
