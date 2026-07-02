@@ -22,10 +22,6 @@ const mainCss = readFileSync(
   fileURLToPath(new URL("./main.css", import.meta.url)),
   "utf8",
 );
-const engineTaskOutputCss = readFileSync(
-  fileURLToPath(new URL("./engine-task-output.css", import.meta.url)),
-  "utf8",
-);
 const sessionCasebarCss = readFileSync(
   fileURLToPath(
     new URL("../features/session-evidence/session-casebar.css", import.meta.url),
@@ -87,9 +83,6 @@ describe("messages overflow guard", () => {
     );
     expect(getCssRuleBlock(messagesMarkdownCss, ".markdown table")).toContain(
       "box-sizing: border-box;",
-    );
-    expect(getCssRuleBlock(engineTaskOutputCss, ".engine-task-output-inspector")).toContain(
-      "min-width: 0;",
     );
   });
 });

@@ -308,8 +308,10 @@
 }
 
 .markdown {
+  box-sizing: border-box;
+  max-width: 100%;
   white-space: normal;
-  overflow-wrap: break-word;
+  overflow-wrap: anywhere;
   word-break: break-word;
   min-width: 0;
   font-family: "Geist", var(--font-sans);
@@ -320,6 +322,7 @@
 }
 
 .markdown > * {
+  max-width: 100%;
   margin: 0;
 }
 
@@ -329,7 +332,9 @@
 }
 
 .markdown pre {
+  max-width: 100%;
   margin: 0;
+  overflow-x: auto;
   white-space: pre-wrap;
 }
 
@@ -408,6 +413,9 @@
    边框用 --border-strong 而非 --border：亮色下 --border 与 --muted 底色几近同色、
    四边几乎隐形，--border-strong 让淡边框清晰可见又不喧宾夺主。 */
 .message .markdown-codeblock {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg);
   background: var(--message-codeblock-bg);
@@ -1086,6 +1094,7 @@
    故用「单边来源」拼网格——每格只画 right+bottom，table 补 top+left 外框，
    避免相邻边框在 display:table 的 separate 模式下叠加变厚。 */
 .markdown table {
+  box-sizing: border-box;
   width: 100%;
   margin: 1.5em 0;
   display: block;
@@ -1114,7 +1123,7 @@
   padding: 0.5rem 1rem;
   text-align: left;
   word-wrap: break-word;
-  overflow-wrap: break-word;
+  overflow-wrap: anywhere;
 }
 
 .markdown th {

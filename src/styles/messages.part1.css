@@ -1,6 +1,9 @@
 @import "./messages.status-shell.css";
 
 .message {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   display: flex;
   margin-bottom: 12px;
   content-visibility: auto;
@@ -49,6 +52,7 @@
 }
 
 .message-user-layout {
+  min-width: 0;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -317,6 +321,9 @@
 }
 
 .message-agent-task-card {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
   margin-bottom: 10px;
 }
 
@@ -603,6 +610,8 @@
 }
 
 .user-collapsible-block {
+  min-width: 0;
+  max-width: 100%;
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -610,6 +619,8 @@
 
 .user-collapsible-content {
   position: relative;
+  min-width: 0;
+  max-width: 100%;
   transition: max-height 0.3s ease-out;
 }
 
@@ -620,6 +631,7 @@
 .user-collapsible-text-content {
   color: inherit;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
   word-break: break-word;
 }
 
@@ -1471,11 +1483,15 @@
   display: grid;
   gap: 8px;
   width: min(860px, 100%);
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .message-context-stack.is-user {
   width: var(--message-user-bubble-max-width, 85%);
-  max-width: none;
+  min-width: 0;
+  max-width: 100%;
   margin-left: auto;
   justify-items: end;
 }
