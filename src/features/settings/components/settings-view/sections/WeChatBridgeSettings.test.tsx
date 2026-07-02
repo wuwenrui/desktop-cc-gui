@@ -44,8 +44,8 @@ vi.mock("@tauri-apps/plugin-opener", () => ({
   openUrl: vi.fn(),
 }));
 
-vi.mock("antd", () => ({
-  QRCode: ({ value }: { value: string }) => (
+vi.mock("qrcode.react", () => ({
+  QRCodeSVG: ({ value }: { value: string }) => (
     <div data-testid="wechat-login-qrcode" data-value={value} />
   ),
 }));

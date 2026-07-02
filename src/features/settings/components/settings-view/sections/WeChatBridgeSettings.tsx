@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { QRCode } from "antd";
+import { QRCodeSVG } from "qrcode.react";
 import type { WorkspaceInfo } from "@/types";
 import {
   createWechatBridgeManualSubscriptionOrder,
@@ -1153,11 +1153,10 @@ export function WeChatBridgeSettings({
           </div>
           {loginUrl ? (
             <div className="wechat-bridge-qr-code">
-              <QRCode
+              <QRCodeSVG
                 value={loginUrl}
-                type="svg"
-                bordered={false}
-                errorLevel="M"
+                size={160}
+                level="M"
                 data-testid="wechat-login-qrcode"
               />
             </div>
