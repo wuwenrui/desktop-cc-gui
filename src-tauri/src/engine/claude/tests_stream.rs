@@ -922,6 +922,50 @@ async fn send_message_treats_stream_result_as_raw_and_emits_single_final_complet
 }
 
 #[tokio::test]
+async fn send_message_completes_within_grace_when_process_lingers_after_result() {
+    #[cfg(windows)]
+    let script_body = concat!(
+        "@echo off\r\n",
+        "echo {\"type\":\"result\",\"session_id\":\"11111111-1111-4111-8111-111111111111\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"final answer\"}]}}\r\n",
+        "ping 127.0.0.1 -n 61 >nul\r\n",
+        "exit /b 0\r\n"
+    );
+    #[cfg(not(windows))]
+    let script_body = concat!(
+        "#!/bin/sh\n",
+        "printf '%s\\n' '{\"type\":\"result\",\"session_id\":\"11111111-1111-4111-8111-111111111111\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"final answer\"}]}}'\n",
+        "sleep 60\n"
+    );
+    let (root, workspace_path, script_path) = create_fake_claude_script(script_body);
+    let session = test_session_with_bin(workspace_path, script_path);
+    let mut receiver = session.subscribe();
+    let mut params = SendMessageParams::default();
+    params.text = "hello".to_string();
+
+    let response = tokio::time::timeout(
+        std::time::Duration::from_secs(20),
+        session.send_message(params, "turn-lingering-process"),
+    )
+    .await
+    .expect("send_message must not wait for the lingering process to exit")
+    .expect("turn with result event should complete successfully");
+    let events = drain_turn_events(&mut receiver);
+    let _ = std::fs::remove_dir_all(&root);
+
+    assert_eq!(response, "final answer");
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| matches!(event.event, EngineEvent::TurnCompleted { .. }))
+            .count(),
+        1
+    );
+    assert!(!events
+        .iter()
+        .any(|event| matches!(event.event, EngineEvent::TurnError { .. })));
+}
+
+#[tokio::test]
 async fn send_message_reports_exit_metadata_when_claude_fails_without_output() {
     #[cfg(windows)]
     let script = "@echo off\r\nexit /b 1\r\n";

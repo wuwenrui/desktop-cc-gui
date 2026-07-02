@@ -185,6 +185,11 @@ const CLAUDE_STREAM_FIRST_EVENT_TIMEOUT: Duration = Duration::from_secs(90);
 #[cfg(test)]
 const CLAUDE_STREAM_FIRST_EVENT_TIMEOUT: Duration = Duration::from_secs(10);
 const CLAUDE_STREAM_DIAGNOSTIC_SAMPLE_LIMIT: usize = 800;
+// After the CLI prints the final `result` packet the turn is semantically
+// over; stdout EOF only lags behind by process teardown (MCP shutdown,
+// upstream connection close). Bound that lag so a lingering process cannot
+// keep the turn busy indefinitely.
+const CLAUDE_RESULT_EXIT_GRACE: Duration = Duration::from_secs(5);
 const CLAUDE_REASONING_EFFORTS: &[&str] = &["low", "medium", "high", "xhigh", "max"];
 
 #[derive(Debug, Default)]
@@ -1305,6 +1310,8 @@ impl ClaudeSession {
 
         // Process stdout events
         let mut session_id_emitted = false;
+        let mut result_seen_at: Option<Instant> = None;
+        let mut result_exit_grace_expired = false;
         loop {
             if pending_text_delta.has_expired(text_delta_coalesce_window) {
                 self.flush_buffered_text_delta(turn_id, &mut pending_text_delta);
@@ -1313,7 +1320,23 @@ impl ClaudeSession {
 
             let next_line = if pending_text_delta.is_empty() {
                 if saw_valid_stream_event {
-                    lines.next_line().await
+                    if let Some(result_seen) = result_seen_at {
+                        let grace = CLAUDE_RESULT_EXIT_GRACE.saturating_sub(result_seen.elapsed());
+                        match tokio::time::timeout(grace, lines.next_line()).await {
+                            Ok(result) => result,
+                            Err(_) => {
+                                log::warn!(
+                                    "[claude] stdout still open {:?} after result event; forcing turn completion for turn={}",
+                                    CLAUDE_RESULT_EXIT_GRACE,
+                                    turn_id
+                                );
+                                result_exit_grace_expired = true;
+                                break;
+                            }
+                        }
+                    } else {
+                        lines.next_line().await
+                    }
                 } else {
                     let wait_duration = first_event_deadline
                         .checked_duration_since(Instant::now())
@@ -1388,6 +1411,9 @@ impl ClaudeSession {
 
             match parse_claude_stream_json_line(&line) {
                 Ok(event) => {
+                    if event.get("type").and_then(|v| v.as_str()) == Some("result") {
+                        result_seen_at.get_or_insert_with(Instant::now);
+                    }
                     if Self::is_valid_claude_stream_event(&event) {
                         if stream_startup_timing
                             .first_valid_stream_event_at_ms
@@ -1585,6 +1611,9 @@ impl ClaudeSession {
             active.remove(turn_id)
         };
         let status = if let Some(mut child_proc) = child.take() {
+            if result_exit_grace_expired {
+                let _ = self.terminate_child_process(turn_id, &mut child_proc).await;
+            }
             child_proc.wait().await.ok()
         } else {
             None
@@ -1606,7 +1635,7 @@ impl ClaudeSession {
         // Previously this only triggered when response_text was empty, which
         // caused silent failures when the CLI produced partial output before crashing.
         if let Some(status) = status {
-            if !status.success() {
+            if !status.success() && !result_exit_grace_expired {
                 let error_msg = Self::build_process_exit_error(
                     status,
                     &error_output,
