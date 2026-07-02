@@ -1,18 +1,28 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ThreadSummary } from "../../../types";
 import { PinnedThreadList } from "./PinnedThreadList";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string) => {
+    t: (key: string, options?: Record<string, unknown>) => {
       const translations: Record<string, string> = {
         "threads.autoNaming": "Auto naming...",
         "threads.pin": "Pin",
         "threads.unpin": "Unpin",
+        "threads.runtimeProcessing": "Running",
+        "threads.runtimeReviewing": "Reviewing",
+        "threads.previewKind": "Conversation",
+        "threads.previewActive": "Active",
+        "threads.previewPinned": "Pinned",
+        "threads.previewUpdated": "Updated {{time}}",
+        "threads.previewWorkspace": "Workspace",
+        "threads.previewStatus": "Status",
+        "threads.previewEngine": "Engine",
       };
-      return translations[key] ?? key;
+      const template = translations[key] ?? key;
+      return template.replace(/\{\{(\w+)\}\}/g, (_, token: string) => String(options?.[token] ?? ""));
     },
     i18n: { language: "en", changeLanguage: vi.fn() },
   }),
@@ -49,6 +59,15 @@ const baseProps = {
 };
 
 describe("PinnedThreadList", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
+
   it("renders pinned rows and handles click/context menu", () => {
     const onSelectThread = vi.fn();
     const onShowThreadMenu = vi.fn();
@@ -87,6 +106,29 @@ describe("PinnedThreadList", () => {
       true,
       "/tmp/ws-1",
     );
+  });
+
+  it("shows a rich pinned thread preview card on hover", async () => {
+    render(<PinnedThreadList {...baseProps} />);
+
+    const row = screen.getByText("Pinned Alpha").closest(".thread-row");
+    expect(row).toBeTruthy();
+    if (!row) {
+      throw new Error("Missing pinned row");
+    }
+
+    await act(async () => {
+      fireEvent.mouseEnter(row);
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    const tooltip = screen.getByRole("tooltip");
+    expect(tooltip.querySelector(".thread-hover-preview-card")).toBeTruthy();
+    expect(tooltip.textContent).toContain("Pinned Alpha");
+    expect(tooltip.textContent).toContain("Reviewing");
+    expect(tooltip.textContent).toContain("Codex");
+    expect(tooltip.textContent).toContain("Pinned");
+    expect(tooltip.textContent).toContain("/tmp/ws-1");
   });
 
   it("marks shared pinned rows as not archivable for the context menu", () => {

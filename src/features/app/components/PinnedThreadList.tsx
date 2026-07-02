@@ -8,7 +8,7 @@ import {
   TooltipPopup,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { memo, useEffect } from "react";
+import { memo, useEffect, useState } from "react";
 import type { CSSProperties, MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -24,6 +24,7 @@ import {
   useThreadRowStatus,
   type ThreadStatusMap,
 } from "./threadRowStatusStore";
+import { ThreadHoverPreviewCard } from "./ThreadHoverPreviewCard";
 
 type PinnedThreadRow = {
   thread: ThreadSummary;
@@ -109,11 +110,11 @@ const PinnedThreadRowItem = memo(function PinnedThreadRowItem({
   systemProxyUrl,
 }: PinnedThreadRowItemProps) {
   const { t } = useTranslation();
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const { thread, depth, workspaceId, workspacePath } = row;
   useEffect(() => {
     onPinnedThreadRowRender?.(thread.id);
   });
-
   const relativeTime = getThreadTime(thread);
   const indentStyle =
     depth > 0
@@ -160,6 +161,17 @@ const PinnedThreadRowItem = memo(function PinnedThreadRowItem({
   const isDeleteConfirmOpen =
     deleteConfirmWorkspaceId === workspaceId &&
     deleteConfirmThreadId === thread.id;
+  useEffect(() => {
+    if (isDeleteConfirmOpen) {
+      setIsPreviewOpen(false);
+    }
+  }, [isDeleteConfirmOpen]);
+  const previewEngineLabel = providerLabel
+    ? `${engineTitle} · ${providerLabel}`
+    : engineTitle;
+  const previewUpdatedLabel = relativeTime
+    ? t("threads.previewUpdated", { time: relativeTime })
+    : null;
 
   return (
     <Popover
@@ -170,39 +182,52 @@ const PinnedThreadRowItem = memo(function PinnedThreadRowItem({
         }
       }}
     >
-      <Tooltip>
+      <Tooltip
+        open={!isDeleteConfirmOpen && isPreviewOpen}
+        onOpenChange={setIsPreviewOpen}
+      >
         <PopoverAnchor asChild>
-          <TooltipTrigger
-            delay={450}
-            className={`thread-row ${
-              workspaceId === activeWorkspaceId && thread.id === activeThreadId
-                ? "active"
-                : ""
-            }${isDeleteConfirmOpen ? " has-delete-confirm" : ""}${
-              canPin ? " has-pin-toggle" : ""
-            }`}
-            style={indentStyle}
-            onClick={() => onSelectThread(workspaceId, thread.id)}
-            onContextMenu={(event) =>
-              onShowThreadMenu(
-                event,
-                workspaceId,
-                thread.id,
-                canPin,
-                thread.sizeBytes,
-                contextMenuMoveFolderTargets,
-                thread.folderId ?? null,
-                canArchive,
-                workspacePath,
-              )
-            }
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
+          <TooltipTrigger asChild delay={220}>
+            <button
+              type="button"
+              className={`thread-row ${
+                workspaceId === activeWorkspaceId && thread.id === activeThreadId
+                  ? "active"
+                  : ""
+              }${isDeleteConfirmOpen ? " has-delete-confirm" : ""}${
+                canPin ? " has-pin-toggle" : ""
+              }`}
+              style={indentStyle}
+              onMouseEnter={() => setIsPreviewOpen(true)}
+              onMouseLeave={() => setIsPreviewOpen(false)}
+              onFocus={() => setIsPreviewOpen(true)}
+              onBlur={() => setIsPreviewOpen(false)}
+              onClick={() => {
+                setIsPreviewOpen(false);
                 onSelectThread(workspaceId, thread.id);
-              }
-            }}
-          >
+              }}
+              onContextMenu={(event) => {
+                setIsPreviewOpen(false);
+                onShowThreadMenu(
+                  event,
+                  workspaceId,
+                  thread.id,
+                  canPin,
+                  thread.sizeBytes,
+                  contextMenuMoveFolderTargets,
+                  thread.folderId ?? null,
+                  canArchive,
+                  workspacePath,
+                );
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setIsPreviewOpen(false);
+                  onSelectThread(workspaceId, thread.id);
+                }
+              }}
+            >
             <span className={`thread-status ${statusClass}`} aria-hidden />
             {canPin && onToggleThreadPin && (
               <span
@@ -273,16 +298,35 @@ const PinnedThreadRowItem = memo(function PinnedThreadRowItem({
                 <span className="thread-time">{relativeTime}</span>
               ) : null}
             </div>
+            </button>
           </TooltipTrigger>
         </PopoverAnchor>
-        <TooltipPopup
-          side="top"
-          align="start"
-          sideOffset={4}
-          className="max-w-[400px] break-words"
-        >
-          {thread.name}
-        </TooltipPopup>
+        {!isDeleteConfirmOpen && isPreviewOpen && (
+          <TooltipPopup
+            side="right"
+            align="start"
+            sideOffset={12}
+            className="thread-hover-preview-tooltip"
+          >
+            <ThreadHoverPreviewCard
+              kindLabel={t("threads.previewKind")}
+              activeLabel={t("threads.previewActive")}
+              pinnedLabel={t("threads.previewPinned")}
+              isActive={
+                workspaceId === activeWorkspaceId && thread.id === activeThreadId
+              }
+              isPinned={isPinned}
+              threadName={thread.name}
+              statusTitle={t("threads.previewStatus")}
+              statusLabel={runtimeBadge?.label ?? null}
+              updatedLabel={previewUpdatedLabel}
+              engineTitle={t("threads.previewEngine")}
+              engineLabel={previewEngineLabel}
+              workspaceLabel={t("threads.previewWorkspace")}
+              workspacePath={workspacePath || null}
+            />
+          </TooltipPopup>
+        )}
       </Tooltip>
       {isDeleteConfirmOpen && (
         <PopoverContent

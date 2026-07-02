@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ThreadSummary } from "../../../types";
 import { DEFAULT_VISIBLE_THREAD_ROOT_COUNT } from "../constants";
 import { ThreadList } from "./ThreadList";
@@ -30,6 +30,13 @@ vi.mock("react-i18next", () => ({
         "threads.subagentTreeCollapse": "Collapse subagent tree",
         "threads.runtimeProcessing": "Processing",
         "threads.runtimeReviewing": "Reviewing",
+        "threads.previewKind": "Conversation",
+        "threads.previewActive": "Active",
+        "threads.previewPinned": "Pinned",
+        "threads.previewUpdated": "Updated {{time}}",
+        "threads.previewWorkspace": "Workspace",
+        "threads.previewStatus": "Status",
+        "threads.previewEngine": "Engine",
         "threads.deleteThreadTitle": "Delete conversation",
         "threads.deleteThreadMessage": "Are you sure you want to delete this thread?",
         "threads.deleteThreadHint": "This cannot be undone.",
@@ -86,6 +93,15 @@ const baseProps = {
 };
 
 describe("ThreadList", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
+
   it("renders active row and handles click/context menu", () => {
     const onSelectThread = vi.fn();
     const onShowThreadMenu = vi.fn();
@@ -589,6 +605,36 @@ describe("ThreadList", () => {
     const time = meta.querySelector(".thread-time");
     expect(size).toBeNull();
     expect(time?.textContent).toBe("2m");
+  });
+
+  it("shows a rich thread preview card on hover", async () => {
+    render(
+      <ThreadList
+        {...baseProps}
+        threadStatusById={{
+          "thread-1": { isProcessing: true, hasUnread: false, isReviewing: false },
+        }}
+      />,
+    );
+
+    const row = screen.getByText("Alpha").closest(".thread-row");
+    expect(row).toBeTruthy();
+    if (!row) {
+      throw new Error("Missing thread row");
+    }
+
+    await act(async () => {
+      fireEvent.mouseEnter(row);
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    const tooltip = screen.getByRole("tooltip");
+    expect(tooltip.querySelector(".thread-hover-preview-card")).toBeTruthy();
+    expect(tooltip.textContent).toContain("Alpha");
+    expect(tooltip.textContent).toContain("Processing");
+    expect(tooltip.textContent).toContain("Codex");
+    expect(tooltip.textContent).toContain("Updated 2m");
+    expect(tooltip.textContent).toContain("/tmp/ws-1");
   });
 
   it("marks engine badge as processing when thread is running", () => {
